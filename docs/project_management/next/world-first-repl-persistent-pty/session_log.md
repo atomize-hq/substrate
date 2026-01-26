@@ -1,0 +1,196 @@
+## START — 2026-01-26T16:05:29Z — planning — planning pack completion (ADR-0016)
+- Feature: `docs/project_management/next/world-first-repl-persistent-pty/`
+- Branch: `testing`
+- Goal: Produce a complete Planning Pack per PLANNING_README with full MUST/SHOULD traceability to tasks and validation.
+- Inputs to read end-to-end:
+  - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/STATE_MACHINE.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/decision_register.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/plan.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/driver_loop_design.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/drain_design.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/RESEARCH.md`
+  - `docs/project_management/standards/PLANNING_README.md`
+  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+  - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
+  - `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
+  - `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`
+  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`
+  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+  - `docs/project_management/next/sequencing.json`
+- Commands planned (if any):
+  - `make adr-check ADR=docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
+  - `FEATURE_DIR="docs/project_management/next/world-first-repl-persistent-pty"; jq -e . "$FEATURE_DIR/tasks.json" >/dev/null`
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null`
+  - `python - <<'PY' ... PY` (tasks.json required-field audit)
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world-first-repl-persistent-pty"`
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/world-first-repl-persistent-pty"`
+
+## END — 2026-01-26T16:11:12Z — planning — planning pack completion (ADR-0016)
+- Summary of changes (exhaustive):
+  - Added full Planning Pack artifacts under `docs/project_management/next/world-first-repl-persistent-pty/` (spec slices, tasks.json, integration map, manual playbook, smoke scripts, kickoff prompts, traceability map, and quality gate report).
+  - Updated `docs/project_management/next/sequencing.json` to register the sprint (`world_first_repl_persistent_pty`, order `32`) and align slice specs (`C0`/`C1`/`C2`).
+  - Fixed ADR executive summary drift marker by updating `ADR_BODY_SHA256` in `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`.
+  - Applied planning-lint-safe editorial tightening (no behavior drift) in the authoritative spec pack docs under the feature directory.
+  - Removed a hard-ban lint violation caused by embedding a hard-ban scan pattern string in planning artifacts.
+- Files created/modified:
+  - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
+  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/STATE_MACHINE.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/decision_register.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/plan.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/driver_loop_design.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/drain_design.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/RESEARCH.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/C0-spec.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/C1-spec.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/C2-spec.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/tasks.json`
+  - `docs/project_management/next/world-first-repl-persistent-pty/integration_map.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/manual_testing_playbook.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/requirements_traceability.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/quality_gate_report.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/session_log.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/smoke/linux-smoke.sh`
+  - `docs/project_management/next/world-first-repl-persistent-pty/smoke/macos-smoke.sh`
+  - `docs/project_management/next/world-first-repl-persistent-pty/smoke/windows-smoke.ps1`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C0-code.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C0-test.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C0-integ-core.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C0-integ-linux.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C0-integ-macos.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C0-integ-windows.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C0-integ.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C1-code.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C1-test.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C1-integ-core.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C1-integ-linux.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C1-integ-macos.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C1-integ-windows.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C1-integ.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C2-code.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C2-test.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C2-integ-core.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C2-integ-linux.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C2-integ-macos.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C2-integ-windows.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C2-integ.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/FZ-feature-cleanup.md`
+- Rubric checks run (with results):
+  - `make adr-check ADR=docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md` → `0` → executive summary hash matches
+  - `FEATURE_DIR="docs/project_management/next/world-first-repl-persistent-pty"; jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` → `0` → valid JSON
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0` → valid JSON
+  - `python - <<'PY' ... PY` (tasks.json required-field audit) → `0` → required fields present
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/world-first-repl-persistent-pty"` → `0` → tasks.json validation passed
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world-first-repl-persistent-pty"` → `0` → planning lint passed (includes kickoff prompt sentinel and hard-ban scan)
+- Sequencing alignment:
+  - `sequencing.json` reviewed: `YES`
+  - Changes required: `NONE` (aligned and lint-validated)
+- Blockers:
+  - `NONE`
+- Next steps:
+  - Execution triads may begin on the orchestration branch `feat/world-first-repl-persistent-pty` starting with `C0-code`/`C0-test`, then `C0-integ-*` per `docs/project_management/next/world-first-repl-persistent-pty/tasks.json`.
+
+## START — 2026-01-26T18:08:05Z — planning — decompose triads into six slices (C0–C5)
+- Feature: `docs/project_management/next/world-first-repl-persistent-pty/`
+- Branch: `testing`
+- Goal: Replace the 3-slice plan with a 6-slice execution plan (C0–C5) while preserving all locked decisions and keeping planning-lint/validate green.
+- Inputs to read end-to-end:
+  - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/STATE_MACHINE.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/decision_register.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/plan.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/driver_loop_design.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/drain_design.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/requirements_traceability.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/tasks.json`
+  - `docs/project_management/next/world-first-repl-persistent-pty/integration_map.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/manual_testing_playbook.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/smoke/linux-smoke.sh`
+  - `docs/project_management/next/world-first-repl-persistent-pty/smoke/macos-smoke.sh`
+  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/standards/PLANNING_README.md`
+  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+  - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
+  - `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
+  - `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`
+  - `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`
+- Commands planned (if any):
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null`
+  - `FEATURE_DIR="docs/project_management/next/world-first-repl-persistent-pty"; jq -e . "$FEATURE_DIR/tasks.json" >/dev/null`
+  - `make adr-check ADR=docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/world-first-repl-persistent-pty"`
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world-first-repl-persistent-pty"`
+
+## END — 2026-01-26T18:10:07Z — planning — decompose triads into six slices (C0–C5)
+- Summary of changes (exhaustive):
+  - Decomposed execution from 3 slices to 6 slices (`C0`–`C5`) to isolate independent hard requirements (DR-22 privacy, DR-23 ordering barrier, byte-safe REPL rendering, and non-interactive routing).
+  - Updated slice specs:
+    - Updated `C0-spec.md` for persistent-session bootstrap + fail-closed preflight.
+    - Updated `C1-spec.md` for world-agent per-submission `exec` + `command_complete`.
+    - Updated `C2-spec.md` for host-side persistent session client core.
+    - Added `C3-spec.md` (REPL routing + lifecycle), `C4-spec.md` (byte-safe rendering + buffering), `C5-spec.md` (non-interactive `-c` + stdin pipe mode).
+  - Rebuilt `tasks.json` to include triads for `C0`–`C5` using the platform-fix integration model (schema v3), with `C4` and `C5` able to execute concurrently after `C3`.
+  - Expanded kickoff prompts to cover all new tasks (`C3`–`C5`) and updated affected existing prompts to match new slice ownership.
+  - Updated supporting docs and validation artifacts (plan, integration map, smoke scripts, manual playbook, and requirements traceability) to match the new slice boundaries.
+  - Updated `docs/project_management/next/sequencing.json` to register `C3`–`C5` specs for the sprint.
+- Files created/modified:
+  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/next/world-first-repl-persistent-pty/plan.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/tasks.json`
+  - `docs/project_management/next/world-first-repl-persistent-pty/integration_map.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/manual_testing_playbook.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/requirements_traceability.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/quality_gate_report.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/session_log.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/smoke/linux-smoke.sh`
+  - `docs/project_management/next/world-first-repl-persistent-pty/C0-spec.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/C1-spec.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/C2-spec.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/C3-spec.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/C4-spec.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/C5-spec.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C1-code.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C1-test.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C2-code.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C2-test.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C3-code.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C3-test.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C3-integ-core.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C3-integ-linux.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C3-integ-macos.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C3-integ-windows.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C3-integ.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C4-code.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C4-test.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C4-integ-core.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C4-integ-linux.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C4-integ-macos.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C4-integ-windows.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C4-integ.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C5-code.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C5-test.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C5-integ-core.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C5-integ-linux.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C5-integ-macos.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C5-integ-windows.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C5-integ.md`
+- Rubric checks run (with results):
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0` → valid JSON
+  - `FEATURE_DIR="docs/project_management/next/world-first-repl-persistent-pty"; jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` → `0` → valid JSON
+  - `make adr-check ADR=docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md` → `0` → executive summary hash matches
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/world-first-repl-persistent-pty"` → `0` → tasks.json validation passed
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world-first-repl-persistent-pty"` → `0` → planning lint passed
+- Sequencing alignment:
+  - `sequencing.json` reviewed: `YES`
+  - Changes required: `NONE` (aligned and lint-validated)
+- Blockers:
+  - `NONE`
+- Next steps:
+  - Execution triads begin on `feat/world-first-repl-persistent-pty` with `C0-code`/`C0-test`, then `C0-integ-*`, proceeding through `C1`–`C5` per `docs/project_management/next/world-first-repl-persistent-pty/tasks.json`.

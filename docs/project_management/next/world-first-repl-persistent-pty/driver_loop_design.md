@@ -76,10 +76,10 @@
 
   ### Driver-internal persistent state
 
-  - session_env: map of exported env vars that should apply to subsequent commands (starts from start_session.env; then updated after each
+  - session_env: map of exported env vars that apply to subsequent commands (starts from start_session.env; then updated after each
     exec)
   - session_cwd: physical, world-absolute cwd (starts from ready.cwd; then updated after each exec)
-  - reserved_env_keys: at minimum includes SHIM_PARENT_CMD_ID (must never persist) and should also strip shim “bypass” variables (SHIM_ACTIVE,
+  - reserved_env_keys: at minimum includes SHIM_PARENT_CMD_ID (must never persist) and also strips shim “bypass” variables (SHIM_ACTIVE,
     SHIM_CALLER, SHIM_CALL_STACK, SHIM_DEPTH) to avoid accidentally disabling shim tracing across commands (host-side already removes those
     per command in today’s runner code, e.g. cmd.env_remove("SHIM_ACTIVE") patterns).
 
@@ -238,7 +238,7 @@
 
   When to pick
 
-  - If ptrace is disallowed in the world environment (security policy, seccomp profiles, etc.) and you want a deterministic alternative.
+  - If ptrace is disallowed in the world environment (security policy, seccomp profiles, or other constraints) and you want a deterministic alternative.
 
   ———
 
@@ -286,7 +286,7 @@
       - Only acceptable if you can provably satisfy DR-22 (user code can’t access session infrastructure/control-plane handles even inside
         that bash).
       - In practice, any design where the evaluator can access session infrastructure (including inherited file descriptors and
-        /proc/self/fd discovery) is extremely hard to harden against redirections, DEBUG traps, `read -u`, etc.
+        /proc/self/fd discovery) is extremely hard to harden against redirections, DEBUG traps, and `read -u`.
       - Reminder: v1 explicitly does not require a long-lived interpreter; the selected model is per-submission evaluators with driver-managed persistence (see `docs/project_management/next/world-first-repl-persistent-pty/decision_register.md` DR-07).
   2. Replace ptrace with a “self-stop barrier” wrapper
       - Have a trusted wrapper around evaluation that ensures the evaluator process stops (SIGSTOP) at a known completion boundary before
@@ -363,7 +363,7 @@
 
   - Agent events like :demo-agent must not corrupt TUI output; buffer and flush after passthrough (plan bullet, and current event pipeline is
     ExternalPrinter<String>: crates/shell/src/execution/agent_events.rs:24).
-  - Test: run a passthrough TUI and concurrently emit demo agent events; terminal output should not be corrupted.
+  - Test: run a passthrough TUI and concurrently emit demo agent events; terminal output MUST NOT be corrupted.
 
   ———
 
@@ -387,6 +387,6 @@
 
   ## Out-of-band output
 
-  - The driver should forward PTY bytes regardless of whether an exec is in-flight; world-agent forwards as stdout frames.
+  - The driver forwards PTY bytes regardless of whether an exec is in-flight; world-agent forwards as stdout frames.
   - The host must be able to print these bytes while Reedline is waiting (requires byte-capable concurrent rendering, not just
     ExternalPrinter<String>).

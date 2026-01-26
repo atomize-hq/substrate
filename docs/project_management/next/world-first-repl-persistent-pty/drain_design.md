@@ -270,8 +270,8 @@ Grounding (what exists today)
       - Linux/macOS both support this via tcgetpgrp on the PTY slave and kill(-pgid, sig). You need correct session/job-control setup so the
         evaluator’s group is foreground while running, and the driver isn’t.
   - Resize semantics
-      - Generally stable; but macOS terminal size ioctls sometimes need to be applied to the master vs slave consistently. The driver should
-        pick one target and test it (plan.md resize bullet).
+      - Generally stable; but macOS terminal size ioctls sometimes need to be applied to the master vs slave consistently. The driver picks
+        one target and tests it (plan.md resize bullet).
   - Exit/drain ordering on shutdown
       - Recommendation (non-normative): apply the same “drain before completion-like boundary” logic to session exit where practical (or else you recreate the same bug
         at session end). The v1 protocol is normative for shutdown semantics; see `PROTOCOL.md` `close`/`exit`.

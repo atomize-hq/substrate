@@ -4,6 +4,53 @@ This plan is anchored by:
 - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
 - `docs/project_management/next/world-first-repl-persistent-pty/decision_register.md`
 
+## Guardrails (non-negotiable)
+- No fallbacks (DR-06): no legacy mode, no hidden switches, no silent host fallback when world is enabled.
+- Completion is explicit: `start_session → ready → exec → command_complete` (no stdout marker parsing; fail closed on protocol violations).
+- v1 evaluator model: per-submission evaluator shells (`/bin/bash --noprofile --norc`), not a single long-lived interactive bash interpreter (DR-07).
+- v1 persistence scope is limited and explicit (ADR-0016 + PROTOCOL v1):
+  - MUST persist: physical in-world cwd (`pwd -P` / `getcwd()` semantics) and exported env mutations (`export`/`unset`).
+  - Other shell-local state is not guaranteed.
+- DR-22 control-plane handle privacy is MUST-level: untrusted evaluator MUST NOT be able to access session infrastructure/control-plane handles/endpoints. Fail closed during `start_session` if this cannot be guaranteed.
+- Output ordering is MUST-level (DR-23 + PROTOCOL v1): `command_complete` MUST NOT be emitted until all foreground Session PTY bytes for that command have been forwarded; v1 requires a watermark drain barrier (Linux `ioctl(FIONREAD)`) and MUST fail closed if unsupported (no quiescence/would-block drains; no timing heuristics).
+- No pipelining: only one `exec` in flight; concurrent `exec` is fatal protocol error.
+- macOS v1 runs through Lima (Linux guest).
+
+## Platform scope (planning pack)
+- Behavior platforms (smoke required): `linux`, `macos`
+- CI parity platforms (compile/test parity): `linux`, `macos`, `windows`
+- WSL: not required for this feature (Windows world PTY parity is out of scope per ADR-0016).
+
+## Slice plan (triads)
+- `C0`: world-agent persistent session bootstrap + fail-closed preflight (server-side).
+- `C1`: world-agent per-submission `exec` + `command_complete` (server-side).
+- `C2`: shell persistent session client core (protocol correctness; no REPL UX yet).
+- `C3`: interactive REPL routing + lifecycle (`:host` gating, `:pty`, drift restart; no rendering changes).
+- `C4`: interactive REPL byte-safe rendering + structured host output buffering + out-of-band stdout handling.
+- `C5`: non-interactive `-c/--command` and stdin pipe mode world-consistency when world is enabled; `:host` never recognized in non-interactive modes.
+
+## Planning Pack artifact index (this directory)
+- `docs/project_management/next/world-first-repl-persistent-pty/plan.md`
+- `docs/project_management/next/world-first-repl-persistent-pty/tasks.json`
+- `docs/project_management/next/world-first-repl-persistent-pty/session_log.md`
+- Specs (slice-level): `docs/project_management/next/world-first-repl-persistent-pty/C0-spec.md`, `docs/project_management/next/world-first-repl-persistent-pty/C1-spec.md`, `docs/project_management/next/world-first-repl-persistent-pty/C2-spec.md`, `docs/project_management/next/world-first-repl-persistent-pty/C3-spec.md`, `docs/project_management/next/world-first-repl-persistent-pty/C4-spec.md`, `docs/project_management/next/world-first-repl-persistent-pty/C5-spec.md`
+- Authoritative spec pack:
+  - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/STATE_MACHINE.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/decision_register.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/driver_loop_design.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/drain_design.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/RESEARCH.md` (historical)
+- `docs/project_management/next/world-first-repl-persistent-pty/integration_map.md`
+- `docs/project_management/next/world-first-repl-persistent-pty/manual_testing_playbook.md`
+- `docs/project_management/next/world-first-repl-persistent-pty/requirements_traceability.md`
+- Smoke scripts:
+  - `docs/project_management/next/world-first-repl-persistent-pty/smoke/linux-smoke.sh`
+  - `docs/project_management/next/world-first-repl-persistent-pty/smoke/macos-smoke.sh`
+  - `docs/project_management/next/world-first-repl-persistent-pty/smoke/windows-smoke.ps1`
+- Kickoff prompts: `docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/`
+
 ## Execution Phases (high-level)
 
 1) REPL command routing
@@ -42,12 +89,12 @@ This plan is anchored by:
   - `command_complete` correlation: mismatched `seq/token_hex` must be treated as a protocol error (fail closed).
   - Binary output containing arbitrary bytes must never interfere with command completion (no stdout marker parsing).
   - Output ordering: prompt/resume input must not occur before all foreground PTY stdout for that command has been forwarded (no “late stdout after command_complete” for non-backgrounded commands). See DR-23 and `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md` (“Output ordering / drain guarantee”, watermark barrier).
-  - Out-of-band stdout: `stdout` bytes arriving while no `exec` is in-flight (idle/out-of-band output) must be forwarded/rendered without corrupting the prompt/input buffer, and should emit an explicit trace event (unattributed; no `cmd_id` guessing).
-  - Structured concurrent events during PTY passthrough: structured host/agent messages MUST NOT be injected into the PTY byte stream during `stdin_mode=passthrough`; they should be buffered and flushed after passthrough ends (e.g., verify `:demo-agent` output does not corrupt a running TUI).
+  - Out-of-band stdout: `stdout` bytes arriving while no `exec` is in-flight (idle/out-of-band output) must be forwarded/rendered without corrupting the prompt/input buffer, and SHOULD emit an explicit trace event (unattributed; no `cmd_id` guessing).
+  - Structured concurrent events during PTY passthrough: structured host/agent messages MUST NOT be injected into the PTY byte stream during `stdin_mode=passthrough`; they SHOULD be buffered and flushed after passthrough ends (e.g., verify `:demo-agent` output does not corrupt a running TUI).
   - Stdin boundary: world-agent must ignore/drop `stdin` frames before `ready`, while `Idle`, and during `stdin_mode=eof` commands (i.e., unless the current command is `stdin_mode=passthrough`), and must drop “late keystrokes” after `command_complete` until the next passthrough command begins.
   - Resize forwarding: terminal resize events must be forwarded to world-agent and must take effect for the in-world foreground program (e.g., a `passthrough` command that prints cols/rows on `SIGWINCH` observes updated values).
   - No pipelining: world-agent must reject concurrent `exec` requests as protocol error; host must not send a new `exec` until the prior completes.
-  - Signal targeting: host-originated `SIGINT` must interrupt the currently executing foreground program without killing the session driver loop (Ctrl+C should not “brick” the REPL).
+  - Signal targeting: host-originated `SIGINT` must interrupt the currently executing foreground program without killing the session driver loop (Ctrl+C MUST NOT “brick” the REPL).
   - PTY passthrough Ctrl+C semantics: in `stdin_mode=passthrough`, typed `Ctrl+C` must be forwarded as byte `0x03` via `stdin` frames (not translated into a `signal` message).
   - Stdin-consuming commands in line mode (`cat`, `read`): must not hang the session (stdin treated as EOF, e.g. via `/dev/null`).
   - Session-state persistence: `export FOO=bar` then `echo "$FOO"` must print `bar`; `unset FOO` then `echo "$FOO"` must print empty (validates ADR persistence goals).
@@ -64,17 +111,25 @@ This plan is anchored by:
   - `:host` disabled: must error and must not execute.
   - Snapshot drift restart: policy file/workspace root change triggers restart (cwd continuity preserved when possible).
   - Startup cwd resolution: if requested `start_session.cwd` is invalid, world-agent must start in the resolved session root/project dir and `ready.cwd` must reflect that; host must surface the change.
-  - Startup snapshot consistency: after `ready`, host recomputes effective snapshot/workspace root for `ready.cwd`; if it differs from what was used to start the session (e.g., because `start_session.cwd` could not be honored), the host must restart immediately before accepting input.
+  - Startup snapshot consistency: after `ready`, host recomputes effective snapshot/workspace root for `ready.cwd`; if it differs from what was used to start the session (e.g., because `start_session.cwd` was not honored), the host must restart immediately before accepting input.
   - Error framing: world-agent `error` frames must include a stable `code` and optional `seq`; host must surface and fail closed (enables assertable harness tests).
   - Program rejection cases (explicit, testable):
     - Program contains NUL: `error.code=program_contains_nul`, fail closed.
     - Program bytes not valid UTF-8: `error.code=program_invalid_utf8`, fail closed.
     - `program_b64` invalid base64: `error.code=bad_request`, fail closed.
   - Session initiation: if the first WS frame is not `start` or `start_session`, world-agent must fail the connection with `error.code=bad_request` (no “partial compat”).
-  - Exit code semantics: when `SIGINT` terminates the foreground program, `command_complete.exit` should follow bash conventions (typically `130`).
+  - Exit code semantics: when `SIGINT` terminates the foreground program, `command_complete.exit` SHOULD follow bash conventions (typically `130`).
   - CWD semantics (physical): `command_complete.cwd` must be the physical working directory (equivalent to `pwd -P` / `getcwd()`); e.g., `cd` into a symlinked path and assert `command_complete.cwd` resolves symlinks.
-  - Token redaction: `token_hex` MUST NOT be printed in full to the operator terminal; protocol error messaging/traces should redact or hash tokens (e.g., ensure a token-mismatch failure message does not include the full 32-hex token).
-  - Correlation env scoping: `SHIM_PARENT_CMD_ID` must not persist as an exported variable across submissions (e.g., after a command, `env | rg SHIM_PARENT_CMD_ID` should be empty).
+  - Token redaction: `token_hex` MUST NOT be printed in full to the operator terminal; protocol error messaging/traces SHOULD redact or hash tokens (e.g., ensure a token-mismatch failure message does not include the full 32-hex token).
+  - Correlation env scoping: `SHIM_PARENT_CMD_ID` must not persist as an exported variable across submissions (e.g., after a command, `env | rg SHIM_PARENT_CMD_ID` SHOULD be empty).
   - Signal test coverage:
     - Line mode: run a long command (e.g., `sleep 10`) in `stdin_mode=eof`, deliver host-originated `SIGINT`, and assert the session recovers with a clean `command_complete` and stable prompt.
     - PTY passthrough: run a raw-input test program in `stdin_mode=passthrough` and assert typed `Ctrl+C` is observed as byte `0x03` (not termination via injected `SIGINT`).
+
+## Dependency ordering (execution)
+- `C0` must land before `C1` (session bootstrap is a prerequisite for exec/completion).
+- `C1` must land before `C2` (shell client depends on the server contract).
+- `C2` must land before `C3` (REPL lifecycle/routing depends on the client).
+- `C4` and `C5` may execute concurrently after `C3`:
+  - `C4` is REPL-rendering heavy.
+  - `C5` is non-interactive routing heavy.

@@ -399,6 +399,44 @@
       ]
     },
     {
+      "order": 32,
+      "id": "world_first_repl_persistent_pty",
+      "title": "World-first REPL with persistent world PTY",
+      "branch": "feat/world-first-repl-persistent-pty",
+      "directory": "docs/project_management/next/world-first-repl-persistent-pty",
+      "plan": "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
+      "status": "not_started",
+      "sequence": [
+        {
+          "id": "C0",
+          "spec": "docs/project_management/next/world-first-repl-persistent-pty/C0-spec.md"
+        },
+        {
+          "id": "C1",
+          "spec": "docs/project_management/next/world-first-repl-persistent-pty/C1-spec.md"
+        },
+        {
+          "id": "C2",
+          "spec": "docs/project_management/next/world-first-repl-persistent-pty/C2-spec.md"
+        },
+        {
+          "id": "C3",
+          "spec": "docs/project_management/next/world-first-repl-persistent-pty/C3-spec.md"
+        },
+        {
+          "id": "C4",
+          "spec": "docs/project_management/next/world-first-repl-persistent-pty/C4-spec.md"
+        },
+        {
+          "id": "C5",
+          "spec": "docs/project_management/next/world-first-repl-persistent-pty/C5-spec.md"
+        }
+      ],
+      "notes": [
+        "Implements ADR-0016: world-first interactive REPL with persistent Session PTY, explicit completion protocol (no stdout parsing), and REPL-only host escape hatch."
+      ]
+    },
+    {
       "order": 40,
       "id": "json_mode",
       "title": "JSON mode (structured CLI I/O)",

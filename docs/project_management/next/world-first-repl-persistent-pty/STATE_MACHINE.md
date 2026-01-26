@@ -43,7 +43,7 @@ On REPL startup:
      - While waiting for `ready`: receiving a world-agent `error` frame or any unknown server frame type MUST be treated as fatal (fail closed), per `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`.
    - Initialize `world_cwd` from `ready.cwd`.
    - Record the session nonce from `ready.session_nonce` into `world_session` metadata for trace correlation (see `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`).
-   - If the requested `start_session.cwd` could not be honored and `ready.cwd` differs, Substrate MUST report that the REPL started in a different working directory (see `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`).
+  - If the requested `start_session.cwd` was not honored and `ready.cwd` differs, Substrate MUST report that the REPL started in a different working directory (see `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`).
    - After `ready`, Substrate MUST recompute the effective policy snapshot hash and effective workspace root for `ready.cwd`. If either differs from what was used to start the session, Substrate MUST immediately restart the world session (same drift restart behavior as in `ExecutingWorldLine`) before accepting user commands. This avoids starting a session under a snapshot that is inconsistent with the actual in-world starting directory.
 3) If world execution is disabled:
    - No world session exists; all commands execute on host.
@@ -113,7 +113,7 @@ Actions:
      - If that `cwd` is rejected/invalid under the new session, Substrate MUST start in the new session's resolved
        project/root directory and MUST report the cwd change.
    - Update `world_cwd` from `ready.cwd`.
-   - Note: this restart reinitializes the persistent session infrastructure. Only `world_cwd` continuity is best-effort; other in-session state (exported env mutations, history, shell-local state, etc.) may be lost (see ADR-0016 and decision register DR-09/DR-17).
+  - Note: this restart reinitializes the persistent session infrastructure. Only `world_cwd` continuity is best-effort; other in-session state (exported env mutations, history, shell-local state) may be lost (see ADR-0016 and decision register DR-09/DR-17).
 3) Submit the user submission to the world session using the protocol in `PROTOCOL.md`:
    - host assigns the next `seq`, per-command `token_hex`, and `cmd_id` (UUIDv7; see `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md` `exec` schema),
    - sends an `exec` message with `stdin_mode=eof` (stdin is treated as EOF for the duration of the program),
@@ -169,7 +169,7 @@ Completion:
 
 Edge case:
 - There may be a small race where user keystrokes typed at completion time are dropped or partially delivered to the world PTY.
-  Substrate should prefer correctness (no unintended extra input to the shell) over preserving every keystroke in this boundary.
+  Substrate prefers correctness (no unintended extra input to the shell) over preserving every keystroke in this boundary.
 - Job control and backgrounding remain unsupported. In particular, `cmd &` can cause `command_complete` to fire while work continues in the background,
   undermining per-line auditability and command boundaries.
   - Out-of-band PTY output may continue after `command_complete` (see `PROTOCOL.md`). This is allowed but unattributed in v1.

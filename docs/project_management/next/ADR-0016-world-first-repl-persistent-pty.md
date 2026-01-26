@@ -31,7 +31,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 6440d354ecf7fbc3d1b66f5b73a1f5b3e95347a694c7a52619370ddf433e4db1
+ADR_BODY_SHA256: 2428c1041dae3e1d64c313106fbfe6f1d2298a6c0ae7f00c784908a58c597e17
 ### Changes (operator-facing)
 - Make interactive `substrate` behave like a normal in-world shell by default (persistent world PTY session)
   - Existing: In the REPL, most commands run in the world overlay view, but stateful builtins (`cd`, `pwd`, `export`, `unset`) run on the host and operate on host paths/env; this can yield surprising “exists in world but cd fails” behavior.

@@ -205,7 +205,7 @@ Cons:
 2) Introduce an internal “effective cwd” for routing, request building, and telemetry
 - `crates/shell/src/execution/routing/dispatch/exec.rs` must not rely on `env::current_dir()` as the authoritative cwd for policy/config when running world-first.
 - `crates/shell/src/execution/routing/dispatch/world_ops.rs` must build requests using the internal state rather than host cwd/env.
-- `crates/shell/src/execution/routing/telemetry.rs` should log the internal cwd (not host cwd) for world-first modes.
+- `crates/shell/src/execution/routing/telemetry.rs` logs the internal cwd (not host cwd) for world-first modes.
 
 3) Implement `:host` gating as REPL-only opt-in
 - Parsing must occur in REPL loops only (sync + async):
@@ -231,4 +231,4 @@ The major design choices that were previously open here are now locked by the de
 - Auto-PTY + `:pty` passthrough behavior: see DR-12 and DR-14.
 - `:host` scope and gating (REPL-only; never in `-c`): see DR-10.
 
-Open questions should be tracked as explicit DR entries or issues (not implied as “pending” here).
+Unresolved items are tracked as explicit DR entries or issues (not implied as “pending” here).
