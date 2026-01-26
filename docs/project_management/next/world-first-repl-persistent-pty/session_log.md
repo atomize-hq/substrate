@@ -194,3 +194,25 @@
   - `NONE`
 - Next steps:
   - Execution triads begin on `feat/world-first-repl-persistent-pty` with `C0-code`/`C0-test`, then `C0-integ-*`, proceeding through `C1`–`C5` per `docs/project_management/next/world-first-repl-persistent-pty/tasks.json`.
+
+## START — 2026-01-26T22:57:47Z — ops — execution preflight gate (F0-exec-preflight)
+- Feature: `docs/project_management/next/world-first-repl-persistent-pty/`
+- Branch: `feat/world-first-repl-persistent-pty`
+- Goal: Run execution preflight gate per standard and record exactly one recommendation (`ACCEPT` or `REVISE`) in `execution_preflight_report.md`.
+- Inputs read end-to-end (authoritative set + supporting proofs):
+  - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/plan.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/tasks.json`
+  - `docs/project_management/next/world-first-repl-persistent-pty/session_log.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/STATE_MACHINE.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/decision_register.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/integration_map.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/manual_testing_playbook.md`
+  - `docs/project_management/next/world-first-repl-persistent-pty/smoke/*`
+  - `docs/project_management/next/sequencing.json`
+  - Standard: `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
+- Commands planned (minimum):
+  - `FEATURE_DIR="docs/project_management/next/world-first-repl-persistent-pty"; jq -e . "$FEATURE_DIR/tasks.json" >/dev/null`
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null`
+  - `make planning-lint FEATURE_DIR="$FEATURE_DIR"`
