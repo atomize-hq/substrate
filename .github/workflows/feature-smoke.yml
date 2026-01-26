@@ -293,7 +293,7 @@ jobs:
           fi
 
       - name: Provision world-agent (Linux self-hosted; WAPS)
-        if: startsWith(inputs.feature_dir, 'docs/project_management/next/world-agent-policy-snapshot')
+        if: startsWith(inputs.feature_dir, 'docs/project_management/next/world-agent-policy-snapshot') || startsWith(inputs.feature_dir, 'docs/project_management/next/full-isolation-landlock-overlayfs-compat')
         run: |
           set -euo pipefail
           if sudo -n true >/dev/null 2>&1; then
@@ -389,7 +389,7 @@ jobs:
         run: caffeinate -dimsu &
 
       - name: Warm Lima world (macOS self-hosted; WAPS)
-        if: startsWith(inputs.feature_dir, 'docs/project_management/next/world-agent-policy-snapshot')
+        if: startsWith(inputs.feature_dir, 'docs/project_management/next/world-agent-policy-snapshot') || startsWith(inputs.feature_dir, 'docs/project_management/next/full-isolation-landlock-overlayfs-compat')
         run: bash scripts/mac/lima-warm.sh "$GITHUB_WORKSPACE"
 
       - name: Install Rust toolchain

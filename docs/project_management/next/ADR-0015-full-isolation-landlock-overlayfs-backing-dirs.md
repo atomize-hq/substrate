@@ -25,7 +25,6 @@
 ## Executive Summary (Operator)
 
 ADR_BODY_SHA256: e2e35964543818cb613112ba9325f5b183727aab284ce90a32d1070a7a9aba40
-ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md` after drafting>
 
 ### Changes (operator-facing)
 - Full isolation writable allowlists stop failing with EPERM on Linux

@@ -58,6 +58,9 @@ The installer will:
    `loginctl enable-linger <user>` guidance so socket activation survives
    logout/reboots.
 
+If you installed an older version and see `EPERM` for allowlisted writes in `world_fs.isolation=full` + `world_fs.mode=writable`,
+rerun the installer (or `scripts/linux/world-provision.sh` / `scripts/mac/lima-warm.sh`) to refresh the systemd units and capabilities.
+
 By default the installer adds `<prefix>/bin` (default: `~/.substrate/bin`) to
 your shell PATH by appending a small, idempotent snippet to your rc files
 (bash/zsh/fish). Set `SUBSTRATE_INSTALL_NO_PATH=1` to skip this behavior and

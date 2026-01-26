@@ -71,6 +71,7 @@ Windows (WSL backend) is functional but experimental. When the world backend is 
   ```bash
   systemctl status substrate-world-agent.socket --no-pager
   systemctl status substrate-world-agent.service --no-pager
+  systemctl show substrate-world-agent.service -p CapabilityBoundingSet -p AmbientCapabilities
   sudo ls -l /run/substrate.sock
   sudo curl --unix-socket /run/substrate.sock http://localhost/v1/capabilities | jq .
   substrate host doctor --json | jq '.host.world_socket'
@@ -103,6 +104,9 @@ Windows (WSL backend) is functional but experimental. When the world backend is 
   when socket activation is managing the transport instead of a manual bind. The doctor payload
   also includes `world_fs_mode` (`writable` or `read_only`) so policy-driven filesystem settings are
   visible without digging through trace logs.
+  If `world_fs.isolation=full` + `world_fs.mode=writable` allowlisted writes fail with `EPERM`,
+  confirm `cap_chown` is present in the service's `CapabilityBoundingSet`/`AmbientCapabilities`
+  (overlayfs copy-up may require it to preserve ownership/metadata).
 - Need to hand off a reproducible verification run? Execute `scripts/linux/world-socket-verify.sh`
   (see `docs/manual_verification/linux_world_socket.md`) to provision the socket, capture
   doctor/shim-status JSON, and optionally uninstall the units afterward.
@@ -121,6 +125,8 @@ Substrate on macOS uses a Lima VM (“substrate”) to host the world-agent. The
 - `scripts/mac/lima-warm.sh` starts or creates the VM from `scripts/mac/lima/substrate.yaml`, installs required packages, and ensures the systemd unit writes to `/run/substrate.sock` with `/tmp` included in `ReadWritePaths`.
   - `scripts/mac/lima-stop.sh` shuts the VM down cleanly; `scripts/mac/lima-doctor.sh` reports health (virtualization, agent socket, service status, forwarding tools).
   - The helper scripts substitute the active project path so `/src` inside the VM mirrors the host repo checkout.
+  - If full isolation writable allowlists fail with `EPERM` in the guest, confirm the guest service has `cap_chown`:
+    `limactl shell substrate systemctl show substrate-world-agent.service -p CapabilityBoundingSet -p AmbientCapabilities`
 
 - Transport selection (host ⇄ guest)
   1. VSock via `vsock-proxy` (preferred when Virtualization.framework exposes VSock)

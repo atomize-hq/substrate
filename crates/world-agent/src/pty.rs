@@ -347,23 +347,27 @@ pub async fn handle_ws_pty(
                     prefixes.join("\n"),
                 );
             }
-            if !landlock_read_paths.is_empty() {
-                env.insert(
-                    WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV.to_string(),
-                    landlock_read_paths.join("\n"),
-                );
+            let landlock_supported = world::landlock::detect_support().supported;
+            let landlock_env_needed = landlock_supported
+                && (!landlock_read_paths.is_empty() || !landlock_write_paths.is_empty());
+            if landlock_env_needed {
+                if !landlock_read_paths.is_empty() {
+                    env.insert(
+                        WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV.to_string(),
+                        landlock_read_paths.join("\n"),
+                    );
+                }
+                if !landlock_write_paths.is_empty() {
+                    env.insert(
+                        WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV.to_string(),
+                        landlock_write_paths.join("\n"),
+                    );
+                }
+                if let Ok(exe) = std::env::current_exe() {
+                    env.entry("SUBSTRATE_LANDLOCK_HELPER_SRC".to_string())
+                        .or_insert_with(|| exe.display().to_string());
+                }
             }
-            if !landlock_write_paths.is_empty() {
-                env.insert(
-                    WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV.to_string(),
-                    landlock_write_paths.join("\n"),
-                );
-            }
-        }
-
-        if let Ok(exe) = std::env::current_exe() {
-            env.entry("SUBSTRATE_LANDLOCK_HELPER_SRC".to_string())
-                .or_insert_with(|| exe.display().to_string());
         }
 
         let spec = WorldSpec {

@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use substrate_broker::{set_global_broker, BrokerHandle};
 use tempfile::tempdir;
 use tokio::runtime::Runtime;
@@ -26,6 +27,31 @@ fn overlay_available() -> bool {
         && fs::read_to_string("/proc/filesystems")
             .map(|data| data.contains("overlay"))
             .unwrap_or(false)
+}
+
+fn landlock_supported() -> bool {
+    world::landlock::detect_support().supported
+}
+
+#[test]
+fn landlock_exec_subprocess_entry() {
+    if !std::env::var("SUBSTRATE_TEST_RUN_LANDLOCK_EXEC")
+        .ok()
+        .is_some_and(|v| v == "1")
+    {
+        return;
+    }
+
+    match world_agent::internal_exec::run_landlock_exec() {
+        Ok(()) => {
+            eprintln!("unexpected success: landlock exec wrapper returned Ok(())");
+            std::process::exit(1);
+        }
+        Err(err) => {
+            eprintln!("unexpected error return (expected process exit): {err:#}");
+            std::process::exit(1);
+        }
+    }
 }
 
 fn make_service() -> Option<WorldAgentService> {
@@ -265,8 +291,10 @@ fn non_pty_full_isolation_runs_from_tmp_rooted_project() {
 
 #[test]
 fn non_pty_full_isolation_honors_write_allowlist_prefix_globs() {
-    if !overlay_available() {
-        eprintln!("skipping full-isolation non-PTY test: overlay support or privileges missing");
+    if !overlay_available() || !landlock_supported() {
+        eprintln!(
+            "skipping full-isolation non-PTY allowlist test: overlay or Landlock support missing"
+        );
         return;
     }
     let service = match make_service() {
@@ -282,15 +310,56 @@ fn non_pty_full_isolation_honors_write_allowlist_prefix_globs() {
         &service,
         &cwd,
         r#"sh -lc 'set -eu
+mp="${SUBSTRATE_MOUNT_PROJECT_DIR:-}"
+echo "MOUNT_PROJECT_DIR=${mp:-<missing>}"
+if [ -z "$mp" ]; then
+  echo MISSING_SUBSTRATE_MOUNT_PROJECT_DIR
+  exit 44
+fi
+line="$(awk -v mp="$mp" '\''$5==mp {line=$0} END { if (line=="") exit 1; print line }'\'' /proc/self/mountinfo 2>/dev/null)" || {
+  echo MOUNTINFO_NO_MATCH
+  exit 45
+}
+echo "MOUNTINFO_LINE=$line"
+echo "$line" | grep -q " - overlay " || {
+  echo MOUNTINFO_NOT_OVERLAY
+  exit 46
+}
+echo "$line" | grep -q "upperdir=" || {
+  echo MOUNTINFO_MISSING_UPPERDIR
+  exit 47
+}
+echo "$line" | grep -q "workdir=" || {
+  echo MOUNTINFO_MISSING_WORKDIR
+  exit 48
+}
+if [ -z "${SUBSTRATE_WORLD_FS_LANDLOCK_WRITE_ALLOWLIST:-}" ]; then
+  echo MISSING_LANDLOCK_WRITE_ALLOWLIST_ENV
+  exit 49
+fi
+expected="${mp%/}/writable"
+echo "$SUBSTRATE_WORLD_FS_LANDLOCK_WRITE_ALLOWLIST" | grep -F "$expected" >/dev/null || {
+  echo "MISSING_LANDLOCK_WRITE_ENTRY=$expected"
+  echo "LANDLOCK_WRITE_ALLOWLIST=$SUBSTRATE_WORLD_FS_LANDLOCK_WRITE_ALLOWLIST"
+  exit 50
+}
 echo "PWD=$(pwd)"
 mkdir -p writable/sub
 echo ok > writable/sub/ok.txt
 cat writable/sub/ok.txt
-if echo nope > denied.txt 2>/dev/null; then
+if deny_out="$(sh -c '\''echo nope > denied.txt'\'' 2>&1)"; then
   echo UNEXPECTED_WRITE
   exit 41
 else
   echo DENIED_WRITE
+  echo "DENIED_WRITE_ERR=$deny_out"
+  case "$deny_out" in
+    *"Permission denied"*|*"Read-only file system"*|*"Operation not permitted"*) ;;
+    *)
+      echo "UNEXPECTED_DENIED_WRITE_ERR=$deny_out"
+      exit 51
+      ;;
+  esac
 fi
 '"#,
         base_cage_env(),
@@ -323,6 +392,61 @@ fi
     assert!(
         !cwd.join("denied.txt").exists(),
         "denied write should not mutate host project directory"
+    );
+}
+
+#[test]
+fn landlock_exec_fails_closed_with_actionable_error_when_overlay_backing_dirs_missing() {
+    if !landlock_supported() {
+        eprintln!("skipping landlock exec wrapper failure test: Landlock unsupported");
+        return;
+    }
+
+    let exe = std::env::current_exe().expect("current_exe");
+
+    let output = Command::new(exe)
+        .arg("landlock_exec_subprocess_entry")
+        .arg("--exact")
+        .arg("--nocapture")
+        .env("SUBSTRATE_TEST_RUN_LANDLOCK_EXEC", "1")
+        .env("SUBSTRATE_WORLD_FS_ISOLATION", "full")
+        .env("SUBSTRATE_MOUNT_FS_MODE", "writable")
+        .env("SUBSTRATE_MOUNT_PROJECT_DIR", "/proc")
+        .env(
+            "SUBSTRATE_WORLD_FS_LANDLOCK_WRITE_ALLOWLIST",
+            "/project/writable",
+        )
+        .env("SUBSTRATE_MOUNT_CWD", "/")
+        .env("SUBSTRATE_INNER_CMD", "echo should-not-run")
+        .env("SUBSTRATE_INNER_LOGIN_SHELL", "0")
+        .output()
+        .expect("run world-agent landlock exec wrapper");
+
+    assert_eq!(
+        output.status.code(),
+        Some(4),
+        "expected strict overlay backing dir derivation to fail closed with exit=4, got status={:?} stdout={} stderr={}",
+        output.status,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("full isolation landlock prerequisites missing"),
+        "expected high-signal prerequisites error, got stderr={stderr:?}"
+    );
+    assert!(
+        stderr.contains("\"feature\":\"full-isolation-landlock-overlayfs-compat\""),
+        "expected feature tag in stderr, got stderr={stderr:?}"
+    );
+    assert!(
+        stderr.contains("\"mount_point\":\"/proc\""),
+        "expected mount_point in stderr, got stderr={stderr:?}"
+    );
+    assert!(
+        stderr.contains("deriving overlayfs backing dirs from /proc/self/mountinfo"),
+        "expected remediation hint in stderr, got stderr={stderr:?}"
     );
 }
 

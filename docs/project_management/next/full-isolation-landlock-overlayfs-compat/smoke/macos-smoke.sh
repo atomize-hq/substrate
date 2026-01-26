@@ -31,12 +31,15 @@ export PATH="${REPO_ROOT}/target/debug:${PATH}"
 need_cmd substrate
 
 TMP_HOME="$(mktemp -d)"
-TMP_WS="$(mktemp -d)"
-cleanup() { rm -rf "${TMP_HOME}" "${TMP_WS}"; }
+TMP_BASE="${REPO_ROOT}/target/full-isolation-landlock-overlayfs-compat-smoke"
+mkdir -p "${TMP_BASE}"
+TMP_WS="$(mktemp -d "${TMP_BASE}/ws.XXXXXX")"
+cleanup() { rm -rf "${TMP_HOME}" "${TMP_WS}"; rmdir "${TMP_BASE}" 2>/dev/null || true; }
 trap cleanup EXIT
 
 export SUBSTRATE_HOME="${TMP_HOME}"
-export HOME="${TMP_HOME}"
+# Do not override $HOME: rustup/cargo default to $HOME/{.cargo,.rustup} and will break in CI/smoke
+# if HOME is replaced with a temp dir. Substrate state is isolated via $SUBSTRATE_HOME.
 
 substrate config global init --force >/dev/null
 substrate policy global init --force >/dev/null
@@ -48,7 +51,6 @@ substrate workspace init "${TMP_WS}" >/dev/null
 cd "${TMP_WS}"
 mkdir -p writable
 
-substrate policy workspace init --force >/dev/null
 substrate policy workspace set \
   world_fs.mode=writable \
   world_fs.isolation=full \
@@ -80,7 +82,8 @@ if [[ "${fs_primary}" != "overlay" ]]; then
 fi
 
 set +e
-allow_out="$(substrate --world --ci --command "sh -lc 'set -eu\nmkdir -p writable/sub\necho OK > writable/sub/ok.txt\ncat writable/sub/ok.txt\n' " 2>&1)"
+allow_cmd=$'set -eu\nmkdir -p writable/sub\necho OK > writable/sub/ok.txt\ncat writable/sub/ok.txt\n'
+allow_out="$(substrate --world --ci --command "${allow_cmd}" 2>&1)"
 allow_rc=$?
 set -e
 if [[ "${allow_rc}" -ne 0 ]]; then
@@ -94,7 +97,8 @@ fi
 echo "OK: allowlisted write succeeded"
 
 set +e
-deny_out="$(substrate --world --ci --command "sh -lc 'set -eu\nif echo NOPE > denied.txt 2>/dev/null; then\n  echo UNEXPECTED_WRITE\n  exit 41\nelse\n  echo DENIED_WRITE\nfi\n' " 2>&1)"
+deny_cmd=$'set -eu\nif echo NOPE > denied.txt 2>/dev/null; then\n  echo UNEXPECTED_WRITE\n  exit 41\nelse\n  echo DENIED_WRITE\nfi\n'
+deny_out="$(substrate --world --ci --command "${deny_cmd}" 2>&1)"
 deny_rc=$?
 set -e
 if [[ "${deny_rc}" -ne 0 ]]; then
