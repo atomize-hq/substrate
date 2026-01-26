@@ -143,7 +143,7 @@ This decision register supports:
 ## DR-08 — Per-command completion protocol (exit status + cwd)
 
 ### Option A
-- Historical (pre-lock): implement a client-side stdout marker scheme: a shell interpreter emits a boundary marker (with nonce/seq/token/exit/cwd) and the host parses stdout to determine completion.
+- Historical (pre-lock): implement a client-side stdout marker scheme: a shell interpreter emits a boundary marker (with `session_nonce`/`seq`/`token_hex`/`exit`/`cwd`) and the host parses stdout to determine completion.
   - Status: not selected (retained for historical comparison only).
 
 ### Option B
@@ -304,7 +304,7 @@ Scope:
 - Include a per-command random token in the `exec` request and `command_complete` response, and require the host to validate the awaited `(seq, token_hex)` pair (`token_hex` is a `hex32` in the wire protocol).
 
 ### Option B
-- Do not include a per-command token; rely on nonce + seq only.
+- Do not include a per-command token; validate completion using `seq` only (no `token_hex`).
 
 ### Tradeoffs
 - A:

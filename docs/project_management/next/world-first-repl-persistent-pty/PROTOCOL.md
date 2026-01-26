@@ -85,7 +85,7 @@ Session initiation (mode distinction):
 
 ## Evaluator Shell
 The evaluator shell MUST be `/bin/bash` with deterministic invocation:
-- `bash --noprofile --norc`
+- `/bin/bash --noprofile --norc`
 
 World-agent SHOULD suppress in-world prompt output by setting:
 - `PS1=""`, `PS2=""`, and `PROMPT_COMMAND=""` in the evaluator shell environment (and any other in-world shell contexts used to execute submissions).

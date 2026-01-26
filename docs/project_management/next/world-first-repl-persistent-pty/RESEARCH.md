@@ -121,7 +121,7 @@ enforce policy.
 ### The hard constraint for persistent sessions
 A persistent world PTY session introduces snapshot drift risk:
 - Policy and config are resolved per command today (host-side) based on cwd and on-disk policy files.
-- A long-lived world session has one `start` snapshot unless we add an update mechanism.
+- A long-lived persistent session has one `start_session.policy_snapshot` unless we add an update mechanism.
 
 Therefore, any “persistent world session” design must explicitly choose one:
 
@@ -143,7 +143,7 @@ This choice is central to correctness and is now locked by decision register DR-
 
 These are implementation options for how Substrate “replaces the state” currently maintained by host builtins.
 
-### Option A (recommended under ADR constraints): Persistent in-world shell session + explicit `command_complete` protocol
+### Option A (recommended under ADR constraints): Persistent Session PTY + per-submission evaluator shells + explicit `command_complete` protocol
 
 Idea:
 - Start a persistent world session PTY owned by world-agent and keep it alive for the REPL duration.
@@ -216,7 +216,7 @@ Cons:
 ## Recommendation (historical)
 
 If the priority is “Substrate feels like a normal shell inside the world” with correct semantics:
-- Prefer Option A (persistent in-world shell + explicit `command_complete` protocol) and accept the PTY/session complexity.
+- Prefer Option A (persistent Session PTY + per-submission evaluator shells + explicit `command_complete` protocol) and accept the PTY/session complexity.
 
 If the priority is fastest correctness with minimal PTY work:
 - Prefer Option B (virtual state + per-command exec) and accept that the REPL is not a full shell.

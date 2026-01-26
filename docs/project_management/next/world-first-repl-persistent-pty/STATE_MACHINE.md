@@ -13,6 +13,7 @@ The interactive REPL has two execution origins:
 
 The REPL is line-editor driven but supports auto-PTY for interactive programs:
 - Each submitted REPL input (a line-editor submission; it may contain embedded newlines) is treated as one “command submission” to the world session via a single `exec` request.
+  - Terminology note: this document uses “submission” as the canonical term for “what the user entered”. Host execution states may still use `(line)` parameter names, but they refer to the same submission string.
 - Substrate selects a per-command I/O mode:
   - **Line mode** for non-interactive commands (stdin not forwarded; treated as EOF via `stdin_mode=eof`).
   - **PTY passthrough mode** for interactive commands/TUIs (stdin forwarded; raw terminal mode).
@@ -106,7 +107,7 @@ Actions:
    - Update `world_cwd` from `ready.cwd`.
    - Note: this restart reinitializes the persistent session infrastructure. Only `world_cwd` continuity is best-effort; other in-session state (exported env mutations, history, shell-local state, etc.) may be lost (see ADR-0016 and decision register DR-09/DR-17).
 3) Submit the user submission to the world session using the protocol in `PROTOCOL.md`:
-   - host assigns the next `seq`, per-command `token_hex`, and `cmd_id`,
+   - host assigns the next `seq`, per-command `token_hex`, and `cmd_id` (UUIDv7; see `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md` `exec` schema),
    - sends an `exec` message with `stdin_mode=eof` (stdin is treated as EOF for the duration of the program),
    - streams `stdout` (raw PTY bytes; stdout+stderr combined) to the user while waiting for the accepted `command_complete(seq, token_hex)`.
 4) The host MUST NOT pipeline: it MUST NOT send a second `exec` until the current `exec` completes (sequential in-flight semantics; see `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`).
@@ -141,7 +142,7 @@ The REPL executes one REPL submission inside the persistent world session in **P
 Actions:
 1) Perform the same pre-step as `ExecutingWorldLine` for drift (restart-on-change for policy snapshot hash OR workspace root, preserving `world_cwd` when possible).
 2) Submit the user submission to the world session using the protocol in `PROTOCOL.md`:
-   - host assigns the next `seq`, per-command `token_hex`, and `cmd_id`,
+   - host assigns the next `seq`, per-command `token_hex`, and `cmd_id` (UUIDv7; see `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md` `exec` schema),
    - sends an `exec` message with `stdin_mode=passthrough`,
    - switches the host terminal into raw mode and begins forwarding stdin bytes and resize events to the session PTY.
 3) Continue forwarding until the accepted `command_complete(seq, token_hex)` arrives.
