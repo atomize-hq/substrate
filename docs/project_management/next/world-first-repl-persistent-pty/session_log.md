@@ -234,3 +234,10 @@
 - Orchestration branch: `feat/world-first-repl-persistent-pty`
 - Dispatch:
   - `make triad-task-start-pair FEATURE_DIR="$FEATURE_DIR" SLICE_ID="$SLICE_ID" LAUNCH_CODEX=1`
+
+## START — 2026-01-26T23:36:26Z — test — C0-test
+- Worktree: `wt/world-first-repl-persistent-pty-c0-test`
+- Branch: `world-first-repl-persistent-pty-c0-test`
+- Orchestration branch: `feat/world-first-repl-persistent-pty`
+- Dispatch:
+  - `make triad-task-start-pair FEATURE_DIR="$FEATURE_DIR" SLICE_ID="$SLICE_ID" LAUNCH_CODEX=1`

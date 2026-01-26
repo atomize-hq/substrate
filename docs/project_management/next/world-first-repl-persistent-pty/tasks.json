@@ -96,7 +96,7 @@
       "name": "C0 — world-agent persistent session bootstrap + preflight (test)",
       "type": "test",
       "phase": "C0",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Add tests for persistent-session bootstrap and fail-closed preflight on world-agent per C0-spec.md and requirements_traceability.md.",
       "references": [
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
