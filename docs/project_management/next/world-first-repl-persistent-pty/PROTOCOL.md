@@ -26,6 +26,9 @@ It specifies the host↔world-agent protocol for the world-first interactive REP
   - executes them under the stdin-mode semantics below,
   - and reports structured completion events to the host.
 - **Evaluator shell**: the untrusted shell interpreter used to evaluate a submission program (v1 requires `/bin/bash --noprofile --norc`).
+- **Session nonce**: a world-agent-generated, per-session random identifier (`hex32`) returned as `ready.session_nonce`.
+  - It is intended for observability and correlation (e.g., tying out-of-band `stdout` or errors to a specific persistent session instance, including across restart boundaries).
+  - It is not an authentication secret and MUST NOT be used as a capability/credential.
 
 ## Transport (WebSocket JSON frames)
 Substrate uses world-agent `/v1/stream` over WebSocket.
@@ -119,6 +122,12 @@ Therefore, it is a MUST-level requirement that user-submitted programs cannot:
 
 If a user submission attempts to access inherited non-stdio file descriptors (e.g., via `/proc/self/fd` where available, or via shell redirections to numeric FDs), it MUST fail harmlessly and MUST NOT cause premature `command_complete` acceptance or protocol desynchronization.
 
+Implementation guidance (non-normative but posture-aligned):
+- The evaluator process should be spawned with a minimal FD table: only `stdin/stdout/stderr` plus the PTY slave and any explicit `stdin_mode=eof` redirections required for the evaluator.
+- Selected v1 mechanism (Linux, normative): the evaluator process MUST NOT inherit any non-stdio file descriptors/handles.
+  - On Linux, this MUST be enforced by closing all file descriptors other than the explicitly required stdio/PTY fds in the child before `exec` (e.g., `close_range(3, ~0)` or an equivalent “close everything” mechanism).
+  - If the platform/runtime cannot provide an equivalent guarantee in-process, world-agent SHOULD use a separate spawn helper (Option B portability fallback) that itself starts with a minimal FD table and then `exec`s the evaluator with only the required fds.
+
 Invariant reminder:
 - Meeting the control-plane handle privacy requirement MUST NOT be achieved by silently weakening ADR-0016’s persistence guarantees (at minimum: physical cwd + exported env persistence across submissions) or the REPL’s auto-PTY contract, unless the ADR/decision register is explicitly revised.
 
@@ -160,8 +169,12 @@ Fail-closed validation:
 `start_session.env` is the **full environment** (`envp`) used to initialize the persistent session state, and to launch evaluator processes for `exec`s.
 
 Therefore:
+- World-agent MUST treat `start_session.env` as authoritative by default: evaluator processes MUST start from a cleared environment and then apply exactly `start_session.env` (plus documented session-level overrides below).
 - World-agent MUST NOT implicitly inherit environment variables from the world-agent process when launching evaluator processes.
 - World-agent MAY apply documented session-level overrides needed for correctness/UX (e.g., forcing `PS1/PS2/PROMPT_COMMAND` empty to suppress in-world prompts, and normalizing XDG paths to a writable in-world location when necessary).
+- World-agent MUST strip shim/runtime control variables from the persisted session environment (defense-in-depth and correctness), at minimum:
+  - `SHIM_ACTIVE`, `SHIM_CALLER`, `SHIM_CALL_STACK`, `SHIM_DEPTH`.
+  - Rationale: these may be present in the host process environment due to shim interception and must not leak into the persistent in-world session state.
 
 #### `cwd` resolution (startup)
 `start_session.cwd` is a requested starting working directory for the persistent session state (and for the first evaluator invocation).
@@ -186,6 +199,10 @@ World-agent MUST reply:
 - `{"type":"ready","session_nonce":<hex32>,"cwd":<path>,"protocol_version":1}`
 
 The host MUST wait for `ready` before accepting user commands.
+
+`session_nonce` semantics:
+- MUST be freshly generated for each accepted `start_session` (i.e., it MUST change across session restarts).
+- SHOULD be recorded in host trace/session metadata for correlation (see Terms).
 
 #### Version negotiation (fail-closed)
 This document defines **protocol version 1** (`protocol_version=1`).
@@ -251,6 +268,7 @@ Persistent-session v1 ordering barrier (watermark-based, not quiescence):
 - After observing evaluator termination for the foreground command, world-agent MUST snapshot a PTY-read watermark representing “bytes readable at exit” and MUST drain at least that many PTY bytes (forwarding them as `stdout` frames) before emitting `command_complete`.
   - Linux: use `ioctl(FIONREAD)` on the PTY master to obtain `available_bytes_at_exit`.
   - If the platform cannot support a watermark query needed for this barrier, persistent sessions under `protocol_version=1` MUST fail closed on that platform (do not substitute timing heuristics or “drain until would-block/quiescence”).
+  - Selected v1 behavior (fail-closed early): world-agent MUST validate watermark-query support during `start_session` before emitting `ready`, and MUST fail the session early with a fatal `error` if the barrier cannot be satisfied.
 - world-agent MUST NOT wait for global PTY quiescence (e.g., “drain until would-block”) as a prerequisite for `command_complete`, because continuous out-of-band writers can prevent quiescence indefinitely.
 
 Note:

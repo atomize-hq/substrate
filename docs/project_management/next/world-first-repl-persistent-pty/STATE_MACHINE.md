@@ -35,6 +35,7 @@ On REPL startup:
    - Start the persistent world session and wait for readiness (`ready`).
    - Validate `ready.protocol_version` matches `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md` (fail closed if unsupported).
    - Initialize `world_cwd` from `ready.cwd`.
+   - Record the session nonce from `ready.session_nonce` into `world_session` metadata for trace correlation (see `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`).
    - If the requested `start_session.cwd` could not be honored and `ready.cwd` differs, Substrate MUST report that the REPL started in a different working directory (see `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`).
    - After `ready`, Substrate MUST recompute the effective policy snapshot hash and effective workspace root for `ready.cwd`. If either differs from what was used to start the session, Substrate MUST immediately restart the world session (same drift restart behavior as in `ExecutingWorldLine`) before accepting user commands. This avoids starting a session under a snapshot that is inconsistent with the actual in-world starting directory.
 3) If world execution is disabled:
@@ -57,7 +58,8 @@ The REPL is waiting for the next input submission via the line editor (Reedline)
 Out-of-band world PTY output:
 - `stdout` bytes from the world session may arrive while `Idle` (see `PROTOCOL.md` “Out-of-band PTY output”).
 - Substrate MUST render/forward those bytes without corrupting the line editor state.
-  - Terminal UX guidance (non-normative): suspend prompt rendering, write bytes, then restore the prompt and the current input buffer.
+  - Selected v1 requirement: the host MUST use a byte-capable output path that can write arbitrary PTY bytes while Reedline is active (suspend/repair line editor state as needed).
+    - The host MUST NOT route PTY bytes through `ExternalPrinter<String>` or any string-only rendering path, because PTY output is a byte stream and may be non-UTF8.
   - Future UX note: a block-based terminal UI may choose to render these as separate “output blocks”, but the byte stream semantics remain the same.
 
 Directive parsing rule (multiline submissions):

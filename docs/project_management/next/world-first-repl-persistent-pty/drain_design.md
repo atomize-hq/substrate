@@ -106,7 +106,7 @@ Grounding (what exists today)
   loop:
     select over:
       A) control messages from world-agent:
-         - Exec(seq, token, cmd_id, stdin_mode, program_utf8)
+         - Exec(seq, token_hex, cmd_id, stdin_mode, program_utf8)
          - Stdin(bytes)
          - Resize(cols, rows)
          - Signal(sig)
@@ -161,7 +161,7 @@ Grounding (what exists today)
            - session_cwd = physical cwd after exec (getcwd()/pwd -P semantics)
            - session_env = exported env mutations
            - ensure SHIM_PARENT_CMD_ID does not persist
-        3) Emit DriverEvent::CommandComplete{seq, token, exit, cwd=session_cwd}
+        3) Emit DriverEvent::CommandComplete{seq, token_hex, exit, cwd=session_cwd}
     - transition -> Idle{...}
 
   on Close:
@@ -183,8 +183,8 @@ Grounding (what exists today)
 
   ## 2) Correctness argument (no late foreground stdout after completion)
 
-  We need: for a given exec(seq, token), the host must not receive any PTY bytes produced by that foreground execution after
-  command_complete(seq, token, ...).
+  We need: for a given exec(seq, token_hex), the host must not receive any PTY bytes produced by that foreground execution after
+  command_complete(seq, token_hex, ...).
 
   Assumptions that are explicitly in-scope per the docs
 
@@ -222,7 +222,7 @@ Grounding (what exists today)
 
   What is guaranteed
 
-  - For each exec(seq, token), all PTY bytes that are in the PTY output stream as a consequence of that foreground execution and that are
+  - For each exec(seq, token_hex), all PTY bytes that are in the PTY output stream as a consequence of that foreground execution and that are
     readable by the driver before it emits CommandComplete are forwarded as stdout frames before command_complete.
 
   Operationally in this design:

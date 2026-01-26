@@ -85,7 +85,7 @@
 
   ### Evaluator launch per exec
 
-  For each exec(seq, token, cmd_id, stdin_mode, program):
+  For each exec(seq, token_hex, cmd_id, stdin_mode, program):
 
   1. Build env_for_exec = session_env + { SHIM_PARENT_CMD_ID = cmd_id } (and session-level PS1/PS2/PROMPT_COMMAND suppression per protocol).
   2. Set working directory to session_cwd.
@@ -135,15 +135,15 @@
   - Driver owns PTY master and reads it continuously.
   - Driver sends an internal event stream to world-agent:
       - stdout(bytes…) events (raw PTY bytes)
-      - complete(seq, token, exit, cwd) event
-  - Driver emits complete only after:
+      - command_complete(seq, token_hex, exit, cwd) event
+  - Driver emits command_complete only after:
       - it has observed evaluator termination, and
-      - it has performed the post-exit PTY drain barrier (prefer a watermark-based drain, not “drain-to-quiescence”), then sends complete.
+      - it has performed the post-exit PTY drain barrier (prefer a watermark-based drain, not “drain-to-quiescence”), then sends command_complete.
 
   Because stdout and completion share one ordered channel, world-agent can forward:
 
   - each stdout as {"type":"stdout","data_b64":...}
-  - complete as {"type":"command_complete",...}
+  - command_complete as {"type":"command_complete",...}
 
   …and ordering is preserved by construction.
 
@@ -248,9 +248,7 @@
       - The protocol requires forwarding PTY output bytes “unchanged” (docs/project_management/next/world-first-repl-persistent-pty/
         PROTOCOL.md, “stdout” semantics), but today’s concurrent-print mechanism is ExternalPrinter<String> (crates/shell/src/repl/async_repl.rs:10), which
         cannot losslessly represent arbitrary bytes.
-      - This will force either:
-          - a new byte-capable terminal renderer for world stdout while Reedline is active, or
-          - a deliberate v1 constraint (documented) that PTY output is assumed UTF-8 (not currently allowed by the protocol text).
+      - Selected v1 approach: implement a new byte-capable terminal write path for world stdout while Reedline is active; do not assume PTY output is UTF-8.
       - This is likely the highest-friction host-side issue.
   2. Foreground process group correctness
       - World-agent currently forwards signals to a PID in one-shot mode (crates/world-agent/src/pty.rs:663), but v1 requires targeting the
@@ -316,7 +314,7 @@
   2. Token binding
       - Host accepts command_complete only if (seq, token_hex) matches awaited (docs/project_management/next/world-first-repl-persistent-pty/
         PROTOCOL.md, “command_complete” acceptance rules).
-      - Test: fuzz a driver in a harness to send mismatched token; host must fail closed.
+      - Test: fuzz a driver in a harness to send mismatched `token_hex`; host must fail closed.
   3. Output ordering
       - command_complete must not arrive before all foreground stdout bytes were forwarded (docs/project_management/next/world-first-repl-
         persistent-pty/PROTOCOL.md, “Output ordering / drain guarantee”).
