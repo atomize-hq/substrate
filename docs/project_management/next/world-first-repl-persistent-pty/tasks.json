@@ -54,7 +54,7 @@
       "name": "C0 — world-agent persistent session bootstrap + preflight (code)",
       "type": "code",
       "phase": "C0",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Implement persistent-session bootstrap on world-agent (/v1/stream): start_session → ready with fail-closed DR-22/DR-23 preflight and legacy start preserved (production code only).",
       "references": [
         "docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md",
