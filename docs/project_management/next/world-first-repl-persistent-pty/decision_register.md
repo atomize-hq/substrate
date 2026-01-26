@@ -304,8 +304,22 @@ Scope:
 
 ## DR-15 — Deprecated: candidate detection (binary-output false fatals)
 
+### Option A
+- Keep a client-side stdout marker scheme and define candidate detection rules to reduce false protocol fatals under arbitrary/binary output.
+
+### Option B
+- Deprecate candidate detection because v1 does not parse stdout for completion boundaries (completion is explicit: `command_complete`).
+
+### Tradeoffs
+- A:
+  - Pros: improves robustness of a marker-based design under binary output.
+  - Cons: irrelevant for v1; implies stdout parsing, which is explicitly not selected (DR-08).
+- B:
+  - Pros: aligns with v1’s explicit completion protocol; removes an entire class of parsing brittleness.
+  - Cons: none for v1.
+
 ### Decision
-- Deprecated by DR-08 (Option B). With explicit `command_complete` frames from world-agent, the host does not parse stdout for completion boundaries.
+- Selected: Option B (deprecated; v1 uses DR-08 Option B).
 
 ## DR-16 — Per-command token in the persistent-session protocol (spoof resistance)
 
@@ -496,18 +510,33 @@ Scope:
 - Selected: Option B.
   - Authoritative spec: `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md` (“Output ordering / drain guarantee”, watermark barrier).
 
-## Decision follow-ups (selected DRs → tasks)
+## Decision follow-ups (DRs → tasks; exhaustive)
 
 This table is a convenience index. The source of truth for requirement-level ownership is
 `docs/project_management/next/world-first-repl-persistent-pty/requirements_traceability.md`.
 
 | DR | Selected decision (summary) | Implemented by | Validated by |
 |---|---|---|---|
-| DR-04 / DR-10 / DR-11 | `:host` exists, REPL-only, gated; host-only `host_cwd`/`host_env` | `C3-code`, `C5-code` | `C3-test`, `C5-test` |
+| DR-01 | `:host <command>` prefix | `C3-code` | `C3-test`; manual playbook |
+| DR-02 | World-first REPL default (persistent Session PTY + explicit completion; no host-only builtins when world enabled) | `C0-code`, `C1-code`, `C2-code`, `C3-code`, `C5-code` | `C0-test`, `C1-test`, `C2-test`, `C3-test`, `C5-test`; smoke |
+| DR-03 | No legacy compat mode | `C3-code`, `C5-code` | `C3-test`, `C5-test` |
+| DR-04 | `:host` exists but is gated (prevent bypass) | `C3-code`, `C5-code` | `C3-test`, `C5-test`; manual playbook |
 | DR-05 | `-c/--command` world-consistency (no host-only builtins when world enabled) | `C5-code` | `C5-test`; smoke `linux-smoke.sh` |
+| DR-06 | No fallbacks (fail closed; no hidden switches) | `C2-code`, `C3-code`, `C5-code` | `C2-test`, `C3-test`, `C5-test`; manual playbook |
+| DR-07 | Per-submission evaluator shells (`/bin/bash --noprofile --norc`) | `C1-code` | `C1-test` |
 | DR-08 | Explicit completion protocol (`start_session → ready → exec → command_complete`) | `C0-code`, `C1-code`, `C2-code`, `C3-code` | `C0-test`, `C1-test`, `C2-test`, `C3-test` |
-| DR-09 / DR-17 | Drift restart (snapshot/workspace-root) with best-effort cwd continuity | `C3-code` | `C3-test`; manual playbook |
-| DR-12 / DR-20 | Auto-PTY retained; `:pty` forces passthrough within session | `C3-code`, `C4-code` | `C3-test`, `C4-test`; manual playbook |
+| DR-09 | Drift restart on snapshot/workspace-root change | `C3-code` | `C3-test`; manual playbook |
+| DR-10 | `:host` enablement knobs + behavior when disabled | `C3-code`, `C5-code` | `C3-test`, `C5-test`; manual playbook |
+| DR-11 | Host-only `host_cwd` + `host_env` for `:host` | `C3-code` | `C3-test`; manual playbook |
+| DR-12 | `:pty` forces passthrough within session (or host PTY under `--no-world`) | `C3-code`, `C4-code` | `C3-test`, `C4-test`; manual playbook |
+| DR-13 | Multiline submissions are bounded; no PS2 continuation; no job control | `C1-code`, `C3-code` | `C1-test`, `C3-test`; manual playbook |
+| DR-14 | Stdin contract: line mode EOF; passthrough forwards bytes (auto-PTY) | `C1-code`, `C3-code` | `C1-test`, `C3-test` |
+| DR-15 | Deprecated: candidate detection is not part of v1 (superseded by DR-08) | `C0-code`, `C1-code`, `C2-code`, `C3-code` | `C0-test`, `C1-test`, `C2-test`, `C3-test` |
+| DR-16 | Per-command token binding (`token_hex`) | `C1-code`, `C2-code`, `C3-code` | `C1-test`, `C2-test`, `C3-test` |
+| DR-17 | Best-effort cwd continuity on drift restart | `C3-code` | `C3-test`; manual playbook |
+| DR-18 | `:pty` snapshot/availability semantics | `C3-code` | `C3-test` |
+| DR-19 | Subprocess correlation hook via `SHIM_PARENT_CMD_ID` (parity still backlog) | `C1-code`, `C3-code` | `C1-test`, `C3-test` |
+| DR-20 | Auto-PTY heuristic retained | `C3-code`, `C4-code` | `C3-test`, `C4-test` |
 | DR-21 | Command/control separation (program text not on PTY stdin) | `C1-code` | `C1-test` |
-| DR-22 | Control-plane handle privacy (evaluator cannot access session infra/handles) | `C0-code`, `C1-code` | `C0-test`, `C1-test` |
+| DR-22 | Control-plane handle privacy | `C0-code`, `C1-code` | `C0-test`, `C1-test` |
 | DR-23 | Watermark drain barrier ordering (no `command_complete` before forwarded foreground PTY output) | `C0-code`, `C1-code` | `C0-test`, `C1-test` |
