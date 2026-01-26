@@ -261,10 +261,8 @@
         PROTOCOL.md, “Output ordering / drain guarantee”).
       - This is why the “single ordered event channel from driver → agent” is recommended.
   4. Policy snapshot drift restarts will reset in-world env
-      - Per DR-09, session restart on snapshot/workspace-root drift is mandatory (docs/project_management/next/world-first-repl-persistent-
-        pty/decision_register.md:160).
-      - That restart necessarily resets the driver state; the state machine already calls out that exported env may be lost on restart (docs/
-        project_management/next/world-first-repl-persistent-pty/STATE_MACHINE.md:93).
+      - Per decision register DR-09, session restart on snapshot/workspace-root drift is mandatory.
+      - That restart necessarily resets the driver state; `STATE_MACHINE.md` (`ExecutingWorldLine(submission)` restart step) calls out that exported env may be lost on restart.
       - The UX must make this explicit (operator-visible message) and tests must assert restart behavior.
   5. Reserved env vars that must not persist
       - SHIM_PARENT_CMD_ID must never persist across submissions (docs/project_management/next/world-first-repl-persistent-pty/
@@ -298,7 +296,7 @@
   3. Keep program text out of argv
       - Use memfd or an anonymous temp file for the program, execute as bash /proc/self/fd/N.
       - This is recommended regardless, to avoid leaking program text into process listings and future “in-world process execution tracing
-        parity” plumbing (docs/BACKLOG.md:8).
+        parity” plumbing (see `docs/BACKLOG.md` “P0 – In-world process execution tracing parity”).
 
   ———
 
@@ -357,8 +355,7 @@
 
   10. Out-of-band output rendering while idle
 
-  - stdout arriving while Idle must be rendered without corrupting input (docs/project_management/next/world-first-repl-persistent-pty/
-    STATE_MACHINE.md:57).
+  - stdout arriving while Idle must be rendered without corrupting input (`STATE_MACHINE.md` `Idle` → “Out-of-band world PTY output”).
   - Test: start a background writer (even if unsupported) and verify prompt restoration. This likely requires a new byte-capable renderer (see
     friction point #1).
 

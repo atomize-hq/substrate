@@ -273,8 +273,8 @@ Grounding (what exists today)
       - Generally stable; but macOS terminal size ioctls sometimes need to be applied to the master vs slave consistently. The driver should
         pick one target and test it (plan.md resize bullet).
   - Exit/drain ordering on shutdown
-      - Must apply the same “drain before completion-like boundary” logic to session exit where practical (or else you recreate the same bug
-        at session end).
+      - Recommendation (non-normative): apply the same “drain before completion-like boundary” logic to session exit where practical (or else you recreate the same bug
+        at session end). The v1 protocol is normative for shutdown semantics; see `PROTOCOL.md` `close`/`exit`.
 
   ———
 
@@ -291,6 +291,7 @@ Grounding (what exists today)
       - Pros: very explicit “output drained” semantic.
       - Cons: can hang if other writers keep writing; you’d need a fail-closed timeout (acceptable only if timeout triggers a fatal error, not
         a degraded continuation). Watermark-based drain avoids this class of hang.
+      - v1 note: not permitted as a substitute for the watermark barrier required by DR-23 unless DR-23 / `PROTOCOL.md` is explicitly revised.
   3. Instrumented PTY proxy with an internal “barrier marker” that never reaches the user
       - Disallowed for v1: v1 explicitly avoids stdout marker parsing and forbids injecting non-PTY bytes into the Session PTY stream; the watermark barrier is the selected ordering mechanism (DR-23 / `PROTOCOL.md`).
   4. Separate PTY per exec (not a shared persistent PTY)

@@ -29,6 +29,9 @@ Substrate maintains the following state for the lifetime of the REPL:
 
 `world_cwd` and `host_cwd` are independent by design.
 
+World exported environment note:
+- The host does not maintain a “world exported env” map in its REPL state. Exported env persistence for world commands is driver-owned: the trusted driver component persists exported env mutations within the world session and re-applies them to evaluator shells (see `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md` “Evaluation model (v1)”).
+
 ## Startup
 On REPL startup:
 1) Resolve whether world execution is enabled (based on existing `--world/--no-world` and config).

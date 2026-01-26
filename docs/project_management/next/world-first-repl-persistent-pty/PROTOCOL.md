@@ -131,7 +131,10 @@ Implementation guidance (non-normative but posture-aligned):
 - The evaluator process should be spawned with a minimal FD table: only `stdin/stdout/stderr` plus the PTY slave and any explicit `stdin_mode=eof` redirections required for the evaluator.
 - Selected v1 mechanism (Linux, normative): the evaluator process MUST NOT inherit any non-stdio file descriptors/handles.
   - On Linux, this MUST be enforced by closing all file descriptors other than the explicitly required stdio/PTY fds in the child before `exec` (e.g., `close_range(3, ~0)` or an equivalent “close everything” mechanism).
-  - If the platform/runtime cannot provide an equivalent guarantee in-process, world-agent SHOULD use a separate spawn helper (Option B portability fallback) that itself starts with a minimal FD table and then `exec`s the evaluator with only the required fds.
+  - If the platform/runtime cannot provide an equivalent guarantee in-process, world-agent SHOULD use a separate spawn helper (Option B portability fallback) that itself starts with a minimal FD table and then `exec`s the evaluator with only the required fds (the trusted driver component remains in-process; the helper exists only to spawn the evaluator with a minimal FD table).
+
+Fail-closed posture (v1):
+- If world-agent cannot guarantee the required minimal FD table / non-inheritance properties for the evaluator process on the current platform/runtime, it MUST fail closed during `start_session` (before emitting `ready`), rather than starting a session that violates DR-22.
 
 Invariant reminder:
 - Meeting the control-plane handle privacy requirement MUST NOT be achieved by silently weakening ADR-0016’s persistence guarantees (at minimum: physical cwd + exported env persistence across submissions) or the REPL’s auto-PTY contract, unless the ADR/decision register is explicitly revised.

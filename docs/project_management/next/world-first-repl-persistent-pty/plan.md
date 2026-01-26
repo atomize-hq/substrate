@@ -9,6 +9,7 @@ This plan is anchored by:
 1) REPL command routing
 - Add `:host` prefix routing and ensure unprefixed commands are world-first.
 - Enforce `:host` gating (interactive REPL only): when disabled, `:host ...` must error and must not execute on host or world; in `-c/--command`, `:host` must never be recognized as a directive (treated as a normal command string, not a bypass).
+  - Canonical enablement knobs (REPL-only): CLI `--repl-host-escape`, env `SUBSTRATE_REPL_HOST_ESCAPE=1`.
 - Make `-c/--command` world-consistent when world is enabled (no host-only builtins for `cd`/`pwd`/`export`/`unset`), since agent/automation integrations are expected to primarily use `-c`.
 
 2) Persistent world session

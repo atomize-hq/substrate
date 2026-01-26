@@ -3,6 +3,9 @@
 This decision register supports:
 - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
 
+Note on non-selected options:
+- Many DRs include “Option A/B/…” that were considered during design. Unless the DR explicitly says “Selected”, treat non-selected options as historical context only; do not implement them in v1.
+
 ## DR-01 — Host escape prefix syntax
 
 ### Option A
@@ -194,6 +197,9 @@ Scope:
 
 ### Option A
 - Require explicit REPL startup opt-in via a dedicated CLI flag and/or REPL-only env/config knob; when disabled, `:host ...` is rejected with a clear error and is never executed on host or world.
+  - Canonical enablement knobs (REPL-only; see ADR-0016):
+    - CLI: `--repl-host-escape`
+    - Env: `SUBSTRATE_REPL_HOST_ESCAPE=1`
 
 ### Option B
 - When disabled, treat `:host ...` as a normal world command string (i.e. attempt to execute a binary named `:host`).
