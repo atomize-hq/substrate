@@ -50,12 +50,14 @@ This plan is anchored by:
   - Stdin-consuming commands in line mode (`cat`, `read`): must not hang the session (stdin treated as EOF, e.g. via `/dev/null`).
   - Session-state persistence: `export FOO=bar` then `echo "$FOO"` must print `bar`; `unset FOO` then `echo "$FOO"` must print empty (validates ADR persistence goals).
   - `:pty` shares persistent state: `cd /tmp` then `:pty pwd` must report `/tmp` (enforces DR-12 “:pty runs within the persistent session”).
-  - Control-plane FD privacy (DR-22): user submissions attempting to access the reserved control-plane FDs (e.g., via `/proc/self/fd` scanning where available and redirections like `echo hi >&$FD` / `<&$FD`) must not be able to spoof completion, read tokens, or desync the protocol.
+  - Control-plane handle privacy (DR-22): user submissions attempting to access inherited non-stdio file descriptors/handles (e.g., via `/proc/self/fd` scanning where available and numeric redirections like `echo hi >&$FD` / `<&$FD`) must not be able to reach session infrastructure/control-plane endpoints, spoof completion, read tokens/future submissions, or desync the protocol.
   - Version negotiation: if `ready.protocol_version != 1`, the host must treat the session as unsupported and fail closed with a high-signal error (no partial compatibility).
   - Auto-PTY commands (vim/python REPL): must receive stdin and function interactively in PTY passthrough mode.
   - Directive parsing (multiline submissions): directives are recognized only when the submission contains no embedded newlines; a pasted multiline submission beginning with `:pty`/`:host` must be treated as program text (and must not trigger directive routing).
   - Multiline and incomplete shell syntax: incomplete constructs (e.g., `if true; then`) must produce a syntax error and return to idle (no session hang).
-  - Session termination: REPL `exit` and `exit <code>` must cleanly shut down the world session (REPL process exit code remains `0` on normal user exit); shell-terminating submissions like `exec ...` must not produce silent hangs (session exit must be surfaced as fatal fail-closed error).
+  - Session termination:
+    - REPL `exit` and `exit <code>` must cleanly shut down the world session (REPL process exit code remains `0` on normal user exit).
+    - Shell-level constructs like `exec ...` within a submission must not hang and must not terminate the persistent session (v1 uses per-submission evaluator shells).
   - Graceful vs unexpected exit: if the host initiates shutdown (`close`), the subsequent `exit` is treated as expected/graceful; if `exit` arrives unexpectedly (no shutdown in progress), the host must fail closed with a high-signal error.
   - `:host` disabled: must error and must not execute.
   - Snapshot drift restart: policy file/workspace root change triggers restart (cwd continuity preserved when possible).

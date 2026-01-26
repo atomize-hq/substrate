@@ -10,6 +10,12 @@ Grounding (what exists today)
       - stdin gating rules, close/exit semantics, and signal targeting (foreground process group, not a PID).
   - The repo already sketches the correct shape in docs/project_management/next/world-first-repl-persistent-pty/driver_loop_design.md: make a
     trusted driver that owns the PTY and emits a single ordered stream of (stdout bytes | command_complete) events.
+  - Important nuance (host UX + future agent hub):
+      - PTY `stdout` frames are raw bytes from the session PTY.
+      - Concurrent Substrate-managed output (e.g., `:demo-agent`, future AgentHub events) is **not PTY bytes** and MUST NOT be injected into
+        the PTY stream. It must be rendered via a separate host path (Reedline external printer / buffered renderer), and during PTY
+        passthrough it SHOULD be buffered to avoid corrupting TUIs.
+      - See `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`.
 
   ———
 
@@ -118,12 +124,12 @@ Grounding (what exists today)
         - stdin wiring:
             - eof: stdin = /dev/null (NOT PTY)
             - passthrough: stdin = PTY slave
-        - ensure reserved control-plane FDs are not present in evaluator (DR-22)
+        - ensure the evaluator does not inherit session infrastructure/control-plane handles (DR-22)
         - put evaluator into its own process group and make it foreground on the PTY
     - transition -> Running{...}
 
   on PTY readable:
-    - read as many bytes as available (loop until would-block)
+    - read as many bytes as immediately available (best-effort batching)
     - for each chunk: emit DriverEvent::Stdout(chunk_bytes)
 
   on Stdin(bytes):
@@ -138,15 +144,19 @@ Grounding (what exists today)
   on Signal(sig):
     - if state != Running: drop (per PROTOCOL.md)
     - else: deliver to foreground process group (kill(-fg_pgid, signo) or tcgetpgrp-based)
-            MUST NOT target the driver/evaluator PID blindly
+            MUST NOT target session infrastructure (including world-agent) directly; target the foreground process group
 
   on evaluator exit (Running):
     - record exit status as protocol requires (bash convention 128+signal if signaled)
     - IMPORTANT: enter "pending completion" barrier:
-        1) Drain PTY output:
-           - keep reading PTY master in non-blocking mode until would-block,
-             emitting DriverEvent::Stdout for any bytes read.
-           - if drain errors in a way that indicates a broken stream invariant: FatalError + session close.
+        1) Drain PTY output (foreground drain barrier; does not require quiescence):
+           - Snapshot a PTY-read “watermark” at the moment evaluator termination is observed:
+               - Linux: `ioctl(FIONREAD)` on the PTY master to get `available_bytes_at_exit`.
+               - If the platform cannot support a watermark query, the session MUST fail closed (do not silently switch to timing heuristics).
+           - Drain/read the PTY master until at least `available_bytes_at_exit` bytes have been read and emitted as DriverEvent::Stdout.
+           - The driver MUST NOT wait for global PTY quiescence (would-block) as a prerequisite for `command_complete`, because continuous
+             out-of-band writers may prevent quiescence indefinitely.
+           - If drain errors in a way that indicates a broken stream invariant: FatalError + session close.
         2) Update persisted state:
            - session_cwd = physical cwd after exec (getcwd()/pwd -P semantics)
            - session_env = exported env mutations
@@ -163,10 +173,11 @@ Grounding (what exists today)
   What “pending completion” means precisely
 
   - “Pending completion” begins when the evaluator is known finished (exit observed), but before CommandComplete is emitted.
-  - During this phase the driver only does one thing that matters for ordering: drain PTY output to quiescence (would-block), and only then
-    emits CommandComplete.
+  - During this phase the driver only does one thing that matters for ordering: drain the PTY output to a deterministic *foreground watermark*
+    (bytes readable at evaluator exit), and only then emits CommandComplete.
 
-  This is exactly the repository’s recommended strategy in driver_loop_design.md §1.4.
+  This is the repository’s recommended strategy in driver_loop_design.md §1.4, updated to avoid non-terminating drains under continuous
+  out-of-band output.
 
   ———
 
@@ -186,15 +197,15 @@ Grounding (what exists today)
   2. PTY byte order preserved: Stdout(bytes) events are emitted in the same order bytes are read from the PTY master.
   3. Completion barrier: for a given exec, the driver emits CommandComplete only after:
       - the evaluator has terminated, and
-      - the driver has drained the PTY master until it would-block (no more readable bytes at that moment).
+      - the driver has drained at least the PTY-read watermark captured at evaluator exit (`available_bytes_at_exit`).
   4. Single WS writer, FIFO: the world-agent forwards driver events to the WebSocket in FIFO order, and the writer awaits each send.
 
   Why this implies the required guarantee
 
   - Any PTY bytes “produced by the foreground execution” that successfully reach the PTY device are in the PTY master’s read stream.
   - After the evaluator is observed terminated, it cannot produce additional output bytes.
-  - The drain-to-would-block step ensures that all bytes that were already in the PTY stream by that point are read and emitted as Stdout
-    events before CommandComplete.
+  - The watermark drain step ensures that all bytes that were already readable in the PTY stream at the moment evaluator termination was
+    observed are read and emitted as Stdout events before CommandComplete.
   - Because the WS writer is FIFO and awaited, every stdout frame corresponding to those drained bytes is sent before the command_complete
     frame is sent.
   - Therefore the host cannot observe “late foreground stdout after command_complete” unless:
@@ -202,8 +213,8 @@ Grounding (what exists today)
       - the system violates basic PTY semantics.
         In those cases the protocol requires failing closed; we send a fatal error and terminate the session.
 
-  No timing sleeps or heuristic delays are required for correctness; the barrier is defined by (a) evaluator termination and (b) PTY-read
-  quiescence.
+  No timing sleeps or heuristic delays are required for correctness; the barrier is defined by (a) evaluator termination and (b) a
+  deterministic PTY-read watermark (not global quiescence).
 
   ———
 
@@ -216,7 +227,7 @@ Grounding (what exists today)
 
   Operationally in this design:
 
-  - “Foreground bytes” = bytes emitted by the PTY stream from the start of Running through the drain barrier immediately after evaluator exit.
+  - “Foreground bytes” = bytes emitted by the PTY stream from the start of Running through the watermark drain barrier after evaluator exit.
 
   What is explicitly not guaranteed (and why)
 
@@ -233,6 +244,14 @@ Grounding (what exists today)
   - The important property is that out-of-band bytes must not be “tail bytes from the foreground command”. The drain barrier is what prevents
     that.
 
+  Interaction with host-side concurrent output (AgentHub / `:demo-agent`)
+
+  - This document’s “stdout” refers to the **session PTY byte stream** only.
+  - Substrate-managed concurrent output on the host (agent/task events) is a distinct stream and MUST be rendered separately (see
+    `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`).
+  - In particular, during PTY passthrough mode, the host SHOULD buffer structured events and render them only after the foreground PTY
+    command completes, so TUIs/REPLs are not corrupted by interleaved host text.
+
   ———
 
   ## 4) Cross-platform considerations (Linux vs macOS PTY behaviors)
@@ -241,12 +260,11 @@ Grounding (what exists today)
   differs across OSes. Likely friction points:
 
   - Drain primitive implementation
-      - Linux: non-blocking read + EAGAIN/EWOULDBLOCK is the usual quiescence signal; poll/epoll with timeout=0 works well.
+      - Linux: use a watermark query (`ioctl(FIONREAD)` on the PTY master) to bound the post-exit drain, then drain at least that many bytes.
       - macOS: PTY reads may return EIO in some “slave closed” situations where Linux returns 0. Persistent sessions shouldn’t close the slave
         except on shutdown; but shutdown paths must treat EIO as “PTY ended” and fail/exit consistently.
-      - portable_pty exposes Read/Write traits; getting to “non-blocking + would-block” may require raw-fd access (AsRawFd) and OS calls
-        (fcntl, poll). If that’s hard, use a dedicated thread that calls poll(timeout=0) before attempting a blocking read to implement “drain
-        without blocking”.
+      - portable_pty exposes Read/Write traits; watermark queries require raw-fd access and OS calls (ioctl). If raw-fd access is not
+        available, the persistent-session feature MUST fail closed on that platform (do not substitute timing heuristics).
   - Foreground process group signaling
       - The spec requires signaling the foreground process group of the session PTY, not a single PID (PROTOCOL.md).
       - Linux/macOS both support this via tcgetpgrp on the PTY slave and kill(-pgid, sig). You need correct session/job-control setup so the
@@ -265,14 +283,14 @@ Grounding (what exists today)
   1. World-agent-local “pending completion” (no separate driver event stream)
       - Keep PTY reading and completion generation inside the WS handler, but still enforce:
           - a single outbound WS writer,
-          - a completion barrier that triggers a non-blocking drain before command_complete.
+          - a completion barrier that triggers a bounded drain before command_complete (prefer watermark-based).
       - Risk: you’re back to coordinating multiple tasks (PTY read loop, exec lifecycle, WS receive), which is exactly where ordering bugs
         happen unless you carefully serialize all state transitions.
   2. Use tcdrain() on the PTY slave before emitting completion
       - After evaluator exit, call tcdrain(slave_fd) to wait until the terminal output queue is empty, then emit completion.
       - Pros: very explicit “output drained” semantic.
       - Cons: can hang if other writers keep writing; you’d need a fail-closed timeout (acceptable only if timeout triggers a fatal error, not
-        a degraded continuation).
+        a degraded continuation). Watermark-based drain avoids this class of hang.
   3. Instrumented PTY proxy with an internal “barrier marker” that never reaches the user
       - Generally not recommended given the constraints: anything injected into the PTY output risks corrupting TUIs, and server-side marker
         parsing becomes its own correctness/safety hazard.

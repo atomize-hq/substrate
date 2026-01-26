@@ -12,7 +12,7 @@ The interactive REPL has two execution origins:
 - **Host** (explicit): execute only when the input line begins with `:host ` and host escape is enabled.
 
 The REPL is line-editor driven but supports auto-PTY for interactive programs:
-- Each submitted REPL input (a line-editor submission; it may contain embedded newlines) is treated as one “command submission” to the session shell.
+- Each submitted REPL input (a line-editor submission; it may contain embedded newlines) is treated as one “command submission” to the world session via a single `exec` request.
 - Substrate selects a per-command I/O mode:
   - **Line mode** for non-interactive commands (stdin not forwarded; treated as EOF via `stdin_mode=eof`).
   - **PTY passthrough mode** for interactive commands/TUIs (stdin forwarded; raw terminal mode).
@@ -82,9 +82,10 @@ Input handling:
     - If the command is classified as “needs PTY”: transition to `ExecutingHostPty(line)`.
     - Otherwise: transition to `ExecutingHost(line)`.
 
-Reserved / unsafe shell builtins (session-terminating):
-- Submissions that terminate or replace the session shell (e.g., `exit`, `exec ...`, `logout`, `kill $$`) can cause the world session to exit before `command_complete`.
-- If you intend to exit the Substrate REPL, use the REPL `exit`/`quit` directives (handled in `Idle`). Do not run `exit` as an in-world submission.
+Reserved / special shell constructs (operator guidance):
+- `exit`/`quit` are REPL directives (handled in `Idle` for single-line submissions with no embedded newlines).
+  - `exit` within a multiline submission is treated as program text and only affects that submission (it does not request REPL shutdown).
+- Job control and backgrounding remain unsupported. In particular, `cmd &` can cause `command_complete` to fire while work continues in the background, undermining per-line auditability and command boundaries.
 - If the world session exits unexpectedly while a command is in-flight, Substrate MUST treat it as a fatal error and fail closed (see `PROTOCOL.md` Failures).
 
 ### State: `ExecutingWorldLine(line)`
@@ -101,8 +102,8 @@ Actions:
      - If that `cwd` is rejected/invalid under the new session, Substrate MUST start in the new session's resolved
        project/root directory and MUST report the cwd change.
    - Update `world_cwd` from `ready.cwd`.
-   - Note: this restart reinitializes the session shell. Only `world_cwd` continuity is best-effort; other in-session state (exported env mutations, history, shell-local state, etc.) may be lost (see ADR-0016 and decision register DR-09/DR-17).
-3) Submit the user line to the session shell using the protocol in `PROTOCOL.md`:
+   - Note: this restart reinitializes the persistent session infrastructure. Only `world_cwd` continuity is best-effort; other in-session state (exported env mutations, history, shell-local state, etc.) may be lost (see ADR-0016 and decision register DR-09/DR-17).
+3) Submit the user line to the world session using the protocol in `PROTOCOL.md`:
    - host assigns the next `seq`, per-command `token_hex`, and `cmd_id`,
    - sends an `exec` message with `stdin_mode=eof` (stdin is treated as EOF for the duration of the program),
    - streams `stdout` to the user while waiting for the accepted `command_complete(seq, token_hex)`.
@@ -136,7 +137,7 @@ The REPL executes one REPL submission inside the persistent world session in **P
 
 Actions:
 1) Perform the same pre-step as `ExecutingWorldLine` for drift (restart-on-change for policy snapshot hash OR workspace root, preserving `world_cwd` when possible).
-2) Submit the user line to the session shell using the protocol in `PROTOCOL.md`:
+2) Submit the user line to the world session using the protocol in `PROTOCOL.md`:
    - host assigns the next `seq`, per-command `token_hex`, and `cmd_id`,
    - sends an `exec` message with `stdin_mode=passthrough`,
    - switches the host terminal into raw mode and begins forwarding stdin bytes and resize events to the session PTY.
@@ -154,7 +155,7 @@ Completion:
   - transition back to `Idle`.
 
 Edge case:
-- There may be a small race where user keystrokes typed at completion time are dropped or partially delivered to the session shell.
+- There may be a small race where user keystrokes typed at completion time are dropped or partially delivered to the world PTY.
   Substrate should prefer correctness (no unintended extra input to the shell) over preserving every keystroke in this boundary.
 - Job control and backgrounding remain unsupported. In particular, `cmd &` can cause `command_complete` to fire while work continues in the background,
   undermining per-line auditability and command boundaries.

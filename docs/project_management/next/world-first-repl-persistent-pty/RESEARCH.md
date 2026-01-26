@@ -146,11 +146,13 @@ These are implementation options for how Substrate “replaces the state” curr
 ### Option A (recommended under ADR constraints): Persistent in-world shell session + explicit `command_complete` protocol
 
 Idea:
-- Start a persistent `bash` (or compatible shell) inside the world PTY and keep it alive for the REPL duration.
+- Start a persistent world session PTY owned by world-agent and keep it alive for the REPL duration.
+- Use a trusted driver component to enforce DR-22 (control-plane handle privacy) and mediate execution.
 - Extend `/v1/stream` so world-agent can accept per-submission `exec` messages and emit structured `command_complete` messages.
 - Use a small in-world “driver loop” owned by world-agent so:
   - user programs cannot consume REPL control bytes (command text is not sent over PTY stdin),
   - and completion events cannot be spoofed by user output.
+- Evaluate each submission via an untrusted evaluator shell (`/bin/bash --noprofile --norc`) attached to the session PTY; persist only the ADR-guaranteed state across submissions (at minimum: physical cwd + exported env).
 
 State replacement:
 - Substrate maintains `WorldSessionState` (at minimum: `cwd`, `last_exit`) by waiting for `command_complete` from world-agent.
@@ -160,13 +162,13 @@ State replacement:
   - trace logging (`cwd` field)
 
 Pros:
-- Real shell semantics (`cd`, quoting, env behavior) for the default path.
+- Shell semantics for each submission (bash interpreter), with persistence for the ADR-guaranteed state (`cd/pwd` + exported env).
 - Overlay-only paths behave as expected.
 
 Cons / risks:
 - PTY echo/line discipline complexity for a line-editor prompt.
 - Requires world-agent protocol changes and a hardened driver loop.
-- Requires a correlation story for shim logs inside a long-lived shell (the protocol can provide this cleanly via per-command `cmd_id` propagated as `SHIM_PARENT_CMD_ID`).
+- Requires a correlation story for shim logs within a persistent session (the protocol provides this cleanly via per-command `cmd_id` propagated as `SHIM_PARENT_CMD_ID`).
 
 ### Option B: Virtual state in Substrate + per-command non-PTY `/v1/execute`
 
@@ -225,7 +227,7 @@ The major design choices that were previously open here are now locked by the de
 - Line-editor REPL + multiline submissions (no PS2 continuation): see DR-13.
 - Persistent PTY-backed session with explicit `exec` → `command_complete` (no stdout marker parsing): see DR-08 and `PROTOCOL.md`.
 - Driver-loop control plane separation (no program text over PTY stdin): see DR-21.
-- Control-plane FD privacy beyond `FD_CLOEXEC`: see DR-22.
+- Control-plane handle privacy beyond close-on-exec: see DR-22.
 - Auto-PTY + `:pty` passthrough behavior: see DR-12 and DR-14.
 - `:host` scope and gating (REPL-only; never in `-c`): see DR-10.
 

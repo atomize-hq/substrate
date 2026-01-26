@@ -19,12 +19,13 @@ It specifies the host↔world-agent protocol for the world-first interactive REP
 - **Host**: the Substrate shell process and the user’s terminal.
 - **World-agent**: the in-world daemon that exposes `/v1/stream` (WebSocket).
 - **World session**: a single long-lived WebSocket connection for the duration of the REPL.
-- **Session shell**: a long-lived `/bin/bash` process attached to a PTY, managed by world-agent.
-- **Driver loop**: a small in-world control loop (owned by world-agent) that:
-  - receives per-submission programs over a control channel,
-  - executes them in the session shell,
+- **Session PTY**: the long-lived in-world PTY stream for the REPL session (stdout/stderr bytes streamed to the host; stdin reserved for user keystrokes during PTY passthrough).
+- **Trusted driver component**: an implementation-defined component owned by world-agent that holds the private control-plane state and mediates execution/completion; it is trusted infrastructure, not user-submitted code.
+- **Driver loop**: the control loop inside the trusted driver component that:
+  - receives per-submission programs over the private command-control channel,
+  - executes them under the stdin-mode semantics below,
   - and reports structured completion events to the host.
-- **Trusted driver component**: an implementation-defined component owned by world-agent that holds the private control-plane endpoints and mediates execution/completion; it is trusted infrastructure, not user-submitted code.
+- **Evaluator shell**: the untrusted shell interpreter used to evaluate a submission program (v1 requires `/bin/bash --noprofile --norc`).
 
 ## Transport (WebSocket JSON frames)
 Substrate uses world-agent `/v1/stream` over WebSocket.
@@ -58,6 +59,12 @@ Out-of-band PTY output (session-level stdout):
 - Such bytes are **unattributed** to a specific `cmd_id` by default. The v1 protocol does not provide job control or background attribution, and implementations MUST NOT guess attribution.
 - Forward-compat: `command_complete` is a foreground completion boundary, not a guarantee that no further `stdout` bytes will occur on the session PTY stream.
 
+Important separation (host concurrent output vs PTY bytes):
+- This protocol’s `stdout` stream is the **session PTY byte stream** only.
+- Substrate-managed concurrent output on the host (e.g., `:demo-agent`, future AgentHub events) MUST NOT be injected into the PTY byte stream.
+  - In PTY passthrough mode, the host SHOULD buffer structured events and render them only after the foreground PTY command completes, so TUIs/REPLs are not corrupted by interleaved host text.
+  - See `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`.
+
 Compatibility note:
 - Existing one-shot PTY execution over `/v1/stream` is not replaced by this ADR.
 - If world-agent does not support `start_session`/`exec`, the world-first REPL MUST fail closed (no fallback to legacy client-side parsing).
@@ -69,12 +76,17 @@ Session initiation (mode distinction):
   - `{"type":"start_session", ...}` (persistent REPL session mode, `protocol_version=1`).
 - World-agent MUST treat any other first frame as `error.code=bad_request` (or equivalent fatal error) and MUST fail/close the session.
 
-## Session Shell
-The session shell MUST be `/bin/bash` with deterministic invocation:
+## Evaluator Shell
+The evaluator shell MUST be `/bin/bash` with deterministic invocation:
 - `bash --noprofile --norc`
 
 World-agent SHOULD suppress in-world prompt output by setting:
-- `PS1=""`, `PS2=""`, and `PROMPT_COMMAND=""` in the session shell environment.
+- `PS1=""`, `PS2=""`, and `PROMPT_COMMAND=""` in the evaluator shell environment (and any other in-world shell contexts used to execute submissions).
+
+Evaluation model (v1):
+- To satisfy the control-plane handle privacy requirements in this protocol (DR-22), world-agent MUST evaluate each `exec` in an untrusted evaluator context that does not have access to session control-plane endpoints or other session infrastructure.
+- In v1, the trusted driver component MUST evaluate each `exec` by spawning a fresh evaluator shell process attached to the Session PTY.
+  - The trusted driver component MUST persist and re-apply the ADR-0016 guaranteed state across submissions (at minimum: physical cwd + exported env).
 
 ## Key Design Invariant: Separate Command Channel vs User Stdin
 Persistent sessions must support auto-PTY (interactive stdin forwarding) without allowing interactive programs to consume REPL control bytes.
@@ -87,69 +99,38 @@ Therefore:
 This eliminates the “REPL control bytes consumed by stdin” failure mode and avoids shell-syntax splice edge cases (`#` comments, trailing `;`, etc.).
 
 ## Internal Driver Loop (World-Agent Owned)
-When a REPL world session starts, world-agent MUST:
-1) Allocate one PTY for the session shell (stdout/stderr stream to the host; stdin used for user keystrokes during passthrough).
-2) Create two additional OS pipes (or equivalent) for a private control plane:
-   - **FD 9 (command channel)**: world-agent → trusted driver component (read-only in the driver).
-   - **FD 8 (completion channel)**: trusted driver component → world-agent (write-only in the driver).
-   - FD numbering note: the specific FD numbers shown above are illustrative. The implementation SHOULD allocate high-numbered, reserved FDs (e.g., `>= 200`) to minimize collisions with user workflows that use explicit low-numbered file descriptors. Regardless of the chosen numbers, user-submitted programs MUST NOT be able to read/write these control-plane FDs (see below).
-3) Ensure **FD 8 and FD 9 are not inherited by exec’d subprocesses** spawned by untrusted programs (e.g., set close-on-exec).
-4) Ensure **the untrusted evaluation context cannot read from FD 9 or write to FD 8**:
-   - Closing on exec is necessary but not sufficient, because user-submitted shell programs evaluated in the session shell can still reference open file descriptors via redirections (e.g., `>&8`, `<&9`) if those FDs are present in the evaluation context.
-   - The driver loop MUST be structured such that the control-plane FDs are inaccessible to untrusted user code during program execution (mechanism is implementation-defined, but this invariant is required).
-5) Start the session shell and driver loop such that the trusted driver component:
-   - receives programs from the private command-control channel,
-   - executes them in the session shell with the stdin-mode semantics below,
-   - and reports structured completions over the private completion channel.
+In protocol version 1, the **trusted driver component** is an **in-process world-agent component** (not a separate helper process).
 
-### Control-plane FD privacy (beyond `FD_CLOEXEC`)
-This protocol relies on the control-plane FDs being private to the trusted driver loop.
+World-agent MUST:
+1) Allocate one Session PTY (stdout/stderr stream to the host; stdin used for user keystrokes during passthrough).
+2) Initialize the trusted driver component (in-process) and wait until it is ready to accept `exec`s, then send `ready`.
+3) For each `exec`, decode and validate `program_b64` in the WebSocket handler (see `exec` validation rules below), and then deliver the decoded UTF-8 program string and per-command metadata to the trusted driver component via an internal command-control interface (e.g., an in-memory queue). The program text is never sent over PTY stdin.
+4) Ensure the untrusted evaluator process execution context cannot access session infrastructure or control-plane endpoints (see DR-22). In particular, the evaluator process MUST NOT inherit:
+   - the `/v1/stream` WebSocket connection,
+   - any internal world-agent session control endpoints used to coordinate `exec`/`command_complete`,
+   - or any other file descriptors/handles that would allow untrusted code to spoof completion, read future submissions/tokens, or desynchronize the session.
+
+### Control-plane handle privacy (DR-22)
+This protocol relies on the **session control plane being private to world-agent**.
 
 Therefore, it is a MUST-level requirement that user-submitted programs cannot:
-- write bytes that are interpreted as a completion record (FD 8), or
-- read/peek future submissions, tokens, or framing (FD 9).
+- write bytes that are interpreted as a completion event, nor
+- read/peek future submissions, tokens, or other control-plane state.
 
-If a user submission attempts to access these channels (e.g., `echo hi >&8`), it MUST fail harmlessly (e.g., `EBADF`) and MUST NOT cause premature `command_complete` acceptance or desync.
+If a user submission attempts to access inherited non-stdio file descriptors (e.g., via `/proc/self/fd` where available, or via shell redirections to numeric FDs), it MUST fail harmlessly and MUST NOT cause premature `command_complete` acceptance or protocol desynchronization.
 
 Invariant reminder:
-- Meeting the control-plane FD privacy requirement MUST NOT be achieved by silently weakening the persistent-session contract (e.g., switching to per-command fresh shells that lose the persistence guarantees in ADR-0016) unless the ADR/decision register is explicitly revised.
-
-> Implementation note (non-normative)
->
-> The requirement above is subtle: `FD_CLOEXEC` prevents *child process* inheritance, but it does not prevent shell-evaluated code in the session shell from using redirections to access still-open FDs.
->
-> Example implementation patterns that can satisfy the MUST invariant (pick one; not exhaustive):
-> - **Keep the control-plane FDs out of the session shell entirely**: put the command/control plane in a separate helper process (owned by world-agent) and ensure the bash process that evaluates user submissions never has readable/writable handles to those FDs.
-> - **Evaluate user code in an execution context where the control-plane FDs are closed/disabled**: e.g., run the submission in a confined subshell/process with the reserved FDs closed, and propagate only the necessary persistent session state back to the driver (e.g., cwd/env deltas), rather than evaluating directly in the FD-holding context.
->
-### Command framing (FD 9)
-For each submitted REPL program, world-agent writes the following **NUL-delimited** fields to FD 9:
-1) `seq` (ASCII base-10 `u64`)
-2) `token_hex` (lowercase hex, 32 chars)
-3) `stdin_mode` (`eof` or `passthrough`)
-4) `cmd_id` (UUIDv7 string from the host; used for tracing correlation)
-5) `program` (UTF-8 bytes; may contain newlines; MUST NOT contain `0x00`)
-
-Each field is terminated by a single `0x00` byte.
-
-Constraint:
-- Because framing is NUL-delimited, `program` MUST NOT contain NUL bytes. If the decoded program contains `0x00`, world-agent MUST reject it as a protocol error.
-
-### Completion framing (FD 8)
-After running a program, the driver loop writes these NUL-delimited fields to FD 8:
-1) `seq` (ASCII base-10 `u64`)
-2) `token_hex` (lowercase hex, 32 chars)
-3) `exit` (ASCII base-10 `i32`)
-4) `cwd` (UTF-8 absolute path, no NUL)
-
-Each field is terminated by a single `0x00` byte.
+- Meeting the control-plane handle privacy requirement MUST NOT be achieved by silently weakening ADR-0016’s persistence guarantees (at minimum: physical cwd + exported env persistence across submissions) or the REPL’s auto-PTY contract, unless the ADR/decision register is explicitly revised.
 
 ### Execution semantics (stdin modes)
-For each `(seq, token)`:
+For each `(seq, token_hex)`:
 - The driver loop MUST set `SHIM_PARENT_CMD_ID=<cmd_id>` for the duration of executing the program, so in-world shim logs can be correlated to the host command span.
 - `SHIM_PARENT_CMD_ID` MUST be applied only to the foreground program evaluation and its descendants, and MUST NOT persist as a user-visible exported variable across subsequent submissions (the driver MUST restore/unset it after the command completes).
-- The driver loop MUST execute the program in the session shell context (so `cd`/`export`/`unset` semantics persist).
-- The driver loop MUST ensure the executed program cannot access the private control-plane FDs (FD 8/FD 9).
+- The driver loop MUST ensure the ADR-0016 persistence guarantees hold across subsequent `exec`s:
+  - physical working directory (`cd`/`pwd` semantics), and
+  - exported env mutations (`export`/`unset` semantics).
+  The implementation is allowed to be driver-managed (recommended for v1) rather than relying on a single long-lived shell interpreter.
+- The driver loop MUST ensure the executed program cannot access session control-plane endpoints or other session infrastructure (DR-22).
 - If `stdin_mode=eof`, the driver loop MUST execute the program with stdin effectively EOF (e.g., by applying a temporary `</dev/null` redirection around the evaluation).
 - If `stdin_mode=passthrough`, the driver loop MUST execute the program with stdin connected to the PTY, and the host will forward user keystrokes to the PTY until completion.
 
@@ -176,14 +157,14 @@ Fail-closed validation:
 - If `policy_snapshot` is missing or fails schema validation, world-agent MUST treat the request as invalid (e.g., `error.code=bad_request`) and MUST fail/close the session.
 
 #### `env` semantics (startup)
-`start_session.env` is the **full environment** (`envp`) for the session shell.
+`start_session.env` is the **full environment** (`envp`) used to initialize the persistent session state, and to launch evaluator processes for `exec`s.
 
 Therefore:
-- World-agent MUST NOT implicitly inherit environment variables from the world-agent process when launching the session shell.
+- World-agent MUST NOT implicitly inherit environment variables from the world-agent process when launching evaluator processes.
 - World-agent MAY apply documented session-level overrides needed for correctness/UX (e.g., forcing `PS1/PS2/PROMPT_COMMAND` empty to suppress in-world prompts, and normalizing XDG paths to a writable in-world location when necessary).
 
 #### `cwd` resolution (startup)
-`start_session.cwd` is a requested starting working directory for the session shell.
+`start_session.cwd` is a requested starting working directory for the persistent session state (and for the first evaluator invocation).
 
 Definition: “resolved session root/project directory”
 - This refers to the world backend’s anchor/project root for the session (often called `project_dir` in the codebase), i.e., the root directory that the world filesystem view is anchored to.
@@ -193,7 +174,7 @@ Definition: “resolved session root/project directory”
   - If `SUBSTRATE_ANCHOR_MODE=project` (default): use `SUBSTRATE_ANCHOR_PATH` if set; otherwise use the requested `start_session.cwd`.
 
 World-agent MUST:
-- attempt to start the session shell in `start_session.cwd`, and
+- attempt to initialize the persistent session working directory to `start_session.cwd`, and
 - if it cannot honor `start_session.cwd` (e.g., path does not exist, is outside the world root/cage, or is rejected by backend/policy constraints), start the session in the **resolved session root/project directory** for that world session (e.g., workspace root / configured anchor root, consistent with the provided `policy_snapshot`), and return that as `ready.cwd`.
 - Additionally, if `start_session.cwd` is outside the resolved session root/project directory, world-agent MUST start the session in the resolved session root/project directory and return that as `ready.cwd`.
 
@@ -235,8 +216,9 @@ The world-first REPL execution model is sequential:
 World-agent MUST:
 - base64-decode `program_b64` to bytes,
 - validate the bytes are UTF-8 (the “program” string),
-- reject any program containing NUL (`0x00`) bytes (because the internal FD framing is NUL-delimited),
-- and then deliver the decoded program to the trusted driver component via the private command-control channel (FD 9), which then executes it in the session shell execution context.
+- reject any program containing NUL (`0x00`) bytes.
+  - Rationale: NUL cannot be safely represented in the common POSIX process-string interfaces (`execve` argv/envp are NUL-terminated), and it creates ambiguity/fragility in program delivery mechanisms (argv/env/script-file/text) and observability tooling. v1 treats a submission as a UTF-8 program string without embedded NUL.
+- and then deliver the decoded program to the trusted driver component, which executes it in an evaluator shell context under the persistent session state.
 
 Non-interactive execution note:
 - The persistent-session REPL contract MUST NOT rely on interactive shell continuation prompts (PS2). Incomplete constructs must fail as a bounded submission (syntax error) and return to `Idle` (see DR-13 and `plan.md` validation).
@@ -246,11 +228,11 @@ World-agent MUST send:
 - `{"type":"command_complete","seq":<u64>,"token_hex":<hex32>,"exit":<i32>,"cwd":<path>}`
 
 Exit code semantics:
-- `exit` MUST reflect the session shell’s standard `$?`/wait-status semantics for the just-finished foreground submission.
+- `exit` MUST reflect the evaluator shell’s standard `$?`/wait-status semantics for the just-finished foreground submission.
 - If the submission terminates due to a signal, `exit` SHOULD follow bash conventions (typically `128 + signal_number`, e.g., `SIGINT` → `130`) so audit/replay expectations are stable.
 
 Working directory (`cwd`) semantics:
-- `cwd` MUST be the **physical** working directory of the session shell after the submission completes (i.e., symlinks resolved; equivalent to `pwd -P` / `getcwd()` semantics).
+- `cwd` MUST be the **physical** working directory of the persistent session state after the submission completes (i.e., symlinks resolved; equivalent to `pwd -P` / `getcwd()` semantics).
 - `cwd` MUST be an absolute path string.
 
 Path namespace requirement:
@@ -259,11 +241,17 @@ Path namespace requirement:
 - The host MUST NOT `fs::canonicalize()` or otherwise require host-side existence of `cwd` for policy snapshot resolution; doing so reintroduces the original “exists in world but cd fails” class of bugs.
 
 #### Output ordering / drain guarantee (PTY stdout vs `command_complete`)
-For a given `exec(seq, token)`:
+For a given `exec(seq, token_hex)`:
 - World-agent MUST preserve PTY byte ordering when emitting `stdout` frames.
-- World-agent MUST NOT emit `command_complete(seq, token, ...)` until it has forwarded all PTY output bytes produced by that command’s foreground execution.
+- World-agent MUST NOT emit `command_complete(seq, token_hex, ...)` until it has forwarded all PTY output bytes produced by that command’s foreground execution.
 
 This requirement exists to prevent post-completion output from interleaving with the next REPL prompt or Reedline input rendering.
+
+Persistent-session v1 ordering barrier (watermark-based, not quiescence):
+- After observing evaluator termination for the foreground command, world-agent MUST snapshot a PTY-read watermark representing “bytes readable at exit” and MUST drain at least that many PTY bytes (forwarding them as `stdout` frames) before emitting `command_complete`.
+  - Linux: use `ioctl(FIONREAD)` on the PTY master to obtain `available_bytes_at_exit`.
+  - If the platform cannot support a watermark query needed for this barrier, persistent sessions under `protocol_version=1` MUST fail closed on that platform (do not substitute timing heuristics or “drain until would-block/quiescence”).
+- world-agent MUST NOT wait for global PTY quiescence (e.g., “drain until would-block”) as a prerequisite for `command_complete`, because continuous out-of-band writers can prevent quiescence indefinitely.
 
 Note:
 - Output produced *after* `command_complete` may still occur if the command started background work (unsupported) or if other in-world processes write to the session PTY asynchronously. Such behavior undermines per-line auditability and is treated as out of scope (see `STATE_MACHINE.md` job control notes).
@@ -295,7 +283,7 @@ Therefore:
 This ensures that “late keystrokes” near completion cannot leak into the next command and cannot mutate shell state unexpectedly. It also prevents minor host/terminal races from becoming protocol-fatal.
 
 #### `signal` targeting semantics (agent-side, normative)
-In persistent sessions, `signal` is intended to control the currently executing *foreground program*, not the session shell / driver loop itself.
+In persistent sessions, `signal` is intended to control the currently executing *foreground program*, not the trusted driver component itself.
 
 Important distinction:
 - During `stdin_mode=passthrough`, typed control keys (including `Ctrl+C` / `0x03`) are transported as `stdin` bytes. The host MUST NOT translate typed keystrokes into `signal` messages; the remote PTY line discipline / foreground program decides what those bytes mean.
@@ -304,8 +292,8 @@ Therefore:
 - Before `ready` is sent, world-agent MUST ignore/drop all `signal` messages.
 - While no command is running, world-agent MUST ignore/drop all `signal` messages.
 - While a command is running, world-agent MUST deliver the signal to the **foreground process group** of the session PTY (or the closest equivalent on the platform).
-  - World-agent MUST NOT target the session shell PID directly for interactive control signals like `SIGINT`, because that can terminate the driver loop and cause a fatal session loss.
-  - The driver loop/session shell setup MUST ensure the “currently executing command” runs in a distinct foreground process group so that `SIGINT` interrupts the active program without terminating the session driver.
+  - World-agent MUST NOT target session infrastructure (including world-agent itself) for interactive control signals like `SIGINT`, because that can terminate the persistent session and cause a fatal session loss.
+  - The driver loop/session PTY setup MUST ensure the “currently executing command” runs in a distinct foreground process group so that `SIGINT` interrupts the active program without terminating the session.
 
 Operational intent:
 - `SIGINT` must interrupt the currently executing foreground command and the session must remain usable afterward (host continues waiting for `command_complete`).
@@ -313,11 +301,11 @@ Operational intent:
 
 ### `close` / `exit`
 - On REPL shutdown, the host SHOULD send `{"type":"close"}` and close the WebSocket.
-- World-agent MAY send `{"type":"exit","code":<i32>}` if the session shell exits.
+- World-agent MAY send `{"type":"exit","code":<i32>}` if the persistent session infrastructure exits (driver/PTY teardown).
 
 Expected vs unexpected session exit:
 - If the host has initiated shutdown (sent `close` and/or is intentionally closing the WebSocket), receiving `exit` is expected and SHOULD be treated as a graceful shutdown acknowledgement.
-- If world-agent sends `exit` while the host is not shutting down (i.e., a session shell dies unexpectedly, especially while a command is in-flight), the host MUST treat it as fatal and fail closed.
+- If world-agent sends `exit` while the host is not shutting down (i.e., the session ends unexpectedly, especially while a command is in-flight), the host MUST treat it as fatal and fail closed.
 
 ### `error`
 World-agent MAY send an error frame to report a fatal failure for the session or for a specific `exec`.
@@ -356,7 +344,7 @@ Recommended error code mapping (for testability; non-normative but strongly pref
 If any of the following occur, Substrate MUST fail the REPL session (no host fallback):
 - The world session WebSocket closes unexpectedly.
 - World-agent reports `error`.
-- The session shell exits unexpectedly (`exit`).
+- The persistent session infrastructure exits unexpectedly (`exit`).
 - A protocol error occurs (unexpected/mismatched `command_complete`, invalid `ready`, invalid framing, etc.).
 
 The failure MUST be:
@@ -384,24 +372,23 @@ This restart is a correctness requirement; it is not optional and is not a “le
 This appendix provides one concrete architecture sketch that satisfies the MUST-level invariants in this protocol:
 - program text is not sent over PTY stdin (command/control separation),
 - `stdin_mode` semantics are preserved (EOF vs passthrough),
-- and DR-22 is satisfied (the untrusted evaluation context cannot read/write the private control-plane FDs).
+- and DR-22 is satisfied (the untrusted evaluation context cannot access session infrastructure/control-plane endpoints).
 
 This is a recommended reference design, not a normative requirement. Alternative implementations are allowed as long as they satisfy the MUST-level invariants above.
 
 ### Reference Sketch: Dedicated trusted driver + isolated evaluation context + persisted “ADR-required state”
 
 Key idea:
-- Keep the **trusted driver component** as the only holder of the private control-plane endpoints (FD 8/FD 9).
-- Ensure untrusted program evaluation runs in an execution context that never has access to those endpoints (even transiently).
+- Keep the **trusted driver component** as an in-process world-agent component that owns the session PTY and all control-plane state.
+- Ensure untrusted program evaluation runs in an execution context that never has access to session control-plane endpoints (even transiently).
 
 One viable shape:
-1) World-agent starts a long-lived **trusted driver component** (recommended: a small Rust helper owned by world-agent).
+1) World-agent initializes a long-lived **trusted driver component** (in-process).
 2) The driver component owns:
-   - the private command-control channel (FD 9) and completion channel (FD 8),
    - the session PTY master (for output streaming and for PTY stdin in passthrough mode),
    - and the persistent session state required by ADR-0016 (at minimum: `world_cwd` and exported environment mutations).
 3) For each `exec`:
-   - The driver component base64-decodes `program_b64` and validates UTF-8 + “no NUL”.
+   - The WebSocket handler base64-decodes `program_b64` and validates UTF-8 + “no NUL”.
    - It determines stdin wiring:
      - `stdin_mode=eof`: child stdin is `/dev/null`.
      - `stdin_mode=passthrough`: child stdin is the session PTY (host forwards keystrokes via `stdin` frames).
@@ -410,7 +397,7 @@ One viable shape:
        - cwd set to the driver’s current `world_cwd`,
        - envp set to the driver’s current exported env state plus documented session-level overrides,
        - `SHIM_PARENT_CMD_ID` set only for this exec,
-       - and with the reserved control-plane FDs *not present* (closed/never inherited).
+       - and with no access to session control-plane endpoints or other session infrastructure (e.g., no inherited WebSocket FDs).
 4) After the evaluation context completes, the driver component computes and persists the ADR-required state for the next command:
    - update `world_cwd` to the post-exec physical directory (equivalent to `pwd -P` / `getcwd()` semantics),
    - and update the exported env mutations (export/unset) to reflect the completed exec.
@@ -419,11 +406,10 @@ One viable shape:
 
 Security/integrity notes:
 - In this reference design, the **completion event** and `(seq, token)` binding come from the trusted driver component, not from user-output parsing.
-- The untrusted evaluation context MUST NOT be able to read tokens/future submissions (FD 9) nor spoof completion (FD 8).
+- The untrusted evaluation context MUST NOT be able to read tokens/future submissions nor spoof completion (DR-22).
 
 ### Anti-patterns (do not implement; violate DR-22 and/or core invariants)
 
 These approaches often look plausible but violate the spec:
-- **“bash reads commands from FD 9”**: if the bash process that evaluates untrusted submissions can access FD 9, user code can potentially read/peek future submissions/tokens via redirections or `/proc/self/fd` and break the integrity story (DR-22).
-- **“FD_CLOEXEC is enough”**: `FD_CLOEXEC` prevents exec-child inheritance, but it does not prevent shell-level redirections in the evaluation process (DR-22).
+- **“The evaluator can see session infrastructure”**: if the evaluator process can access world-agent session infrastructure (e.g., inherited WebSocket FDs or internal control endpoints), user code can potentially spoof completion, read/peek control-plane state, or desynchronize the protocol (DR-22).
 - **“Send program text over PTY stdin”** (even if “only sometimes”): this violates the command/control separation invariant and reintroduces the class of failure modes this ADR is designed to eliminate.

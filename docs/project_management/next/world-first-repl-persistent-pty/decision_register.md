@@ -25,7 +25,7 @@ This decision register supports:
 ## DR-02 — Default REPL semantics (world-first implementation strategy)
 
 ### Option A
-- Persistent in-world PTY-backed session is the default REPL execution model; Substrate runs a long-lived shell in the world and evaluates each input line within that session.
+- Persistent in-world PTY-backed session is the default REPL execution model; world-agent maintains a long-lived world session and Substrate evaluates each REPL submission inside the world under that session (no host-only builtins for `cd`/`pwd`/`export`/`unset` when world is enabled).
 
 ### Option B
 - Virtual “world state” is maintained by Substrate without a persistent PTY; Substrate uses per-command `/v1/execute` requests and updates its internal cwd/env state by running helper commands (e.g., `pwd`) to simulate shell state.
@@ -117,21 +117,25 @@ This decision register supports:
 ### Decision
 - Selected: Option B (no fallbacks).
 
-## DR-07 — In-world shell process used for the persistent session
+## DR-07 — Evaluator execution model for the persistent session
 
 ### Option A
-- Use a non-interactive `bash` process as the session command interpreter, launched once per REPL session and driven by a world-agent owned driver loop (not an interactive prompt).
+- Use per-submission evaluator shells:
+  - World-agent owns a trusted driver component and a persistent Session PTY.
+  - For each `exec`, the trusted driver spawns an untrusted evaluator (`/bin/bash --noprofile --norc`) attached to the session PTY, and enforces ADR-level persistence (at minimum: physical cwd + exported env) across submissions by driver-managed state.
 
 ### Option B
-- Use an interactive `bash -i` session and rely on prompt hooks (e.g. `PROMPT_COMMAND`) to emit command boundary markers.
+- Use a true long-lived shell interpreter:
+  - Start one long-lived `/bin/bash` interpreter for the session and feed it submissions via a control channel.
+  - Persistence is “natural” because state lives inside the interpreter process.
 
 ### Tradeoffs
 - A:
-  - Pros: deterministic (no rcfiles/prompts required); avoids prompt/PS2 complexity; works with Reedline line-oriented input.
-  - Cons: users do not see an in-world shell prompt; multiline/continuation input remains constrained by the host REPL model.
+  - Pros: satisfies DR-22 cleanly (untrusted evaluation context never has access to session infrastructure/control-plane handles); keeps protocol boundaries robust; aligns with explicit persistence guarantees (cwd/exported env) without requiring a fully interactive shell session model.
+  - Cons: does not provide full “interactive shell session fidelity” (aliases/functions/traps/non-exported vars/history/job control) unless explicitly modeled; requires careful state capture/apply in the trusted driver.
 - B:
-  - Pros: closer to a “native” shell session model.
-  - Cons: prompt hooks can be modified by user configuration; multiline/PS2 behavior is difficult to represent safely via a host line editor; higher risk of desync.
+  - Pros: closer to “native bash session” semantics.
+  - Cons: extremely difficult to satisfy DR-22 without privilege separation or other complex hardening; evaluator process that holds control-plane endpoints is vulnerable to shell-level redirections and `/proc/self/fd` access unless proven otherwise.
 
 ### Decision
 - Selected: Option A.
@@ -139,7 +143,7 @@ This decision register supports:
 ## DR-08 — Per-command completion protocol (exit status + cwd)
 
 ### Option A
-- Implement a client-side stdout marker scheme: the session shell emits a boundary marker (with nonce/seq/token/exit/cwd) and the host parses stdout to determine completion.
+- Implement a client-side stdout marker scheme: a shell interpreter emits a boundary marker (with nonce/seq/token/exit/cwd) and the host parses stdout to determine completion.
   - Status: not selected (retained for historical comparison only).
 
 ### Option B
@@ -420,25 +424,37 @@ Scope:
 ### Decision
 - Selected: Option A.
 
-## DR-22 — Control-plane FD privacy (prevent shell-level access to FD 8/FD 9)
+## DR-22 — Control-plane handle privacy (prevent untrusted access to session infrastructure)
+
+Scope:
+- Applies to the world-first persistent-session REPL only (`start_session` / `exec` / `command_complete`).
+- Applies regardless of whether the trusted driver loop is implemented as a separate helper or as an in-process world-agent component.
+  - v1 is explicitly in-process (see `PROTOCOL.md`), so there is no spec-level “FD 8/FD 9” control plane to protect.
 
 ### Option A
-- Rely on `FD_CLOEXEC` only (FD 8/FD 9 are not inherited by exec’d subprocesses), and accept that user-submitted programs evaluated by the session shell can still access those FDs via redirections (e.g., `>&8`, `<&9`).
+- Rely on close-on-exec and “best effort” isolation only (i.e., accept that the untrusted evaluator process might inherit or otherwise access
+  session infrastructure/control-plane handles, such as the `/v1/stream` WebSocket connection).
 
 ### Option B
-- Require that **user-submitted programs cannot read/write the private control-plane FDs at all**, including when the program is evaluated by the session shell itself:
-  - `FD_CLOEXEC` is necessary but not sufficient.
-  - The driver loop must be structured so FD 8/FD 9 are inaccessible during untrusted program execution (implementation-defined mechanism, but MUST be enforced).
-  - The implementation SHOULD allocate high-numbered, reserved FDs for the control plane (e.g., `>= 200`) to reduce collisions with user workflows that use explicit low-numbered file descriptors.
-  - Invariant reminder: satisfying FD privacy MUST NOT be done by silently weakening the persistent-session contract (e.g., switching to per-command fresh shells that lose ADR-0016 persistence guarantees) unless the ADR/DR is explicitly revised.
+- Require that **user-submitted programs cannot access session infrastructure/control-plane handles at all**, including when the program is
+  evaluated by an evaluator shell itself:
+  - Close-on-exec is necessary but not sufficient; the evaluator must not have access in the first place.
+  - The session driver loop must be structured so the evaluator cannot:
+    - spoof completion (`command_complete`),
+    - read/peek future submissions/tokens,
+    - or desynchronize the protocol by reading/writing session control-plane endpoints.
+  - Invariant reminder: satisfying control-plane handle privacy MUST NOT be done by silently weakening the persistent-session contract
+    (e.g., disabling auto-PTY or dropping ADR-0016 persistence guarantees) unless the ADR/DR is explicitly revised.
 
 ### Tradeoffs
 - A:
   - Pros: simpler implementation.
-  - Cons: breaks the “completion channel not spoofable” integrity claim; allows deliberate session desync/DoS and can cause incorrect per-command completion/cwd tracking.
+  - Cons: breaks the “completion is explicit and non-spoofable” integrity claim; allows deliberate session desync/DoS and can cause incorrect
+    per-command completion/cwd tracking.
 - B:
-  - Pros: makes command completion integrity robust against shell-level redirections; aligns with hardened-driver-loop security posture.
-  - Cons: requires more careful driver architecture and explicit tests.
+  - Pros: makes command completion integrity robust against shell-level redirections and `/proc/self/fd`-style discovery; aligns with the
+    hardened session posture.
+  - Cons: requires more careful process spawning and explicit tests to ensure the evaluator cannot see session infrastructure.
 
 ### Decision
 - Selected: Option B.
