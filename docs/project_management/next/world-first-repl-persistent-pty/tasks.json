@@ -3,6 +3,7 @@
     "schema_version": 3,
     "feature": "world-first-repl-persistent-pty",
     "cross_platform": true,
+    "execution_gates": true,
     "behavior_platforms_required": ["linux", "macos"],
     "ci_parity_platforms_required": ["linux", "macos", "windows"],
     "automation": {
@@ -11,6 +12,43 @@
     }
   },
   "tasks": [
+    {
+      "id": "F0-exec-preflight",
+      "name": "Execution preflight gate (feature start)",
+      "type": "ops",
+      "phase": "F0",
+      "status": "pending",
+      "description": "Run the execution preflight gate to confirm smoke/manual/CI plans are adequate before starting triads.",
+      "references": [
+        "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
+        "docs/project_management/next/world-first-repl-persistent-pty/tasks.json",
+        "docs/project_management/next/world-first-repl-persistent-pty/session_log.md",
+        "docs/project_management/next/world-first-repl-persistent-pty/execution_preflight_report.md",
+        "docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md",
+        "docs/project_management/next/world-first-repl-persistent-pty/decision_register.md",
+        "docs/project_management/next/world-first-repl-persistent-pty/integration_map.md",
+        "docs/project_management/next/world-first-repl-persistent-pty/manual_testing_playbook.md",
+        "docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md"
+      ],
+      "acceptance_criteria": [
+        "Execution preflight recommendation recorded (ACCEPT or REVISE) in execution_preflight_report.md"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\"",
+        "Read: plan.md, tasks.json, session_log.md, execution_preflight_report.md, and kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Verify planning quality gate is ACCEPT in docs/project_management/next/world-first-repl-persistent-pty/quality_gate_report.md"
+      ],
+      "end_checklist": [
+        "Complete execution_preflight_report.md with ACCEPT/REVISE, evidence, and required fixes (if any)",
+        "Set status to completed; add END entry; commit docs"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/F0-exec-preflight.md",
+      "depends_on": [],
+      "concurrent_with": []
+    },
     {
       "id": "C0-code",
       "name": "C0 — world-agent persistent session bootstrap + preflight (code)",
@@ -48,7 +86,7 @@
       "worktree": "wt/world-first-repl-persistent-pty-c0-code",
       "integration_task": "C0-integ-core",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C0-code.md",
-      "depends_on": [],
+      "depends_on": ["F0-exec-preflight"],
       "concurrent_with": ["C0-test"],
       "git_branch": "world-first-repl-persistent-pty-c0-code",
       "required_make_targets": ["triad-code-checks"]
@@ -86,7 +124,7 @@
       "worktree": "wt/world-first-repl-persistent-pty-c0-test",
       "integration_task": "C0-integ-core",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C0-test.md",
-      "depends_on": [],
+      "depends_on": ["F0-exec-preflight"],
       "concurrent_with": ["C0-code"],
       "git_branch": "world-first-repl-persistent-pty-c0-test",
       "required_make_targets": ["triad-test-checks"]
@@ -261,11 +299,13 @@
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
         "docs/project_management/next/world-first-repl-persistent-pty/tasks.json",
         "docs/project_management/next/world-first-repl-persistent-pty/session_log.md",
-        "docs/project_management/next/world-first-repl-persistent-pty/C0-spec.md"
+        "docs/project_management/next/world-first-repl-persistent-pty/C0-spec.md",
+        "docs/project_management/next/world-first-repl-persistent-pty/C0-closeout_report.md"
       ],
       "acceptance_criteria": [
         "All required platform gates for C0 are green (behavior smoke + CI parity)",
-        "C0 is merged back to orchestration branch"
+        "C0 is merged back to orchestration branch",
+        "C0-closeout_report.md is completed with evidence"
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\"",
@@ -278,6 +318,7 @@
         "cargo clippy --workspace --all-targets -- -D warnings",
         "make integ-checks",
         "Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=behavior SMOKE_SLICE_ID=\"C0\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
+        "Complete docs/project_management/next/world-first-repl-persistent-pty/C0-closeout_report.md",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C0-integ\""
       ],
       "worktree": "wt/world-first-repl-persistent-pty-c0-integ",
@@ -541,11 +582,13 @@
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
         "docs/project_management/next/world-first-repl-persistent-pty/tasks.json",
         "docs/project_management/next/world-first-repl-persistent-pty/session_log.md",
-        "docs/project_management/next/world-first-repl-persistent-pty/C1-spec.md"
+        "docs/project_management/next/world-first-repl-persistent-pty/C1-spec.md",
+        "docs/project_management/next/world-first-repl-persistent-pty/C1-closeout_report.md"
       ],
       "acceptance_criteria": [
         "All required platform gates for C1 are green (behavior smoke + CI parity)",
-        "C1 is merged back to orchestration branch"
+        "C1 is merged back to orchestration branch",
+        "C1-closeout_report.md is completed with evidence"
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\"",
@@ -558,6 +601,7 @@
         "cargo clippy --workspace --all-targets -- -D warnings",
         "make integ-checks",
         "Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=behavior SMOKE_SLICE_ID=\"C1\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
+        "Complete docs/project_management/next/world-first-repl-persistent-pty/C1-closeout_report.md",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C1-integ\""
       ],
       "worktree": "wt/world-first-repl-persistent-pty-c1-integ",
@@ -818,11 +862,13 @@
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
         "docs/project_management/next/world-first-repl-persistent-pty/tasks.json",
         "docs/project_management/next/world-first-repl-persistent-pty/session_log.md",
-        "docs/project_management/next/world-first-repl-persistent-pty/C2-spec.md"
+        "docs/project_management/next/world-first-repl-persistent-pty/C2-spec.md",
+        "docs/project_management/next/world-first-repl-persistent-pty/C2-closeout_report.md"
       ],
       "acceptance_criteria": [
         "All required platform gates for C2 are green (behavior smoke + CI parity)",
-        "C2 is merged back to orchestration branch"
+        "C2 is merged back to orchestration branch",
+        "C2-closeout_report.md is completed with evidence"
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\"",
@@ -835,6 +881,7 @@
         "cargo clippy --workspace --all-targets -- -D warnings",
         "make integ-checks",
         "Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=behavior SMOKE_SLICE_ID=\"C2\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
+        "Complete docs/project_management/next/world-first-repl-persistent-pty/C2-closeout_report.md",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C2-integ\""
       ],
       "worktree": "wt/world-first-repl-persistent-pty-c2-integ",
@@ -1097,11 +1144,13 @@
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
         "docs/project_management/next/world-first-repl-persistent-pty/tasks.json",
         "docs/project_management/next/world-first-repl-persistent-pty/session_log.md",
-        "docs/project_management/next/world-first-repl-persistent-pty/C3-spec.md"
+        "docs/project_management/next/world-first-repl-persistent-pty/C3-spec.md",
+        "docs/project_management/next/world-first-repl-persistent-pty/C3-closeout_report.md"
       ],
       "acceptance_criteria": [
         "All required platform gates for C3 are green (behavior smoke + CI parity)",
-        "C3 is merged back to orchestration branch"
+        "C3 is merged back to orchestration branch",
+        "C3-closeout_report.md is completed with evidence"
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\"",
@@ -1114,6 +1163,7 @@
         "cargo clippy --workspace --all-targets -- -D warnings",
         "make integ-checks",
         "Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=behavior SMOKE_SLICE_ID=\"C3\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
+        "Complete docs/project_management/next/world-first-repl-persistent-pty/C3-closeout_report.md",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C3-integ\""
       ],
       "worktree": "wt/world-first-repl-persistent-pty-c3-integ",
@@ -1375,11 +1425,13 @@
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
         "docs/project_management/next/world-first-repl-persistent-pty/tasks.json",
         "docs/project_management/next/world-first-repl-persistent-pty/session_log.md",
-        "docs/project_management/next/world-first-repl-persistent-pty/C4-spec.md"
+        "docs/project_management/next/world-first-repl-persistent-pty/C4-spec.md",
+        "docs/project_management/next/world-first-repl-persistent-pty/C4-closeout_report.md"
       ],
       "acceptance_criteria": [
         "All required platform gates for C4 are green (behavior smoke + CI parity)",
-        "C4 is merged back to orchestration branch"
+        "C4 is merged back to orchestration branch",
+        "C4-closeout_report.md is completed with evidence"
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\"",
@@ -1392,6 +1444,7 @@
         "cargo clippy --workspace --all-targets -- -D warnings",
         "make integ-checks",
         "Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=behavior SMOKE_SLICE_ID=\"C4\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
+        "Complete docs/project_management/next/world-first-repl-persistent-pty/C4-closeout_report.md",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C4-integ\""
       ],
       "worktree": "wt/world-first-repl-persistent-pty-c4-integ",
@@ -1649,11 +1702,13 @@
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
         "docs/project_management/next/world-first-repl-persistent-pty/tasks.json",
         "docs/project_management/next/world-first-repl-persistent-pty/session_log.md",
-        "docs/project_management/next/world-first-repl-persistent-pty/C5-spec.md"
+        "docs/project_management/next/world-first-repl-persistent-pty/C5-spec.md",
+        "docs/project_management/next/world-first-repl-persistent-pty/C5-closeout_report.md"
       ],
       "acceptance_criteria": [
         "All required platform gates for C5 are green (behavior smoke + CI parity)",
-        "C5 is merged back to orchestration branch"
+        "C5 is merged back to orchestration branch",
+        "C5-closeout_report.md is completed with evidence"
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\"",
@@ -1666,6 +1721,7 @@
         "cargo clippy --workspace --all-targets -- -D warnings",
         "make integ-checks",
         "Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=behavior SMOKE_SLICE_ID=\"C5\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
+        "Complete docs/project_management/next/world-first-repl-persistent-pty/C5-closeout_report.md",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C5-integ\""
       ],
       "worktree": "wt/world-first-repl-persistent-pty-c5-integ",
