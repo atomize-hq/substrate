@@ -1,0 +1,7 @@
+- Verified worktree/branch: `wt/workspace_config_policy_unification-wcu5-integ` on `workspace_config_policy_unification-wcu5-integ`; `.taskmeta.json` present.
+- Merged `workspace_config_policy_unification-wcu5-integ-core` into `workspace_config_policy_unification-wcu5-integ`; final HEAD `97fc1f457d82b1c99cf0959c66585ce933cdf547`.
+- Ran gates: `cargo fmt --all`, `cargo clippy --workspace --all-targets -- -D warnings`, targeted tests (`-p substrate-shell --tests`, `--test wcu2_explain_determinism`), `make integ-checks` (pass).
+- Dispatched cross-platform feature smoke (behavior): run `21076914464` (`success`) `https://github.com/atomize-hq/substrate/actions/runs/21076914464` (passed `linux,macos,windows`).
+- Ran `make triad-task-finish TASK_ID="WCU5-integ"` (fast-forwarded orchestration); pushed `feat/workspace-config-policy-unification` to `origin` at `97fc1f4`.
+
+Next for closeout: update `docs/project_management/_archived/workspace-config-policy-unification/WCU5-closeout_report.md` with the smoke run URL/id and the final HEAD `97fc1f457d82b1c99cf0959c66585ce933cdf547` (I didn’t edit planning docs in this worktree).

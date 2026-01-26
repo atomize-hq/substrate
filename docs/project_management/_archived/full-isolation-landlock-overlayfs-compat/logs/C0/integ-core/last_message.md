@@ -1,0 +1,18 @@
+**What I did**
+- Verified worktree/branch and `.taskmeta.json`; did not edit any planning docs under `docs/project_management/next/`.
+- Local gates green: `cargo fmt --all`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test` (via `make integ-checks`), `make integ-checks`.
+- Fixed CI compile-parity failure (non-Linux clippy) with `2883f19d` (`fix(world): appease clippy on non-linux`).
+- Ran `make triad-task-finish TASK_ID="C0-integ-core"` successfully.
+
+**CI Compile Parity (green)**
+- `RUN_ID=21173624758`
+- `RUN_URL=https://github.com/atomize-hq/substrate/actions/runs/21173624758`
+
+**Behavior Smoke (failed)**
+- `RUN_ID=21173728283`
+- `RUN_URL=https://github.com/atomize-hq/substrate/actions/runs/21173728283`
+- `SMOKE_PASSED_PLATFORMS=`
+- `SMOKE_FAILED_PLATFORMS=linux,macos`
+
+**Operator next step (from orchestration checkout)**
+- Run: `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="docs/project_management/_archived/full-isolation-landlock-overlayfs-compat" SLICE_ID="C0" SMOKE_RUN_ID="21173728283" LAUNCH_CODEX=1`

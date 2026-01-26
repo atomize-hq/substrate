@@ -6,15 +6,15 @@
 - Owner(s): spenser
 
 ## Scope
-- Feature directory: `docs/project_management/next/full-isolation-landlock-overlayfs-compat/`
+- Feature directory: `docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/`
 - Sequencing spine: `docs/project_management/next/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 
 ## Related Docs
-- Policy snapshot spec: `docs/project_management/next/world-agent-policy-snapshot/policy-snapshot-spec.md`
-- Decision Register: `docs/project_management/next/full-isolation-landlock-overlayfs-compat/decision_register.md`
+- Policy snapshot spec: `docs/project_management/_archived/world-agent-policy-snapshot/policy-snapshot-spec.md`
+- Decision Register: `docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/decision_register.md`
 - Related ADRs:
   - `docs/project_management/next/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
 - Grounding code references:
@@ -33,7 +33,7 @@ ADR_BODY_SHA256: e2e35964543818cb613112ba9325f5b183727aab284ce90a32d1070a7a9aba4
   - Why: Landlock enforcement currently blocks overlayfs’ internal upper/work backing directory writes (not user policy writes), which breaks the operator contract for `world_fs.write_allowlist`.
   - Links:
     - `docs/ISOLATION_SUPPORT_MATRIX.md`
-    - `docs/project_management/next/world-agent-policy-snapshot/decision_register.md`
+    - `docs/project_management/_archived/world-agent-policy-snapshot/decision_register.md`
     - `crates/world-agent/src/internal_exec.rs`
     - `crates/world/src/exec.rs`
 
@@ -130,5 +130,5 @@ ADR_BODY_SHA256: e2e35964543818cb613112ba9325f5b183727aab284ce90a32d1070a7a9aba4
 
 ## Decision Summary
 - Decision Register entries:
-  - `docs/project_management/next/full-isolation-landlock-overlayfs-compat/decision_register.md`:
+  - `docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/decision_register.md`:
     - DR-0001

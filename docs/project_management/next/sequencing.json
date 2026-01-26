@@ -131,7 +131,7 @@
         }
       ],
       "notes": [
-        "I2/I3 full cage must mount `/var/lib/substrate/world-deps` read-write so ADR-0002 user-space world-deps installs remain compatible under pivot_root (see docs/project_management/next/world_deps_selection_layer/decision_register.md DR-0008)."
+        "I2/I3 full cage must mount `/var/lib/substrate/world-deps` read-write so ADR-0002 user-space world-deps installs remain compatible under pivot_root (see docs/project_management/_archived/world_deps_selection_layer/decision_register.md DR-0008)."
       ]
     },
     {
@@ -246,21 +246,21 @@
       "id": "world_deps_selection_layer",
       "title": "World deps selection layer",
       "branch": "feat/world_deps_selection_layer",
-      "directory": "docs/project_management/next/world_deps_selection_layer",
-      "plan": "docs/project_management/next/world_deps_selection_layer/plan.md",
+      "directory": "docs/project_management/_archived/world_deps_selection_layer",
+      "plan": "docs/project_management/_archived/world_deps_selection_layer/plan.md",
       "status": "completed",
       "sequence": [
         {
           "id": "WDL0",
-          "spec": "docs/project_management/next/world_deps_selection_layer/S0-spec-selection-config-and-ux.md"
+          "spec": "docs/project_management/_archived/world_deps_selection_layer/S0-spec-selection-config-and-ux.md"
         },
         {
           "id": "WDL1",
-          "spec": "docs/project_management/next/world_deps_selection_layer/S1-spec-install-classes.md"
+          "spec": "docs/project_management/_archived/world_deps_selection_layer/S1-spec-install-classes.md"
         },
         {
           "id": "WDL2",
-          "spec": "docs/project_management/next/world_deps_selection_layer/S2-spec-system-packages-provisioning.md"
+          "spec": "docs/project_management/_archived/world_deps_selection_layer/S2-spec-system-packages-provisioning.md"
         }
       ],
       "notes": [
@@ -273,7 +273,7 @@
       "id": "workspace_config_policy_unification",
       "title": "Workspace config/policy scopes + .substrate unification (patch files)",
       "branch": "feat/workspace-config-policy-unification",
-      "directory": "docs/project_management/next/workspace-config-policy-unification",
+      "directory": "docs/project_management/_archived/workspace-config-policy-unification",
       "plan": "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
       "status": "completed",
       "sequence": [
@@ -308,17 +308,17 @@
       "id": "policy_patch_only_broker_effective_resolution",
       "title": "Policy patch-only + broker-canonical effective resolution",
       "branch": "feat/policy-patch-only-broker-effective-resolution",
-      "directory": "docs/project_management/next/policy-patch-only-broker-effective-resolution",
-      "plan": "docs/project_management/next/policy-patch-only-broker-effective-resolution/plan.md",
+      "directory": "docs/project_management/_archived/policy-patch-only-broker-effective-resolution",
+      "plan": "docs/project_management/_archived/policy-patch-only-broker-effective-resolution/plan.md",
       "status": "not_started",
       "sequence": [
         {
           "id": "C0",
-          "spec": "docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md"
+          "spec": "docs/project_management/_archived/policy-patch-only-broker-effective-resolution/C0-spec.md"
         },
         {
           "id": "C1",
-          "spec": "docs/project_management/next/policy-patch-only-broker-effective-resolution/C1-spec.md"
+          "spec": "docs/project_management/_archived/policy-patch-only-broker-effective-resolution/C1-spec.md"
         }
       ],
       "notes": [
@@ -385,13 +385,13 @@
       "id": "full_isolation_landlock_overlayfs_compat",
       "title": "Full isolation Landlock ↔ overlayfs backing dirs compat",
       "branch": "feat/full-isolation-landlock-overlayfs-compat",
-      "directory": "docs/project_management/next/full-isolation-landlock-overlayfs-compat",
-      "plan": "docs/project_management/next/full-isolation-landlock-overlayfs-compat/plan.md",
+      "directory": "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat",
+      "plan": "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/plan.md",
       "status": "not_started",
       "sequence": [
         {
           "id": "C0",
-          "spec": "docs/project_management/next/full-isolation-landlock-overlayfs-compat/C0-spec.md"
+          "spec": "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/C0-spec.md"
         }
       ],
       "notes": [

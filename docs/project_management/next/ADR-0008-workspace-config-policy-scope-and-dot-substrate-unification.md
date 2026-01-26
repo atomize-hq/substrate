@@ -6,7 +6,7 @@
 - Owner(s): spenser
 
 ## Scope
-- Feature directory: `docs/project_management/next/workspace-config-policy-unification/`
+- Feature directory: `docs/project_management/_archived/workspace-config-policy-unification/`
 - Sequencing spine: `docs/project_management/next/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
@@ -22,7 +22,7 @@
   - `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md`
 - Follow-on ADRs:
   - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
-- Decision Register: `docs/project_management/next/workspace-config-policy-unification/decision_register.md`
+- Decision Register: `docs/project_management/_archived/workspace-config-policy-unification/decision_register.md`
 
 ## Executive Summary (Operator)
 
@@ -35,7 +35,7 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0008-wo
   - New: `current show` is the effective/merged view; `global|workspace show` shows exactly what is set at that scope (patch file). Install/dev scripts do not export `SUBSTRATE_OVERRIDE_*` by default.
   - Why: Eliminate “why didn’t my global set take effect?” confusion and make config and policy semantics symmetric.
   - Links:
-    - `docs/project_management/next/workspace-config-policy-unification/decision_register.md`
+    - `docs/project_management/_archived/workspace-config-policy-unification/decision_register.md`
     - `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md`
     - `crates/shell/src/execution/config_model.rs#L220`
 
@@ -509,12 +509,12 @@ Policy validation invariants are enforced on the effective merged policy:
   - Tests ensuring protected excludes include `.git/**` and `.substrate/**` and no other injected excludes.
 
 ### Manual validation
-- Manual playbook: `docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md`
+- Manual playbook: `docs/project_management/_archived/workspace-config-policy-unification/manual_testing_playbook.md`
 
 ### Smoke scripts
-- Linux: `docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh`
-- macOS: `docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh`
-- Windows: `docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1`
+- Linux: `docs/project_management/_archived/workspace-config-policy-unification/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/_archived/workspace-config-policy-unification/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/_archived/workspace-config-policy-unification/smoke/windows-smoke.ps1`
 
 ## Rollout / Backwards Compatibility
 - Policy: greenfield breaking is allowed.
@@ -523,5 +523,5 @@ Policy validation invariants are enforced on the effective merged policy:
 
 ## Decision Summary
 - Decision Register entries:
-  - `docs/project_management/next/workspace-config-policy-unification/decision_register.md`:
+  - `docs/project_management/_archived/workspace-config-policy-unification/decision_register.md`:
     - DR-0001, DR-0002, DR-0003, DR-0004, DR-0005, DR-0006, DR-0007, DR-0008

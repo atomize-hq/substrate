@@ -47,7 +47,7 @@ World-sync commands use these exit codes:
 ## Triads Overview
 - C0: Init + gating (require `substrate init`, create `.substrate/` and `.substrate-git/`, host/world readiness guards).
 - C1: Config/CLI surface (no behavior change).
-- WDL0–WDL2: World-deps selection layer (executes between C1 and C2; see `docs/project_management/next/world_deps_selection_layer/plan.md`).
+- WDL0–WDL2: World-deps selection layer (executes between C1 and C2; see `docs/project_management/_archived/world_deps_selection_layer/plan.md`).
 - C2: Manual world→host sync (non-PTY) with conflict/filter controls.
 - C3: Auto-sync (non-PTY) on session close + safety rails.
 - C4: PTY overlay diff + manual/auto world→host sync.

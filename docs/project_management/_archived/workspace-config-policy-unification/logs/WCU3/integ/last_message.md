@@ -1,0 +1,5 @@
+- Merged `workspace_config_policy_unification-wcu3-integ-core` into `workspace_config_policy_unification-wcu3-integ`, then ran `make triad-task-finish TASK_ID="WCU3-integ"` (fast-forwarded `feat/workspace-config-policy-unification` to `7ba0d1245ac83d4e746db608a2b645f29018c8e5`).
+- Green checks: `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p substrate-shell`, and `make integ-checks` all pass.
+- Cross-platform smoke dispatched and green: run `21055761993` (`success`) https://github.com/atomize-hq/substrate/actions/runs/21055761993.
+- Closeout/status recorded + pushed on `origin/feat/workspace-config-policy-unification`: `docs/project_management/_archived/workspace-config-policy-unification/WCU3-closeout_report.md#L1`, `docs/project_management/_archived/workspace-config-policy-unification/tasks.json#L1088`, `docs/project_management/_archived/workspace-config-policy-unification/session_log.md#L326` (commit `99d1f6a`).
+- Core WCU3 evidence landed in code/tests: `crates/shell/tests/config_world_deps_phase_b.rs#L219`, `crates/shell/src/execution/config_model.rs#L340`.

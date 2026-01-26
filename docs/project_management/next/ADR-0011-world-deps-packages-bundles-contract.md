@@ -14,7 +14,7 @@
 ## Scope
 - Feature directories (impacted):
   - `docs/project_management/next/` (this ADR; cross-cutting contract)
-  - `docs/project_management/next/world_deps_selection_layer/` (related work; see notes under Sequencing)
+  - `docs/project_management/_archived/world_deps_selection_layer/` (related work; see notes under Sequencing)
 - Sequencing spine: `docs/project_management/next/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
@@ -27,8 +27,8 @@
   - `docs/project_management/next/world_deps_packages_bundles_contract.md`
 - Existing world-deps work (may be superseded / requires reconciliation if this ADR is Accepted):
   - `docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
-  - `docs/project_management/next/world_deps_selection_layer/plan.md`
-  - `docs/project_management/next/world_deps_selection_layer/decision_register.md`
+  - `docs/project_management/_archived/world_deps_selection_layer/plan.md`
+  - `docs/project_management/_archived/world_deps_selection_layer/decision_register.md`
 - Patch-file (scope/current/global/workspace) mental model:
   - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 - Per-key merge strategies + multi-source provenance (for `world.deps.*` keys):
@@ -623,7 +623,7 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
   - Patch-file scope semantics from `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md` (global/workspace patch files; preserve comment headers).
   - World backend availability semantics for commands that query/apply in-world state (exit `3` when backend is unavailable).
 - Coexistence note (separate bodies of work):
-  - `docs/project_management/next/world_deps_selection_layer/` defines a selection-file-driven contract that conflicts with this ADR’s “enabled patch” model and “legacy selection file paths removed” requirement.
+  - `docs/project_management/_archived/world_deps_selection_layer/` defines a selection-file-driven contract that conflicts with this ADR’s “enabled patch” model and “legacy selection file paths removed” requirement.
   - This ADR is a separate/add-on body of work and does not update that planning-pack directory.
   - If/when we unify the world-deps operator contract, do it via a new planning pack and/or a new cross-cutting ADR under `docs/project_management/next/` (and update `docs/project_management/next/sequencing.json`), without authoring changes inside existing planning-pack directories.
 

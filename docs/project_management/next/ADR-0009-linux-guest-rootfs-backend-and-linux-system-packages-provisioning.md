@@ -138,7 +138,7 @@ This ADR introduces a new Linux backend selection knob (exact schema location is
 ## Sequencing / Dependencies
 - Sequencing entry: `docs/project_management/next/sequencing.json` → `linux_guest_rootfs_backend` (to be added)
 - Prerequisites:
-  - WDL2 (`docs/project_management/next/world_deps_selection_layer/`) must land first so `world deps provision` exists and has a stable contract for `system_packages`.
+  - WDL2 (`docs/project_management/_archived/world_deps_selection_layer/`) must land first so `world deps provision` exists and has a stable contract for `system_packages`.
   - Linux full-cage mechanics (I2/I3) must already be available (or this feature must fail closed when requested but unavailable).
 
 ## Security / Safety Posture

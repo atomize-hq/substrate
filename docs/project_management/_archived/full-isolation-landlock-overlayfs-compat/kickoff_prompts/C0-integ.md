@@ -1,0 +1,53 @@
+# Kickoff: C0-integ (integration final — cross-platform merge)
+
+## Scope
+- Merge platform-fix branches (if any) and finalize the slice with a clean, auditable cross-platform green state.
+- Spec: `docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/C0-spec.md`
+- Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+- This task is responsible for merging back to the orchestration branch after all platforms are green (fast-forward when possible; otherwise a merge commit, preserving the orchestration branch’s Planning Pack files under the feature dir).
+
+## Start Checklist
+Do not edit planning docs inside the worktree.
+
+1. Verify you are in the task worktree `wt/full-isolation-landlock-overlayfs-compat-c0-integ` on branch `full-isolation-landlock-overlayfs-compat-c0-integ` and that `.taskmeta.json` exists at the worktree root.
+2. Read: `docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/plan.md`, `docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/tasks.json`, `docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/session_log.md`, spec, this prompt.
+3. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run:
+   - `make triad-task-start FEATURE_DIR="docs/project_management/_archived/full-isolation-landlock-overlayfs-compat" TASK_ID="C0-integ"`
+
+## Requirements
+- Merge the relevant integration branches for this slice:
+  - The core integration branch (e.g., `*-integ-core`) and any platform-fix integration branches (`*-integ-linux|macos|windows|wsl`) that produced commits.
+- Do not merge the orchestration branch into this worktree to “pick up task status/docs updates”; the finisher merges back while preserving the orchestration branch’s Planning Pack files.
+- If the integration state has grown too large/unstable (many conflicts, large refactors, multiple unrelated changes), stop and ask the operator to split follow-up triads rather than forcing everything through a single final merge.
+- Run:
+  - `cargo fmt`
+  - `cargo clippy --workspace --all-targets -- -D warnings`
+  - relevant tests
+  - `make integ-checks`
+- Local behavioral smoke preflight (fast fail before CI dispatch; required when possible):
+  - If `docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/smoke/` exists and this machine matches a behavior platform, build `substrate`, add `target/debug` to `PATH`, and run the matching smoke script locally.
+  - Linux: `cargo build --bin substrate && export PATH="$PWD/target/debug:$PATH" && bash "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh"`
+  - macOS: `cargo build --bin substrate && export PATH="$PWD/target/debug:$PATH" && bash "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/smoke/macos-smoke.sh"`
+  - Windows: `cargo build --bin substrate; $env:Path=\"$pwd\\target\\debug;$env:Path\"; pwsh -File \"docs/project_management/_archived/full-isolation-landlock-overlayfs-compat\\smoke\\windows-smoke.ps1\"`
+- Ensure cross-platform compile parity is green for this exact `HEAD` (fast fail):
+  - `make ci-compile-parity CI_WORKFLOW_REF="feat/full-isolation-landlock-overlayfs-compat" CI_REMOTE=origin CI_CLEANUP=1`
+- Run behavioral smoke via CI to confirm the merged result is green (P3-008):
+  - Run from this final integration worktree (smoke validates current `HEAD` via a throwaway remote branch).
+  - Dispatch behavioral smoke in a single run (preferred):
+    - `make feature-smoke FEATURE_DIR="docs/project_management/_archived/full-isolation-landlock-overlayfs-compat" PLATFORM=behavior SMOKE_SLICE_ID="<slice>" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/full-isolation-landlock-overlayfs-compat" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
+      - `SMOKE_SLICE_ID` is optional; when provided, the workflow exports `SUBSTRATE_SMOKE_SLICE_ID` for slice-scoped smoke scripts.
+      - If WSL coverage is required for this feature, add `RUN_WSL=1`.
+- Complete the slice closeout gate report:
+  - `docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/<SLICE>-closeout_report.md` (e.g., `docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/C0-closeout_report.md`)
+
+## End Checklist
+1. Ensure all required platforms are green (include run ids/URLs).
+2. From inside the worktree, run: `make triad-task-finish TASK_ID="C0-integ"`
+3. Run CI Testing on this final integration commit before merging to `testing` (even if CI Testing was run earlier on integ-core):
+   - From inside this worktree: `scripts/ci/dispatch_ci_testing.sh --workflow-ref "feat/full-isolation-landlock-overlayfs-compat" --remote origin --cleanup --mode full`
+   - You may skip this only if the operator already has a CI Testing run for this exact `HEAD` commit SHA.
+4. Hand off run ids/URLs (smoke + CI Testing) and closeout report completion to the operator (do not edit planning docs inside the worktree).
+5. Do not delete the worktree (feature cleanup removes worktrees at feature end).
+
+Naming note:
+- The task id for the final aggregator is `<slice>-integ` (this prompt’s `C0-integ`). The helper command to start it is named `triad-task-start-integ-final`.

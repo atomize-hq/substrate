@@ -1,0 +1,7 @@
+- Fixed WCU5 manual-playbook parity by making `config|policy global show` print the patch view (`{}` when empty/missing) instead of defaults, with the DR-0010 empty-patch note (`crates/shell/src/execution/config_cmd.rs:113`, `crates/shell/src/execution/policy_cmd.rs:125`).
+- Added missing scope commands: `config workspace show` and `policy workspace show|set|reset` (`crates/shell/src/execution/cli.rs:323`, `crates/shell/src/execution/config_cmd.rs:215`, `crates/shell/src/execution/policy_cmd.rs:155`).
+- Ensured `config|policy current show` always emits the merged-view notice on stderr (and keeps `--explain` deterministic) (`crates/shell/src/execution/config_cmd.rs:195`, `crates/shell/src/execution/policy_cmd.rs:256`).
+- Implemented policy patch parsing/merging + `policy current show --explain` payload (`crates/shell/src/execution/policy_model.rs:16`, `crates/shell/src/execution/policy_model.rs:703`).
+- Unified patch header prefixes to match the playbook (`crates/shell/src/execution/workspace_cmd.rs:9`, `crates/shell/src/execution/workspace_cmd.rs:16`).
+
+- Ran `cargo fmt` and `cargo clippy --workspace --all-targets -- -D warnings`; finished with `make triad-task-finish TASK_ID="WCU5-code"`.

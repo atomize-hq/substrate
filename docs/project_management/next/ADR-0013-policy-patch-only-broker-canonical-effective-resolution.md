@@ -8,8 +8,8 @@
 ## Scope
 - Feature directories (impacted):
   - `docs/project_management/next/` (this ADR; cross-cutting contract)
-  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/` (planning pack + decision register)
-  - `docs/project_management/next/workspace-config-policy-unification/` (ADR-0008 baseline contract this work enforces)
+  - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/` (planning pack + decision register)
+  - `docs/project_management/_archived/workspace-config-policy-unification/` (ADR-0008 baseline contract this work enforces)
 - Sequencing spine: `docs/project_management/next/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
@@ -21,7 +21,7 @@
 - Provenance + per-key merge strategy semantics (add-on to ADR-0008):
   - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 - Decision Register (this body of work):
-  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/decision_register.md`
+  - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/decision_register.md`
 - Current (stale) operator docs that must be updated as part of this work:
   - `docs/CONFIGURATION.md`
 
@@ -171,12 +171,12 @@ Run `make adr-fix ADR=docs/project_management/next/ADR-0013-policy-patch-only-br
     - world-agent full isolation paths (`crates/world-agent`)
 
 ### Manual validation
-- Manual playbook: `docs/project_management/next/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md`
+- Manual playbook: `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md`
 
 ### Smoke scripts
-- Linux: `docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh`
-- macOS: `docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/macos-smoke.sh`
-- Windows: `docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/windows-smoke.ps1`
+- Linux: `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/smoke/windows-smoke.ps1`
 
 ## Rollout / Backwards Compatibility
 - Policy: greenfield breaking is allowed.
@@ -184,5 +184,5 @@ Run `make adr-fix ADR=docs/project_management/next/ADR-0013-policy-patch-only-br
 
 ## Decision Summary
 - Decision Register entries:
-  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/decision_register.md`:
+  - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/decision_register.md`:
     - DR-0001

@@ -8,7 +8,7 @@
 ## Scope
 - Feature directories (impacted):
   - `docs/project_management/next/` (this ADR; cross-cutting contract)
-  - `docs/project_management/next/workspace-config-policy-unification/` (ADR-0008 implementation)
+  - `docs/project_management/_archived/workspace-config-policy-unification/` (ADR-0008 implementation)
 - Sequencing spine: `docs/project_management/next/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`

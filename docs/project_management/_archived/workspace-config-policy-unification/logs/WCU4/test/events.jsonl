@@ -1,0 +1,9 @@
+- Added WCU4 contract tests to ensure install/dev scripts don’t export `SUBSTRATE_OVERRIDE_*` by default: `crates/shell/tests/installer_env_wcu4.rs:1`
+- Hardened installer harnesses to fail if `env.sh` exports `SUBSTRATE_OVERRIDE_*`: `tests/installers/install_smoke.sh:1`, `tests/installers/install_state_smoke.sh:1`
+
+Commands run:
+- `cargo fmt`
+- `cargo test -p substrate-shell --test installer_env_wcu4 -- --nocapture` (expected failure until WCU4 code removes the exports)
+- `bash tests/installers/install_state_smoke.sh --scenario metadata` (expected failure until WCU4 code removes the exports)
+- `bash tests/installers/install_smoke.sh --scenario prod-no-world` (expected failure until WCU4 code removes the exports)
+- `make triad-task-finish TASK_ID="WCU4-test"`

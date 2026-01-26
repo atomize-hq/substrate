@@ -1,0 +1,2383 @@
+OpenAI Codex v0.77.0 (research preview)
+--------
+workdir: /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test
+model: gpt-5.2
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: high
+reasoning summaries: auto
+session id: 019bc7c5-fb57-77d0-bc5b-30d9c354c5f6
+--------
+user
+# Kickoff: WCU5-test (test)
+
+## Scope
+- Tests only; no production code.
+- Spec: `docs/project_management/next/workspace-config-policy-unification/WCU5-spec.md`
+- ADRs:
+  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+- Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+
+Do not edit planning docs inside the worktree.
+
+## Start Checklist
+1. Verify you are in the task worktree `wt/workspace_config_policy_unification-wcu5-test` on branch `workspace_config_policy_unification-wcu5-test` and that `.taskmeta.json` exists.
+2. Read: WCU5-spec, manual_testing_playbook.md, PHASE_A_B_GATES, plan/tasks/session log, this prompt.
+3. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run:
+   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" SLICE_ID="WCU5"`
+
+## Requirements
+- Add/modify tests that enforce WCU5 acceptance criteria in `tasks.json`.
+- Run: `cargo fmt`, plus targeted tests you add/touch.
+
+## End Checklist
+1. From inside the worktree, run: `make triad-task-finish TASK_ID="WCU5-test"`
+
+mcp: deepwiki starting
+mcp: deepwiki ready
+mcp startup: ready: deepwiki
+
+
+
+
+thinking
+**Understanding execution standards**
+
+I need to follow the execution standard document carefully. It's clear I shouldn't edit planning documents in the worktree — only tests and possibly some documentation are okay. The requirement stresses that I should only be adding or modifying tests to enforce acceptance criteria in tasks.json. It seems like tasks.json is part of the documentation project management, but I shouldn't alter it. Instead, I should read tasks.json, understand the specs, and determine what tests to add based on the specified criteria.
+thinking
+**Planning test implementation**
+
+I’ll start by reading the specifications and ADRs, but I can't edit them. My focus will be on implementing tests that verify the behavior of the system. I need to locate any existing code or tests related to workspace configuration and policy. While we won’t change production code now, the tests should catch current issues. Ideally, the acceptance criteria mean the tests should pass once the feature is in place. It seems the WCU5 test aims to add verification for existing implementations. I'll also create a checklist to verify the branch, check for .taskmeta.json, and run relevant commands.
+thinking
+**Outlining implementation steps**
+
+First, I’ll verify the branch and check for the .taskmeta.json file. Next, I'll read the necessary documentation, locate the relevant code, and implement the tests needed. Following that, I’ll run `cargo fmt` and the targeted tests. The final step involves executing `make triad-task-finish`, which seems permissible since it's in the worktree and likely writes logs or metadata. However, I must be cautious not to edit planning documents. I need to ensure the acceptance criteria are fully covered in the tests and consider updating tasks.json for tracking purposes.
+thinking
+**Clarifying tasks.json location**
+
+It looks like tasks.json isn’t just a planning document but a file that drives actions within the codebase. However, it does seem to be part of the project management slice. I’ll check its path, likely found in docs/project_management/next/workspace-config-policy-unification/tasks.json. I also need to read related documents like manual_testing_playbook.md and PHASE_A_B_GATES. My plan is to verify the setup, read the documentation, identify acceptance criteria, implement tests, run formatting and tests, then finish the task while ensuring all instructions are followed. Let's get started!
+Plan update
+  → Verify worktree and taskmeta
+  • Read WCU5 spec and ADRs
+  • Map acceptance criteria to code
+  • Implement or update tests
+  • Run fmt and targeted tests
+  • Run triad task finish
+exec
+/bin/bash -lc 'set -euo pipefail
+pwd
+git rev-parse --abbrev-ref HEAD
+git status --porcelain=v1
+ls -la .taskmeta.json || true
+cat .taskmeta.json || true
+' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 55ms:
+/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test
+workspace_config_policy_unification-wcu5-test
+-rw-r--r-- 1 spenser spenser 383 Jan 16 12:06 .taskmeta.json
+{
+  "created_at_utc": "2026-01-16T17:06:39Z",
+  "created_from_sha": "a6b9afdbfa773999cb52f56be2d409d1b1227080",
+  "feature_dir": "docs/project_management/next/workspace-config-policy-unification",
+  "orchestration_branch": "feat/workspace-config-policy-unification",
+  "schema_version": 1,
+  "task_branch": "workspace_config_policy_unification-wcu5-test",
+  "task_id": "WCU5-test"
+}
+exec
+/bin/bash -lc 'set -euo pipefail
+ls -la docs/project_management/next/workspace-config-policy-unification || true
+ls -la docs/project_management/next || true
+' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 44ms:
+total 300
+drwxr-xr-x 4 spenser spenser   4096 Jan 16 12:06 .
+drwxr-xr-x 7 spenser spenser   4096 Jan 16 12:06 ..
+-rw-r--r-- 1 spenser spenser  36402 Jan 16 12:06 decision_register.md
+-rw-r--r-- 1 spenser spenser   4807 Jan 16 12:06 execution_preflight_report.md
+-rw-r--r-- 1 spenser spenser   5432 Jan 16 12:06 integration_map.md
+drwxr-xr-x 2 spenser spenser   4096 Jan 16 12:06 kickoff_prompts
+-rw-r--r-- 1 spenser spenser  14523 Jan 16 12:06 manual_testing_playbook.md
+-rw-r--r-- 1 spenser spenser   6921 Jan 16 12:06 PHASE_A_B_GATES_ADR_0012.md
+-rw-r--r-- 1 spenser spenser   5537 Jan 16 12:06 plan.md
+-rw-r--r-- 1 spenser spenser  10685 Jan 16 12:06 quality_gate_report.md
+-rw-r--r-- 1 spenser spenser  27948 Jan 16 12:06 session_log.md
+drwxr-xr-x 2 spenser spenser   4096 Jan 16 12:06 smoke
+-rw-r--r-- 1 spenser spenser 112396 Jan 16 12:06 tasks.json
+-rw-r--r-- 1 spenser spenser   1117 Jan 16 12:06 WCU1-closeout_report.md
+-rw-r--r-- 1 spenser spenser   3609 Jan 16 12:06 WCU1-spec.md
+-rw-r--r-- 1 spenser spenser   2050 Jan 16 12:06 WCU2-closeout_report.md
+-rw-r--r-- 1 spenser spenser   5278 Jan 16 12:06 WCU2-spec.md
+-rw-r--r-- 1 spenser spenser   2392 Jan 16 12:06 WCU3-closeout_report.md
+-rw-r--r-- 1 spenser spenser   5688 Jan 16 12:06 WCU3-spec.md
+Plan update
+  ✓ Verify worktree and taskmeta
+  → Read WCU5 spec and ADRs
+  • Map acceptance criteria to code
+  • Implement or update tests
+  • Run fmt and targeted tests
+  • Run triad task finish
+exec
+/bin/bash -lc "set -euo pipefail
+sed -n '1,220p' docs/project_management/next/workspace-config-policy-unification/WCU5-spec.md
+" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 40ms:
+# WCU5 Spec — Docs + smoke + manual playbook parity (includes ADR-0012 Phase A/B validation)
+
+References:
+- `docs/project_management/next/workspace-config-policy-unification/plan.md`
+- `docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md`
+- `docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh`
+- `docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh`
+- `docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1`
+- `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
+
+## Scope
+- Ensure the feature-local manual testing playbook and all feature smoke scripts remain in parity.
+- Ensure the automated smoke journey validates ADR-0012 Phase A/B behaviors for:
+  - `world.deps.enabled` effective merge semantics, and
+  - multi-source provenance via `config current show --explain`.
+
+## Non-goals
+- Adding new feature behavior beyond validating the existing contract.
+
+## Parity contract (authoritative)
+exec
+/bin/bash -lc "set -euo pipefail
+sed -n '1,260p' docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md
+" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 41ms:
+# ADR-0008 — Workspace Config/Policy Scopes + `.substrate/` Unification (Patch Files)
+
+## Status
+- Status: Approved
+- Date (UTC): 2026-01-10
+- Owner(s): spenser
+
+## Scope
+- Feature directory: `docs/project_management/next/workspace-config-policy-unification/`
+- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Standards:
+  - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
+  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+
+## Related Docs
+- Prior ADRs:
+  - `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md`
+exec
+/bin/bash -lc "set -euo pipefail
+sed -n '1,260p' docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md
+" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 42ms:
+# ADR-0012 — Config Schema: Per-key Merge Strategies + Multi-source Provenance
+
+## Status
+- Status: Approved
+- Date (UTC): 2026-01-14
+- Owner(s): Shell maintainers
+
+## Scope
+- Feature directories (impacted):
+  - `docs/project_management/next/` (this ADR; cross-cutting contract)
+  - `docs/project_management/next/workspace-config-policy-unification/` (ADR-0008 implementation)
+- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Standards:
+  - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
+  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+
+## Related Docs
+- Patch files + scope model:
+  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- World-deps consumer contract:
+exec
+/bin/bash -lc "set -euo pipefail
+sed -n '1,260p' docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md
+" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 47ms:
+# Task Triads — Worktree Execution Standard (Automation + Concurrent Code/Test)
+
+This standard is for **execution-time** triad work when tasks are started via triad automation (preferred), and the agent is already running **inside a task worktree**.
+
+It is a focused companion to:
+- `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md` (full planning pack + task schema + integration model)
+
+## Operating assumptions (the situation you are in)
+
+When this standard applies, the operator started you with one of:
+- `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1` (preferred)
+- `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
+
+You are already:
+- in a git worktree (usually under `wt/...`)
+- on a task branch (not the orchestration branch)
+- expected to find `.taskmeta.json` at the worktree root (task id, orchestration branch, etc.)
+
+## Non-negotiable safety rule
+
+exec
+/bin/bash -lc "set -euo pipefail
+sed -n '1,220p' docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md
+" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 42ms:
+# Manual Testing Playbook — Workspace Config/Policy Unification (ADR-0008)
+
+This playbook validates the operator-facing contract in:
+- `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md` (Phase A/B gates)
+
+All steps are written to be run in a scratch workspace directory and must not mutate any real project.
+
+Smoke scripts (automated counterpart; must remain in parity with this playbook):
+- Linux: `docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1`
+
+## 0) Setup (all platforms)
+
+1. Create a fresh scratch workspace and scratch Substrate home (so you do not touch your real `~/.substrate`):
+   - `rm -rf /tmp/substrate-wcu /tmp/substrate-wcu-home`
+   - `mkdir -p /tmp/substrate-wcu /tmp/substrate-wcu-home`
+   - `export SUBSTRATE_HOME=/tmp/substrate-wcu-home`
+2. Enter the scratch workspace directory:
+exec
+/bin/bash -lc "set -euo pipefail
+sed -n '1,240p' docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md
+" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 43ms:
+# ADR-0008 Planning Pack — Phase A/B Gates (ADR-0012) (Non-negotiable)
+
+This file is an **additive execution constraint** for the Planning Pack under:
+- `docs/project_management/next/workspace-config-policy-unification/`
+
+It layers on top of all repo planning standards and must be treated as **non-negotiable acceptance criteria** for this body of work.
+
+## Why this exists
+`ADR-0012` introduces per-key merge strategies and multi-source provenance. `ADR-0008` is the queued body of work that will implement the config plumbing and CLI surfaces; therefore, this Planning Pack must explicitly include and complete the Phase A/B work defined here so downstream work (notably world-deps) can safely depend on it.
+
+Authoritative ADRs:
+- `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+
+Primary downstream consumer contract:
+- `docs/project_management/next/world_deps_packages_bundles_contract.md`
+
+## Phase A (must complete) — Per-key merge strategies + multi-source provenance
+
+### A1) Schema supports per-key merge strategies
+exec
+/bin/bash -lc "set -euo pipefail
+python - <<'PY'
+import json
+path='docs/project_management/next/workspace-config-policy-unification/tasks.json'
+with open(path) as f:
+    data=json.load(f)
+print('top keys:', list(data)[:20])
+print('num items:', len(data.get('items',[])))
+for k in ['slice_id','slice','id','task_id','title']:
+    if k in data:
+        print(k, data[k])
+PY
+" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 153ms:
+top keys: ['meta', 'tasks']
+num items: 0
+exec
+/bin/bash -lc "set -euo pipefail
+python - <<'PY'
+import json
+path='docs/project_management/next/workspace-config-policy-unification/tasks.json'
+with open(path) as f:
+    data=json.load(f)
+items=data.get('items',[])
+# print WCU5-related items
+for it in items:
+    tid=str(it.get('id',''))
+    if 'WCU5' in tid or it.get('slice_id')=='WCU5' or it.get('slice')=='WCU5':
+        print('---')
+        print('id:', it.get('id'))
+        print('title:', it.get('title'))
+        ac=it.get('acceptance_criteria') or it.get('acceptance') or []
+        if isinstance(ac,str):
+            ac=[ac]
+        print('acceptance_criteria_count:', len(ac))
+        for a in ac[:20]:
+            print('-', a)
+PY
+" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 174ms:
+
+
+thinking
+**Creating integration tests**
+
+I'm thinking about creating a new test file if it's needed. It seems like we can add either integration tests or module tests. We definitely need to map the acceptance criteria, and tasks.json might have a list of tasks. For WCU5-test, the acceptance criteria likely specify that we need to implement tests for Phase A/B if there aren't any tests. I'll parse tasks.json for WCU5-test and then rerun the Python script.
+exec
+/bin/bash -lc "set -euo pipefail
+python - <<'PY'
+import json
+path='docs/project_management/next/workspace-config-policy-unification/tasks.json'
+with open(path) as f:
+    data=json.load(f)
+print('meta keys:', list(data.get('meta',{}).keys()))
+print('num tasks:', len(data.get('tasks',[])))
+# Try find any entries containing WCU5
+matches=[]
+for t in data.get('tasks',[]):
+    tid=str(t.get('task_id') or t.get('id') or '')
+    title=str(t.get('title') or '')
+    if 'WCU5' in tid or 'WCU5' in title:
+        matches.append(t)
+print('matches:', len(matches))
+for t in matches[:50]:
+    print('---')
+    print('task_id:', t.get('task_id') or t.get('id'))
+    print('type:', t.get('type'))
+    print('title:', t.get('title'))
+    for k in ['slice_id','owner','status','branch']:
+        if k in t:
+            print(k+':', t[k])
+    ac=t.get('acceptance_criteria') or []
+    print('acceptance_criteria_count:', len(ac))
+    for a in ac[:20]:
+        print('-', a)
+PY
+" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 204ms:
+meta keys: ['schema_version', 'feature', 'cross_platform', 'behavior_platforms_required', 'ci_parity_platforms_required', 'execution_gates', 'automation']
+num tasks: 37
+matches: 7
+---
+task_id: WCU5-code
+type: code
+title: None
+status: in_progress
+acceptance_criteria_count: 2
+- Manual playbook and smoke scripts remain valid and reflect shipped behavior (including `world.deps.enabled`, `world.deps.inventory_mode`, and `world.deps.builtins`)
+- `--explain` output is deterministic for identical inputs
+---
+task_id: WCU5-test
+type: test
+title: None
+status: in_progress
+acceptance_criteria_count: 1
+- Tests cover smoke assertions and manual playbook steps for Phase A/B gates, including replace-key enum validation and workspace-disable fallback for `world.deps.inventory_mode` and `world.deps.builtins`
+---
+task_id: WCU5-integ-core
+exec
+/bin/bash -lc "set -euo pipefail
+rg -n \"world\\.deps\\.enabled\" -S crates || true
+rg -n \"current show --explain\" -S crates || true
+rg -n \"merge_strategy\" -S crates || true
+rg -n \"concat_dedupe\" -S crates || true
+rg -n \"workspace\\.disabled\" -S crates/shell crates/common crates/broker || true
+" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 149ms:
+crates/shell/tests/config_world_deps_phase_b.rs:219:        &["world.deps.enabled+=a", "world.deps.enabled+=b"],
+crates/shell/tests/config_world_deps_phase_b.rs:228:        &["world.deps.enabled+=b", "world.deps.enabled+=c"],
+crates/shell/tests/config_world_deps_phase_b.rs:244:        .expect("world.deps.enabled should be an array");
+crates/shell/tests/config_world_deps_phase_b.rs:249:        .expect("world.deps.enabled should be string array");
+crates/shell/tests/config_world_deps_phase_b.rs:253:    let enabled_explain = explain_key(&explain, "world.deps.enabled");
+crates/shell/tests/config_world_deps_phase_b.rs:259:        "world.deps.enabled merge strategy mismatch: {enabled_explain}"
+crates/shell/tests/config_world_deps_phase_b.rs:273:        fixture.config_global_set_json(&fixture.workspace_root, &["world.deps.enabled+=a"]);
+crates/shell/tests/config_world_deps_phase_b.rs:277:        fixture.config_global_set_json(&fixture.workspace_root, &["world.deps.enabled-=a"]);
+crates/shell/tests/config_world_deps_phase_b.rs:283:    let enabled = yaml_get(deps, "enabled").expect("world.deps.enabled should remain present");
+crates/shell/tests/config_world_deps_phase_b.rs:286:        .expect("world.deps.enabled should be a YAML sequence");
+crates/shell/tests/config_world_deps_phase_b.rs:289:        "expected explicit empty list for world.deps.enabled, got {enabled:?}"
+crates/shell/tests/config_world_deps_phase_b.rs:294:        &["world.deps.enabled+=b", "world.deps.enabled-=b"],
+crates/shell/tests/config_world_deps_phase_b.rs:304:    let enabled = yaml_get(deps, "enabled").expect("world.deps.enabled should remain present");
+crates/shell/tests/config_world_deps_phase_b.rs:307:        .expect("world.deps.enabled should be a YAML sequence");
+crates/shell/tests/config_world_deps_phase_b.rs:310:        "expected explicit empty list for world.deps.enabled, got {enabled:?}"
+crates/shell/tests/config_world_deps_phase_b.rs:320:        fixture.config_workspace_set_json(&fixture.workspace_root, &["world.deps.enabled+=a"]);
+crates/shell/tests/config_world_deps_phase_b.rs:328:        "precondition: expected world.deps.enabled present in workspace patch"
+crates/shell/tests/config_world_deps_phase_b.rs:331:    let reset = fixture.config_workspace_reset(&fixture.workspace_root, &["world.deps.enabled"]);
+crates/shell/tests/config_world_deps_phase_b.rs:347:        "expected world.deps.enabled removed from workspace patch, got: {after:?}"
+crates/shell/tests/config_world_deps_phase_b.rs:457:            "world.deps.enabled+=a",
+
+thinking
+**Considering file modifications**
+
+I’m recognizing that editing the production files directly, even for testing, is likely not allowed. So, it’s better to use separate test files in the designated tests directory instead. I need to avoid messing with config_model.rs, focusing on adding new tests in crates/shell/tests. I’ve noticed we already have a file named config_world_deps_phase_b.rs, so I might extend that for testing purposes. I’ll also consider adding a new file for determinism. Time to check it out!
+exec
+/bin/bash -lc "set -euo pipefail
+sed -n '1,260p' crates/shell/tests/config_world_deps_phase_b.rs
+" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 38ms:
+#![cfg(unix)]
+
+mod common;
+
+use assert_cmd::Command;
+use common::{substrate_shell_driver, temp_dir};
+use serde_json::Value as JsonValue;
+use serde_yaml::Value as YamlValue;
+use std::fs;
+use std::path::{Path, PathBuf};
+use tempfile::TempDir;
+
+struct WorldDepsConfigFixture {
+    _temp: TempDir,
+    home: PathBuf,
+    substrate_home: PathBuf,
+    workspace_root: PathBuf,
+}
+
+impl WorldDepsConfigFixture {
+exec
+/bin/bash -lc "set -euo pipefail
+sed -n '260,620p' crates/shell/tests/config_world_deps_phase_b.rs
+" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 45ms:
+    );
+    assert_eq!(
+        explain_layers(enabled_explain),
+        vec!["global_patch", "workspace_patch"]
+    );
+}
+
+#[test]
+fn config_world_deps_enabled_supports_remove_and_persists_explicit_empty_list() {
+    let fixture = WorldDepsConfigFixture::new();
+    fixture.init_workspace();
+
+    let global =
+        fixture.config_global_set_json(&fixture.workspace_root, &["world.deps.enabled+=a"]);
+    assert!(global.status.success(), "global append should succeed");
+
+    let global =
+        fixture.config_global_set_json(&fixture.workspace_root, &["world.deps.enabled-=a"]);
+    assert!(global.status.success(), "global remove should succeed");
+
+exec
+/bin/bash -lc "set -euo pipefail
+sed -n '620,980p' crates/shell/tests/config_world_deps_phase_b.rs
+" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 46ms:
+        "expected world.deps keys removed from global patch, got: {after:?}"
+    );
+}
+
+
+
+
+thinking
+**Evaluating JSON output**
+
+I'm exploring a system where it seems parsing stderr as JSON is crucial, so I assume it’s pure JSON. I think I need to focus on comparing stderr and stdout across two runs, keeping in mind that stdout might have dynamic ordering. The `serde_json` writer could output different map orders, but JSON map order may actually be deterministic. I’ll need to check actual outputs, as the requirement mentions "identical outputs," which might mean byte-for-byte comparisons. Comparing parsed JSON values could also work, especially within the same process!
+thinking
+**Assessing unit tests for phase A**
+
+In phase A, it looks like unit tests are crucial for verifying that the `replace` function yields single-source provenance, while the `merge` function handles multi-source ordering. There's a specific unit test in `config_model.rs` for this purpose. Although it’s in a production file, I think we could create additional unit tests in a separate file under `crates/shell/tests/config_model_phase_a.rs`. I might need to rely on public APIs for unit tests or consider integration tests. Given the criteria, I need to ensure the outputs are deterministic JSON, correct source ordering, and proper handling of keys and scopes for configurations.
+thinking
+**Evaluating merge test coverage**
+
+The merge test currently does a decent job but doesn't cover scenarios for global-only and workspace-only configurations. I see that it already checks for proper provenance exclusion when the workspace is disabled. Another assertion checks for strict invalid enum values, confirming exits properly without writes. I also note there's a test for concatenation and deduplication behaviors across scopes. 
+
+However, it seems like there's a gap regarding the `-=` syntax for list removal in the workspace context. Plus, I need to ensure that the determinism and idempotence of outputs are covered, especially under the `--explain` flag for merging strategies.
+thinking
+**Investigating output truncation in tests**
+
+I noticed that the test `config_world_deps_enum_keys_use_replace_precedence_with_single_source_provenance` is checking the workspace patch, but the output seems truncated. It’s crucial for me to see full lines, so I'll explore that section closely to ensure both keys are present and that it's checking the merge strategy and sources correctly. I plan to use `nl -ba` to view the lines around the truncated output, and then apply `sed` with line numbers for clarity. Let’s dig in!
+exec
+/bin/bash -lc "set -euo pipefail
+nl -ba crates/shell/tests/config_world_deps_phase_b.rs | sed -n '330,520p'
+" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 41ms:
+   330	
+   331	    let reset = fixture.config_workspace_reset(&fixture.workspace_root, &["world.deps.enabled"]);
+   332	    assert!(
+   333	        reset.status.success(),
+   334	        "workspace reset should succeed: {reset:?}"
+   335	    );
+   336	
+   337	    let after = fixture.read_workspace_yaml();
+   338	    let removed = match yaml_get(&after, "world") {
+   339	        None => true,
+   340	        Some(world) => match yaml_get(world, "deps") {
+   341	            None => true,
+   342	            Some(deps) => yaml_get(deps, "enabled").is_none(),
+   343	        },
+   344	    };
+   345	    assert!(
+   346	        removed,
+   347	        "expected world.deps.enabled removed from workspace patch, got: {after:?}"
+   348	    );
+   349	}
+exec
+/bin/bash -lc "set -euo pipefail
+nl -ba crates/shell/tests/config_world_deps_phase_b.rs | sed -n '520,700p'
+" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 29ms:
+   520	        explain_layers(explain_key(&explain, "world.deps.builtins")),
+   521	        vec!["global_patch"]
+   522	    );
+   523	}
+   524	
+   525	#[test]
+   526	fn config_world_deps_invalid_enum_values_exit_2_and_do_not_mutate_patch_bytes() {
+   527	    let fixture = WorldDepsConfigFixture::new();
+   528	    fixture.init_workspace();
+   529	
+   530	    fixture.write_global_raw("# config header\nworld:\n  deps:\n    builtins: enabled\n");
+   531	    fixture
+   532	        .write_workspace_raw("# workspace header\nworld:\n  deps:\n    inventory_mode: merged\n");
+   533	
+   534	    let global_before = fixture.read_global_raw();
+   535	    let output = fixture.config_global_set_json(
+   536	        &fixture.workspace_root,
+   537	        &["world.deps.inventory_mode=bogus"],
+   538	    );
+   539	    assert_eq!(
+
+
+
+
+
+thinking
+**Evaluating stability in Rust collections**
+
+In Rust, using `serde_json` with `BTreeMap` ensures stability, while `HashMap` might be nondeterministic across runs, although stable within the same process. Since we require determinism, we should use `BTreeMap` or ensure the tests enforce ordering. If the current code uses `HashMap`, its output may still appear deterministic if insertion order is stable, but this isn't guaranteed. I'll check `config_model.rs` for types and ensure comparisons maintain stability by parsing to `Value`.
+thinking
+**Ensuring determinism in tests**
+
+The contract specifies that outputs should be deterministic for the same inputs, so comparing bytes between two calls to the `substrate` binary is essential, even across different command invocations. If the output uses `serde_json`, the order should remain consistent based on the struct field order. It's good to have tests to catch any instability. If current outputs are unstable, the tests might fail, which is acceptable as we might expect them to. I'll consider running existing tests to verify, especially since the test branch may already contain relevant production code.
+thinking
+**Checking code and tests on branches**
+
+It seems that on the `...-test` branch, the production code might already be implemented in the orchestration branch. I should confirm if it includes partial code. While tests must compile, they might fail if certain behaviors aren't present. We want tests to align with acceptance criteria, and ideally, they should pass if the code is ready. After making modifications, I'll run targeted tests. I also need to clarify the behavior for contributions from the workspace patch and ensure sources are correctly set up. It's a bit unclear whether the default contributes, especially if it's empty, so I’ll investigate further.
+thinking
+**Reviewing playbook and tests**
+
+The manual playbook checks for `global_patch` and `workspace_patch`, but doesn't mention defaults, possibly indicating that the defaults list is empty, so it may not be an issue. I see the acceptance criteria include covering smoke assertions and manual playbook steps for Phase A/B gates, including validating replace-key enums and workspace-disable fallbacks. That suggests the existing files should cover those scenarios. However, I might need to add tests for both invalid enum cases to ensure no writes occur and confirm the comment header is preserved. It's also crucial to ensure that an invalid enum doesn’t create a patch file if it doesn't exist.
+thinking
+**Analyzing manual playbook steps and testing**
+
+In the manual playbook, the invalid enum check uses copy and diff with a pre-existing patch file. I could test to ensure that an invalid update doesn’t create or modify the patch file as the acceptance criteria state no writes. It might also be useful to test for unknown keys with both global and workspace to ensure they’re rejected. Our tests should include coverage for smoke assertions and behaviors, like determinism and idempotence. Since existing tests focus on Unix, I wonder about cross-platform coverage. I’ll check if the common module supports Windows to create tests that run on all platforms without Unix-specific operations.
+exec
+/bin/bash -lc "set -euo pipefail
+ls -la crates/shell/tests/common
+sed -n '1,220p' crates/shell/tests/common/mod.rs
+" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test exited 2 in 44ms:
+ls: cannot access 'crates/shell/tests/common': No such file or directory
+exec
+/bin/bash -lc "set -euo pipefail
+ls -la crates/shell/tests
+sed -n '1,240p' crates/shell/tests/common.rs
+" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 45ms:
+total 448
+drwxr-xr-x 4 spenser spenser  4096 Jan 16 12:06 .
+drwxr-xr-x 4 spenser spenser  4096 Jan 16 12:06 ..
+-rw-r--r-- 1 spenser spenser  9020 Jan 16 12:06 common.rs
+-rw-r--r-- 1 spenser spenser  8004 Jan 16 12:06 config_init.rs
+-rw-r--r-- 1 spenser spenser  9572 Jan 16 12:06 config_set.rs
+-rw-r--r-- 1 spenser spenser 10678 Jan 16 12:06 config_show.rs
+-rw-r--r-- 1 spenser spenser 20268 Jan 16 12:06 config_world_deps_phase_b.rs
+-rw-r--r-- 1 spenser spenser  5659 Jan 16 12:06 doctor_scopes_ds0.rs
+-rw-r--r-- 1 spenser spenser 10749 Jan 16 12:06 ev0_override_split.rs
+-rw-r--r-- 1 spenser spenser  5743 Jan 16 12:06 fail_closed_semantics.rs
+-rw-r--r-- 1 spenser spenser  2487 Jan 16 12:06 installer_env_wcu4.rs
+drwxr-xr-x 2 spenser spenser  4096 Jan 16 12:06 integration
+-rw-r--r-- 1 spenser spenser  9851 Jan 16 12:06 logging.rs
+-rw-r--r-- 1 spenser spenser  3044 Jan 16 12:06 manager_init.rs
+-rw-r--r-- 1 spenser spenser  2227 Jan 16 12:06 needs_shell.rs
+-rw-r--r-- 1 spenser spenser  3617 Jan 16 12:06 playbook_alignment.rs
+-rw-r--r-- 1 spenser spenser  5179 Jan 16 12:06 policy_discovery.rs
+-rw-r--r-- 1 spenser spenser  9395 Jan 16 12:06 policy_routing_semantics.rs
+-rw-r--r-- 1 spenser spenser  1616 Jan 16 12:06 profile_guardrails.rs
+exec
+/bin/bash -lc "set -euo pipefail
+sed -n '1,200p' docs/project_management/next/workspace-config-policy-unification/plan.md
+" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 42ms:
+# Workspace Config/Policy Unification (ADR-0008) — Plan
+
+## Context (why this exists)
+This Planning Pack implements the operator-facing contract defined by:
+- `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+
+This body of work also **must** implement the cross-cutting refinement defined by:
+- `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+
+Non-negotiable additional gating for this pack:
+- `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
+
+## Execution model (triads + automation)
+- Standards:
+  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+  - `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md` (because `tasks.json` enables execution gates)
+- Orchestration branch: `feat/workspace-config-policy-unification`
+- Docs discipline:
+  - planning docs (`plan.md`, `tasks.json`, `session_log.md`, specs, prompts) are edited only on the orchestration branch
+exec
+/bin/bash -lc "set -euo pipefail
+sed -n '1,120p' docs/project_management/next/workspace-config-policy-unification/session_log.md
+" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 41ms:
+# workspace-config-policy-unification — session log
+
+## START — 2026-01-14T00:00:00Z — planning — Phase A/B gate scaffolding
+- Feature: `docs/project_management/next/workspace-config-policy-unification/`
+- Branch: `feat/workspace-config-policy-unification`
+- Goal: Add Phase A/B gates (ADR-0012) scaffolding and ensure it is mechanically encoded in the Planning Pack.
+- Inputs to read end-to-end:
+  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+- Commands planned (if any):
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification"`
+
+## END — 2026-01-14T00:00:00Z — planning — Phase A/B gate scaffolding
+- Summary of changes (exhaustive):
+  - Added explicit Phase A/B gate file for ADR-0012 and wired it as a non-negotiable Planning Pack input
+  - Added Planning Pack scaffolding files (`plan.md`, `tasks.json`, `integration_map.md`, gate report templates, smoke stubs)
+- Files created/modified:
+  - `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
+
+thinking
+**Updating the plan**
+
+Alright, I’ve completed step 2, which involved reading the docs. Now, I’m ready to move on to step 3, where I’ll be mapping acceptance to code. The good news is that we already have existing tests, so we just need to decide on any modifications needed. I’ll make sure to update the plan to reflect these changes. It feels good to tick things off the list!
+Plan update
+  ✓ Verify worktree and taskmeta
+  ✓ Read WCU5 spec and ADRs
+  → Map acceptance criteria to code
+  • Implement or update tests
+  • Run fmt and targeted tests
+  • Run triad task finish
+
+
+
+
+thinking
+**Mapping test coverage**
+
+I'm looking at the manual playbook and the Phase gate file, and I see that tests should cover specific behaviors. I found that existing tests in `crates/shell/tests/config_world_deps_phase_b.rs` cover a lot of ground, but we need to check for gaps in coverage from section 7. WCU5-test mentions covering smoke assertions for Phase A/B gates, but I think we should also focus on determinism and idempotence, which seems to be missing. I plan to implement a new test to compare outputs and ensure consistency.
+thinking
+**Testing output consistency**
+
+I need to consider how command outputs work. The command might return JSON with a newline, which could affect comparisons, so I plan to compare raw bytes directly. I also noticed that running the command with and without the `--explain` flag should yield identical outputs, but the output may include notes to stderr. To simplify testing, I will focus on cases using `--json` and `--explain` together, and also separately with just `--json` to ensure I capture everything accurately. Let's proceed with that plan.
+thinking
+**Implementing deterministic tests**
+
+I’m planning to implement a test function that ensures `config_current_show` produces consistent outputs across repeated invocations. I need to set up the workspace and run the command twice without `--explain`, checking that stdout and stderr remain identical. I have to consider minor differences like trailing spaces, so I think it's best to compare trimmed strings. While the outputs should ideally be stable due to deterministic requirements, I’ll verify this by running existing tests after making changes. Let's keep an eye on output order to prevent any unexpected test failures!
+thinking
+**Ensuring determinism with tests**
+
+I need to add tests that focus on ensuring determinism, along with creating specific tests for global-only and workspace-only sources. When `world.deps.enabled` is configured with only a global patch and no workspace settings, the explanation should show `["global_patch"]`. The manual playbook provides steps for setting both global and workspace, but I also want to ensure we thoroughly test for both one-at-a-time scenarios. Integration tests for these cases are mentioned in Phase A2, so I’ll quickly check for existing tests in files like `world_deps_layering.rs` or `config_show.rs` to avoid redundancy.
+exec
+/bin/bash -lc 'set -euo pipefail
+rg -n "determin" crates/shell/tests -S
+' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 56ms:
+crates/shell/tests/common.rs:14:/// sets a shared TMPDIR for deterministic fixtures, and propagates the
+crates/shell/tests/common.rs:21:    // Ensure tests are deterministic even when run from inside the shimmed substrate shell.
+crates/shell/tests/world_deps.rs:1206:fn world_deps_provision_unsupported_on_linux_host_backend_exits_4_and_prints_deterministic_package_list(
+crates/shell/tests/world_deps.rs:1247:        "expected deterministic system package ordering on Linux host: {output}"
+exec
+/bin/bash -lc "set -euo pipefail
+rg -n \"config\\s+current\\s+show\" crates/shell/tests -S
+" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 56ms:
+crates/shell/tests/config_world_deps_phase_b.rs:172:        cmd.output().expect("run config current show --json")
+crates/shell/tests/config_world_deps_phase_b.rs:238:        "config current show should succeed: {current:?}"
+crates/shell/tests/config_world_deps_phase_b.rs:383:        "config current show should succeed: {current:?}"
+crates/shell/tests/config_world_deps_phase_b.rs:424:        "config current show should succeed after reset: {current:?}"
+crates/shell/tests/config_world_deps_phase_b.rs:485:        "config current show should succeed: {current:?}"
+crates/shell/tests/installer_env_wcu4.rs:66:        .expect("run substrate config current show --json");
+crates/shell/tests/installer_env_wcu4.rs:69:        "config current show should succeed: {output:?}"
+exec
+/bin/bash -lc "set -euo pipefail
+nl -ba crates/shell/src/execution/config_model.rs | sed -n '820,930p'
+" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 43ms:
+   820	                merge_strategy: "replace".to_string(),
+   821	                sources: vec![explain_source(
+   822	                    conflict_policy_src,
+   823	                    global_path,
+   824	                    workspace_path,
+   825	                )],
+   826	            },
+   827	        );
+   828	    }
+   829	
+   830	    // sync.exclude (replace semantics; protected excludes are injected later)
+   831	    let (exclude, exclude_src) = resolve_replace(
+   832	        effective.sync.exclude.clone(),
+   833	        global_patch.sync.exclude.clone(),
+   834	        workspace_patch
+   835	            .map(|(p, _)| p.sync.exclude.clone())
+   836	            .unwrap_or(None),
+   837	        env_overrides.sync_exclude.clone(),
+   838	        None,
+   839	        workspace_enabled,
+Plan update
+  ✓ Verify worktree and taskmeta
+  ✓ Read WCU5 spec and ADRs
+  ✓ Map acceptance criteria to code
+  → Implement or update tests
+  • Run fmt and targeted tests
+  • Run triad task finish
+file update
+M /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test/crates/shell/tests/config_world_deps_phase_b.rs
+@@ -622 +622,118 @@
+ }
++
++#[test]
++fn config_current_show_outputs_are_deterministic_without_changes() {
++    let fixture = WorldDepsConfigFixture::new();
++    fixture.init_workspace();
++
++    let global = fixture.config_global_set_json(
++        &fixture.workspace_root,
++        &[
++            "world.deps.enabled+=a",
++            "world.deps.enabled+=b",
++            "world.deps.inventory_mode=merged",
++            "world.deps.builtins=enabled",
++        ],
++    );
++    assert!(
++        global.status.success(),
++        "global set should succeed: {global:?}"
++    );
++
++    let workspace = fixture.config_workspace_set_json(
++        &fixture.workspace_root,
++        &[
++            "world.deps.enabled+=b",
++            "world.deps.enabled+=c",
++            "world.deps.inventory_mode=workspace_only",
++            "world.deps.builtins=disabled",
++        ],
++    );
++    assert!(
++        workspace.status.success(),
++        "workspace set should succeed: {workspace:?}"
++    );
++
++    let current_1 = fixture.config_current_show_json(&fixture.workspace_root, false);
++    assert!(
++        current_1.status.success(),
++        "config current show should succeed: {current_1:?}"
++    );
++    let current_2 = fixture.config_current_show_json(&fixture.workspace_root, false);
++    assert!(
++        current_2.status.success(),
++        "config current show should succeed: {current_2:?}"
++    );
++    assert_eq!(
++        current_1.stdout, current_2.stdout,
++        "config current show --json stdout must be deterministic for identical inputs"
++    );
++    assert_eq!(
++        current_1.stderr, current_2.stderr,
++        "config current show --json stderr must be deterministic for identical inputs"
++    );
++
++    let explain_1 = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        explain_1.status.success(),
++        "config current show --explain should succeed: {explain_1:?}"
++    );
++    let explain_2 = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        explain_2.status.success(),
++        "config current show --explain should succeed: {explain_2:?}"
++    );
++    assert_eq!(
++        explain_1.stdout, explain_2.stdout,
++        "config current show --json --explain stdout must be deterministic for identical inputs"
++    );
++    assert_eq!(
++        explain_1.stderr, explain_2.stderr,
++        "config current show --json --explain stderr must be deterministic for identical inputs"
++    );
++}
++
++#[test]
++fn config_world_deps_enabled_explain_reports_only_contributing_layers() {
++    let fixture = WorldDepsConfigFixture::new();
++    fixture.init_workspace();
++
++    let global = fixture.config_global_set_json(&fixture.workspace_root, &["world.deps.enabled+=a"]);
++    assert!(
++        global.status.success(),
++        "global set should succeed: {global:?}"
++    );
++    let current = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        current.status.success(),
++        "config current show should succeed: {current:?}"
++    );
++    let explain = parse_explain(&current.stderr);
++    assert_eq!(
++        explain_layers(explain_key(&explain, "world.deps.enabled")),
++        vec!["global_patch"]
++    );
++
++    let reset = fixture.config_global_reset(&fixture.workspace_root, &["world.deps.enabled"]);
++    assert!(
++        reset.status.success(),
++        "global reset should succeed: {reset:?}"
++    );
++
++    let workspace =
++        fixture.config_workspace_set_json(&fixture.workspace_root, &["world.deps.enabled+=b"]);
++    assert!(
++        workspace.status.success(),
++        "workspace set should succeed: {workspace:?}"
++    );
++    let current = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        current.status.success(),
++        "config current show should succeed: {current:?}"
++    );
++    let explain = parse_explain(&current.stderr);
++    assert_eq!(
++        explain_layers(explain_key(&explain, "world.deps.enabled")),
++        vec!["workspace_patch"]
++    );
++}
+apply_patch(auto_approved=true) exited 0 in 11ms:
+Success. Updated the following files:
+M crates/shell/tests/config_world_deps_phase_b.rs
+file update:
+diff --git a/crates/shell/tests/config_world_deps_phase_b.rs b/crates/shell/tests/config_world_deps_phase_b.rs
+index b8e113ec14811f0bc7f35c39da8988cd8da134c5..e93ea1c6c3ebc8eceb60a263cce4c0b20acc082f
+--- a/crates/shell/tests/config_world_deps_phase_b.rs
++++ b/crates/shell/tests/config_world_deps_phase_b.rs
+@@ -620,3 +620,120 @@
+         "expected world.deps keys removed from global patch, got: {after:?}"
+     );
+ }
++
++#[test]
++fn config_current_show_outputs_are_deterministic_without_changes() {
++    let fixture = WorldDepsConfigFixture::new();
++    fixture.init_workspace();
++
++    let global = fixture.config_global_set_json(
++        &fixture.workspace_root,
++        &[
++            "world.deps.enabled+=a",
++            "world.deps.enabled+=b",
++            "world.deps.inventory_mode=merged",
++            "world.deps.builtins=enabled",
++        ],
++    );
++    assert!(
++        global.status.success(),
++        "global set should succeed: {global:?}"
++    );
++
++    let workspace = fixture.config_workspace_set_json(
++        &fixture.workspace_root,
++        &[
++            "world.deps.enabled+=b",
++            "world.deps.enabled+=c",
++            "world.deps.inventory_mode=workspace_only",
++            "world.deps.builtins=disabled",
++        ],
++    );
++    assert!(
++        workspace.status.success(),
++        "workspace set should succeed: {workspace:?}"
++    );
++
++    let current_1 = fixture.config_current_show_json(&fixture.workspace_root, false);
++    assert!(
++        current_1.status.success(),
++        "config current show should succeed: {current_1:?}"
++    );
++    let current_2 = fixture.config_current_show_json(&fixture.workspace_root, false);
++    assert!(
++        current_2.status.success(),
++        "config current show should succeed: {current_2:?}"
++    );
++    assert_eq!(
++        current_1.stdout, current_2.stdout,
++        "config current show --json stdout must be deterministic for identical inputs"
++    );
++    assert_eq!(
++        current_1.stderr, current_2.stderr,
++        "config current show --json stderr must be deterministic for identical inputs"
++    );
++
++    let explain_1 = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        explain_1.status.success(),
++        "config current show --explain should succeed: {explain_1:?}"
++    );
++    let explain_2 = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        explain_2.status.success(),
++        "config current show --explain should succeed: {explain_2:?}"
++    );
++    assert_eq!(
++        explain_1.stdout, explain_2.stdout,
++        "config current show --json --explain stdout must be deterministic for identical inputs"
++    );
++    assert_eq!(
++        explain_1.stderr, explain_2.stderr,
++        "config current show --json --explain stderr must be deterministic for identical inputs"
++    );
++}
++
++#[test]
++fn config_world_deps_enabled_explain_reports_only_contributing_layers() {
++    let fixture = WorldDepsConfigFixture::new();
++    fixture.init_workspace();
++
++    let global = fixture.config_global_set_json(&fixture.workspace_root, &["world.deps.enabled+=a"]);
++    assert!(
++        global.status.success(),
++        "global set should succeed: {global:?}"
++    );
++    let current = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        current.status.success(),
++        "config current show should succeed: {current:?}"
++    );
++    let explain = parse_explain(&current.stderr);
++    assert_eq!(
++        explain_layers(explain_key(&explain, "world.deps.enabled")),
++        vec!["global_patch"]
++    );
++
++    let reset = fixture.config_global_reset(&fixture.workspace_root, &["world.deps.enabled"]);
++    assert!(
++        reset.status.success(),
++        "global reset should succeed: {reset:?}"
++    );
++
++    let workspace =
++        fixture.config_workspace_set_json(&fixture.workspace_root, &["world.deps.enabled+=b"]);
++    assert!(
++        workspace.status.success(),
++        "workspace set should succeed: {workspace:?}"
++    );
++    let current = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        current.status.success(),
++        "config current show should succeed: {current:?}"
++    );
++    let explain = parse_explain(&current.stderr);
++    assert_eq!(
++        explain_layers(explain_key(&explain, "world.deps.enabled")),
++        vec!["workspace_patch"]
++    );
++}
+
+file update:
+diff --git a/crates/shell/tests/config_world_deps_phase_b.rs b/crates/shell/tests/config_world_deps_phase_b.rs
+index b8e113ec14811f0bc7f35c39da8988cd8da134c5..e93ea1c6c3ebc8eceb60a263cce4c0b20acc082f
+--- a/crates/shell/tests/config_world_deps_phase_b.rs
++++ b/crates/shell/tests/config_world_deps_phase_b.rs
+@@ -620,3 +620,120 @@
+         "expected world.deps keys removed from global patch, got: {after:?}"
+     );
+ }
++
++#[test]
++fn config_current_show_outputs_are_deterministic_without_changes() {
++    let fixture = WorldDepsConfigFixture::new();
++    fixture.init_workspace();
++
++    let global = fixture.config_global_set_json(
++        &fixture.workspace_root,
++        &[
++            "world.deps.enabled+=a",
++            "world.deps.enabled+=b",
++            "world.deps.inventory_mode=merged",
++            "world.deps.builtins=enabled",
++        ],
++    );
++    assert!(
++        global.status.success(),
++        "global set should succeed: {global:?}"
++    );
++
++    let workspace = fixture.config_workspace_set_json(
++        &fixture.workspace_root,
++        &[
++            "world.deps.enabled+=b",
++            "world.deps.enabled+=c",
++            "world.deps.inventory_mode=workspace_only",
++            "world.deps.builtins=disabled",
++        ],
++    );
++    assert!(
++        workspace.status.success(),
++        "workspace set should succeed: {workspace:?}"
++    );
++
++    let current_1 = fixture.config_current_show_json(&fixture.workspace_root, false);
++    assert!(
++        current_1.status.success(),
++        "config current show should succeed: {current_1:?}"
++    );
++    let current_2 = fixture.config_current_show_json(&fixture.workspace_root, false);
++    assert!(
++        current_2.status.success(),
++        "config current show should succeed: {current_2:?}"
++    );
++    assert_eq!(
++        current_1.stdout, current_2.stdout,
++        "config current show --json stdout must be deterministic for identical inputs"
++    );
++    assert_eq!(
++        current_1.stderr, current_2.stderr,
++        "config current show --json stderr must be deterministic for identical inputs"
++    );
++
++    let explain_1 = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        explain_1.status.success(),
++        "config current show --explain should succeed: {explain_1:?}"
++    );
++    let explain_2 = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        explain_2.status.success(),
++        "config current show --explain should succeed: {explain_2:?}"
++    );
++    assert_eq!(
++        explain_1.stdout, explain_2.stdout,
++        "config current show --json --explain stdout must be deterministic for identical inputs"
++    );
++    assert_eq!(
++        explain_1.stderr, explain_2.stderr,
++        "config current show --json --explain stderr must be deterministic for identical inputs"
++    );
++}
++
++#[test]
++fn config_world_deps_enabled_explain_reports_only_contributing_layers() {
++    let fixture = WorldDepsConfigFixture::new();
++    fixture.init_workspace();
++
++    let global = fixture.config_global_set_json(&fixture.workspace_root, &["world.deps.enabled+=a"]);
++    assert!(
++        global.status.success(),
++        "global set should succeed: {global:?}"
++    );
++    let current = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        current.status.success(),
++        "config current show should succeed: {current:?}"
++    );
++    let explain = parse_explain(&current.stderr);
++    assert_eq!(
++        explain_layers(explain_key(&explain, "world.deps.enabled")),
++        vec!["global_patch"]
++    );
++
++    let reset = fixture.config_global_reset(&fixture.workspace_root, &["world.deps.enabled"]);
++    assert!(
++        reset.status.success(),
++        "global reset should succeed: {reset:?}"
++    );
++
++    let workspace =
++        fixture.config_workspace_set_json(&fixture.workspace_root, &["world.deps.enabled+=b"]);
++    assert!(
++        workspace.status.success(),
++        "workspace set should succeed: {workspace:?}"
++    );
++    let current = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        current.status.success(),
++        "config current show should succeed: {current:?}"
++    );
++    let explain = parse_explain(&current.stderr);
++    assert_eq!(
++        explain_layers(explain_key(&explain, "world.deps.enabled")),
++        vec!["workspace_patch"]
++    );
++}
+
+Plan update
+  ✓ Verify worktree and taskmeta
+  ✓ Read WCU5 spec and ADRs
+  ✓ Map acceptance criteria to code
+  ✓ Implement or update tests
+  → Run fmt and targeted tests
+  • Run triad task finish
+file update:
+diff --git a/crates/shell/tests/config_world_deps_phase_b.rs b/crates/shell/tests/config_world_deps_phase_b.rs
+index b8e113ec14811f0bc7f35c39da8988cd8da134c5..e93ea1c6c3ebc8eceb60a263cce4c0b20acc082f
+--- a/crates/shell/tests/config_world_deps_phase_b.rs
++++ b/crates/shell/tests/config_world_deps_phase_b.rs
+@@ -620,3 +620,120 @@
+         "expected world.deps keys removed from global patch, got: {after:?}"
+     );
+ }
++
++#[test]
++fn config_current_show_outputs_are_deterministic_without_changes() {
++    let fixture = WorldDepsConfigFixture::new();
++    fixture.init_workspace();
++
++    let global = fixture.config_global_set_json(
++        &fixture.workspace_root,
++        &[
++            "world.deps.enabled+=a",
++            "world.deps.enabled+=b",
++            "world.deps.inventory_mode=merged",
++            "world.deps.builtins=enabled",
++        ],
++    );
++    assert!(
++        global.status.success(),
++        "global set should succeed: {global:?}"
++    );
++
++    let workspace = fixture.config_workspace_set_json(
++        &fixture.workspace_root,
++        &[
++            "world.deps.enabled+=b",
++            "world.deps.enabled+=c",
++            "world.deps.inventory_mode=workspace_only",
++            "world.deps.builtins=disabled",
++        ],
++    );
++    assert!(
++        workspace.status.success(),
++        "workspace set should succeed: {workspace:?}"
++    );
++
++    let current_1 = fixture.config_current_show_json(&fixture.workspace_root, false);
++    assert!(
++        current_1.status.success(),
++        "config current show should succeed: {current_1:?}"
++    );
++    let current_2 = fixture.config_current_show_json(&fixture.workspace_root, false);
++    assert!(
++        current_2.status.success(),
++        "config current show should succeed: {current_2:?}"
++    );
++    assert_eq!(
++        current_1.stdout, current_2.stdout,
++        "config current show --json stdout must be deterministic for identical inputs"
++    );
++    assert_eq!(
++        current_1.stderr, current_2.stderr,
++        "config current show --json stderr must be deterministic for identical inputs"
++    );
++
++    let explain_1 = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        explain_1.status.success(),
++        "config current show --explain should succeed: {explain_1:?}"
++    );
++    let explain_2 = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        explain_2.status.success(),
++        "config current show --explain should succeed: {explain_2:?}"
++    );
++    assert_eq!(
++        explain_1.stdout, explain_2.stdout,
++        "config current show --json --explain stdout must be deterministic for identical inputs"
++    );
++    assert_eq!(
++        explain_1.stderr, explain_2.stderr,
++        "config current show --json --explain stderr must be deterministic for identical inputs"
++    );
++}
++
++#[test]
++fn config_world_deps_enabled_explain_reports_only_contributing_layers() {
++    let fixture = WorldDepsConfigFixture::new();
++    fixture.init_workspace();
++
++    let global = fixture.config_global_set_json(&fixture.workspace_root, &["world.deps.enabled+=a"]);
++    assert!(
++        global.status.success(),
++        "global set should succeed: {global:?}"
++    );
++    let current = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        current.status.success(),
++        "config current show should succeed: {current:?}"
++    );
++    let explain = parse_explain(&current.stderr);
++    assert_eq!(
++        explain_layers(explain_key(&explain, "world.deps.enabled")),
++        vec!["global_patch"]
++    );
++
++    let reset = fixture.config_global_reset(&fixture.workspace_root, &["world.deps.enabled"]);
++    assert!(
++        reset.status.success(),
++        "global reset should succeed: {reset:?}"
++    );
++
++    let workspace =
++        fixture.config_workspace_set_json(&fixture.workspace_root, &["world.deps.enabled+=b"]);
++    assert!(
++        workspace.status.success(),
++        "workspace set should succeed: {workspace:?}"
++    );
++    let current = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        current.status.success(),
++        "config current show should succeed: {current:?}"
++    );
++    let explain = parse_explain(&current.stderr);
++    assert_eq!(
++        explain_layers(explain_key(&explain, "world.deps.enabled")),
++        vec!["workspace_patch"]
++    );
++}
+
+exec
+/bin/bash -lc 'set -euo pipefail
+cargo fmt --all
+cargo test -p shell --test config_world_deps_phase_b -- --nocapture
+' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test exited 101 in 775ms:
+error: package ID specification `shell` did not match any packages
+
+help: a package with a similar name exists: `shlex`
+file update:
+diff --git a/crates/shell/tests/config_world_deps_phase_b.rs b/crates/shell/tests/config_world_deps_phase_b.rs
+index b8e113ec14811f0bc7f35c39da8988cd8da134c5..581f20db66911ae303e1865d68ff4b114443231e
+--- a/crates/shell/tests/config_world_deps_phase_b.rs
++++ b/crates/shell/tests/config_world_deps_phase_b.rs
+@@ -620,3 +620,121 @@
+         "expected world.deps keys removed from global patch, got: {after:?}"
+     );
+ }
++
++#[test]
++fn config_current_show_outputs_are_deterministic_without_changes() {
++    let fixture = WorldDepsConfigFixture::new();
++    fixture.init_workspace();
++
++    let global = fixture.config_global_set_json(
++        &fixture.workspace_root,
++        &[
++            "world.deps.enabled+=a",
++            "world.deps.enabled+=b",
++            "world.deps.inventory_mode=merged",
++            "world.deps.builtins=enabled",
++        ],
++    );
++    assert!(
++        global.status.success(),
++        "global set should succeed: {global:?}"
++    );
++
++    let workspace = fixture.config_workspace_set_json(
++        &fixture.workspace_root,
++        &[
++            "world.deps.enabled+=b",
++            "world.deps.enabled+=c",
++            "world.deps.inventory_mode=workspace_only",
++            "world.deps.builtins=disabled",
++        ],
++    );
++    assert!(
++        workspace.status.success(),
++        "workspace set should succeed: {workspace:?}"
++    );
++
++    let current_1 = fixture.config_current_show_json(&fixture.workspace_root, false);
++    assert!(
++        current_1.status.success(),
++        "config current show should succeed: {current_1:?}"
++    );
++    let current_2 = fixture.config_current_show_json(&fixture.workspace_root, false);
++    assert!(
++        current_2.status.success(),
++        "config current show should succeed: {current_2:?}"
++    );
++    assert_eq!(
++        current_1.stdout, current_2.stdout,
++        "config current show --json stdout must be deterministic for identical inputs"
++    );
++    assert_eq!(
++        current_1.stderr, current_2.stderr,
++        "config current show --json stderr must be deterministic for identical inputs"
++    );
++
++    let explain_1 = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        explain_1.status.success(),
++        "config current show --explain should succeed: {explain_1:?}"
++    );
++    let explain_2 = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        explain_2.status.success(),
++        "config current show --explain should succeed: {explain_2:?}"
++    );
++    assert_eq!(
++        explain_1.stdout, explain_2.stdout,
++        "config current show --json --explain stdout must be deterministic for identical inputs"
++    );
++    assert_eq!(
++        explain_1.stderr, explain_2.stderr,
++        "config current show --json --explain stderr must be deterministic for identical inputs"
++    );
++}
++
++#[test]
++fn config_world_deps_enabled_explain_reports_only_contributing_layers() {
++    let fixture = WorldDepsConfigFixture::new();
++    fixture.init_workspace();
++
++    let global =
++        fixture.config_global_set_json(&fixture.workspace_root, &["world.deps.enabled+=a"]);
++    assert!(
++        global.status.success(),
++        "global set should succeed: {global:?}"
++    );
++    let current = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        current.status.success(),
++        "config current show should succeed: {current:?}"
++    );
++    let explain = parse_explain(&current.stderr);
++    assert_eq!(
++        explain_layers(explain_key(&explain, "world.deps.enabled")),
++        vec!["global_patch"]
++    );
++
++    let reset = fixture.config_global_reset(&fixture.workspace_root, &["world.deps.enabled"]);
++    assert!(
++        reset.status.success(),
++        "global reset should succeed: {reset:?}"
++    );
++
++    let workspace =
++        fixture.config_workspace_set_json(&fixture.workspace_root, &["world.deps.enabled+=b"]);
++    assert!(
++        workspace.status.success(),
++        "workspace set should succeed: {workspace:?}"
++    );
++    let current = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        current.status.success(),
++        "config current show should succeed: {current:?}"
++    );
++    let explain = parse_explain(&current.stderr);
++    assert_eq!(
++        explain_layers(explain_key(&explain, "world.deps.enabled")),
++        vec!["workspace_patch"]
++    );
++}
+
+
+thinking
+**Determining package name**
+
+I noticed that the cargo package name isn't "shell." It seems like it could be "substrate-shell." To figure this out, I'll use `cargo metadata` or take a look at the `Cargo.toml` file in the `crates/shell` directory. It should help clarify the package name, so I'll check that quickly. Let's see what the file reveals!
+exec
+/bin/bash -lc "set -euo pipefail
+cat crates/shell/Cargo.toml | sed -n '1,80p'
+" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 38ms:
+[package]
+name = "substrate-shell"
+version = "0.2.5"
+edition = "2021"
+rust-version = "1.89"
+authors = ["Atomize"]
+description = "Secure execution layer for AI agent development workflows with comprehensive tracing and isolation"
+license = "MIT"
+repository = "https://github.com/atomize-hq/substrate"
+keywords = ["ai", "agent", "security", "tracing", "shell"]
+categories = ["command-line-utilities", "development-tools"]
+readme = "../../README.md"
+
+[dependencies]
+anyhow = "1.0"
+clap = { version = "4.5", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.10", features = ["v7"] }
+file update:
+diff --git a/crates/shell/tests/config_world_deps_phase_b.rs b/crates/shell/tests/config_world_deps_phase_b.rs
+index b8e113ec14811f0bc7f35c39da8988cd8da134c5..581f20db66911ae303e1865d68ff4b114443231e
+--- a/crates/shell/tests/config_world_deps_phase_b.rs
++++ b/crates/shell/tests/config_world_deps_phase_b.rs
+@@ -620,3 +620,121 @@
+         "expected world.deps keys removed from global patch, got: {after:?}"
+     );
+ }
++
++#[test]
++fn config_current_show_outputs_are_deterministic_without_changes() {
++    let fixture = WorldDepsConfigFixture::new();
++    fixture.init_workspace();
++
++    let global = fixture.config_global_set_json(
++        &fixture.workspace_root,
++        &[
++            "world.deps.enabled+=a",
++            "world.deps.enabled+=b",
++            "world.deps.inventory_mode=merged",
++            "world.deps.builtins=enabled",
++        ],
++    );
++    assert!(
++        global.status.success(),
++        "global set should succeed: {global:?}"
++    );
++
++    let workspace = fixture.config_workspace_set_json(
++        &fixture.workspace_root,
++        &[
++            "world.deps.enabled+=b",
++            "world.deps.enabled+=c",
++            "world.deps.inventory_mode=workspace_only",
++            "world.deps.builtins=disabled",
++        ],
++    );
++    assert!(
++        workspace.status.success(),
++        "workspace set should succeed: {workspace:?}"
++    );
++
++    let current_1 = fixture.config_current_show_json(&fixture.workspace_root, false);
++    assert!(
++        current_1.status.success(),
++        "config current show should succeed: {current_1:?}"
++    );
++    let current_2 = fixture.config_current_show_json(&fixture.workspace_root, false);
++    assert!(
++        current_2.status.success(),
++        "config current show should succeed: {current_2:?}"
++    );
++    assert_eq!(
++        current_1.stdout, current_2.stdout,
++        "config current show --json stdout must be deterministic for identical inputs"
++    );
++    assert_eq!(
++        current_1.stderr, current_2.stderr,
++        "config current show --json stderr must be deterministic for identical inputs"
++    );
++
++    let explain_1 = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        explain_1.status.success(),
++        "config current show --explain should succeed: {explain_1:?}"
++    );
++    let explain_2 = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        explain_2.status.success(),
++        "config current show --explain should succeed: {explain_2:?}"
++    );
++    assert_eq!(
++        explain_1.stdout, explain_2.stdout,
++        "config current show --json --explain stdout must be deterministic for identical inputs"
++    );
++    assert_eq!(
++        explain_1.stderr, explain_2.stderr,
++        "config current show --json --explain stderr must be deterministic for identical inputs"
++    );
++}
++
++#[test]
++fn config_world_deps_enabled_explain_reports_only_contributing_layers() {
++    let fixture = WorldDepsConfigFixture::new();
++    fixture.init_workspace();
++
++    let global =
++        fixture.config_global_set_json(&fixture.workspace_root, &["world.deps.enabled+=a"]);
++    assert!(
++        global.status.success(),
++        "global set should succeed: {global:?}"
++    );
++    let current = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        current.status.success(),
++        "config current show should succeed: {current:?}"
++    );
++    let explain = parse_explain(&current.stderr);
++    assert_eq!(
++        explain_layers(explain_key(&explain, "world.deps.enabled")),
++        vec!["global_patch"]
++    );
++
++    let reset = fixture.config_global_reset(&fixture.workspace_root, &["world.deps.enabled"]);
++    assert!(
++        reset.status.success(),
++        "global reset should succeed: {reset:?}"
++    );
++
++    let workspace =
++        fixture.config_workspace_set_json(&fixture.workspace_root, &["world.deps.enabled+=b"]);
++    assert!(
++        workspace.status.success(),
++        "workspace set should succeed: {workspace:?}"
++    );
++    let current = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        current.status.success(),
++        "config current show should succeed: {current:?}"
++    );
++    let explain = parse_explain(&current.stderr);
++    assert_eq!(
++        explain_layers(explain_key(&explain, "world.deps.enabled")),
++        vec!["workspace_patch"]
++    );
++}
+
+exec
+/bin/bash -lc 'set -euo pipefail
+cargo test -p substrate-shell --test config_world_deps_phase_b -- --nocapture
+' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 22.25s:
+   Compiling libc v0.2.178
+   Compiling proc-macro2 v1.0.103
+   Compiling unicode-ident v1.0.22
+   Compiling quote v1.0.42
+   Compiling cfg-if v1.0.4
+   Compiling serde_core v1.0.228
+   Compiling memchr v2.7.6
+   Compiling log v0.4.29
+   Compiling smallvec v1.15.1
+   Compiling itoa v1.0.16
+   Compiling autocfg v1.5.0
+   Compiling parking_lot_core v0.9.12
+   Compiling pin-project-lite v0.2.16
+   Compiling serde v1.0.228
+   Compiling scopeguard v1.2.0
+   Compiling bytes v1.11.0
+   Compiling once_cell v1.21.3
+   Compiling regex-syntax v0.8.8
+   Compiling getrandom v0.3.4
+   Compiling equivalent v1.0.2
+file update:
+diff --git a/crates/shell/tests/config_world_deps_phase_b.rs b/crates/shell/tests/config_world_deps_phase_b.rs
+index b8e113ec14811f0bc7f35c39da8988cd8da134c5..581f20db66911ae303e1865d68ff4b114443231e
+--- a/crates/shell/tests/config_world_deps_phase_b.rs
++++ b/crates/shell/tests/config_world_deps_phase_b.rs
+@@ -620,3 +620,121 @@
+         "expected world.deps keys removed from global patch, got: {after:?}"
+     );
+ }
++
++#[test]
++fn config_current_show_outputs_are_deterministic_without_changes() {
++    let fixture = WorldDepsConfigFixture::new();
++    fixture.init_workspace();
++
++    let global = fixture.config_global_set_json(
++        &fixture.workspace_root,
++        &[
++            "world.deps.enabled+=a",
++            "world.deps.enabled+=b",
++            "world.deps.inventory_mode=merged",
++            "world.deps.builtins=enabled",
++        ],
++    );
++    assert!(
++        global.status.success(),
++        "global set should succeed: {global:?}"
++    );
++
++    let workspace = fixture.config_workspace_set_json(
++        &fixture.workspace_root,
++        &[
++            "world.deps.enabled+=b",
++            "world.deps.enabled+=c",
++            "world.deps.inventory_mode=workspace_only",
++            "world.deps.builtins=disabled",
++        ],
++    );
++    assert!(
++        workspace.status.success(),
++        "workspace set should succeed: {workspace:?}"
++    );
++
++    let current_1 = fixture.config_current_show_json(&fixture.workspace_root, false);
++    assert!(
++        current_1.status.success(),
++        "config current show should succeed: {current_1:?}"
++    );
++    let current_2 = fixture.config_current_show_json(&fixture.workspace_root, false);
++    assert!(
++        current_2.status.success(),
++        "config current show should succeed: {current_2:?}"
++    );
++    assert_eq!(
++        current_1.stdout, current_2.stdout,
++        "config current show --json stdout must be deterministic for identical inputs"
++    );
++    assert_eq!(
++        current_1.stderr, current_2.stderr,
++        "config current show --json stderr must be deterministic for identical inputs"
++    );
++
++    let explain_1 = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        explain_1.status.success(),
++        "config current show --explain should succeed: {explain_1:?}"
++    );
++    let explain_2 = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        explain_2.status.success(),
++        "config current show --explain should succeed: {explain_2:?}"
++    );
++    assert_eq!(
++        explain_1.stdout, explain_2.stdout,
++        "config current show --json --explain stdout must be deterministic for identical inputs"
++    );
++    assert_eq!(
++        explain_1.stderr, explain_2.stderr,
++        "config current show --json --explain stderr must be deterministic for identical inputs"
++    );
++}
++
++#[test]
++fn config_world_deps_enabled_explain_reports_only_contributing_layers() {
++    let fixture = WorldDepsConfigFixture::new();
++    fixture.init_workspace();
++
++    let global =
++        fixture.config_global_set_json(&fixture.workspace_root, &["world.deps.enabled+=a"]);
++    assert!(
++        global.status.success(),
++        "global set should succeed: {global:?}"
++    );
++    let current = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        current.status.success(),
++        "config current show should succeed: {current:?}"
++    );
++    let explain = parse_explain(&current.stderr);
++    assert_eq!(
++        explain_layers(explain_key(&explain, "world.deps.enabled")),
++        vec!["global_patch"]
++    );
++
++    let reset = fixture.config_global_reset(&fixture.workspace_root, &["world.deps.enabled"]);
++    assert!(
++        reset.status.success(),
++        "global reset should succeed: {reset:?}"
++    );
++
++    let workspace =
++        fixture.config_workspace_set_json(&fixture.workspace_root, &["world.deps.enabled+=b"]);
++    assert!(
++        workspace.status.success(),
++        "workspace set should succeed: {workspace:?}"
++    );
++    let current = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        current.status.success(),
++        "config current show should succeed: {current:?}"
++    );
++    let explain = parse_explain(&current.stderr);
++    assert_eq!(
++        explain_layers(explain_key(&explain, "world.deps.enabled")),
++        vec!["workspace_patch"]
++    );
++}
+
+
+
+
+
+
+thinking
+**Evaluating commit decisions**
+
+All tests have passed, which is great! I need to ensure that `cargo fmt` ran successfully too. I'm updating my plan with step 5 completed and step 6 in progress, but I also want to check that no planning documents have been modified—just the tests. I should check the git status and see about committing changes to the task branch. The triad standard suggests committing, but the user didn’t request it. It's a bit confusing!
+thinking
+**Deciding on commits**
+
+The developer says not to commit unless explicitly asked, which is pretty straightforward, so I won't commit after all. I might mention this to the operator, since the task finisher could expect a clean git state. I'm wondering if it allows for uncommitted changes. The triad finish script may expect changes even if not committed. To be on the safe side, I think I'll run `make triad-task-finish TASK_ID="WCU5-test"` to see what happens, even though I'm unsure if it’ll fail due to uncommitted changes.
+thinking
+**Navigating commit ambiguities**
+
+The user asked me to run `make triad-task-finish`, which might create a commit. It could fail if there’s no commit, but I’m not sure. The user didn’t explicitly say to commit, but the documentation hints that a commit could be necessary. However, the developer's instructions say not to commit unless asked. It’s unclear which guideline takes precedence. The user’s message includes the standard, yet they didn’t request a commit directly. I think this might be ambiguous overall.
+thinking
+**Deciding on task completion**
+
+I’m leaning towards following the developer's instructions not to commit. However, the `make` target may not necessarily require a commit; it could just gather a diff. I’ll go ahead and run the `triad-task-finish`. If it fails due to uncommitted changes, I could consider modifying the finish script, although I realize I can’t edit planning docs. It might be worth asking the user for explicit permission to commit, even though the approval policy usually doesn’t allow for interaction. I think it’s better to see if the finish succeeds first!
+thinking
+**Running user command**
+
+The user explicitly instructed to run `make triad-task-finish` from inside the worktree, so I’ll go ahead and do that now. It's a clear directive, so no ambiguity there! If something goes wrong, I’ll just handle it afterward. Before I finish up, though, I need to make sure I update the plan step statuses as well. It's important to keep everything organized and track progress properly. Let’s get started!
+Plan update
+  ✓ Verify worktree and taskmeta
+  ✓ Read WCU5 spec and ADRs
+  ✓ Map acceptance criteria to code
+  ✓ Implement or update tests
+  ✓ Run fmt and targeted tests
+  → Run triad task finish
+file update:
+diff --git a/crates/shell/tests/config_world_deps_phase_b.rs b/crates/shell/tests/config_world_deps_phase_b.rs
+index b8e113ec14811f0bc7f35c39da8988cd8da134c5..581f20db66911ae303e1865d68ff4b114443231e
+--- a/crates/shell/tests/config_world_deps_phase_b.rs
++++ b/crates/shell/tests/config_world_deps_phase_b.rs
+@@ -620,3 +620,121 @@
+         "expected world.deps keys removed from global patch, got: {after:?}"
+     );
+ }
++
++#[test]
++fn config_current_show_outputs_are_deterministic_without_changes() {
++    let fixture = WorldDepsConfigFixture::new();
++    fixture.init_workspace();
++
++    let global = fixture.config_global_set_json(
++        &fixture.workspace_root,
++        &[
++            "world.deps.enabled+=a",
++            "world.deps.enabled+=b",
++            "world.deps.inventory_mode=merged",
++            "world.deps.builtins=enabled",
++        ],
++    );
++    assert!(
++        global.status.success(),
++        "global set should succeed: {global:?}"
++    );
++
++    let workspace = fixture.config_workspace_set_json(
++        &fixture.workspace_root,
++        &[
++            "world.deps.enabled+=b",
++            "world.deps.enabled+=c",
++            "world.deps.inventory_mode=workspace_only",
++            "world.deps.builtins=disabled",
++        ],
++    );
++    assert!(
++        workspace.status.success(),
++        "workspace set should succeed: {workspace:?}"
++    );
++
++    let current_1 = fixture.config_current_show_json(&fixture.workspace_root, false);
++    assert!(
++        current_1.status.success(),
++        "config current show should succeed: {current_1:?}"
++    );
++    let current_2 = fixture.config_current_show_json(&fixture.workspace_root, false);
++    assert!(
++        current_2.status.success(),
++        "config current show should succeed: {current_2:?}"
++    );
++    assert_eq!(
++        current_1.stdout, current_2.stdout,
++        "config current show --json stdout must be deterministic for identical inputs"
++    );
++    assert_eq!(
++        current_1.stderr, current_2.stderr,
++        "config current show --json stderr must be deterministic for identical inputs"
++    );
++
++    let explain_1 = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        explain_1.status.success(),
++        "config current show --explain should succeed: {explain_1:?}"
++    );
++    let explain_2 = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        explain_2.status.success(),
++        "config current show --explain should succeed: {explain_2:?}"
++    );
++    assert_eq!(
++        explain_1.stdout, explain_2.stdout,
++        "config current show --json --explain stdout must be deterministic for identical inputs"
++    );
++    assert_eq!(
++        explain_1.stderr, explain_2.stderr,
++        "config current show --json --explain stderr must be deterministic for identical inputs"
++    );
++}
++
++#[test]
++fn config_world_deps_enabled_explain_reports_only_contributing_layers() {
++    let fixture = WorldDepsConfigFixture::new();
++    fixture.init_workspace();
++
++    let global =
++        fixture.config_global_set_json(&fixture.workspace_root, &["world.deps.enabled+=a"]);
++    assert!(
++        global.status.success(),
++        "global set should succeed: {global:?}"
++    );
++    let current = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        current.status.success(),
++        "config current show should succeed: {current:?}"
++    );
++    let explain = parse_explain(&current.stderr);
++    assert_eq!(
++        explain_layers(explain_key(&explain, "world.deps.enabled")),
++        vec!["global_patch"]
++    );
++
++    let reset = fixture.config_global_reset(&fixture.workspace_root, &["world.deps.enabled"]);
++    assert!(
++        reset.status.success(),
++        "global reset should succeed: {reset:?}"
++    );
++
++    let workspace =
++        fixture.config_workspace_set_json(&fixture.workspace_root, &["world.deps.enabled+=b"]);
++    assert!(
++        workspace.status.success(),
++        "workspace set should succeed: {workspace:?}"
++    );
++    let current = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        current.status.success(),
++        "config current show should succeed: {current:?}"
++    );
++    let explain = parse_explain(&current.stderr);
++    assert_eq!(
++        explain_layers(explain_key(&explain, "world.deps.enabled")),
++        vec!["workspace_patch"]
++    );
++}
+
+exec
+/bin/bash -lc 'set -euo pipefail
+git status --porcelain=v1
+' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 57ms:
+ M crates/shell/tests/config_world_deps_phase_b.rs
+exec
+/bin/bash -lc 'set -euo pipefail
+make triad-task-finish TASK_ID="WCU5-test"
+' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 1.37s:
+make[1]: Entering directory '/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test'
+== Running: make triad-test-checks
+make[2]: Entering directory '/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test'
+cargo fmt
+make[2]: Leaving directory '/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test'
+== Committing worktree changes
+[workspace_config_policy_unification-wcu5-test 867639e] task: WCU5-test
+ 1 file changed, 118 insertions(+)
+TASK_BRANCH=workspace_config_policy_unification-wcu5-test
+WORKTREE=/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test
+HEAD=867639ea325f03ce8d56dce30c451915991cf40f
+COMMITS=1
+CHECKS=make triad-test-checks
+SMOKE_RUN=
+MERGED_TO_ORCH=
+make[1]: Leaving directory '/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test'
+file update:
+diff --git a/crates/shell/tests/config_world_deps_phase_b.rs b/crates/shell/tests/config_world_deps_phase_b.rs
+index b8e113ec14811f0bc7f35c39da8988cd8da134c5..581f20db66911ae303e1865d68ff4b114443231e
+--- a/crates/shell/tests/config_world_deps_phase_b.rs
++++ b/crates/shell/tests/config_world_deps_phase_b.rs
+@@ -620,3 +620,121 @@
+         "expected world.deps keys removed from global patch, got: {after:?}"
+     );
+ }
++
++#[test]
++fn config_current_show_outputs_are_deterministic_without_changes() {
++    let fixture = WorldDepsConfigFixture::new();
++    fixture.init_workspace();
++
++    let global = fixture.config_global_set_json(
++        &fixture.workspace_root,
++        &[
++            "world.deps.enabled+=a",
++            "world.deps.enabled+=b",
++            "world.deps.inventory_mode=merged",
++            "world.deps.builtins=enabled",
++        ],
++    );
++    assert!(
++        global.status.success(),
++        "global set should succeed: {global:?}"
++    );
++
++    let workspace = fixture.config_workspace_set_json(
++        &fixture.workspace_root,
++        &[
++            "world.deps.enabled+=b",
++            "world.deps.enabled+=c",
++            "world.deps.inventory_mode=workspace_only",
++            "world.deps.builtins=disabled",
++        ],
++    );
++    assert!(
++        workspace.status.success(),
++        "workspace set should succeed: {workspace:?}"
++    );
++
++    let current_1 = fixture.config_current_show_json(&fixture.workspace_root, false);
++    assert!(
++        current_1.status.success(),
++        "config current show should succeed: {current_1:?}"
++    );
++    let current_2 = fixture.config_current_show_json(&fixture.workspace_root, false);
++    assert!(
++        current_2.status.success(),
++        "config current show should succeed: {current_2:?}"
++    );
++    assert_eq!(
++        current_1.stdout, current_2.stdout,
++        "config current show --json stdout must be deterministic for identical inputs"
++    );
++    assert_eq!(
++        current_1.stderr, current_2.stderr,
++        "config current show --json stderr must be deterministic for identical inputs"
++    );
++
++    let explain_1 = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        explain_1.status.success(),
++        "config current show --explain should succeed: {explain_1:?}"
++    );
++    let explain_2 = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        explain_2.status.success(),
++        "config current show --explain should succeed: {explain_2:?}"
++    );
++    assert_eq!(
++        explain_1.stdout, explain_2.stdout,
++        "config current show --json --explain stdout must be deterministic for identical inputs"
++    );
++    assert_eq!(
++        explain_1.stderr, explain_2.stderr,
++        "config current show --json --explain stderr must be deterministic for identical inputs"
++    );
++}
++
++#[test]
++fn config_world_deps_enabled_explain_reports_only_contributing_layers() {
++    let fixture = WorldDepsConfigFixture::new();
++    fixture.init_workspace();
++
++    let global =
++        fixture.config_global_set_json(&fixture.workspace_root, &["world.deps.enabled+=a"]);
++    assert!(
++        global.status.success(),
++        "global set should succeed: {global:?}"
++    );
++    let current = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        current.status.success(),
++        "config current show should succeed: {current:?}"
++    );
++    let explain = parse_explain(&current.stderr);
++    assert_eq!(
++        explain_layers(explain_key(&explain, "world.deps.enabled")),
++        vec!["global_patch"]
++    );
++
++    let reset = fixture.config_global_reset(&fixture.workspace_root, &["world.deps.enabled"]);
++    assert!(
++        reset.status.success(),
++        "global reset should succeed: {reset:?}"
++    );
++
++    let workspace =
++        fixture.config_workspace_set_json(&fixture.workspace_root, &["world.deps.enabled+=b"]);
++    assert!(
++        workspace.status.success(),
++        "workspace set should succeed: {workspace:?}"
++    );
++    let current = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        current.status.success(),
++        "config current show should succeed: {current:?}"
++    );
++    let explain = parse_explain(&current.stderr);
++    assert_eq!(
++        explain_layers(explain_key(&explain, "world.deps.enabled")),
++        vec!["workspace_patch"]
++    );
++}
+
+
+thinking
+**Updating commitments**
+
+It’s interesting that I need to make the triad-task-finish committed automatically. The system instructions say not to commit unless requested, but since the user requested to run make—which includes a commit—I’m okay with that since it aligns with their instruction. So, I complied, and now a commit has been created in the branch. Awesome, that means step 6 is completed. Now I’ll update the plan accordingly!
+Plan update
+  ✓ Verify worktree and taskmeta
+  ✓ Read WCU5 spec and ADRs
+  ✓ Map acceptance criteria to code
+  ✓ Implement or update tests
+  ✓ Run fmt and targeted tests
+  ✓ Run triad task finish
+file update:
+diff --git a/crates/shell/tests/config_world_deps_phase_b.rs b/crates/shell/tests/config_world_deps_phase_b.rs
+index b8e113ec14811f0bc7f35c39da8988cd8da134c5..581f20db66911ae303e1865d68ff4b114443231e
+--- a/crates/shell/tests/config_world_deps_phase_b.rs
++++ b/crates/shell/tests/config_world_deps_phase_b.rs
+@@ -620,3 +620,121 @@
+         "expected world.deps keys removed from global patch, got: {after:?}"
+     );
+ }
++
++#[test]
++fn config_current_show_outputs_are_deterministic_without_changes() {
++    let fixture = WorldDepsConfigFixture::new();
++    fixture.init_workspace();
++
++    let global = fixture.config_global_set_json(
++        &fixture.workspace_root,
++        &[
++            "world.deps.enabled+=a",
++            "world.deps.enabled+=b",
++            "world.deps.inventory_mode=merged",
++            "world.deps.builtins=enabled",
++        ],
++    );
++    assert!(
++        global.status.success(),
++        "global set should succeed: {global:?}"
++    );
++
++    let workspace = fixture.config_workspace_set_json(
++        &fixture.workspace_root,
++        &[
++            "world.deps.enabled+=b",
++            "world.deps.enabled+=c",
++            "world.deps.inventory_mode=workspace_only",
++            "world.deps.builtins=disabled",
++        ],
++    );
++    assert!(
++        workspace.status.success(),
++        "workspace set should succeed: {workspace:?}"
++    );
++
++    let current_1 = fixture.config_current_show_json(&fixture.workspace_root, false);
++    assert!(
++        current_1.status.success(),
++        "config current show should succeed: {current_1:?}"
++    );
++    let current_2 = fixture.config_current_show_json(&fixture.workspace_root, false);
++    assert!(
++        current_2.status.success(),
++        "config current show should succeed: {current_2:?}"
++    );
++    assert_eq!(
++        current_1.stdout, current_2.stdout,
++        "config current show --json stdout must be deterministic for identical inputs"
++    );
++    assert_eq!(
++        current_1.stderr, current_2.stderr,
++        "config current show --json stderr must be deterministic for identical inputs"
++    );
++
++    let explain_1 = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        explain_1.status.success(),
++        "config current show --explain should succeed: {explain_1:?}"
++    );
++    let explain_2 = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        explain_2.status.success(),
++        "config current show --explain should succeed: {explain_2:?}"
++    );
++    assert_eq!(
++        explain_1.stdout, explain_2.stdout,
++        "config current show --json --explain stdout must be deterministic for identical inputs"
++    );
++    assert_eq!(
++        explain_1.stderr, explain_2.stderr,
++        "config current show --json --explain stderr must be deterministic for identical inputs"
++    );
++}
++
++#[test]
++fn config_world_deps_enabled_explain_reports_only_contributing_layers() {
++    let fixture = WorldDepsConfigFixture::new();
++    fixture.init_workspace();
++
++    let global =
++        fixture.config_global_set_json(&fixture.workspace_root, &["world.deps.enabled+=a"]);
++    assert!(
++        global.status.success(),
++        "global set should succeed: {global:?}"
++    );
++    let current = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        current.status.success(),
++        "config current show should succeed: {current:?}"
++    );
++    let explain = parse_explain(&current.stderr);
++    assert_eq!(
++        explain_layers(explain_key(&explain, "world.deps.enabled")),
++        vec!["global_patch"]
++    );
++
++    let reset = fixture.config_global_reset(&fixture.workspace_root, &["world.deps.enabled"]);
++    assert!(
++        reset.status.success(),
++        "global reset should succeed: {reset:?}"
++    );
++
++    let workspace =
++        fixture.config_workspace_set_json(&fixture.workspace_root, &["world.deps.enabled+=b"]);
++    assert!(
++        workspace.status.success(),
++        "workspace set should succeed: {workspace:?}"
++    );
++    let current = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        current.status.success(),
++        "config current show should succeed: {current:?}"
++    );
++    let explain = parse_explain(&current.stderr);
++    assert_eq!(
++        explain_layers(explain_key(&explain, "world.deps.enabled")),
++        vec!["workspace_patch"]
++    );
++}
+
+exec
+/bin/bash -lc 'set -euo pipefail
+rg -n "config_current_show_outputs_are_deterministic_without_changes|config_world_deps_enabled_explain_reports_only_contributing_layers" crates/shell/tests/config_world_deps_phase_b.rs
+' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 45ms:
+625:fn config_current_show_outputs_are_deterministic_without_changes() {
+697:fn config_world_deps_enabled_explain_reports_only_contributing_layers() {
+file update:
+diff --git a/crates/shell/tests/config_world_deps_phase_b.rs b/crates/shell/tests/config_world_deps_phase_b.rs
+index b8e113ec14811f0bc7f35c39da8988cd8da134c5..581f20db66911ae303e1865d68ff4b114443231e
+--- a/crates/shell/tests/config_world_deps_phase_b.rs
++++ b/crates/shell/tests/config_world_deps_phase_b.rs
+@@ -620,3 +620,121 @@
+         "expected world.deps keys removed from global patch, got: {after:?}"
+     );
+ }
++
++#[test]
++fn config_current_show_outputs_are_deterministic_without_changes() {
++    let fixture = WorldDepsConfigFixture::new();
++    fixture.init_workspace();
++
++    let global = fixture.config_global_set_json(
++        &fixture.workspace_root,
++        &[
++            "world.deps.enabled+=a",
++            "world.deps.enabled+=b",
++            "world.deps.inventory_mode=merged",
++            "world.deps.builtins=enabled",
++        ],
++    );
++    assert!(
++        global.status.success(),
++        "global set should succeed: {global:?}"
++    );
++
++    let workspace = fixture.config_workspace_set_json(
++        &fixture.workspace_root,
++        &[
++            "world.deps.enabled+=b",
++            "world.deps.enabled+=c",
++            "world.deps.inventory_mode=workspace_only",
++            "world.deps.builtins=disabled",
++        ],
++    );
++    assert!(
++        workspace.status.success(),
++        "workspace set should succeed: {workspace:?}"
++    );
++
++    let current_1 = fixture.config_current_show_json(&fixture.workspace_root, false);
++    assert!(
++        current_1.status.success(),
++        "config current show should succeed: {current_1:?}"
++    );
++    let current_2 = fixture.config_current_show_json(&fixture.workspace_root, false);
++    assert!(
++        current_2.status.success(),
++        "config current show should succeed: {current_2:?}"
++    );
++    assert_eq!(
++        current_1.stdout, current_2.stdout,
++        "config current show --json stdout must be deterministic for identical inputs"
++    );
++    assert_eq!(
++        current_1.stderr, current_2.stderr,
++        "config current show --json stderr must be deterministic for identical inputs"
++    );
++
++    let explain_1 = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        explain_1.status.success(),
++        "config current show --explain should succeed: {explain_1:?}"
++    );
++    let explain_2 = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        explain_2.status.success(),
++        "config current show --explain should succeed: {explain_2:?}"
++    );
++    assert_eq!(
++        explain_1.stdout, explain_2.stdout,
++        "config current show --json --explain stdout must be deterministic for identical inputs"
++    );
++    assert_eq!(
++        explain_1.stderr, explain_2.stderr,
++        "config current show --json --explain stderr must be deterministic for identical inputs"
++    );
++}
++
++#[test]
++fn config_world_deps_enabled_explain_reports_only_contributing_layers() {
++    let fixture = WorldDepsConfigFixture::new();
++    fixture.init_workspace();
++
++    let global =
++        fixture.config_global_set_json(&fixture.workspace_root, &["world.deps.enabled+=a"]);
++    assert!(
++        global.status.success(),
++        "global set should succeed: {global:?}"
++    );
++    let current = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        current.status.success(),
++        "config current show should succeed: {current:?}"
++    );
++    let explain = parse_explain(&current.stderr);
++    assert_eq!(
++        explain_layers(explain_key(&explain, "world.deps.enabled")),
++        vec!["global_patch"]
++    );
++
++    let reset = fixture.config_global_reset(&fixture.workspace_root, &["world.deps.enabled"]);
++    assert!(
++        reset.status.success(),
++        "global reset should succeed: {reset:?}"
++    );
++
++    let workspace =
++        fixture.config_workspace_set_json(&fixture.workspace_root, &["world.deps.enabled+=b"]);
++    assert!(
++        workspace.status.success(),
++        "workspace set should succeed: {workspace:?}"
++    );
++    let current = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        current.status.success(),
++        "config current show should succeed: {current:?}"
++    );
++    let explain = parse_explain(&current.stderr);
++    assert_eq!(
++        explain_layers(explain_key(&explain, "world.deps.enabled")),
++        vec!["workspace_patch"]
++    );
++}
+
+codex
+- Added WCU5 Phase A/B determinism + provenance coverage in `crates/shell/tests/config_world_deps_phase_b.rs:625` and `crates/shell/tests/config_world_deps_phase_b.rs:697`:
+  - `config_current_show_outputs_are_deterministic_without_changes` (byte-for-byte stable stdout/stderr across repeated `config current show` runs)
+  - `config_world_deps_enabled_explain_reports_only_contributing_layers` (global-only vs workspace-only `--explain` sources)
+- Ran `cargo fmt --all` and `cargo test -p substrate-shell --test config_world_deps_phase_b -- --nocapture` (all pass)
+- Ran `make triad-task-finish TASK_ID="WCU5-test"`; it committed `task: WCU5-test` at `867639ea325f03ce8d56dce30c451915991cf40f`
+file update:
+diff --git a/crates/shell/tests/config_world_deps_phase_b.rs b/crates/shell/tests/config_world_deps_phase_b.rs
+index b8e113ec14811f0bc7f35c39da8988cd8da134c5..581f20db66911ae303e1865d68ff4b114443231e
+--- a/crates/shell/tests/config_world_deps_phase_b.rs
++++ b/crates/shell/tests/config_world_deps_phase_b.rs
+@@ -620,3 +620,121 @@
+         "expected world.deps keys removed from global patch, got: {after:?}"
+     );
+ }
++
++#[test]
++fn config_current_show_outputs_are_deterministic_without_changes() {
++    let fixture = WorldDepsConfigFixture::new();
++    fixture.init_workspace();
++
++    let global = fixture.config_global_set_json(
++        &fixture.workspace_root,
++        &[
++            "world.deps.enabled+=a",
++            "world.deps.enabled+=b",
++            "world.deps.inventory_mode=merged",
++            "world.deps.builtins=enabled",
++        ],
++    );
++    assert!(
++        global.status.success(),
++        "global set should succeed: {global:?}"
++    );
++
++    let workspace = fixture.config_workspace_set_json(
++        &fixture.workspace_root,
++        &[
++            "world.deps.enabled+=b",
++            "world.deps.enabled+=c",
++            "world.deps.inventory_mode=workspace_only",
++            "world.deps.builtins=disabled",
++        ],
++    );
++    assert!(
++        workspace.status.success(),
++        "workspace set should succeed: {workspace:?}"
++    );
++
++    let current_1 = fixture.config_current_show_json(&fixture.workspace_root, false);
++    assert!(
++        current_1.status.success(),
++        "config current show should succeed: {current_1:?}"
++    );
++    let current_2 = fixture.config_current_show_json(&fixture.workspace_root, false);
++    assert!(
++        current_2.status.success(),
++        "config current show should succeed: {current_2:?}"
++    );
++    assert_eq!(
++        current_1.stdout, current_2.stdout,
++        "config current show --json stdout must be deterministic for identical inputs"
++    );
++    assert_eq!(
++        current_1.stderr, current_2.stderr,
++        "config current show --json stderr must be deterministic for identical inputs"
++    );
++
++    let explain_1 = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        explain_1.status.success(),
++        "config current show --explain should succeed: {explain_1:?}"
++    );
++    let explain_2 = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        explain_2.status.success(),
++        "config current show --explain should succeed: {explain_2:?}"
++    );
++    assert_eq!(
++        explain_1.stdout, explain_2.stdout,
++        "config current show --json --explain stdout must be deterministic for identical inputs"
++    );
++    assert_eq!(
++        explain_1.stderr, explain_2.stderr,
++        "config current show --json --explain stderr must be deterministic for identical inputs"
++    );
++}
++
++#[test]
++fn config_world_deps_enabled_explain_reports_only_contributing_layers() {
++    let fixture = WorldDepsConfigFixture::new();
++    fixture.init_workspace();
++
++    let global =
++        fixture.config_global_set_json(&fixture.workspace_root, &["world.deps.enabled+=a"]);
++    assert!(
++        global.status.success(),
++        "global set should succeed: {global:?}"
++    );
++    let current = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        current.status.success(),
++        "config current show should succeed: {current:?}"
++    );
++    let explain = parse_explain(&current.stderr);
++    assert_eq!(
++        explain_layers(explain_key(&explain, "world.deps.enabled")),
++        vec!["global_patch"]
++    );
++
++    let reset = fixture.config_global_reset(&fixture.workspace_root, &["world.deps.enabled"]);
++    assert!(
++        reset.status.success(),
++        "global reset should succeed: {reset:?}"
++    );
++
++    let workspace =
++        fixture.config_workspace_set_json(&fixture.workspace_root, &["world.deps.enabled+=b"]);
++    assert!(
++        workspace.status.success(),
++        "workspace set should succeed: {workspace:?}"
++    );
++    let current = fixture.config_current_show_json(&fixture.workspace_root, true);
++    assert!(
++        current.status.success(),
++        "config current show should succeed: {current:?}"
++    );
++    let explain = parse_explain(&current.stderr);
++    assert_eq!(
++        explain_layers(explain_key(&explain, "world.deps.enabled")),
++        vec!["workspace_patch"]
++    );
++}
+
+tokens used
+63,580

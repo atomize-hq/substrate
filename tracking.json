@@ -427,7 +427,7 @@
             "status": "completed",
             "files": [
                 "docs/project_management/next/sequencing.json",
-                "docs/project_management/next/world_deps_selection_layer/tasks.json",
+                "docs/project_management/_archived/world_deps_selection_layer/tasks.json",
                 "docs/project_management/next/world-sync/tasks.json"
             ],
             "notes": "Added missing sprint entries (incl. `p0_platform_stability`, `p0_platform_stability_macos_parity`, `world_deps_selection_layer`) and declared cross-feature task deps via `meta.external_task_ids`."

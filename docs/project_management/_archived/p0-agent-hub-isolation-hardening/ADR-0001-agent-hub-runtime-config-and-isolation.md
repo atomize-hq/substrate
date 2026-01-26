@@ -22,7 +22,7 @@ ADR_BODY_SHA256: <run `python3 scripts/planning/check_adr_exec_summary.py --adr 
 - New: Substrate behaves like a strict agent-hub execution layer: selection-driven world-deps (no-op when unconfigured), YAML-only runtime config, and Linux isolation guarantees that prevent absolute-path project writes from bypassing the overlay.
 - Why: Reduces security footguns and makes guarantees auditable/reproducible across tools (humans + multiple agent CLIs).
 - Links:
-  - `docs/project_management/next/world_deps_selection_layer/`
+  - `docs/project_management/_archived/world_deps_selection_layer/`
   - `docs/project_management/next/yaml-settings-migration/Y0-spec.md`
 
 ## 0) Executive Summary
@@ -247,7 +247,7 @@ Implemented the “project bind mount” enforcement:
 
 The selection-driven world-deps model is specified and sequenced:
 - ADR: `docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
-- Specs: `docs/project_management/next/world_deps_selection_layer/S0-spec-selection-config-and-ux.md`, `docs/project_management/next/world_deps_selection_layer/S1-spec-install-classes.md`, `docs/project_management/next/world_deps_selection_layer/S2-spec-system-packages-provisioning.md`
+- Specs: `docs/project_management/_archived/world_deps_selection_layer/S0-spec-selection-config-and-ux.md`, `docs/project_management/_archived/world_deps_selection_layer/S1-spec-install-classes.md`, `docs/project_management/_archived/world_deps_selection_layer/S2-spec-system-packages-provisioning.md`
 - Sequencing: `docs/project_management/next/sequencing.json`
 
 ### 3.4 Runtime format unification (Not started)
@@ -261,9 +261,9 @@ Runtime settings format is YAML-only and is implemented by Y0:
 
 World-deps selection + install-class semantics are finalized in ADR-0002 and its triad specs:
 - `docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
-- `docs/project_management/next/world_deps_selection_layer/S0-spec-selection-config-and-ux.md`
-- `docs/project_management/next/world_deps_selection_layer/S1-spec-install-classes.md`
-- `docs/project_management/next/world_deps_selection_layer/S2-spec-system-packages-provisioning.md`
+- `docs/project_management/_archived/world_deps_selection_layer/S0-spec-selection-config-and-ux.md`
+- `docs/project_management/_archived/world_deps_selection_layer/S1-spec-install-classes.md`
+- `docs/project_management/_archived/world_deps_selection_layer/S2-spec-system-packages-provisioning.md`
 
 Policy schema is finalized by I0/I1:
 - `docs/project_management/next/p0-agent-hub-isolation-hardening/I0-spec.md`

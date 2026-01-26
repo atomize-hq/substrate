@@ -238,7 +238,7 @@ Manifests:
 
 ## 7) Logging & Telemetry
 
-- Policy snapshot behavior and the trace fields `policy_resolution_mode`, `policy_snapshot_schema`, and `policy_snapshot_hash` are specified in `docs/project_management/next/world-agent-policy-snapshot/policy-snapshot-spec.md`.
+- Policy snapshot behavior and the trace fields `policy_resolution_mode`, `policy_snapshot_schema`, and `policy_snapshot_hash` are specified in `docs/project_management/_archived/world-agent-policy-snapshot/policy-snapshot-spec.md`.
 - Windows spans include an optional `fs_diff.display_path` map pairing canonical WSL paths with native Windows paths for telemetry consumers.
 
 - world-agent (PTY)

@@ -7,7 +7,7 @@ Last updated: 2025-12-24
 Owners: Shell / World / Installer maintainers
 
 Planning Pack directory:
-- `docs/project_management/next/world_deps_selection_layer/`
+- `docs/project_management/_archived/world_deps_selection_layer/`
 
 Intended execution branch:
 - `feat/world_deps_selection_layer`
@@ -16,13 +16,13 @@ Exit code taxonomy:
 - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md` (this ADR’s exit-code meanings must remain consistent with this taxonomy)
 
 Authoritative implementation docs:
-- Decision register: `docs/project_management/next/world_deps_selection_layer/decision_register.md`
-- Integration map: `docs/project_management/next/world_deps_selection_layer/integration_map.md`
-- Manual testing: `docs/project_management/next/world_deps_selection_layer/manual_testing_playbook.md`
+- Decision register: `docs/project_management/_archived/world_deps_selection_layer/decision_register.md`
+- Integration map: `docs/project_management/_archived/world_deps_selection_layer/integration_map.md`
+- Manual testing: `docs/project_management/_archived/world_deps_selection_layer/manual_testing_playbook.md`
 - Specs:
-  - `docs/project_management/next/world_deps_selection_layer/S0-spec-selection-config-and-ux.md`
-  - `docs/project_management/next/world_deps_selection_layer/S1-spec-install-classes.md`
-  - `docs/project_management/next/world_deps_selection_layer/S2-spec-system-packages-provisioning.md`
+  - `docs/project_management/_archived/world_deps_selection_layer/S0-spec-selection-config-and-ux.md`
+  - `docs/project_management/_archived/world_deps_selection_layer/S1-spec-install-classes.md`
+  - `docs/project_management/_archived/world_deps_selection_layer/S2-spec-system-packages-provisioning.md`
 - Sequencing: `docs/project_management/next/sequencing.json`
 
 Related tracks:
@@ -39,14 +39,14 @@ ADR_BODY_SHA256: <run `python3 scripts/planning/check_adr_exec_summary.py --adr 
 - New: `substrate world deps status|sync|install|provision` is selection-driven and no-ops (exit `0`, no world calls) when no selection file exists.
 - Why: Prevents accidental tooling mutation/noise and makes behavior consistent, auditable, and safe for an agent-hub threat model.
 - Links:
-  - `docs/project_management/next/world_deps_selection_layer/S0-spec-selection-config-and-ux.md`
+  - `docs/project_management/_archived/world_deps_selection_layer/S0-spec-selection-config-and-ux.md`
 
 - Existing: “Install” can be interpreted as “mutate the OS”, which is unsafe/irreproducible during runtime `sync/install`.
 - New: Install classes are explicit; OS packages route only through `substrate world deps provision` on supported guest platforms; runtime `sync/install` never mutate OS packages.
 - Why: Keeps runtime behavior reproducible and avoids hidden privileged mutations.
 - Links:
-  - `docs/project_management/next/world_deps_selection_layer/S1-spec-install-classes.md`
-  - `docs/project_management/next/world_deps_selection_layer/S2-spec-system-packages-provisioning.md`
+  - `docs/project_management/_archived/world_deps_selection_layer/S1-spec-install-classes.md`
+  - `docs/project_management/_archived/world_deps_selection_layer/S2-spec-system-packages-provisioning.md`
 
 ## 0) Executive summary
 
@@ -158,4 +158,4 @@ This ADR is implemented by the `world_deps_selection_layer` triad:
 - WDL2 → provisioning-time system packages
 
 Sequencing must match `docs/project_management/next/sequencing.json` and the prerequisites listed in
-`docs/project_management/next/world_deps_selection_layer/integration_map.md`.
+`docs/project_management/_archived/world_deps_selection_layer/integration_map.md`.

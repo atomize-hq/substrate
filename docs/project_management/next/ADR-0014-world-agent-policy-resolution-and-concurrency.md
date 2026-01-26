@@ -131,4 +131,4 @@ Adopt Option C in stages:
 ## Follow-up Decisions (Recorded Elsewhere)
 
 Decisions required to execute this ADR are recorded in the feature Decision Register:
-- `docs/project_management/next/world-agent-policy-snapshot/decision_register.md`
+- `docs/project_management/_archived/world-agent-policy-snapshot/decision_register.md`

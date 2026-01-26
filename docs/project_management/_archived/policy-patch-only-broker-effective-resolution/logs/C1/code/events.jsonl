@@ -1,0 +1,6 @@
+- Implemented fail-closed policy resolution across shim + world-agent paths, and classified broker policy resolution failures as user errors (`exit 2` / HTTP 400). Key changes in `crates/shim/src/exec/mod.rs:1`, `crates/world-agent/src/service.rs:1`, `crates/world-agent/src/handlers.rs:1`, `crates/world-agent/src/pty.rs:1`, `crates/broker/src/broker.rs:1`, `crates/broker/src/errors.rs:1`, `crates/broker/src/lib.rs:1`.
+- Updated policy documentation to match patch-only semantics + canonical locations in `docs/CONFIGURATION.md:1`.
+- Baseline tests (before): `cargo test -p substrate-broker -p substrate-shim -p world-agent` (exit 0).
+- Baseline tests (after): `cargo test -p substrate-broker -p substrate-shim -p world-agent` (exit 0).
+- Required checks: `cargo fmt --all` (exit 0), `cargo clippy --workspace --all-targets -- -D warnings` (exit 0).
+- Ran `make triad-task-finish TASK_ID="C1-code"` (exit 0); it committed `task: C1-code` at `1a5d90d6c08e950d28013666c1fb16696b457253`.

@@ -87,7 +87,7 @@ jq 'select(.policy_decision.action == "deny")' ~/.substrate/trace.jsonl
 
 ### Policy Snapshot Metadata (No Raw Policy Content)
 
-Snapshot enforcement semantics and the authoritative definitions of `policy_resolution_mode` and related fields live in `docs/project_management/next/world-agent-policy-snapshot/policy-snapshot-spec.md`.
+Snapshot enforcement semantics and the authoritative definitions of `policy_resolution_mode` and related fields live in `docs/project_management/_archived/world-agent-policy-snapshot/policy-snapshot-spec.md`.
 
 Command completion spans record snapshot metadata without logging raw policy contents:
 

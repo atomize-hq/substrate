@@ -5,7 +5,7 @@ Status: Complete (0 unresolved misalignments)
 Scope audited:
 - `docs/project_management/next/p0-agent-hub-isolation-hardening/*`
 - `docs/project_management/next/world-sync/*`
-- `docs/project_management/next/world_deps_selection_layer/*`
+- `docs/project_management/_archived/world_deps_selection_layer/*`
 - `docs/project_management/next/yaml-settings-migration/*`
 - `docs/project_management/next/sequencing.json`
 - `docs/project_management/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md`
@@ -118,14 +118,14 @@ Each item: issue → impact → exact fix → files changed.
   - Tightened “worlds must feel the same” wording and removed remaining ambiguity language in specs.
   - Made the manual playbook runnable without “depends on … once it lands” placeholders by explicitly injecting a manual tool via `~/.substrate/manager_hooks.local.yaml`.
 - Files changed:
-  - `docs/project_management/next/world_deps_selection_layer/S0-spec-selection-config-and-ux.md`
-  - `docs/project_management/next/world_deps_selection_layer/S1-spec-install-classes.md`
-  - `docs/project_management/next/world_deps_selection_layer/S2-spec-system-packages-provisioning.md`
-  - `docs/project_management/next/world_deps_selection_layer/decision_register.md`
-  - `docs/project_management/next/world_deps_selection_layer/integration_map.md`
-  - `docs/project_management/next/world_deps_selection_layer/manual_testing_playbook.md`
-  - `docs/project_management/next/world_deps_selection_layer/plan.md`
-  - `docs/project_management/next/world_deps_selection_layer/session_log.md`
+  - `docs/project_management/_archived/world_deps_selection_layer/S0-spec-selection-config-and-ux.md`
+  - `docs/project_management/_archived/world_deps_selection_layer/S1-spec-install-classes.md`
+  - `docs/project_management/_archived/world_deps_selection_layer/S2-spec-system-packages-provisioning.md`
+  - `docs/project_management/_archived/world_deps_selection_layer/decision_register.md`
+  - `docs/project_management/_archived/world_deps_selection_layer/integration_map.md`
+  - `docs/project_management/_archived/world_deps_selection_layer/manual_testing_playbook.md`
+  - `docs/project_management/_archived/world_deps_selection_layer/plan.md`
+  - `docs/project_management/_archived/world_deps_selection_layer/session_log.md`
 
 6) Cross-triad task dependency drift vs sequencing.json (C1 → WDL → C2)
 - Impact: executing tasks in dependency order would violate sequencing and create merge/conflict risk.
@@ -134,7 +134,7 @@ Each item: issue → impact → exact fix → files changed.
   - Updated `WDL0-*` tasks to depend on `Y0-integ` and `C1-integ`.
 - Files changed:
   - `docs/project_management/next/world-sync/tasks.json`
-  - `docs/project_management/next/world_deps_selection_layer/tasks.json`
+  - `docs/project_management/_archived/world_deps_selection_layer/tasks.json`
 
 7) Missing required manual playbooks
 - Impact: UX/provisioning changes were not runnable/validatable by humans, violating the required deliverable.
@@ -200,4 +200,4 @@ Each item: issue → impact → exact fix → files changed.
 
 ## Allowed Phrase Exceptions (explicit)
 
-- The word “optional” appears only inside an explicit `Option A`/`Option B` comparison in `docs/project_management/next/world_deps_selection_layer/decision_register.md`.
+- The word “optional” appears only inside an explicit `Option A`/`Option B` comparison in `docs/project_management/_archived/world_deps_selection_layer/decision_register.md`.

@@ -1,0 +1,8 @@
+- Merged `policy-patch-only-broker-effective-resolution-c1-code` + `policy-patch-only-broker-effective-resolution-c1-test` into `policy-patch-only-broker-effective-resolution-c1-integ-core` (HEAD `67665bb`) and pushed `origin/policy-patch-only-broker-effective-resolution-c1-integ-core`.
+- Local gates are green: `cargo fmt --all`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p substrate-shim -- --nocapture`, `cargo test -p world-agent -- --nocapture`, `make integ-checks`.
+- Dispatch validation:
+  - CI compile parity: RUN_ID `21100960903` `https://github.com/atomize-hq/substrate/actions/runs/21100960903` (success)
+  - Feature smoke (behavior, C1, self-hosted): RUN_ID `21100994166` `https://github.com/atomize-hq/substrate/actions/runs/21100994166` (success)
+- Completed: `make triad-task-finish TASK_ID="C1-integ-core"`.
+
+Operator handoff: please record the two RUN_URLs in `docs/project_management/next/policy-patch-only-broker-effective-resolution/session_log.md` on the orchestration branch.
