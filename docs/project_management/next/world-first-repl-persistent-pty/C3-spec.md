@@ -38,7 +38,9 @@ Routing correctness (locked):
 
 Policy snapshot drift restart (locked):
 - Before executing a new submission, the host MUST recompute the effective policy snapshot hash and effective workspace root for the current `world_cwd`.
-- On drift, host MUST restart the world session (best-effort cwd continuity per DR-17; operator-visible message on cwd change).
+- On drift, host MUST restart the world session (best-effort cwd continuity per DR-17).
+  - The host MUST emit an operator-visible message when a snapshot/workspace-root drift restart occurs, even if cwd continuity is preserved.
+  - If cwd continuity cannot be preserved, the host MUST also emit an operator-visible message that the working directory changed.
 
 Signals (locked; routing only):
 - Typed `Ctrl+C` during PTY passthrough is forwarded as a byte (`0x03`) via `stdin` frames; it MUST NOT be translated into a `signal` message.
@@ -57,4 +59,4 @@ Add tests that cover, at minimum:
 - `:pty` routing rules (world-enabled uses persistent session; `--no-world` uses host PTY path).
 - No implicit host builtin path in world-enabled interactive REPL routing.
 - Drift restart behavior (restart on effective snapshot/workspace-root changes).
-
+  - Operator-visible restart messaging when drift restart occurs (including the case where cwd continuity is preserved).

@@ -905,7 +905,8 @@
       "acceptance_criteria": [
         "Adds tests for :host gating and single-line directive parsing",
         "Adds tests for :pty routing rules and world-first default routing",
-        "Adds tests for policy snapshot drift restart behavior"
+        "Adds tests for policy snapshot drift restart behavior",
+        "Adds tests for operator-visible drift restart messaging (including when cwd continuity is preserved)"
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\"",
