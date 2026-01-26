@@ -64,14 +64,14 @@ The table below is canonical. The subsequent “Occurrence index” section list
 | R-029 | MUST/SHOULD | Policy snapshot drift restart: before each command, host MUST compute effective snapshot hash + workspace root; on drift, MUST restart session; MUST emit an operator-visible restart message even if cwd continuity is preserved; SHOULD request cwd continuity; MUST report cwd change if continuity fails | `C3-code` | `C3-test` |
 | R-030 | MUST/SHOULD | REPL UX model: prompt derives from `world_cwd` or `host_cwd`; prompt SHOULD distinguish contexts; multiline submissions are program text (not directives); directive tokenization requires `:host␠` / `:pty␠`; bare directive is an error | `C3-code` | `C3-test`; manual playbook “Interactive REPL world-first semantics” |
 | R-032 | MUST | Startup invariants: host sends initial terminal size in `start_session` and keeps it updated; after `ready`, recomputes snapshot/workspace root and restarts immediately if inconsistent | `C3-code` | `C3-test` |
-| R-037 | MUST | Host execution invariants: `:host` uses `host_cwd` and `host_env`; `:host cd` mutates `host_cwd`; `:host export/unset` mutates `host_env`; MUST NOT affect world session persistence | `C3-code` | `C3-test`; manual playbook “:host gating” |
+| R-037 | MUST | Host execution invariants: `:host` uses `host_cwd` and `host_env`; `:host cd` mutates `host_cwd`; `:host export/unset` mutates `host_env`; MUST NOT affect world session persistence | `C3-code` | `C3-test`; manual playbook “`:host` gating (disabled by default)” |
 | R-038 | MUST | Fatal state handling: any entry into `Error` MUST be followed by shutdown; no degraded continuation | `C3-code` | `C3-test` |
 | R-039 | MUST/SHOULD | Signal handling: host-originated `SIGINT` MUST be forwarded to world session while executing world commands; for host execution it SHOULD target the host child process | `C3-code` | `C3-test` |
 | R-041 | MUST | Terminal resize: host MUST forward resize events to world-agent when a world session exists | `C3-code` | `C3-test` |
 | R-042 | MUST/SHOULD | Observability: each submission MUST produce a trace command span with execution origin, exit code, cwd, policy snapshot hash/world id; cmd_id MUST be propagated as `SHIM_PARENT_CMD_ID`; bootstrap commands MUST NOT be recorded; out-of-band output SHOULD emit a trace event | `C3-code`, `C4-code` | `C3-test`, `C4-test` |
 | R-043 | MUST | Non-interactive routing (ADR-0016): when world enabled, `-c/--command` MUST run in world; `cd/pwd/export/unset` MUST NOT be host-only builtins; `:host` MUST NOT be recognized in `-c` | `C5-code` | `C5-test`; smoke `linux-smoke.sh` (C5) |
 | R-044 | MUST | `:host` gating (ADR-0016 + DR-10): REPL-only; disabled by default; requires explicit startup opt-in; if disabled, reject and do not execute on host or world; REPL-only setting MUST NOT be honored in non-interactive flows | `C3-code`, `C5-code` | `C3-test`, `C5-test` |
-| R-045 | MUST | `:pty` semantics (DR-12/DR-18): when world enabled, runs inside the persistent session; when `--no-world`, runs on host PTY; when world enabled but unavailable, fail closed | `C3-code` | `C3-test`; manual playbook “:pty shares persistent session state” |
+| R-045 | MUST | `:pty` semantics (DR-12/DR-18): when world enabled, runs inside the persistent session; when `--no-world`, runs on host PTY; when world enabled but unavailable, fail closed | `C3-code` | `C3-test`; manual playbook “`:pty` shares persistent session state (world enabled)” |
 | R-050 | MUST | No fallbacks / no legacy switch (DR-06): no hidden switches or compat mode restoring legacy REPL routing | `C3-code`, `C5-code` | `C3-test`, `C5-test` |
 
 ## Occurrence index (exhaustive)
@@ -251,11 +251,16 @@ Notes:
 - docs/project_management/next/world-first-repl-persistent-pty/plan.md:12  →  R-001
 - docs/project_management/next/world-first-repl-persistent-pty/plan.md:14  →  R-001
 - docs/project_management/next/world-first-repl-persistent-pty/plan.md:15  →  R-001
-- docs/project_management/next/world-first-repl-persistent-pty/plan.md:90  →  R-005
-- docs/project_management/next/world-first-repl-persistent-pty/plan.md:120  →  R-019
+- docs/project_management/next/world-first-repl-persistent-pty/plan.md:92  →  R-042
+- docs/project_management/next/world-first-repl-persistent-pty/plan.md:93  →  R-005
+- docs/project_management/next/world-first-repl-persistent-pty/plan.md:97  →  R-039
+- docs/project_management/next/world-first-repl-persistent-pty/plan.md:121  →  R-020
+- docs/project_management/next/world-first-repl-persistent-pty/plan.md:123  →  R-019
+- docs/project_management/next/world-first-repl-persistent-pty/plan.md:124  →  R-011
 - docs/project_management/next/world-first-repl-persistent-pty/driver_loop_design.md:33  →  R-001
 - docs/project_management/next/world-first-repl-persistent-pty/driver_loop_design.md:69  →  R-010
 - docs/project_management/next/world-first-repl-persistent-pty/driver_loop_design.md:305  →  R-001
+- docs/project_management/next/world-first-repl-persistent-pty/driver_loop_design.md:366  →  R-005
 - docs/project_management/next/world-first-repl-persistent-pty/drain_design.md:9  →  R-022
 - docs/project_management/next/world-first-repl-persistent-pty/drain_design.md:15  →  R-005
 - docs/project_management/next/world-first-repl-persistent-pty/drain_design.md:17  →  R-022
