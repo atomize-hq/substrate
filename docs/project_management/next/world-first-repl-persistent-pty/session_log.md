@@ -216,3 +216,14 @@
   - `FEATURE_DIR="docs/project_management/next/world-first-repl-persistent-pty"; jq -e . "$FEATURE_DIR/tasks.json" >/dev/null`
   - `jq -e . docs/project_management/next/sequencing.json >/dev/null`
   - `make planning-lint FEATURE_DIR="$FEATURE_DIR"`
+
+## END — 2026-01-26T23:00:29Z — ops — execution preflight gate (F0-exec-preflight)
+- Recommendation: `ACCEPT`
+- Required fixes before starting C0: `NONE`
+- Report: `docs/project_management/next/world-first-repl-persistent-pty/execution_preflight_report.md`
+- Commands run (with exit codes):
+  - `FEATURE_DIR="docs/project_management/next/world-first-repl-persistent-pty"; jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` → `0`
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0`
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world-first-repl-persistent-pty"` → `0`
+  - `make -n ci-compile-parity CI_WORKFLOW_REF="feat/world-first-repl-persistent-pty" CI_REMOTE=origin CI_CLEANUP=1` → `0`
+  - `make -n feature-smoke FEATURE_DIR="docs/project_management/next/world-first-repl-persistent-pty" PLATFORM=behavior SMOKE_SLICE_ID="C0" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/world-first-repl-persistent-pty" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1` → `0`
