@@ -524,7 +524,7 @@
       "name": "C1 \u2014 integration platform-fix (linux)",
       "type": "integration",
       "phase": "C1",
-      "status": "pending",
+      "status": "completed",
       "description": "Validate and fix C1 on Linux behavior platform via feature smoke; dispatch CI parity gates as required.",
       "references": [
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
@@ -571,7 +571,7 @@
       "name": "C1 \u2014 integration platform-fix (macos)",
       "type": "integration",
       "phase": "C1",
-      "status": "pending",
+      "status": "completed",
       "description": "Validate and fix C1 on macOS behavior platform via feature smoke; dispatch CI parity gates as required.",
       "references": [
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
@@ -618,7 +618,7 @@
       "name": "C1 \u2014 integration platform-fix (windows)",
       "type": "integration",
       "phase": "C1",
-      "status": "pending",
+      "status": "completed",
       "description": "Validate CI parity for C1 on Windows (no behavioral smoke required for this feature).",
       "references": [
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
