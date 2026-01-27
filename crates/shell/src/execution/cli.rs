@@ -91,6 +91,10 @@ pub struct Cli {
     #[arg(long = "legacy-repl", conflicts_with_all = &["command", "script", "async_repl"])]
     pub legacy_repl: bool,
 
+    /// Enable the `:host <command>` escape hatch in the interactive REPL (disabled by default)
+    #[arg(long = "repl-host-escape", action = ArgAction::SetTrue)]
+    pub repl_host_escape: bool,
+
     /// Show trace information for a span ID
     #[arg(long = "trace", value_name = "SPAN_ID", conflicts_with_all = &["command", "script", "shim_deploy", "shim_status", "shim_remove", "replay"])]
     pub trace: Option<String>,
