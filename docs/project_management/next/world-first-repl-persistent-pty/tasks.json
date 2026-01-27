@@ -324,17 +324,17 @@
       ],
       "merge_to_orchestration": false
     },
-    {
-      "id": "C0-integ",
-      "name": "C0 \u2014 integration final",
-      "type": "integration",
-      "phase": "C0",
-      "status": "pending",
-      "description": "Final aggregator for C0: merge platform-fix branches, run integration checks, and land in orchestration.",
-      "references": [
-        "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
-        "docs/project_management/next/world-first-repl-persistent-pty/tasks.json",
-        "docs/project_management/next/world-first-repl-persistent-pty/session_log.md",
+	    {
+	      "id": "C0-integ",
+	      "name": "C0 \u2014 integration final",
+	      "type": "integration",
+	      "phase": "C0",
+	      "status": "completed",
+	      "description": "Final aggregator for C0: merge platform-fix branches, run integration checks, and land in orchestration.",
+	      "references": [
+	        "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
+	        "docs/project_management/next/world-first-repl-persistent-pty/tasks.json",
+	        "docs/project_management/next/world-first-repl-persistent-pty/session_log.md",
         "docs/project_management/next/world-first-repl-persistent-pty/C0-spec.md",
         "docs/project_management/next/world-first-repl-persistent-pty/C0-closeout_report.md"
       ],
