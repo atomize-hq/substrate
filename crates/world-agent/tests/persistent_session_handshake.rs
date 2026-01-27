@@ -12,7 +12,6 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 #[cfg(unix)]
 use std::os::fd::AsRawFd;
-use std::path::PathBuf;
 use std::sync::mpsc;
 use std::time::Duration;
 use tokio::net::TcpListener;
@@ -95,7 +94,7 @@ fn install_seccomp_deny_ioctl_fionread() -> std::io::Result<()> {
         return Err(std::io::Error::last_os_error());
     }
 
-    let deny_errno = (SECCOMP_RET_ERRNO | (libc::EPERM as u32)) as u32;
+    let deny_errno = SECCOMP_RET_ERRNO | (libc::EPERM as u32);
     let sys_ioctl = libc::SYS_ioctl as u32;
     let fionread = libc::FIONREAD as u32;
 
@@ -250,7 +249,7 @@ async fn expect_terminal_frame(ws: &mut Ws) -> Value {
     panic!("did not receive terminal frame (ready/error/exit) after 20 messages");
 }
 
-fn start_session_frame(cwd: &PathBuf, policy_snapshot: Value) -> Value {
+fn start_session_frame(cwd: &std::path::Path, policy_snapshot: Value) -> Value {
     json!({
         "type": "start_session",
         "cwd": cwd.display().to_string(),
@@ -386,7 +385,7 @@ async fn persistent_session_enforces_first_frame_start_session() {
     // The server MUST NOT emit `ready` after a bad first frame (fail-closed posture).
     ws.send(Message::Text(
         start_session_frame(
-            &cwd,
+            cwd.as_path(),
             serde_json::to_value(minimal_policy_snapshot()).expect("snapshot to JSON"),
         )
         .to_string(),
@@ -419,7 +418,7 @@ async fn start_session_rejects_policy_snapshot_with_unknown_fields_fail_closed()
 
     let mut ws = ws_connect(addr).await;
     ws.send(Message::Text(
-        start_session_frame(&cwd, snapshot).to_string(),
+        start_session_frame(cwd.as_path(), snapshot).to_string(),
     ))
     .await
     .expect("send start_session");
@@ -491,7 +490,7 @@ async fn start_session_yields_ready_with_fresh_hex32_session_nonce() {
 
     let mut ws = ws_connect(addr).await;
     ws.send(Message::Text(
-        start_session_frame(&cwd, snapshot).to_string(),
+        start_session_frame(cwd.as_path(), snapshot).to_string(),
     ))
     .await
     .expect("send start_session");
@@ -538,7 +537,7 @@ async fn session_nonce_is_unique_per_session_restart() {
     let (addr1, server1) = spawn_world_agent_ws(service.clone()).await;
     let mut ws1 = ws_connect(addr1).await;
     ws1.send(Message::Text(
-        start_session_frame(&cwd, snapshot.clone()).to_string(),
+        start_session_frame(cwd.as_path(), snapshot.clone()).to_string(),
     ))
     .await
     .expect("send start_session");
@@ -558,7 +557,7 @@ async fn session_nonce_is_unique_per_session_restart() {
     let (addr2, server2) = spawn_world_agent_ws(service).await;
     let mut ws2 = ws_connect(addr2).await;
     ws2.send(Message::Text(
-        start_session_frame(&cwd, snapshot).to_string(),
+        start_session_frame(cwd.as_path(), snapshot).to_string(),
     ))
     .await
     .expect("send start_session");
@@ -592,7 +591,7 @@ async fn start_session_fails_closed_when_fionread_watermark_is_unavailable() {
 
     let mut ws = ws_connect(addr).await;
     ws.send(Message::Text(
-        start_session_frame(&cwd, snapshot).to_string(),
+        start_session_frame(cwd.as_path(), snapshot).to_string(),
     ))
     .await
     .expect("send start_session");
@@ -637,7 +636,7 @@ async fn start_session_is_robust_to_inheritable_non_stdio_fds() {
     let (addr, server) = spawn_world_agent_ws(service).await;
     let mut ws = ws_connect(addr).await;
     ws.send(Message::Text(
-        start_session_frame(&cwd, snapshot).to_string(),
+        start_session_frame(cwd.as_path(), snapshot).to_string(),
     ))
     .await
     .expect("send start_session");

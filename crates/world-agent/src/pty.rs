@@ -187,21 +187,21 @@ async fn send_persistent_ws_message(
         })
 }
 
-fn hex32(bytes: [u8; 16]) -> String {
+fn hex32(bytes: [u8; 32]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut out = [0u8; 32];
+    let mut out = [0u8; 64];
     for (i, b) in bytes.iter().enumerate() {
         out[i * 2] = HEX[(b >> 4) as usize];
         out[i * 2 + 1] = HEX[(b & 0x0f) as usize];
     }
     // Safety: HEX table is ASCII.
     std::str::from_utf8(&out)
-        .unwrap_or("00000000000000000000000000000000")
+        .unwrap_or("0000000000000000000000000000000000000000000000000000000000000000")
         .to_string()
 }
 
 fn generate_session_nonce() -> String {
-    let mut raw = [0u8; 16];
+    let mut raw = [0u8; 32];
     OsRng.fill_bytes(&mut raw);
     hex32(raw)
 }
