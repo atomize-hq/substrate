@@ -206,6 +206,13 @@ impl PtyRepl {
         }
     }
 
+    fn send_bytes(&mut self, bytes: &[u8]) {
+        if let Ok(mut w) = self.writer.lock() {
+            let _ = w.write_all(bytes);
+            let _ = w.flush();
+        }
+    }
+
     fn output_bytes(&self) -> Vec<u8> {
         self.output.lock().expect("lock output").clone()
     }
@@ -288,6 +295,10 @@ fn contains_subslice(haystack: &[u8], needle: &[u8]) -> bool {
     haystack.windows(needle.len()).any(|w| w == needle)
 }
 
+fn find_substring(haystack: &str, needle: &str) -> Option<usize> {
+    haystack.find(needle)
+}
+
 #[test]
 #[serial]
 fn c4_repl_renders_non_utf8_bytes_and_continues() {
@@ -344,5 +355,165 @@ fn c4_repl_renders_non_utf8_bytes_and_continues() {
         contains_subslice(&out, &[0xFF, 0xFE, 0xFD]),
         "expected raw non-UTF8 bytes to reach PTY; output (lossy):\n{}",
         String::from_utf8_lossy(&out)
+    );
+}
+
+#[test]
+#[serial]
+fn c4_out_of_band_stdout_renders_while_idle_and_input_submission_survives() {
+    let temp = temp_dir("substrate-c4-oob-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    write_policy(&substrate_home);
+
+    let sock_temp = short_socket_dir("sub-c4ws-oob-");
+    let sock = sock_temp.path().join("world.sock");
+
+    let trigger = "__C4_OOB_TRIGGER__";
+    let oob = "__C4_OOB_BYTES__\n";
+    let script = support::PersistentExecStdoutOverride {
+        marker: trigger.to_string(),
+        bytes: format!("{trigger}\n").into_bytes(),
+        suffix_bytes: None,
+        delay_before_suffix_ms: None,
+        out_of_band_after_complete: Some((800, oob.as_bytes().to_vec())),
+    };
+
+    let server = ReplWorldAgentStub::start_with_persistent_exec_script(&sock, script);
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &["--world"]);
+
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("banner");
+
+    repl.send_line(&format!("echo {trigger}"));
+    repl.wait_for_output(trigger, Duration::from_secs(3))
+        .expect("trigger output");
+
+    // Out-of-band bytes should render while idle (Reedline active) and the REPL should remain usable.
+    repl.wait_for_output("__C4_OOB_BYTES__", Duration::from_secs(3))
+        .expect("oob stdout rendered");
+
+    repl.send_line("echo __C4_INPUT_OK__");
+    repl.wait_for_output("__C4_INPUT_OK__", Duration::from_secs(3))
+        .expect("input submission survived");
+
+    // Also assert the stub saw the intact submission.
+    let records = server.records();
+    let guard = records.lock().expect("lock records");
+    assert!(
+        guard
+            .persistent_execs
+            .iter()
+            .any(|e| e.program_utf8.trim() == "echo __C4_INPUT_OK__"),
+        "expected intact submission in exec records; execs: {:?}",
+        guard
+            .persistent_execs
+            .iter()
+            .map(|e| e.program_utf8.trim().to_string())
+            .collect::<Vec<_>>()
+    );
+
+    repl.send_line("exit");
+    let (code, out) = repl.shutdown_graceful(Duration::from_secs(3));
+    assert_eq!(
+        code,
+        0,
+        "expected clean exit; output:\n{}",
+        String::from_utf8_lossy(&out)
+    );
+}
+
+#[test]
+#[serial]
+fn c4_pty_passthrough_forwards_raw_bytes_and_buffers_structured_events() {
+    let temp = temp_dir("substrate-c4-pty-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    write_policy(&substrate_home);
+
+    let sock_temp = short_socket_dir("sub-c4ws-pty-");
+    let sock = sock_temp.path().join("world.sock");
+
+    let marker = "__C4_PTY__";
+    let prefix = format!("BEGIN {marker}\n");
+    let suffix = format!("END {marker}\n");
+    let script = support::PersistentExecStdoutOverride {
+        marker: marker.to_string(),
+        bytes: prefix.into_bytes(),
+        suffix_bytes: Some(suffix.clone().into_bytes()),
+        delay_before_suffix_ms: Some(1700),
+        out_of_band_after_complete: None,
+    };
+
+    let server = ReplWorldAgentStub::start_with_persistent_exec_script(&sock, script);
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &["--world"]);
+
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("banner");
+
+    // Schedule structured agent events that fire while PTY passthrough is active.
+    repl.send_line(":demo-agent");
+
+    repl.send_line(&format!(":pty echo {marker}"));
+    repl.wait_for_output(&format!("BEGIN {marker}"), Duration::from_secs(3))
+        .expect("pty prefix");
+
+    // While PTY passthrough is active, typed Ctrl+C must be forwarded as byte 0x03 (not as a signal).
+    repl.send_bytes(b"x");
+    repl.send_bytes(&[0x03]);
+
+    repl.wait_for_output(&format!("END {marker}"), Duration::from_secs(5))
+        .expect("pty suffix");
+
+    // Structured agent output should be buffered during passthrough and appear after the PTY command ends.
+    repl.wait_for_output("Demo agent event #1", Duration::from_secs(3))
+        .expect("demo event");
+
+    // Give any additional buffered output a moment to flush, then exit.
+    std::thread::sleep(Duration::from_millis(150));
+    repl.send_line("exit");
+
+    let (_code, out_bytes) = repl.shutdown_graceful(Duration::from_secs(3));
+    let out = String::from_utf8_lossy(&out_bytes).into_owned();
+
+    let end_idx =
+        find_substring(&out, &format!("END {marker}")).expect("expected END marker in output");
+    let ev1 = find_substring(&out, "Demo agent event #1");
+    assert!(
+        ev1.is_some(),
+        "expected demo event to appear somewhere in output (buffered or not); output:\n{out}"
+    );
+
+    // C4 contract: during PTY passthrough, structured host output SHOULD be buffered and rendered
+    // only after the foreground command completes.
+    assert!(
+        ev1.unwrap() > end_idx,
+        "expected demo events to render after PTY passthrough; output:\n{out}"
+    );
+
+    // Assert raw stdin bytes were forwarded (including 0x03) and were not translated into a signal frame.
+    let records = server.records();
+    let guard = records.lock().expect("lock records");
+    let stdin_concat: Vec<u8> = guard.persistent_stdin.concat();
+    assert!(
+        stdin_concat.contains(&0x03),
+        "expected forwarded stdin to contain 0x03; got: {stdin_concat:?}"
+    );
+    assert!(
+        guard.persistent_signals.is_empty(),
+        "expected no signal frames from typed 0x03; signals: {:?}",
+        guard.persistent_signals
     );
 }
