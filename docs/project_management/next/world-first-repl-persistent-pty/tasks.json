@@ -1043,7 +1043,7 @@
       "name": "C3 \u2014 interactive REPL routing + lifecycle (code)",
       "type": "code",
       "phase": "C3",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Wire interactive REPL routing and lifecycle to the persistent session client, including :host gating, :pty routing, and drift restart per C3-spec.md (production code only).",
       "references": [
         "docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md",
