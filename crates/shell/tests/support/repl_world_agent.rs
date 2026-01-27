@@ -55,6 +55,12 @@ pub enum StreamBehavior {
     Normal,
 }
 
+#[derive(Debug, Clone)]
+pub struct PersistentExecStdoutOverride {
+    pub marker: String,
+    pub bytes: Vec<u8>,
+}
+
 /// Test-only UDS server that can answer:
 /// - `GET /v1/capabilities` (readiness probe)
 /// - `GET /v1/stream` websocket (both legacy PTY `/v1/stream` and persistent-session REPL)
@@ -63,11 +69,35 @@ pub struct ReplWorldAgentStub {
     shutdown: Arc<AtomicBool>,
     connections: Arc<AtomicUsize>,
     records: Arc<Mutex<ReplWorldAgentRecords>>,
+    persistent_exec_stdout_override: Option<PersistentExecStdoutOverride>,
     handle: Option<thread::JoinHandle<()>>,
 }
 
 impl ReplWorldAgentStub {
     pub fn start(path: &Path, behavior: StreamBehavior) -> Self {
+        Self::start_with_override(path, behavior, None)
+    }
+
+    pub fn start_with_persistent_exec_stdout_override(
+        path: &Path,
+        marker: impl Into<String>,
+        bytes: Vec<u8>,
+    ) -> Self {
+        Self::start_with_override(
+            path,
+            StreamBehavior::Normal,
+            Some(PersistentExecStdoutOverride {
+                marker: marker.into(),
+                bytes,
+            }),
+        )
+    }
+
+    fn start_with_override(
+        path: &Path,
+        behavior: StreamBehavior,
+        persistent_exec_stdout_override: Option<PersistentExecStdoutOverride>,
+    ) -> Self {
         let _ = std::fs::remove_file(path);
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).expect("create socket parent");
@@ -80,6 +110,7 @@ impl ReplWorldAgentStub {
         let connections_for_thread = connections.clone();
         let records = Arc::new(Mutex::new(ReplWorldAgentRecords::default()));
         let records_for_thread = records.clone();
+        let persistent_exec_stdout_override_for_thread = persistent_exec_stdout_override.clone();
 
         let handle = thread::spawn(move || {
             let rt = tokio::runtime::Builder::new_current_thread()
@@ -529,14 +560,41 @@ impl ReplWorldAgentStub {
                                     });
                                 }
 
-                                // Minimal stdout for observability.
-                                let out = format!("__PERSISTENT_EXEC_STUB__ {stdin_mode} {program_utf8}\n");
-                                let stdout = serde_json::json!({
-                                    "type": "stdout",
-                                    "data_b64": BASE64.encode(out.as_bytes()),
-                                })
-                                .to_string();
-                                let _ = sink.send(Message::Text(stdout)).await;
+                                // Minimal stdout for observability (optionally overridden for tests).
+                                let mut stdout_bytes = None;
+                                if let Some(ov) = &persistent_exec_stdout_override_for_thread {
+                                    if !ov.marker.is_empty() && program_utf8.contains(&ov.marker) {
+                                        stdout_bytes = Some(ov.bytes.clone());
+                                    }
+                                }
+
+                                let stdout_bytes = stdout_bytes.unwrap_or_else(|| {
+                                    format!(
+                                        "__PERSISTENT_EXEC_STUB__ {stdin_mode} {program_utf8}\n"
+                                    )
+                                    .into_bytes()
+                                });
+
+                                // Allow testing output buffering by splitting the stream.
+                                if stdout_bytes.len() > 3 {
+                                    let split_at = stdout_bytes.len() / 2;
+                                    for chunk in [&stdout_bytes[..split_at], &stdout_bytes[split_at..]]
+                                    {
+                                        let stdout = serde_json::json!({
+                                            "type": "stdout",
+                                            "data_b64": BASE64.encode(chunk),
+                                        })
+                                        .to_string();
+                                        let _ = sink.send(Message::Text(stdout)).await;
+                                    }
+                                } else {
+                                    let stdout = serde_json::json!({
+                                        "type": "stdout",
+                                        "data_b64": BASE64.encode(&stdout_bytes),
+                                    })
+                                    .to_string();
+                                    let _ = sink.send(Message::Text(stdout)).await;
+                                }
 
                                 let complete = serde_json::json!({
                                     "type": "command_complete",
@@ -566,6 +624,7 @@ impl ReplWorldAgentStub {
             shutdown,
             connections,
             records,
+            persistent_exec_stdout_override,
             handle: Some(handle),
         }
     }
