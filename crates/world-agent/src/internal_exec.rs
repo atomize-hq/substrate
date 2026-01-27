@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+#[cfg(target_os = "linux")]
 use serde_json::json;
 
 pub const LANDLOCK_EXEC_ARG: &str = "__substrate_world_landlock_exec";

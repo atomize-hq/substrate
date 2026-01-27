@@ -186,31 +186,30 @@ impl NetFilter {
             return Ok(true);
         }
 
-        let mut installed = false;
-
         #[cfg(target_os = "linux")]
         {
-            if !Self::netfilter_enabled() {
+            let installed = if !Self::netfilter_enabled() {
                 tracing::debug!(
                     target: "world::netfilter",
                     "WORLD_NETFILTER_ENABLE is not set; skipping nftables rule installation"
                 );
+                false
             } else {
                 self.install_rules_linux()?;
                 self.is_active = true;
-                installed = true;
-            }
+                true
+            };
+
+            Ok(installed)
         }
 
         #[cfg(not(target_os = "linux"))]
         {
-            // Network filtering only works on Linux
+            // Network filtering only works on Linux.
             eprintln!("⚠️  Network filtering not available on this platform");
             self.is_active = true;
-            installed = true;
+            Ok(true)
         }
-
-        Ok(installed)
     }
 
     #[cfg(target_os = "linux")]
