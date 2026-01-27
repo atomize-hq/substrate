@@ -19,10 +19,12 @@ use crate::execution::agent_events::{
     clear_agent_event_sender, format_event_line, init_event_channel, publish_command_completion,
     schedule_demo_burst, schedule_demo_events,
 };
+#[cfg(unix)]
+use crate::execution::get_terminal_size;
 use crate::execution::ReplSessionTelemetry;
 use crate::execution::{
-    execute_command, find_workspace_root, get_terminal_size, is_shell_stream_event, needs_pty,
-    policy_snapshot, setup_signal_handlers, MinimalTerminalGuard, ReplPersistentSessionClient,
+    execute_command, find_workspace_root, is_shell_stream_event, needs_pty, policy_snapshot,
+    setup_signal_handlers, MinimalTerminalGuard, ReplPersistentSessionClient,
     ReplSessionStartParams, ReplStdinMode, ShellConfig, PTY_ACTIVE,
 };
 use crate::repl::editor;
