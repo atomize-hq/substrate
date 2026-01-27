@@ -296,7 +296,12 @@ fn c4_repl_renders_non_utf8_bytes_and_continues() {
     repl.send_line("exit");
 
     let (code, out) = repl.shutdown_graceful(Duration::from_secs(3));
-    assert_eq!(code, 0, "expected clean exit; output:\n{}", String::from_utf8_lossy(&out));
+    assert_eq!(
+        code,
+        0,
+        "expected clean exit; output:\n{}",
+        String::from_utf8_lossy(&out)
+    );
 
     assert!(
         contains_subslice(&out, &[0xFF, 0xFE, 0xFD]),
@@ -304,4 +309,3 @@ fn c4_repl_renders_non_utf8_bytes_and_continues() {
         String::from_utf8_lossy(&out)
     );
 }
-
