@@ -13,12 +13,19 @@ use agent_api_types::{PolicyResolutionModeV1, PolicySnapshotWorldFsIsolationV1};
 use axum::extract::ws::{Message, WebSocket};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use futures_util::stream::SplitSink;
+use futures_util::stream::SplitStream;
 use futures_util::{SinkExt, StreamExt};
+#[cfg(target_os = "linux")]
+use once_cell::sync::OnceCell;
 use portable_pty::*;
+use rand::rngs::OsRng;
+use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::PathBuf;
+#[cfg(target_os = "linux")]
+use std::process::{Command, Stdio};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 #[cfg(target_os = "linux")]
@@ -113,6 +120,7 @@ pub enum ServerMessage {
 }
 
 type WsSender = SplitSink<WebSocket, Message>;
+type WsReceiver = SplitStream<WebSocket>;
 
 async fn send_ws_message(tx: &Arc<Mutex<WsSender>>, msg: &ServerMessage) -> Result<(), ()> {
     let text = serde_json::to_string(msg).map_err(|err| {
@@ -128,6 +136,236 @@ async fn send_ws_message(tx: &Arc<Mutex<WsSender>>, msg: &ServerMessage) -> Resu
         })
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum PersistentClientMessage {
+    StartSession {
+        #[serde(default)]
+        protocol_version: Option<u32>,
+        cwd: PathBuf,
+        env: HashMap<String, String>,
+        policy_snapshot: PolicySnapshotV1,
+        cols: u16,
+        rows: u16,
+    },
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum PersistentServerMessage {
+    Ready {
+        session_nonce: String,
+        cwd: PathBuf,
+        protocol_version: u32,
+    },
+    Exit {
+        code: i32,
+    },
+    Error {
+        code: String,
+        message: String,
+        fatal: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        seq: Option<u64>,
+    },
+}
+
+async fn send_persistent_ws_message(
+    tx: &Arc<Mutex<WsSender>>,
+    msg: &PersistentServerMessage,
+) -> Result<(), ()> {
+    let text = serde_json::to_string(msg).map_err(|err| {
+        error!(%err, "ws_pty: failed to serialize persistent server message");
+    })?;
+
+    tx.lock()
+        .await
+        .send(Message::Text(text))
+        .await
+        .map_err(|err| {
+            error!(%err, "ws_pty: failed to send persistent server message");
+        })
+}
+
+fn hex32(bytes: [u8; 16]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = [0u8; 32];
+    for (i, b) in bytes.iter().enumerate() {
+        out[i * 2] = HEX[(b >> 4) as usize];
+        out[i * 2 + 1] = HEX[(b & 0x0f) as usize];
+    }
+    // Safety: HEX table is ASCII.
+    std::str::from_utf8(&out)
+        .unwrap_or("00000000000000000000000000000000")
+        .to_string()
+}
+
+fn generate_session_nonce() -> String {
+    let mut raw = [0u8; 16];
+    OsRng.fill_bytes(&mut raw);
+    hex32(raw)
+}
+
+fn sanitize_session_env(env: &mut HashMap<String, String>) {
+    for key in [
+        "SHIM_ACTIVE",
+        "SHIM_CALLER",
+        "SHIM_CALL_STACK",
+        "SHIM_DEPTH",
+    ] {
+        env.remove(key);
+    }
+
+    // Suppress in-world prompts; the REPL prompt is host-side.
+    env.insert("PS1".to_string(), "".to_string());
+    env.insert("PS2".to_string(), "".to_string());
+    env.insert("PROMPT_COMMAND".to_string(), "".to_string());
+}
+
+#[cfg(target_os = "linux")]
+fn validate_pty_watermark_query_supported(master: &dyn MasterPty) -> Result<(), std::io::Error> {
+    let fd = master.as_raw_fd().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "PTY master does not expose a raw fd",
+        )
+    })?;
+    let mut bytes_readable: libc::c_int = 0;
+    // Safety: FIONREAD expects a pointer to int.
+    let rc = unsafe { libc::ioctl(fd, libc::FIONREAD, &mut bytes_readable) };
+    if rc == -1 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn validate_pty_watermark_query_supported(_master: &dyn MasterPty) -> Result<(), std::io::Error> {
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "Persistent sessions require Linux PTY watermark query support (FIONREAD)",
+    ))
+}
+
+#[cfg(target_os = "linux")]
+fn validate_control_plane_privacy_precondition() -> Result<(), std::io::Error> {
+    static PREFLIGHT: OnceCell<Result<(), String>> = OnceCell::new();
+    match PREFLIGHT.get_or_init(control_plane_privacy_preflight_impl) {
+        Ok(()) => Ok(()),
+        Err(message) => Err(std::io::Error::other(message.clone())),
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn validate_control_plane_privacy_precondition() -> Result<(), std::io::Error> {
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "FD table scrubbing is unsupported on this platform",
+    ))
+}
+
+#[cfg(target_os = "linux")]
+fn control_plane_privacy_preflight_impl() -> Result<(), String> {
+    let dev_null = std::ffi::CString::new("/dev/null").map_err(|e| e.to_string())?;
+    // Safety: `dev_null` is a valid C string. We close this fd before returning.
+    let mut leak_fd = unsafe { libc::open(dev_null.as_ptr(), libc::O_RDONLY) };
+    if leak_fd < 0 {
+        return Err(format!(
+            "open(/dev/null) failed: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+
+    if leak_fd < 3 {
+        // Safety: fcntl calls with valid fd; best-effort cleanup on failure.
+        let dup_fd = unsafe { libc::fcntl(leak_fd, libc::F_DUPFD, 3) };
+        if dup_fd < 0 {
+            unsafe { libc::close(leak_fd) };
+            return Err(format!(
+                "fcntl(F_DUPFD) failed: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        unsafe { libc::close(leak_fd) };
+        leak_fd = dup_fd;
+    }
+
+    // Safety: fcntl calls with valid fd.
+    let flags = unsafe { libc::fcntl(leak_fd, libc::F_GETFD) };
+    if flags < 0 {
+        // Safety: best-effort cleanup.
+        unsafe { libc::close(leak_fd) };
+        return Err(format!(
+            "fcntl(F_GETFD) failed: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    let rc = unsafe { libc::fcntl(leak_fd, libc::F_SETFD, flags & !libc::FD_CLOEXEC) };
+    if rc < 0 {
+        // Safety: best-effort cleanup.
+        unsafe { libc::close(leak_fd) };
+        return Err(format!(
+            "fcntl(F_SETFD) failed: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+
+    let mut cmd = Command::new("sh");
+    cmd.arg("-c").arg(
+        r#"if [ ! -d /proc/self/fd ]; then exit 2; fi
+if [ -e "/proc/self/fd/$SUBSTRATE_PREFLIGHT_LEAK_FD" ]; then exit 3; fi
+printf '%s' ok"#,
+    );
+    cmd.env("SUBSTRATE_PREFLIGHT_LEAK_FD", leak_fd.to_string());
+    cmd.stdin(Stdio::null());
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        unsafe {
+            cmd.pre_exec(|| {
+                let open_max = libc::sysconf(libc::_SC_OPEN_MAX);
+                let max_fd = if open_max > 0 && open_max <= i64::from(i32::MAX) {
+                    open_max as i32
+                } else {
+                    1024
+                };
+
+                for fd in 3..max_fd {
+                    libc::close(fd);
+                }
+
+                Ok(())
+            });
+        }
+    }
+
+    let output = cmd
+        .output()
+        .map_err(|e| format!("preflight spawn failed: {e}"))?;
+
+    // Safety: best-effort cleanup.
+    unsafe { libc::close(leak_fd) };
+
+    if !output.status.success() {
+        return Err(format!(
+            "preflight failed (exit={:?}, stdout={}, stderr={})",
+            output.status.code(),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    if stdout != "ok" {
+        return Err(format!("preflight failed (unexpected stdout={stdout:?})"));
+    }
+
+    Ok(())
+}
+
 pub async fn handle_ws_pty(
     #[cfg_attr(not(target_os = "linux"), allow(unused_variables))] service: WorldAgentService,
     ws: WebSocket,
@@ -136,73 +374,396 @@ pub async fn handle_ws_pty(
     let (tx, mut rx) = ws.split();
     let tx = Arc::new(Mutex::new(tx));
 
-    // Wait for start message
-    let start_msg = match rx.next().await {
-        Some(Ok(Message::Text(text))) => match serde_json::from_str::<ClientMessage>(&text) {
-            Ok(ClientMessage::Start {
-                cmd,
-                cwd,
-                env,
-                policy_snapshot,
-                span_id,
-                cols,
-                rows,
-            }) => {
-                let mut env = env;
-                ensure_xdg_dirs(&mut env);
-                let policy_snapshot = *policy_snapshot;
-                info!(
-                    %cmd,
-                    cwd = %cwd.display(),
-                    span_id = span_id.as_deref().unwrap_or("-"),
-                    cols = cols,
-                    rows = rows,
-                    "ws_pty: start"
-                );
-                (cmd, cwd, env, policy_snapshot, span_id, cols, rows)
-            }
-            Ok(_) => {
-                let _ = send_ws_message(
-                    &tx,
-                    &ServerMessage::Error {
-                        message: "Expected start message".to_string(),
-                    },
-                )
-                .await;
-                return;
-            }
-            Err(e) => {
-                let _ = send_ws_message(
-                    &tx,
-                    &ServerMessage::Error {
-                        message: format!("Invalid JSON: {}", e),
-                    },
-                )
-                .await;
-                return;
-            }
-        },
+    // Wait for initial message: either legacy `start` or persistent `start_session`.
+    let first_text = match rx.next().await {
+        Some(Ok(Message::Text(text))) => text,
         Some(Ok(_)) => {
-            let _ = send_ws_message(
+            let _ = send_persistent_ws_message(
                 &tx,
-                &ServerMessage::Error {
+                &PersistentServerMessage::Error {
+                    code: "bad_request".to_string(),
                     message: "Expected text message".to_string(),
+                    fatal: true,
+                    seq: None,
                 },
             )
             .await;
             return;
         }
         Some(Err(e)) => {
-            let _ = send_ws_message(
+            let _ = send_persistent_ws_message(
                 &tx,
-                &ServerMessage::Error {
-                    message: format!("WebSocket error: {}", e),
+                &PersistentServerMessage::Error {
+                    code: "internal_error".to_string(),
+                    message: format!("WebSocket error: {e}"),
+                    fatal: true,
+                    seq: None,
                 },
             )
             .await;
             return;
         }
-        None => return, // Connection closed
+        None => return,
+    };
+
+    let msg_type = match serde_json::from_str::<serde_json::Value>(&first_text)
+        .ok()
+        .and_then(|v| {
+            v.get("type")
+                .and_then(|t| t.as_str())
+                .map(|s| s.to_string())
+        }) {
+        Some(t) => t,
+        None => {
+            let _ = send_persistent_ws_message(
+                &tx,
+                &PersistentServerMessage::Error {
+                    code: "bad_request".to_string(),
+                    message: "Invalid JSON: missing or non-string `type`".to_string(),
+                    fatal: true,
+                    seq: None,
+                },
+            )
+            .await;
+            return;
+        }
+    };
+
+    match msg_type.as_str() {
+        "start" => {
+            handle_legacy_start(service, tx, rx, first_text).await;
+        }
+        "start_session" => {
+            handle_persistent_session(service, tx, rx, first_text).await;
+        }
+        _ => {
+            let _ = send_persistent_ws_message(
+                &tx,
+                &PersistentServerMessage::Error {
+                    code: "bad_request".to_string(),
+                    message: "First frame must be `start` or `start_session`".to_string(),
+                    fatal: true,
+                    seq: None,
+                },
+            )
+            .await;
+        }
+    }
+}
+
+async fn handle_persistent_session(
+    #[cfg_attr(not(target_os = "linux"), allow(unused_variables))] _service: WorldAgentService,
+    tx: Arc<Mutex<WsSender>>,
+    mut rx: WsReceiver,
+    first_text: String,
+) {
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = send_persistent_ws_message(
+            &tx,
+            &PersistentServerMessage::Error {
+                code: "internal_error".to_string(),
+                message: "Persistent sessions are only supported on Linux world-agent".to_string(),
+                fatal: true,
+                seq: None,
+            },
+        )
+        .await;
+        return;
+    }
+
+    let start = match serde_json::from_str::<PersistentClientMessage>(&first_text) {
+        Ok(PersistentClientMessage::StartSession {
+            protocol_version,
+            cwd,
+            env,
+            policy_snapshot,
+            cols,
+            rows,
+        }) => (
+            protocol_version.unwrap_or(1),
+            cwd,
+            env,
+            policy_snapshot,
+            cols,
+            rows,
+        ),
+        Err(e) => {
+            let _ = send_persistent_ws_message(
+                &tx,
+                &PersistentServerMessage::Error {
+                    code: "bad_request".to_string(),
+                    message: format!("Invalid JSON: {e}"),
+                    fatal: true,
+                    seq: None,
+                },
+            )
+            .await;
+            return;
+        }
+    };
+
+    let (requested_protocol_version, requested_cwd, mut session_env, policy_snapshot, cols, rows) =
+        start;
+
+    if requested_protocol_version != 1 {
+        let _ = send_persistent_ws_message(
+            &tx,
+            &PersistentServerMessage::Error {
+                code: "unsupported_protocol_version".to_string(),
+                message: format!(
+                    "Unsupported protocol_version: {requested_protocol_version} (expected 1)"
+                ),
+                fatal: true,
+                seq: None,
+            },
+        )
+        .await;
+        return;
+    }
+
+    if policy_snapshot.schema_version != 1 {
+        let _ = send_persistent_ws_message(
+            &tx,
+            &PersistentServerMessage::Error {
+                code: "bad_request".to_string(),
+                message: format!(
+                    "Invalid policy_snapshot.schema_version: {}",
+                    policy_snapshot.schema_version
+                ),
+                fatal: true,
+                seq: None,
+            },
+        )
+        .await;
+        return;
+    }
+
+    sanitize_session_env(&mut session_env);
+    ensure_xdg_dirs(&mut session_env);
+
+    // DR-23 preflight: watermark-query capability for Session PTY (v1 requires FIONREAD).
+    let pty_system = native_pty_system();
+    let pair = match pty_system.openpty(PtySize {
+        rows,
+        cols,
+        pixel_width: 0,
+        pixel_height: 0,
+    }) {
+        Ok(pair) => pair,
+        Err(e) => {
+            let _ = send_persistent_ws_message(
+                &tx,
+                &PersistentServerMessage::Error {
+                    code: "internal_error".to_string(),
+                    message: format!("Failed to create session PTY: {e}"),
+                    fatal: true,
+                    seq: None,
+                },
+            )
+            .await;
+            return;
+        }
+    };
+
+    if let Err(e) = validate_pty_watermark_query_supported(&*pair.master) {
+        let _ = send_persistent_ws_message(
+            &tx,
+            &PersistentServerMessage::Error {
+                code: "internal_error".to_string(),
+                message: format!("PTY watermark query unsupported: {e}"),
+                fatal: true,
+                seq: None,
+            },
+        )
+        .await;
+        return;
+    }
+
+    // DR-22 preflight: ensure we can enforce a minimal evaluator FD table.
+    if let Err(e) = validate_control_plane_privacy_precondition() {
+        let _ = send_persistent_ws_message(
+            &tx,
+            &PersistentServerMessage::Error {
+                code: "internal_error".to_string(),
+                message: format!("Control-plane privacy precondition failed: {e}"),
+                fatal: true,
+                seq: None,
+            },
+        )
+        .await;
+        return;
+    }
+
+    let ready_cwd = match resolve_ready_cwd(&session_env, requested_cwd.as_path(), &policy_snapshot)
+    {
+        Ok(cwd) => cwd,
+        Err(message) => {
+            let _ = send_persistent_ws_message(
+                &tx,
+                &PersistentServerMessage::Error {
+                    code: "internal_error".to_string(),
+                    message,
+                    fatal: true,
+                    seq: None,
+                },
+            )
+            .await;
+            return;
+        }
+    };
+    let session_nonce = generate_session_nonce();
+
+    let _ = send_persistent_ws_message(
+        &tx,
+        &PersistentServerMessage::Ready {
+            session_nonce,
+            cwd: ready_cwd,
+            protocol_version: 1,
+        },
+    )
+    .await;
+
+    // C0 scope: accept close and keep the session alive; exec/command_complete is C1.
+    loop {
+        let Some(msg) = rx.next().await else { break };
+        match msg {
+            Ok(Message::Text(text)) => {
+                let msg_type = serde_json::from_str::<serde_json::Value>(&text)
+                    .ok()
+                    .and_then(|v| {
+                        v.get("type")
+                            .and_then(|t| t.as_str())
+                            .map(|s| s.to_string())
+                    });
+
+                match msg_type.as_deref() {
+                    Some("close") => {
+                        let _ = send_persistent_ws_message(
+                            &tx,
+                            &PersistentServerMessage::Exit { code: 0 },
+                        )
+                        .await;
+                        break;
+                    }
+                    Some("resize") | Some("stdin") | Some("signal") => {
+                        continue;
+                    }
+                    Some(_) => {
+                        let _ = send_persistent_ws_message(
+                            &tx,
+                            &PersistentServerMessage::Error {
+                                code: "protocol_violation".to_string(),
+                                message: "Unsupported frame for C0 persistent session".to_string(),
+                                fatal: true,
+                                seq: None,
+                            },
+                        )
+                        .await;
+                        break;
+                    }
+                    None => {
+                        let _ = send_persistent_ws_message(
+                            &tx,
+                            &PersistentServerMessage::Error {
+                                code: "bad_request".to_string(),
+                                message: "Invalid JSON frame".to_string(),
+                                fatal: true,
+                                seq: None,
+                            },
+                        )
+                        .await;
+                        break;
+                    }
+                }
+            }
+            Ok(Message::Close(_)) => break,
+            Ok(_) => continue,
+            Err(_) => break,
+        }
+    }
+
+    drop(pair);
+    info!("ws_pty: persistent session closed");
+}
+
+#[cfg(target_os = "linux")]
+fn resolve_ready_cwd(
+    env: &HashMap<String, String>,
+    requested_cwd: &std::path::Path,
+    _policy_snapshot: &PolicySnapshotV1,
+) -> Result<PathBuf, String> {
+    let project_dir =
+        resolve_project_dir(Some(env), Some(requested_cwd)).map_err(|e| e.to_string())?;
+
+    if requested_cwd.starts_with(&project_dir)
+        && requested_cwd.is_absolute()
+        && requested_cwd.is_dir()
+    {
+        Ok(requested_cwd.to_path_buf())
+    } else {
+        Ok(project_dir)
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn resolve_ready_cwd(
+    _env: &HashMap<String, String>,
+    requested_cwd: &std::path::Path,
+    _policy_snapshot: &PolicySnapshotV1,
+) -> Result<PathBuf, String> {
+    Ok(requested_cwd.to_path_buf())
+}
+
+async fn handle_legacy_start(
+    #[cfg_attr(not(target_os = "linux"), allow(unused_variables))] service: WorldAgentService,
+    tx: Arc<Mutex<WsSender>>,
+    mut rx: WsReceiver,
+    first_text: String,
+) {
+    let start_msg = match serde_json::from_str::<ClientMessage>(&first_text) {
+        Ok(ClientMessage::Start {
+            cmd,
+            cwd,
+            env,
+            policy_snapshot,
+            span_id,
+            cols,
+            rows,
+        }) => {
+            let mut env = env;
+            ensure_xdg_dirs(&mut env);
+            let policy_snapshot = *policy_snapshot;
+            info!(
+                %cmd,
+                cwd = %cwd.display(),
+                span_id = span_id.as_deref().unwrap_or("-"),
+                cols = cols,
+                rows = rows,
+                "ws_pty: start"
+            );
+            (cmd, cwd, env, policy_snapshot, span_id, cols, rows)
+        }
+        Ok(_) => {
+            let _ = send_ws_message(
+                &tx,
+                &ServerMessage::Error {
+                    message: "Expected start message".to_string(),
+                },
+            )
+            .await;
+            return;
+        }
+        Err(e) => {
+            let _ = send_ws_message(
+                &tx,
+                &ServerMessage::Error {
+                    message: format!("Invalid JSON: {}", e),
+                },
+            )
+            .await;
+            return;
+        }
     };
 
     let (cmd, cwd, env_map, policy_snapshot, _span_id, cols, rows) = start_msg;

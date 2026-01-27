@@ -35,9 +35,10 @@ fn landlock_supported() -> bool {
 
 #[test]
 fn landlock_exec_subprocess_entry() {
-    if !std::env::var("SUBSTRATE_TEST_RUN_LANDLOCK_EXEC")
+    if std::env::var("SUBSTRATE_TEST_RUN_LANDLOCK_EXEC")
         .ok()
-        .is_some_and(|v| v == "1")
+        .as_deref()
+        != Some("1")
     {
         return;
     }
