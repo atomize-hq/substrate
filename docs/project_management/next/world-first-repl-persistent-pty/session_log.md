@@ -268,6 +268,13 @@
 - Dispatch:
   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/world-first-repl-persistent-pty" SLICE_ID="C4" LAUNCH_CODEX=1`
 
+## START — 2026-01-27T16:37:31Z — test — C4-test
+- Worktree: `wt/world-first-repl-persistent-pty-c4-test`
+- Branch: `world-first-repl-persistent-pty-c4-test`
+- Orchestration branch: `feat/world-first-repl-persistent-pty`
+- Dispatch:
+  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/world-first-repl-persistent-pty" SLICE_ID="C4" LAUNCH_CODEX=1`
+
 ## END — 2026-01-26T23:58:50Z — test — C0-test
 - Worktree: `/home/spenser/__Active_code/substrate/wt/world-first-repl-persistent-pty-c0-test`
 - Branch: `world-first-repl-persistent-pty-c0-test`
