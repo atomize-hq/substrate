@@ -230,24 +230,46 @@ async fn send_persistent_ws_message(
 }
 
 #[cfg(target_os = "linux")]
-fn hex32(bytes: [u8; 32]) -> String {
+fn hex32(bytes: [u8; 16]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut out = [0u8; 64];
+    let mut out = [0u8; 32];
     for (i, b) in bytes.iter().enumerate() {
         out[i * 2] = HEX[(b >> 4) as usize];
         out[i * 2 + 1] = HEX[(b & 0x0f) as usize];
     }
     // Safety: HEX table is ASCII.
     std::str::from_utf8(&out)
-        .unwrap_or("0000000000000000000000000000000000000000000000000000000000000000")
+        .unwrap_or("00000000000000000000000000000000")
         .to_string()
 }
 
 #[cfg(target_os = "linux")]
 fn generate_session_nonce() -> String {
-    let mut raw = [0u8; 32];
+    let mut raw = [0u8; 16];
     OsRng.fill_bytes(&mut raw);
     hex32(raw)
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod session_nonce_tests {
+    use super::{generate_session_nonce, hex32};
+
+    #[test]
+    fn hex32_renders_32_lowercase_hex_chars() {
+        assert_eq!(hex32([0u8; 16]), "00000000000000000000000000000000");
+    }
+
+    #[test]
+    fn generate_session_nonce_is_hex32_lower() {
+        let nonce = generate_session_nonce();
+        assert_eq!(nonce.len(), 32);
+        assert!(
+            nonce
+                .chars()
+                .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)),
+            "nonce must be [0-9a-f]; got: {nonce}"
+        );
+    }
 }
 
 #[cfg(target_os = "linux")]

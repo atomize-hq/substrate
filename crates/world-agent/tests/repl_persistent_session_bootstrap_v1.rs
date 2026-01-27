@@ -511,10 +511,16 @@ async fn start_session_yields_ready_with_fresh_hex32_session_nonce() {
         .get("session_nonce")
         .and_then(Value::as_str)
         .expect("ready.session_nonce string");
-    assert_eq!(nonce.len(), 64, "hex32 must be 64 hex chars");
+    assert_eq!(
+        nonce.len(),
+        32,
+        "session_nonce must be 32 lowercase hex chars"
+    );
     assert!(
-        nonce.chars().all(|c| c.is_ascii_hexdigit()),
-        "ready.session_nonce must be hex"
+        nonce
+            .chars()
+            .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)),
+        "ready.session_nonce must be lowercase hex"
     );
 
     server.abort();
