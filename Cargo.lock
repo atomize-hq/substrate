@@ -3356,6 +3356,7 @@ dependencies = [
  "portable-pty",
  "predicates",
  "proptest",
+ "rand 0.8.5",
  "reedline",
  "rustc_version",
  "serde",
