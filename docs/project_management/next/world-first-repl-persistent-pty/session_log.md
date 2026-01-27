@@ -397,3 +397,22 @@
 - Orchestration branch: `feat/world-first-repl-persistent-pty`
 - Dispatch:
   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/world-first-repl-persistent-pty" SLICE_ID="C3" LAUNCH_CODEX=1`
+
+## END — 2026-01-27T13:34:33Z — code — C3-code
+- Worktree: `/home/spenser/__Active_code/substrate/wt/world-first-repl-persistent-pty-c3-code`
+- Branch: `world-first-repl-persistent-pty-c3-code`
+- HEAD: `912831ed28d552cab8b92eb00987e9a4e21e5f20`
+- Codex: `CODEX_CODE_EXIT=0`
+- Finisher summary:
+  - `TASK_BRANCH=world-first-repl-persistent-pty-c3-code`
+  - `WORKTREE=/home/spenser/__Active_code/substrate/wt/world-first-repl-persistent-pty-c3-code`
+  - `HEAD=912831ed28d552cab8b92eb00987e9a4e21e5f20`
+  - `COMMITS=1`
+  - `CHECKS=verify-only`
+  - `SMOKE_RUN=`
+  - `MERGED_TO_ORCH=`
+- Artifacts:
+  - `CODEX_CODE_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/world-first-repl-persistent-pty/logs/C3/code/last_message.md`
+  - `CODEX_CODE_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/world-first-repl-persistent-pty/logs/C3/code/events.jsonl`
+  - `CODEX_CODE_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/world-first-repl-persistent-pty/logs/C3/code/stderr.log`
+- Blockers: `NONE`
