@@ -16,5 +16,7 @@ mod linux_world;
 mod pty;
 #[path = "tests/registry.rs"]
 mod registry;
+#[path = "tests/repl_persistent_session_client_fail_closed.rs"]
+mod repl_persistent_session_client_fail_closed;
 #[path = "tests/telemetry.rs"]
 mod telemetry;

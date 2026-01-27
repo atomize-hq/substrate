@@ -22,7 +22,7 @@ path = "src/shim_main.rs"
 [dependencies]
 anyhow = { workspace = true }
 env_logger = "0.11"
-substrate-shell = { version = "0.2.5", path = "crates/shell" }
+substrate-shell = { version = "0.2.5", path = "crates/shell", package = "shell" }
 substrate-shim = { version = "0.2.5", path = "crates/shim" }
 
 [dev-dependencies]

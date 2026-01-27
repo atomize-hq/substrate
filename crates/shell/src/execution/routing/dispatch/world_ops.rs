@@ -34,7 +34,9 @@ use world::LinuxLocalBackend;
 use world_api::{ResourceLimits, WorldBackend, WorldSpec};
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-fn normalize_env_for_linux_guest(env_map: &mut std::collections::HashMap<String, String>) {
+pub(super) fn normalize_env_for_linux_guest(
+    env_map: &mut std::collections::HashMap<String, String>,
+) {
     // macOS host PATH often contains directories that are mounted into the guest (e.g. /Users/...),
     // which can lead to confusing behavior where `which node` points at a macOS binary that cannot
     // run inside the Linux VM. Prefer a stable Linux guest PATH.
@@ -378,7 +380,7 @@ pub(super) fn execute_world_pty_over_ws(
 }
 
 #[cfg(target_os = "linux")]
-fn ensure_world_agent_ready() -> anyhow::Result<()> {
+pub(super) fn ensure_world_agent_ready() -> anyhow::Result<()> {
     use std::path::Path;
     use std::path::PathBuf;
     use std::thread;
