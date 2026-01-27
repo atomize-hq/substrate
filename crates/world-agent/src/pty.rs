@@ -18,7 +18,9 @@ use futures_util::{SinkExt, StreamExt};
 #[cfg(target_os = "linux")]
 use once_cell::sync::OnceCell;
 use portable_pty::*;
+#[cfg(target_os = "linux")]
 use rand::rngs::OsRng;
+#[cfg(target_os = "linux")]
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -138,6 +140,7 @@ async fn send_ws_message(tx: &Arc<Mutex<WsSender>>, msg: &ServerMessage) -> Resu
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[cfg(target_os = "linux")]
 enum PersistentClientMessage {
     StartSession {
         #[serde(default)]
@@ -187,6 +190,7 @@ async fn send_persistent_ws_message(
         })
 }
 
+#[cfg(target_os = "linux")]
 fn hex32(bytes: [u8; 32]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut out = [0u8; 64];
@@ -200,12 +204,14 @@ fn hex32(bytes: [u8; 32]) -> String {
         .to_string()
 }
 
+#[cfg(target_os = "linux")]
 fn generate_session_nonce() -> String {
     let mut raw = [0u8; 32];
     OsRng.fill_bytes(&mut raw);
     hex32(raw)
 }
 
+#[cfg(target_os = "linux")]
 fn sanitize_session_env(env: &mut HashMap<String, String>) {
     for key in [
         "SHIM_ACTIVE",
@@ -239,14 +245,6 @@ fn validate_pty_watermark_query_supported(master: &dyn MasterPty) -> Result<(), 
     Ok(())
 }
 
-#[cfg(not(target_os = "linux"))]
-fn validate_pty_watermark_query_supported(_master: &dyn MasterPty) -> Result<(), std::io::Error> {
-    Err(std::io::Error::new(
-        std::io::ErrorKind::Unsupported,
-        "Persistent sessions require Linux PTY watermark query support (FIONREAD)",
-    ))
-}
-
 #[cfg(target_os = "linux")]
 fn validate_control_plane_privacy_precondition() -> Result<(), std::io::Error> {
     static PREFLIGHT: OnceCell<Result<(), String>> = OnceCell::new();
@@ -254,14 +252,6 @@ fn validate_control_plane_privacy_precondition() -> Result<(), std::io::Error> {
         Ok(()) => Ok(()),
         Err(message) => Err(std::io::Error::other(message.clone())),
     }
-}
-
-#[cfg(not(target_os = "linux"))]
-fn validate_control_plane_privacy_precondition() -> Result<(), std::io::Error> {
-    Err(std::io::Error::new(
-        std::io::ErrorKind::Unsupported,
-        "FD table scrubbing is unsupported on this platform",
-    ))
 }
 
 #[cfg(target_os = "linux")]
@@ -709,15 +699,6 @@ fn resolve_ready_cwd(
     } else {
         Ok(project_dir)
     }
-}
-
-#[cfg(not(target_os = "linux"))]
-fn resolve_ready_cwd(
-    _env: &HashMap<String, String>,
-    requested_cwd: &std::path::Path,
-    _policy_snapshot: &PolicySnapshotV1,
-) -> Result<PathBuf, String> {
-    Ok(requested_cwd.to_path_buf())
 }
 
 async fn handle_legacy_start(
