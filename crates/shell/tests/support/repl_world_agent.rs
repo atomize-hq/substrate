@@ -44,6 +44,8 @@ pub struct LegacyPtyStartRecord {
 pub struct ReplWorldAgentRecords {
     pub persistent_start_sessions: Vec<PersistentStartSessionRecord>,
     pub persistent_execs: Vec<PersistentExecRecord>,
+    pub persistent_stdin: Vec<Vec<u8>>,
+    pub persistent_signals: Vec<String>,
     pub legacy_pty_starts: Vec<LegacyPtyStartRecord>,
 }
 
@@ -59,6 +61,9 @@ pub enum StreamBehavior {
 pub struct PersistentExecStdoutOverride {
     pub marker: String,
     pub bytes: Vec<u8>,
+    pub suffix_bytes: Option<Vec<u8>>,
+    pub delay_before_suffix_ms: Option<u64>,
+    pub out_of_band_after_complete: Option<(u64, Vec<u8>)>,
 }
 
 /// Test-only UDS server that can answer:
@@ -89,8 +94,18 @@ impl ReplWorldAgentStub {
             Some(PersistentExecStdoutOverride {
                 marker: marker.into(),
                 bytes,
+                suffix_bytes: None,
+                delay_before_suffix_ms: None,
+                out_of_band_after_complete: None,
             }),
         )
+    }
+
+    pub fn start_with_persistent_exec_script(
+        path: &Path,
+        script: PersistentExecStdoutOverride,
+    ) -> Self {
+        Self::start_with_override(path, StreamBehavior::Normal, Some(script))
     }
 
     fn start_with_override(
@@ -479,6 +494,11 @@ impl ReplWorldAgentStub {
                                 .collect::<HashMap<String, String>>()
                         })
                         .unwrap_or_default();
+                    // Avoid leaking host secrets into test failure output: record env keys but redact values.
+                    let env = env
+                        .into_iter()
+                        .map(|(k, _v)| (k, "<redacted>".to_string()))
+                        .collect::<HashMap<String, String>>();
                     let policy_snapshot = first_json
                         .get("policy_snapshot")
                         .cloned()
@@ -596,6 +616,27 @@ impl ReplWorldAgentStub {
                                     let _ = sink.send(Message::Text(stdout)).await;
                                 }
 
+                                if let Some(ov) = &persistent_exec_stdout_override_for_thread {
+                                    if ov.marker.is_empty() || !program_utf8.contains(&ov.marker) {
+                                        // no-op
+                                    } else {
+                                        if let (Some(delay_ms), Some(suffix)) =
+                                            (ov.delay_before_suffix_ms, ov.suffix_bytes.as_ref())
+                                        {
+                                            tokio::time::sleep(std::time::Duration::from_millis(
+                                                delay_ms,
+                                            ))
+                                            .await;
+                                            let stdout = serde_json::json!({
+                                                "type": "stdout",
+                                                "data_b64": BASE64.encode(suffix),
+                                            })
+                                            .to_string();
+                                            let _ = sink.send(Message::Text(stdout)).await;
+                                        }
+                                    }
+                                }
+
                                 let complete = serde_json::json!({
                                     "type": "command_complete",
                                     "seq": seq,
@@ -605,6 +646,46 @@ impl ReplWorldAgentStub {
                                 })
                                 .to_string();
                                 let _ = sink.send(Message::Text(complete)).await;
+
+                                if let Some(ov) = &persistent_exec_stdout_override_for_thread {
+                                    if ov.marker.is_empty() || !program_utf8.contains(&ov.marker) {
+                                        // no-op
+                                    } else if let Some((delay_ms, bytes)) =
+                                        ov.out_of_band_after_complete.as_ref()
+                                    {
+                                        tokio::time::sleep(std::time::Duration::from_millis(
+                                            *delay_ms,
+                                        ))
+                                        .await;
+                                        let stdout = serde_json::json!({
+                                            "type": "stdout",
+                                            "data_b64": BASE64.encode(bytes),
+                                        })
+                                        .to_string();
+                                        let _ = sink.send(Message::Text(stdout)).await;
+                                    }
+                                }
+                            }
+                            "stdin" => {
+                                let data_b64 = frame
+                                    .get("data_b64")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("");
+                                if let Ok(bytes) = BASE64.decode(data_b64.as_bytes()) {
+                                    if let Ok(mut guard) = records_for_thread.lock() {
+                                        guard.persistent_stdin.push(bytes);
+                                    }
+                                }
+                            }
+                            "signal" => {
+                                let signal = frame
+                                    .get("signal")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("")
+                                    .to_string();
+                                if let Ok(mut guard) = records_for_thread.lock() {
+                                    guard.persistent_signals.push(signal);
+                                }
                             }
                             "close" => {
                                 let exit = serde_json::json!({ "type": "exit", "code": 0 }).to_string();
