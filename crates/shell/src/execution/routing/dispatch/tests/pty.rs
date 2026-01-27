@@ -575,6 +575,8 @@ fn test_is_force_pty_command() {
     // :pty prefix forces PTY
     assert!(is_force_pty_command(":pty ls"));
     assert!(is_force_pty_command(":pty echo hello"));
+    // C3: directives are single-line only; embedded newlines are program text.
+    assert!(!is_force_pty_command(":pty echo hello\npwd"));
 
     // Regular commands without SUBSTRATE_FORCE_PTY
     assert!(!is_force_pty_command("ls"));
