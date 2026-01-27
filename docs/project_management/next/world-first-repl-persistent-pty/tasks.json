@@ -378,7 +378,7 @@
 	      "name": "C1 \u2014 world-agent exec + command_complete (code)",
 	      "type": "code",
 	      "phase": "C1",
-	      "status": "in_progress",
+	      "status": "completed",
 	      "description": "Implement per-submission exec and explicit completion for persistent sessions on world-agent per C1-spec.md (production code only).",
 	      "references": [
 	        "docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md",
