@@ -117,11 +117,11 @@ mod imp {
                     ready.protocol_version
                 ));
             }
-            if !is_hex_lower(&ready.session_nonce) || ready.session_nonce.len() != 64 {
+            if !is_hex_lower(&ready.session_nonce) || ready.session_nonce.len() != 32 {
                 read_task.abort();
                 let _ = read_task.await;
                 return Err(anyhow!(
-                    "protocol error: invalid ready.session_nonce (expected 64 lowercase hex chars)"
+                    "protocol error: invalid ready.session_nonce (expected 32 lowercase hex chars)"
                 ));
             }
             if !ready.cwd.starts_with('/') {
@@ -455,6 +455,11 @@ mod imp {
                     return Err(anyhow!(
                     "protocol error: command_complete.cwd must be an absolute world path: {cwd}"
                 ));
+                }
+                if !is_hex_lower(&token_hex) || token_hex.len() != 32 {
+                    return Err(anyhow!(
+                        "protocol error: invalid command_complete.token_hex (expected 32 lowercase hex chars)"
+                    ));
                 }
                 let mut guard = state.lock().await;
                 match std::mem::replace(&mut *guard, SessionState::Closed) {
