@@ -4,8 +4,15 @@
     "feature": "world-first-repl-persistent-pty",
     "cross_platform": true,
     "execution_gates": true,
-    "behavior_platforms_required": ["linux", "macos"],
-    "ci_parity_platforms_required": ["linux", "macos", "windows"],
+    "behavior_platforms_required": [
+      "linux",
+      "macos"
+    ],
+    "ci_parity_platforms_required": [
+      "linux",
+      "macos",
+      "windows"
+    ],
     "automation": {
       "enabled": true,
       "orchestration_branch": "feat/world-first-repl-persistent-pty"
@@ -51,11 +58,11 @@
     },
     {
       "id": "C0-code",
-      "name": "C0 — world-agent persistent session bootstrap + preflight (code)",
+      "name": "C0 \u2014 world-agent persistent session bootstrap + preflight (code)",
       "type": "code",
       "phase": "C0",
       "status": "completed",
-      "description": "Implement persistent-session bootstrap on world-agent (/v1/stream): start_session → ready with fail-closed DR-22/DR-23 preflight and legacy start preserved (production code only).",
+      "description": "Implement persistent-session bootstrap on world-agent (/v1/stream): start_session \u2192 ready with fail-closed DR-22/DR-23 preflight and legacy start preserved (production code only).",
       "references": [
         "docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md",
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
@@ -86,14 +93,20 @@
       "worktree": "wt/world-first-repl-persistent-pty-c0-code",
       "integration_task": "C0-integ-core",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C0-code.md",
-      "depends_on": ["F0-exec-preflight"],
-      "concurrent_with": ["C0-test"],
+      "depends_on": [
+        "F0-exec-preflight"
+      ],
+      "concurrent_with": [
+        "C0-test"
+      ],
       "git_branch": "world-first-repl-persistent-pty-c0-code",
-      "required_make_targets": ["triad-code-checks"]
+      "required_make_targets": [
+        "triad-code-checks"
+      ]
     },
     {
       "id": "C0-test",
-      "name": "C0 — world-agent persistent session bootstrap + preflight (test)",
+      "name": "C0 \u2014 world-agent persistent session bootstrap + preflight (test)",
       "type": "test",
       "phase": "C0",
       "status": "completed",
@@ -124,17 +137,23 @@
       "worktree": "wt/world-first-repl-persistent-pty-c0-test",
       "integration_task": "C0-integ-core",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C0-test.md",
-      "depends_on": ["F0-exec-preflight"],
-      "concurrent_with": ["C0-code"],
+      "depends_on": [
+        "F0-exec-preflight"
+      ],
+      "concurrent_with": [
+        "C0-code"
+      ],
       "git_branch": "world-first-repl-persistent-pty-c0-test",
-      "required_make_targets": ["triad-test-checks"]
+      "required_make_targets": [
+        "triad-test-checks"
+      ]
     },
     {
       "id": "C0-integ-core",
-      "name": "C0 — integration core",
+      "name": "C0 \u2014 integration core",
       "type": "integration",
       "phase": "C0",
-      "status": "pending",
+      "status": "completed",
       "description": "Merge C0 code+tests, get primary platform green, then dispatch behavioral smoke and CI parity gates.",
       "references": [
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
@@ -167,18 +186,23 @@
       "worktree": "wt/world-first-repl-persistent-pty-c0-integ-core",
       "integration_task": "C0-integ-core",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C0-integ-core.md",
-      "depends_on": ["C0-code", "C0-test"],
+      "depends_on": [
+        "C0-code",
+        "C0-test"
+      ],
       "concurrent_with": [],
       "git_branch": "world-first-repl-persistent-pty-c0-integ-core",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "C0-integ-linux",
-      "name": "C0 — integration platform-fix (linux)",
+      "name": "C0 \u2014 integration platform-fix (linux)",
       "type": "integration",
       "phase": "C0",
-      "status": "pending",
+      "status": "completed",
       "description": "Validate and fix C0 on Linux behavior platform via feature smoke; dispatch CI parity gates as required.",
       "references": [
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
@@ -203,21 +227,25 @@
       "worktree": "wt/world-first-repl-persistent-pty-c0-integ-linux",
       "integration_task": "C0-integ-linux",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C0-integ-linux.md",
-      "depends_on": ["C0-integ-core"],
+      "depends_on": [
+        "C0-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "linux",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "world-first-repl-persistent-pty-c0-integ-linux",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "C0-integ-macos",
-      "name": "C0 — integration platform-fix (macos)",
+      "name": "C0 \u2014 integration platform-fix (macos)",
       "type": "integration",
       "phase": "C0",
-      "status": "pending",
+      "status": "completed",
       "description": "Validate and fix C0 on macOS behavior platform via feature smoke; dispatch CI parity gates as required.",
       "references": [
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
@@ -242,21 +270,25 @@
       "worktree": "wt/world-first-repl-persistent-pty-c0-integ-macos",
       "integration_task": "C0-integ-macos",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C0-integ-macos.md",
-      "depends_on": ["C0-integ-core"],
+      "depends_on": [
+        "C0-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "macos",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "world-first-repl-persistent-pty-c0-integ-macos",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "C0-integ-windows",
-      "name": "C0 — integration platform-fix (windows)",
+      "name": "C0 \u2014 integration platform-fix (windows)",
       "type": "integration",
       "phase": "C0",
-      "status": "pending",
+      "status": "completed",
       "description": "Validate CI parity for C0 on Windows (no behavioral smoke required for this feature).",
       "references": [
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
@@ -279,18 +311,22 @@
       "worktree": "wt/world-first-repl-persistent-pty-c0-integ-windows",
       "integration_task": "C0-integ-windows",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C0-integ-windows.md",
-      "depends_on": ["C0-integ-core"],
+      "depends_on": [
+        "C0-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "windows",
       "runner": "github-actions",
       "workflow": ".github/workflows/ci-testing.yml",
       "git_branch": "world-first-repl-persistent-pty-c0-integ-windows",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "C0-integ",
-      "name": "C0 — integration final",
+      "name": "C0 \u2014 integration final",
       "type": "integration",
       "phase": "C0",
       "status": "pending",
@@ -324,16 +360,22 @@
       "worktree": "wt/world-first-repl-persistent-pty-c0-integ",
       "integration_task": "C0-integ",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C0-integ.md",
-      "depends_on": ["C0-integ-core", "C0-integ-linux", "C0-integ-macos", "C0-integ-windows"],
+      "depends_on": [
+        "C0-integ-core",
+        "C0-integ-linux",
+        "C0-integ-macos",
+        "C0-integ-windows"
+      ],
       "concurrent_with": [],
       "git_branch": "world-first-repl-persistent-pty-c0-integ",
-      "required_make_targets": ["integ-checks"],
+      "required_make_targets": [
+        "integ-checks"
+      ],
       "merge_to_orchestration": true
     },
-
     {
       "id": "C1-code",
-      "name": "C1 — world-agent exec + command_complete (code)",
+      "name": "C1 \u2014 world-agent exec + command_complete (code)",
       "type": "code",
       "phase": "C1",
       "status": "pending",
@@ -368,14 +410,20 @@
       "worktree": "wt/world-first-repl-persistent-pty-c1-code",
       "integration_task": "C1-integ-core",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C1-code.md",
-      "depends_on": ["C0-integ"],
-      "concurrent_with": ["C1-test"],
+      "depends_on": [
+        "C0-integ"
+      ],
+      "concurrent_with": [
+        "C1-test"
+      ],
       "git_branch": "world-first-repl-persistent-pty-c1-code",
-      "required_make_targets": ["triad-code-checks"]
+      "required_make_targets": [
+        "triad-code-checks"
+      ]
     },
     {
       "id": "C1-test",
-      "name": "C1 — world-agent exec + command_complete (test)",
+      "name": "C1 \u2014 world-agent exec + command_complete (test)",
       "type": "test",
       "phase": "C1",
       "status": "pending",
@@ -407,14 +455,20 @@
       "worktree": "wt/world-first-repl-persistent-pty-c1-test",
       "integration_task": "C1-integ-core",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C1-test.md",
-      "depends_on": ["C0-integ"],
-      "concurrent_with": ["C1-code"],
+      "depends_on": [
+        "C0-integ"
+      ],
+      "concurrent_with": [
+        "C1-code"
+      ],
       "git_branch": "world-first-repl-persistent-pty-c1-test",
-      "required_make_targets": ["triad-test-checks"]
+      "required_make_targets": [
+        "triad-test-checks"
+      ]
     },
     {
       "id": "C1-integ-core",
-      "name": "C1 — integration core",
+      "name": "C1 \u2014 integration core",
       "type": "integration",
       "phase": "C1",
       "status": "pending",
@@ -450,15 +504,20 @@
       "worktree": "wt/world-first-repl-persistent-pty-c1-integ-core",
       "integration_task": "C1-integ-core",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C1-integ-core.md",
-      "depends_on": ["C1-code", "C1-test"],
+      "depends_on": [
+        "C1-code",
+        "C1-test"
+      ],
       "concurrent_with": [],
       "git_branch": "world-first-repl-persistent-pty-c1-integ-core",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "C1-integ-linux",
-      "name": "C1 — integration platform-fix (linux)",
+      "name": "C1 \u2014 integration platform-fix (linux)",
       "type": "integration",
       "phase": "C1",
       "status": "pending",
@@ -486,18 +545,22 @@
       "worktree": "wt/world-first-repl-persistent-pty-c1-integ-linux",
       "integration_task": "C1-integ-linux",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C1-integ-linux.md",
-      "depends_on": ["C1-integ-core"],
+      "depends_on": [
+        "C1-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "linux",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "world-first-repl-persistent-pty-c1-integ-linux",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "C1-integ-macos",
-      "name": "C1 — integration platform-fix (macos)",
+      "name": "C1 \u2014 integration platform-fix (macos)",
       "type": "integration",
       "phase": "C1",
       "status": "pending",
@@ -525,18 +588,22 @@
       "worktree": "wt/world-first-repl-persistent-pty-c1-integ-macos",
       "integration_task": "C1-integ-macos",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C1-integ-macos.md",
-      "depends_on": ["C1-integ-core"],
+      "depends_on": [
+        "C1-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "macos",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "world-first-repl-persistent-pty-c1-integ-macos",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "C1-integ-windows",
-      "name": "C1 — integration platform-fix (windows)",
+      "name": "C1 \u2014 integration platform-fix (windows)",
       "type": "integration",
       "phase": "C1",
       "status": "pending",
@@ -562,18 +629,22 @@
       "worktree": "wt/world-first-repl-persistent-pty-c1-integ-windows",
       "integration_task": "C1-integ-windows",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C1-integ-windows.md",
-      "depends_on": ["C1-integ-core"],
+      "depends_on": [
+        "C1-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "windows",
       "runner": "github-actions",
       "workflow": ".github/workflows/ci-testing.yml",
       "git_branch": "world-first-repl-persistent-pty-c1-integ-windows",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "C1-integ",
-      "name": "C1 — integration final",
+      "name": "C1 \u2014 integration final",
       "type": "integration",
       "phase": "C1",
       "status": "pending",
@@ -607,16 +678,22 @@
       "worktree": "wt/world-first-repl-persistent-pty-c1-integ",
       "integration_task": "C1-integ",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C1-integ.md",
-      "depends_on": ["C1-integ-core", "C1-integ-linux", "C1-integ-macos", "C1-integ-windows"],
+      "depends_on": [
+        "C1-integ-core",
+        "C1-integ-linux",
+        "C1-integ-macos",
+        "C1-integ-windows"
+      ],
       "concurrent_with": [],
       "git_branch": "world-first-repl-persistent-pty-c1-integ",
-      "required_make_targets": ["integ-checks"],
+      "required_make_targets": [
+        "integ-checks"
+      ],
       "merge_to_orchestration": true
     },
-
     {
       "id": "C2-code",
-      "name": "C2 — shell persistent session client core (code)",
+      "name": "C2 \u2014 shell persistent session client core (code)",
       "type": "code",
       "phase": "C2",
       "status": "pending",
@@ -649,14 +726,20 @@
       "worktree": "wt/world-first-repl-persistent-pty-c2-code",
       "integration_task": "C2-integ-core",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C2-code.md",
-      "depends_on": ["C1-integ"],
-      "concurrent_with": ["C2-test"],
+      "depends_on": [
+        "C1-integ"
+      ],
+      "concurrent_with": [
+        "C2-test"
+      ],
       "git_branch": "world-first-repl-persistent-pty-c2-code",
-      "required_make_targets": ["triad-code-checks"]
+      "required_make_targets": [
+        "triad-code-checks"
+      ]
     },
     {
       "id": "C2-test",
-      "name": "C2 — shell persistent session client core (test)",
+      "name": "C2 \u2014 shell persistent session client core (test)",
       "type": "test",
       "phase": "C2",
       "status": "pending",
@@ -687,14 +770,20 @@
       "worktree": "wt/world-first-repl-persistent-pty-c2-test",
       "integration_task": "C2-integ-core",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C2-test.md",
-      "depends_on": ["C1-integ"],
-      "concurrent_with": ["C2-code"],
+      "depends_on": [
+        "C1-integ"
+      ],
+      "concurrent_with": [
+        "C2-code"
+      ],
       "git_branch": "world-first-repl-persistent-pty-c2-test",
-      "required_make_targets": ["triad-test-checks"]
+      "required_make_targets": [
+        "triad-test-checks"
+      ]
     },
     {
       "id": "C2-integ-core",
-      "name": "C2 — integration core",
+      "name": "C2 \u2014 integration core",
       "type": "integration",
       "phase": "C2",
       "status": "pending",
@@ -730,15 +819,20 @@
       "worktree": "wt/world-first-repl-persistent-pty-c2-integ-core",
       "integration_task": "C2-integ-core",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C2-integ-core.md",
-      "depends_on": ["C2-code", "C2-test"],
+      "depends_on": [
+        "C2-code",
+        "C2-test"
+      ],
       "concurrent_with": [],
       "git_branch": "world-first-repl-persistent-pty-c2-integ-core",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "C2-integ-linux",
-      "name": "C2 — integration platform-fix (linux)",
+      "name": "C2 \u2014 integration platform-fix (linux)",
       "type": "integration",
       "phase": "C2",
       "status": "pending",
@@ -766,18 +860,22 @@
       "worktree": "wt/world-first-repl-persistent-pty-c2-integ-linux",
       "integration_task": "C2-integ-linux",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C2-integ-linux.md",
-      "depends_on": ["C2-integ-core"],
+      "depends_on": [
+        "C2-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "linux",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "world-first-repl-persistent-pty-c2-integ-linux",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "C2-integ-macos",
-      "name": "C2 — integration platform-fix (macos)",
+      "name": "C2 \u2014 integration platform-fix (macos)",
       "type": "integration",
       "phase": "C2",
       "status": "pending",
@@ -805,18 +903,22 @@
       "worktree": "wt/world-first-repl-persistent-pty-c2-integ-macos",
       "integration_task": "C2-integ-macos",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C2-integ-macos.md",
-      "depends_on": ["C2-integ-core"],
+      "depends_on": [
+        "C2-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "macos",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "world-first-repl-persistent-pty-c2-integ-macos",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "C2-integ-windows",
-      "name": "C2 — integration platform-fix (windows)",
+      "name": "C2 \u2014 integration platform-fix (windows)",
       "type": "integration",
       "phase": "C2",
       "status": "pending",
@@ -842,18 +944,22 @@
       "worktree": "wt/world-first-repl-persistent-pty-c2-integ-windows",
       "integration_task": "C2-integ-windows",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C2-integ-windows.md",
-      "depends_on": ["C2-integ-core"],
+      "depends_on": [
+        "C2-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "windows",
       "runner": "github-actions",
       "workflow": ".github/workflows/ci-testing.yml",
       "git_branch": "world-first-repl-persistent-pty-c2-integ-windows",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "C2-integ",
-      "name": "C2 — integration final",
+      "name": "C2 \u2014 integration final",
       "type": "integration",
       "phase": "C2",
       "status": "pending",
@@ -887,16 +993,22 @@
       "worktree": "wt/world-first-repl-persistent-pty-c2-integ",
       "integration_task": "C2-integ",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C2-integ.md",
-      "depends_on": ["C2-integ-core", "C2-integ-linux", "C2-integ-macos", "C2-integ-windows"],
+      "depends_on": [
+        "C2-integ-core",
+        "C2-integ-linux",
+        "C2-integ-macos",
+        "C2-integ-windows"
+      ],
       "concurrent_with": [],
       "git_branch": "world-first-repl-persistent-pty-c2-integ",
-      "required_make_targets": ["integ-checks"],
+      "required_make_targets": [
+        "integ-checks"
+      ],
       "merge_to_orchestration": true
     },
-
     {
       "id": "C3-code",
-      "name": "C3 — interactive REPL routing + lifecycle (code)",
+      "name": "C3 \u2014 interactive REPL routing + lifecycle (code)",
       "type": "code",
       "phase": "C3",
       "status": "pending",
@@ -930,14 +1042,20 @@
       "worktree": "wt/world-first-repl-persistent-pty-c3-code",
       "integration_task": "C3-integ-core",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C3-code.md",
-      "depends_on": ["C2-integ"],
-      "concurrent_with": ["C3-test"],
+      "depends_on": [
+        "C2-integ"
+      ],
+      "concurrent_with": [
+        "C3-test"
+      ],
       "git_branch": "world-first-repl-persistent-pty-c3-code",
-      "required_make_targets": ["triad-code-checks"]
+      "required_make_targets": [
+        "triad-code-checks"
+      ]
     },
     {
       "id": "C3-test",
-      "name": "C3 — interactive REPL routing + lifecycle (test)",
+      "name": "C3 \u2014 interactive REPL routing + lifecycle (test)",
       "type": "test",
       "phase": "C3",
       "status": "pending",
@@ -969,14 +1087,20 @@
       "worktree": "wt/world-first-repl-persistent-pty-c3-test",
       "integration_task": "C3-integ-core",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C3-test.md",
-      "depends_on": ["C2-integ"],
-      "concurrent_with": ["C3-code"],
+      "depends_on": [
+        "C2-integ"
+      ],
+      "concurrent_with": [
+        "C3-code"
+      ],
       "git_branch": "world-first-repl-persistent-pty-c3-test",
-      "required_make_targets": ["triad-test-checks"]
+      "required_make_targets": [
+        "triad-test-checks"
+      ]
     },
     {
       "id": "C3-integ-core",
-      "name": "C3 — integration core",
+      "name": "C3 \u2014 integration core",
       "type": "integration",
       "phase": "C3",
       "status": "pending",
@@ -1012,15 +1136,20 @@
       "worktree": "wt/world-first-repl-persistent-pty-c3-integ-core",
       "integration_task": "C3-integ-core",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C3-integ-core.md",
-      "depends_on": ["C3-code", "C3-test"],
+      "depends_on": [
+        "C3-code",
+        "C3-test"
+      ],
       "concurrent_with": [],
       "git_branch": "world-first-repl-persistent-pty-c3-integ-core",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "C3-integ-linux",
-      "name": "C3 — integration platform-fix (linux)",
+      "name": "C3 \u2014 integration platform-fix (linux)",
       "type": "integration",
       "phase": "C3",
       "status": "pending",
@@ -1048,18 +1177,22 @@
       "worktree": "wt/world-first-repl-persistent-pty-c3-integ-linux",
       "integration_task": "C3-integ-linux",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C3-integ-linux.md",
-      "depends_on": ["C3-integ-core"],
+      "depends_on": [
+        "C3-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "linux",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "world-first-repl-persistent-pty-c3-integ-linux",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "C3-integ-macos",
-      "name": "C3 — integration platform-fix (macos)",
+      "name": "C3 \u2014 integration platform-fix (macos)",
       "type": "integration",
       "phase": "C3",
       "status": "pending",
@@ -1087,18 +1220,22 @@
       "worktree": "wt/world-first-repl-persistent-pty-c3-integ-macos",
       "integration_task": "C3-integ-macos",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C3-integ-macos.md",
-      "depends_on": ["C3-integ-core"],
+      "depends_on": [
+        "C3-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "macos",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "world-first-repl-persistent-pty-c3-integ-macos",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "C3-integ-windows",
-      "name": "C3 — integration platform-fix (windows)",
+      "name": "C3 \u2014 integration platform-fix (windows)",
       "type": "integration",
       "phase": "C3",
       "status": "pending",
@@ -1124,18 +1261,22 @@
       "worktree": "wt/world-first-repl-persistent-pty-c3-integ-windows",
       "integration_task": "C3-integ-windows",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C3-integ-windows.md",
-      "depends_on": ["C3-integ-core"],
+      "depends_on": [
+        "C3-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "windows",
       "runner": "github-actions",
       "workflow": ".github/workflows/ci-testing.yml",
       "git_branch": "world-first-repl-persistent-pty-c3-integ-windows",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "C3-integ",
-      "name": "C3 — integration final",
+      "name": "C3 \u2014 integration final",
       "type": "integration",
       "phase": "C3",
       "status": "pending",
@@ -1169,16 +1310,22 @@
       "worktree": "wt/world-first-repl-persistent-pty-c3-integ",
       "integration_task": "C3-integ",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C3-integ.md",
-      "depends_on": ["C3-integ-core", "C3-integ-linux", "C3-integ-macos", "C3-integ-windows"],
+      "depends_on": [
+        "C3-integ-core",
+        "C3-integ-linux",
+        "C3-integ-macos",
+        "C3-integ-windows"
+      ],
       "concurrent_with": [],
       "git_branch": "world-first-repl-persistent-pty-c3-integ",
-      "required_make_targets": ["integ-checks"],
+      "required_make_targets": [
+        "integ-checks"
+      ],
       "merge_to_orchestration": true
     },
-
     {
       "id": "C4-code",
-      "name": "C4 — interactive REPL byte-safe rendering + buffering (code)",
+      "name": "C4 \u2014 interactive REPL byte-safe rendering + buffering (code)",
       "type": "code",
       "phase": "C4",
       "status": "pending",
@@ -1211,14 +1358,22 @@
       "worktree": "wt/world-first-repl-persistent-pty-c4-code",
       "integration_task": "C4-integ-core",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C4-code.md",
-      "depends_on": ["C3-integ"],
-      "concurrent_with": ["C4-test", "C5-code", "C5-test"],
+      "depends_on": [
+        "C3-integ"
+      ],
+      "concurrent_with": [
+        "C4-test",
+        "C5-code",
+        "C5-test"
+      ],
       "git_branch": "world-first-repl-persistent-pty-c4-code",
-      "required_make_targets": ["triad-code-checks"]
+      "required_make_targets": [
+        "triad-code-checks"
+      ]
     },
     {
       "id": "C4-test",
-      "name": "C4 — interactive REPL byte-safe rendering + buffering (test)",
+      "name": "C4 \u2014 interactive REPL byte-safe rendering + buffering (test)",
       "type": "test",
       "phase": "C4",
       "status": "pending",
@@ -1250,14 +1405,22 @@
       "worktree": "wt/world-first-repl-persistent-pty-c4-test",
       "integration_task": "C4-integ-core",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C4-test.md",
-      "depends_on": ["C3-integ"],
-      "concurrent_with": ["C4-code", "C5-code", "C5-test"],
+      "depends_on": [
+        "C3-integ"
+      ],
+      "concurrent_with": [
+        "C4-code",
+        "C5-code",
+        "C5-test"
+      ],
       "git_branch": "world-first-repl-persistent-pty-c4-test",
-      "required_make_targets": ["triad-test-checks"]
+      "required_make_targets": [
+        "triad-test-checks"
+      ]
     },
     {
       "id": "C4-integ-core",
-      "name": "C4 — integration core",
+      "name": "C4 \u2014 integration core",
       "type": "integration",
       "phase": "C4",
       "status": "pending",
@@ -1293,15 +1456,20 @@
       "worktree": "wt/world-first-repl-persistent-pty-c4-integ-core",
       "integration_task": "C4-integ-core",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C4-integ-core.md",
-      "depends_on": ["C4-code", "C4-test"],
+      "depends_on": [
+        "C4-code",
+        "C4-test"
+      ],
       "concurrent_with": [],
       "git_branch": "world-first-repl-persistent-pty-c4-integ-core",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "C4-integ-linux",
-      "name": "C4 — integration platform-fix (linux)",
+      "name": "C4 \u2014 integration platform-fix (linux)",
       "type": "integration",
       "phase": "C4",
       "status": "pending",
@@ -1329,18 +1497,22 @@
       "worktree": "wt/world-first-repl-persistent-pty-c4-integ-linux",
       "integration_task": "C4-integ-linux",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C4-integ-linux.md",
-      "depends_on": ["C4-integ-core"],
+      "depends_on": [
+        "C4-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "linux",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "world-first-repl-persistent-pty-c4-integ-linux",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "C4-integ-macos",
-      "name": "C4 — integration platform-fix (macos)",
+      "name": "C4 \u2014 integration platform-fix (macos)",
       "type": "integration",
       "phase": "C4",
       "status": "pending",
@@ -1368,18 +1540,22 @@
       "worktree": "wt/world-first-repl-persistent-pty-c4-integ-macos",
       "integration_task": "C4-integ-macos",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C4-integ-macos.md",
-      "depends_on": ["C4-integ-core"],
+      "depends_on": [
+        "C4-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "macos",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "world-first-repl-persistent-pty-c4-integ-macos",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "C4-integ-windows",
-      "name": "C4 — integration platform-fix (windows)",
+      "name": "C4 \u2014 integration platform-fix (windows)",
       "type": "integration",
       "phase": "C4",
       "status": "pending",
@@ -1405,18 +1581,22 @@
       "worktree": "wt/world-first-repl-persistent-pty-c4-integ-windows",
       "integration_task": "C4-integ-windows",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C4-integ-windows.md",
-      "depends_on": ["C4-integ-core"],
+      "depends_on": [
+        "C4-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "windows",
       "runner": "github-actions",
       "workflow": ".github/workflows/ci-testing.yml",
       "git_branch": "world-first-repl-persistent-pty-c4-integ-windows",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "C4-integ",
-      "name": "C4 — integration final",
+      "name": "C4 \u2014 integration final",
       "type": "integration",
       "phase": "C4",
       "status": "pending",
@@ -1450,16 +1630,22 @@
       "worktree": "wt/world-first-repl-persistent-pty-c4-integ",
       "integration_task": "C4-integ",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C4-integ.md",
-      "depends_on": ["C4-integ-core", "C4-integ-linux", "C4-integ-macos", "C4-integ-windows"],
+      "depends_on": [
+        "C4-integ-core",
+        "C4-integ-linux",
+        "C4-integ-macos",
+        "C4-integ-windows"
+      ],
       "concurrent_with": [],
       "git_branch": "world-first-repl-persistent-pty-c4-integ",
-      "required_make_targets": ["integ-checks"],
+      "required_make_targets": [
+        "integ-checks"
+      ],
       "merge_to_orchestration": true
     },
-
     {
       "id": "C5-code",
-      "name": "C5 — non-interactive -c and pipe mode world-consistency (code)",
+      "name": "C5 \u2014 non-interactive -c and pipe mode world-consistency (code)",
       "type": "code",
       "phase": "C5",
       "status": "pending",
@@ -1491,14 +1677,22 @@
       "worktree": "wt/world-first-repl-persistent-pty-c5-code",
       "integration_task": "C5-integ-core",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C5-code.md",
-      "depends_on": ["C3-integ"],
-      "concurrent_with": ["C5-test", "C4-code", "C4-test"],
+      "depends_on": [
+        "C3-integ"
+      ],
+      "concurrent_with": [
+        "C5-test",
+        "C4-code",
+        "C4-test"
+      ],
       "git_branch": "world-first-repl-persistent-pty-c5-code",
-      "required_make_targets": ["triad-code-checks"]
+      "required_make_targets": [
+        "triad-code-checks"
+      ]
     },
     {
       "id": "C5-test",
-      "name": "C5 — non-interactive -c and pipe mode world-consistency (test)",
+      "name": "C5 \u2014 non-interactive -c and pipe mode world-consistency (test)",
       "type": "test",
       "phase": "C5",
       "status": "pending",
@@ -1527,14 +1721,22 @@
       "worktree": "wt/world-first-repl-persistent-pty-c5-test",
       "integration_task": "C5-integ-core",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C5-test.md",
-      "depends_on": ["C3-integ"],
-      "concurrent_with": ["C5-code", "C4-code", "C4-test"],
+      "depends_on": [
+        "C3-integ"
+      ],
+      "concurrent_with": [
+        "C5-code",
+        "C4-code",
+        "C4-test"
+      ],
       "git_branch": "world-first-repl-persistent-pty-c5-test",
-      "required_make_targets": ["triad-test-checks"]
+      "required_make_targets": [
+        "triad-test-checks"
+      ]
     },
     {
       "id": "C5-integ-core",
-      "name": "C5 — integration core",
+      "name": "C5 \u2014 integration core",
       "type": "integration",
       "phase": "C5",
       "status": "pending",
@@ -1570,15 +1772,20 @@
       "worktree": "wt/world-first-repl-persistent-pty-c5-integ-core",
       "integration_task": "C5-integ-core",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C5-integ-core.md",
-      "depends_on": ["C5-code", "C5-test"],
+      "depends_on": [
+        "C5-code",
+        "C5-test"
+      ],
       "concurrent_with": [],
       "git_branch": "world-first-repl-persistent-pty-c5-integ-core",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "C5-integ-linux",
-      "name": "C5 — integration platform-fix (linux)",
+      "name": "C5 \u2014 integration platform-fix (linux)",
       "type": "integration",
       "phase": "C5",
       "status": "pending",
@@ -1606,18 +1813,22 @@
       "worktree": "wt/world-first-repl-persistent-pty-c5-integ-linux",
       "integration_task": "C5-integ-linux",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C5-integ-linux.md",
-      "depends_on": ["C5-integ-core"],
+      "depends_on": [
+        "C5-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "linux",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "world-first-repl-persistent-pty-c5-integ-linux",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "C5-integ-macos",
-      "name": "C5 — integration platform-fix (macos)",
+      "name": "C5 \u2014 integration platform-fix (macos)",
       "type": "integration",
       "phase": "C5",
       "status": "pending",
@@ -1645,18 +1856,22 @@
       "worktree": "wt/world-first-repl-persistent-pty-c5-integ-macos",
       "integration_task": "C5-integ-macos",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C5-integ-macos.md",
-      "depends_on": ["C5-integ-core"],
+      "depends_on": [
+        "C5-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "macos",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "world-first-repl-persistent-pty-c5-integ-macos",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "C5-integ-windows",
-      "name": "C5 — integration platform-fix (windows)",
+      "name": "C5 \u2014 integration platform-fix (windows)",
       "type": "integration",
       "phase": "C5",
       "status": "pending",
@@ -1682,18 +1897,22 @@
       "worktree": "wt/world-first-repl-persistent-pty-c5-integ-windows",
       "integration_task": "C5-integ-windows",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C5-integ-windows.md",
-      "depends_on": ["C5-integ-core"],
+      "depends_on": [
+        "C5-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "windows",
       "runner": "github-actions",
       "workflow": ".github/workflows/ci-testing.yml",
       "git_branch": "world-first-repl-persistent-pty-c5-integ-windows",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "C5-integ",
-      "name": "C5 — integration final",
+      "name": "C5 \u2014 integration final",
       "type": "integration",
       "phase": "C5",
       "status": "pending",
@@ -1727,13 +1946,19 @@
       "worktree": "wt/world-first-repl-persistent-pty-c5-integ",
       "integration_task": "C5-integ",
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/C5-integ.md",
-      "depends_on": ["C5-integ-core", "C5-integ-linux", "C5-integ-macos", "C5-integ-windows"],
+      "depends_on": [
+        "C5-integ-core",
+        "C5-integ-linux",
+        "C5-integ-macos",
+        "C5-integ-windows"
+      ],
       "concurrent_with": [],
       "git_branch": "world-first-repl-persistent-pty-c5-integ",
-      "required_make_targets": ["integ-checks"],
+      "required_make_targets": [
+        "integ-checks"
+      ],
       "merge_to_orchestration": true
     },
-
     {
       "id": "FZ-feature-cleanup",
       "name": "Feature cleanup (worktrees + branches)",
@@ -1763,7 +1988,9 @@
       "worktree": null,
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/world-first-repl-persistent-pty/kickoff_prompts/FZ-feature-cleanup.md",
-      "depends_on": ["C5-integ"],
+      "depends_on": [
+        "C5-integ"
+      ],
       "concurrent_with": []
     }
   ]
