@@ -1,11 +1,8 @@
 #![cfg(all(unix, target_os = "linux"))]
 
-#[path = "common.rs"]
-mod common;
 #[path = "support/mod.rs"]
 mod support;
 
-use common::temp_dir;
 use serial_test::serial;
 use std::fs;
 use std::io::{Read, Write};
@@ -14,7 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
-use support::{ReplWorldAgentStub, StreamBehavior};
+use support::{binary_path, ensure_substrate_built, temp_dir, ReplWorldAgentStub, StreamBehavior};
 use tempfile::TempDir;
 
 fn manager_manifest_path() -> PathBuf {
@@ -101,7 +98,7 @@ impl PtyRepl {
         extra_env: &[(&str, &str)],
         args: &[&str],
     ) -> Self {
-        common::ensure_substrate_built();
+        ensure_substrate_built();
 
         let pty_system = native_pty_system();
         let pair = pty_system
@@ -113,7 +110,7 @@ impl PtyRepl {
             })
             .expect("openpty");
 
-        let mut cmd = CommandBuilder::new(common::binary_path());
+        let mut cmd = CommandBuilder::new(binary_path());
         cmd.args(args);
         cmd.cwd(project_dir);
         cmd.env("HOME", home_dir);
@@ -326,6 +323,7 @@ fn c3_host_directive_executes_on_host_when_enabled() {
     repl.send_line("exit");
 
     let (_code, out) = repl.shutdown_graceful(Duration::from_secs(2));
+    let project = fs::canonicalize(&project).unwrap_or(project);
     let project_str = project.to_string_lossy();
     assert!(
         out.contains(project_str.as_ref()),
