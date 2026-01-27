@@ -661,7 +661,7 @@
       "name": "C1 — integration final",
       "type": "integration",
       "phase": "C1",
-      "status": "pending",
+      "status": "completed",
       "description": "Final aggregator for C1: merge platform-fix branches, run integration checks, and land in orchestration.",
       "references": [
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
