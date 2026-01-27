@@ -324,17 +324,17 @@
       ],
       "merge_to_orchestration": false
     },
-	    {
-	      "id": "C0-integ",
-	      "name": "C0 \u2014 integration final",
-	      "type": "integration",
-	      "phase": "C0",
-	      "status": "completed",
-	      "description": "Final aggregator for C0: merge platform-fix branches, run integration checks, and land in orchestration.",
-	      "references": [
-	        "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
-	        "docs/project_management/next/world-first-repl-persistent-pty/tasks.json",
-	        "docs/project_management/next/world-first-repl-persistent-pty/session_log.md",
+    {
+      "id": "C0-integ",
+      "name": "C0 \u2014 integration final",
+      "type": "integration",
+      "phase": "C0",
+      "status": "completed",
+      "description": "Final aggregator for C0: merge platform-fix branches, run integration checks, and land in orchestration.",
+      "references": [
+        "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
+        "docs/project_management/next/world-first-repl-persistent-pty/tasks.json",
+        "docs/project_management/next/world-first-repl-persistent-pty/session_log.md",
         "docs/project_management/next/world-first-repl-persistent-pty/C0-spec.md",
         "docs/project_management/next/world-first-repl-persistent-pty/C0-closeout_report.md"
       ],
@@ -373,17 +373,17 @@
       ],
       "merge_to_orchestration": true
     },
-	    {
-	      "id": "C1-code",
-	      "name": "C1 \u2014 world-agent exec + command_complete (code)",
-	      "type": "code",
-	      "phase": "C1",
-	      "status": "completed",
-	      "description": "Implement per-submission exec and explicit completion for persistent sessions on world-agent per C1-spec.md (production code only).",
-	      "references": [
-	        "docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md",
-	        "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
-	        "docs/project_management/next/world-first-repl-persistent-pty/C1-spec.md",
+    {
+      "id": "C1-code",
+      "name": "C1 \u2014 world-agent exec + command_complete (code)",
+      "type": "code",
+      "phase": "C1",
+      "status": "completed",
+      "description": "Implement per-submission exec and explicit completion for persistent sessions on world-agent per C1-spec.md (production code only).",
+      "references": [
+        "docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md",
+        "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
+        "docs/project_management/next/world-first-repl-persistent-pty/C1-spec.md",
         "docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md",
         "docs/project_management/next/world-first-repl-persistent-pty/decision_register.md (DR-02, DR-07, DR-14, DR-15, DR-16, DR-21, DR-22, DR-23)",
         "docs/project_management/next/world-first-repl-persistent-pty/driver_loop_design.md",
@@ -421,16 +421,16 @@
         "triad-code-checks"
       ]
     },
-	    {
-	      "id": "C1-test",
-	      "name": "C1 \u2014 world-agent exec + command_complete (test)",
-	      "type": "test",
-	      "phase": "C1",
-	      "status": "completed",
-	      "description": "Add tests for persistent-session exec and completion invariants on world-agent per C1-spec.md and requirements_traceability.md.",
-	      "references": [
-	        "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
-	        "docs/project_management/next/world-first-repl-persistent-pty/C1-spec.md",
+    {
+      "id": "C1-test",
+      "name": "C1 \u2014 world-agent exec + command_complete (test)",
+      "type": "test",
+      "phase": "C1",
+      "status": "completed",
+      "description": "Add tests for persistent-session exec and completion invariants on world-agent per C1-spec.md and requirements_traceability.md.",
+      "references": [
+        "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
+        "docs/project_management/next/world-first-repl-persistent-pty/C1-spec.md",
         "docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md",
         "docs/project_management/next/world-first-repl-persistent-pty/requirements_traceability.md",
         "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
@@ -471,7 +471,7 @@
       "name": "C1 \u2014 integration core",
       "type": "integration",
       "phase": "C1",
-      "status": "pending",
+      "status": "completed",
       "description": "Merge C1 code+tests, get primary platform green, then dispatch behavioral smoke and CI parity gates.",
       "references": [
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
