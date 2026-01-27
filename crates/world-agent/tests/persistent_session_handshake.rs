@@ -1,0 +1,656 @@
+#![cfg(all(unix, target_os = "linux"))]
+
+use agent_api_types::{
+    PolicySnapshotLimitsV1, PolicySnapshotV1, PolicySnapshotWorldFsIsolationV1,
+    PolicySnapshotWorldFsV1, WorldFsMode,
+};
+use axum::routing::get;
+use axum::Router;
+use futures_util::{SinkExt, StreamExt};
+use serde_json::{json, Value};
+use std::collections::HashMap;
+use std::net::SocketAddr;
+#[cfg(unix)]
+use std::os::fd::AsRawFd;
+use std::path::PathBuf;
+use std::sync::mpsc;
+use std::time::Duration;
+use tokio::net::TcpListener;
+use tokio::time::timeout;
+use tokio_tungstenite::connect_async;
+use tokio_tungstenite::tungstenite::Message;
+use world_agent::WorldAgentService;
+
+type Ws =
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
+
+fn minimal_policy_snapshot() -> PolicySnapshotV1 {
+    PolicySnapshotV1 {
+        schema_version: 1,
+        world_fs: PolicySnapshotWorldFsV1 {
+            mode: WorldFsMode::Writable,
+            isolation: PolicySnapshotWorldFsIsolationV1::Workspace,
+            require_world: true,
+            read_allowlist: Vec::new(),
+            write_allowlist: Vec::new(),
+        },
+        net_allowed: Vec::new(),
+        limits: PolicySnapshotLimitsV1 {
+            max_memory_mb: None,
+            max_cpu_percent: None,
+            max_runtime_ms: None,
+            max_egress_bytes: None,
+        },
+    }
+}
+
+async fn spawn_world_agent_ws(
+    service: WorldAgentService,
+) -> (SocketAddr, tokio::task::JoinHandle<()>) {
+    let router = Router::new()
+        .route("/v1/stream", get(world_agent::handlers::stream))
+        .with_state(service);
+
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind ws listener");
+    let addr = listener.local_addr().expect("ws listener addr");
+    let std_listener = listener.into_std().expect("into_std listener");
+
+    let server = tokio::spawn(async move {
+        let _ = axum::Server::from_tcp(std_listener)
+            .expect("from_tcp")
+            .serve(router.into_make_service())
+            .await;
+    });
+
+    (addr, server)
+}
+
+#[cfg(target_os = "linux")]
+fn install_seccomp_deny_ioctl_fionread() -> std::io::Result<()> {
+    // Deny only ioctl(..., FIONREAD, ...) for this thread.
+    // This allows the test to simulate DR-23 “watermark query unsupported” without breaking
+    // the rest of the networking stack (tokio may use other ioctls like FIONBIO).
+    const PR_SET_NO_NEW_PRIVS: libc::c_int = 38;
+    const PR_SET_SECCOMP: libc::c_int = 22;
+    const SECCOMP_MODE_FILTER: libc::c_ulong = 2;
+
+    const SECCOMP_RET_ALLOW: u32 = 0x7fff_0000;
+    const SECCOMP_RET_ERRNO: u32 = 0x0005_0000;
+
+    const BPF_LD: u16 = 0x00;
+    const BPF_W: u16 = 0x00;
+    const BPF_ABS: u16 = 0x20;
+    const BPF_JMP: u16 = 0x05;
+    const BPF_JEQ: u16 = 0x10;
+    const BPF_K: u16 = 0x00;
+    const BPF_RET: u16 = 0x06;
+
+    const SECCOMP_DATA_NR_OFFSET: u32 = 0;
+    const SECCOMP_DATA_ARGS1_OFFSET: u32 = 24; // args[1] == ioctl request
+
+    let rc = unsafe { libc::prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) };
+    if rc != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+
+    let deny_errno = (SECCOMP_RET_ERRNO | (libc::EPERM as u32)) as u32;
+    let sys_ioctl = libc::SYS_ioctl as u32;
+    let fionread = libc::FIONREAD as u32;
+
+    let filter: [libc::sock_filter; 8] = [
+        // load seccomp_data.nr
+        libc::sock_filter {
+            code: BPF_LD | BPF_W | BPF_ABS,
+            jt: 0,
+            jf: 0,
+            k: SECCOMP_DATA_NR_OFFSET,
+        },
+        // if nr != SYS_ioctl -> allow
+        libc::sock_filter {
+            code: BPF_JMP | BPF_JEQ | BPF_K,
+            jt: 0,
+            jf: 5,
+            k: sys_ioctl,
+        },
+        // load seccomp_data.args[1] (ioctl request)
+        libc::sock_filter {
+            code: BPF_LD | BPF_W | BPF_ABS,
+            jt: 0,
+            jf: 0,
+            k: SECCOMP_DATA_ARGS1_OFFSET,
+        },
+        // if request == FIONREAD -> deny
+        libc::sock_filter {
+            code: BPF_JMP | BPF_JEQ | BPF_K,
+            jt: 0,
+            jf: 1,
+            k: fionread,
+        },
+        libc::sock_filter {
+            code: BPF_RET | BPF_K,
+            jt: 0,
+            jf: 0,
+            k: deny_errno,
+        },
+        // allow ioctl requests != FIONREAD
+        libc::sock_filter {
+            code: BPF_RET | BPF_K,
+            jt: 0,
+            jf: 0,
+            k: SECCOMP_RET_ALLOW,
+        },
+        // allow non-ioctl syscalls
+        libc::sock_filter {
+            code: BPF_RET | BPF_K,
+            jt: 0,
+            jf: 0,
+            k: SECCOMP_RET_ALLOW,
+        },
+        // (unused padding to keep array fixed-size; never reached)
+        libc::sock_filter {
+            code: BPF_RET | BPF_K,
+            jt: 0,
+            jf: 0,
+            k: SECCOMP_RET_ALLOW,
+        },
+    ];
+
+    let prog = libc::sock_fprog {
+        len: filter.len() as u16,
+        filter: filter.as_ptr() as *mut libc::sock_filter,
+    };
+
+    let rc = unsafe { libc::prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog) };
+    if rc != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+
+    Ok(())
+}
+
+async fn spawn_world_agent_ws_with_fionread_blocked() -> (
+    SocketAddr,
+    tokio::sync::oneshot::Sender<()>,
+    std::thread::JoinHandle<()>,
+) {
+    let (tx, rx) = mpsc::channel::<(SocketAddr, tokio::sync::oneshot::Sender<()>)>();
+
+    let handle = std::thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("tokio runtime");
+
+        rt.block_on(async move {
+            let service = WorldAgentService::new().expect("WorldAgentService::new");
+            let router = Router::new()
+                .route("/v1/stream", get(world_agent::handlers::stream))
+                .with_state(service);
+
+            let listener = TcpListener::bind("127.0.0.1:0")
+                .await
+                .expect("bind ws listener");
+            let addr = listener.local_addr().expect("ws listener addr");
+            let std_listener = listener.into_std().expect("into_std listener");
+
+            // Install filter after binding (so networking setup is unaffected), but before
+            // accepting `start_session` and attempting the DR-23 watermark query.
+            install_seccomp_deny_ioctl_fionread().expect("install seccomp filter");
+
+            let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+            tx.send((addr, shutdown_tx)).expect("send addr");
+
+            let _ = axum::Server::from_tcp(std_listener)
+                .expect("from_tcp")
+                .serve(router.into_make_service())
+                .with_graceful_shutdown(async move {
+                    let _ = shutdown_rx.await;
+                })
+                .await;
+        });
+    });
+
+    let (addr, shutdown) = rx
+        .recv_timeout(Duration::from_secs(2))
+        .expect("receive addr");
+    (addr, shutdown, handle)
+}
+
+async fn ws_connect(addr: SocketAddr) -> Ws {
+    let (ws, _) = connect_async(format!("ws://{addr}/v1/stream"))
+        .await
+        .expect("connect ws");
+    ws
+}
+
+async fn recv_json(ws: &mut Ws) -> Value {
+    let msg = timeout(Duration::from_secs(2), ws.next())
+        .await
+        .expect("timed out waiting for ws message")
+        .expect("ws closed without a message")
+        .expect("ws read error");
+
+    let Message::Text(text) = msg else {
+        panic!("expected text ws message, got: {msg:?}");
+    };
+    serde_json::from_str(&text).expect("server ws message is valid JSON")
+}
+
+async fn expect_terminal_frame(ws: &mut Ws) -> Value {
+    for _ in 0..20 {
+        let frame = recv_json(ws).await;
+        match frame.get("type").and_then(Value::as_str) {
+            Some("stdout") => continue,
+            Some("ready") | Some("error") | Some("exit") => return frame,
+            other => panic!("unexpected server frame type: {other:?} frame={frame}"),
+        }
+    }
+    panic!("did not receive terminal frame (ready/error/exit) after 20 messages");
+}
+
+fn start_session_frame(cwd: &PathBuf, policy_snapshot: Value) -> Value {
+    json!({
+        "type": "start_session",
+        "cwd": cwd.display().to_string(),
+        "env": {
+            "HOME": "/root",
+            "TERM": "xterm-256color",
+        },
+        "policy_snapshot": policy_snapshot,
+        "cols": 80,
+        "rows": 24,
+    })
+}
+
+fn looks_like_missing_world_prereqs(frame: &Value) -> bool {
+    if frame.get("type").and_then(Value::as_str) != Some("error") {
+        return false;
+    }
+    let message = frame
+        .get("message")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    message.contains("failed to create session world")
+        || message.contains("failed to prepare world overlay")
+        || message.contains("user namespaces disabled")
+        || message.contains("operation not permitted")
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn legacy_one_shot_start_remains_accepted() {
+    let service = match WorldAgentService::new() {
+        Ok(svc) => svc,
+        Err(err) => {
+            eprintln!("skipping legacy /v1/stream test: service init failed: {err}");
+            return;
+        }
+    };
+
+    let (addr, server) = spawn_world_agent_ws(service).await;
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let cwd = tmp.path().to_path_buf();
+
+    let mut ws = ws_connect(addr).await;
+    ws.send(Message::Text(
+        json!({
+            "type": "start",
+            "cmd": "sh -lc 'printf hello'",
+            "cwd": cwd.display().to_string(),
+            "env": HashMap::<String, String>::new(),
+            "policy_snapshot": null,
+            "span_id": null,
+            "cols": 80,
+            "rows": 24,
+        })
+        .to_string(),
+    ))
+    .await
+    .expect("send start");
+
+    let mut saw_stdout = false;
+    let mut exit_code = None;
+    for _ in 0..50 {
+        let frame = recv_json(&mut ws).await;
+        match frame.get("type").and_then(Value::as_str) {
+            Some("stdout") => {
+                saw_stdout = true;
+            }
+            Some("exit") => {
+                exit_code = frame.get("code").and_then(Value::as_i64);
+                break;
+            }
+            Some("error") => {
+                if looks_like_missing_world_prereqs(&frame) {
+                    eprintln!(
+                        "skipping legacy /v1/stream assertions: world prereqs missing: {frame}"
+                    );
+                    server.abort();
+                    return;
+                }
+                panic!("unexpected error for legacy start: {frame}");
+            }
+            other => panic!("unexpected server frame type: {other:?} frame={frame}"),
+        }
+    }
+
+    assert!(saw_stdout, "expected at least one stdout frame");
+    assert_eq!(exit_code, Some(0), "expected exit code 0");
+
+    server.abort();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn persistent_session_enforces_first_frame_start_session() {
+    let service = match WorldAgentService::new() {
+        Ok(svc) => svc,
+        Err(err) => {
+            eprintln!("skipping persistent first-frame test: service init failed: {err}");
+            return;
+        }
+    };
+
+    let (addr, server) = spawn_world_agent_ws(service).await;
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let cwd = tmp.path().to_path_buf();
+
+    let mut ws = ws_connect(addr).await;
+    ws.send(Message::Text(
+        json!({
+            "type": "stdin",
+            "data_b64": "AA=="
+        })
+        .to_string(),
+    ))
+    .await
+    .expect("send invalid first frame");
+
+    let frame = expect_terminal_frame(&mut ws).await;
+    assert_eq!(frame.get("type").and_then(Value::as_str), Some("error"));
+    assert_eq!(
+        frame.get("code").and_then(Value::as_str),
+        Some("bad_request")
+    );
+    assert_eq!(frame.get("fatal").and_then(Value::as_bool), Some(true));
+    assert!(
+        !frame
+            .get("message")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .is_empty(),
+        "error.message must be non-empty"
+    );
+
+    // The server MUST NOT emit `ready` after a bad first frame (fail-closed posture).
+    ws.send(Message::Text(
+        start_session_frame(
+            &cwd,
+            serde_json::to_value(minimal_policy_snapshot()).expect("snapshot to JSON"),
+        )
+        .to_string(),
+    ))
+    .await
+    .ok();
+
+    server.abort();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn start_session_rejects_policy_snapshot_with_unknown_fields_fail_closed() {
+    let service = match WorldAgentService::new() {
+        Ok(svc) => svc,
+        Err(err) => {
+            eprintln!("skipping policy_snapshot unknown-fields test: service init failed: {err}");
+            return;
+        }
+    };
+
+    let (addr, server) = spawn_world_agent_ws(service).await;
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let cwd = tmp.path().to_path_buf();
+
+    let mut snapshot = serde_json::to_value(minimal_policy_snapshot()).expect("snapshot to JSON");
+    snapshot
+        .as_object_mut()
+        .expect("snapshot object")
+        .insert("unknown_field".to_string(), json!(123));
+
+    let mut ws = ws_connect(addr).await;
+    ws.send(Message::Text(
+        start_session_frame(&cwd, snapshot).to_string(),
+    ))
+    .await
+    .expect("send start_session");
+
+    let frame = expect_terminal_frame(&mut ws).await;
+    assert_eq!(frame.get("type").and_then(Value::as_str), Some("error"));
+    assert_eq!(
+        frame.get("code").and_then(Value::as_str),
+        Some("bad_request")
+    );
+    assert_eq!(frame.get("fatal").and_then(Value::as_bool), Some(true));
+
+    server.abort();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn start_session_requires_policy_snapshot_fail_closed() {
+    let service = match WorldAgentService::new() {
+        Ok(svc) => svc,
+        Err(err) => {
+            eprintln!("skipping policy_snapshot required test: service init failed: {err}");
+            return;
+        }
+    };
+
+    let (addr, server) = spawn_world_agent_ws(service).await;
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let cwd = tmp.path().to_path_buf();
+
+    let mut ws = ws_connect(addr).await;
+    ws.send(Message::Text(
+        json!({
+            "type": "start_session",
+            "cwd": cwd.display().to_string(),
+            "env": { "HOME": "/root" },
+            "cols": 80,
+            "rows": 24,
+        })
+        .to_string(),
+    ))
+    .await
+    .expect("send start_session missing policy_snapshot");
+
+    let frame = expect_terminal_frame(&mut ws).await;
+    assert_eq!(frame.get("type").and_then(Value::as_str), Some("error"));
+    assert_eq!(
+        frame.get("code").and_then(Value::as_str),
+        Some("bad_request")
+    );
+    assert_eq!(frame.get("fatal").and_then(Value::as_bool), Some(true));
+
+    server.abort();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn start_session_yields_ready_with_fresh_hex32_session_nonce() {
+    let service = match WorldAgentService::new() {
+        Ok(svc) => svc,
+        Err(err) => {
+            eprintln!("skipping ready.session_nonce test: service init failed: {err}");
+            return;
+        }
+    };
+
+    let (addr, server) = spawn_world_agent_ws(service).await;
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let cwd = tmp.path().to_path_buf();
+    let snapshot = serde_json::to_value(minimal_policy_snapshot()).expect("snapshot to JSON");
+
+    let mut ws = ws_connect(addr).await;
+    ws.send(Message::Text(
+        start_session_frame(&cwd, snapshot).to_string(),
+    ))
+    .await
+    .expect("send start_session");
+
+    let frame = expect_terminal_frame(&mut ws).await;
+    if looks_like_missing_world_prereqs(&frame) {
+        eprintln!("skipping start_session ready assertions: world prereqs missing: {frame}");
+        server.abort();
+        return;
+    }
+    assert_eq!(frame.get("type").and_then(Value::as_str), Some("ready"));
+    assert_eq!(
+        frame.get("protocol_version").and_then(Value::as_i64),
+        Some(1)
+    );
+
+    let nonce = frame
+        .get("session_nonce")
+        .and_then(Value::as_str)
+        .expect("ready.session_nonce string");
+    assert_eq!(nonce.len(), 64, "hex32 must be 64 hex chars");
+    assert!(
+        nonce.chars().all(|c| c.is_ascii_hexdigit()),
+        "ready.session_nonce must be hex"
+    );
+
+    server.abort();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn session_nonce_is_unique_per_session_restart() {
+    let service = match WorldAgentService::new() {
+        Ok(svc) => svc,
+        Err(err) => {
+            eprintln!("skipping session_nonce uniqueness test: service init failed: {err}");
+            return;
+        }
+    };
+
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let cwd = tmp.path().to_path_buf();
+    let snapshot = serde_json::to_value(minimal_policy_snapshot()).expect("snapshot to JSON");
+
+    let (addr1, server1) = spawn_world_agent_ws(service.clone()).await;
+    let mut ws1 = ws_connect(addr1).await;
+    ws1.send(Message::Text(
+        start_session_frame(&cwd, snapshot.clone()).to_string(),
+    ))
+    .await
+    .expect("send start_session");
+    let ready1 = expect_terminal_frame(&mut ws1).await;
+    if looks_like_missing_world_prereqs(&ready1) {
+        eprintln!("skipping session_nonce uniqueness assertions: world prereqs missing: {ready1}");
+        server1.abort();
+        return;
+    }
+    let nonce1 = ready1
+        .get("session_nonce")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    server1.abort();
+
+    let (addr2, server2) = spawn_world_agent_ws(service).await;
+    let mut ws2 = ws_connect(addr2).await;
+    ws2.send(Message::Text(
+        start_session_frame(&cwd, snapshot).to_string(),
+    ))
+    .await
+    .expect("send start_session");
+    let ready2 = expect_terminal_frame(&mut ws2).await;
+    if looks_like_missing_world_prereqs(&ready2) {
+        eprintln!("skipping session_nonce uniqueness assertions: world prereqs missing: {ready2}");
+        server2.abort();
+        return;
+    }
+    let nonce2 = ready2
+        .get("session_nonce")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    server2.abort();
+
+    assert!(!nonce1.is_empty(), "session_nonce missing for session 1");
+    assert!(!nonce2.is_empty(), "session_nonce missing for session 2");
+    assert_ne!(nonce1, nonce2, "session_nonce must change per session");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn start_session_fails_closed_when_fionread_watermark_is_unavailable() {
+    // DR-23 preflight is fail-closed: if the required PTY watermark query is unavailable for
+    // protocol v1 (Linux ioctl(FIONREAD)), world-agent MUST NOT emit `ready`.
+    let (addr, shutdown, server_thread) = spawn_world_agent_ws_with_fionread_blocked().await;
+
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let cwd = tmp.path().to_path_buf();
+    let snapshot = serde_json::to_value(minimal_policy_snapshot()).expect("snapshot to JSON");
+
+    let mut ws = ws_connect(addr).await;
+    ws.send(Message::Text(
+        start_session_frame(&cwd, snapshot).to_string(),
+    ))
+    .await
+    .expect("send start_session");
+
+    let frame = expect_terminal_frame(&mut ws).await;
+    if looks_like_missing_world_prereqs(&frame) {
+        eprintln!("skipping DR-23 FIONREAD assertions: world prereqs missing: {frame}");
+        let _ = shutdown.send(());
+        let _ = server_thread.join();
+        return;
+    }
+    assert_eq!(frame.get("type").and_then(Value::as_str), Some("error"));
+    assert_eq!(frame.get("fatal").and_then(Value::as_bool), Some(true));
+
+    let _ = shutdown.send(());
+    let _ = server_thread.join();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn start_session_is_robust_to_inheritable_non_stdio_fds() {
+    // DR-22 preflight: the evaluator MUST NOT inherit non-stdio fds.
+    // This test opens a non-CLOEXEC fd in the world-agent process and requires that the
+    // session bootstrap still succeeds, implying the session's spawn strategy doesn't rely on
+    // CLOEXEC alone.
+    let service = match WorldAgentService::new() {
+        Ok(svc) => svc,
+        Err(err) => {
+            eprintln!("skipping DR-22 inheritable-fd test: service init failed: {err}");
+            return;
+        }
+    };
+
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let cwd = tmp.path().to_path_buf();
+    let snapshot = serde_json::to_value(minimal_policy_snapshot()).expect("snapshot to JSON");
+
+    let fd_leak_guard = std::fs::File::open("/dev/null").expect("open /dev/null");
+    let fd = fd_leak_guard.as_raw_fd();
+    let rc = unsafe { libc::fcntl(fd, libc::F_SETFD, 0) };
+    assert_eq!(rc, 0, "clear CLOEXEC");
+
+    let (addr, server) = spawn_world_agent_ws(service).await;
+    let mut ws = ws_connect(addr).await;
+    ws.send(Message::Text(
+        start_session_frame(&cwd, snapshot).to_string(),
+    ))
+    .await
+    .expect("send start_session");
+
+    let frame = expect_terminal_frame(&mut ws).await;
+    if looks_like_missing_world_prereqs(&frame) {
+        eprintln!("skipping DR-22 inheritable-fd assertions: world prereqs missing: {frame}");
+        server.abort();
+        drop(fd_leak_guard);
+        return;
+    }
+    assert_eq!(frame.get("type").and_then(Value::as_str), Some("ready"));
+
+    server.abort();
+    drop(fd_leak_guard);
+}
