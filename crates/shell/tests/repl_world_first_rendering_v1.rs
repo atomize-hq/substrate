@@ -7,12 +7,24 @@ use serial_test::serial;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use support::{binary_path, ensure_substrate_built, temp_dir, ReplWorldAgentStub};
 use tempfile::TempDir;
+
+#[cfg(unix)]
+fn set_fd_nonblocking(fd: i32) {
+    unsafe {
+        let flags = libc::fcntl(fd, libc::F_GETFL);
+        if flags < 0 {
+            return;
+        }
+        let _ = libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
+    }
+}
 
 fn manager_manifest_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../config/manager_hooks.yaml")
@@ -84,6 +96,7 @@ struct PtyRepl {
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
     output: Arc<Mutex<Vec<u8>>>,
     reader_handle: Option<std::thread::JoinHandle<()>>,
+    stop_reader: Arc<AtomicBool>,
 }
 
 impl PtyRepl {
@@ -105,6 +118,11 @@ impl PtyRepl {
                 pixel_height: 0,
             })
             .expect("openpty");
+
+        #[cfg(unix)]
+        if let Some(fd) = pair.master.as_raw_fd() {
+            set_fd_nonblocking(fd);
+        }
 
         let mut cmd = CommandBuilder::new(binary_path());
         cmd.args(args);
@@ -131,11 +149,16 @@ impl PtyRepl {
             Arc::new(Mutex::new(pair.master.take_writer().expect("take writer")));
 
         let output = Arc::new(Mutex::new(Vec::new()));
+        let stop_reader = Arc::new(AtomicBool::new(false));
         let output_for_thread = output.clone();
         let writer_for_thread = writer.clone();
+        let stop_for_thread = stop_reader.clone();
         let reader_handle = std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
             loop {
+                if stop_for_thread.load(Ordering::Relaxed) {
+                    break;
+                }
                 match reader.read(&mut buf) {
                     Ok(0) => break,
                     Ok(n) => {
@@ -157,6 +180,9 @@ impl PtyRepl {
                             guard.extend_from_slice(&buf[..n]);
                         }
                     }
+                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(Duration::from_millis(25));
+                    }
                     Err(_) => break,
                 }
             }
@@ -168,6 +194,7 @@ impl PtyRepl {
             writer,
             output,
             reader_handle: Some(reader_handle),
+            stop_reader,
         }
     }
 
@@ -227,10 +254,20 @@ impl PtyRepl {
     }
 
     fn shutdown(mut self) -> (i32, Vec<u8>) {
+        self.stop_reader.store(true, Ordering::Relaxed);
         if self.waited.is_none() {
             let _ = self.child.kill();
-            let status = self.child.wait().expect("wait child");
-            self.waited = Some(status);
+            let deadline = Instant::now() + Duration::from_secs(2);
+            while Instant::now() < deadline {
+                match self.child.try_wait() {
+                    Ok(Some(status)) => {
+                        self.waited = Some(status);
+                        break;
+                    }
+                    Ok(None) => std::thread::sleep(Duration::from_millis(25)),
+                    Err(_) => break,
+                }
+            }
         }
         if let Some(handle) = self.reader_handle.take() {
             let _ = handle.join();
