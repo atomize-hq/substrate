@@ -451,27 +451,32 @@ pub async fn handle_ws_pty(
     }
 }
 
+#[cfg(not(target_os = "linux"))]
 async fn handle_persistent_session(
-    #[cfg_attr(not(target_os = "linux"), allow(unused_variables))] _service: WorldAgentService,
+    _service: WorldAgentService,
+    tx: Arc<Mutex<WsSender>>,
+    _rx: WsReceiver,
+    _first_text: String,
+) {
+    let _ = send_persistent_ws_message(
+        &tx,
+        &PersistentServerMessage::Error {
+            code: "internal_error".to_string(),
+            message: "Persistent sessions are only supported on Linux world-agent".to_string(),
+            fatal: true,
+            seq: None,
+        },
+    )
+    .await;
+}
+
+#[cfg(target_os = "linux")]
+async fn handle_persistent_session(
+    _service: WorldAgentService,
     tx: Arc<Mutex<WsSender>>,
     mut rx: WsReceiver,
     first_text: String,
 ) {
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = send_persistent_ws_message(
-            &tx,
-            &PersistentServerMessage::Error {
-                code: "internal_error".to_string(),
-                message: "Persistent sessions are only supported on Linux world-agent".to_string(),
-                fatal: true,
-                seq: None,
-            },
-        )
-        .await;
-        return;
-    }
-
     let start = match serde_json::from_str::<PersistentClientMessage>(&first_text) {
         Ok(PersistentClientMessage::StartSession {
             protocol_version,
