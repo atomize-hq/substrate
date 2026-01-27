@@ -156,14 +156,14 @@ enum PersistentClientMessage {
 #[derive(Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum PersistentServerMessage {
+    #[cfg(target_os = "linux")]
     Ready {
         session_nonce: String,
         cwd: PathBuf,
         protocol_version: u32,
     },
-    Exit {
-        code: i32,
-    },
+    #[cfg(target_os = "linux")]
+    Exit { code: i32 },
     Error {
         code: String,
         message: String,
