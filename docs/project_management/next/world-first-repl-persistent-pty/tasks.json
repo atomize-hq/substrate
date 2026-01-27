@@ -1424,7 +1424,7 @@
       "name": "C4 \u2014 interactive REPL byte-safe rendering + buffering (test)",
       "type": "test",
       "phase": "C4",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Add tests for byte-safe rendering, out-of-band stdout, and structured output buffering per C4-spec.md.",
       "references": [
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
