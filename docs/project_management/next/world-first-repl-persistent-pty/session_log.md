@@ -569,3 +569,19 @@
   - `SMOKE_RUN=`
   - `MERGED_TO_ORCH=false`
 - Blockers: `NONE`
+
+## START — 2026-01-27T19:50:01Z — integration — C5-integ-macos
+- Worktree: `wt/world-first-repl-persistent-pty-c5-integ-macos`
+- Branch: `world-first-repl-persistent-pty-c5-integ-macos`
+- Orchestration branch: `feat/world-first-repl-persistent-pty`
+
+## END — 2026-01-27T20:44:59Z — integration — C5-integ-macos
+- Worktree: `/home/spenser/__Active_code/substrate/wt/world-first-repl-persistent-pty-c5-integ-macos`
+- Branch: `world-first-repl-persistent-pty-c5-integ-macos`
+- HEAD: `99c13f7e362e9c09aa2d0bea16b65f0fbe6dfedf`
+- Feature smoke (macos-only, slice `C5`):
+  - Run `21411802680` — https://github.com/atomize-hq/substrate/actions/runs/21411802680 — `conclusion=failure` (fail: `c3_drift_restart_restarts_session_and_emits_message`)
+  - Run `21413173992` — https://github.com/atomize-hq/substrate/actions/runs/21413173992 — `conclusion=success`
+- CI testing (compile parity):
+  - Run `21413408940` — https://github.com/atomize-hq/substrate/actions/runs/21413408940 — `conclusion=success` (passed: `macos-14, ubuntu-24.04, windows-2022`)
+- Blockers: `NONE`
