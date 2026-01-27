@@ -1,4 +1,4 @@
-#![cfg(all(unix, target_os = "linux"))]
+#![cfg(any(target_os = "linux", target_os = "macos"))]
 
 #[path = "support/mod.rs"]
 mod support;
