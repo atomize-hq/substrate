@@ -261,6 +261,25 @@
   - `CODEX_CODE_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/world-first-repl-persistent-pty/logs/C0/code/stderr.log`
 - Blockers: `NONE`
 
+## END — 2026-01-27T17:13:21Z — code — C4-code
+- Worktree: `/home/spenser/__Active_code/substrate/wt/world-first-repl-persistent-pty-c4-code`
+- Branch: `world-first-repl-persistent-pty-c4-code`
+- HEAD: `16159f677b9f0e6a0a9c28d6d564cfdef914940f`
+- Codex: `CODEX_CODE_EXIT=0`
+- Finisher summary:
+  - `TASK_BRANCH=world-first-repl-persistent-pty-c4-code`
+  - `WORKTREE=/home/spenser/__Active_code/substrate/wt/world-first-repl-persistent-pty-c4-code`
+  - `HEAD=16159f677b9f0e6a0a9c28d6d564cfdef914940f`
+  - `COMMITS=1`
+  - `CHECKS=verify-only`
+  - `SMOKE_RUN=`
+  - `MERGED_TO_ORCH=`
+- Artifacts:
+  - `CODEX_CODE_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/world-first-repl-persistent-pty/logs/C4/code/last_message.md`
+  - `CODEX_CODE_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/world-first-repl-persistent-pty/logs/C4/code/events.jsonl`
+  - `CODEX_CODE_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/world-first-repl-persistent-pty/logs/C4/code/stderr.log`
+- Blockers: `NONE`
+
 ## START — 2026-01-27T16:37:31Z — code — C4-code
 - Worktree: `wt/world-first-repl-persistent-pty-c4-code`
 - Branch: `world-first-repl-persistent-pty-c4-code`
