@@ -100,4 +100,3 @@ fn persistent_session_client_v1_fail_closed_core_contract() {
     client.note_shutdown_initiated();
     client.on_server_frame(exit_frame(0)).unwrap();
 }
-
