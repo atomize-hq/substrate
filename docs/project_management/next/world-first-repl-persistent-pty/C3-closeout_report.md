@@ -33,6 +33,10 @@ Slice spec:
 
 ## Cross-Platform Gates (when applicable)
 
+CI audit + evidence ledger (if any CI was intentionally skipped):
+- Ledger path: `docs/project_management/next/world-first-repl-persistent-pty/logs/C3/ci-audit/ledger.jsonl`
+- Notes (e.g., `RECOMMEND=skip` reason, last-green run id, and baseline sha):
+
 Record run ids and URLs for required platforms:
 - Linux (behavior smoke):
 - macOS (behavior smoke):

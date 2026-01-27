@@ -55,7 +55,12 @@ Minimum checks (no ambiguity; each must have evidence in the report):
   - Each required behavior platform has a smoke script and the manual playbook references it.
 
 ### 4) CI dispatch path is runnable
-- Confirm the CI dispatch commands embedded in integration tasks are valid and match the feature branch ref:
+- Confirm the CI dispatch commands embedded in integration tasks are valid and match the feature branch ref.
+- Confirm `ci-audit` tooling is available (recommended-first policy):
+  - `scripts/ci-audit/ci_audit.sh`
+  - `scripts/ci-audit/ci_audit_record.sh`
+  - Per-slice ledger location (gitignored): `docs/project_management/next/world-first-repl-persistent-pty/logs/<slice>/ci-audit/ledger.jsonl`
+- Validate that the underlying dispatch commands remain runnable:
   - `make ci-compile-parity CI_WORKFLOW_REF="feat/world-first-repl-persistent-pty" CI_REMOTE=origin CI_CLEANUP=1`
   - `make feature-smoke FEATURE_DIR="docs/project_management/next/world-first-repl-persistent-pty" PLATFORM=behavior SMOKE_SLICE_ID="<slice>" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/world-first-repl-persistent-pty" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
 - If required self-hosted runners/labels are missing, recommendation MUST be `REVISE`.

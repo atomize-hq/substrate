@@ -24,6 +24,23 @@ Required gates (integration tasks dispatch these):
 - `make ci-compile-parity CI_WORKFLOW_REF="feat/world-first-repl-persistent-pty" CI_REMOTE=origin CI_CLEANUP=1`
 - `scripts/ci/dispatch_ci_testing.sh --workflow-ref "feat/world-first-repl-persistent-pty" --remote origin --cleanup`
 
+### CI audit + evidence ledger (recommended first)
+
+Goal:
+- Reduce redundant CI dispatch by checking whether the last green run already covered the required OS set, and whether changes since then are docs/planning-only.
+
+Ledger (per slice; gitignored):
+- `docs/project_management/next/world-first-repl-persistent-pty/logs/<slice>/ci-audit/ledger.jsonl`
+
+Before dispatching **CI parity** (ci-testing / compile-parity / CI Testing):
+- `scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch "feat/world-first-repl-persistent-pty" --ledger-path "docs/project_management/next/world-first-repl-persistent-pty/logs/<slice>/ci-audit/ledger.jsonl"`
+
+After a dispatch completes (record run id + tested sha from dispatcher stdout):
+- `scripts/ci-audit/ci_audit_record.sh --ledger-path "docs/project_management/next/world-first-repl-persistent-pty/logs/<slice>/ci-audit/ledger.jsonl" --kind ci-testing --mode compile-parity --orch-branch "feat/world-first-repl-persistent-pty" --run-id "<RUN_ID>" --tested-sha "<HEAD>"`
+
+Docs/planning-only changes:
+- Per policy, ci-audit recommends **SKIP all CI** when the diff is entirely under `docs/`.
+
 ## Linux manual validation (local)
 
 Preconditions:
@@ -140,6 +157,12 @@ Expected:
 
 Run from the integration worktree `HEAD`:
 - `make feature-smoke FEATURE_DIR="docs/project_management/next/world-first-repl-persistent-pty" PLATFORM=behavior SMOKE_SLICE_ID="<slice>" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/world-first-repl-persistent-pty" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
+
+Recommended before dispatch:
+- `scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch "feat/world-first-repl-persistent-pty" --feature-dir "docs/project_management/next/world-first-repl-persistent-pty" --ledger-path "docs/project_management/next/world-first-repl-persistent-pty/logs/<slice>/ci-audit/ledger.jsonl"`
+
+After a dispatch completes (record run id + tested sha from dispatcher stdout):
+- `scripts/ci-audit/ci_audit_record.sh --ledger-path "docs/project_management/next/world-first-repl-persistent-pty/logs/<slice>/ci-audit/ledger.jsonl" --kind feature-smoke --mode behavior --orch-branch "feat/world-first-repl-persistent-pty" --run-id "<RUN_ID>" --tested-sha "<HEAD>" --feature-dir "docs/project_management/next/world-first-repl-persistent-pty"`
 
 Expected:
 - Dispatcher prints `DISPATCH_OK=1` and a `RUN_URL=...`.

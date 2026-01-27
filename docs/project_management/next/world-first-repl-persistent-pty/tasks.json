@@ -497,8 +497,12 @@
         "cargo fmt",
         "cargo clippy --workspace --all-targets -- -D warnings",
         "Run slice-targeted tests for C1",
-        "Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (record run id/URL)",
-        "Dispatch behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=behavior SMOKE_SLICE_ID=\"C1\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
+        "Run CI audit (ci-testing): scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch \"feat/world-first-repl-persistent-pty\" --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C1/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`)",
+        "If dispatched: Record CI ledger entry: scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C1/ci-audit/ledger.jsonl\" --kind ci-testing --mode compile-parity --orch-branch \"feat/world-first-repl-persistent-pty\" --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\"",
+        "Run CI audit (feature smoke): scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch \"feat/world-first-repl-persistent-pty\" --feature-dir \"docs/project_management/next/world-first-repl-persistent-pty\" --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C1/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Dispatch behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=behavior SMOKE_SLICE_ID=\"C1\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`, `SMOKE_PASSED_PLATFORMS`, `SMOKE_FAILED_PLATFORMS`)",
+        "If dispatched: Record smoke ledger entry: scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C1/ci-audit/ledger.jsonl\" --kind feature-smoke --mode behavior --orch-branch \"feat/world-first-repl-persistent-pty\" --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\" --feature-dir \"docs/project_management/next/world-first-repl-persistent-pty\"",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C1-integ-core\""
       ],
       "worktree": "wt/world-first-repl-persistent-pty-c1-integ-core",
@@ -538,8 +542,12 @@
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" TASK_ID=\"C1-integ-linux\""
       ],
       "end_checklist": [
-        "Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=linux SMOKE_SLICE_ID=\"C1\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
-        "Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (record run id/URL)",
+        "Run CI audit (feature smoke; linux-only): scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms linux --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C1/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=linux SMOKE_SLICE_ID=\"C1\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`)",
+        "If dispatched: Record smoke ledger entry (linux-only): scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C1/ci-audit/ledger.jsonl\" --kind feature-smoke --mode linux --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms linux --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\"",
+        "Run CI audit (ci-testing; linux-only): scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms linux --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C1/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`)",
+        "If dispatched: Record CI ledger entry (linux-only): scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C1/ci-audit/ledger.jsonl\" --kind ci-testing --mode compile-parity --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms linux --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\"",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C1-integ-linux\""
       ],
       "worktree": "wt/world-first-repl-persistent-pty-c1-integ-linux",
@@ -581,8 +589,12 @@
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" TASK_ID=\"C1-integ-macos\""
       ],
       "end_checklist": [
-        "Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=macos SMOKE_SLICE_ID=\"C1\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
-        "Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (record run id/URL)",
+        "Run CI audit (feature smoke; macos-only): scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms macos --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C1/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=macos SMOKE_SLICE_ID=\"C1\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`)",
+        "If dispatched: Record smoke ledger entry (macos-only): scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C1/ci-audit/ledger.jsonl\" --kind feature-smoke --mode macos --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms macos --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\"",
+        "Run CI audit (ci-testing; macos-only): scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms macos --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C1/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`)",
+        "If dispatched: Record CI ledger entry (macos-only): scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C1/ci-audit/ledger.jsonl\" --kind ci-testing --mode compile-parity --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms macos --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\"",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C1-integ-macos\""
       ],
       "worktree": "wt/world-first-repl-persistent-pty-c1-integ-macos",
@@ -623,7 +635,9 @@
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" TASK_ID=\"C1-integ-windows\""
       ],
       "end_checklist": [
-        "Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (record run id/URL)",
+        "Run CI audit (ci-testing; windows-only): scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms windows --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C1/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`)",
+        "If dispatched: Record CI ledger entry (windows-only): scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C1/ci-audit/ledger.jsonl\" --kind ci-testing --mode compile-parity --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms windows --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\"",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C1-integ-windows\""
       ],
       "worktree": "wt/world-first-repl-persistent-pty-c1-integ-windows",
@@ -671,7 +685,9 @@
         "cargo fmt",
         "cargo clippy --workspace --all-targets -- -D warnings",
         "make integ-checks",
-        "Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=behavior SMOKE_SLICE_ID=\"C1\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
+        "Run CI audit (feature smoke): scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch \"feat/world-first-repl-persistent-pty\" --feature-dir \"docs/project_management/next/world-first-repl-persistent-pty\" --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C1/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=behavior SMOKE_SLICE_ID=\"C1\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`, `SMOKE_PASSED_PLATFORMS`, `SMOKE_FAILED_PLATFORMS`)",
+        "If dispatched: Record smoke ledger entry: scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C1/ci-audit/ledger.jsonl\" --kind feature-smoke --mode behavior --orch-branch \"feat/world-first-repl-persistent-pty\" --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\" --feature-dir \"docs/project_management/next/world-first-repl-persistent-pty\"",
         "Complete docs/project_management/next/world-first-repl-persistent-pty/C1-closeout_report.md",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C1-integ\""
       ],
@@ -812,8 +828,12 @@
         "cargo fmt",
         "cargo clippy --workspace --all-targets -- -D warnings",
         "Run slice-targeted tests for C2",
-        "Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (record run id/URL)",
-        "Dispatch behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=behavior SMOKE_SLICE_ID=\"C2\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
+        "Run CI audit (ci-testing): scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch \"feat/world-first-repl-persistent-pty\" --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C2/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`)",
+        "If dispatched: Record CI ledger entry: scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C2/ci-audit/ledger.jsonl\" --kind ci-testing --mode compile-parity --orch-branch \"feat/world-first-repl-persistent-pty\" --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\"",
+        "Run CI audit (feature smoke): scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch \"feat/world-first-repl-persistent-pty\" --feature-dir \"docs/project_management/next/world-first-repl-persistent-pty\" --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C2/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Dispatch behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=behavior SMOKE_SLICE_ID=\"C2\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`, `SMOKE_PASSED_PLATFORMS`, `SMOKE_FAILED_PLATFORMS`)",
+        "If dispatched: Record smoke ledger entry: scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C2/ci-audit/ledger.jsonl\" --kind feature-smoke --mode behavior --orch-branch \"feat/world-first-repl-persistent-pty\" --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\" --feature-dir \"docs/project_management/next/world-first-repl-persistent-pty\"",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C2-integ-core\""
       ],
       "worktree": "wt/world-first-repl-persistent-pty-c2-integ-core",
@@ -853,8 +873,12 @@
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" TASK_ID=\"C2-integ-linux\""
       ],
       "end_checklist": [
-        "Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=linux SMOKE_SLICE_ID=\"C2\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
-        "Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (record run id/URL)",
+        "Run CI audit (feature smoke; linux-only): scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms linux --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C2/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=linux SMOKE_SLICE_ID=\"C2\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`)",
+        "If dispatched: Record smoke ledger entry (linux-only): scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C2/ci-audit/ledger.jsonl\" --kind feature-smoke --mode linux --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms linux --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\"",
+        "Run CI audit (ci-testing; linux-only): scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms linux --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C2/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`)",
+        "If dispatched: Record CI ledger entry (linux-only): scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C2/ci-audit/ledger.jsonl\" --kind ci-testing --mode compile-parity --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms linux --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\"",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C2-integ-linux\""
       ],
       "worktree": "wt/world-first-repl-persistent-pty-c2-integ-linux",
@@ -896,8 +920,12 @@
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" TASK_ID=\"C2-integ-macos\""
       ],
       "end_checklist": [
-        "Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=macos SMOKE_SLICE_ID=\"C2\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
-        "Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (record run id/URL)",
+        "Run CI audit (feature smoke; macos-only): scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms macos --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C2/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=macos SMOKE_SLICE_ID=\"C2\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`)",
+        "If dispatched: Record smoke ledger entry (macos-only): scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C2/ci-audit/ledger.jsonl\" --kind feature-smoke --mode macos --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms macos --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\"",
+        "Run CI audit (ci-testing; macos-only): scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms macos --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C2/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`)",
+        "If dispatched: Record CI ledger entry (macos-only): scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C2/ci-audit/ledger.jsonl\" --kind ci-testing --mode compile-parity --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms macos --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\"",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C2-integ-macos\""
       ],
       "worktree": "wt/world-first-repl-persistent-pty-c2-integ-macos",
@@ -938,7 +966,9 @@
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" TASK_ID=\"C2-integ-windows\""
       ],
       "end_checklist": [
-        "Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (record run id/URL)",
+        "Run CI audit (ci-testing; windows-only): scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms windows --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C2/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`)",
+        "If dispatched: Record CI ledger entry (windows-only): scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C2/ci-audit/ledger.jsonl\" --kind ci-testing --mode compile-parity --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms windows --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\"",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C2-integ-windows\""
       ],
       "worktree": "wt/world-first-repl-persistent-pty-c2-integ-windows",
@@ -986,7 +1016,9 @@
         "cargo fmt",
         "cargo clippy --workspace --all-targets -- -D warnings",
         "make integ-checks",
-        "Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=behavior SMOKE_SLICE_ID=\"C2\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
+        "Run CI audit (feature smoke): scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch \"feat/world-first-repl-persistent-pty\" --feature-dir \"docs/project_management/next/world-first-repl-persistent-pty\" --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C2/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=behavior SMOKE_SLICE_ID=\"C2\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`, `SMOKE_PASSED_PLATFORMS`, `SMOKE_FAILED_PLATFORMS`)",
+        "If dispatched: Record smoke ledger entry: scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C2/ci-audit/ledger.jsonl\" --kind feature-smoke --mode behavior --orch-branch \"feat/world-first-repl-persistent-pty\" --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\" --feature-dir \"docs/project_management/next/world-first-repl-persistent-pty\"",
         "Complete docs/project_management/next/world-first-repl-persistent-pty/C2-closeout_report.md",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C2-integ\""
       ],
@@ -1129,8 +1161,12 @@
         "cargo fmt",
         "cargo clippy --workspace --all-targets -- -D warnings",
         "Run slice-targeted tests for C3",
-        "Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (record run id/URL)",
-        "Dispatch behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=behavior SMOKE_SLICE_ID=\"C3\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
+        "Run CI audit (ci-testing): scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch \"feat/world-first-repl-persistent-pty\" --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C3/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`)",
+        "If dispatched: Record CI ledger entry: scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C3/ci-audit/ledger.jsonl\" --kind ci-testing --mode compile-parity --orch-branch \"feat/world-first-repl-persistent-pty\" --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\"",
+        "Run CI audit (feature smoke): scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch \"feat/world-first-repl-persistent-pty\" --feature-dir \"docs/project_management/next/world-first-repl-persistent-pty\" --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C3/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Dispatch behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=behavior SMOKE_SLICE_ID=\"C3\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`, `SMOKE_PASSED_PLATFORMS`, `SMOKE_FAILED_PLATFORMS`)",
+        "If dispatched: Record smoke ledger entry: scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C3/ci-audit/ledger.jsonl\" --kind feature-smoke --mode behavior --orch-branch \"feat/world-first-repl-persistent-pty\" --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\" --feature-dir \"docs/project_management/next/world-first-repl-persistent-pty\"",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C3-integ-core\""
       ],
       "worktree": "wt/world-first-repl-persistent-pty-c3-integ-core",
@@ -1170,8 +1206,12 @@
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" TASK_ID=\"C3-integ-linux\""
       ],
       "end_checklist": [
-        "Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=linux SMOKE_SLICE_ID=\"C3\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
-        "Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (record run id/URL)",
+        "Run CI audit (feature smoke; linux-only): scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms linux --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C3/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=linux SMOKE_SLICE_ID=\"C3\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`)",
+        "If dispatched: Record smoke ledger entry (linux-only): scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C3/ci-audit/ledger.jsonl\" --kind feature-smoke --mode linux --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms linux --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\"",
+        "Run CI audit (ci-testing; linux-only): scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms linux --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C3/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`)",
+        "If dispatched: Record CI ledger entry (linux-only): scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C3/ci-audit/ledger.jsonl\" --kind ci-testing --mode compile-parity --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms linux --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\"",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C3-integ-linux\""
       ],
       "worktree": "wt/world-first-repl-persistent-pty-c3-integ-linux",
@@ -1213,8 +1253,12 @@
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" TASK_ID=\"C3-integ-macos\""
       ],
       "end_checklist": [
-        "Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=macos SMOKE_SLICE_ID=\"C3\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
-        "Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (record run id/URL)",
+        "Run CI audit (feature smoke; macos-only): scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms macos --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C3/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=macos SMOKE_SLICE_ID=\"C3\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`)",
+        "If dispatched: Record smoke ledger entry (macos-only): scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C3/ci-audit/ledger.jsonl\" --kind feature-smoke --mode macos --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms macos --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\"",
+        "Run CI audit (ci-testing; macos-only): scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms macos --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C3/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`)",
+        "If dispatched: Record CI ledger entry (macos-only): scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C3/ci-audit/ledger.jsonl\" --kind ci-testing --mode compile-parity --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms macos --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\"",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C3-integ-macos\""
       ],
       "worktree": "wt/world-first-repl-persistent-pty-c3-integ-macos",
@@ -1255,7 +1299,9 @@
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" TASK_ID=\"C3-integ-windows\""
       ],
       "end_checklist": [
-        "Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (record run id/URL)",
+        "Run CI audit (ci-testing; windows-only): scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms windows --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C3/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`)",
+        "If dispatched: Record CI ledger entry (windows-only): scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C3/ci-audit/ledger.jsonl\" --kind ci-testing --mode compile-parity --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms windows --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\"",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C3-integ-windows\""
       ],
       "worktree": "wt/world-first-repl-persistent-pty-c3-integ-windows",
@@ -1303,7 +1349,9 @@
         "cargo fmt",
         "cargo clippy --workspace --all-targets -- -D warnings",
         "make integ-checks",
-        "Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=behavior SMOKE_SLICE_ID=\"C3\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
+        "Run CI audit (feature smoke): scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch \"feat/world-first-repl-persistent-pty\" --feature-dir \"docs/project_management/next/world-first-repl-persistent-pty\" --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C3/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=behavior SMOKE_SLICE_ID=\"C3\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`, `SMOKE_PASSED_PLATFORMS`, `SMOKE_FAILED_PLATFORMS`)",
+        "If dispatched: Record smoke ledger entry: scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C3/ci-audit/ledger.jsonl\" --kind feature-smoke --mode behavior --orch-branch \"feat/world-first-repl-persistent-pty\" --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\" --feature-dir \"docs/project_management/next/world-first-repl-persistent-pty\"",
         "Complete docs/project_management/next/world-first-repl-persistent-pty/C3-closeout_report.md",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C3-integ\""
       ],
@@ -1449,8 +1497,12 @@
         "cargo fmt",
         "cargo clippy --workspace --all-targets -- -D warnings",
         "Run slice-targeted tests for C4",
-        "Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (record run id/URL)",
-        "Dispatch behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=behavior SMOKE_SLICE_ID=\"C4\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
+        "Run CI audit (ci-testing): scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch \"feat/world-first-repl-persistent-pty\" --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C4/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`)",
+        "If dispatched: Record CI ledger entry: scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C4/ci-audit/ledger.jsonl\" --kind ci-testing --mode compile-parity --orch-branch \"feat/world-first-repl-persistent-pty\" --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\"",
+        "Run CI audit (feature smoke): scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch \"feat/world-first-repl-persistent-pty\" --feature-dir \"docs/project_management/next/world-first-repl-persistent-pty\" --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C4/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Dispatch behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=behavior SMOKE_SLICE_ID=\"C4\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`, `SMOKE_PASSED_PLATFORMS`, `SMOKE_FAILED_PLATFORMS`)",
+        "If dispatched: Record smoke ledger entry: scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C4/ci-audit/ledger.jsonl\" --kind feature-smoke --mode behavior --orch-branch \"feat/world-first-repl-persistent-pty\" --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\" --feature-dir \"docs/project_management/next/world-first-repl-persistent-pty\"",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C4-integ-core\""
       ],
       "worktree": "wt/world-first-repl-persistent-pty-c4-integ-core",
@@ -1490,8 +1542,12 @@
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" TASK_ID=\"C4-integ-linux\""
       ],
       "end_checklist": [
-        "Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=linux SMOKE_SLICE_ID=\"C4\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
-        "Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (record run id/URL)",
+        "Run CI audit (feature smoke; linux-only): scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms linux --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C4/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=linux SMOKE_SLICE_ID=\"C4\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`)",
+        "If dispatched: Record smoke ledger entry (linux-only): scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C4/ci-audit/ledger.jsonl\" --kind feature-smoke --mode linux --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms linux --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\"",
+        "Run CI audit (ci-testing; linux-only): scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms linux --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C4/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`)",
+        "If dispatched: Record CI ledger entry (linux-only): scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C4/ci-audit/ledger.jsonl\" --kind ci-testing --mode compile-parity --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms linux --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\"",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C4-integ-linux\""
       ],
       "worktree": "wt/world-first-repl-persistent-pty-c4-integ-linux",
@@ -1533,8 +1589,12 @@
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" TASK_ID=\"C4-integ-macos\""
       ],
       "end_checklist": [
-        "Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=macos SMOKE_SLICE_ID=\"C4\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
-        "Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (record run id/URL)",
+        "Run CI audit (feature smoke; macos-only): scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms macos --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C4/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=macos SMOKE_SLICE_ID=\"C4\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`)",
+        "If dispatched: Record smoke ledger entry (macos-only): scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C4/ci-audit/ledger.jsonl\" --kind feature-smoke --mode macos --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms macos --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\"",
+        "Run CI audit (ci-testing; macos-only): scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms macos --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C4/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`)",
+        "If dispatched: Record CI ledger entry (macos-only): scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C4/ci-audit/ledger.jsonl\" --kind ci-testing --mode compile-parity --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms macos --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\"",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C4-integ-macos\""
       ],
       "worktree": "wt/world-first-repl-persistent-pty-c4-integ-macos",
@@ -1575,7 +1635,9 @@
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" TASK_ID=\"C4-integ-windows\""
       ],
       "end_checklist": [
-        "Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (record run id/URL)",
+        "Run CI audit (ci-testing; windows-only): scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms windows --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C4/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`)",
+        "If dispatched: Record CI ledger entry (windows-only): scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C4/ci-audit/ledger.jsonl\" --kind ci-testing --mode compile-parity --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms windows --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\"",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C4-integ-windows\""
       ],
       "worktree": "wt/world-first-repl-persistent-pty-c4-integ-windows",
@@ -1623,7 +1685,9 @@
         "cargo fmt",
         "cargo clippy --workspace --all-targets -- -D warnings",
         "make integ-checks",
-        "Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=behavior SMOKE_SLICE_ID=\"C4\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
+        "Run CI audit (feature smoke): scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch \"feat/world-first-repl-persistent-pty\" --feature-dir \"docs/project_management/next/world-first-repl-persistent-pty\" --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C4/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=behavior SMOKE_SLICE_ID=\"C4\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`, `SMOKE_PASSED_PLATFORMS`, `SMOKE_FAILED_PLATFORMS`)",
+        "If dispatched: Record smoke ledger entry: scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C4/ci-audit/ledger.jsonl\" --kind feature-smoke --mode behavior --orch-branch \"feat/world-first-repl-persistent-pty\" --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\" --feature-dir \"docs/project_management/next/world-first-repl-persistent-pty\"",
         "Complete docs/project_management/next/world-first-repl-persistent-pty/C4-closeout_report.md",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C4-integ\""
       ],
@@ -1765,8 +1829,12 @@
         "cargo fmt",
         "cargo clippy --workspace --all-targets -- -D warnings",
         "Run slice-targeted tests for C5",
-        "Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (record run id/URL)",
-        "Dispatch behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=behavior SMOKE_SLICE_ID=\"C5\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
+        "Run CI audit (ci-testing): scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch \"feat/world-first-repl-persistent-pty\" --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C5/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`)",
+        "If dispatched: Record CI ledger entry: scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C5/ci-audit/ledger.jsonl\" --kind ci-testing --mode compile-parity --orch-branch \"feat/world-first-repl-persistent-pty\" --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\"",
+        "Run CI audit (feature smoke): scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch \"feat/world-first-repl-persistent-pty\" --feature-dir \"docs/project_management/next/world-first-repl-persistent-pty\" --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C5/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Dispatch behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=behavior SMOKE_SLICE_ID=\"C5\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`, `SMOKE_PASSED_PLATFORMS`, `SMOKE_FAILED_PLATFORMS`)",
+        "If dispatched: Record smoke ledger entry: scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C5/ci-audit/ledger.jsonl\" --kind feature-smoke --mode behavior --orch-branch \"feat/world-first-repl-persistent-pty\" --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\" --feature-dir \"docs/project_management/next/world-first-repl-persistent-pty\"",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C5-integ-core\""
       ],
       "worktree": "wt/world-first-repl-persistent-pty-c5-integ-core",
@@ -1806,8 +1874,12 @@
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" TASK_ID=\"C5-integ-linux\""
       ],
       "end_checklist": [
-        "Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=linux SMOKE_SLICE_ID=\"C5\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
-        "Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (record run id/URL)",
+        "Run CI audit (feature smoke; linux-only): scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms linux --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C5/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=linux SMOKE_SLICE_ID=\"C5\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`)",
+        "If dispatched: Record smoke ledger entry (linux-only): scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C5/ci-audit/ledger.jsonl\" --kind feature-smoke --mode linux --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms linux --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\"",
+        "Run CI audit (ci-testing; linux-only): scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms linux --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C5/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`)",
+        "If dispatched: Record CI ledger entry (linux-only): scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C5/ci-audit/ledger.jsonl\" --kind ci-testing --mode compile-parity --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms linux --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\"",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C5-integ-linux\""
       ],
       "worktree": "wt/world-first-repl-persistent-pty-c5-integ-linux",
@@ -1849,8 +1921,12 @@
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" TASK_ID=\"C5-integ-macos\""
       ],
       "end_checklist": [
-        "Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=macos SMOKE_SLICE_ID=\"C5\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
-        "Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (record run id/URL)",
+        "Run CI audit (feature smoke; macos-only): scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms macos --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C5/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=macos SMOKE_SLICE_ID=\"C5\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`)",
+        "If dispatched: Record smoke ledger entry (macos-only): scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C5/ci-audit/ledger.jsonl\" --kind feature-smoke --mode macos --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms macos --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\"",
+        "Run CI audit (ci-testing; macos-only): scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms macos --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C5/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`)",
+        "If dispatched: Record CI ledger entry (macos-only): scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C5/ci-audit/ledger.jsonl\" --kind ci-testing --mode compile-parity --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms macos --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\"",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C5-integ-macos\""
       ],
       "worktree": "wt/world-first-repl-persistent-pty-c5-integ-macos",
@@ -1891,7 +1967,9 @@
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" TASK_ID=\"C5-integ-windows\""
       ],
       "end_checklist": [
-        "Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (record run id/URL)",
+        "Run CI audit (ci-testing; windows-only): scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms windows --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C5/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" CI_REMOTE=origin CI_CLEANUP=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`)",
+        "If dispatched: Record CI ledger entry (windows-only): scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C5/ci-audit/ledger.jsonl\" --kind ci-testing --mode compile-parity --orch-branch \"feat/world-first-repl-persistent-pty\" --required-platforms windows --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\"",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C5-integ-windows\""
       ],
       "worktree": "wt/world-first-repl-persistent-pty-c5-integ-windows",
@@ -1939,7 +2017,9 @@
         "cargo fmt",
         "cargo clippy --workspace --all-targets -- -D warnings",
         "make integ-checks",
-        "Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=behavior SMOKE_SLICE_ID=\"C5\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
+        "Run CI audit (feature smoke): scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch \"feat/world-first-repl-persistent-pty\" --feature-dir \"docs/project_management/next/world-first-repl-persistent-pty\" --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C5/ci-audit/ledger.jsonl\"",
+        "If `RECOMMEND=run`: Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world-first-repl-persistent-pty\" PLATFORM=behavior SMOKE_SLICE_ID=\"C5\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-first-repl-persistent-pty\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (capture `HEAD`, `RUN_ID`, `RUN_URL`, `CONCLUSION`, `SMOKE_PASSED_PLATFORMS`, `SMOKE_FAILED_PLATFORMS`)",
+        "If dispatched: Record smoke ledger entry: scripts/ci-audit/ci_audit_record.sh --ledger-path \"docs/project_management/next/world-first-repl-persistent-pty/logs/C5/ci-audit/ledger.jsonl\" --kind feature-smoke --mode behavior --orch-branch \"feat/world-first-repl-persistent-pty\" --run-id \"<RUN_ID>\" --tested-sha \"<HEAD>\" --feature-dir \"docs/project_management/next/world-first-repl-persistent-pty\"",
         "Complete docs/project_management/next/world-first-repl-persistent-pty/C5-closeout_report.md",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C5-integ\""
       ],

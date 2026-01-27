@@ -21,6 +21,10 @@ This plan is anchored by:
 - CI parity platforms (compile/test parity): `linux`, `macos`, `windows`
 - WSL: not required for this feature (Windows world PTY parity is out of scope per ADR-0016).
 
+## CI dispatch policy (recommended-first)
+- Use `scripts/ci-audit/ci_audit.sh` before dispatching multi-OS CI (ci-testing / feature-smoke) to reduce redundant runs.
+- Record each CI run to the per-slice evidence ledger (gitignored): `docs/project_management/next/world-first-repl-persistent-pty/logs/<slice>/ci-audit/ledger.jsonl`.
+
 ## Slice plan (triads)
 - `C0`: world-agent persistent session bootstrap + fail-closed preflight (server-side).
 - `C1`: world-agent per-submission `exec` + `command_complete` (server-side).
