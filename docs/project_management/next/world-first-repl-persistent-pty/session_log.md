@@ -312,3 +312,22 @@
   - `CODEX_CODE_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/world-first-repl-persistent-pty/logs/C1/code/events.jsonl`
   - `CODEX_CODE_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/world-first-repl-persistent-pty/logs/C1/code/stderr.log`
 - Blockers: `NONE`
+
+## END — 2026-01-27T04:46:50Z — test — C1-test
+- Worktree: `/home/spenser/__Active_code/substrate/wt/world-first-repl-persistent-pty-c1-test`
+- Branch: `world-first-repl-persistent-pty-c1-test`
+- HEAD: `d4ea75decd63a96b9baa4471f4752a9b3d2d2346`
+- Codex: `CODEX_TEST_EXIT=0`
+- Finisher summary:
+  - `TASK_BRANCH=world-first-repl-persistent-pty-c1-test`
+  - `WORKTREE=/home/spenser/__Active_code/substrate/wt/world-first-repl-persistent-pty-c1-test`
+  - `HEAD=d4ea75decd63a96b9baa4471f4752a9b3d2d2346`
+  - `COMMITS=1`
+  - `CHECKS=verify-only`
+  - `SMOKE_RUN=`
+  - `MERGED_TO_ORCH=`
+- Artifacts:
+  - `CODEX_TEST_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/world-first-repl-persistent-pty/logs/C1/test/last_message.md`
+  - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/world-first-repl-persistent-pty/logs/C1/test/events.jsonl`
+  - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/world-first-repl-persistent-pty/logs/C1/test/stderr.log`
+- Blockers: `NONE (note: test branch alone has expected failures until merged with C1-code)`
