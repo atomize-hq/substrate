@@ -277,7 +277,12 @@ impl PtyRepl {
             }
         }
         if let Some(handle) = self.reader_handle.take() {
-            let _ = handle.join();
+            let (tx, rx) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                let _ = handle.join();
+                let _ = tx.send(());
+            });
+            let _ = rx.recv_timeout(Duration::from_secs(2));
         }
         let code = self
             .waited
