@@ -207,6 +207,10 @@ Automation wrapper:
   - If the feature includes a manual validation playbook and smoke scripts (see `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`), integration must run the required validation gates and record results (including run ids/URLs for CI) in the feature `session_log.md`:
     - **Behavior platforms** (P3-008): smoke scripts are required here; dispatch via `make feature-smoke`.
     - **CI parity platforms** (P3-008): smoke is not required for CI parity-only platforms; use compile parity/CI Testing gates instead.
+    - Use the advisory CI audit + evidence ledger tooling to reduce redundant multi-OS runs while preserving safety:
+      - Before dispatch: `scripts/ci-audit/ci_audit.sh` (use `--ledger-path "$FEATURE_DIR/logs/<slice>/ci-audit/ledger.jsonl"`).
+      - After dispatch: `scripts/ci-audit/ci_audit_record.sh` (record `tested_sha` + run id/URL; do not commit the ledger).
+      - Docs/planning-only changes (anything under `docs/`) may skip all CI/smoke when the audit shows `DIFF_CLASS=docs_only` and `RECOMMEND=skip`.
     - Preferred cross-platform mechanism: `make feature-smoke` (self-hosted runners), e.g.:
       - Behavior platforms (preferred): `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=behavior RUN_WSL=1 WORKFLOW_REF="feat/<feature>"`
       - Debugging single platform: `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=linux RUN_WSL=1 WORKFLOW_REF="feat/<feature>"`

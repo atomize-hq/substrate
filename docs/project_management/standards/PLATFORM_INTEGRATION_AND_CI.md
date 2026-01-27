@@ -69,6 +69,32 @@ Mechanism:
 - The workflow exports this as `SUBSTRATE_SMOKE_SLICE_ID` for smoke scripts.
 - Smoke scripts should use `SUBSTRATE_SMOKE_SLICE_ID` to run only the checks that are expected to be present at that slice (and treat an empty value as “full feature smoke”).
 
+## CI Audit + Evidence Ledger (recommended; reduces redundant multi-OS runs)
+
+Problem:
+- Cross-platform validation can become redundant when CI is re-dispatched multiple times against effectively the same code (or docs/planning-only changes).
+- Dispatchers often create throwaway branches, which can make it ambiguous (from GitHub metadata alone) what exact commit SHA was “the code under test”.
+
+Solution:
+- Use the advisory CI audit tool before dispatch, and record evidence after dispatch into a local ledger:
+  - Audit: `scripts/ci-audit/ci_audit.sh`
+  - Record: `scripts/ci-audit/ci_audit_record.sh`
+
+Ledger location (recommended; survives `cargo clean`; do not commit):
+- `$FEATURE_DIR/logs/<slice>/ci-audit/ledger.jsonl`
+
+Policy:
+- Docs/planning-only changes (anything under `docs/`) may skip all CI/smoke. The audit should show `DIFF_CLASS=docs_only` and `RECOMMEND=skip`.
+
+Workflow (operator/integration tasks):
+1) Before dispatching Feature Smoke or CI Testing, run the audit:
+   - CI Testing: `scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch "<orch-branch>" --ledger-path "$FEATURE_DIR/logs/<slice>/ci-audit/ledger.jsonl"`
+   - Feature Smoke: `scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch "<orch-branch>" --feature-dir "$FEATURE_DIR" --ledger-path "$FEATURE_DIR/logs/<slice>/ci-audit/ledger.jsonl"`
+2) If `RECOMMEND=skip`, do not dispatch that gate; record the audit output + last-green run id/URL in `session_log.md`.
+3) If you dispatch, record evidence after the run completes:
+   - `scripts/ci-audit/ci_audit_record.sh --ledger-path "$FEATURE_DIR/logs/<slice>/ci-audit/ledger.jsonl" --kind <ci-testing|feature-smoke> --orch-branch "<orch-branch>" --run-id "<run-id>" --tested-sha "<sha>" --feature-dir "$FEATURE_DIR"`
+   - Use `<run-id>` from `RUN_ID=...` and `<sha>` from `HEAD=...` (both are printed by the dispatchers).
+
 ## Smoke script hygiene (recommended)
 
 To avoid “CI-only” failures caused by script brittleness:

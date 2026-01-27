@@ -124,6 +124,11 @@ Dispatch cross-platform smoke:
 - Preferred: `make feature-smoke FEATURE_DIR="docs/project_management/next/<feature>" PLATFORM=behavior WORKFLOW_REF="feat/<feature>"`
 - Add WSL coverage when required: `RUN_WSL=1` (Linux smoke, or `PLATFORM=wsl` when `wsl_task_mode="separate"`)
 
+Recommended (reduces redundant CI):
+- Audit before dispatch: `scripts/ci-audit/ci_audit.sh`
+- Record evidence after dispatch: `scripts/ci-audit/ci_audit_record.sh`
+- Docs/planning-only changes (anything under `docs/`) may skip all CI/smoke when the audit shows `DIFF_CLASS=docs_only` and `RECOMMEND=skip`.
+
 If smoke fails, start only the failing platform-fix tasks:
 - Single smoke run id case (`PLATFORM=behavior`): `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="C0" SMOKE_RUN_ID="<run-id>" LAUNCH_CODEX=1`
 - Multi-run case (per-platform smoke): `make triad-task-start-platform-fixes FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="C0" PLATFORMS="<csv>" LAUNCH_CODEX=1`

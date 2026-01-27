@@ -144,6 +144,12 @@ Required interoperability rules:
   - **Behavior platforms**: run the feature-local smoke script via CI (`make feature-smoke`) when `FEATURE_DIR/smoke/` exists.
   - **CI parity platforms**: run cross-platform compile parity (and CI Testing when required by the slice/workflow); smoke is not required for CI parity-only platforms.
   - For cross-platform smoke, prefer GitHub Actions + self-hosted runners via `make feature-smoke` (see `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`).
+  - Before dispatching CI/smoke, run the advisory CI audit and follow its recommendation:
+    - `scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch "<orch-branch>" --ledger-path "$FEATURE_DIR/logs/<slice>/ci-audit/ledger.jsonl"`
+    - `scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch "<orch-branch>" --feature-dir "$FEATURE_DIR" --ledger-path "$FEATURE_DIR/logs/<slice>/ci-audit/ledger.jsonl"`
+    - If `DIFF_CLASS=docs_only` and `RECOMMEND=skip`, CI/smoke may be skipped entirely.
+  - After any dispatch completes, record evidence (recommended; do not commit the ledger):
+    - `scripts/ci-audit/ci_audit_record.sh --ledger-path "$FEATURE_DIR/logs/<slice>/ci-audit/ledger.jsonl" --kind <ci-testing|feature-smoke> --orch-branch "<orch-branch>" --run-id "<id>" --tested-sha "<sha>" --feature-dir "$FEATURE_DIR"`
   - **Cross-platform Planning Packs are required to use the platform-fix integration model** (not optional):
     - Set `meta.schema_version >= 2` and `meta.cross_platform: true`.
     - Declare both scopes in `tasks.json` (P3-008):

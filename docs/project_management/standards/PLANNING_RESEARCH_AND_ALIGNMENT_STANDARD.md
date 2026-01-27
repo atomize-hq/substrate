@@ -243,9 +243,10 @@ To make validation repeatable and auditable:
   - the exact command(s) to run the script(s),
   - what success looks like (exit code and key expected output),
 	  - how to run sections manually for debugging.
-	  - if cross-platform validation is required, how to run smoke scripts via GitHub Actions on self-hosted runners (preferred):
-	    - Preferred: `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=behavior RUN_WSL=1 WORKFLOW_REF="feat/<feature>"`
-	    - Debugging single-platform: `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=linux RUN_WSL=1 WORKFLOW_REF="feat/<feature>"`
+		  - if cross-platform validation is required, how to run smoke scripts via GitHub Actions on self-hosted runners (preferred):
+		    - Preferred: `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=behavior RUN_WSL=1 WORKFLOW_REF="feat/<feature>"`
+		    - Debugging single-platform: `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=linux RUN_WSL=1 WORKFLOW_REF="feat/<feature>"`
+		    - Recommended: run the advisory CI audit before dispatch to avoid redundant CI (`scripts/ci-audit/ci_audit.sh`) and record evidence after dispatch (`scripts/ci-audit/ci_audit_record.sh`).
 
 Prohibited:
 - “Verify it works”

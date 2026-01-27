@@ -51,6 +51,11 @@ Smoke scripts must be a runnable, minimal version of how a careful human would v
 - Cross-platform dispatch commands listed in the integration tasks are valid and runnable:
   - `make feature-smoke ...`
 - Any required self-hosted runners exist and are labeled correctly.
+- Advisory CI audit + evidence ledger tooling exists and is referenced by integration prompts:
+  - `scripts/ci-audit/ci_audit.sh`
+  - `scripts/ci-audit/ci_audit_record.sh`
+- Policy is explicit:
+  - Docs/planning-only changes (anything under `docs/`) may skip all CI/smoke; audit should show `DIFF_CLASS=docs_only` and `RECOMMEND=skip`.
 
 ## Output and rules
 - Fill `execution_preflight_report.md` with:
