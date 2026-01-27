@@ -48,6 +48,7 @@ pub struct ShellConfig {
     pub cli_no_world: bool,
     pub world_root: settings::WorldRootSettings,
     pub async_repl: bool,
+    pub repl_host_escape: bool,
     pub env_vars: HashMap<String, String>,
     pub manager_init_path: PathBuf,
     pub manager_env_path: PathBuf,
@@ -612,6 +613,11 @@ impl ShellConfig {
         };
 
         let async_repl_enabled = !cli.legacy_repl;
+        let repl_host_escape = cli.repl_host_escape
+            || matches!(
+                env::var("SUBSTRATE_REPL_HOST_ESCAPE").as_deref(),
+                Ok("1") | Ok("true") | Ok("TRUE") | Ok("yes") | Ok("YES")
+            );
 
         Ok(ShellConfig {
             mode,
@@ -628,6 +634,7 @@ impl ShellConfig {
             cli_no_world: cli.no_world,
             world_root: world_root_settings,
             async_repl: async_repl_enabled,
+            repl_host_escape,
             env_vars: HashMap::new(),
             manager_init_path,
             manager_env_path,

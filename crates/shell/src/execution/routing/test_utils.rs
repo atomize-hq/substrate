@@ -38,6 +38,7 @@ pub(crate) fn test_shell_config(temp: &TempDir) -> ShellConfig {
             caged: true,
         },
         async_repl: false,
+        repl_host_escape: false,
         env_vars: HashMap::new(),
         manager_init_path: temp.path().join("manager_init.sh"),
         manager_env_path: temp.path().join("manager_env.sh"),

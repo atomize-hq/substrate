@@ -711,7 +711,8 @@ pub(crate) fn needs_pty(cmd: &str) -> bool {
 
 /// Force PTY for specific command (user override)
 pub(crate) fn is_force_pty_command(cmd: &str) -> bool {
-    cmd.starts_with(":pty ") || std::env::var("SUBSTRATE_FORCE_PTY").is_ok()
+    (cmd.starts_with(":pty ") && !cmd.contains('\n') && !cmd.contains('\r'))
+        || std::env::var("SUBSTRATE_FORCE_PTY").is_ok()
 }
 
 /// Check if PTY is disabled globally
@@ -719,6 +720,7 @@ pub(crate) fn is_pty_disabled() -> bool {
     std::env::var("SUBSTRATE_DISABLE_PTY").is_ok()
 }
 
+#[allow(dead_code)]
 pub(crate) fn parse_demo_burst_command(input: &str) -> Option<(usize, usize, u64)> {
     let rest = input.strip_prefix(":demo-burst")?.trim();
     if rest.is_empty() {
