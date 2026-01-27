@@ -1803,7 +1803,7 @@
       "name": "C5 \u2014 integration core",
       "type": "integration",
       "phase": "C5",
-      "status": "pending",
+      "status": "completed",
       "description": "Merge C5 code+tests, get primary platform green, then dispatch behavioral smoke and CI parity gates.",
       "references": [
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
