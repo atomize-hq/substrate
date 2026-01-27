@@ -758,7 +758,7 @@
       "name": "C2 — shell persistent session client core (test)",
       "type": "test",
       "phase": "C2",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Add tests for host-side persistent session client correctness per C2-spec.md and requirements_traceability.md.",
       "references": [
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
