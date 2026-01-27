@@ -1471,7 +1471,7 @@
       "name": "C4 \u2014 integration core",
       "type": "integration",
       "phase": "C4",
-      "status": "pending",
+      "status": "completed",
       "description": "Merge C4 code+tests, get primary platform green, then dispatch behavioral smoke and CI parity gates.",
       "references": [
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
@@ -1524,7 +1524,7 @@
       "name": "C4 \u2014 integration platform-fix (linux)",
       "type": "integration",
       "phase": "C4",
-      "status": "pending",
+      "status": "completed",
       "description": "Validate and fix C4 on Linux behavior platform via feature smoke; dispatch CI parity gates as required.",
       "references": [
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
@@ -1571,7 +1571,7 @@
       "name": "C4 \u2014 integration platform-fix (macos)",
       "type": "integration",
       "phase": "C4",
-      "status": "pending",
+      "status": "completed",
       "description": "Validate and fix C4 on macOS behavior platform via feature smoke; dispatch CI parity gates as required.",
       "references": [
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
@@ -1618,7 +1618,7 @@
       "name": "C4 \u2014 integration platform-fix (windows)",
       "type": "integration",
       "phase": "C4",
-      "status": "pending",
+      "status": "completed",
       "description": "Validate CI parity for C4 on Windows (no behavioral smoke required for this feature).",
       "references": [
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
