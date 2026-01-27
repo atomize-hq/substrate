@@ -376,20 +376,6 @@ fn pty_fionread(master_fd: libc::c_int) -> Result<usize, std::io::Error> {
 }
 
 #[cfg(target_os = "linux")]
-fn pty_set_foreground_pgid(
-    master_fd: libc::c_int,
-    pgid: libc::pid_t,
-) -> Result<(), std::io::Error> {
-    let mut pgid = pgid;
-    // Safety: TIOCSPGRP expects pid_t pointer.
-    let rc = unsafe { libc::ioctl(master_fd, libc::TIOCSPGRP as _, &mut pgid as *mut _) };
-    if rc == -1 {
-        return Err(std::io::Error::last_os_error());
-    }
-    Ok(())
-}
-
-#[cfg(target_os = "linux")]
 fn validate_control_plane_privacy_precondition() -> Result<(), std::io::Error> {
     static PREFLIGHT: OnceCell<Result<(), String>> = OnceCell::new();
     match PREFLIGHT.get_or_init(control_plane_privacy_preflight_impl) {
@@ -1589,10 +1575,6 @@ fn spawn_persistent_exec(
     if let Some(ref cg) = world.cgroup_path {
         let _ = std::fs::create_dir_all(cg);
         let _ = std::fs::write(cg.join("cgroup.procs"), pid.to_string());
-    }
-
-    if let Err(e) = pty_set_foreground_pgid(pty.master.as_raw_fd(), pid) {
-        return Err(format!("Failed to set PTY foreground pgid: {e}"));
     }
 
     let (tx, rx) = tokio::sync::mpsc::channel::<PersistentChildEvent>(1);
