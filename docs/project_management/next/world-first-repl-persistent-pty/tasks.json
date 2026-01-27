@@ -1712,7 +1712,7 @@
       "name": "C5 \u2014 non-interactive -c and pipe mode world-consistency (code)",
       "type": "code",
       "phase": "C5",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Implement non-interactive -c/--command and stdin pipe mode world-consistency when world is enabled per C5-spec.md (production code only).",
       "references": [
         "docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md",
