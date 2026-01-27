@@ -1188,7 +1188,7 @@
       "name": "C3 \u2014 integration platform-fix (linux)",
       "type": "integration",
       "phase": "C3",
-      "status": "pending",
+      "status": "completed",
       "description": "Validate and fix C3 on Linux behavior platform via feature smoke; dispatch CI parity gates as required.",
       "references": [
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
@@ -1282,7 +1282,7 @@
       "name": "C3 \u2014 integration platform-fix (windows)",
       "type": "integration",
       "phase": "C3",
-      "status": "pending",
+      "status": "completed",
       "description": "Validate CI parity for C3 on Windows (no behavioral smoke required for this feature).",
       "references": [
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
