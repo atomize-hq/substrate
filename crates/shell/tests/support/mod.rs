@@ -13,6 +13,11 @@ pub use common::{binary_path, ensure_substrate_built, substrate_shell_driver, te
 pub use substrate_common::dedupe_path;
 mod socket;
 pub use socket::{AgentSocket, SocketResponse};
+mod repl_world_agent;
+pub use repl_world_agent::{
+    PersistentExecRecord, PersistentStartSessionRecord, ReplWorldAgentRecords, ReplWorldAgentStub,
+    StreamBehavior,
+};
 
 pub const PAYLOAD_MARKER: &str = "__SUBSTRATE_PAYLOAD__";
 
