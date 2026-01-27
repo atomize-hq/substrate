@@ -30,6 +30,8 @@ use crate::execution::{
 use crate::repl::editor;
 use substrate_common::agent_events::AgentEvent;
 
+const MAX_BUFFERED_STRUCTURED_LINES_DURING_PTY: usize = 2048;
+
 pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
     println!("Substrate v{}", env!("CARGO_PKG_VERSION"));
     println!("Session ID: {}", config.session_id);
@@ -728,6 +730,8 @@ async fn exec_world_pty(
     let stdin_done = Arc::new(AtomicBool::new(false));
     let stdin_thread = spawn_passthrough_stdin_thread(stdin_tx, stdin_done.clone(), cmd_id);
 
+    let mut buffered_structured_lines = Vec::<String>::new();
+
     let fut = session
         .client
         .exec(program, ReplStdinMode::Passthrough, cmd_id)
@@ -744,7 +748,21 @@ async fn exec_world_pty(
             }
             maybe_event = io.agent_rx.recv() => {
                 if let Some(event) = maybe_event {
-                    handle_agent_event(event, io.telemetry, io.agent_printer);
+                    if is_shell_stream_event(&event) {
+                        continue;
+                    }
+
+                    io.telemetry.record_agent_event();
+                    if buffered_structured_lines.len() < MAX_BUFFERED_STRUCTURED_LINES_DURING_PTY {
+                        buffered_structured_lines.push(format_event_line(&event));
+                    } else if buffered_structured_lines.len()
+                        == MAX_BUFFERED_STRUCTURED_LINES_DURING_PTY
+                    {
+                        buffered_structured_lines.push(
+                            "substrate: warning: structured output dropped during :pty (buffer full)"
+                                .to_string(),
+                        );
+                    }
                 }
             }
             maybe_resize = io.resize_rx.recv() => {
@@ -762,6 +780,10 @@ async fn exec_world_pty(
 
     stdin_done.store(true, Ordering::Relaxed);
     let _ = stdin_thread.join();
+
+    for line in buffered_structured_lines {
+        let _ = io.agent_printer.print(line);
+    }
 
     session.world_cwd = cwd;
     Ok(exit)

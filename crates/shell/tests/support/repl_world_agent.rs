@@ -496,8 +496,8 @@ impl ReplWorldAgentStub {
                         .unwrap_or_default();
                     // Avoid leaking host secrets into test failure output: record env keys but redact values.
                     let env = env
-                        .into_iter()
-                        .map(|(k, _v)| (k, "<redacted>".to_string()))
+                        .into_keys()
+                        .map(|k| (k, "<redacted>".to_string()))
                         .collect::<HashMap<String, String>>();
                     let policy_snapshot = first_json
                         .get("policy_snapshot")
@@ -617,9 +617,7 @@ impl ReplWorldAgentStub {
                                 }
 
                                 if let Some(ov) = &persistent_exec_stdout_override_for_thread {
-                                    if ov.marker.is_empty() || !program_utf8.contains(&ov.marker) {
-                                        // no-op
-                                    } else {
+                                    if !ov.marker.is_empty() && program_utf8.contains(&ov.marker) {
                                         if let (Some(delay_ms), Some(suffix)) =
                                             (ov.delay_before_suffix_ms, ov.suffix_bytes.as_ref())
                                         {
