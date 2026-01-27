@@ -338,3 +338,10 @@
 - Orchestration branch: `feat/world-first-repl-persistent-pty`
 - Dispatch:
   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/world-first-repl-persistent-pty" SLICE_ID="C2" LAUNCH_CODEX=1`
+
+## START — 2026-01-27T09:04:26Z — test — C2-test
+- Worktree: `wt/world-first-repl-persistent-pty-c2-test`
+- Branch: `world-first-repl-persistent-pty-c2-test`
+- Orchestration branch: `feat/world-first-repl-persistent-pty`
+- Dispatch:
+  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/world-first-repl-persistent-pty" SLICE_ID="C2" LAUNCH_CODEX=1`
