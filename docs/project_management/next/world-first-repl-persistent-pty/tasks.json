@@ -992,7 +992,7 @@
       "name": "C2 \u2014 integration final",
       "type": "integration",
       "phase": "C2",
-      "status": "pending",
+      "status": "completed",
       "description": "Final aggregator for C2: merge platform-fix branches, run integration checks, and land in orchestration.",
       "references": [
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
