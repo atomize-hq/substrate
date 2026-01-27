@@ -778,9 +778,19 @@ pub(crate) fn execute_command(
         }
     }
 
-    // Handle lightweight builtins first (cd/pwd/export/unset) so stateful changes
-    // like cwd take effect before we hand off to the agent path.
-    if !needs_shell(trimmed) {
+    // Handle lightweight builtins (cd/pwd/export/unset) only when we're definitively
+    // running on the host.
+    //
+    // C5: In non-interactive `-c/--command` and stdin pipe mode, when world execution
+    // is enabled, these MUST be interpreted in-world (shell semantics), not as
+    // host-only builtins.
+    let allow_host_lightweight_builtins = !world_enabled
+        || matches!(
+            &config.mode,
+            ShellMode::Interactive { .. } | ShellMode::Script(_)
+        );
+
+    if allow_host_lightweight_builtins && !needs_shell(trimmed) {
         if let Some(status) = handle_builtin(config, trimmed, cmd_id)? {
             if let Some(active_span) = span {
                 let _ = active_span.finish(status.code().unwrap_or(-1), vec![], None);
