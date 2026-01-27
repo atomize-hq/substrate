@@ -421,16 +421,16 @@
         "triad-code-checks"
       ]
     },
-    {
-      "id": "C1-test",
-      "name": "C1 \u2014 world-agent exec + command_complete (test)",
-      "type": "test",
-      "phase": "C1",
-      "status": "pending",
-      "description": "Add tests for persistent-session exec and completion invariants on world-agent per C1-spec.md and requirements_traceability.md.",
-      "references": [
-        "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
-        "docs/project_management/next/world-first-repl-persistent-pty/C1-spec.md",
+	    {
+	      "id": "C1-test",
+	      "name": "C1 \u2014 world-agent exec + command_complete (test)",
+	      "type": "test",
+	      "phase": "C1",
+	      "status": "in_progress",
+	      "description": "Add tests for persistent-session exec and completion invariants on world-agent per C1-spec.md and requirements_traceability.md.",
+	      "references": [
+	        "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
+	        "docs/project_management/next/world-first-repl-persistent-pty/C1-spec.md",
         "docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md",
         "docs/project_management/next/world-first-repl-persistent-pty/requirements_traceability.md",
         "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
