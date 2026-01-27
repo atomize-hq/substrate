@@ -70,6 +70,22 @@ metadata: {}
     fs::write(home_substrate.join("policy.yaml"), policy).expect("write policy.yaml");
 }
 
+fn write_config(home_substrate: &Path) {
+    fs::create_dir_all(home_substrate).expect("create SUBSTRATE_HOME");
+    // Keep this minimal but non-empty to avoid platforms auto-initializing global defaults during tests.
+    // `SUBSTRATE_WORLD_SOCKET` provides the world backend override for these tests.
+    let config = r#"world:
+  enabled: true
+  anchor_mode: workspace
+  anchor_path: ""
+  caged: false
+
+policy:
+  mode: observe
+"#;
+    fs::write(home_substrate.join("config.yaml"), config).expect("write config.yaml");
+}
+
 fn short_socket_dir(prefix: &str) -> TempDir {
     tempfile::Builder::new()
         .prefix(prefix)
@@ -92,6 +108,7 @@ fn command_mode_world_consistency_v1_routes_both_c_and_pipe_via_world_socket() {
     fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
     write_profile(&project);
     write_policy(&substrate_home);
+    write_config(&substrate_home);
 
     let sock_temp = short_socket_dir("sub-c5-sock-");
     let sock = sock_temp.path().join("world.sock");
