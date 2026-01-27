@@ -1090,7 +1090,7 @@
       "name": "C3 \u2014 interactive REPL routing + lifecycle (test)",
       "type": "test",
       "phase": "C3",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Add tests for interactive REPL routing, directive parsing, gating, and drift restart per C3-spec.md.",
       "references": [
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
