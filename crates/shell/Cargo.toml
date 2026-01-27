@@ -1,5 +1,5 @@
 [package]
-name = "substrate-shell"
+name = "shell"
 version = "0.2.5"
 edition = "2021"
 rust-version = "1.89"
@@ -10,6 +10,9 @@ repository = "https://github.com/atomize-hq/substrate"
 keywords = ["ai", "agent", "security", "tracing", "shell"]
 categories = ["command-line-utilities", "development-tools"]
 readme = "../../README.md"
+
+[lib]
+name = "substrate_shell"
 
 [dependencies]
 anyhow = "1.0"
@@ -54,6 +57,7 @@ tokio-tungstenite = { version = "0.21", features = ["rustls-tls-webpki-roots"] }
 futures = "0.3"
 base64 = "0.22"
 url = "2"
+rand = "0.8"
 agent-api-client = { version = "0.2.5", path = "../agent-api-client" }
 agent-api-types = { version = "0.2.5", path = "../agent-api-types" }
 http-body-util = "0.1"

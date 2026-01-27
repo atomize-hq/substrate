@@ -14,6 +14,7 @@ mod policy_cmd;
 pub(crate) mod policy_model;
 pub(crate) mod policy_snapshot;
 mod pty;
+pub mod repl_persistent_session;
 mod routing;
 mod settings;
 pub mod shim_deploy;
