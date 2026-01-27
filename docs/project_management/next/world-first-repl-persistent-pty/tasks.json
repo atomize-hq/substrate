@@ -1759,7 +1759,7 @@
       "name": "C5 \u2014 non-interactive -c and pipe mode world-consistency (test)",
       "type": "test",
       "phase": "C5",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Add tests for -c/--command and stdin pipe mode world-consistency per C5-spec.md.",
       "references": [
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
