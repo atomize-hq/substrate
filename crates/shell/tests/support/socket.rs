@@ -29,6 +29,15 @@ pub enum SocketResponse {
         exit: i32,
         scopes: Vec<String>,
     },
+    /// Like `CapabilitiesAndExecute`, but also records each `/v1/execute` and
+    /// `/v1/execute/stream` request JSON payload.
+    CapabilitiesAndExecuteRecord {
+        stdout: String,
+        stderr: String,
+        exit: i32,
+        scopes: Vec<String>,
+        records: Arc<Mutex<Vec<JsonValue>>>,
+    },
     /// Executes `/v1/execute` and `/v1/execute/stream` requests on the host, using
     /// the request's `cwd` and `env` for a lightweight world-agent simulation.
     CapabilitiesAndHostExecute { scopes: Vec<String> },
@@ -114,6 +123,38 @@ impl AgentSocket {
                                         build_stream_payload(*exit, stdout, stderr, scopes);
                                     write_stream_response(&mut stream, &payload);
                                 } else if first_line.starts_with("POST /v1/execute") {
+                                    let payload = json!({
+                                        "exit": exit,
+                                        "span_id": "agent-span",
+                                        "stdout_b64": BASE64.encode(stdout.as_bytes()),
+                                        "stderr_b64": BASE64.encode(stderr.as_bytes()),
+                                        "scopes_used": scopes,
+                                        "fs_diff": serde_json::Value::Null
+                                    })
+                                    .to_string();
+                                    write_response(&mut stream, &payload);
+                                } else {
+                                    let _ = stream.write_all(b"HTTP/1.1 400 Bad Request\r\n\r\n");
+                                }
+                            }
+                            SocketResponse::CapabilitiesAndExecuteRecord {
+                                stdout,
+                                stderr,
+                                exit,
+                                scopes,
+                                records,
+                            } => {
+                                if first_line.starts_with("GET /v1/capabilities") {
+                                    write_capabilities(&mut stream);
+                                } else if first_line.starts_with("GET /v1/doctor/world") {
+                                    write_world_doctor_report(&mut stream);
+                                } else if first_line.starts_with("POST /v1/execute/stream") {
+                                    record_execute_request(records, &request);
+                                    let payload =
+                                        build_stream_payload(*exit, stdout, stderr, scopes);
+                                    write_stream_response(&mut stream, &payload);
+                                } else if first_line.starts_with("POST /v1/execute") {
+                                    record_execute_request(records, &request);
                                     let payload = json!({
                                         "exit": exit,
                                         "span_id": "agent-span",
