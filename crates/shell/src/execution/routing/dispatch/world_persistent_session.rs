@@ -17,7 +17,6 @@ mod imp {
     use std::sync::Arc;
     use tokio::sync::{Mutex, OnceCell};
     use tokio_tungstenite as tungs;
-    use uuid::Uuid;
 
     #[cfg(unix)]
     use tokio::net::UnixStream;
@@ -81,11 +80,40 @@ mod imp {
         pub(crate) protocol_version: u32,
     }
 
+    #[derive(Debug, Clone)]
+    pub(crate) struct ReplSessionStartParams {
+        pub(crate) cwd: String,
+        pub(crate) env: HashMap<String, String>,
+        pub(crate) policy_snapshot: agent_api_types::PolicySnapshotV1,
+        pub(crate) cols: u16,
+        pub(crate) rows: u16,
+    }
+
+    impl ReplSessionStartParams {
+        pub(crate) fn for_cwd_and_snapshot(
+            cwd: String,
+            policy_snapshot: agent_api_types::PolicySnapshotV1,
+        ) -> Self {
+            let env = build_world_env_map();
+            let (cols, rows) = terminal_size_or_default();
+            Self {
+                cwd,
+                env,
+                policy_snapshot,
+                cols,
+                rows,
+            }
+        }
+    }
+
     type StdoutCallback = Arc<dyn Fn(&[u8]) + Send + Sync>;
 
     impl ReplPersistentSessionClient {
-        pub(crate) async fn start(on_stdout: StdoutCallback) -> Result<Self> {
-            let (ws, start_frame) = build_ws_and_start_session_frame().await?;
+        pub(crate) async fn start_with(
+            start: ReplSessionStartParams,
+            on_stdout: StdoutCallback,
+        ) -> Result<Self> {
+            let (ws, start_frame) = build_ws_and_start_session_frame(start).await?;
             let (sink, stream) = ws.split();
             let sink = Arc::new(Mutex::new(sink));
 
@@ -143,6 +171,35 @@ mod imp {
             })
         }
 
+        pub(crate) async fn start(on_stdout: StdoutCallback) -> Result<Self> {
+            let cwd_path =
+                std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+            let cwd = cwd_path.display().to_string();
+            #[cfg(target_os = "macos")]
+            let env_map = {
+                let mut env_map = build_world_env_map();
+                super::super::world_ops::normalize_env_for_linux_guest(&mut env_map);
+                env_map
+            };
+            #[cfg(not(target_os = "macos"))]
+            let env_map = build_world_env_map();
+            let policy_snapshot =
+                policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
+            let (cols, rows) = terminal_size_or_default();
+
+            Self::start_with(
+                ReplSessionStartParams {
+                    cwd,
+                    env: env_map,
+                    policy_snapshot,
+                    cols,
+                    rows,
+                },
+                on_stdout,
+            )
+            .await
+        }
+
         pub(crate) fn ready(&self) -> &ReadyFrame {
             self.ready.get().expect("ready set during start()")
         }
@@ -151,6 +208,7 @@ mod imp {
             &self,
             program_utf8: &str,
             stdin_mode: ReplStdinMode,
+            cmd_id: &str,
         ) -> Result<ReplCommandComplete> {
             let (seq, token_hex, complete_rx, exec_payload) = {
                 let mut guard = self.state.lock().await;
@@ -158,12 +216,11 @@ mod imp {
                     SessionState::Ready { next_seq } => {
                         let seq = *next_seq;
                         let token_hex = generate_token_hex();
-                        let cmd_id = Uuid::now_v7().to_string();
                         let program_b64 = BASE64.encode(program_utf8.as_bytes());
                         let frame = ClientFrame::Exec {
                             seq,
                             token_hex: token_hex.clone(),
-                            cmd_id,
+                            cmd_id: cmd_id.to_string(),
                             stdin_mode: stdin_mode.as_str().to_string(),
                             program_b64,
                         };
@@ -523,7 +580,9 @@ mod imp {
     }
 
     #[cfg(target_os = "linux")]
-    async fn build_ws_and_start_session_frame() -> Result<(tungs::WebSocketStream<WsIo>, String)> {
+    async fn build_ws_and_start_session_frame(
+        start: ReplSessionStartParams,
+    ) -> Result<(tungs::WebSocketStream<WsIo>, String)> {
         super::super::world_ops::ensure_world_agent_ready()
             .context("world backend unavailable: ensure world-agent ready")?;
 
@@ -540,15 +599,16 @@ mod imp {
             .await
             .context("ws handshake /v1/stream")?;
 
-        let cwd_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-        let cwd = cwd_path.display().to_string();
-        let env_map = build_world_env_map();
-        let policy_snapshot = policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
-
-        let (cols, rows) = terminal_size_or_default();
+        let ReplSessionStartParams {
+            cwd,
+            env,
+            policy_snapshot,
+            cols,
+            rows,
+        } = start;
         let start = ClientFrame::StartSession {
             cwd,
-            env: env_map,
+            env,
             policy_snapshot,
             cols,
             rows,
@@ -558,7 +618,18 @@ mod imp {
     }
 
     #[cfg(target_os = "macos")]
-    async fn build_ws_and_start_session_frame() -> Result<(tungs::WebSocketStream<WsIo>, String)> {
+    async fn build_ws_and_start_session_frame(
+        start: ReplSessionStartParams,
+    ) -> Result<(tungs::WebSocketStream<WsIo>, String)> {
+        let ReplSessionStartParams {
+            cwd,
+            mut env,
+            policy_snapshot,
+            cols,
+            rows,
+        } = start;
+        super::super::world_ops::normalize_env_for_linux_guest(&mut env);
+
         // Allow explicit socket overrides (used by tests/fixtures and advanced setups).
         if let Some(socket_path) = std::env::var_os("SUBSTRATE_WORLD_SOCKET") {
             let socket_path = std::path::PathBuf::from(socket_path);
@@ -570,7 +641,15 @@ mod imp {
             let (ws, _resp) = tungs::client_async(url, io)
                 .await
                 .context("ws handshake /v1/stream")?;
-            return Ok((ws, build_start_frame()?));
+            let start = ClientFrame::StartSession {
+                cwd,
+                env,
+                policy_snapshot,
+                cols,
+                rows,
+            };
+            let payload = serde_json::to_string(&start).context("serialize start_session")?;
+            return Ok((ws, payload));
         }
 
         let ctx = match pw::get_context() {
@@ -616,25 +695,15 @@ mod imp {
             }
         };
 
-        Ok((ws, build_start_frame()?))
-    }
-
-    #[cfg(target_os = "macos")]
-    fn build_start_frame() -> Result<String> {
-        let cwd_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-        let cwd = cwd_path.display().to_string();
-        let mut env_map = build_world_env_map();
-        super::super::world_ops::normalize_env_for_linux_guest(&mut env_map);
-        let policy_snapshot = policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
-        let (cols, rows) = terminal_size_or_default();
         let start = ClientFrame::StartSession {
             cwd,
-            env: env_map,
+            env,
             policy_snapshot,
             cols,
             rows,
         };
-        serde_json::to_string(&start).context("serialize start_session")
+        let payload = serde_json::to_string(&start).context("serialize start_session")?;
+        Ok((ws, payload))
     }
 
     fn terminal_size_or_default() -> (u16, u16) {
@@ -689,6 +758,7 @@ mod imp {
 #[allow(dead_code)]
 mod imp {
     use anyhow::{anyhow, Result};
+    use std::collections::HashMap;
     use std::sync::Arc;
 
     type StdoutCallback = Arc<dyn Fn(&[u8]) + Send + Sync>;
@@ -712,12 +782,30 @@ mod imp {
         pub(crate) protocol_version: u32,
     }
 
+    #[derive(Debug, Clone)]
+    pub(crate) struct ReplSessionStartParams {
+        pub(crate) cwd: String,
+        pub(crate) env: HashMap<String, String>,
+        pub(crate) policy_snapshot: agent_api_types::PolicySnapshotV1,
+        pub(crate) cols: u16,
+        pub(crate) rows: u16,
+    }
+
     #[derive(Debug)]
     pub(crate) struct ReplPersistentSessionClient {
         ready: ReadyFrame,
     }
 
     impl ReplPersistentSessionClient {
+        pub(crate) async fn start_with(
+            _start: ReplSessionStartParams,
+            _on_stdout: StdoutCallback,
+        ) -> Result<Self> {
+            Err(anyhow!(
+                "persistent world PTY sessions are unsupported on this platform"
+            ))
+        }
+
         pub(crate) async fn start(_on_stdout: StdoutCallback) -> Result<Self> {
             Err(anyhow!(
                 "persistent world PTY sessions are unsupported on this platform"
@@ -732,6 +820,7 @@ mod imp {
             &self,
             _program_utf8: &str,
             _stdin_mode: ReplStdinMode,
+            _cmd_id: &str,
         ) -> Result<ReplCommandComplete> {
             Err(anyhow!(
                 "persistent world PTY sessions are unsupported on this platform"

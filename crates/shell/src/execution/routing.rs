@@ -1,7 +1,5 @@
 use super::cli::*;
-use super::invocation::{
-    run_interactive_shell, run_pipe_mode, run_script_mode, run_wrap_mode, ShellConfig, ShellMode,
-};
+use super::invocation::{run_pipe_mode, run_script_mode, run_wrap_mode, ShellConfig, ShellMode};
 mod builtin;
 mod dispatch;
 mod path_env;
@@ -36,9 +34,11 @@ use tracing::warn;
 use std::thread;
 // use nu_ansi_term::{Color, Style}; // Unused for now
 pub(crate) use self::world::initialize_world;
+pub(crate) use dispatch::world_persistent_session::{
+    ReplPersistentSessionClient, ReplSessionStartParams, ReplStdinMode,
+};
 pub(crate) use dispatch::{
-    build_agent_client_and_request, execute_command, parse_demo_burst_command,
-    stream_non_pty_via_agent,
+    build_agent_client_and_request, execute_command, needs_pty, stream_non_pty_via_agent,
 };
 #[cfg(target_os = "linux")]
 use nix::sys::termios::{
@@ -336,12 +336,9 @@ pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
 
     let result = match &config.mode {
         ShellMode::Interactive { use_pty: _ } => {
-            if config.async_repl {
-                async_repl::run_async_repl(&config)
-            } else {
-                // PTY mode is now handled within run_interactive_shell on a per-command basis
-                run_interactive_shell(&config)
-            }
+            // World-first REPL routing is implemented in the async REPL loop.
+            // The legacy synchronous REPL remains as an implementation detail but is not used.
+            async_repl::run_async_repl(&config)
         }
         ShellMode::Wrap(cmd) => run_wrap_mode(&config, cmd),
         ShellMode::Script(path) => run_script_mode(&config, path),

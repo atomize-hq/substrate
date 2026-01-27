@@ -1,17 +1,10 @@
 //! Invocation execution helpers.
 
 use super::plan::{ShellConfig, ShellMode};
-use crate::execution::agent_events::{
-    clear_agent_event_sender, format_event_line, init_event_channel, publish_command_completion,
-    schedule_demo_burst, schedule_demo_events,
-};
 use crate::execution::{
-    configure_child_shell_env, execute_command, is_shell_stream_event, log_command_event,
-    parse_demo_burst_command, setup_signal_handlers, ReplSessionTelemetry,
+    configure_child_shell_env, execute_command, log_command_event, setup_signal_handlers,
 };
-use crate::repl::editor;
 use anyhow::{Context, Result};
-use reedline::Signal;
 use serde_json::json;
 use std::io::{self, BufRead};
 #[cfg(unix)]
@@ -20,128 +13,8 @@ use std::path::Path;
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
-use std::thread;
 use substrate_common::log_schema;
 use uuid::Uuid;
-
-pub(crate) fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
-    println!("Substrate v{}", env!("CARGO_PKG_VERSION"));
-    println!("Session ID: {}", config.session_id);
-    println!("Logging to: {}", config.trace_log_file.display());
-
-    let mut telemetry = ReplSessionTelemetry::new(Arc::new(config.clone()), "sync");
-
-    let prompt = editor::make_prompt(config.ci_mode);
-
-    let editor::EditorSetup {
-        mut line_editor,
-        printer,
-    } = editor::build_editor(config)?;
-
-    let mut agent_rx = init_event_channel();
-
-    let renderer_handle = thread::spawn(move || {
-        let printer = printer;
-        while let Some(event) = agent_rx.blocking_recv() {
-            if is_shell_stream_event(&event) {
-                continue;
-            }
-            let line = format_event_line(&event);
-            if printer.print(line).is_err() {
-                break;
-            }
-        }
-    });
-
-    // Set up the host command decider for PTY commands
-
-    // Signal handling setup
-    let running_child_pid = Arc::new(AtomicI32::new(0));
-    setup_signal_handlers(running_child_pid.clone())?;
-
-    // Main REPL loop
-    loop {
-        let sig = line_editor.read_line(&prompt);
-
-        match sig {
-            Ok(Signal::Success(line)) => {
-                let trimmed = line.trim();
-
-                if trimmed.is_empty() {
-                    continue;
-                }
-
-                // Check for exit commands
-                if matches!(trimmed, "exit" | "quit") {
-                    break;
-                }
-
-                if trimmed == ":demo-agent" {
-                    schedule_demo_events();
-                    continue;
-                }
-
-                if let Some((agents, events, delay_ms)) = parse_demo_burst_command(trimmed) {
-                    schedule_demo_burst(agents, events, std::time::Duration::from_millis(delay_ms));
-                    println!(
-                        "[demo] scheduled burst: agents={}, events_per_agent={}, delay_ms={}",
-                        agents, events, delay_ms
-                    );
-                    continue;
-                }
-
-                let cmd_id = Uuid::now_v7().to_string();
-
-                match execute_command(config, &line, &cmd_id, running_child_pid.clone()) {
-                    Ok(status) => {
-                        if !status.success() {
-                            #[cfg(unix)]
-                            if let Some(sig) = status.signal() {
-                                eprintln!("Command terminated by signal {sig}");
-                            } else {
-                                eprintln!(
-                                    "Command failed with status: {}",
-                                    status.code().unwrap_or(-1)
-                                );
-                            }
-                            #[cfg(not(unix))]
-                            eprintln!(
-                                "Command failed with status: {}",
-                                status.code().unwrap_or(-1)
-                            );
-                        }
-
-                        publish_command_completion(trimmed, &status);
-                        telemetry.record_command();
-                    }
-                    Err(e) => eprintln!("Error: {e}"),
-                }
-            }
-            Ok(Signal::CtrlC) => {
-                println!("^C");
-                // Reedline handles this better than rustyline
-            }
-            Ok(Signal::CtrlD) => {
-                println!("^D");
-                break;
-            }
-            Err(e) => {
-                eprintln!("Error: {e:?}");
-                break;
-            }
-        }
-    }
-
-    // Save history before exit
-    if let Err(e) = line_editor.sync_history() {
-        log::warn!("Failed to save history: {e}");
-    }
-
-    clear_agent_event_sender();
-    let _ = renderer_handle.join();
-
-    Ok(0)
-}
 
 pub(crate) fn run_wrap_mode(config: &ShellConfig, command: &str) -> Result<i32> {
     let cmd_id = Uuid::now_v7().to_string();
