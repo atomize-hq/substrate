@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::io::{self, Read, Write};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
@@ -752,14 +752,15 @@ fn spawn_passthrough_stdin_thread(
     done: Arc<AtomicBool>,
     cmd_id: &str,
 ) -> thread::JoinHandle<()> {
-    let cmd_id = cmd_id.to_string();
-    thread::spawn(move || {
-        #[cfg(unix)]
-        {
-            use nix::sys::select::{select, FdSet};
-            use nix::sys::time::TimeVal;
-            use std::os::unix::io::{AsFd, AsRawFd};
+    #[cfg(unix)]
+    {
+        use nix::sys::select::{select, FdSet};
+        use nix::sys::time::TimeVal;
+        use std::io::Read;
+        use std::os::unix::io::{AsFd, AsRawFd};
 
+        let cmd_id = cmd_id.to_string();
+        thread::spawn(move || {
             let mut stdin = io::stdin();
             let mut buffer = vec![0u8; 4096];
             while !done.load(Ordering::Relaxed) {
@@ -796,8 +797,14 @@ fn spawn_passthrough_stdin_thread(
                     }
                 }
             }
-        }
-    })
+        })
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = (stdin_tx, done, cmd_id);
+        thread::spawn(|| {})
+    }
 }
 
 async fn exec_host_line(

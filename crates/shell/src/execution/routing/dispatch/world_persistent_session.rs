@@ -791,6 +791,21 @@ mod imp {
         pub(crate) rows: u16,
     }
 
+    impl ReplSessionStartParams {
+        pub(crate) fn for_cwd_and_snapshot(
+            cwd: String,
+            policy_snapshot: agent_api_types::PolicySnapshotV1,
+        ) -> Self {
+            Self {
+                cwd,
+                env: HashMap::new(),
+                policy_snapshot,
+                cols: 80,
+                rows: 24,
+            }
+        }
+    }
+
     #[derive(Debug)]
     pub(crate) struct ReplPersistentSessionClient {
         ready: ReadyFrame,
