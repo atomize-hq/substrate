@@ -25,6 +25,10 @@ At minimum, verify:
 - The cross-platform plan is explicit and matches the spec/contract (platforms + WSL mode if needed).
 - Smoke scripts are not “toy” checks; they mimic the manual testing playbook by running real commands/workflows and validating exit codes + key output.
 - Any CI dispatch commands embedded in integration tasks are runnable with the expected runners.
+- The advisory CI audit + evidence ledger tooling exists and is referenced by integration prompts:
+  - `scripts/ci-audit/ci_audit.sh`
+  - `scripts/ci-audit/ci_audit_record.sh`
+  - (Policy) docs/planning-only changes may skip all CI (ci-audit should recommend `RECOMMEND=skip` with `DIFF_CLASS=docs_only`).
 
 ## End Checklist
 

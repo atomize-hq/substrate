@@ -64,6 +64,14 @@ Gaps (must fix before execution begins):
 Integration task dispatch commands (copy verbatim from `tasks.json` integration checklists):
 - CI compile parity:
 - Feature Smoke dispatch:
+- Advisory CI audit (recommended before any dispatch):
+  - `scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch "<orch-branch>" --ledger-path "{{FEATURE_DIR}}/logs/<slice>/ci-audit/ledger.jsonl"`
+  - `scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch "<orch-branch>" --feature-dir "{{FEATURE_DIR}}" --ledger-path "{{FEATURE_DIR}}/logs/<slice>/ci-audit/ledger.jsonl"`
+  - Evidence recorder (recommended after dispatch):
+    - `scripts/ci-audit/ci_audit_record.sh --ledger-path "{{FEATURE_DIR}}/logs/<slice>/ci-audit/ledger.jsonl" --kind <ci-testing|feature-smoke> --orch-branch "<orch-branch>" --run-id "<id>" --tested-sha "<sha>" --feature-dir "{{FEATURE_DIR}}"`
+
+Policy note:
+- Docs/planning-only changes (anything under `docs/`) may skip all CI/smoke. `ci_audit.sh` should recommend `RECOMMEND=skip` with `DIFF_CLASS=docs_only`.
 
 Runner readiness:
 - Required self-hosted runners exist and are labeled correctly:

@@ -24,12 +24,29 @@ Do not edit planning docs inside the worktree.
   - `cargo clippy --workspace --all-targets -- -D warnings`
   - relevant tests
   - `make integ-checks`
+
+### CI audit (recommended; reduces redundant multi-OS CI)
+
+Before dispatching compile parity, Feature Smoke, or CI Testing, run the advisory CI audit:
+- CI Testing audit (default required platforms: `linux,macos,windows`):
+  - `scripts/ci-audit/ci_audit.sh --ledger-path "{{FEATURE_DIR}}/logs/<slice>/ci-audit/ledger.jsonl" --kind ci-testing --orch-branch "{{ORCH_BRANCH}}"`
+- Feature Smoke audit (required platforms from `{{FEATURE_DIR}}/tasks.json` meta `behavior_platforms_required`):
+  - `scripts/ci-audit/ci_audit.sh --ledger-path "{{FEATURE_DIR}}/logs/<slice>/ci-audit/ledger.jsonl" --kind feature-smoke --orch-branch "{{ORCH_BRANCH}}" --feature-dir "{{FEATURE_DIR}}"`
+
+Policy:
+- If `DIFF_CLASS=docs_only` (docs/planning-only changes), CI/smoke may be skipped entirely.
+- Otherwise, if `RECOMMEND=run`, dispatch normally.
+
+After any CI dispatch completes, record evidence (recommended):
+- `scripts/ci-audit/ci_audit_record.sh --ledger-path "{{FEATURE_DIR}}/logs/<slice>/ci-audit/ledger.jsonl" --kind <ci-testing|feature-smoke> --orch-branch "{{ORCH_BRANCH}}" --run-id "<run-id>" --tested-sha "<sha>" --feature-dir "{{FEATURE_DIR}}"`
+  - Use `<run-id>` from `RUN_ID=...` and `<sha>` from `HEAD=...` (both are printed by the dispatchers).
+  - The ledger lives under `{{FEATURE_DIR}}/logs/...` and is not intended to be committed.
 - Local behavioral smoke preflight (fast fail before CI dispatch; required when possible):
   - If `{{FEATURE_DIR}}/smoke/` exists and this machine matches a behavior platform, build `substrate`, add `target/debug` to `PATH`, and run the matching smoke script locally.
   - Linux: `cargo build --bin substrate && export PATH="$PWD/target/debug:$PATH" && bash "{{FEATURE_DIR}}/smoke/linux-smoke.sh"`
   - macOS: `cargo build --bin substrate && export PATH="$PWD/target/debug:$PATH" && bash "{{FEATURE_DIR}}/smoke/macos-smoke.sh"`
   - Windows: `cargo build --bin substrate; $env:Path=\"$pwd\\target\\debug;$env:Path\"; pwsh -File \"{{FEATURE_DIR}}\\smoke\\windows-smoke.ps1\"`
-- Ensure cross-platform compile parity is green for this exact `HEAD` (fast fail):
+- Ensure cross-platform compile parity is green for this exact `HEAD` (fast fail), unless ci-audit recommends skip:
   - `make ci-compile-parity CI_WORKFLOW_REF="{{ORCH_BRANCH}}" CI_REMOTE=origin CI_CLEANUP=1`
 - Run behavioral smoke via CI to confirm the merged result is green (P3-008):
   - Run from this final integration worktree (smoke validates current `HEAD` via a throwaway remote branch).
@@ -43,9 +60,10 @@ Do not edit planning docs inside the worktree.
 ## End Checklist
 1. Ensure all required platforms are green (include run ids/URLs).
 2. From inside the worktree, run: `make triad-task-finish TASK_ID="{{TASK_ID}}"`
-3. Run CI Testing on this final integration commit before merging to `testing` (even if CI Testing was run earlier on integ-core):
-   - From inside this worktree: `scripts/ci/dispatch_ci_testing.sh --workflow-ref "{{ORCH_BRANCH}}" --remote origin --cleanup --mode full`
-   - You may skip this only if the operator already has a CI Testing run for this exact `HEAD` commit SHA.
+3. Run CI Testing on this final integration commit before merging to `testing`:
+   - First, run `scripts/ci-audit/ci_audit.sh ... --kind ci-testing` (above).
+   - If `RECOMMEND=run`: from inside this worktree run `scripts/ci/dispatch_ci_testing.sh --workflow-ref "{{ORCH_BRANCH}}" --remote origin --cleanup --mode full`
+   - If `RECOMMEND=skip` (including `DIFF_CLASS=docs_only`): you may skip dispatch; include the ci-audit output lines in the handoff.
 4. Hand off run ids/URLs (smoke + CI Testing) and closeout report completion to the operator (do not edit planning docs inside the worktree).
 5. Do not delete the worktree (feature cleanup removes worktrees at feature end).
 
