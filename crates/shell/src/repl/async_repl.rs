@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use anyhow::{anyhow, Context, Result};
 use futures::{pin_mut, FutureExt};
-use reedline::{ExternalPrinter, Reedline, Signal};
+use reedline::{ExternalBytePrinter, ExternalPrinter, Reedline, Signal};
 use tokio::runtime::Builder as TokioRuntimeBuilder;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task;
@@ -50,6 +50,7 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
         let mut prompt_worker = PromptWorker::spawn(shared_config.clone())
             .context("failed to start Reedline worker")?;
         let agent_printer = prompt_worker.printer_handle();
+        let byte_printer = prompt_worker.byte_printer_handle();
         let mut prompt_responses = prompt_worker.take_response_receiver();
         let mut agent_rx = init_event_channel();
 
@@ -62,7 +63,8 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
         let (sigint_tx, mut sigint_rx) = mpsc::unbounded_channel::<()>();
         spawn_sigint_task(sigint_tx);
 
-        let stdout_cb = make_world_stdout_callback();
+        let prompt_active = Arc::new(AtomicBool::new(false));
+        let stdout_cb = make_world_stdout_callback(prompt_active.clone(), byte_printer);
         let mut world_session = if !shared_config.no_world {
             let requested = std::env::current_dir()
                 .unwrap_or_else(|_| PathBuf::from("."))
@@ -79,6 +81,7 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
 
         let mut should_exit = false;
         while !should_exit {
+            prompt_active.store(true, Ordering::SeqCst);
             prompt_worker
                 .request_prompt()
                 .context("failed to request prompt")?;
@@ -108,6 +111,7 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                     }
                 }
             };
+            prompt_active.store(false, Ordering::SeqCst);
 
             match prompt_response {
                 PromptWorkerResponse::Line(command) => {
@@ -316,6 +320,7 @@ struct PromptWorker {
     join_handle: Option<thread::JoinHandle<()>>,
     response_rx: Option<UnboundedReceiver<PromptWorkerResponse>>,
     printer: ExternalPrinter<String>,
+    byte_printer: ExternalBytePrinter,
 }
 
 impl PromptWorker {
@@ -326,6 +331,7 @@ impl PromptWorker {
         let editor::EditorSetup {
             line_editor,
             printer,
+            byte_printer,
         } = editor::build_editor(&config)?;
         let prompt = editor::make_prompt(config.ci_mode);
 
@@ -338,6 +344,7 @@ impl PromptWorker {
             join_handle: Some(join_handle),
             response_rx: Some(response_rx),
             printer,
+            byte_printer,
         })
     }
 
@@ -356,6 +363,10 @@ impl PromptWorker {
 
     fn printer_handle(&self) -> ExternalPrinter<String> {
         self.printer.clone()
+    }
+
+    fn byte_printer_handle(&self) -> ExternalBytePrinter {
+        self.byte_printer.clone()
     }
 
     fn take_response_receiver(&mut self) -> UnboundedReceiver<PromptWorkerResponse> {
@@ -512,8 +523,15 @@ fn is_exit_directive(trimmed: &str) -> bool {
     false
 }
 
-fn make_world_stdout_callback() -> StdoutCallback {
-    Arc::new(|bytes: &[u8]| {
+fn make_world_stdout_callback(
+    prompt_active: Arc<AtomicBool>,
+    byte_printer: ExternalBytePrinter,
+) -> StdoutCallback {
+    Arc::new(move |bytes: &[u8]| {
+        if prompt_active.load(Ordering::SeqCst) && byte_printer.print(bytes.to_vec()).is_ok() {
+            return;
+        }
+
         let mut stdout = io::stdout();
         let _ = stdout.write_all(bytes);
         let _ = stdout.flush();
