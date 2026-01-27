@@ -37,6 +37,9 @@ The system is designed for:
 **Tooling and schema**
 - `docs/project_management/standards/tasks.schema.json`
 - `scripts/planning/validate_tasks_json.py`
+- Advisory CI reuse tooling (recommended; reduces redundant multi-OS CI):
+  - `scripts/ci-audit/ci_audit.sh` (audit before dispatch; may recommend skip for docs-only changes)
+  - `scripts/ci-audit/ci_audit_record.sh` (record run evidence to a local ledger; not committed)
 - `scripts/planning/new_feature.sh`
 - `scripts/planning/new_feature.ps1`
 - `scripts/planning/archive_project_management_dir.py` (archive a Planning Pack into `docs/project_management/_archived/` and rewrite in-repo references)
