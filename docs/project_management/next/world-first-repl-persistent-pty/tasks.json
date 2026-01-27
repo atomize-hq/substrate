@@ -58,11 +58,11 @@
     },
     {
       "id": "C0-code",
-      "name": "C0 — world-agent persistent session bootstrap + preflight (code)",
+      "name": "C0 \u2014 world-agent persistent session bootstrap + preflight (code)",
       "type": "code",
       "phase": "C0",
       "status": "completed",
-      "description": "Implement persistent-session bootstrap on world-agent (/v1/stream): start_session → ready with fail-closed DR-22/DR-23 preflight and legacy start preserved (production code only).",
+      "description": "Implement persistent-session bootstrap on world-agent (/v1/stream): start_session \u2192 ready with fail-closed DR-22/DR-23 preflight and legacy start preserved (production code only).",
       "references": [
         "docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md",
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
@@ -106,7 +106,7 @@
     },
     {
       "id": "C0-test",
-      "name": "C0 — world-agent persistent session bootstrap + preflight (test)",
+      "name": "C0 \u2014 world-agent persistent session bootstrap + preflight (test)",
       "type": "test",
       "phase": "C0",
       "status": "completed",
@@ -150,7 +150,7 @@
     },
     {
       "id": "C0-integ-core",
-      "name": "C0 — integration core",
+      "name": "C0 \u2014 integration core",
       "type": "integration",
       "phase": "C0",
       "status": "completed",
@@ -199,7 +199,7 @@
     },
     {
       "id": "C0-integ-linux",
-      "name": "C0 — integration platform-fix (linux)",
+      "name": "C0 \u2014 integration platform-fix (linux)",
       "type": "integration",
       "phase": "C0",
       "status": "completed",
@@ -242,7 +242,7 @@
     },
     {
       "id": "C0-integ-macos",
-      "name": "C0 — integration platform-fix (macos)",
+      "name": "C0 \u2014 integration platform-fix (macos)",
       "type": "integration",
       "phase": "C0",
       "status": "completed",
@@ -285,7 +285,7 @@
     },
     {
       "id": "C0-integ-windows",
-      "name": "C0 — integration platform-fix (windows)",
+      "name": "C0 \u2014 integration platform-fix (windows)",
       "type": "integration",
       "phase": "C0",
       "status": "completed",
@@ -326,7 +326,7 @@
     },
     {
       "id": "C0-integ",
-      "name": "C0 — integration final",
+      "name": "C0 \u2014 integration final",
       "type": "integration",
       "phase": "C0",
       "status": "completed",
@@ -375,7 +375,7 @@
     },
     {
       "id": "C1-code",
-      "name": "C1 — world-agent exec + command_complete (code)",
+      "name": "C1 \u2014 world-agent exec + command_complete (code)",
       "type": "code",
       "phase": "C1",
       "status": "completed",
@@ -423,7 +423,7 @@
     },
     {
       "id": "C1-test",
-      "name": "C1 — world-agent exec + command_complete (test)",
+      "name": "C1 \u2014 world-agent exec + command_complete (test)",
       "type": "test",
       "phase": "C1",
       "status": "completed",
@@ -468,7 +468,7 @@
     },
     {
       "id": "C1-integ-core",
-      "name": "C1 — integration core",
+      "name": "C1 \u2014 integration core",
       "type": "integration",
       "phase": "C1",
       "status": "completed",
@@ -521,7 +521,7 @@
     },
     {
       "id": "C1-integ-linux",
-      "name": "C1 — integration platform-fix (linux)",
+      "name": "C1 \u2014 integration platform-fix (linux)",
       "type": "integration",
       "phase": "C1",
       "status": "completed",
@@ -568,7 +568,7 @@
     },
     {
       "id": "C1-integ-macos",
-      "name": "C1 — integration platform-fix (macos)",
+      "name": "C1 \u2014 integration platform-fix (macos)",
       "type": "integration",
       "phase": "C1",
       "status": "completed",
@@ -615,7 +615,7 @@
     },
     {
       "id": "C1-integ-windows",
-      "name": "C1 — integration platform-fix (windows)",
+      "name": "C1 \u2014 integration platform-fix (windows)",
       "type": "integration",
       "phase": "C1",
       "status": "completed",
@@ -658,7 +658,7 @@
     },
     {
       "id": "C1-integ",
-      "name": "C1 — integration final",
+      "name": "C1 \u2014 integration final",
       "type": "integration",
       "phase": "C1",
       "status": "completed",
@@ -709,7 +709,7 @@
     },
     {
       "id": "C2-code",
-      "name": "C2 — shell persistent session client core (code)",
+      "name": "C2 \u2014 shell persistent session client core (code)",
       "type": "code",
       "phase": "C2",
       "status": "completed",
@@ -755,7 +755,7 @@
     },
     {
       "id": "C2-test",
-      "name": "C2 — shell persistent session client core (test)",
+      "name": "C2 \u2014 shell persistent session client core (test)",
       "type": "test",
       "phase": "C2",
       "status": "completed",
@@ -799,10 +799,10 @@
     },
     {
       "id": "C2-integ-core",
-      "name": "C2 — integration core",
+      "name": "C2 \u2014 integration core",
       "type": "integration",
       "phase": "C2",
-      "status": "pending",
+      "status": "completed",
       "description": "Merge C2 code+tests, get primary platform green, then dispatch behavioral smoke and CI parity gates.",
       "references": [
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
@@ -852,10 +852,10 @@
     },
     {
       "id": "C2-integ-linux",
-      "name": "C2 — integration platform-fix (linux)",
+      "name": "C2 \u2014 integration platform-fix (linux)",
       "type": "integration",
       "phase": "C2",
-      "status": "pending",
+      "status": "completed",
       "description": "Validate and fix C2 on Linux behavior platform via feature smoke; dispatch CI parity gates as required.",
       "references": [
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
@@ -899,10 +899,10 @@
     },
     {
       "id": "C2-integ-macos",
-      "name": "C2 — integration platform-fix (macos)",
+      "name": "C2 \u2014 integration platform-fix (macos)",
       "type": "integration",
       "phase": "C2",
-      "status": "pending",
+      "status": "completed",
       "description": "Validate and fix C2 on macOS behavior platform via feature smoke; dispatch CI parity gates as required.",
       "references": [
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
@@ -946,10 +946,10 @@
     },
     {
       "id": "C2-integ-windows",
-      "name": "C2 — integration platform-fix (windows)",
+      "name": "C2 \u2014 integration platform-fix (windows)",
       "type": "integration",
       "phase": "C2",
-      "status": "pending",
+      "status": "completed",
       "description": "Validate CI parity for C2 on Windows (no behavioral smoke required for this feature).",
       "references": [
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
@@ -989,7 +989,7 @@
     },
     {
       "id": "C2-integ",
-      "name": "C2 — integration final",
+      "name": "C2 \u2014 integration final",
       "type": "integration",
       "phase": "C2",
       "status": "pending",
@@ -1040,7 +1040,7 @@
     },
     {
       "id": "C3-code",
-      "name": "C3 — interactive REPL routing + lifecycle (code)",
+      "name": "C3 \u2014 interactive REPL routing + lifecycle (code)",
       "type": "code",
       "phase": "C3",
       "status": "pending",
@@ -1087,7 +1087,7 @@
     },
     {
       "id": "C3-test",
-      "name": "C3 — interactive REPL routing + lifecycle (test)",
+      "name": "C3 \u2014 interactive REPL routing + lifecycle (test)",
       "type": "test",
       "phase": "C3",
       "status": "pending",
@@ -1132,7 +1132,7 @@
     },
     {
       "id": "C3-integ-core",
-      "name": "C3 — integration core",
+      "name": "C3 \u2014 integration core",
       "type": "integration",
       "phase": "C3",
       "status": "pending",
@@ -1185,7 +1185,7 @@
     },
     {
       "id": "C3-integ-linux",
-      "name": "C3 — integration platform-fix (linux)",
+      "name": "C3 \u2014 integration platform-fix (linux)",
       "type": "integration",
       "phase": "C3",
       "status": "pending",
@@ -1232,7 +1232,7 @@
     },
     {
       "id": "C3-integ-macos",
-      "name": "C3 — integration platform-fix (macos)",
+      "name": "C3 \u2014 integration platform-fix (macos)",
       "type": "integration",
       "phase": "C3",
       "status": "pending",
@@ -1279,7 +1279,7 @@
     },
     {
       "id": "C3-integ-windows",
-      "name": "C3 — integration platform-fix (windows)",
+      "name": "C3 \u2014 integration platform-fix (windows)",
       "type": "integration",
       "phase": "C3",
       "status": "pending",
@@ -1322,7 +1322,7 @@
     },
     {
       "id": "C3-integ",
-      "name": "C3 — integration final",
+      "name": "C3 \u2014 integration final",
       "type": "integration",
       "phase": "C3",
       "status": "pending",
@@ -1373,7 +1373,7 @@
     },
     {
       "id": "C4-code",
-      "name": "C4 — interactive REPL byte-safe rendering + buffering (code)",
+      "name": "C4 \u2014 interactive REPL byte-safe rendering + buffering (code)",
       "type": "code",
       "phase": "C4",
       "status": "pending",
@@ -1421,7 +1421,7 @@
     },
     {
       "id": "C4-test",
-      "name": "C4 — interactive REPL byte-safe rendering + buffering (test)",
+      "name": "C4 \u2014 interactive REPL byte-safe rendering + buffering (test)",
       "type": "test",
       "phase": "C4",
       "status": "pending",
@@ -1468,7 +1468,7 @@
     },
     {
       "id": "C4-integ-core",
-      "name": "C4 — integration core",
+      "name": "C4 \u2014 integration core",
       "type": "integration",
       "phase": "C4",
       "status": "pending",
@@ -1521,7 +1521,7 @@
     },
     {
       "id": "C4-integ-linux",
-      "name": "C4 — integration platform-fix (linux)",
+      "name": "C4 \u2014 integration platform-fix (linux)",
       "type": "integration",
       "phase": "C4",
       "status": "pending",
@@ -1568,7 +1568,7 @@
     },
     {
       "id": "C4-integ-macos",
-      "name": "C4 — integration platform-fix (macos)",
+      "name": "C4 \u2014 integration platform-fix (macos)",
       "type": "integration",
       "phase": "C4",
       "status": "pending",
@@ -1615,7 +1615,7 @@
     },
     {
       "id": "C4-integ-windows",
-      "name": "C4 — integration platform-fix (windows)",
+      "name": "C4 \u2014 integration platform-fix (windows)",
       "type": "integration",
       "phase": "C4",
       "status": "pending",
@@ -1658,7 +1658,7 @@
     },
     {
       "id": "C4-integ",
-      "name": "C4 — integration final",
+      "name": "C4 \u2014 integration final",
       "type": "integration",
       "phase": "C4",
       "status": "pending",
@@ -1709,7 +1709,7 @@
     },
     {
       "id": "C5-code",
-      "name": "C5 — non-interactive -c and pipe mode world-consistency (code)",
+      "name": "C5 \u2014 non-interactive -c and pipe mode world-consistency (code)",
       "type": "code",
       "phase": "C5",
       "status": "pending",
@@ -1756,7 +1756,7 @@
     },
     {
       "id": "C5-test",
-      "name": "C5 — non-interactive -c and pipe mode world-consistency (test)",
+      "name": "C5 \u2014 non-interactive -c and pipe mode world-consistency (test)",
       "type": "test",
       "phase": "C5",
       "status": "pending",
@@ -1800,7 +1800,7 @@
     },
     {
       "id": "C5-integ-core",
-      "name": "C5 — integration core",
+      "name": "C5 \u2014 integration core",
       "type": "integration",
       "phase": "C5",
       "status": "pending",
@@ -1853,7 +1853,7 @@
     },
     {
       "id": "C5-integ-linux",
-      "name": "C5 — integration platform-fix (linux)",
+      "name": "C5 \u2014 integration platform-fix (linux)",
       "type": "integration",
       "phase": "C5",
       "status": "pending",
@@ -1900,7 +1900,7 @@
     },
     {
       "id": "C5-integ-macos",
-      "name": "C5 — integration platform-fix (macos)",
+      "name": "C5 \u2014 integration platform-fix (macos)",
       "type": "integration",
       "phase": "C5",
       "status": "pending",
@@ -1947,7 +1947,7 @@
     },
     {
       "id": "C5-integ-windows",
-      "name": "C5 — integration platform-fix (windows)",
+      "name": "C5 \u2014 integration platform-fix (windows)",
       "type": "integration",
       "phase": "C5",
       "status": "pending",
@@ -1990,7 +1990,7 @@
     },
     {
       "id": "C5-integ",
-      "name": "C5 — integration final",
+      "name": "C5 \u2014 integration final",
       "type": "integration",
       "phase": "C5",
       "status": "pending",
