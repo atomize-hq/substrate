@@ -435,3 +435,33 @@
   - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/world-first-repl-persistent-pty/logs/C3/test/events.jsonl`
   - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/world-first-repl-persistent-pty/logs/C3/test/stderr.log`
 - Blockers: `NONE (note: test branch expected to fail until merged with C3-code)`
+
+## START — 2026-01-27T14:59:17Z — integration — C3-integ-macos
+- Worktree: `wt/world-first-repl-persistent-pty-c3-integ-macos`
+- Branch: `world-first-repl-persistent-pty-c3-integ-macos`
+- Orchestration branch: `feat/world-first-repl-persistent-pty`
+- Commands planned (per kickoff prompt):
+  - `scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch "feat/world-first-repl-persistent-pty" --required-platforms macos --ledger-path "docs/project_management/next/world-first-repl-persistent-pty/logs/C3/ci-audit/ledger.jsonl"`
+  - `scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch "feat/world-first-repl-persistent-pty" --required-platforms macos --ledger-path "docs/project_management/next/world-first-repl-persistent-pty/logs/C3/ci-audit/ledger.jsonl"`
+  - `make triad-task-finish TASK_ID="C3-integ-macos"`
+
+## END — 2026-01-27T15:06:31Z — integration — C3-integ-macos
+- Worktree: `/home/spenser/__Active_code/substrate/wt/world-first-repl-persistent-pty-c3-integ-macos`
+- Branch: `world-first-repl-persistent-pty-c3-integ-macos`
+- HEAD: `499d1257ff30afaa1219a26519f242ba1cc42620` (docs-only vs last-green `7e3aac6852764cff94229ed57002e06062eb28b6`)
+- CI audit (feature-smoke, macos-only): `RECOMMEND=skip` (`docs_only_changes`)
+  - Last green: `21400973716` — `https://github.com/atomize-hq/substrate/actions/runs/21400973716` — `conclusion=success` (jobs include `macos_self_hosted`)
+- CI audit (ci-testing, macos-only): `RECOMMEND=skip` (`docs_only_changes`)
+  - Last green: `21401718367` — `https://github.com/atomize-hq/substrate/actions/runs/21401718367` — `conclusion=success` (jobs include `Lint & Test (macos-14)`)
+- Commands run (with exit codes):
+  - `make triad-code-checks` → `0`
+  - `make triad-task-finish TASK_ID="C3-integ-macos"` → `0`
+- Finisher summary:
+  - `TASK_BRANCH=world-first-repl-persistent-pty-c3-integ-macos`
+  - `WORKTREE=/home/spenser/__Active_code/substrate/wt/world-first-repl-persistent-pty-c3-integ-macos`
+  - `HEAD=499d1257ff30afaa1219a26519f242ba1cc42620`
+  - `COMMITS=0`
+  - `CHECKS=make triad-code-checks`
+  - `SMOKE_RUN=`
+  - `MERGED_TO_ORCH=false`
+- Blockers: `NONE`

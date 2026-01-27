@@ -1235,7 +1235,7 @@
       "name": "C3 \u2014 integration platform-fix (macos)",
       "type": "integration",
       "phase": "C3",
-      "status": "pending",
+      "status": "completed",
       "description": "Validate and fix C3 on macOS behavior platform via feature smoke; dispatch CI parity gates as required.",
       "references": [
         "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
