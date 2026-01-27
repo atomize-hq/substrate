@@ -4,19 +4,22 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use reedline::{
-    default_emacs_keybindings, ColumnarMenu, Completer, Emacs, ExampleHighlighter, ExternalPrinter,
-    FileBackedHistory, MenuBuilder, Prompt, PromptEditMode, PromptHistorySearch,
-    PromptHistorySearchStatus, Reedline, ReedlineMenu, Suggestion, ValidationResult, Validator,
+    default_emacs_keybindings, ColumnarMenu, Completer, Emacs, ExampleHighlighter,
+    ExternalBytePrinter, ExternalPrinter, FileBackedHistory, MenuBuilder, Prompt, PromptEditMode,
+    PromptHistorySearch, PromptHistorySearchStatus, Reedline, ReedlineMenu, Suggestion,
+    ValidationResult, Validator,
 };
 
 use crate::ShellConfig;
 
 const HISTORY_CAPACITY: usize = 100_000;
 const PRINTER_CAPACITY: usize = 256;
+const BYTE_PRINTER_CAPACITY: usize = 1024;
 
 pub(crate) struct EditorSetup {
     pub line_editor: Reedline,
     pub printer: ExternalPrinter<String>,
+    pub byte_printer: ExternalBytePrinter,
 }
 
 pub(crate) fn build_editor(config: &ShellConfig) -> Result<EditorSetup> {
@@ -43,6 +46,8 @@ pub(crate) fn build_editor(config: &ShellConfig) -> Result<EditorSetup> {
 
     let printer = ExternalPrinter::<String>::new(PRINTER_CAPACITY);
     let printer_handle = printer.clone();
+    let byte_printer = ExternalBytePrinter::new(BYTE_PRINTER_CAPACITY);
+    let byte_printer_handle = byte_printer.clone();
 
     let line_editor = Reedline::create()
         .with_history(Box::new(history))
@@ -54,11 +59,13 @@ pub(crate) fn build_editor(config: &ShellConfig) -> Result<EditorSetup> {
         .with_menu(ReedlineMenu::EngineCompleter(Box::new(
             ColumnarMenu::default().with_name("completion_menu"),
         )))
-        .with_external_printer(printer);
+        .with_external_printer(printer)
+        .with_external_byte_printer(byte_printer);
 
     Ok(EditorSetup {
         line_editor,
         printer: printer_handle,
+        byte_printer: byte_printer_handle,
     })
 }
 
