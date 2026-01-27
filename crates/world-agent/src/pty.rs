@@ -25,9 +25,13 @@ use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{Read, Write};
+#[cfg(target_os = "linux")]
+use std::os::fd::{AsRawFd, FromRawFd};
 use std::path::PathBuf;
 #[cfg(target_os = "linux")]
 use std::process::{Command, Stdio};
+#[cfg(target_os = "linux")]
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 #[cfg(target_os = "linux")]
@@ -151,6 +155,32 @@ enum PersistentClientMessage {
         cols: u16,
         rows: u16,
     },
+    Exec {
+        seq: u64,
+        token_hex: String,
+        cmd_id: String,
+        stdin_mode: PersistentStdinMode,
+        program_b64: String,
+    },
+    Stdin {
+        data_b64: String,
+    },
+    Resize {
+        cols: u16,
+        rows: u16,
+    },
+    Signal {
+        sig: String,
+    },
+    Close,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Debug, Deserialize, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+enum PersistentStdinMode {
+    Eof,
+    Passthrough,
 }
 
 #[derive(Debug, Serialize)]
@@ -161,6 +191,15 @@ enum PersistentServerMessage {
         session_nonce: String,
         cwd: PathBuf,
         protocol_version: u32,
+    },
+    #[cfg(target_os = "linux")]
+    Stdout { data_b64: String },
+    #[cfg(target_os = "linux")]
+    CommandComplete {
+        seq: u64,
+        token_hex: String,
+        exit: i32,
+        cwd: PathBuf,
     },
     #[cfg(target_os = "linux")]
     Exit { code: i32 },
@@ -229,16 +268,99 @@ fn sanitize_session_env(env: &mut HashMap<String, String>) {
 }
 
 #[cfg(target_os = "linux")]
-fn validate_pty_watermark_query_supported(master: &dyn MasterPty) -> Result<(), std::io::Error> {
-    let fd = master.as_raw_fd().ok_or_else(|| {
-        std::io::Error::new(
-            std::io::ErrorKind::Unsupported,
-            "PTY master does not expose a raw fd",
-        )
-    })?;
+fn validate_pty_watermark_query_supported(master_fd: libc::c_int) -> Result<(), std::io::Error> {
     let mut bytes_readable: libc::c_int = 0;
     // Safety: FIONREAD expects a pointer to int.
-    let rc = unsafe { libc::ioctl(fd, libc::FIONREAD, &mut bytes_readable) };
+    let rc = unsafe { libc::ioctl(master_fd, libc::FIONREAD, &mut bytes_readable) };
+    if rc == -1 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+struct RawPty {
+    master: std::os::fd::OwnedFd,
+    slave: std::os::fd::OwnedFd,
+}
+
+#[cfg(target_os = "linux")]
+fn open_raw_pty(rows: u16, cols: u16) -> Result<RawPty, std::io::Error> {
+    let mut master_fd: libc::c_int = -1;
+    let mut slave_fd: libc::c_int = -1;
+    let size = libc::winsize {
+        ws_row: rows,
+        ws_col: cols,
+        ws_xpixel: 0,
+        ws_ypixel: 0,
+    };
+
+    // Safety: openpty initializes master_fd/slave_fd on success.
+    let rc = unsafe {
+        libc::openpty(
+            &mut master_fd,
+            &mut slave_fd,
+            std::ptr::null_mut(),
+            std::ptr::null(),
+            &size,
+        )
+    };
+    if rc == -1 {
+        return Err(std::io::Error::last_os_error());
+    }
+
+    let master = unsafe { std::os::fd::OwnedFd::from_raw_fd(master_fd) };
+    let slave = unsafe { std::os::fd::OwnedFd::from_raw_fd(slave_fd) };
+
+    // Best-effort: set master non-blocking so the PTY reader thread can poll+drain without
+    // risking an indefinite block mid-drain.
+    let flags = unsafe { libc::fcntl(master.as_raw_fd(), libc::F_GETFL) };
+    if flags >= 0 {
+        let _ = unsafe { libc::fcntl(master.as_raw_fd(), libc::F_SETFL, flags | libc::O_NONBLOCK) };
+    }
+
+    Ok(RawPty {
+        // Safety: openpty returned valid fds on success.
+        master,
+        slave,
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn pty_resize(master_fd: libc::c_int, rows: u16, cols: u16) -> Result<(), std::io::Error> {
+    let size = libc::winsize {
+        ws_row: rows,
+        ws_col: cols,
+        ws_xpixel: 0,
+        ws_ypixel: 0,
+    };
+    // Safety: TIOCSWINSZ expects winsize pointer.
+    let rc = unsafe { libc::ioctl(master_fd, libc::TIOCSWINSZ as _, &size as *const _) };
+    if rc == -1 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn pty_fionread(master_fd: libc::c_int) -> Result<usize, std::io::Error> {
+    let mut bytes_readable: libc::c_int = 0;
+    // Safety: FIONREAD expects a pointer to int.
+    let rc = unsafe { libc::ioctl(master_fd, libc::FIONREAD, &mut bytes_readable) };
+    if rc == -1 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(bytes_readable.max(0) as usize)
+}
+
+#[cfg(target_os = "linux")]
+fn pty_set_foreground_pgid(
+    master_fd: libc::c_int,
+    pgid: libc::pid_t,
+) -> Result<(), std::io::Error> {
+    let mut pgid = pgid;
+    // Safety: TIOCSPGRP expects pid_t pointer.
+    let rc = unsafe { libc::ioctl(master_fd, libc::TIOCSPGRP as _, &mut pgid as *mut _) };
     if rc == -1 {
         return Err(std::io::Error::last_os_error());
     }
@@ -462,7 +584,7 @@ async fn handle_persistent_session(
 
 #[cfg(target_os = "linux")]
 async fn handle_persistent_session(
-    _service: WorldAgentService,
+    service: WorldAgentService,
     tx: Arc<Mutex<WsSender>>,
     mut rx: WsReceiver,
     first_text: String,
@@ -483,6 +605,19 @@ async fn handle_persistent_session(
             cols,
             rows,
         ),
+        Ok(_) => {
+            let _ = send_persistent_ws_message(
+                &tx,
+                &PersistentServerMessage::Error {
+                    code: "bad_request".to_string(),
+                    message: "First frame must be `start_session`".to_string(),
+                    fatal: true,
+                    seq: None,
+                },
+            )
+            .await;
+            return;
+        }
         Err(e) => {
             let _ = send_persistent_ws_message(
                 &tx,
@@ -537,15 +672,8 @@ async fn handle_persistent_session(
     sanitize_session_env(&mut session_env);
     ensure_xdg_dirs(&mut session_env);
 
-    // DR-23 preflight: watermark-query capability for Session PTY (v1 requires FIONREAD).
-    let pty_system = native_pty_system();
-    let pair = match pty_system.openpty(PtySize {
-        rows,
-        cols,
-        pixel_width: 0,
-        pixel_height: 0,
-    }) {
-        Ok(pair) => pair,
+    let pty = match open_raw_pty(rows, cols) {
+        Ok(pty) => pty,
         Err(e) => {
             let _ = send_persistent_ws_message(
                 &tx,
@@ -561,7 +689,8 @@ async fn handle_persistent_session(
         }
     };
 
-    if let Err(e) = validate_pty_watermark_query_supported(&*pair.master) {
+    // DR-23 preflight: watermark-query capability for Session PTY (v1 requires FIONREAD).
+    if let Err(e) = validate_pty_watermark_query_supported(pty.master.as_raw_fd()) {
         let _ = send_persistent_ws_message(
             &tx,
             &PersistentServerMessage::Error {
@@ -607,79 +736,355 @@ async fn handle_persistent_session(
             return;
         }
     };
+
+    let world = match prepare_persistent_world_context(
+        &service,
+        &session_env,
+        &ready_cwd,
+        &policy_snapshot,
+    ) {
+        Ok(world) => world,
+        Err(message) => {
+            let _ = send_persistent_ws_message(
+                &tx,
+                &PersistentServerMessage::Error {
+                    code: "internal_error".to_string(),
+                    message,
+                    fatal: true,
+                    seq: None,
+                },
+            )
+            .await;
+            return;
+        }
+    };
     let session_nonce = generate_session_nonce();
 
-    let _ = send_persistent_ws_message(
-        &tx,
-        &PersistentServerMessage::Ready {
+    let (ws_write_tx, mut ws_write_rx) =
+        tokio::sync::mpsc::unbounded_channel::<PersistentServerMessage>();
+
+    let writer_task = {
+        let tx = tx.clone();
+        tokio::spawn(async move {
+            while let Some(msg) = ws_write_rx.recv().await {
+                if send_persistent_ws_message(&tx, &msg).await.is_err() {
+                    break;
+                }
+            }
+        })
+    };
+
+    if ws_write_tx
+        .send(PersistentServerMessage::Ready {
             session_nonce,
-            cwd: ready_cwd,
+            cwd: ready_cwd.clone(),
             protocol_version: 1,
-        },
-    )
-    .await;
+        })
+        .is_err()
+    {
+        return;
+    }
 
-    // C0 scope: accept close and keep the session alive; exec/command_complete is C1.
+    let stop_flag = Arc::new(AtomicBool::new(false));
+    let (pty_bytes_tx, mut pty_bytes_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(1);
+    let pty_master_fd = pty.master.as_raw_fd();
+    {
+        let stop_flag = stop_flag.clone();
+        std::thread::spawn(move || read_pty_to_channel(pty_master_fd, stop_flag, pty_bytes_tx));
+    }
+
+    let mut session_cwd = ready_cwd;
+
+    struct Running {
+        seq: u64,
+        token_hex: String,
+        stdin_mode: PersistentStdinMode,
+        pgid: libc::pid_t,
+    }
+
+    struct Draining {
+        seq: u64,
+        token_hex: String,
+        exit: i32,
+        new_cwd: PathBuf,
+        new_env: HashMap<String, String>,
+        drain_remaining: usize,
+    }
+
+    enum ExecPhase {
+        Idle,
+        Running(Running),
+        Draining(Draining),
+    }
+
+    let mut phase = ExecPhase::Idle;
+    let mut child_events_rx: Option<tokio::sync::mpsc::Receiver<PersistentChildEvent>> = None;
+
+    let send_fatal = |ws_write_tx: &tokio::sync::mpsc::UnboundedSender<PersistentServerMessage>,
+                      code: &str,
+                      message: String,
+                      seq: Option<u64>| {
+        let _ = ws_write_tx.send(PersistentServerMessage::Error {
+            code: code.to_string(),
+            message,
+            fatal: true,
+            seq,
+        });
+    };
+
     loop {
-        let Some(msg) = rx.next().await else { break };
-        match msg {
-            Ok(Message::Text(text)) => {
-                let msg_type = serde_json::from_str::<serde_json::Value>(&text)
-                    .ok()
-                    .and_then(|v| {
-                        v.get("type")
-                            .and_then(|t| t.as_str())
-                            .map(|s| s.to_string())
-                    });
+        tokio::select! {
+            maybe_bytes = pty_bytes_rx.recv() => {
+                let Some(bytes) = maybe_bytes else { break };
+                let data_b64 = BASE64.encode(&bytes);
+                if ws_write_tx.send(PersistentServerMessage::Stdout { data_b64 }).is_err() {
+                    break;
+                }
 
-                match msg_type.as_deref() {
-                    Some("close") => {
-                        let _ = send_persistent_ws_message(
-                            &tx,
-                            &PersistentServerMessage::Exit { code: 0 },
-                        )
-                        .await;
-                        break;
+                if let ExecPhase::Draining(ref mut draining) = phase {
+                    if draining.drain_remaining > 0 {
+                        let drained_now = draining.drain_remaining.min(bytes.len());
+                        draining.drain_remaining -= drained_now;
                     }
-                    Some("resize") | Some("stdin") | Some("signal") => {
+                }
+
+                if matches!(&phase, ExecPhase::Draining(Draining { drain_remaining: 0, .. })) {
+                    // Flush any buffered PTY bytes already read (bounded channel).
+                    while let Ok(extra) = pty_bytes_rx.try_recv() {
+                        let data_b64 = BASE64.encode(&extra);
+                        if ws_write_tx
+                            .send(PersistentServerMessage::Stdout { data_b64 })
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+
+                    let ExecPhase::Draining(draining) = std::mem::replace(&mut phase, ExecPhase::Idle) else {
                         continue;
-                    }
-                    Some(_) => {
-                        let _ = send_persistent_ws_message(
-                            &tx,
-                            &PersistentServerMessage::Error {
-                                code: "protocol_violation".to_string(),
-                                message: "Unsupported frame for C0 persistent session".to_string(),
-                                fatal: true,
-                                seq: None,
-                            },
-                        )
-                        .await;
-                        break;
-                    }
-                    None => {
-                        let _ = send_persistent_ws_message(
-                            &tx,
-                            &PersistentServerMessage::Error {
-                                code: "bad_request".to_string(),
-                                message: "Invalid JSON frame".to_string(),
-                                fatal: true,
-                                seq: None,
-                            },
-                        )
-                        .await;
+                    };
+
+                    let mut persisted_env = draining.new_env;
+                    strip_persistent_internal_env(&mut persisted_env, &world.base_env);
+                    sanitize_session_env(&mut persisted_env);
+                    ensure_xdg_dirs(&mut persisted_env);
+
+                    session_env = persisted_env;
+                    session_cwd = draining.new_cwd.clone();
+
+                    if ws_write_tx
+                        .send(PersistentServerMessage::CommandComplete {
+                            seq: draining.seq,
+                            token_hex: draining.token_hex,
+                            exit: draining.exit,
+                            cwd: draining.new_cwd,
+                        })
+                        .is_err()
+                    {
                         break;
                     }
                 }
             }
-            Ok(Message::Close(_)) => break,
-            Ok(_) => continue,
-            Err(_) => break,
+            msg = rx.next() => {
+                let Some(msg) = msg else { break };
+                match msg {
+                    Ok(Message::Text(text)) => {
+                        let frame = match serde_json::from_str::<PersistentClientMessage>(&text) {
+                            Ok(f) => f,
+                            Err(e) => {
+                                send_fatal(&ws_write_tx, "bad_request", format!("Invalid JSON: {e}"), None);
+                                break;
+                            }
+                        };
+
+                        match frame {
+                            PersistentClientMessage::Close => {
+                                let _ = ws_write_tx.send(PersistentServerMessage::Exit { code: 0 });
+                                break;
+                            }
+                            PersistentClientMessage::Resize { cols, rows } => {
+                                if let Err(e) = pty_resize(pty.master.as_raw_fd(), rows, cols) {
+                                    send_fatal(&ws_write_tx, "internal_error", format!("Failed to resize PTY: {e}"), None);
+                                    break;
+                                }
+                            }
+                            PersistentClientMessage::Stdin { data_b64 } => {
+                                let ExecPhase::Running(ref running) = phase else {
+                                    continue;
+                                };
+                                if !matches!(running.stdin_mode, PersistentStdinMode::Passthrough) {
+                                    continue;
+                                }
+                                let data = match BASE64.decode(&data_b64) {
+                                    Ok(d) => d,
+                                    Err(_) => {
+                                        send_fatal(&ws_write_tx, "bad_request", "Invalid base64 in stdin.data_b64".to_string(), None);
+                                        break;
+                                    }
+                                };
+                                if let Err(e) = tokio::task::spawn_blocking({
+                                    let master_fd = pty.master.as_raw_fd();
+                                    move || write_all_pty(master_fd, &data)
+                                }).await.unwrap_or_else(|_| Err(std::io::Error::other("join error"))) {
+                                    send_fatal(&ws_write_tx, "internal_error", format!("Failed to write stdin to PTY: {e}"), None);
+                                    break;
+                                }
+                            }
+                            PersistentClientMessage::Signal { sig } => {
+                                let ExecPhase::Running(ref running) = phase else {
+                                    continue;
+                                };
+                                if let Some(signo) = parse_signal(&sig) {
+                                    // Safety: kill is safe; targeting foreground process group with negative pgid.
+                                    unsafe { libc::kill(-running.pgid, signo) };
+                                }
+                            }
+                            PersistentClientMessage::Exec {
+                                seq,
+                                token_hex,
+                                cmd_id,
+                                stdin_mode,
+                                program_b64,
+                            } => {
+                                match phase {
+                                    ExecPhase::Idle => {}
+                                    _ => {
+                                        send_fatal(&ws_write_tx, "exec_while_busy", "exec received while another command is in-flight".to_string(), Some(seq));
+                                        break;
+                                    }
+                                }
+
+                                let program_bytes = match BASE64.decode(&program_b64) {
+                                    Ok(b) => b,
+                                    Err(_) => {
+                                        send_fatal(&ws_write_tx, "bad_request", "Invalid base64 in exec.program_b64".to_string(), Some(seq));
+                                        break;
+                                    }
+                                };
+                                if program_bytes.contains(&0) {
+                                    send_fatal(&ws_write_tx, "program_contains_nul", "Program contains NUL byte".to_string(), Some(seq));
+                                    break;
+                                }
+                                let program = match String::from_utf8(program_bytes) {
+                                    Ok(s) => s,
+                                    Err(_) => {
+                                        send_fatal(&ws_write_tx, "program_invalid_utf8", "Program is not valid UTF-8".to_string(), Some(seq));
+                                        break;
+                                    }
+                                };
+
+                                let (child_events, pgid) = match spawn_persistent_exec(
+                                    &world,
+                                    &pty,
+                                    &session_env,
+                                    &session_cwd,
+                                    &cmd_id,
+                                    stdin_mode,
+                                    &program,
+                                ) {
+                                    Ok(v) => v,
+                                    Err(message) => {
+                                        send_fatal(&ws_write_tx, "internal_error", message, Some(seq));
+                                        break;
+                                    }
+                                };
+
+                                phase = ExecPhase::Running(Running {
+                                    seq,
+                                    token_hex,
+                                    stdin_mode,
+                                    pgid,
+                                });
+                                child_events_rx = Some(child_events);
+                            }
+                            PersistentClientMessage::StartSession { .. } => {
+                                send_fatal(&ws_write_tx, "protocol_violation", "Unexpected start_session after ready".to_string(), None);
+                                break;
+                            }
+                        }
+                    }
+                    Ok(Message::Close(_)) => break,
+                    Ok(_) => continue,
+                    Err(e) => {
+                        send_fatal(&ws_write_tx, "internal_error", format!("WebSocket error: {e}"), None);
+                        break;
+                    }
+                }
+            }
+            child_event = async {
+                match child_events_rx.as_mut() {
+                    Some(rx) => rx.recv().await,
+                    None => None,
+                }
+            }, if child_events_rx.is_some() => {
+                let Some(child_event) = child_event else {
+                    send_fatal(&ws_write_tx, "internal_error", "child event channel closed unexpectedly".to_string(), None);
+                    break;
+                };
+                child_events_rx = None;
+                match (child_event, std::mem::replace(&mut phase, ExecPhase::Idle)) {
+                    (PersistentChildEvent::Fatal { code, message, seq }, _) => {
+                        send_fatal(&ws_write_tx, &code, message, seq);
+                        break;
+                    }
+                    (PersistentChildEvent::Finished { exit, cwd, env, watermark_bytes }, ExecPhase::Running(running)) => {
+                        // Snapshot a drain requirement based on the exit watermark.
+                        phase = ExecPhase::Draining(Draining {
+                            seq: running.seq,
+                            token_hex: running.token_hex,
+                            exit,
+                            new_cwd: cwd,
+                            new_env: env,
+                            drain_remaining: watermark_bytes,
+                        });
+
+                        if matches!(&phase, ExecPhase::Draining(Draining { drain_remaining: 0, .. })) {
+                            while let Ok(extra) = pty_bytes_rx.try_recv() {
+                                let data_b64 = BASE64.encode(&extra);
+                                if ws_write_tx.send(PersistentServerMessage::Stdout { data_b64 }).is_err() {
+                                    break;
+                                }
+                            }
+
+                            let ExecPhase::Draining(draining) = std::mem::replace(&mut phase, ExecPhase::Idle) else {
+                                continue;
+                            };
+
+                            let mut persisted_env = draining.new_env;
+                            strip_persistent_internal_env(&mut persisted_env, &world.base_env);
+                            sanitize_session_env(&mut persisted_env);
+                            ensure_xdg_dirs(&mut persisted_env);
+
+                            session_env = persisted_env;
+                            session_cwd = draining.new_cwd.clone();
+
+                            if ws_write_tx.send(PersistentServerMessage::CommandComplete {
+                                seq: draining.seq,
+                                token_hex: draining.token_hex,
+                                exit: draining.exit,
+                                cwd: draining.new_cwd,
+                            }).is_err() {
+                                break;
+                            }
+                        }
+                    }
+                    _ => {
+                        send_fatal(&ws_write_tx, "internal_error", "unexpected child event/state transition".to_string(), None);
+                        break;
+                    }
+                }
+            }
         }
     }
 
-    drop(pair);
-    info!("ws_pty: persistent session closed");
+    stop_flag.store(true, Ordering::Relaxed);
+    drop(pty);
+    drop(ws_write_tx);
+    let _ = writer_task.await;
+    info!(
+        "ws_pty: persistent session closed (world_id={})",
+        world.world_id
+    );
 }
 
 #[cfg(target_os = "linux")]
@@ -699,6 +1104,666 @@ fn resolve_ready_cwd(
     } else {
         Ok(project_dir)
     }
+}
+
+#[cfg(target_os = "linux")]
+struct PersistentWorldContext {
+    world_id: String,
+    merged_dir: PathBuf,
+    project_dir: PathBuf,
+    fs_mode: WorldFsMode,
+    netns_name: Option<String>,
+    cgroup_path: Option<PathBuf>,
+    base_env: HashMap<String, String>,
+}
+
+#[cfg(target_os = "linux")]
+fn prepare_persistent_world_context(
+    service: &WorldAgentService,
+    session_env: &HashMap<String, String>,
+    ready_cwd: &std::path::Path,
+    policy_snapshot: &PolicySnapshotV1,
+) -> Result<PersistentWorldContext, String> {
+    use world_api::{ResourceLimits, WorldSpec};
+
+    let project_dir =
+        resolve_project_dir(Some(session_env), Some(ready_cwd)).map_err(|e| e.to_string())?;
+
+    let allowed_domains = policy_snapshot.net_allowed.clone();
+    let fs_mode = policy_snapshot.world_fs.mode;
+
+    let spec = WorldSpec {
+        reuse_session: true,
+        isolate_network: true,
+        limits: ResourceLimits::default(),
+        enable_preload: false,
+        allowed_domains,
+        project_dir: project_dir.clone(),
+        always_isolate: true,
+        fs_mode,
+    };
+
+    let (world, merged_dir) = service
+        .ensure_session_overlay_root(&spec)
+        .map_err(|e| format!("Failed to prepare world overlay: {e}"))?;
+
+    let ns_name = format!("substrate-{}", world.id);
+    let ns_path = format!("/var/run/netns/{ns_name}");
+    let netns_name = if std::path::Path::new(&ns_path).exists() {
+        Some(ns_name)
+    } else {
+        None
+    };
+
+    let cgroup_path = Some(std::path::PathBuf::from("/sys/fs/cgroup/substrate").join(&world.id));
+
+    let mut base_env: HashMap<String, String> = HashMap::new();
+    let isolation_full = matches!(
+        policy_snapshot.world_fs.isolation,
+        PolicySnapshotWorldFsIsolationV1::Full
+    );
+    if isolation_full {
+        base_env.insert(
+            "SUBSTRATE_WORLD_FS_ISOLATION".to_string(),
+            "full".to_string(),
+        );
+
+        let write_allowlist_prefixes = resolve_project_write_allowlist_prefixes(
+            &project_dir,
+            &policy_snapshot.world_fs.write_allowlist,
+        );
+        if !write_allowlist_prefixes.is_empty() {
+            base_env.insert(
+                WORLD_FS_WRITE_ALLOWLIST_ENV.to_string(),
+                write_allowlist_prefixes.join("\n"),
+            );
+        }
+
+        let landlock_read_paths = resolve_landlock_allowlist_paths(
+            &project_dir,
+            &policy_snapshot.world_fs.read_allowlist,
+        );
+        let landlock_write_paths = resolve_landlock_allowlist_paths(
+            &project_dir,
+            &policy_snapshot.world_fs.write_allowlist,
+        );
+        let landlock_supported = world::landlock::detect_support().supported;
+        let landlock_env_needed = landlock_supported
+            && (!landlock_read_paths.is_empty() || !landlock_write_paths.is_empty());
+        if landlock_env_needed {
+            if !landlock_read_paths.is_empty() {
+                base_env.insert(
+                    WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV.to_string(),
+                    landlock_read_paths.join("\n"),
+                );
+            }
+            if !landlock_write_paths.is_empty() {
+                base_env.insert(
+                    WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV.to_string(),
+                    landlock_write_paths.join("\n"),
+                );
+            }
+            if let Ok(exe) = std::env::current_exe() {
+                base_env
+                    .entry("SUBSTRATE_LANDLOCK_HELPER_SRC".to_string())
+                    .or_insert_with(|| exe.display().to_string());
+            }
+        }
+    } else {
+        base_env.insert(
+            "SUBSTRATE_WORLD_FS_ISOLATION".to_string(),
+            "workspace".to_string(),
+        );
+    }
+
+    Ok(PersistentWorldContext {
+        world_id: world.id,
+        merged_dir,
+        project_dir,
+        fs_mode,
+        netns_name,
+        cgroup_path,
+        base_env,
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn strip_persistent_internal_env(
+    env: &mut HashMap<String, String>,
+    base_env: &HashMap<String, String>,
+) {
+    env.remove("SHIM_PARENT_CMD_ID");
+    env.remove("SUBSTRATE_PROGRAM");
+    env.remove("SUBSTRATE_MOUNT_MERGED_DIR");
+    env.remove("SUBSTRATE_MOUNT_PROJECT_DIR");
+    env.remove("SUBSTRATE_MOUNT_CWD");
+    env.remove("SUBSTRATE_MOUNT_FS_MODE");
+    env.remove("SUBSTRATE_INNER_CMD");
+    env.remove("SUBSTRATE_INNER_LOGIN_SHELL");
+    env.remove("SUBSTRATE_LANDLOCK_HELPER_PATH");
+
+    for key in base_env.keys() {
+        env.remove(key);
+    }
+
+    // Defense-in-depth: keep shim runtime variables out of the persisted env.
+    for key in [
+        "SHIM_ACTIVE",
+        "SHIM_CALLER",
+        "SHIM_CALL_STACK",
+        "SHIM_DEPTH",
+    ] {
+        env.remove(key);
+    }
+}
+
+#[cfg(target_os = "linux")]
+enum PersistentChildEvent {
+    Finished {
+        exit: i32,
+        cwd: PathBuf,
+        env: HashMap<String, String>,
+        watermark_bytes: usize,
+    },
+    Fatal {
+        code: String,
+        message: String,
+        seq: Option<u64>,
+    },
+}
+
+#[cfg(target_os = "linux")]
+fn read_pty_to_channel(
+    master_fd: libc::c_int,
+    stop: Arc<AtomicBool>,
+    tx: tokio::sync::mpsc::Sender<Vec<u8>>,
+) {
+    let mut buf = [0u8; 8192];
+    loop {
+        if stop.load(Ordering::Relaxed) {
+            break;
+        }
+
+        let mut fds = libc::pollfd {
+            fd: master_fd,
+            events: libc::POLLIN,
+            revents: 0,
+        };
+        // Safety: pollfd points to valid memory.
+        let rc = unsafe { libc::poll(&mut fds as *mut libc::pollfd, 1, 100) };
+        if rc < 0 {
+            let err = std::io::Error::last_os_error();
+            if err.kind() == std::io::ErrorKind::Interrupted {
+                continue;
+            }
+            break;
+        }
+        if rc == 0 {
+            continue;
+        }
+
+        if (fds.revents & (libc::POLLIN | libc::POLLHUP | libc::POLLERR)) == 0 {
+            continue;
+        }
+
+        loop {
+            // Safety: buf is valid for reads.
+            let n = unsafe {
+                libc::read(
+                    master_fd,
+                    buf.as_mut_ptr().cast::<libc::c_void>(),
+                    buf.len(),
+                )
+            };
+            if n < 0 {
+                let err = std::io::Error::last_os_error();
+                if err.kind() == std::io::ErrorKind::Interrupted {
+                    continue;
+                }
+                if err.kind() == std::io::ErrorKind::WouldBlock {
+                    break;
+                }
+                return;
+            }
+            if n == 0 {
+                return;
+            }
+            let bytes = buf[..(n as usize)].to_vec();
+            if tx.blocking_send(bytes).is_err() {
+                return;
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn write_all_pty(master_fd: libc::c_int, data: &[u8]) -> Result<(), std::io::Error> {
+    let mut offset = 0usize;
+    while offset < data.len() {
+        // Safety: data pointer is valid.
+        let n = unsafe {
+            libc::write(
+                master_fd,
+                data[offset..].as_ptr().cast::<libc::c_void>(),
+                (data.len() - offset) as libc::size_t,
+            )
+        };
+        if n < 0 {
+            let err = std::io::Error::last_os_error();
+            if err.kind() == std::io::ErrorKind::Interrupted {
+                continue;
+            }
+            if err.kind() == std::io::ErrorKind::WouldBlock {
+                let mut fds = libc::pollfd {
+                    fd: master_fd,
+                    events: libc::POLLOUT,
+                    revents: 0,
+                };
+                // Safety: pollfd points to valid memory.
+                let _ = unsafe { libc::poll(&mut fds as *mut libc::pollfd, 1, 100) };
+                continue;
+            }
+            return Err(err);
+        }
+        offset += n as usize;
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn parse_proc_environ(bytes: Vec<u8>) -> Result<HashMap<String, String>, String> {
+    let mut env = HashMap::new();
+    let mut start = 0usize;
+    for i in 0..=bytes.len() {
+        if i == bytes.len() || bytes[i] == 0 {
+            if i > start {
+                let entry = &bytes[start..i];
+                let entry = String::from_utf8(entry.to_vec())
+                    .map_err(|_| "process environ contains non-utf8 entry".to_string())?;
+                if let Some((k, v)) = entry.split_once('=') {
+                    env.insert(k.to_string(), v.to_string());
+                }
+            }
+            start = i + 1;
+        }
+    }
+    Ok(env)
+}
+
+#[cfg(target_os = "linux")]
+fn spawn_persistent_exec(
+    world: &PersistentWorldContext,
+    pty: &RawPty,
+    session_env: &HashMap<String, String>,
+    session_cwd: &std::path::Path,
+    cmd_id: &str,
+    stdin_mode: PersistentStdinMode,
+    program: &str,
+) -> Result<
+    (
+        tokio::sync::mpsc::Receiver<PersistentChildEvent>,
+        libc::pid_t,
+    ),
+    String,
+> {
+    use std::os::unix::process::CommandExt;
+
+    let desired_cwd = if session_cwd.starts_with(&world.project_dir) {
+        session_cwd.to_path_buf()
+    } else {
+        world.project_dir.clone()
+    };
+
+    let mut env = session_env.clone();
+    for (k, v) in world.base_env.iter() {
+        env.insert(k.clone(), v.clone());
+    }
+
+    env.insert(
+        "SUBSTRATE_MOUNT_MERGED_DIR".to_string(),
+        world.merged_dir.display().to_string(),
+    );
+    env.insert(
+        "SUBSTRATE_MOUNT_PROJECT_DIR".to_string(),
+        world.project_dir.display().to_string(),
+    );
+    env.insert(
+        "SUBSTRATE_MOUNT_CWD".to_string(),
+        desired_cwd.display().to_string(),
+    );
+    env.insert(
+        "SUBSTRATE_MOUNT_FS_MODE".to_string(),
+        world.fs_mode.as_str().to_string(),
+    );
+
+    env.insert("SUBSTRATE_PROGRAM".to_string(), program.to_string());
+    env.insert("SHIM_PARENT_CMD_ID".to_string(), cmd_id.to_string());
+
+    env.insert(
+        "SUBSTRATE_INNER_CMD".to_string(),
+        match stdin_mode {
+            PersistentStdinMode::Eof => {
+                r#"exec </dev/null /bin/bash --noprofile --norc -c "$SUBSTRATE_PROGRAM""#
+                    .to_string()
+            }
+            PersistentStdinMode::Passthrough => {
+                r#"exec /bin/bash --noprofile --norc -c "$SUBSTRATE_PROGRAM""#.to_string()
+            }
+        },
+    );
+    env.insert("SUBSTRATE_INNER_LOGIN_SHELL".to_string(), "0".to_string());
+
+    let needs_userns = unsafe { libc::geteuid() != 0 };
+
+    let stdin_fd = unsafe { libc::dup(pty.slave.as_raw_fd()) };
+    let stdout_fd = unsafe { libc::dup(pty.slave.as_raw_fd()) };
+    let stderr_fd = unsafe { libc::dup(pty.slave.as_raw_fd()) };
+    if stdin_fd < 0 || stdout_fd < 0 || stderr_fd < 0 {
+        return Err(format!(
+            "dup(pty slave) failed: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+
+    let stdin_file = unsafe { std::fs::File::from_raw_fd(stdin_fd) };
+    let stdout_file = unsafe { std::fs::File::from_raw_fd(stdout_fd) };
+    let stderr_file = unsafe { std::fs::File::from_raw_fd(stderr_fd) };
+
+    let mut cmd = Command::new("unshare");
+    cmd.arg("--mount");
+    if needs_userns {
+        cmd.arg("--user");
+        cmd.arg("--map-root-user");
+    }
+    cmd.arg("--");
+    cmd.arg("sh");
+    cmd.arg("-c");
+    cmd.arg(PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT);
+    cmd.current_dir("/");
+    cmd.env_clear();
+    cmd.envs(env);
+    cmd.stdin(Stdio::from(stdin_file));
+    cmd.stdout(Stdio::from(stdout_file));
+    cmd.stderr(Stdio::from(stderr_file));
+
+    let netns_fd_parent = if let Some(ref ns_name) = world.netns_name {
+        let ns_path = std::ffi::CString::new(format!("/var/run/netns/{ns_name}"))
+            .map_err(|_| "netns path contains NUL".to_string())?;
+        // Safety: libc::open called with valid C string.
+        let fd = unsafe { libc::open(ns_path.as_ptr(), libc::O_RDONLY | libc::O_CLOEXEC) };
+        if fd < 0 {
+            return Err(format!(
+                "open(netns) failed: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        Some(fd)
+    } else {
+        None
+    };
+    let netns_fd_child = netns_fd_parent.map(|fd| unsafe { libc::dup(fd) });
+
+    unsafe {
+        cmd.pre_exec(move || {
+            for signo in &[
+                libc::SIGCHLD,
+                libc::SIGHUP,
+                libc::SIGINT,
+                libc::SIGQUIT,
+                libc::SIGTERM,
+                libc::SIGALRM,
+            ] {
+                libc::signal(*signo, libc::SIG_DFL);
+            }
+
+            if libc::setsid() == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+
+            if libc::ioctl(0, libc::TIOCSCTTY as _, 0) == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+
+            if let Some(fd) = netns_fd_child {
+                if libc::setns(fd, libc::CLONE_NEWNET) == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                libc::close(fd);
+            }
+
+            let open_max = libc::sysconf(libc::_SC_OPEN_MAX);
+            let max_fd = if open_max > 0 && open_max <= i64::from(i32::MAX) {
+                open_max as i32
+            } else {
+                1024
+            };
+
+            for fd in 3..max_fd {
+                libc::close(fd);
+            }
+
+            // Ptrace-stop so the parent can observe exit-stop and capture cwd/env.
+            if libc::ptrace(libc::PTRACE_TRACEME, 0, 0, 0) == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+            libc::raise(libc::SIGSTOP);
+
+            Ok(())
+        });
+    }
+
+    let child = cmd.spawn().map_err(|e| format!("spawn failed: {e}"))?;
+    let pid = child.id() as libc::pid_t;
+    drop(child);
+    if let Some(fd) = netns_fd_parent {
+        // Safety: best-effort cleanup.
+        unsafe { libc::close(fd) };
+    }
+    if let Some(fd) = netns_fd_child {
+        // Safety: best-effort cleanup.
+        unsafe { libc::close(fd) };
+    }
+
+    if let Some(ref cg) = world.cgroup_path {
+        let _ = std::fs::create_dir_all(cg);
+        let _ = std::fs::write(cg.join("cgroup.procs"), pid.to_string());
+    }
+
+    if let Err(e) = pty_set_foreground_pgid(pty.master.as_raw_fd(), pid) {
+        return Err(format!("Failed to set PTY foreground pgid: {e}"));
+    }
+
+    let (tx, rx) = tokio::sync::mpsc::channel::<PersistentChildEvent>(1);
+    let master_fd = pty.master.as_raw_fd();
+    std::thread::spawn(move || traced_wait_loop(pid, master_fd, tx));
+
+    Ok((rx, pid))
+}
+
+#[cfg(target_os = "linux")]
+fn traced_wait_loop(
+    pid: libc::pid_t,
+    master_fd: libc::c_int,
+    tx: tokio::sync::mpsc::Sender<PersistentChildEvent>,
+) {
+    let send_fatal = |code: &str, message: String| {
+        let _ = tx.blocking_send(PersistentChildEvent::Fatal {
+            code: code.to_string(),
+            message,
+            seq: None,
+        });
+    };
+
+    // Wait for the initial SIGSTOP from PTRACE_TRACEME setup.
+    let mut status: libc::c_int = 0;
+    // Safety: waitpid writes to status.
+    let rc = unsafe { libc::waitpid(pid, &mut status as *mut libc::c_int, 0) };
+    if rc < 0 {
+        send_fatal(
+            "internal_error",
+            format!(
+                "waitpid initial stop failed: {}",
+                std::io::Error::last_os_error()
+            ),
+        );
+        return;
+    }
+
+    if !libc::WIFSTOPPED(status) {
+        send_fatal(
+            "internal_error",
+            "child did not stop as expected".to_string(),
+        );
+        return;
+    }
+
+    // Safety: ptrace called with valid pid.
+    let rc = unsafe {
+        libc::ptrace(
+            libc::PTRACE_SETOPTIONS,
+            pid,
+            0,
+            (libc::PTRACE_O_TRACEEXIT) as libc::c_long,
+        )
+    };
+    if rc == -1 {
+        send_fatal(
+            "internal_error",
+            format!(
+                "ptrace SETOPTIONS failed: {}",
+                std::io::Error::last_os_error()
+            ),
+        );
+        return;
+    }
+
+    // Safety: ptrace called with valid pid.
+    let rc = unsafe { libc::ptrace(libc::PTRACE_CONT, pid, 0, 0) };
+    if rc == -1 {
+        send_fatal(
+            "internal_error",
+            format!("ptrace CONT failed: {}", std::io::Error::last_os_error()),
+        );
+        return;
+    }
+
+    let mut captured_env: Option<HashMap<String, String>> = None;
+    let mut captured_cwd: Option<PathBuf> = None;
+    let mut watermark: Option<usize> = None;
+
+    loop {
+        status = 0;
+        // Safety: waitpid writes to status.
+        let rc = unsafe { libc::waitpid(pid, &mut status as *mut libc::c_int, 0) };
+        if rc < 0 {
+            send_fatal(
+                "internal_error",
+                format!("waitpid failed: {}", std::io::Error::last_os_error()),
+            );
+            return;
+        }
+
+        if libc::WIFSTOPPED(status) {
+            let sig = libc::WSTOPSIG(status);
+            let event = (status >> 16) & 0xffff;
+            if sig == libc::SIGTRAP && event == libc::PTRACE_EVENT_EXIT {
+                let cwd = std::fs::read_link(format!("/proc/{pid}/cwd")).map_err(|e| e.to_string());
+                let env_bytes =
+                    std::fs::read(format!("/proc/{pid}/environ")).map_err(|e| e.to_string());
+                match (cwd, env_bytes) {
+                    (Ok(cwd), Ok(env_bytes)) => match parse_proc_environ(env_bytes) {
+                        Ok(env) => {
+                            captured_env = Some(env);
+                            captured_cwd = Some(cwd);
+                        }
+                        Err(e) => {
+                            send_fatal(
+                                "internal_error",
+                                format!("Failed to parse child environ: {e}"),
+                            );
+                            return;
+                        }
+                    },
+                    (Err(e), _) => {
+                        send_fatal(
+                            "internal_error",
+                            format!("Failed to capture child cwd: {e}"),
+                        );
+                        return;
+                    }
+                    (_, Err(e)) => {
+                        send_fatal(
+                            "internal_error",
+                            format!("Failed to capture child environ: {e}"),
+                        );
+                        return;
+                    }
+                }
+
+                match pty_fionread(master_fd) {
+                    Ok(b) => watermark = Some(b),
+                    Err(e) => {
+                        send_fatal(
+                            "internal_error",
+                            format!("FIONREAD watermark query failed: {e}"),
+                        );
+                        return;
+                    }
+                }
+
+                // Safety: ptrace called with valid pid.
+                let _ = unsafe { libc::ptrace(libc::PTRACE_CONT, pid, 0, 0) };
+                continue;
+            }
+
+            // Pass through other stops.
+            // Safety: ptrace called with valid pid.
+            let _ = unsafe { libc::ptrace(libc::PTRACE_CONT, pid, 0, sig) };
+            continue;
+        }
+
+        if libc::WIFEXITED(status) || libc::WIFSIGNALED(status) {
+            break;
+        }
+    }
+
+    let exit_code = if libc::WIFEXITED(status) {
+        libc::WEXITSTATUS(status) as i32
+    } else if libc::WIFSIGNALED(status) {
+        let sig = libc::WTERMSIG(status) as i32;
+        128 + sig
+    } else {
+        1
+    };
+
+    let Some(env) = captured_env else {
+        send_fatal(
+            "internal_error",
+            "missing child env capture at exit stop".to_string(),
+        );
+        return;
+    };
+    let Some(cwd) = captured_cwd else {
+        send_fatal(
+            "internal_error",
+            "missing child cwd capture at exit stop".to_string(),
+        );
+        return;
+    };
+    let Some(watermark_bytes) = watermark else {
+        send_fatal(
+            "internal_error",
+            "missing PTY watermark at exit stop".to_string(),
+        );
+        return;
+    };
+
+    let _ = tx.blocking_send(PersistentChildEvent::Finished {
+        exit: exit_code,
+        cwd,
+        env,
+        watermark_bytes,
+    });
 }
 
 async fn handle_legacy_start(
