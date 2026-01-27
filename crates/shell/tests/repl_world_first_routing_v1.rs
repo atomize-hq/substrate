@@ -411,7 +411,7 @@ fn c3_drift_restart_restarts_session_and_emits_message() {
     let guard = records.lock().expect("lock records");
     assert!(
         guard.persistent_start_sessions.len() >= 2,
-        "expected a session restart on snapshot/workspace drift; records: {guard:#?}"
+        "expected a session restart on snapshot/workspace drift; output:\n{out}\nrecords: {guard:#?}"
     );
 
     let lower = out.to_ascii_lowercase();

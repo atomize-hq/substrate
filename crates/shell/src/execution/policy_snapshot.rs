@@ -5,6 +5,7 @@ use agent_api_types::{
 use anyhow::{Context, Result};
 use sha2::{Digest, Sha256};
 use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::time::SystemTime;
@@ -20,6 +21,7 @@ struct FileStatKey {
     exists: bool,
     mtime: Option<SystemTime>,
     size: Option<u64>,
+    sha256: Option<[u8; 32]>,
 }
 
 impl FileStatKey {
@@ -29,15 +31,33 @@ impl FileStatKey {
                 exists: true,
                 mtime: meta.modified().ok(),
                 size: Some(meta.len()),
+                sha256: Some(sha256_file(path)?),
             }),
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(Self {
                 exists: false,
                 mtime: None,
                 size: None,
+                sha256: None,
             }),
             Err(err) => Err(err).with_context(|| format!("failed to stat {}", path.display())),
         }
     }
+}
+
+fn sha256_file(path: &Path) -> Result<[u8; 32]> {
+    let mut file = fs::File::open(path).with_context(|| format!("open {}", path.display()))?;
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 16 * 1024];
+    loop {
+        let read = file
+            .read(&mut buf)
+            .with_context(|| format!("read {}", path.display()))?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buf[..read]);
+    }
+    Ok(hasher.finalize().into())
 }
 
 #[derive(Debug, Clone)]
