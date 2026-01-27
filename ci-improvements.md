@@ -195,6 +195,11 @@ Entry example:
 }
 ```
 
+### Current Status
+- Implemented ledger recording helper: `scripts/ci-audit/ci_audit_record.sh`
+- Implemented ledger consumption in `ci-audit` via `--ledger-path`:
+  - `scripts/ci-audit/ci_audit.sh --ledger-path <path> ...`
+
 ### Ledger Write Policy
 Because we are “separate from task/dispatch scripts”, v2 can work in either of these ways:
 1. Operator runs `ci-audit record --run-id <id> --tested-sha <sha> ...` after dispatch finishes.

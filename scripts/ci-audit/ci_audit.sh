@@ -19,6 +19,7 @@ Usage:
     [--required-platforms <csv>] \
     [--head-sha <sha>] \
     [--baseline-sha <sha>] \
+    [--ledger-path <path>] \
     [--remote <name>] \
     [--repo <owner/repo>]
 
@@ -48,6 +49,7 @@ FEATURE_DIR=""
 REQUIRED_PLATFORMS_OVERRIDE=""
 HEAD_SHA=""
 BASELINE_SHA_OVERRIDE=""
+LEDGER_PATH=""
 REMOTE="origin"
 REPO=""
 
@@ -65,6 +67,8 @@ while [[ $# -gt 0 ]]; do
             HEAD_SHA="${2:-}"; shift 2 ;;
         --baseline-sha)
             BASELINE_SHA_OVERRIDE="${2:-}"; shift 2 ;;
+        --ledger-path)
+            LEDGER_PATH="${2:-}"; shift 2 ;;
         --remote)
             REMOTE="${2:-}"; shift 2 ;;
         --repo)
@@ -133,12 +137,59 @@ last_green_run_id=""
 last_green_run_url=""
 last_green_head_sha=""
 last_passed_platforms_sorted=""
+last_green_tested_sha=""
+
+select_last_green_from_ledger() {
+    local ledger_path="$1"
+    local kind="$2"
+    local orch_branch="$3"
+    local required_csv="$4"
+
+    [[ -f "${ledger_path}" ]] || return 1
+
+    local required_json
+    required_json="$(printf '%s' "${required_csv}" | tr ',' '\n' | sed '/^$/d' | sort -u | jq -R -s 'split("\n") | map(select(length>0))')"
+
+    local candidate
+    candidate="$(
+        jq -s \
+          --arg kind "${kind}" \
+          --arg orch "${orch_branch}" \
+          --argjson required "${required_json}" \
+          '
+            map(
+              select(.kind==$kind)
+              | select(.conclusion=="success")
+              | select((.orch_branch==$orch) or (.orch_branch|not))
+              | select((($required - (.passed_platforms // [])) | length) == 0)
+            )
+            | sort_by(.timestamp // .created_at // "")
+            | reverse
+            | .[0] // empty
+          ' "${ledger_path}" 2>/dev/null || true
+    )"
+
+    [[ -n "${candidate}" ]] || return 1
+
+    last_green_run_id="$(jq -r '.run_id // empty' <<<"${candidate}")"
+    last_green_run_url="$(jq -r '.run_url // empty' <<<"${candidate}")"
+    last_green_tested_sha="$(jq -r '.tested_sha // empty' <<<"${candidate}")"
+    last_green_head_sha="$(jq -r '.head_sha // empty' <<<"${candidate}")"
+    last_passed_platforms_sorted="$(jq -r '.passed_platforms // [] | .[]' <<<"${candidate}" | sort -u || true)"
+    return 0
+}
+
+if [[ -n "${LEDGER_PATH}" ]]; then
+    select_last_green_from_ledger "${LEDGER_PATH}" "${KIND}" "${ORCH_BRANCH}" "${required_platforms_csv}" || true
+fi
 
 run_list_json="$(gh run list --workflow "${WORKFLOW_FILE}" --branch "${ORCH_BRANCH}" --limit 50 --json databaseId,conclusion,headSha,url,createdAt || true)"
 if [[ -n "${run_list_json}" ]] && jq -e 'type=="array"' >/dev/null 2>&1 <<<"${run_list_json}"; then
-    last_green_run_id="$(jq -r 'map(select(.conclusion=="success")) | sort_by(.createdAt) | reverse | .[0].databaseId // empty' <<<"${run_list_json}")"
-    last_green_run_url="$(jq -r 'map(select(.conclusion=="success")) | sort_by(.createdAt) | reverse | .[0].url // empty' <<<"${run_list_json}")"
-    last_green_head_sha="$(jq -r 'map(select(.conclusion=="success")) | sort_by(.createdAt) | reverse | .[0].headSha // empty' <<<"${run_list_json}")"
+    if [[ -z "${last_green_run_id}" ]]; then
+        last_green_run_id="$(jq -r 'map(select(.conclusion=="success")) | sort_by(.createdAt) | reverse | .[0].databaseId // empty' <<<"${run_list_json}")"
+        last_green_run_url="$(jq -r 'map(select(.conclusion=="success")) | sort_by(.createdAt) | reverse | .[0].url // empty' <<<"${run_list_json}")"
+        last_green_head_sha="$(jq -r 'map(select(.conclusion=="success")) | sort_by(.createdAt) | reverse | .[0].headSha // empty' <<<"${run_list_json}")"
+    fi
 fi
 
 derive_passed_platforms_from_jobs() {
@@ -181,6 +232,9 @@ baseline_source=""
 if [[ -n "${BASELINE_SHA_OVERRIDE}" ]]; then
     baseline_sha="${BASELINE_SHA_OVERRIDE}"
     baseline_source="baseline_sha_override"
+elif [[ -n "${last_green_tested_sha}" ]]; then
+    baseline_sha="${last_green_tested_sha}"
+    baseline_source="ledger_tested_sha"
 elif [[ -n "${last_green_head_sha}" ]]; then
     baseline_sha="${last_green_head_sha}"
     baseline_source="last_green_head_sha"
@@ -286,6 +340,7 @@ echo "REASON=${reason}"
 echo "REQUIRED_PLATFORMS=${required_platforms_csv}"
 echo "LAST_GREEN_RUN_ID=${last_green_run_id}"
 echo "LAST_GREEN_RUN_URL=${last_green_run_url}"
+echo "LAST_GREEN_TESTED_SHA=${last_green_tested_sha}"
 echo "LAST_GREEN_HEAD_SHA=${last_green_head_sha}"
 echo "LAST_PASSED_PLATFORMS=$(printf '%s' "${last_passed_platforms_sorted}" | paste -sd, - 2>/dev/null || true)"
 echo "BASELINE_SOURCE=${baseline_source}"
