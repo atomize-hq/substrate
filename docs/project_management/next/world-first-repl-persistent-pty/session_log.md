@@ -279,3 +279,10 @@
   - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/world-first-repl-persistent-pty/logs/C0/test/events.jsonl`
   - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/world-first-repl-persistent-pty/logs/C0/test/stderr.log`
 - Blockers: `NONE (note: test branch alone has expected failures until merged with C0-code)`
+
+## START — 2026-01-27T04:03:40Z — code — C1-code
+- Worktree: `wt/world-first-repl-persistent-pty-c1-code`
+- Branch: `world-first-repl-persistent-pty-c1-code`
+- Orchestration branch: `feat/world-first-repl-persistent-pty`
+- Dispatch:
+  - `make triad-task-start-pair FEATURE_DIR="$FEATURE_DIR" SLICE_ID="$SLICE_ID" LAUNCH_CODEX=1`
