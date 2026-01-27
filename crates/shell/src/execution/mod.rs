@@ -29,7 +29,9 @@ pub(crate) use config_cmd::handle_config_command;
 pub(crate) use env_scripts::{env_sh_path, write_env_sh, write_env_sh_at};
 pub use invocation::{needs_shell, ShellConfig, ShellMode};
 pub(crate) use policy_cmd::handle_policy_command;
-pub(crate) use pty::{get_terminal_size, MinimalTerminalGuard};
+#[cfg(unix)]
+pub(crate) use pty::get_terminal_size;
+pub(crate) use pty::MinimalTerminalGuard;
 pub use routing::*;
 pub(crate) use workspace::find_workspace_root;
 pub(crate) use workspace_cmd::handle_workspace_command;
