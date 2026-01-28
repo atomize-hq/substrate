@@ -14,14 +14,23 @@ fi
 [[ $- == *i* ]] && [[ -f ~/.bashrc ]] && source ~/.bashrc
 
 if [[ "${SUBSTRATE_ENABLE_PREEXEC:-0}" == "1" ]]; then
+__substrate_json_escape() {
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\n'/\\n}"
+    s="${s//$'\r'/\\r}"
+    s="${s//$'\t'/\\t}"
+    printf '%s' "$s"
+}
 __substrate_preexec() {
     [[ -z "$SHIM_TRACE_LOG" ]] && return 0
     [[ "$BASH_COMMAND" == __substrate_preexec* ]] && return 0
     [[ -n "$COMP_LINE" ]] && return 0
-    printf '{"ts":"%s","event_type":"builtin_command","command":%q,"session_id":%q,"component":"shell","pty":true}\n' \
+    printf '{"ts":"%s","event_type":"builtin_command","command":"%s","session_id":"%s","component":"shell","pty":true}\n' \
         "$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)" \
-        "$BASH_COMMAND" \
-        "${SHIM_SESSION_ID:-unknown}" >> "$SHIM_TRACE_LOG" 2>/dev/null || true
+        "$(__substrate_json_escape "$BASH_COMMAND")" \
+        "$(__substrate_json_escape "${SHIM_SESSION_ID:-unknown}")" >> "$SHIM_TRACE_LOG" 2>/dev/null || true
 }
 trap '__substrate_preexec' DEBUG
 fi

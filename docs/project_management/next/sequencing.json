@@ -310,7 +310,7 @@
       "branch": "feat/policy-patch-only-broker-effective-resolution",
       "directory": "docs/project_management/_archived/policy-patch-only-broker-effective-resolution",
       "plan": "docs/project_management/_archived/policy-patch-only-broker-effective-resolution/plan.md",
-      "status": "not_started",
+      "status": "completed",
       "sequence": [
         {
           "id": "C0",
@@ -387,7 +387,7 @@
       "branch": "feat/full-isolation-landlock-overlayfs-compat",
       "directory": "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat",
       "plan": "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/plan.md",
-      "status": "not_started",
+      "status": "completed",
       "sequence": [
         {
           "id": "C0",
@@ -405,7 +405,7 @@
       "branch": "feat/world-first-repl-persistent-pty",
       "directory": "docs/project_management/next/world-first-repl-persistent-pty",
       "plan": "docs/project_management/next/world-first-repl-persistent-pty/plan.md",
-      "status": "not_started",
+      "status": "completed",
       "sequence": [
         {
           "id": "C0",
