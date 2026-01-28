@@ -1415,6 +1415,7 @@ fn spawn_persistent_exec(
     String,
 > {
     use std::os::unix::process::CommandExt;
+    use std::time::Duration;
 
     let desired_cwd = if session_cwd.starts_with(&world.project_dir) {
         session_cwd.to_path_buf()
@@ -1550,36 +1551,64 @@ fn spawn_persistent_exec(
                 libc::close(fd);
             }
 
-            // Ptrace-stop so the parent can observe exit-stop and capture cwd/env.
+            // Request tracing by the parent so it can capture env/cwd at an exit-stop.
+            // This avoids relying on PTRACE_ATTACH (which some host policies/LSMs may block)
+            // while still allowing the parent to observe a deterministic exit-stop.
             if libc::ptrace(libc::PTRACE_TRACEME, 0, 0, 0) == -1 {
                 return Err(std::io::Error::last_os_error());
             }
-            libc::raise(libc::SIGSTOP);
 
             Ok(())
         });
     }
 
-    let child = cmd.spawn().map_err(|e| format!("spawn failed: {e}"))?;
-    let pid = child.id() as libc::pid_t;
-    drop(child);
-    if let Some(fd) = netns_fd_parent {
-        // Safety: best-effort cleanup.
-        unsafe { libc::close(fd) };
-    }
-    if let Some(fd) = netns_fd_child {
-        // Safety: best-effort cleanup.
-        unsafe { libc::close(fd) };
-    }
-
-    if let Some(ref cg) = world.cgroup_path {
-        let _ = std::fs::create_dir_all(cg);
-        let _ = std::fs::write(cg.join("cgroup.procs"), pid.to_string());
-    }
-
     let (tx, rx) = tokio::sync::mpsc::channel::<PersistentChildEvent>(1);
     let master_fd = pty.master.as_raw_fd();
-    std::thread::spawn(move || traced_wait_loop(pid, master_fd, tx));
+
+    // ptrace(TRACEME) ties the tracee to the forking thread. Ensure the same OS thread
+    // that spawns the child also performs all ptrace operations.
+    let (pid_tx, pid_rx) = std::sync::mpsc::sync_channel::<Result<libc::pid_t, String>>(1);
+    let cgroup_path = world.cgroup_path.clone();
+    std::thread::spawn(move || {
+        let child = match cmd.spawn() {
+            Ok(c) => c,
+            Err(e) => {
+                let _ = pid_tx.send(Err(format!("spawn failed: {e}")));
+                let _ = tx.blocking_send(PersistentChildEvent::Fatal {
+                    code: "internal_error".to_string(),
+                    message: format!("spawn failed: {e}"),
+                    seq: None,
+                });
+                return;
+            }
+        };
+
+        let pid = child.id() as libc::pid_t;
+        drop(child);
+
+        if let Some(fd) = netns_fd_parent {
+            // Safety: best-effort cleanup.
+            unsafe { libc::close(fd) };
+        }
+        if let Some(fd) = netns_fd_child {
+            // Safety: best-effort cleanup.
+            unsafe { libc::close(fd) };
+        }
+
+        if let Some(ref cg) = cgroup_path {
+            let _ = std::fs::create_dir_all(cg);
+            let _ = std::fs::write(cg.join("cgroup.procs"), pid.to_string());
+        }
+
+        let _ = pid_tx.send(Ok(pid));
+        traced_wait_loop(pid, master_fd, tx);
+    });
+
+    let pid = match pid_rx.recv_timeout(Duration::from_secs(5)) {
+        Ok(Ok(pid)) => pid,
+        Ok(Err(msg)) => return Err(msg),
+        Err(_) => return Err("timed out waiting for child pid".to_string()),
+    };
 
     Ok((rx, pid))
 }
@@ -1598,7 +1627,8 @@ fn traced_wait_loop(
         });
     };
 
-    // Wait for the initial SIGSTOP from PTRACE_TRACEME setup.
+    // With PTRACE_TRACEME, the first ptrace-stop occurs on execve of the `unshare` target.
+    // Wait for that stop, set TRACEEXIT, then continue.
     let mut status: libc::c_int = 0;
     // Safety: waitpid writes to status.
     let rc = unsafe { libc::waitpid(pid, &mut status as *mut libc::c_int, 0) };
@@ -1606,13 +1636,14 @@ fn traced_wait_loop(
         send_fatal(
             "internal_error",
             format!(
-                "waitpid initial stop failed: {}",
+                "waitpid initial ptrace stop failed: {}",
                 std::io::Error::last_os_error()
             ),
         );
         return;
     }
 
+    let trace_pid = rc;
     if !libc::WIFSTOPPED(status) {
         send_fatal(
             "internal_error",
@@ -1621,11 +1652,13 @@ fn traced_wait_loop(
         return;
     }
 
+    let stop_sig = libc::WSTOPSIG(status);
+
     // Safety: ptrace called with valid pid.
     let rc = unsafe {
         libc::ptrace(
             libc::PTRACE_SETOPTIONS,
-            pid,
+            trace_pid,
             0,
             (libc::PTRACE_O_TRACEEXIT) as libc::c_long,
         )
@@ -1634,15 +1667,23 @@ fn traced_wait_loop(
         send_fatal(
             "internal_error",
             format!(
-                "ptrace SETOPTIONS failed: {}",
-                std::io::Error::last_os_error()
+                "ptrace SETOPTIONS failed: {} (pid={}, trace_pid={}, stop_sig={})",
+                std::io::Error::last_os_error(),
+                pid,
+                trace_pid,
+                stop_sig
             ),
         );
         return;
     }
 
     // Safety: ptrace called with valid pid.
-    let rc = unsafe { libc::ptrace(libc::PTRACE_CONT, pid, 0, 0) };
+    let cont_sig = if stop_sig == libc::SIGTRAP {
+        0
+    } else {
+        stop_sig
+    };
+    let rc = unsafe { libc::ptrace(libc::PTRACE_CONT, trace_pid, 0, cont_sig) };
     if rc == -1 {
         send_fatal(
             "internal_error",
@@ -1658,7 +1699,7 @@ fn traced_wait_loop(
     loop {
         status = 0;
         // Safety: waitpid writes to status.
-        let rc = unsafe { libc::waitpid(pid, &mut status as *mut libc::c_int, 0) };
+        let rc = unsafe { libc::waitpid(trace_pid, &mut status as *mut libc::c_int, 0) };
         if rc < 0 {
             send_fatal(
                 "internal_error",
@@ -1671,9 +1712,10 @@ fn traced_wait_loop(
             let sig = libc::WSTOPSIG(status);
             let event = (status >> 16) & 0xffff;
             if sig == libc::SIGTRAP && event == libc::PTRACE_EVENT_EXIT {
-                let cwd = std::fs::read_link(format!("/proc/{pid}/cwd")).map_err(|e| e.to_string());
+                let cwd =
+                    std::fs::read_link(format!("/proc/{trace_pid}/cwd")).map_err(|e| e.to_string());
                 let env_bytes =
-                    std::fs::read(format!("/proc/{pid}/environ")).map_err(|e| e.to_string());
+                    std::fs::read(format!("/proc/{trace_pid}/environ")).map_err(|e| e.to_string());
                 match (cwd, env_bytes) {
                     (Ok(cwd), Ok(env_bytes)) => match parse_proc_environ(env_bytes) {
                         Ok(env) => {
@@ -1716,13 +1758,15 @@ fn traced_wait_loop(
                 }
 
                 // Safety: ptrace called with valid pid.
-                let _ = unsafe { libc::ptrace(libc::PTRACE_CONT, pid, 0, 0) };
+                let _ = unsafe { libc::ptrace(libc::PTRACE_CONT, trace_pid, 0, 0) };
                 continue;
             }
 
             // Pass through other stops.
+            // Do not deliver SIGTRAP back to the tracee; it is used for ptrace bookkeeping.
             // Safety: ptrace called with valid pid.
-            let _ = unsafe { libc::ptrace(libc::PTRACE_CONT, pid, 0, sig) };
+            let cont_sig = if sig == libc::SIGTRAP { 0 } else { sig };
+            let _ = unsafe { libc::ptrace(libc::PTRACE_CONT, trace_pid, 0, cont_sig) };
             continue;
         }
 

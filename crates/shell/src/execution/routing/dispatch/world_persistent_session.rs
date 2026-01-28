@@ -53,6 +53,7 @@ mod imp {
         >,
         state: Arc<Mutex<SessionState>>,
         ready: OnceCell<ReadyFrame>,
+        fatal: tokio::sync::watch::Receiver<Option<String>>,
         read_task: tokio::task::JoinHandle<Result<()>>,
     }
 
@@ -120,6 +121,7 @@ mod imp {
             let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
             let state = Arc::new(Mutex::new(SessionState::Starting { ready_tx }));
             let ready_cell = OnceCell::new();
+            let (fatal_tx, fatal_rx) = tokio::sync::watch::channel::<Option<String>>(None);
 
             sink.lock()
                 .await
@@ -129,10 +131,9 @@ mod imp {
 
             let read_state = state.clone();
             let read_sink = sink.clone();
-            let read_task =
-                tokio::spawn(
-                    async move { read_loop(stream, read_sink, read_state, on_stdout).await },
-                );
+            let read_task = tokio::spawn(async move {
+                read_loop(stream, read_sink, read_state, on_stdout, fatal_tx).await
+            });
 
             let ready = ready_rx
                 .await
@@ -167,6 +168,7 @@ mod imp {
                 sink,
                 state,
                 ready: ready_cell,
+                fatal: fatal_rx,
                 read_task,
             })
         }
@@ -254,10 +256,15 @@ mod imp {
                 .with_context(|| format!("world session ws send exec seq={seq}"))?;
 
             let complete = complete_rx.await.map_err(|_| {
+                let fatal = self.fatal.borrow().clone();
                 anyhow!(
-                    "world session terminated while awaiting command_complete (seq={}, token={})",
+                    "world session terminated while awaiting command_complete (seq={}, token={}){}",
                     seq,
-                    redact_token(&token_hex)
+                    redact_token(&token_hex),
+                    fatal
+                        .as_ref()
+                        .map(|s| format!("; cause: {s}"))
+                        .unwrap_or_default()
                 )
             })?;
             Ok(complete)
@@ -401,15 +408,22 @@ mod imp {
         >,
         state: Arc<Mutex<SessionState>>,
         on_stdout: StdoutCallback,
+        fatal_tx: tokio::sync::watch::Sender<Option<String>>,
     ) -> Result<()> {
         use tungs::tungstenite::Message;
+
+        let publish_fatal = |msg: String| {
+            let _ = fatal_tx.send(Some(msg));
+        };
 
         while let Some(item) = stream.next().await {
             let msg = match item {
                 Ok(m) => m,
                 Err(err) => {
+                    let err = anyhow!(err).context("world session ws read");
+                    publish_fatal(err.to_string());
                     fail_closed(&state).await;
-                    return Err(anyhow!(err).context("world session ws read"));
+                    return Err(err);
                 }
             };
             match msg {
@@ -417,25 +431,33 @@ mod imp {
                     let frame: ServerFrame = match serde_json::from_str(&text) {
                         Ok(f) => f,
                         Err(err) => {
+                            let err = anyhow!(err).context("protocol error: invalid JSON frame");
+                            publish_fatal(err.to_string());
                             fail_closed(&state).await;
-                            return Err(anyhow!(err).context("protocol error: invalid JSON frame"));
+                            return Err(err);
                         }
                     };
                     if let Err(err) = handle_server_frame(frame, &state, &on_stdout).await {
+                        publish_fatal(err.to_string());
                         fail_closed(&state).await;
                         return Err(err);
                     }
                 }
                 Message::Ping(payload) => {
                     if let Err(err) = sink.lock().await.send(Message::Pong(payload)).await {
+                        let err = anyhow!(err).context("world session ws pong");
+                        publish_fatal(err.to_string());
                         fail_closed(&state).await;
-                        return Err(anyhow!(err).context("world session ws pong"));
+                        return Err(err);
                     }
                 }
                 Message::Pong(_) => {}
                 Message::Close(_) => {
                     let closing = matches!(*state.lock().await, SessionState::Closing);
                     if !closing {
+                        publish_fatal(
+                            "world session closed unexpectedly (protocol fail-closed)".to_string(),
+                        );
                         fail_closed(&state).await;
                         return Err(anyhow!(
                             "world session closed unexpectedly (protocol fail-closed)"
@@ -444,6 +466,13 @@ mod imp {
                     return Ok(());
                 }
                 other => {
+                    publish_fatal(
+                        anyhow!(
+                            "protocol error: unexpected websocket message type: {:?}",
+                            other
+                        )
+                        .to_string(),
+                    );
                     fail_closed(&state).await;
                     return Err(anyhow!(
                         "protocol error: unexpected websocket message type: {:?}",
@@ -457,6 +486,9 @@ mod imp {
         if closing {
             Ok(())
         } else {
+            publish_fatal(
+                "world session stream ended unexpectedly (protocol fail-closed)".to_string(),
+            );
             fail_closed(&state).await;
             Err(anyhow!(
                 "world session stream ended unexpectedly (protocol fail-closed)"
