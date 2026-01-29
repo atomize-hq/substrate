@@ -1,0 +1,113 @@
+{
+  "meta": {
+    "schema_version": 1,
+    "feature": "world-fs-granular-allow-deny",
+    "cross_platform": false
+  },
+  "tasks": [
+    {
+      "id": "C0-code",
+      "name": "V2 schema + strict deny core implementation",
+      "type": "code",
+      "phase": "C0",
+      "status": "pending",
+      "description": "Implement PolicySnapshotV2 + policy schema V2, helper deny masking, and strict-mode bypass prevention for Linux full isolation.",
+      "references": [
+        "docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/contract.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/SCHEMA.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/PROTOCOL.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/ENV.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/SECURITY.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/integration_map.md"
+      ],
+      "acceptance_criteria": [
+        "All contract.md MUST statements are implemented",
+        "World-agent rejects PolicySnapshotV1 and accepts PolicySnapshotV2 only",
+        "Strict deny prevents mount/umount bypass attempts by the workload in full isolation"
+      ],
+      "start_checklist": [
+        "Read: contract.md, SCHEMA.md, PROTOCOL.md, ENV.md, SECURITY.md",
+        "Confirm: full isolation only (no workspace support for deny/enforcement)",
+        "No backwards compatibility: legacy keys and PolicySnapshotV1 must hard error"
+      ],
+      "end_checklist": [
+        "Update integration_map.md if code landmarks drift",
+        "Ensure contract.md remains the conflict resolver (fix docs drift if found)"
+      ],
+      "worktree": "wt/world-fs-granular-allow-deny-C0",
+      "integration_task": "C0-integ",
+      "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/C0-code.md",
+      "depends_on": [],
+      "concurrent_with": [
+        "C0-test"
+      ]
+    },
+    {
+      "id": "C0-test",
+      "name": "V2 schema + strict deny tests",
+      "type": "test",
+      "phase": "C0",
+      "status": "pending",
+      "description": "Add unit and integration tests that enforce the V2 schema and strict deny semantics in full isolation.",
+      "references": [
+        "docs/project_management/next/world-fs-granular-allow-deny/requirements_traceability.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/SCHEMA.md"
+      ],
+      "acceptance_criteria": [
+        "Unit tests cover schema hard errors (legacy keys, invalid patterns, workspace deny disallowed)",
+        "Integration tests cover deny-overrides-allow and strict bypass prevention on Linux full isolation"
+      ],
+      "start_checklist": [
+        "Map tests to requirements_traceability.md Req IDs",
+        "Decide gating behavior for kernels without Landlock support (fail closed vs skip) per contract"
+      ],
+      "end_checklist": [
+        "Update requirements_traceability.md with any new stable requirement IDs",
+        "Ensure tests are stable and deterministic"
+      ],
+      "worktree": "wt/world-fs-granular-allow-deny-C0",
+      "integration_task": "C0-integ",
+      "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/C0-test.md",
+      "depends_on": [],
+      "concurrent_with": [
+        "C0-code"
+      ]
+    },
+    {
+      "id": "C0-integ",
+      "name": "Linux full isolation integration validation",
+      "type": "integration",
+      "phase": "C0",
+      "status": "pending",
+      "description": "Run Linux full isolation integration checks (deny-overrides-allow, discover vs read, strict bypass prevention) and record evidence.",
+      "references": [
+        "docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/quality_gate_report.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/contract.md"
+      ],
+      "acceptance_criteria": [
+        "Manual playbook Cases 1-4 pass on Linux full isolation",
+        "Strict bypass attempt fails as specified"
+      ],
+      "start_checklist": [
+        "Run targeted tests for the changed crates (broker, shell, world-agent, world)",
+        "Run manual playbook cases in a small test workspace"
+      ],
+      "end_checklist": [
+        "Update quality_gate_report.md from PENDING to PASS where appropriate",
+        "Record any deviations as failures (no optional behaviors)"
+      ],
+      "worktree": "wt/world-fs-granular-allow-deny-C0",
+      "integration_task": "C0-integ",
+      "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/C0-integ.md",
+      "depends_on": [
+        "C0-code",
+        "C0-test"
+      ],
+      "concurrent_with": []
+    }
+  ]
+}
+
