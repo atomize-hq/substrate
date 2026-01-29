@@ -24,7 +24,7 @@ use crate::execution::get_terminal_size;
 use crate::execution::ReplSessionTelemetry;
 use crate::execution::{
     execute_command, find_workspace_root, is_shell_stream_event, needs_pty, policy_snapshot,
-    setup_signal_handlers, MinimalTerminalGuard, ReplPersistentSessionClient,
+    resolve_world_root, setup_signal_handlers, MinimalTerminalGuard, ReplPersistentSessionClient,
     ReplSessionStartParams, ReplStdinMode, ShellConfig, PTY_ACTIVE,
 };
 use crate::repl::editor;
@@ -582,16 +582,31 @@ async fn start_world_session(
     on_stdout: StdoutCallback,
     agent_printer: &ExternalPrinter<String>,
 ) -> Result<WorldSession> {
+    fn apply_anchor_env_for_cwd(env: &mut HashMap<String, String>, cwd: &Path) -> Result<()> {
+        let resolved = resolve_world_root(None, None, None, cwd)
+            .context("resolve world root settings for session env")?;
+        env.insert(
+            "SUBSTRATE_ANCHOR_MODE".to_string(),
+            resolved.mode.as_str().to_string(),
+        );
+        env.insert(
+            "SUBSTRATE_ANCHOR_PATH".to_string(),
+            resolved.path.to_string_lossy().to_string(),
+        );
+        Ok(())
+    }
+
     let requested_path = Path::new(&requested_cwd);
     let resolved_start = policy_snapshot::resolve_policy_snapshot_for_cwd(requested_path)
         .context("policy snapshot (start)")?;
     let start_hash = resolved_start.snapshot_hash.clone();
     let start_workspace_root = find_workspace_root(requested_path);
 
-    let start_params = ReplSessionStartParams::for_cwd_and_snapshot(
+    let mut start_params = ReplSessionStartParams::for_cwd_and_snapshot(
         requested_cwd.clone(),
         resolved_start.snapshot,
     );
+    apply_anchor_env_for_cwd(&mut start_params.env, requested_path)?;
     let client = ReplPersistentSessionClient::start_with(start_params, on_stdout.clone()).await?;
     let ready = client.ready().clone();
 
@@ -614,10 +629,11 @@ async fn start_world_session(
         );
         client.close().await?;
 
-        let restart_params = ReplSessionStartParams::for_cwd_and_snapshot(
+        let mut restart_params = ReplSessionStartParams::for_cwd_and_snapshot(
             ready.cwd.clone(),
             resolved_ready.snapshot,
         );
+        apply_anchor_env_for_cwd(&mut restart_params.env, Path::new(&ready.cwd))?;
         let client =
             ReplPersistentSessionClient::start_with(restart_params, on_stdout.clone()).await?;
         let ready2 = client.ready().clone();

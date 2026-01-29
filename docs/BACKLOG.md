@@ -21,14 +21,26 @@ Keep concise, actionable, and security-focused.
 - **P0 – Rename `world_fs.require_world` / `SUBSTRATE_WORLD_REQUIRE_WORLD` to semantic “fail closed” naming (no backwards compatibility)**
   - Problem: the current name reads like “world must be enabled”, but the actual behavior is “allow host fallback when world routing fails vs fail closed”. This causes configuration mistakes and confusion during debugging.
   - Work:
-    - Rename the policy/config knob from `world_fs.require_world` to a semantic name (`world_fs.fail_closed` or `world_fs.allow_host_fallback`) and rename the exported state env var from `SUBSTRATE_WORLD_REQUIRE_WORLD` to match (`SUBSTRATE_WORLD_FAIL_CLOSED` or `SUBSTRATE_WORLD_ALLOW_HOST_FALLBACK`).
+    - Rename the policy/config knob from `world_fs.require_world` to a semantic fail-closed naming shape (e.g. `world_fs.fail_closed.world`) and rename the exported state env var from `SUBSTRATE_WORLD_REQUIRE_WORLD` to match (e.g. `SUBSTRATE_WORLD_FAIL_CLOSED`).
+    - Add a policy-level `caged_required: true|false` that overrides workspace config `world.caged` (enforce `SUBSTRATE_CAGED=1` when required; fail closed if it cannot be enforced on the selected backend/protocol).
+    - Make REPL exit behavior explicit and configurable:
+      - Print a note on `exit`/`quit` (and `Ctrl+D` if treated as exit) when `world_cwd != entered_cwd`, e.g. `substrate: note: returning to host cwd: <path>`.
+      - Add a config knob to control where the host returns on REPL exit:
+        - `repl.exit_cwd: entered|last_world|unchanged`
+    - Desired policy shape (example):
+      - `world_fs:`
+      - `  mode: writable`
+      - `  isolation: workspace`
+      - `  fail_closed:`
+      - `    world: true`
+      - `caged_required: true`
     - **No backwards compatibility:** do not accept the old config/env names; delete/rename the fields and update schema/validation/tests/docs in lockstep.
     - Fix documentation to explicitly describe behavior:
       - what happens when the world backend is unavailable,
       - what happens when the world is disabled (`--no-world` / `SUBSTRATE_WORLD=disabled`),
-      - which layer owns the knob (policy-driven “fallback vs fail-closed”, not an effective-config override input).
+      - which layer owns the knobs (policy-driven “fallback vs fail-closed” + “caged required”, not effective-config override inputs).
     - Update references across docs and standards (`docs/WORLD.md`, `docs/CONFIGURATION.md`, `docs/reference/env/contract.md`, `docs/internals/env/inventory.md`, planning pack templates/smoke scripts) and ensure error messages/warnings use the new name.
-  - Acceptance: operators can understand intent from the name alone; docs explain fallback vs fail-closed semantics unambiguously; CI/tests are updated; old names are rejected (hard error) with no aliasing.
+  - Acceptance: operators can understand intent from the name alone; docs explain fallback vs fail-closed semantics unambiguously; caged-required policy override is explicit; CI/tests are updated; old names are rejected (hard error) with no aliasing.
 
 - **P1 – Warn on `config global show` when workspace config overrides**
   - Problem: `substrate policy global show` emits a clear note when a workspace policy overrides the global policy for the current directory, but `substrate config global show` does not emit an equivalent warning when `.substrate/workspace.yaml` overrides global config. This is confusing and makes it easy to misdiagnose “why does my config not match behavior?”

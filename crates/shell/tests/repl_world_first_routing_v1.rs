@@ -81,6 +81,25 @@ fn short_socket_dir(prefix: &str) -> TempDir {
         .expect("create short socket tempdir in /tmp")
 }
 
+fn write_workspace_marker(workspace_root: &Path) {
+    let dir = workspace_root.join(".substrate");
+    fs::create_dir_all(&dir).expect("create .substrate");
+    let cfg = r#"world:
+  enabled: true
+  anchor_mode: workspace
+  anchor_path: ''
+  caged: false
+policy:
+  mode: observe
+sync:
+  auto_sync: false
+  direction: from_world
+  conflict_policy: prefer_host
+  exclude: []
+"#;
+    fs::write(dir.join("workspace.yaml"), cfg).expect("write workspace.yaml");
+}
+
 struct PtyRepl {
     child: Box<dyn portable_pty::Child + Send>,
     waited: Option<portable_pty::ExitStatus>,
@@ -460,4 +479,66 @@ fn c3_startup_fail_closed_when_persistent_session_cannot_reach_ready() {
 
     let (_code, out) = repl.shutdown();
     panic!("expected REPL to exit fail-closed on startup, but it kept running; output:\n{out}");
+}
+
+#[test]
+#[serial]
+fn c3_drift_restart_refreshes_anchor_env_for_new_cwd() {
+    let temp = temp_dir("substrate-c3-anchor-drift-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let child = project.join("child");
+    let substrate_home = home.join(".substrate");
+
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&child).expect("create project child");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+
+    write_workspace_marker(&project);
+    write_profile(&project);
+    write_policy(&substrate_home, true);
+
+    let sock_temp = short_socket_dir("sub-c3ws-anchor-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start(&sock, StreamBehavior::Normal);
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&child, &home, &substrate_home, &sock, &[], &["--world"]);
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("banner");
+
+    // Move up to project root (still in workspace), then move to parent (workspace_root=None),
+    // then run a command to trigger drift restart before execution.
+    repl.send_line("cd ..");
+    repl.send_line("cd ..");
+    repl.send_line("pwd");
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+
+    let guard = records.lock().expect("lock records");
+    assert!(
+        guard.persistent_start_sessions.len() >= 2,
+        "expected a session restart when leaving workspace root; records: {guard:#?}"
+    );
+
+    let first = &guard.persistent_start_sessions[0];
+    let second = &guard.persistent_start_sessions[1];
+
+    let project_canon = project.canonicalize().unwrap_or(project.clone());
+    let parent_canon = temp
+        .path()
+        .canonicalize()
+        .unwrap_or_else(|_| temp.path().to_path_buf());
+
+    assert_eq!(
+        first.env.get("SUBSTRATE_ANCHOR_PATH").map(String::as_str),
+        Some(project_canon.to_string_lossy().as_ref()),
+        "expected initial anchor path to be workspace root"
+    );
+    assert_eq!(
+        second.env.get("SUBSTRATE_ANCHOR_PATH").map(String::as_str),
+        Some(parent_canon.to_string_lossy().as_ref()),
+        "expected drift restart to refresh anchor path for new cwd"
+    );
 }

@@ -636,12 +636,29 @@ async fn persists_physical_cwd_and_exported_env_across_execs() {
     let cwd = tmp.path().to_path_buf();
 
     let mut ws = ws_connect(addr).await;
-    if start_session_or_skip(&mut ws, cwd.as_path())
-        .await
-        .is_none()
     {
-        server.abort();
-        return;
+        let mut env = HashMap::<String, String>::new();
+        env.insert("HOME".to_string(), "/root".to_string());
+        env.insert("TERM".to_string(), "xterm-256color".to_string());
+        // Explicitly exercise uncaged traversal: this test depends on being able to persist a cwd
+        // outside the project anchor between commands.
+        env.insert("SUBSTRATE_CAGED".to_string(), "0".to_string());
+        env.insert("SUBSTRATE_ANCHOR_MODE".to_string(), "workspace".to_string());
+
+        let snapshot = serde_json::to_value(minimal_policy_snapshot()).expect("snapshot to JSON");
+        ws.send(Message::Text(
+            start_session_frame(cwd.as_path(), snapshot, env).to_string(),
+        ))
+        .await
+        .expect("send start_session");
+
+        let frame = recv_json(&mut ws).await;
+        if looks_like_missing_world_prereqs(&frame) {
+            eprintln!("skipping persistence test: world prereqs missing: {frame}");
+            server.abort();
+            return;
+        }
+        assert_eq!(frame.get("type").and_then(Value::as_str), Some("ready"));
     }
 
     let id = uuid::Uuid::now_v7().to_string();
@@ -696,6 +713,67 @@ echo SET_OK"#
         .unwrap_or_default()
         .to_string();
     assert_eq!(cwd2, real, "expected persisted physical cwd");
+
+    server.abort();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn caged_session_prevents_escape_from_anchor() {
+    let service = match WorldAgentService::new() {
+        Ok(svc) => svc,
+        Err(err) => {
+            eprintln!("skipping caged-escape test: service init failed: {err}");
+            return;
+        }
+    };
+
+    let (addr, server) = spawn_world_agent_ws(service).await;
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let cwd = tmp.path().to_path_buf();
+
+    let mut ws = ws_connect(addr).await;
+    {
+        let mut env = HashMap::<String, String>::new();
+        env.insert("HOME".to_string(), "/root".to_string());
+        env.insert("TERM".to_string(), "xterm-256color".to_string());
+        env.insert("SUBSTRATE_CAGED".to_string(), "1".to_string());
+        env.insert("SUBSTRATE_ANCHOR_MODE".to_string(), "workspace".to_string());
+
+        let snapshot = serde_json::to_value(minimal_policy_snapshot()).expect("snapshot to JSON");
+        ws.send(Message::Text(
+            start_session_frame(cwd.as_path(), snapshot, env).to_string(),
+        ))
+        .await
+        .expect("send start_session");
+
+        let frame = recv_json(&mut ws).await;
+        if looks_like_missing_world_prereqs(&frame) {
+            eprintln!("skipping caged-escape test: world prereqs missing: {frame}");
+            server.abort();
+            return;
+        }
+        assert_eq!(frame.get("type").and_then(Value::as_str), Some("ready"));
+    }
+
+    ws.send(Message::Text(
+        exec_frame(1, "eof", b"cd ..; pwd -P").to_string(),
+    ))
+    .await
+    .expect("send exec 1");
+    let (stdout1, complete1) = collect_until_completion(&mut ws).await;
+
+    let out = String::from_utf8_lossy(&stdout1);
+    let cwd1 = complete1
+        .get("cwd")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+
+    assert!(
+        cwd1.starts_with(cwd.to_string_lossy().as_ref()),
+        "expected caged session to stay under anchor; got command_complete.cwd={cwd1:?} anchor={:?} stdout={out:?}",
+        cwd.display()
+    );
 
     server.abort();
 }

@@ -494,10 +494,21 @@ impl ReplWorldAgentStub {
                                 .collect::<HashMap<String, String>>()
                         })
                         .unwrap_or_default();
-                    // Avoid leaking host secrets into test failure output: record env keys but redact values.
+                    // Avoid leaking host secrets into test failure output: keep a small allowlist
+                    // of REPL routing/env keys, redact everything else.
                     let env = env
-                        .into_keys()
-                        .map(|k| (k, "<redacted>".to_string()))
+                        .into_iter()
+                        .map(|(k, v)| {
+                            let keep = matches!(
+                                k.as_str(),
+                                "SUBSTRATE_ANCHOR_MODE" | "SUBSTRATE_ANCHOR_PATH" | "SUBSTRATE_CAGED"
+                            );
+                            if keep {
+                                (k, v)
+                            } else {
+                                (k, "<redacted>".to_string())
+                            }
+                        })
                         .collect::<HashMap<String, String>>();
                     let policy_snapshot = first_json
                         .get("policy_snapshot")
@@ -508,7 +519,7 @@ impl ReplWorldAgentStub {
 
                     if let Ok(mut guard) = records_for_thread.lock() {
                         guard.persistent_start_sessions.push(PersistentStartSessionRecord {
-                            cwd,
+                            cwd: cwd.clone(),
                             env,
                             policy_snapshot,
                             cols,
@@ -516,11 +527,17 @@ impl ReplWorldAgentStub {
                         });
                     }
 
+                    let mut session_cwd = if cwd.trim().is_empty() {
+                        "/".to_string()
+                    } else {
+                        cwd
+                    };
+
                     // Respond with a deterministic ready.
                     let ready = serde_json::json!({
                         "type": "ready",
                         "session_nonce": "0123456789abcdef0123456789abcdef",
-                        "cwd": "/",
+                        "cwd": session_cwd,
                         "protocol_version": 1,
                     })
                     .to_string();
@@ -569,6 +586,38 @@ impl ReplWorldAgentStub {
                                     .ok()
                                     .and_then(|b| String::from_utf8(b).ok())
                                     .unwrap_or_default();
+
+                                // Minimal cwd tracking: support basic `cd <path>` commands so REPL
+                                // drift restarts can be tested against real host paths.
+                                let trimmed = program_utf8.trim();
+                                if let Some(rest) = trimmed.strip_prefix("cd ") {
+                                    let arg = rest.trim();
+                                    if !arg.is_empty() {
+                                        let next = if arg.starts_with('/') {
+                                            PathBuf::from(arg)
+                                        } else {
+                                            PathBuf::from(&session_cwd).join(arg)
+                                        };
+                                        let mut normalized = PathBuf::new();
+                                        for comp in next.components() {
+                                            match comp {
+                                                std::path::Component::RootDir => normalized.push("/"),
+                                                std::path::Component::CurDir => {}
+                                                std::path::Component::ParentDir => {
+                                                    normalized.pop();
+                                                }
+                                                std::path::Component::Normal(seg) => {
+                                                    normalized.push(seg);
+                                                }
+                                                std::path::Component::Prefix(_) => {}
+                                            }
+                                        }
+                                        if normalized.as_os_str().is_empty() {
+                                            normalized.push("/");
+                                        }
+                                        session_cwd = normalized.to_string_lossy().to_string();
+                                    }
+                                }
 
                                 if let Ok(mut guard) = records_for_thread.lock() {
                                     guard.persistent_execs.push(PersistentExecRecord {
@@ -640,7 +689,7 @@ impl ReplWorldAgentStub {
                                     "seq": seq,
                                     "token_hex": token_hex,
                                     "exit": 0,
-                                    "cwd": "/",
+                                    "cwd": session_cwd,
                                 })
                                 .to_string();
                                 let _ = sink.send(Message::Text(complete)).await;

@@ -15,12 +15,24 @@ need_cmd "$SUBSTRATE_BIN"
 need_cmd "$JQ_BIN"
 need_cmd "$MKTEMP_BIN"
 
+assert_jq() {
+  local name="$1"
+  local input="$2"
+  local filter="$3"
+  if ! printf '%s' "$input" | "$JQ_BIN" -e "$filter" >/dev/null; then
+    echo "FAIL: ${name} (jq assertion failed)" >&2
+    printf '%s\n' "$input" >&2
+    exit 1
+  fi
+}
+
 tmp="$("$MKTEMP_BIN" -d)"
 trap 'rm -rf "$tmp"' EXIT
 cd "$tmp"
 
 # Require world-enabled behavior for this feature’s Linux smoke.
-$SUBSTRATE_BIN host doctor --json | $JQ_BIN -e '
+host_doctor="$($SUBSTRATE_BIN host doctor --json)"
+assert_jq "host doctor" "$host_doctor" '
   .schema_version == 1 and
   .platform == "linux" and
   .world_enabled == true and
@@ -32,15 +44,16 @@ $SUBSTRATE_BIN host doctor --json | $JQ_BIN -e '
   (.host.world_socket.socket_path | type == "string") and
   (.host.world_socket.socket_exists == true) and
   (.host.world_socket.probe_ok == true)
-' >/dev/null
+'
 
-$SUBSTRATE_BIN world doctor --json | $JQ_BIN -e '
+world_doctor="$($SUBSTRATE_BIN world doctor --json)"
+assert_jq "world doctor" "$world_doctor" '
   .schema_version == 1 and
   .platform == "linux" and
   .world_enabled == true and
   .ok == true and
   .host.ok == true and
-  .world.schema_version == 1 and
+  (.world.schema_version | IN(1,2)) and
   .world.ok == true and
   .world.landlock.supported == true and
   (.world.landlock.abi | type == "number") and
@@ -49,7 +62,6 @@ $SUBSTRATE_BIN world doctor --json | $JQ_BIN -e '
   .world.world_fs_strategy.probe.id == "enumeration_v1" and
   .world.world_fs_strategy.probe.probe_file == ".substrate_enum_probe" and
   .world.world_fs_strategy.probe.result == "pass"
-' >/dev/null
+'
 
 echo "OK: doctor_scopes smoke (linux)"
-

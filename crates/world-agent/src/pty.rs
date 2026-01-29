@@ -1104,10 +1104,18 @@ fn resolve_ready_cwd(
     let project_dir =
         resolve_project_dir(Some(env), Some(requested_cwd)).map_err(|e| e.to_string())?;
 
-    if requested_cwd.starts_with(&project_dir)
-        && requested_cwd.is_absolute()
-        && requested_cwd.is_dir()
-    {
+    if !requested_cwd.is_absolute() || !requested_cwd.is_dir() {
+        return Ok(project_dir);
+    }
+
+    // When caged guards are disabled (e.g. SUBSTRATE_CAGED=0), allow the session to start anywhere
+    // in the in-world filesystem, not just under the project anchor. This is required for the
+    // persistent-session REPL to support `cd ..` and other uncaged traversal.
+    if !should_guard_anchor(env) {
+        return Ok(requested_cwd.to_path_buf());
+    }
+
+    if requested_cwd.starts_with(&project_dir) {
         Ok(requested_cwd.to_path_buf())
     } else {
         Ok(project_dir)
@@ -1417,16 +1425,25 @@ fn spawn_persistent_exec(
     use std::os::unix::process::CommandExt;
     use std::time::Duration;
 
-    let desired_cwd = if session_cwd.starts_with(&world.project_dir) {
+    let mut env = session_env.clone();
+    for (k, v) in world.base_env.iter() {
+        env.insert(k.clone(), v.clone());
+    }
+
+    let should_guard = should_guard_anchor(&env);
+    let desired_cwd = if session_cwd.is_absolute()
+        && (!should_guard || session_cwd.starts_with(&world.project_dir))
+    {
         session_cwd.to_path_buf()
     } else {
         world.project_dir.clone()
     };
 
-    let mut env = session_env.clone();
-    for (k, v) in world.base_env.iter() {
-        env.insert(k.clone(), v.clone());
-    }
+    let program = if should_guard {
+        wrap_with_anchor_guard(program, &world.project_dir)
+    } else {
+        program.to_string()
+    };
 
     env.insert(
         "SUBSTRATE_MOUNT_MERGED_DIR".to_string(),
@@ -1445,21 +1462,18 @@ fn spawn_persistent_exec(
         world.fs_mode.as_str().to_string(),
     );
 
-    env.insert("SUBSTRATE_PROGRAM".to_string(), program.to_string());
+    env.insert("SUBSTRATE_PROGRAM".to_string(), program);
     env.insert("SHIM_PARENT_CMD_ID".to_string(), cmd_id.to_string());
 
-    env.insert(
-        "SUBSTRATE_INNER_CMD".to_string(),
-        match stdin_mode {
-            PersistentStdinMode::Eof => {
-                r#"exec </dev/null /bin/bash --noprofile --norc -c "$SUBSTRATE_PROGRAM""#
-                    .to_string()
-            }
-            PersistentStdinMode::Passthrough => {
-                r#"exec /bin/bash --noprofile --norc -c "$SUBSTRATE_PROGRAM""#.to_string()
-            }
-        },
-    );
+    let inner_cmd = match stdin_mode {
+        PersistentStdinMode::Eof => {
+            r#"exec </dev/null /bin/bash --noprofile --norc -c "$SUBSTRATE_PROGRAM""#.to_string()
+        }
+        PersistentStdinMode::Passthrough => {
+            r#"exec /bin/bash --noprofile --norc -c "$SUBSTRATE_PROGRAM""#.to_string()
+        }
+    };
+    env.insert("SUBSTRATE_INNER_CMD".to_string(), inner_cmd);
     env.insert("SUBSTRATE_INNER_LOGIN_SHELL".to_string(), "0".to_string());
 
     let needs_userns = unsafe { libc::geteuid() != 0 };
@@ -2072,7 +2086,11 @@ async fn handle_legacy_start(
         cwd_for_child = PathBuf::from("/");
         anchor_root = project_dir.clone();
 
-        let desired_cwd = if cwd.starts_with(&project_dir) {
+        let should_guard = should_guard_anchor(&env);
+        let desired_cwd = if cwd.is_absolute()
+            && cwd.is_dir()
+            && (!should_guard || cwd.starts_with(&project_dir))
+        {
             cwd.clone()
         } else {
             project_dir.clone()
@@ -2094,7 +2112,7 @@ async fn handle_legacy_start(
             fs_mode.as_str().to_string(),
         );
 
-        if should_guard_anchor(&env) {
+        if should_guard {
             inner_cmd = wrap_with_anchor_guard(&inner_cmd, &anchor_root);
         }
         env.insert("SUBSTRATE_INNER_CMD".to_string(), inner_cmd);
