@@ -199,7 +199,7 @@ You should not need to change these, but if you must (infra incident, runner bac
 - CI Testing (`scripts/ci/dispatch_ci_testing.sh`)
   - Use `--mode compile-parity` for fast cross-platform parity (fmt/check/clippy only).
   - Use `--mode quick` for automation selection (skip docs/cross-build).
-  - Use `--mode full` (default) as the final CI gate before merging to `testing`.
+  - Use `--mode full` (default) only when required by the plan (often before merging to `testing`).
   - `CI_TESTING_WATCH_TIMEOUT_SECS` (default `7200`)
   - `CI_TESTING_WATCH_INTERVAL_SECS` (default `15`)
   - `CI_TESTING_GH_TIMEOUT_SECS` (default `120`) — per `gh` call

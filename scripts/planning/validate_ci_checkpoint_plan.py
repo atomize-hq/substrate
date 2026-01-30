@@ -75,7 +75,19 @@ def _slice_ids_from_tasks(tasks_data: dict[str, Any]) -> list[str]:
         if isinstance(task_id, str) and task_id.endswith("-integ") and not task_id.endswith("-integ-core"):
             slice_ids.add(task_id[: -len("-integ")])
 
-    return sorted(slice_ids)
+    return sorted(slice_ids, key=_slice_sort_key)
+
+
+def _slice_sort_key(slice_id: str) -> tuple[str, int, str]:
+    """
+    Deterministic slice ordering.
+
+    Typical slice ids are PREFIX + NUMBER (e.g. WCU0, WCU10). Lexicographic sorting breaks that.
+    """
+    m = re.match(r"^(?P<prefix>[A-Za-z][A-Za-z0-9]*?)(?P<num>\d+)$", slice_id)
+    if not m:
+        return (slice_id, 0, slice_id)
+    return (m.group("prefix"), int(m.group("num")), slice_id)
 
 
 def _parse_checkpoints(plan: dict[str, Any]) -> tuple[dict[str, int], list[Checkpoint]]:
@@ -146,6 +158,14 @@ def _validate_against_tasks(feature_dir: Path, tasks_data: dict[str, Any], defau
     for c in checkpoints:
         slices_in_plan.extend(c.slices)
 
+    # Ordering / contiguity: the plan must define a single ordered partition of the slice list.
+    # This removes ambiguity and enables mechanical gating checks between checkpoint groups.
+    if slices_in_plan != slice_ids:
+        _fail(
+            "ci_checkpoint_plan.md must assign slices in deterministic order and as contiguous groups; "
+            f"expected slice order {slice_ids}, got {slices_in_plan}"
+        )
+
     # Coverage: every slice must belong to exactly one checkpoint.
     duplicates = sorted({s for s in slices_in_plan if slices_in_plan.count(s) > 1})
     if duplicates:
@@ -199,6 +219,22 @@ def _validate_against_tasks(feature_dir: Path, tasks_data: dict[str, Any], defau
         deps = t.get("depends_on")
         if not isinstance(deps, list) or expected_dep not in deps:
             _fail(f"checkpoint task {c.task_id!r} must depend_on {expected_dep!r}")
+
+    # Gating: the first slice of the next checkpoint group must depend on the prior checkpoint task.
+    # This prevents starting work past a checkpoint until the cross-platform CI gate is complete.
+    for i in range(len(checkpoints) - 1):
+        cp = checkpoints[i]
+        next_cp = checkpoints[i + 1]
+        next_first_slice = next_cp.slices[0]
+
+        for task_suffix in ("code", "test"):
+            tid = f"{next_first_slice}-{task_suffix}"
+            t = tasks_by_id.get(tid)
+            if t is None:
+                _fail(f"tasks.json missing required task for gating check: {tid!r}")
+            deps = t.get("depends_on")
+            if not isinstance(deps, list) or cp.task_id not in deps:
+                _fail(f"{tid!r} must depend_on prior checkpoint task {cp.task_id!r}")
 
 
 def main() -> int:
