@@ -125,7 +125,7 @@ Integration tasks should set `merge_to_orchestration` in `tasks.json`:
 Start integration worktree:
 - `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="<SLICE_ID>-integ-core"`
 
-Optional: run an end-to-end integration orchestration wrapper (integ-core -> smoke -> platform-fix -> final) with artifact reporting:
+Optional: run an end-to-end integration orchestration wrapper for a CI checkpoint boundary slice (integ-core -> checkpoint CI -> platform-fix -> final) with artifact reporting:
 - `docs/project_management/standards/TRIAD_INTEGRATION_WRAPPER_PROMPT.md`
 
 Run the planned CI checkpoint (bounded; only at checkpoint boundaries):
