@@ -403,7 +403,7 @@ See `docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md`.
 The Planning Pack is implementation-ready only when all are true:
 - Specs define exact behavior, defaults, error handling, exit codes, and out-of-scope boundaries.
 - Decision register exists and covers all major decisions (two options each, one selection).
-- Integration map exists and explicitly resolves cross-track dependencies and sequencing.
+- Impact map exists and explicitly resolves cross-track dependencies and sequencing.
 - Manual testing playbook exists (if UX/provisioning) with runnable commands and expected results.
 - Smoke scripts exist (if UX/provisioning) for each required platform, and are referenced by the manual playbook.
 - `tasks.json` has code/test/integration tasks with dependencies aligned to `sequencing.json`.
