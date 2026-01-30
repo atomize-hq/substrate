@@ -50,6 +50,10 @@ Review checklist (pass/fail):
    - Manual playbooks exist where required.
    - Smoke scripts exist where required and are referenced by the manual playbook.
    - If `tasks.json` opts into schema v2 cross-platform parity (`meta.schema_version >= 2` and `meta.ci_parity_platforms_required` or legacy `meta.platforms_required`), the required `X-integ-core`, `X-integ-<platform>`, and `X-integ` tasks exist and are correctly wired (platform-fix tasks range over CI parity platforms; smoke scripts range over behavior platforms).
+   - If the pack is cross-platform + automation-enabled (schema v3+ and `meta.automation.enabled=true`), `ci_checkpoint_plan.md` exists and defines bounded CI checkpoints:
+     - default group size bounds: min=2 triads, max=4 triads (unless explicitly justified),
+     - every slice belongs to exactly one checkpoint group,
+     - checkpoint boundaries are code-grounded and justified using `impact_map.md` and `spec_manifest.md`.
 6) Auditability:
    - Decisions map to triad task IDs via `references` and follow-up tasks.
 

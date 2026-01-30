@@ -52,7 +52,7 @@ Do not edit planning docs inside the worktree.
         - After dispatch completes, record evidence (recommended):
           - `scripts/ci-audit/ci_audit_record.sh --ledger-path "{{FEATURE_DIR}}/logs/<slice>/ci-audit/ledger.jsonl" --kind feature-smoke --orch-branch "{{ORCH_BRANCH}}" --run-id "<run-id>" --tested-sha "<sha>" --required-platforms linux,wsl`
   - Otherwise, do **not** run Feature Smoke for this platform. Instead, treat this task as CI parity-only:
-    - Prefer local parity fixes first (fmt/clippy/tests on this OS), then ask the operator to re-run CI parity gates from integ-core/final.
+    - Prefer local parity fixes first (fmt/clippy/tests on this OS), then ask the operator to run the next CI checkpoint task (e.g., `CP1-ci-checkpoint`) to validate cross-platform parity on the orchestration branch.
     - If you need an immediate cross-platform signal, run:
       - `make ci-compile-parity CI_WORKFLOW_REF="{{ORCH_BRANCH}}" CI_REMOTE=origin CI_CLEANUP=1`
       - `scripts/ci/dispatch_ci_testing.sh --workflow-ref "{{ORCH_BRANCH}}" --remote origin --cleanup --mode quick`

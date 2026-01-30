@@ -1,0 +1,49 @@
+# {{FEATURE}} — CI checkpoint plan
+
+This file defines **when** cross-platform CI gates run for this feature.
+
+Standard:
+- `docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md`
+
+## Inputs
+- Feature directory: `{{FEATURE_DIR}}`
+- `{{FEATURE_DIR}}/impact_map.md`
+- `{{FEATURE_DIR}}/spec_manifest.md`
+- Slice specs: `{{FEATURE_DIR}}/*-spec*.md`
+
+## Operator rules
+- This plan is authoritative for **CI cadence**.
+- If you discover a mismatch between the plan and reality (new slice added, new platform scope, new contract surface), update this plan first, then update `tasks.json` and kickoff prompts.
+
+## Machine-readable plan (linted)
+
+```json
+{
+  "version": 1,
+  "defaults": {
+    "min_triads_per_checkpoint": 2,
+    "max_triads_per_checkpoint": 4
+  },
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "task_id": "CP1-ci-checkpoint",
+      "slices": ["{{SLICE_ID}}"],
+      "gates": {
+        "compile_parity": true,
+        "feature_smoke": true,
+        "ci_testing": "full"
+      },
+      "rationale": "Initial scaffold: single-slice checkpoint. When additional slices are added, regroup slices into checkpoints using code-grounded seams; keep checkpoint sizes within defaults (min=2, max=4) unless explicitly justified."
+    }
+  ]
+}
+```
+
+## Human-readable rationale (required)
+
+For each checkpoint, explain:
+- Why the boundary is code-grounded (subsystem seam / contract completion / enabling refactor / UX seam).
+- What surfaces are stabilized by this checkpoint (from `spec_manifest.md`).
+- What risk is reduced by running cross-platform CI here (from `impact_map.md`).
+

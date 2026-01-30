@@ -118,6 +118,7 @@ Constraints (non-negotiable):
 Required reading (end-to-end):
 - `docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md`
 - `docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md`
+- `docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md` (cross-platform automation packs)
 - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
 - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
 - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
@@ -135,6 +136,7 @@ Required deliverables (must create or update):
    - `docs/project_management/next/<feature>/plan.md`
    - `docs/project_management/next/<feature>/spec_manifest.md` (authoritative spec list + surface ownership)
    - `docs/project_management/next/<feature>/impact_map.md` (touch set + cascading implications + cross-queue conflicts; replaces legacy `integration_map.md`)
+   - `docs/project_management/next/<feature>/ci_checkpoint_plan.md` (cross-platform automation packs only; bounded CI checkpoints between groups of triads)
    - `docs/project_management/next/<feature>/tasks.json`
    - `docs/project_management/next/<feature>/session_log.md` (START/END entries only)
    - Specs: the exact spec docs listed in `spec_manifest.md` (no extras, no missing docs)
@@ -161,6 +163,10 @@ Required interoperability rules:
   - Cross-compare all Planning Pack docs (ADR/spec_manifest/impact_map/specs/contract/tasks/playbook/smoke/kickoffs) to ensure names, defaults, precedence, schemas, exit codes, and behavior statements match exactly.
   - If a conflict is found, resolve it by updating the authoritative doc for that surface (do not “paper over” inconsistencies by duplicating contract text).
 - Every task must have a kickoff prompt file and must include the exact rule: `Do not edit planning docs inside the worktree.`
+- For cross-platform automation packs (schema v3+ + `meta.automation.enabled=true` + `meta.cross_platform=true`):
+  - `ci_checkpoint_plan.md` is required and authoritative for CI cadence.
+  - Cross-platform CI dispatch (compile parity / Feature Smoke / CI Testing) must occur only at the bounded checkpoints defined by `ci_checkpoint_plan.md` (default checkpoint size bounds: min=2 triads, max=4 triads unless explicitly justified).
+  - `ci_checkpoint_plan.md` must be wired into `tasks.json` via checkpoint tasks (see `docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md`).
 - Integration tasks must include the required validation gates and record results in `session_log.md`:
   - **Behavior platforms**: run the feature-local smoke script via CI (`make feature-smoke`) when `FEATURE_DIR/smoke/` exists.
   - **CI parity platforms**: run cross-platform compile parity (and CI Testing when required by the slice/workflow); smoke is not required for CI parity-only platforms.

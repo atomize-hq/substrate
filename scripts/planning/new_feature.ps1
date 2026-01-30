@@ -104,6 +104,15 @@ Render-Template (Join-Path $templatesDir "session_log.md.tmpl") (Join-Path $feat
 Render-Template (Join-Path $templatesDir "contract.md.tmpl") (Join-Path $featureDir "contract.md") $vars
 Render-Template (Join-Path $templatesDir "spec_manifest.md.tmpl") (Join-Path $featureDir "spec_manifest.md") $vars
 Render-Template (Join-Path $templatesDir "impact_map.md.tmpl") (Join-Path $featureDir "impact_map.md") $vars
+if ($CrossPlatform.IsPresent -and $Automation.IsPresent) {
+    Render-Template (Join-Path $templatesDir "ci_checkpoint_plan.md.tmpl") (Join-Path $featureDir "ci_checkpoint_plan.md") $vars
+}
+
+$varsCp1 = $vars.Clone()
+$varsCp1["TASK_ID"] = "CP1-ci-checkpoint"
+if ($CrossPlatform.IsPresent -and $Automation.IsPresent) {
+    Render-Template (Join-Path $templatesDir "kickoff_ci_checkpoint.md.tmpl") (Join-Path $featureDir "kickoff_prompts/CP1-ci-checkpoint.md") $varsCp1
+}
 
 @"
 # $($script:SliceId)-spec
@@ -122,6 +131,10 @@ Render-Template (Join-Path $templatesDir "impact_map.md.tmpl") (Join-Path $featu
 "@ | Set-Content -LiteralPath (Join-Path $featureDir $script:SliceSpecFile)
 
 function New-TaskBase([string]$Id, [string]$Name, [string]$Type, [string]$Description) {
+    $refs = @("$featureDir/plan.md", "$featureDir/spec_manifest.md", "$featureDir/impact_map.md", "$featureDir/$($script:SliceSpecFile)")
+    if ($CrossPlatform.IsPresent -and $Automation.IsPresent) {
+        $refs = @("$featureDir/plan.md", "$featureDir/spec_manifest.md", "$featureDir/impact_map.md", "$featureDir/ci_checkpoint_plan.md", "$featureDir/$($script:SliceSpecFile)")
+    }
     return @{
         id                 = $Id
         name               = $Name
@@ -129,7 +142,7 @@ function New-TaskBase([string]$Id, [string]$Name, [string]$Type, [string]$Descri
         phase              = $script:SliceId
         status             = "pending"
         description        = $Description
-        references         = @("$featureDir/plan.md", "$featureDir/spec_manifest.md", "$featureDir/impact_map.md", "$featureDir/$($script:SliceSpecFile)")
+        references         = $refs
         acceptance_criteria = @()
         start_checklist    = @()
         end_checklist      = @()
@@ -301,31 +314,13 @@ if ($CrossPlatform.IsPresent) {
         "Set status to in_progress; add START entry; commit docs",
         $(if ($Automation.IsPresent) { "Run: make triad-task-start FEATURE_DIR=`"$featureDir`" TASK_ID=`"$integCoreId`"" } else { "Run: git worktree add -b $($script:SliceIdLower)-integ-core wt/$Feature-$($script:SliceIdLower)-integ-core feat/$Feature" })
     )
-    $dispatchBase = "scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --workflow-ref `\"feat/$Feature`\""
-    $dispatches = @()
-    $behaviorKey = ($behaviorPlatformsList | Sort-Object) -join ","
-    if ($behaviorKey -eq "linux,macos,windows") {
-        $cmd = "$dispatchBase --platform all"
-        if ($WslRequired.IsPresent) { $cmd += " --run-wsl" }
-        $cmd += " --cleanup"
-        $dispatches += $cmd
-    } else {
-        foreach ($p in $behaviorPlatformsList) {
-            $cmd = "$dispatchBase --platform $p"
-            if ($p -eq "linux" -and $WslRequired.IsPresent) { $cmd += " --run-wsl" }
-            $cmd += " --cleanup"
-            $dispatches += $cmd
-        }
-    }
-    $dispatchLines = $dispatches | ForEach-Object { "Dispatch behavioral smoke via CI: $_ (record run ids/URLs)" }
     $core.end_checklist = @(
         "cargo fmt",
         "cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant tests",
         "make integ-checks"
-    ) + $dispatchLines + @(
-        "If any platform smoke fails: start only failing platform-fix tasks via: make triad-task-start-platform-fixes-from-smoke FEATURE_DIR=`"$featureDir`" SLICE_ID=`"$($script:SliceId)`" SMOKE_RUN_ID=`"<run-id>`"",
-        "After all failing platforms are green: start final aggregator via: make triad-task-start-integ-final FEATURE_DIR=`"$featureDir`" SLICE_ID=`"$($script:SliceId)`"",
+    ) + @(
+        "If this slice ends a CI checkpoint group: run the checkpoint task (for example, CP1-ci-checkpoint) from the orchestration checkout per $featureDir/ci_checkpoint_plan.md",
         $(if ($Automation.IsPresent) { "From inside the worktree: make triad-task-finish TASK_ID=`"$integCoreId`"" } else { "From inside the worktree: git add -A && git commit -m `"integ: $Feature $integCoreId`"" }),
         $(if ($Automation.IsPresent) { "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)" } else { "Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/$Feature-$($script:SliceIdLower)-integ-core (per plan.md)" })
     )
@@ -410,9 +405,9 @@ if ($CrossPlatform.IsPresent) {
         $tasks += $t
     }
 
-    $final = New-TaskBase $integId "$($script:SliceId) slice (integration final)" "integration" "Final integration: merge any platform fixes and confirm behavioral smoke + CI parity are green."
+    $final = New-TaskBase $integId "$($script:SliceId) slice (integration final)" "integration" "Final integration: merge any platform fixes, complete slice closeout, and confirm checkpoint evidence is recorded."
     $final.integration_task = $integId
-    $final.acceptance_criteria = @("All required platforms are green and the slice matches the spec")
+    $final.acceptance_criteria = @("Slice closeout report completed and local integration gates are green")
     foreach ($p in $behaviorPlatformsList) {
         switch ($p) {
             "linux" { $final.references += @("$featureDir/smoke/linux-smoke.sh") }
@@ -427,29 +422,14 @@ if ($CrossPlatform.IsPresent) {
         "Set status to in_progress; add START entry; commit docs",
         $(if ($Automation.IsPresent) { "Run: make triad-task-start FEATURE_DIR=`"$featureDir`" TASK_ID=`"$integId`"" } else { "Run: git worktree add -b $($script:SliceIdLower)-integ wt/$Feature-$($script:SliceIdLower)-integ feat/$Feature" })
     )
-    $dispatchBaseFinal = "scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --workflow-ref `\"feat/$Feature`\""
-    $dispatchesFinal = @()
-    if ($behaviorKey -eq "linux,macos,windows") {
-        $cmd = "$dispatchBaseFinal --platform all"
-        if ($WslRequired.IsPresent) { $cmd += " --run-wsl" }
-        $cmd += " --cleanup"
-        $dispatchesFinal += $cmd
-    } else {
-        foreach ($p in $behaviorPlatformsList) {
-            $cmd = "$dispatchBaseFinal --platform $p"
-            if ($p -eq "linux" -and $WslRequired.IsPresent) { $cmd += " --run-wsl" }
-            $cmd += " --cleanup"
-            $dispatchesFinal += $cmd
-        }
-    }
-    $dispatchLinesFinal = $dispatchesFinal | ForEach-Object { "Re-run behavioral smoke via CI: $_" }
     $final.end_checklist = @(
         "Merge platform-fix branches (if any) + resolve conflicts",
         "cargo fmt",
         "cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant tests",
         "make integ-checks"
-    ) + $dispatchLinesFinal + @(
+    ) + @(
+        "Confirm required CI checkpoint tasks that cover this slice are completed and recorded in $featureDir/session_log.md",
         "Complete slice closeout gate report: $featureDir/$($script:SliceCloseoutFile)",
         $(if ($Automation.IsPresent) { "From inside the worktree: make triad-task-finish TASK_ID=`"$integId`"" } else { "From inside the worktree: git add -A && git commit -m `"integ: $Feature $integId`"" }),
         $(if ($Automation.IsPresent) { "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)" } else { "Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/$Feature-$($script:SliceIdLower)-integ (per plan.md)" })
@@ -461,6 +441,39 @@ if ($CrossPlatform.IsPresent) {
     $final.kickoff_prompt = "$featureDir/kickoff_prompts/$integId.md"
     $final.depends_on = @($integCoreId) + ($platforms | ForEach-Object { "$($script:SliceId)-integ-$_" })
     $tasks += $final
+
+    if ($Automation.IsPresent) {
+        $tasks += @{
+            id = "CP1-ci-checkpoint"
+            name = "CI checkpoint (initial scaffold)"
+            type = "ops"
+            phase = "CP1"
+            status = "pending"
+            description = "Run cross-platform CI gates at the checkpoint boundary defined in ci_checkpoint_plan.md."
+            references = @(
+                "$featureDir/ci_checkpoint_plan.md",
+                "$featureDir/impact_map.md",
+                "$featureDir/tasks.json",
+                "$featureDir/session_log.md"
+            )
+            acceptance_criteria = @("Checkpoint CI gates executed or skipped per ci-audit, with evidence recorded in session_log.md")
+            start_checklist = @(
+                "Run: make triad-orch-ensure FEATURE_DIR=`"$featureDir`"",
+                "Read ci_checkpoint_plan.md and confirm which slice id this checkpoint validates",
+                "Set status to in_progress; add START entry; commit docs"
+            )
+            end_checklist = @(
+                "Run compile parity + behavioral smoke per ci_checkpoint_plan.md (use ci-audit to skip redundant dispatch)",
+                "Record run ids/URLs and ci-audit output lines in session_log.md",
+                "Set status to completed; add END entry; commit docs"
+            )
+            worktree = $null
+            integration_task = $null
+            kickoff_prompt = "$featureDir/kickoff_prompts/CP1-ci-checkpoint.md"
+            depends_on = @($integCoreId)
+            concurrent_with = @()
+        }
+    }
 } else {
     $integ = New-TaskBase $integId "$($script:SliceId) slice (integration)" "integration" "Integrate $($script:SliceId) code+tests, reconcile to spec, and run integration gate."
     $integ.integration_task = $integId

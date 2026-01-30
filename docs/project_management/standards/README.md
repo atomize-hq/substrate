@@ -87,7 +87,7 @@ Validate:
 ### 2) Quality gate (required before execution)
 
 Create/approve:
-- `docs/project_management/next/<feature>/quality_gate_report.md` containing `RECOMMENDATION: ACCEPT`
+  - `docs/project_management/next/<feature>/quality_gate_report.md` containing `RECOMMENDATION: ACCEPT`
 
 Execution triads must not begin until the recommendation is `ACCEPT`.
 
@@ -128,8 +128,15 @@ Start integration worktree:
 Optional: run an end-to-end integration orchestration wrapper (integ-core -> smoke -> platform-fix -> final) with artifact reporting:
 - `docs/project_management/standards/TRIAD_INTEGRATION_WRAPPER_PROMPT.md`
 
-Dispatch cross-platform smoke:
-- Preferred: `make feature-smoke FEATURE_DIR="docs/project_management/next/<feature>" PLATFORM=behavior WORKFLOW_REF="feat/<feature>"`
+Run the planned CI checkpoint (bounded; only at checkpoint boundaries):
+- Read: `docs/project_management/next/<feature>/ci_checkpoint_plan.md`
+- Use the checkpoint’s kickoff prompt (example): `docs/project_management/next/<feature>/kickoff_prompts/CP1-ci-checkpoint.md`
+  - This includes the exact commands to compute the checkpoint `CHECKOUT_SHA` and dispatch:
+    - compile parity (`CI_CHECKOUT_REF="$CHECKOUT_SHA"`)
+    - Feature Smoke (`SMOKE_CHECKOUT_REF="$CHECKOUT_SHA"`)
+
+Dispatch cross-platform smoke (when required by the feature’s CI checkpoint plan):
+- Preferred: `make feature-smoke FEATURE_DIR="docs/project_management/next/<feature>" PLATFORM=behavior WORKFLOW_REF="feat/<feature>" SMOKE_CHECKOUT_REF="<sha>"`
 - Add WSL coverage when required: `RUN_WSL=1` (Linux smoke, or `PLATFORM=wsl` when `wsl_task_mode="separate"`)
 
 Recommended (reduces redundant CI):

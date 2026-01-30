@@ -150,6 +150,7 @@ RUNNER_KIND ?= self-hosted
 RUN_WSL ?= 0
 RUN_INTEG_CHECKS ?= 0
 SMOKE_SLICE_ID ?=
+SMOKE_CHECKOUT_REF ?=
 WORKFLOW ?= .github/workflows/feature-smoke.yml
 WORKFLOW_REF ?= $(CURRENT_REF)
 REMOTE ?= origin
@@ -165,6 +166,7 @@ feature-smoke:
 	args="--feature-dir \"$(FEATURE_DIR)\" --runner-kind $(RUNNER_KIND) --platform $(PLATFORM) --workflow \"$(WORKFLOW)\" --workflow-ref \"$(WORKFLOW_REF)\" --remote \"$(REMOTE)\""; \
 	if [ "$(RUN_WSL)" = "1" ]; then args="$$args --run-wsl"; fi; \
 	if [ "$(RUN_INTEG_CHECKS)" = "1" ]; then args="$$args --run-integ-checks"; fi; \
+	if [ -n "$(SMOKE_CHECKOUT_REF)" ]; then args="$$args --checkout-ref \"$(SMOKE_CHECKOUT_REF)\""; fi; \
 	if [ -n "$(SMOKE_SLICE_ID)" ]; then args="$$args --smoke-slice-id \"$(SMOKE_SLICE_ID)\""; fi; \
 	if [ "$(CLEANUP)" = "1" ]; then args="$$args --cleanup"; fi; \
 	eval "scripts/ci/dispatch_feature_smoke.sh $$args"

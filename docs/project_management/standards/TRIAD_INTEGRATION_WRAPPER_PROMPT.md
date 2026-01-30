@@ -2,16 +2,15 @@
 
 Use this when you want a single orchestration run to:
 - start `<SLICE>-integ-core`, run it with Codex enabled, and capture its final message,
-- run cross-platform compile parity for the integ-core commit (fast fail before relying on smoke),
-- use integ-core’s reported **behavioral** smoke outcome to infer failing platforms (P3-008: behavior platforms may be a subset of CI parity platforms),
+- run cross-platform compile parity and Feature Smoke for the integ-core commit **only when `<SLICE>` is a CI checkpoint boundary** (see `ci_checkpoint_plan.md`),
 - start only the failing `<SLICE>-integ-<platform>` tasks (optionally with Codex enabled) and capture their final messages,
 - start `<SLICE>-integ` (final aggregator) and capture its final message,
-- dispatch CI Testing for the final integration commit (gate before merging to `testing`),
 - report exit codes + artifact paths for all runs.
 
 Notes:
 - Run this from the **orchestration checkout** (repo root), not inside any task worktree.
 - This wrapper assumes an automation-enabled Planning Pack (`tasks.json` meta: `schema_version >= 3` and `meta.automation.enabled=true`).
+- This wrapper is for **checkpoint boundary slices only**. If `<SLICE>` is not the last slice in its checkpoint group, run integ-core and stop (do not dispatch cross-platform CI from this wrapper).
 - This wrapper does not assume you are editing `tasks.json`/`session_log.md`, but **`make triad-task-start-integ-final` requires `depends_on` tasks are `status=completed`**. If CI smoke is green and platform-fix tasks were no-ops, the operator must still mark them `completed` on the orchestration branch to unblock the final aggregator.
 - Naming note: the final aggregator task id is `${SLICE_ID}-integ` (started via `make triad-task-start-integ-final ...`), not `${SLICE_ID}-integ-final`.
 - `CODEX_LAST_MESSAGE_PATH` is the final Codex message for that task run only; if additional manual work happens after Codex exits, record it separately (closeout report/session log), not by trusting the stale Codex summary.
@@ -67,11 +66,16 @@ LEDGER_PATH="$FEATURE_DIR/logs/$SLICE_ID/ci-audit/ledger.jsonl"
    - If local smoke preflight is re-run and fails:
      - Treat this as **blocking**.
      - Fix behavior drift in the **integ-core** branch/worktree, commit, and re-run local smoke preflight until it is green.
-     - Only then proceed to CI dispatch (compile parity and Feature Smoke).
+     - Only then proceed to cross-platform CI dispatch (compile parity and Feature Smoke).
 
-2) Run cross-platform compile parity for the integ-core commit (fast fail; do this before relying on smoke):
-   - Run from the integ-core worktree (validates `INTEG_CORE_HEAD_SHA` via a throwaway branch):
-     - `cd "$INTEG_CORE_WORKTREE" && make ci-compile-parity CI_WORKFLOW_REF="$ORCH_BRANCH" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF="$INTEG_CORE_HEAD_SHA"`
+2) Confirm `<SLICE_ID>` is a CI checkpoint boundary for this feature:
+   - Read: `$FEATURE_DIR/ci_checkpoint_plan.md`
+   - Find the checkpoint that contains `$SLICE_ID`.
+   - If `$SLICE_ID` is not the **last** slice listed in that checkpoint’s `slices[]`, stop after step (1.5) and return a summary. Do not dispatch cross-platform CI from this wrapper.
+
+3) Run cross-platform compile parity for the integ-core commit (fast fail; do this before relying on smoke):
+   - Run from the orchestration checkout (validates `INTEG_CORE_HEAD_SHA` via checkout_ref):
+     - `make ci-compile-parity CI_WORKFLOW_REF="$ORCH_BRANCH" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF="$INTEG_CORE_HEAD_SHA"`
    - Parse and report the dispatcher stdout contract:
      - `RUN_ID`, `RUN_URL`, `CONCLUSION`, `CI_FAILED_OSES`, `CI_FAILED_JOBS`
    - Before dispatching, run advisory audit (skip allowed for docs/planning-only changes):
@@ -79,7 +83,7 @@ LEDGER_PATH="$FEATURE_DIR/logs/$SLICE_ID/ci-audit/ledger.jsonl"
      - If `RECOMMEND=skip`, do not dispatch compile parity; treat this gate as satisfied and report the ci-audit output in the wrapper summary (include `LAST_GREEN_RUN_ID/LAST_GREEN_RUN_URL` when available).
    - If you dispatch and it succeeds, record evidence:
      - `scripts/ci-audit/ci_audit_record.sh --ledger-path "$LEDGER_PATH" --kind ci-testing --orch-branch "$ORCH_BRANCH" --run-id "$RUN_ID" --tested-sha "$INTEG_CORE_HEAD_SHA"`
-   - If compile parity is green: continue to step (3).
+   - If compile parity is green: continue to step (4).
    - If compile parity fails:
      - Treat this as **blocking**: do not proceed to Feature Smoke dispatch or platform-fix selection yet.
      - Use the run logs (`RUN_URL` / `gh run view "$RUN_ID" --log-failed`) to identify the compile errors.
@@ -88,27 +92,21 @@ LEDGER_PATH="$FEATURE_DIR/logs/$SLICE_ID/ci-audit/ledger.jsonl"
        - `INTEG_CORE_HEAD_SHA=$(git -C "$INTEG_CORE_WORKTREE" rev-parse HEAD)`
      - Re-run this compile parity step until green, then continue to step (3).
 
-3) Parse the integ-core agent’s smoke outcome from its final message (only after compile parity is green):
+4) Dispatch Feature Smoke for the integ-core commit (only after compile parity is green):
    - Smoke is required only for the feature’s **behavior platforms** (P3-008; see `tasks.json` meta: `behavior_platforms_required`).
-   - Preferred dispatch shape is a single run with `PLATFORM=behavior` (the workflow reads `tasks.json` and only runs required behavior platforms).
-   - If the agent dispatched per-platform anyway, treat each run independently.
+   - Dispatch exactly one run using `PLATFORM=behavior`:
+     - `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=behavior SMOKE_SLICE_ID="$SLICE_ID" SMOKE_CHECKOUT_REF="$INTEG_CORE_HEAD_SHA" RUNNER_KIND=self-hosted WORKFLOW_REF="$ORCH_BRANCH" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=0`
    - Before requiring smoke keys, run advisory audit for Feature Smoke:
      - `scripts/ci-audit/ci_audit.sh --ledger-path "$LEDGER_PATH" --kind feature-smoke --orch-branch "$ORCH_BRANCH" --feature-dir "$FEATURE_DIR"`
-     - If `RECOMMEND=skip` (including `DIFF_CLASS=docs_only`), it is valid for integ-core to skip smoke dispatch; record the ci-audit output in the wrapper summary and skip steps (4)–(5).
-   - Extract and report these exact keys for each smoke run reported (grouped per run):
-     - `RUN_ID=<id>`
-     - `RUN_URL=<url>`
-     - `SMOKE_PASSED_PLATFORMS=<csv>`
-     - `SMOKE_FAILED_PLATFORMS=<csv>`
-   - If no smoke keys are present and ci-audit did not recommend skip, treat this as a failure (integ-core must run and report behavioral smoke).
-   - If smoke keys are present, record evidence (recommended):
+     - If `RECOMMEND=skip` (including `DIFF_CLASS=docs_only`), do not dispatch smoke; record the ci-audit output in the wrapper summary and skip steps (5)–(6).
+   - Parse and report the smoke dispatcher stdout contract:
+     - `RUN_ID`, `RUN_URL`, `CONCLUSION`, `SMOKE_PASSED_PLATFORMS`, `SMOKE_FAILED_PLATFORMS`
+   - If you dispatch and it succeeds, record evidence:
      - `scripts/ci-audit/ci_audit_record.sh --ledger-path "$LEDGER_PATH" --kind feature-smoke --orch-branch "$ORCH_BRANCH" --run-id "$RUN_ID" --tested-sha "$INTEG_CORE_HEAD_SHA" --feature-dir "$FEATURE_DIR"`
 
-4) If smoke failed on any run, start only failing platform-fix tasks with Codex enabled (parallel):
+5) If smoke failed, start only failing platform-fix tasks with Codex enabled (parallel):
    - If you have a single smoke run id that includes all failing platforms (typical `PLATFORM=behavior` case), use:
-     `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="$FEATURE_DIR" SLICE_ID="$SLICE_ID" SMOKE_RUN_ID="$RUN_ID" LAUNCH_CODEX=1`
-   - If smoke was dispatched per-platform (multiple runs), derive `PLATFORMS=<csv>` from the union of failures and use:
-     `make triad-task-start-platform-fixes FEATURE_DIR="$FEATURE_DIR" SLICE_ID="$SLICE_ID" PLATFORMS="<csv>" LAUNCH_CODEX=1`
+      `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="$FEATURE_DIR" SLICE_ID="$SLICE_ID" SMOKE_RUN_ID="$RUN_ID" LAUNCH_CODEX=1`
    For each selected platform block, collect:
    - `PLATFORM`, `TASK_ID`, `WORKTREE`, `TASK_BRANCH`, `CODEX_EXIT`
    - `CODEX_LAST_MESSAGE_PATH`, `CODEX_EVENTS_PATH`, `CODEX_STDERR_PATH`
@@ -116,35 +114,15 @@ LEDGER_PATH="$FEATURE_DIR/logs/$SLICE_ID/ci-audit/ledger.jsonl"
    Also capture each platform-fix commit SHA after the run:
    - `HEAD_SHA=$(git -C "$WORKTREE" rev-parse HEAD)`
 
-5) If smoke succeeded (no platform fixes needed for smoke):
+6) If smoke succeeded (no platform fixes needed for smoke):
    - Do not start any platform-fix tasks yet; they may still be needed for CI-only failures on macOS/Windows.
 
-6) Dispatch CI Testing (gate before deciding “no-op platform fixes” when smoke is green):
-   - Run from the integ-core worktree (validates `INTEG_CORE_HEAD_SHA` via a throwaway branch):
-     - `cd "$INTEG_CORE_WORKTREE" && scripts/ci/dispatch_ci_testing.sh --workflow-ref "$ORCH_BRANCH" --remote origin --cleanup --mode quick`
-   - Before dispatching, run advisory audit:
-     - `scripts/ci-audit/ci_audit.sh --ledger-path "$LEDGER_PATH" --kind ci-testing --orch-branch "$ORCH_BRANCH"`
-     - If `RECOMMEND=skip`, do not dispatch CI Testing; treat as green and report the ci-audit output in the wrapper summary.
-   - Parse and report the CI Testing stdout contract: `RUN_ID`, `RUN_URL`, `CONCLUSION`, `CI_FAILED_OSES`, `CI_FAILED_JOBS`.
-   - If you dispatched and it succeeds, record evidence:
-     - `scripts/ci-audit/ci_audit_record.sh --ledger-path "$LEDGER_PATH" --kind ci-testing --orch-branch "$ORCH_BRANCH" --run-id "$RUN_ID" --tested-sha "$INTEG_CORE_HEAD_SHA"`
-   - The CI Testing dispatcher enforces a **2 hour** max wait by default; override only if needed via `CI_TESTING_WATCH_TIMEOUT_SECS`.
-   - If CI Testing is green: continue to step (7).
-   - If CI Testing fails:
-     - Derive platforms to fix from `CI_FAILED_OSES`:
-       - `macos-*` -> `macos`
-       - `windows-*` -> `windows`
-       - `ubuntu-*` -> `linux`
-     - Start only those platform-fix tasks:
-       - `make triad-task-start-platform-fixes FEATURE_DIR="$FEATURE_DIR" SLICE_ID="$SLICE_ID" PLATFORMS="<csv>" LAUNCH_CODEX=1`
-     - Do not mark no-ops; proceed to the final aggregator after fixes are complete (the final aggregator run + final CI Testing gate must be green).
-
 7) Decide the platform-fix path:
-   - If CI Testing is green and `SMOKE_FAILED_PLATFORMS` is empty, then no platform-fix worktrees/branches are expected for this slice.
+   - If compile parity is green and `SMOKE_FAILED_PLATFORMS` is empty, then no platform-fix worktrees/branches are expected for this slice.
    - In that case, mark platform-fix tasks as `completed` no-ops to unblock the final aggregator’s `depends_on`:
    - `scripts/triad/mark_noop_platform_fixes_completed.sh --feature-dir "$FEATURE_DIR" --slice-id "$SLICE_ID"`
      - If smoke was dispatched and you have a run id, you may add: `--from-smoke-run "<run-id>"`
-   - Otherwise (smoke failed or CI Testing failed), do not mark no-ops; platform-fix tasks must run and reach green.
+   - Otherwise (smoke failed or compile parity failed), do not mark no-ops; platform-fix tasks must run and reach green.
 
 8) After platform fixes are complete (or marked no-op), start the final aggregator:
    - Confirm `${SLICE_ID}-integ-core` and all required `${SLICE_ID}-integ-<platform>` tasks are `status=completed` in `$FEATURE_DIR/tasks.json` (the starter enforces this).
@@ -158,28 +136,16 @@ LEDGER_PATH="$FEATURE_DIR/logs/$SLICE_ID/ci-audit/ledger.jsonl"
    Also capture the commit SHA after the run:
    - `FINAL_HEAD_SHA=$(git -C "$FINAL_WORKTREE" rev-parse HEAD)`
 
-9) Dispatch CI Testing for the final integration commit (gate before merging to `testing`):
-   - Run from the final aggregator worktree (validates `FINAL_HEAD_SHA` via a throwaway branch):
-     - `cd "$FINAL_WORKTREE" && scripts/ci/dispatch_ci_testing.sh --workflow-ref "$ORCH_BRANCH" --remote origin --cleanup --mode full`
-   - Before dispatching, run advisory audit:
-     - `scripts/ci-audit/ci_audit.sh --ledger-path "$LEDGER_PATH" --kind ci-testing --orch-branch "$ORCH_BRANCH"`
-     - If `RECOMMEND=skip`, do not dispatch CI Testing; treat as green and report the ci-audit output in the wrapper summary.
-   - If you dispatched and it succeeds, record evidence:
-     - `scripts/ci-audit/ci_audit_record.sh --ledger-path "$LEDGER_PATH" --kind ci-testing --orch-branch "$ORCH_BRANCH" --run-id "$RUN_ID" --tested-sha "$FINAL_HEAD_SHA"`
-   - If CI Testing fails here:
-     - Treat this as blocking (even if smoke is green).
-     - Derive platforms to fix from `CI_FAILED_OSES`, start platform-fix tasks, then re-run the final aggregator and this final CI Testing gate.
-
-10) After the final CI Testing gate is green, merge to `testing`.
+9) If the feature requires a full CI Testing gate at this checkpoint, dispatch it from the orchestration checkout using checkout_ref:
+   - `scripts/ci/dispatch_ci_testing.sh --workflow-ref "$ORCH_BRANCH" --remote origin --cleanup --mode full --checkout-ref "$FINAL_HEAD_SHA"`
 
 ## Output to operator
 Return a concise summary that includes:
 - integ-core: `CODEX_EXIT` + `INTEG_CORE_HEAD_SHA` + final message + artifact paths
-- smoke (as reported by integ-core): `RUN_ID` + `RUN_URL` + `SMOKE_PASSED_PLATFORMS` + `SMOKE_FAILED_PLATFORMS`
+- compile parity: `RUN_ID` + `RUN_URL` + `CONCLUSION` + `CI_FAILED_OSES` + `CI_FAILED_JOBS`
+- smoke: `RUN_ID` + `RUN_URL` + `SMOKE_PASSED_PLATFORMS` + `SMOKE_FAILED_PLATFORMS`
 - each platform-fix task started: `CODEX_EXIT` + final message + artifact paths
 - final aggregator: `CODEX_EXIT` + `FINAL_HEAD_SHA` + final message + artifact paths
-- CI Testing (pre-final, used for platform selection when smoke is green): `RUN_ID` + `RUN_URL` + `CONCLUSION` + `CI_FAILED_OSES` + `CI_FAILED_JOBS`
-- CI Testing (final gate on `FINAL_HEAD_SHA`): `RUN_ID` + `RUN_URL` + `CONCLUSION` + `CI_FAILED_OSES` + `CI_FAILED_JOBS`
 
 Do NOT inline events/stderr logs; only paths and short summaries.
 If any expected file is missing, report that clearly (do not guess).

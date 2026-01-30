@@ -21,6 +21,14 @@ Require-Path (Join-Path $FeatureDir "kickoff_prompts")
 Require-Path (Join-Path $FeatureDir "spec_manifest.md")
 Require-Path (Join-Path $FeatureDir "impact_map.md")
 
+$schemaVersion = & jq -r '.meta.schema_version // 1' (Join-Path $FeatureDir "tasks.json")
+$automationEnabled = & jq -r '.meta.automation.enabled // false' (Join-Path $FeatureDir "tasks.json")
+$crossPlatformEnabled = & jq -r '.meta.cross_platform // false' (Join-Path $FeatureDir "tasks.json")
+
+if ([int]$schemaVersion -ge 3 -and $automationEnabled -eq "true" -and $crossPlatformEnabled -eq "true") {
+    Require-Path (Join-Path $FeatureDir "ci_checkpoint_plan.md")
+}
+
 if (Test-Path -LiteralPath (Join-Path $FeatureDir "smoke")) {
     $behaviorPlatforms = @()
     try {
@@ -77,6 +85,12 @@ if ($LASTEXITCODE -ne 0) { throw "FAIL: tasks.json invariants failed" }
 Write-Host "-- spec_manifest.md required-doc existence"
 & python scripts/planning/validate_spec_manifest.py --feature-dir $FeatureDir
 if ($LASTEXITCODE -ne 0) { throw "FAIL: spec_manifest.md required-doc existence failed" }
+
+if ([int]$schemaVersion -ge 3 -and $automationEnabled -eq "true" -and $crossPlatformEnabled -eq "true") {
+    Write-Host "-- ci_checkpoint_plan.md invariants"
+    & python scripts/planning/validate_ci_checkpoint_plan.py --feature-dir $FeatureDir
+    if ($LASTEXITCODE -ne 0) { throw "FAIL: ci_checkpoint_plan.md invariants failed" }
+}
 
 Write-Host "-- ADR Executive Summary drift (if ADRs found/referenced)"
 $adrPaths = @()

@@ -48,11 +48,12 @@ For cross-platform work, split integration into:
   - Prefer a single dispatch with `platform=behavior` (the workflow reads `tasks.json` and runs only required behavior platforms).
 - **Option B (platform-fix when needed):** split integration into core + platform-fix tasks:
   - `X-integ-core` (core integration): merges code+tests and gets primary-platform green.
+  - `CPk-ci-checkpoint` (ops task; planned boundary): dispatches compile parity + Feature Smoke for the checkpoint slice’s `X-integ-core` commit (uses `CI_CHECKOUT_REF` / `SMOKE_CHECKOUT_REF`) and starts platform-fix tasks only when needed.
   - `X-integ-linux` (platform-fix): if Linux is a behavior platform, runs Linux smoke (and bundled WSL smoke if required); otherwise treats Linux as CI parity-only.
   - `X-integ-macos` (platform-fix): if macOS is a behavior platform, runs macOS smoke; otherwise treats macOS as CI parity-only.
   - `X-integ-windows` (platform-fix): if Windows is a behavior platform, runs Windows smoke; otherwise treats Windows as CI parity-only.
   - optional: `X-integ-wsl` (platform-fix): only create when WSL divergence is likely/expected and you want independent ownership/retry loops.
-  - `X-integ` (final aggregator): merges any platform-fix branches, re-runs `make integ-checks` on the primary dev platform, and confirms behavioral smoke + CI parity gates are green.
+  - `X-integ` (final aggregator): merges any platform-fix branches and re-runs `make integ-checks` on the primary dev platform. Cross-platform CI dispatch is scheduled by `ci_checkpoint_plan.md` and must not run by default per slice.
 
 This preserves parallelism and makes it explicit which validations happened where.
 
@@ -214,7 +215,7 @@ Platform-fix work happens on the corresponding platform machine:
 - apply the fix,
 - commit,
 - re-run smoke via `make feature-smoke`,
-- do not merge to the orchestration branch (the final aggregator integration task merges platform-fix branches, re-runs smoke, and is the only merge-back point to orchestration).
+- do not merge to the orchestration branch (the final aggregator integration task merges platform-fix branches and is the only merge-back point to orchestration; cross-platform CI dispatch is scheduled by `ci_checkpoint_plan.md`).
 
 ## WSL testing note
 

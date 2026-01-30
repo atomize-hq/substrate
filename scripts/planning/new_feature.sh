@@ -209,6 +209,9 @@ render "${TEMPLATES_DIR}/session_log.md.tmpl" "${FEATURE_DIR}/session_log.md"
 render "${TEMPLATES_DIR}/contract.md.tmpl" "${FEATURE_DIR}/contract.md"
 render "${TEMPLATES_DIR}/spec_manifest.md.tmpl" "${FEATURE_DIR}/spec_manifest.md"
 render "${TEMPLATES_DIR}/impact_map.md.tmpl" "${FEATURE_DIR}/impact_map.md"
+if [[ "${CROSS_PLATFORM}" -eq 1 && "${AUTOMATION}" -eq 1 ]]; then
+    render "${TEMPLATES_DIR}/ci_checkpoint_plan.md.tmpl" "${FEATURE_DIR}/ci_checkpoint_plan.md"
+fi
 
 cat >"${FEATURE_DIR}/${SLICE_ID}-spec.md" <<MD
 # ${SLICE_ID}-spec
@@ -232,6 +235,9 @@ render "${TEMPLATES_DIR}/slice_closeout_report.md.tmpl" "${FEATURE_DIR}/${SLICE_
 render "${TEMPLATES_DIR}/kickoff_exec_preflight.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/F0-exec-preflight.md" "F0-exec-preflight"
 if [[ "${AUTOMATION}" -eq 1 ]]; then
     render "${TEMPLATES_DIR}/kickoff_feature_cleanup.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/FZ-feature-cleanup.md" "FZ-feature-cleanup"
+fi
+if [[ "${CROSS_PLATFORM}" -eq 1 && "${AUTOMATION}" -eq 1 ]]; then
+    render "${TEMPLATES_DIR}/kickoff_ci_checkpoint.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/CP1-ci-checkpoint.md" "CP1-ci-checkpoint"
 fi
 
 FEATURE="${FEATURE}" FEATURE_DIR="${FEATURE_DIR}" SLICE_ID="${SLICE_ID}" SLICE_ID_LOWER="${SLICE_ID_LOWER}" CROSS_PLATFORM="${CROSS_PLATFORM}" BEHAVIOR_PLATFORMS="${BEHAVIOR_PLATFORMS}" CI_PARITY_PLATFORMS="${CI_PARITY_PLATFORMS}" WSL_REQUIRED="${WSL_REQUIRED}" WSL_SEPARATE="${WSL_SEPARATE}" AUTOMATION="${AUTOMATION}" \
@@ -297,6 +303,8 @@ def refs(*extra: str) -> list:
         os.path.join(feature_dir, "impact_map.md"),
         os.path.join(feature_dir, slice_spec),
     ]
+    if cross_platform and automation:
+        base.insert(3, os.path.join(feature_dir, "ci_checkpoint_plan.md"))
     return base + [os.path.join(feature_dir, x) for x in extra]
 
 
@@ -406,26 +414,15 @@ def integ_core_task() -> dict:
     }
     smoke_refs = [platform_to_smoke[p] for p in behavior_platforms if p in platform_to_smoke]
 
-    dispatch_base = f'scripts/ci/dispatch_feature_smoke.sh --feature-dir "{feature_dir}" --runner-kind self-hosted --workflow-ref "feat/{feature}"'
-    dispatches = []
-    if set(behavior_platforms) == {"linux", "macos", "windows"}:
-        dispatches.append(dispatch_base + " --platform all" + (" --run-wsl" if wsl_required else "") + " --cleanup")
-    else:
-        for p in behavior_platforms:
-            dispatches.append(dispatch_base + f" --platform {p}" + (" --run-wsl" if (p == "linux" and wsl_required) else "") + " --cleanup")
-
     end_checklist = [
         "cargo fmt",
         "cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant tests",
         "make integ-checks",
     ]
-    for dispatch in dispatches:
-        end_checklist.append(f"Dispatch behavioral smoke via CI: {dispatch} (record run ids/URLs)")
     end_checklist.extend(
         [
-            f"If any platform smoke fails: start only failing platform-fix tasks via: make triad-task-start-platform-fixes-from-smoke FEATURE_DIR=\"{feature_dir}\" SLICE_ID=\"{slice_id}\" SMOKE_RUN_ID=\"<run-id>\"",
-            f"After all failing platforms are green: start final aggregator via: make triad-task-start-integ-final FEATURE_DIR=\"{feature_dir}\" SLICE_ID=\"{slice_id}\"",
+            f"If this slice ends a CI checkpoint group: run the checkpoint task (for example, CP1-ci-checkpoint) from the orchestration checkout per {os.path.join(feature_dir, 'ci_checkpoint_plan.md')}",
             (
                 f"From inside the worktree: make triad-task-finish TASK_ID=\"{slice_id}-integ-core\""
                 if automation
@@ -569,14 +566,6 @@ def integ_final_task(platform_tasks: list) -> dict:
     }
     smoke_refs = [platform_to_smoke[p] for p in behavior_platforms if p in platform_to_smoke]
 
-    dispatch_base = f'scripts/ci/dispatch_feature_smoke.sh --feature-dir "{feature_dir}" --runner-kind self-hosted --workflow-ref "feat/{feature}"'
-    dispatches = []
-    if set(behavior_platforms) == {"linux", "macos", "windows"}:
-        dispatches.append(dispatch_base + " --platform all" + (" --run-wsl" if wsl_required else "") + " --cleanup")
-    else:
-        for p in behavior_platforms:
-            dispatches.append(dispatch_base + f" --platform {p}" + (" --run-wsl" if (p == "linux" and wsl_required) else "") + " --cleanup")
-
     end_checklist = [
         "Merge platform-fix branches (if any) + resolve conflicts",
         "cargo fmt",
@@ -584,10 +573,9 @@ def integ_final_task(platform_tasks: list) -> dict:
         "Run relevant tests",
         "make integ-checks",
     ]
-    for dispatch in dispatches:
-        end_checklist.append(f"Re-run behavioral smoke via CI: {dispatch}")
     end_checklist.extend(
         [
+            f"Confirm required CI checkpoint tasks that cover this slice are completed and recorded in {os.path.join(feature_dir, 'session_log.md')}",
             f"Complete slice closeout gate report: {os.path.join(feature_dir, slice_closeout)}",
             (
                 f"From inside the worktree: make triad-task-finish TASK_ID=\"{slice_id}-integ\""
@@ -608,9 +596,9 @@ def integ_final_task(platform_tasks: list) -> dict:
         "type": "integration",
         "phase": slice_id,
         "status": "pending",
-        "description": "Final integration: merge any platform fixes and confirm behavioral smoke + CI parity are green.",
+        "description": "Final integration: merge any platform fixes, complete slice closeout, and confirm checkpoint evidence is recorded.",
         "references": refs(*smoke_refs, slice_closeout),
-        "acceptance_criteria": ["All required platforms are green and the slice matches the spec"],
+        "acceptance_criteria": ["Slice closeout report completed and local integration gates are green"],
         "start_checklist": [
             f"git checkout feat/{feature} && git pull --ff-only",
             f"Read plan.md, tasks.json, session_log.md, {slice_spec}, kickoff prompt",
@@ -751,6 +739,41 @@ if cross_platform:
         tasks.append(integ_platform_task(platform))
 
     tasks.append(integ_final_task(platforms))
+    if automation:
+        tasks.append(
+            {
+                "id": "CP1-ci-checkpoint",
+                "name": "CI checkpoint (initial scaffold)",
+                "type": "ops",
+                "phase": "CP1",
+                "status": "pending",
+                "description": "Run cross-platform CI gates at the checkpoint boundary defined in ci_checkpoint_plan.md.",
+                "references": [
+                    os.path.join(feature_dir, "ci_checkpoint_plan.md"),
+                    os.path.join(feature_dir, "impact_map.md"),
+                    os.path.join(feature_dir, "tasks.json"),
+                    os.path.join(feature_dir, "session_log.md"),
+                ],
+                "acceptance_criteria": [
+                    "Checkpoint CI gates executed or skipped per ci-audit, with evidence recorded in session_log.md",
+                ],
+                "start_checklist": [
+                    f"Run: make triad-orch-ensure FEATURE_DIR=\"{feature_dir}\"",
+                    "Read ci_checkpoint_plan.md and confirm which slice id this checkpoint validates",
+                    "Set status to in_progress; add START entry; commit docs",
+                ],
+                "end_checklist": [
+                    "Run compile parity + behavioral smoke per ci_checkpoint_plan.md (use ci-audit to skip redundant dispatch)",
+                    "Record run ids/URLs and ci-audit output lines in session_log.md",
+                    "Set status to completed; add END entry; commit docs",
+                ],
+                "worktree": None,
+                "integration_task": None,
+                "kickoff_prompt": os.path.join(feature_dir, "kickoff_prompts", "CP1-ci-checkpoint.md"),
+                "depends_on": [f"{slice_id}-integ-core"],
+                "concurrent_with": [],
+            }
+        )
 else:
     tasks.append(integ_single_task())
 

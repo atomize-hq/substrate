@@ -219,6 +219,7 @@ Automation wrapper:
 - Test: `cargo fmt`; targeted `cargo test ...` for tests added/modified; no production code; no responsibility for full suite.
 - Integration: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; run relevant tests (at least new/affected suites) and finish with `make integ-checks` (required full-suite gate). Integration must reconcile code/tests to the spec.
   - If the feature includes a manual validation playbook and smoke scripts (see `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`), integration must run the required validation gates and record results (including run ids/URLs for CI) in the feature `session_log.md`:
+    - Cross-platform CI dispatch is scheduled by `ci_checkpoint_plan.md` (bounded CI checkpoints). Do not dispatch cross-platform CI/smoke from every slice.
     - **Behavior platforms** (P3-008): smoke scripts are required here; dispatch via `make feature-smoke`.
     - **CI parity platforms** (P3-008): smoke is not required for CI parity-only platforms; use compile parity/CI Testing gates instead.
     - Use the advisory CI audit + evidence ledger tooling to reduce redundant multi-OS runs while preserving safety:
@@ -233,13 +234,14 @@ Automation wrapper:
 ## Cross-platform integration task model (platform-fix)
 
 For cross-platform Planning Packs (`tasks.json` meta: `cross_platform: true`), use this integration task structure for every slice (see also `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`):
-- `X-integ-core`: merges `X-code` + `X-test`, gets primary-platform green, runs compile parity gating, then dispatches smoke for behavior platforms.
+- `X-integ-core`: merges `X-code` + `X-test`, gets primary-platform green, and runs local integration gates (plus a local behavioral smoke preflight when possible).
+- `CPk-ci-checkpoint` (ops task; planned boundary): dispatches compile parity + Feature Smoke for the checkpoint slice’s `X-integ-core` commit (uses `CI_CHECKOUT_REF` / `SMOKE_CHECKOUT_REF`), then starts platform-fix tasks only when needed.
 - `X-integ-linux|macos|windows` (and optional `X-integ-wsl`): platform-fix tasks that:
   - validate via `make feature-smoke` for the platform when it is a behavior platform (dispatch from the orchestration/task ref; never from `main`/`testing`),
   - otherwise validate via CI parity gates (compile parity / CI Testing),
   - apply fixes on the corresponding platform machine/worktree only if smoke fails,
   - re-run smoke until green.
-- `X-integ` (final): merges any platform-fix branches, runs `make integ-checks`, and re-runs cross-platform smoke to confirm the merged result is green.
+- `X-integ` (final): merges any platform-fix branches, runs `make integ-checks`, completes slice closeout, and merges back to orchestration.
 
 Kickoff prompt templates for this model:
 - Core integration: `docs/project_management/standards/templates/kickoff_integ_core.md.tmpl`

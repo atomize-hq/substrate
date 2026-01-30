@@ -11,21 +11,22 @@ It shows:
 - worktrees retained through the feature and removed only by the feature cleanup task (`FZ-feature-cleanup`).
 
 Operational notes (important for correct orchestration):
-- CI smoke dispatch (`make feature-smoke ...`) validates the **current `HEAD`** by creating/pushing a throwaway branch at that commit; run it from the worktree that contains the code you intend to validate (e.g., the `X-integ-core` or `X-integ` worktree).
+- CI dispatch validates a specific commit by creating/pushing a throwaway branch at `checkout_ref`:
+  - Feature Smoke: `SMOKE_CHECKOUT_REF=<sha>` (via `make feature-smoke ...`)
+  - CI Testing / compile parity: `CI_CHECKOUT_REF=<sha>` (via `make ci-compile-parity ...`)
+  - In checkpointed packs, dispatch these gates from the orchestration checkout (repo root) at the planned checkpoint task (`CPk-ci-checkpoint`), not from each `X-integ-core` worktree.
 - Platform-fix tasks should begin by merging the `X-integ-core` task branch into their own branch before running smoke or making fixes.
 - Before any CI dispatch, run a **local behavioral smoke preflight** (fast fail) on the current platform when possible:
   - Build `substrate` in the integration worktree, add `target/debug` to `PATH`, and run the matching feature-local smoke script from `docs/project_management/next/<feature>/smoke/` (or `"$FEATURE_DIR/smoke/"` if you set `FEATURE_DIR`).
   - This catches obvious smoke-script/behavior drift before burning runner time and creating throwaway branches.
-- Cross-platform compile parity should be validated before Feature Smoke dispatch to avoid discovering macOS/Windows compilation breaks only after creating temp branches and consuming runner time:
+- At each CI checkpoint, validate cross-platform compile parity before Feature Smoke dispatch to avoid discovering macOS/Windows compilation breaks only after consuming self-hosted runner time:
   - `make ci-compile-parity CI_WORKFLOW_REF="$ORCH_BRANCH" CI_REMOTE=origin CI_CLEANUP=1` (dispatches CI Testing in `mode=compile-parity` via `scripts/ci/dispatch_ci_testing.sh`).
-  - If compile parity fails: treat it as **blocking** and fix it on the `X-integ-core` branch/worktree (cfg/platform guards), then re-run compile parity until green; do not dispatch Feature Smoke until it is green.
+  - If compile parity fails: treat it as **blocking** and fix it on the checkpoint slice’s `X-integ-core` branch/worktree (cfg/platform guards), then re-run compile parity until green; do not dispatch Feature Smoke until it is green.
 - Workflow dispatch reliability note: GitHub only allows `workflow_dispatch` by workflow file if that workflow is registered on the default branch (`main`). Operationally, this means:
   - You may need to land *workflow-file-only* changes on `main` so the workflow is registered.
   - Do not dispatch runs from `main` (or `testing`) during triad execution; dispatch from the feature’s orchestration/task ref and rely on the dispatcher’s throwaway `checkout_ref` branch to test the exact commit you care about.
 - Feature Smoke should be dispatched for **behavior platforms only** (read from `tasks.json` via `PLATFORM=behavior`) unless the feature explicitly requires behavior smoke on all three OSes.
-- CI Testing is a separate, stricter gate than Feature Smoke:
-  - Use `mode=quick` for automation selection (skip docs/cross-build) before deciding “no-op platform fixes”.
-  - Use `mode=full` (default) as the final CI gate on the final `X-integ` commit before merging to `testing`.
+- Full CI Testing (`scripts/ci/dispatch_ci_testing.sh --mode full`) is optional and must be scheduled explicitly (checkpoint plan or feature end gate); do not run it by default per slice.
 - The dispatch scripts are hardened with timeouts to avoid indefinite hangs; default max wait is **2 hours**. If you hit infra slowness, you can override via `FEATURE_SMOKE_WATCH_TIMEOUT_SECS` / `CI_TESTING_WATCH_TIMEOUT_SECS` (see `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`).
 - Headless Codex runs write a PID file while running: `<feature_dir>/logs/<slice>/<task-kind>/codex.pid`. If an orchestration session is interrupted, check for stale PID files before starting new runs.
 - Orchestration wrappers should always emit their stdout contract (including `CODEX_EXIT`) even when Codex fails; if you see missing keys, treat it as an automation bug and capture the command output + `<feature_dir>/logs/...` artifact paths for follow-up.
@@ -80,28 +81,19 @@ flowchart TD
     MERGE["X-integ-core (merge X-code + X-test; resolve spec drift)"]
     CORE_CHECKS["Required checks: cargo fmt; cargo clippy ... -- -D warnings; relevant tests; make integ-checks"]
     CORE_LOCAL_SMOKE["Local behavioral smoke preflight (build substrate; run feature-local smoke script for this platform)"]
-    CORE_PARITY["Dispatch cross-platform compile parity via make ci-compile-parity (GitHub-hosted; CI parity platforms)"]
-    CORE_FIX["If parity fails: fix compile parity on X-integ-core branch (cfg/platform guards), commit, and re-run parity"]
-    CORE_DISPATCH["Dispatch behavioral smoke via CI (prefer PLATFORM=behavior; optional RUN_WSL=1; WORKFLOW_REF should be the orchestration/task ref, not main/testing)"]
-    CORE_RESULTS["Wait for smoke results (self-hosted runners)"]
-    CORE_CI_TEST["Dispatch CI Testing (mode=quick) via scripts/ci/dispatch_ci_testing.sh (throwaway branch at HEAD)"]
-    CORE_IDENTIFY["Identify failing platforms from smoke + CI Testing results"]
-    CORE_START_PF["Start failing platform-fix tasks (use from-smoke-run when smoke was a single dispatch; else explicit PLATFORMS=...)"]
-    CORE_START_FINAL["After fixes are green: start final aggregator (make triad-task-start-integ-final SLICE_ID=X; task id is X-integ)"]
+  end
+
+  %% ======== CI checkpoint (cross-platform gates run only at planned boundaries) ========
+  subgraph CHECKPOINT["CI Checkpoint (only at planned boundaries)"]
+    CP["CPk-ci-checkpoint (validate X-integ-core HEAD via checkout_ref)"]
+    CP_PARITY["Dispatch cross-platform compile parity (make ci-compile-parity ... CI_CHECKOUT_REF=<sha>)"]
+    CP_SMOKE["Dispatch behavioral smoke (make feature-smoke ... SMOKE_CHECKOUT_REF=<sha>)"]
+    CP_START_PF["If any gate fails: start failing platform-fix tasks"]
   end
 
   CODE --> MERGE
   TEST --> MERGE
-  MERGE --> CORE_CHECKS --> CORE_LOCAL_SMOKE --> CORE_PARITY
-  CORE_PARITY -->|pass| CORE_DISPATCH
-  CORE_PARITY -->|fail| CORE_FIX --> CORE_PARITY
-
-  %% ======== Smoke validation (CI) ========
-  subgraph CI["GitHub Actions (validation only)"]
-    SMOKE_ALL["Feature Smoke workflow (self-hosted runners; behavior platforms; optional WSL)"]
-  end
-
-  CORE_DISPATCH --> SMOKE_ALL --> CORE_RESULTS --> CORE_CI_TEST --> CORE_IDENTIFY --> CORE_START_PF
+  MERGE --> CORE_CHECKS --> CORE_LOCAL_SMOKE --> CP --> CP_PARITY --> CP_SMOKE --> CP_START_PF
 
   %% ======== Platform-fix tasks (parallel, only if needed) ========
   subgraph PF["Platform-fix Integration Tasks (worktrees on platform machines)"]
@@ -111,15 +103,14 @@ flowchart TD
     WSL["X-integ-wsl (rare; if WSL fails and you want separate ownership; fix + re-run smoke)"]
   end
 
-  CORE_START_PF --> LNX
-  CORE_START_PF --> MAC
-  CORE_START_PF --> WIN
-  CORE_START_PF --> WSL
+  CP_START_PF --> LNX
+  CP_START_PF --> MAC
+  CP_START_PF --> WIN
+  CP_START_PF --> WSL
 
   %% ======== Final aggregator ========
   subgraph INTEG_FINAL["Final Cross-Platform Integration"]
-    AGG["X-integ (final; merge platform fixes; run integ checks; re-run cross-platform smoke)"]
-    AGG_CI_TEST["Dispatch CI Testing (throwaway branch at HEAD)"]
+    AGG["X-integ (final; merge platform fixes; run integ checks; complete closeout report)"]
     MERGE_BACK["Merge back to orchestration branch; update tasks.json/session_log.md (worktrees retained; cleanup at feature end)"]
   end
 
@@ -127,9 +118,8 @@ flowchart TD
   MAC --> AGG
   WIN --> AGG
   WSL --> AGG
-  CORE_DISPATCH --> AGG
-  CORE_START_FINAL --> AGG
-  AGG --> AGG_CI_TEST --> MERGE_BACK --> TASKS
+  CP_SMOKE --> AGG
+  AGG --> MERGE_BACK --> TASKS
 
   %% ======== Feature end cleanup ========
   CLEANUP["FZ-feature-cleanup (make triad-feature-cleanup; remove worktrees; optional prune branches)"]
@@ -175,28 +165,19 @@ flowchart TD
     CORE["X-integ-core (merge X-code + X-test; resolve spec drift)"]
     CORE_CHECKS["Core checks: cargo fmt; cargo clippy ... -- -D warnings; relevant tests; make integ-checks"]
     CORE_LOCAL_SMOKE["Local behavioral smoke preflight (build substrate; run feature-local smoke script for this platform)"]
-    CORE_PARITY["Dispatch cross-platform compile parity via make ci-compile-parity (GitHub-hosted; CI parity platforms)"]
-    CORE_FIX["If parity fails: fix compile parity on X-integ-core branch (cfg/platform guards), commit, and re-run parity"]
-    CORE_DISPATCH["Dispatch behavioral smoke via CI (prefer PLATFORM=behavior; optional WSL; WORKFLOW_REF should be the orchestration/task ref, not main/testing)"]
-    CORE_RESULTS["Wait for smoke results (self-hosted runners)"]
-    CORE_CI_TEST["Dispatch CI Testing (mode=quick) via scripts/ci/dispatch_ci_testing.sh (throwaway branch at HEAD)"]
-    CORE_IDENTIFY["Identify failing platforms from smoke + CI Testing results"]
-    CORE_START_PF["Start failing platform-fix tasks (use from-smoke-run when smoke was a single dispatch; else explicit PLATFORMS=...)"]
-    CORE_START_FINAL["After fixes are green: start final aggregator (make triad-task-start-integ-final SLICE_ID=X; task id is X-integ)"]
+  end
+
+  %% ======== CI checkpoint (cross-platform gates run only at planned boundaries) ========
+  subgraph CHECKPOINT["CI Checkpoint (only at planned boundaries)"]
+    CP["CPk-ci-checkpoint (validate X-integ-core HEAD via checkout_ref)"]
+    CP_PARITY["Dispatch cross-platform compile parity (make ci-compile-parity ... CI_CHECKOUT_REF=<sha>)"]
+    CP_SMOKE["Dispatch behavioral smoke (make feature-smoke ... SMOKE_CHECKOUT_REF=<sha>)"]
+    CP_START_PF["If any gate fails: start failing platform-fix tasks"]
   end
 
   CODE --> CORE
   TEST --> CORE
-  CORE --> CORE_CHECKS --> CORE_LOCAL_SMOKE --> CORE_PARITY
-  CORE_PARITY -->|pass| CORE_DISPATCH
-  CORE_PARITY -->|fail| CORE_FIX --> CORE_PARITY
-
-  %% ======== Smoke validation (CI) ========
-  subgraph CI["GitHub Actions (validation only)"]
-    SMOKE["Feature Smoke workflow (self-hosted runners; behavior platforms; optional WSL)"]
-  end
-
-  CORE_DISPATCH --> SMOKE --> CORE_RESULTS --> CORE_CI_TEST --> CORE_IDENTIFY --> CORE_START_PF
+  CORE --> CORE_CHECKS --> CORE_LOCAL_SMOKE --> CP --> CP_PARITY --> CP_SMOKE --> CP_START_PF
 
   %% ======== Platform-fix tasks (parallel, only if needed) ========
   subgraph PF["Platform-fix Integration Tasks (only make changes if a platform fails)"]
@@ -206,15 +187,14 @@ flowchart TD
     WSL["X-integ-wsl (rare; WSL-only platform-fix; use only when rubric says so)"]
   end
 
-  CORE_START_PF --> LNX
-  CORE_START_PF --> MAC
-  CORE_START_PF --> WIN
-  CORE_START_PF --> WSL
+  CP_START_PF --> LNX
+  CP_START_PF --> MAC
+  CP_START_PF --> WIN
+  CP_START_PF --> WSL
 
   %% ======== Final aggregator ========
   subgraph INTEG_FINAL["Final Cross-Platform Integration"]
-    FINAL["X-integ (final; merge platform fixes; run integ checks; re-run smoke (all; optional WSL))"]
-    FINAL_CI_TEST["Dispatch CI Testing (throwaway branch at HEAD)"]
+    FINAL["X-integ (final; merge platform fixes; run integ checks; complete closeout report)"]
     MERGE_BACK["Merge back to orchestration branch; update tasks.json/session_log.md (worktrees retained; cleanup at feature end)"]
   end
 
@@ -222,9 +202,8 @@ flowchart TD
   MAC --> FINAL
   WIN --> FINAL
   WSL --> FINAL
-  CORE_DISPATCH --> FINAL
-  CORE_START_FINAL --> FINAL
-  FINAL --> FINAL_CI_TEST --> MERGE_BACK --> TASKS
+  CP_SMOKE --> FINAL
+  FINAL --> MERGE_BACK --> TASKS
 
   %% ======== Feature end cleanup ========
   CLEANUP["FZ-feature-cleanup (make triad-feature-cleanup; remove worktrees; optional prune branches)"]

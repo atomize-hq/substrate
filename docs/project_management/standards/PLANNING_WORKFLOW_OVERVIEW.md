@@ -24,13 +24,15 @@ flowchart TD
   SMD[spec_manifest.md created]
   IM["Impact map agent reads: docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md"]
   IMD[impact_map.md created]
+  CP["CI checkpoint planning agent reads: docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md"]
+  CPD[ci_checkpoint_plan.md created]
   D{ADR accepted}
   D_NO[ADR not accepted]
   D_YES[ADR accepted]
 
   P["Planning agent reads: docs/project_management/standards/PLANNING_README.md"]
   PACK[Planning Pack created under docs/project_management/next/**FEATURE_NAME**/]
-  PP["Platform parity plan (schema v2/v3; required when meta.cross_platform=true)\n- meta.schema_version\n- v3: meta.automation.enabled=true\n- meta.behavior_platforms_required\n- meta.ci_parity_platforms_required (legacy: meta.platforms_required)\n- meta.wsl_required + meta.wsl_task_mode (if needed)\n- X-integ-core / X-integ-<platform> / X-integ (per slice)"]
+  PP["Platform parity plan (schema v2/v3; required when meta.cross_platform=true)\n- meta.schema_version\n- v3: meta.automation.enabled=true\n- meta.behavior_platforms_required\n- meta.ci_parity_platforms_required (legacy: meta.platforms_required)\n- meta.wsl_required + meta.wsl_task_mode (if needed)\n- X-integ-core / X-integ-<platform> / X-integ (per slice)\n- ci_checkpoint_plan.md (bounded CI checkpoints between groups of triads)"]
 
   Q["Quality gate reviewer reads: docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md"]
   LINT["Run mechanical checks: docs/project_management/standards/PLANNING_LINT_CHECKLIST.md"]
@@ -42,7 +44,7 @@ flowchart TD
 
   A --> B
   B --> C
-  C --> SM --> SMD --> IM --> IMD --> D
+  C --> SM --> SMD --> IM --> IMD --> CP --> CPD --> D
   D --> D_NO
   D --> D_YES
   D_NO --> B

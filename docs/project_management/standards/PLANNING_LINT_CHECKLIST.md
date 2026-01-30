@@ -24,6 +24,7 @@ make planning-lint-ps FEATURE_DIR=$env:FEATURE_DIR
 
 This runner checks (at minimum):
 - Required Planning Pack artifacts exist (`plan.md`, `spec_manifest.md`, `impact_map.md`, `tasks.json`, `session_log.md`, `kickoff_prompts/`, and `smoke/*` when applicable)
+  - For cross-platform automation packs (schema v3+ + meta.automation.enabled=true): `ci_checkpoint_plan.md` must exist and pass mechanical validation.
 - `spec_manifest.md` exists when an ADR is present or referenced
 - All backticked required-doc paths listed in `spec_manifest.md` exist on disk
 - `impact_map.md` exists as part of the required-doc list (replaces legacy `integration_map.md`)

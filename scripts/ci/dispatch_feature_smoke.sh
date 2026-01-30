@@ -8,6 +8,7 @@ Usage:
     --feature-dir docs/project_management/next/<feature> \
     [--runner-kind github-hosted|self-hosted] \
     --platform behavior|linux|macos|windows|wsl|all \
+    [--checkout-ref <git-ref>] \
     [--smoke-slice-id <slice>] \
     [--run-wsl] \
     [--run-integ-checks] \
@@ -17,7 +18,7 @@ Usage:
     [--cleanup]
 
 What it does:
-  - Creates a throwaway remote branch at HEAD
+  - Creates a throwaway remote branch at the target commit (default: HEAD)
   - Dispatches the workflow against the workflow ref (default: current git branch), checking out the throwaway branch
   - Optionally waits and deletes the throwaway branch
 
@@ -107,6 +108,7 @@ PLATFORM=""
 RUNNER_KIND="self-hosted"
 RUN_WSL=0
 RUN_INTEG_CHECKS=0
+CHECKOUT_REF=""
 SMOKE_SLICE_ID=""
 WORKFLOW=".github/workflows/feature-smoke.yml"
 WORKFLOW_REF=""
@@ -176,6 +178,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --platform)
             PLATFORM="${2:-}"
+            shift 2
+            ;;
+        --checkout-ref)
+            CHECKOUT_REF="${2:-}"
             shift 2
             ;;
         --smoke-slice-id)
@@ -281,7 +287,11 @@ ts="$(date -u +%Y%m%dT%H%M%SZ)"
 safe_feature="$(basename "${FEATURE_DIR}")"
 TEMP_BRANCH="tmp/feature-smoke/${safe_feature}/${PLATFORM}/${ts}"
 
-HEAD="$(git rev-parse HEAD)"
+if [[ -z "${CHECKOUT_REF}" ]]; then
+    CHECKOUT_REF="HEAD"
+fi
+
+HEAD="$(git rev-parse "${CHECKOUT_REF}")"
 echo "HEAD: ${HEAD}" >&2
 echo "Temp branch: ${TEMP_BRANCH}" >&2
 

@@ -60,6 +60,14 @@ require_path "${FEATURE_DIR}/kickoff_prompts"
 require_path "${FEATURE_DIR}/spec_manifest.md"
 require_path "${FEATURE_DIR}/impact_map.md"
 
+schema_version="$(jq -r '.meta.schema_version // 1' "${FEATURE_DIR}/tasks.json")"
+automation_enabled="$(jq -r '.meta.automation.enabled // false' "${FEATURE_DIR}/tasks.json")"
+cross_platform_enabled="$(jq -r '.meta.cross_platform // false' "${FEATURE_DIR}/tasks.json")"
+
+if [[ "${schema_version}" -ge 3 && "${automation_enabled}" == "true" && "${cross_platform_enabled}" == "true" ]]; then
+    require_path "${FEATURE_DIR}/ci_checkpoint_plan.md"
+fi
+
 if [[ -d "${FEATURE_DIR}/smoke" ]]; then
     behavior_platforms_csv="$(jq -r '[.meta.behavior_platforms_required // .meta.ci_parity_platforms_required // .meta.platforms_required // []] | flatten | join(",")' "${FEATURE_DIR}/tasks.json")"
     if [[ -z "${behavior_platforms_csv}" ]]; then
@@ -122,6 +130,11 @@ python3 scripts/planning/validate_tasks_json.py --feature-dir "${FEATURE_DIR}"
 
 echo "-- spec_manifest.md required-doc existence"
 python3 scripts/planning/validate_spec_manifest.py --feature-dir "${FEATURE_DIR}"
+
+if [[ "${schema_version}" -ge 3 && "${automation_enabled}" == "true" && "${cross_platform_enabled}" == "true" ]]; then
+    echo "-- ci_checkpoint_plan.md invariants"
+    python3 scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "${FEATURE_DIR}"
+fi
 
 echo "-- ADR Executive Summary drift (if ADRs found/referenced)"
 adr_paths=()
