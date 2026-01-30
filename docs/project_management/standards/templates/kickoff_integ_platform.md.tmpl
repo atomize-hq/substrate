@@ -21,7 +21,7 @@ Do not edit planning docs inside the worktree.
 
 ## Requirements
 - Before validating smoke or making fixes, merge the slice’s core integration branch into this worktree:
-  - Find the core integration task for this slice in `tasks.json` (e.g., `C0-integ-core`) and merge its task branch into your current branch.
+  - Find the core integration task for this slice in `tasks.json` (e.g., `{{SLICE_ID}}-integ-core`) and merge its task branch into your current branch.
   - This ensures your platform-fix work starts from the merged code+test state that passed local integration gates.
 - Keep fixes narrowly scoped to this platform’s failures. If you discover a broader cross-platform refactor is required, stop and ask the operator to split out an enabling slice instead of piling it into this platform-fix task.
 - Run the platform-local Rust quality gates before finishing (CI Testing parity on this OS):

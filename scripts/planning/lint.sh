@@ -57,6 +57,8 @@ require_path "${FEATURE_DIR}/plan.md"
 require_path "${FEATURE_DIR}/tasks.json"
 require_path "${FEATURE_DIR}/session_log.md"
 require_path "${FEATURE_DIR}/kickoff_prompts"
+require_path "${FEATURE_DIR}/spec_manifest.md"
+require_path "${FEATURE_DIR}/impact_map.md"
 
 if [[ -d "${FEATURE_DIR}/smoke" ]]; then
     behavior_platforms_csv="$(jq -r '[.meta.behavior_platforms_required // .meta.ci_parity_platforms_required // .meta.platforms_required // []] | flatten | join(",")' "${FEATURE_DIR}/tasks.json")"
@@ -118,6 +120,9 @@ jq -e . docs/project_management/next/sequencing.json >/dev/null
 echo "-- tasks.json invariants"
 python3 scripts/planning/validate_tasks_json.py --feature-dir "${FEATURE_DIR}"
 
+echo "-- spec_manifest.md required-doc existence"
+python3 scripts/planning/validate_spec_manifest.py --feature-dir "${FEATURE_DIR}"
+
 echo "-- ADR Executive Summary drift (if ADRs found/referenced)"
 adr_paths=()
 
@@ -127,7 +132,7 @@ done < <(ls -1 "${FEATURE_DIR}"/ADR-*.md 2>/dev/null || true)
 
 while IFS= read -r p; do
     [[ -n "$p" ]] && adr_paths+=("$p")
-done < <(rg -o --no-filename --no-line-number --hidden --glob '!**/.git/**' 'docs/project_management/next/ADR-[^ )"\r\n]+\.md' "${FEATURE_DIR}" 2>/dev/null | sort -u || true)
+done < <(rg -o --no-filename --no-line-number --hidden --glob '!**/.git/**' 'docs/project_management/(next|adrs/[^ )"\r\n]+)/ADR-[^ )"\r\n]+\.md' "${FEATURE_DIR}" 2>/dev/null | sort -u || true)
 
 if [[ "${#adr_paths[@]}" -gt 0 ]]; then
     for adr in "${adr_paths[@]}"; do

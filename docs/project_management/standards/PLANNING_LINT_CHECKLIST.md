@@ -23,7 +23,10 @@ make planning-lint-ps FEATURE_DIR=$env:FEATURE_DIR
 ```
 
 This runner checks (at minimum):
-- Required Planning Pack artifacts exist (`plan.md`, `tasks.json`, `session_log.md`, `kickoff_prompts/`, and `smoke/*` when applicable)
+- Required Planning Pack artifacts exist (`plan.md`, `spec_manifest.md`, `impact_map.md`, `tasks.json`, `session_log.md`, `kickoff_prompts/`, and `smoke/*` when applicable)
+- `spec_manifest.md` exists when an ADR is present or referenced
+- All backticked required-doc paths listed in `spec_manifest.md` exist on disk
+- `impact_map.md` exists as part of the required-doc list (replaces legacy `integration_map.md`)
 - Hard-ban scan (no `TBD/TODO/WIP/TBA`, no “open question”, no “etc.”/“and so on”)
 - Ambiguity scan (no `should|could|might|maybe` in behavior/contracts)
 - `tasks.json` invariants (`make planning-validate`)
@@ -44,4 +47,4 @@ If the runner fails, use these to isolate the cause:
 - Hard bans: `rg -n --hidden --glob '!**/.git/**' '\\b(TBD|TODO|WIP|TBA)\\b|open question|\\betc\\.|and so on' "$FEATURE_DIR"`
 - Ambiguity words: `rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' '\\b(should|could|might|maybe)\\b' "$FEATURE_DIR"`
 - `tasks.json` invariants: `make planning-validate FEATURE_DIR="$FEATURE_DIR"`
-- ADR exec summary drift: `make adr-check ADR=docs/project_management/next/ADR-000X-foo.md`
+- ADR exec summary drift: `make adr-check ADR=docs/project_management/adrs/queued/ADR-000X-foo.md` (or any supported ADR path)

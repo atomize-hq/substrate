@@ -27,12 +27,13 @@ Always required:
 - `docs/project_management/next/<feature>/plan.md`
 - `docs/project_management/next/<feature>/tasks.json`
 - `docs/project_management/next/<feature>/session_log.md`
+- `docs/project_management/next/<feature>/spec_manifest.md`
 - `docs/project_management/next/<feature>/kickoff_prompts/`
 - Specs: `docs/project_management/next/<feature>/*-spec*.md`
 
 Required for decision-heavy or cross-platform work:
 - `docs/project_management/next/<feature>/decision_register.md`
-- `docs/project_management/next/<feature>/integration_map.md`
+- `docs/project_management/next/<feature>/impact_map.md`
 - `docs/project_management/next/<feature>/manual_testing_playbook.md`
 - `docs/project_management/next/<feature>/smoke/`
   - `docs/project_management/next/<feature>/smoke/linux-smoke.sh`
@@ -47,12 +48,13 @@ Minimum required:
 - `plan.md`
 - `tasks.json`
 - `session_log.md`
+- `spec_manifest.md`
 - Specs (`*-spec*.md`)
 - `kickoff_prompts/*-{code,test,integ}.md` for every task
 
 Decision-heavy or cross-platform work must also include:
 - `decision_register.md`
-- `integration_map.md`
+- `impact_map.md`
 - `manual_testing_playbook.md`
 - `smoke/` scripts:
   - `smoke/linux-smoke.sh`
@@ -66,6 +68,8 @@ Before execution triads begin, the Planning Pack must include:
 
 Planning agents must read end-to-end:
 - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+- `docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md`
+- `docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md`
 - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
 - `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md` (when cross-platform / smoke scripts exist)
 - `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
@@ -90,6 +94,12 @@ If the recommendation is `FLAG FOR HUMAN REVIEW`, remediate the Planning Pack (d
 
 ## Kickoff prompt (planning agent)
 
+Before using this kickoff prompt, ensure `spec_manifest.md` exists for the feature directory:
+- Run `docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md` against the drafted ADR(s).
+- Update the ADR `Related Docs` list to include `spec_manifest.md` and the selected `*-spec*.md` files.
+Then create the impact map:
+- Run `docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md` to produce `impact_map.md` (replaces legacy `integration_map.md`).
+
 Copy/paste the following prompt to start a planning pass:
 
 ```md
@@ -106,6 +116,8 @@ Constraints (non-negotiable):
 - Every architectural decision must be recorded as exactly two options (A/B) with explicit tradeoffs and a single selected option.
 
 Required reading (end-to-end):
+- `docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md`
+- `docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md`
 - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
 - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
 - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
@@ -114,31 +126,40 @@ Required reading (end-to-end):
 - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
 - `docs/project_management/next/sequencing.json`
+- `docs/project_management/next/<feature>/spec_manifest.md`
+- `docs/project_management/next/<feature>/impact_map.md`
 - All existing planning docs relevant to <FEATURE> (if any).
 
 Required deliverables (must create or update):
 1) Planning Pack (minimum):
    - `docs/project_management/next/<feature>/plan.md`
+   - `docs/project_management/next/<feature>/spec_manifest.md` (authoritative spec list + surface ownership)
+   - `docs/project_management/next/<feature>/impact_map.md` (touch set + cascading implications + cross-queue conflicts; replaces legacy `integration_map.md`)
    - `docs/project_management/next/<feature>/tasks.json`
    - `docs/project_management/next/<feature>/session_log.md` (START/END entries only)
-   - Specs: `docs/project_management/next/<feature>/*-spec*.md`
+   - Specs: the exact spec docs listed in `spec_manifest.md` (no extras, no missing docs)
    - Kickoff prompts: `docs/project_management/next/<feature>/kickoff_prompts/*-{code,test,integ}.md`
-   - Execution gates (recommended; scaffolded by `make planning-new-feature` / `make planning-new-feature-ps`):
-     - `docs/project_management/next/<feature>/execution_preflight_report.md`
-     - `docs/project_management/next/<feature>/<slice>-closeout_report.md` (e.g., `C0-closeout_report.md`)
-	   - If you want to use triad execution automation (task runner/finisher + feature cleanup), scaffold with `AUTOMATION=1`:
-	     - `make planning-new-feature FEATURE=<feature> AUTOMATION=1`
-	     - `make planning-new-feature-ps FEATURE=<feature> AUTOMATION=1`
+	   - Execution gates (recommended; scaffolded by `make planning-new-feature` / `make planning-new-feature-ps`):
+	     - `docs/project_management/next/<feature>/execution_preflight_report.md`
+	     - `docs/project_management/next/<feature>/<SLICE_ID>-closeout_report.md` (e.g., `WCU0-closeout_report.md`)
+		   - If you want to use triad execution automation (task runner/finisher + feature cleanup), scaffold with `AUTOMATION=1`:
+		     - `make planning-new-feature FEATURE=<feature> AUTOMATION=1`
+		     - `make planning-new-feature-ps FEATURE=<feature> AUTOMATION=1`
 	   - For cross-platform packs, set `CROSS_PLATFORM=1` and optionally split scopes (P3-008):
 	     - `make planning-new-feature FEATURE=<feature> CROSS_PLATFORM=1 AUTOMATION=1 BEHAVIOR_PLATFORMS=linux CI_PARITY_PLATFORMS=linux,macos,windows`
 	2) If decision-heavy or cross-platform:
 	   - `docs/project_management/next/<feature>/decision_register.md`
-	   - `docs/project_management/next/<feature>/integration_map.md`
+	   - `docs/project_management/next/<feature>/impact_map.md`
 	   - `docs/project_management/next/<feature>/manual_testing_playbook.md`
    - `docs/project_management/next/<feature>/smoke/{linux-smoke.sh,macos-smoke.sh,windows-smoke.ps1}`
 
 Required interoperability rules:
 - `tasks.json` must match the required fields and workflow described in `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`.
+- `spec_manifest.md` is authoritative for which spec documents must exist. If you discover a missing surface, update `spec_manifest.md` first, then create/update the required spec doc (do not proceed with implied/undocumented surfaces).
+- `impact_map.md` is required (non-negotiable); it is the authoritative touch set + cascade/contradiction analysis (legacy: `integration_map.md` is deprecated).
+- Planning Pack consistency is required:
+  - Cross-compare all Planning Pack docs (ADR/spec_manifest/impact_map/specs/contract/tasks/playbook/smoke/kickoffs) to ensure names, defaults, precedence, schemas, exit codes, and behavior statements match exactly.
+  - If a conflict is found, resolve it by updating the authoritative doc for that surface (do not “paper over” inconsistencies by duplicating contract text).
 - Every task must have a kickoff prompt file and must include the exact rule: `Do not edit planning docs inside the worktree.`
 - Integration tasks must include the required validation gates and record results in `session_log.md`:
   - **Behavior platforms**: run the feature-local smoke script via CI (`make feature-smoke`) when `FEATURE_DIR/smoke/` exists.

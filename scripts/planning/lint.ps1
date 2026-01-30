@@ -18,6 +18,8 @@ Require-Path (Join-Path $FeatureDir "plan.md")
 Require-Path (Join-Path $FeatureDir "tasks.json")
 Require-Path (Join-Path $FeatureDir "session_log.md")
 Require-Path (Join-Path $FeatureDir "kickoff_prompts")
+Require-Path (Join-Path $FeatureDir "spec_manifest.md")
+Require-Path (Join-Path $FeatureDir "impact_map.md")
 
 if (Test-Path -LiteralPath (Join-Path $FeatureDir "smoke")) {
     $behaviorPlatforms = @()
@@ -72,6 +74,10 @@ Write-Host "-- tasks.json invariants"
 & python scripts/planning/validate_tasks_json.py --feature-dir $FeatureDir
 if ($LASTEXITCODE -ne 0) { throw "FAIL: tasks.json invariants failed" }
 
+Write-Host "-- spec_manifest.md required-doc existence"
+& python scripts/planning/validate_spec_manifest.py --feature-dir $FeatureDir
+if ($LASTEXITCODE -ne 0) { throw "FAIL: spec_manifest.md required-doc existence failed" }
+
 Write-Host "-- ADR Executive Summary drift (if ADRs found/referenced)"
 $adrPaths = @()
 
@@ -79,7 +85,7 @@ Get-ChildItem -LiteralPath $FeatureDir -Filter "ADR-*.md" -File -ErrorAction Sil
     $adrPaths += $_.FullName
 }
 
-$refs = & rg -o --no-filename --no-line-number --hidden --glob '!**/.git/**' 'docs/project_management/next/ADR-[^ )"\r\n]+\.md' $FeatureDir 2>$null
+$refs = & rg -o --no-filename --no-line-number --hidden --glob '!**/.git/**' 'docs/project_management/(next|adrs/[^ )"\r\n]+)/ADR-[^ )"\r\n]+\.md' $FeatureDir 2>$null
 if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 1) { throw "rg failed with exit code $LASTEXITCODE" }
 if ($refs) {
     $adrPaths += ($refs | Sort-Object -Unique)

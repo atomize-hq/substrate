@@ -109,12 +109,12 @@ planning-lint-ps:
 
 .PHONY: adr-check
 adr-check:
-	@if [ -z "$(ADR)" ]; then echo "ERROR: set ADR=docs/project_management/next/ADR-XXXX-....md"; exit 2; fi
+	@if [ -z "$(ADR)" ]; then echo "ERROR: set ADR=docs/project_management/<...>/ADR-XXXX-....md"; exit 2; fi
 	python3 scripts/planning/check_adr_exec_summary.py --adr "$(ADR)"
 
 .PHONY: adr-fix
 adr-fix:
-	@if [ -z "$(ADR)" ]; then echo "ERROR: set ADR=docs/project_management/next/ADR-XXXX-....md"; exit 2; fi
+	@if [ -z "$(ADR)" ]; then echo "ERROR: set ADR=docs/project_management/<...>/ADR-XXXX-....md"; exit 2; fi
 	python3 scripts/planning/check_adr_exec_summary.py --adr "$(ADR)" --fix
 
 # =========================
@@ -194,12 +194,14 @@ WSL_SEPARATE ?= 0
 AUTOMATION ?= 0
 BEHAVIOR_PLATFORMS ?=
 CI_PARITY_PLATFORMS ?=
+SLICE_PREFIX ?=
 
 .PHONY: planning-new-feature
 planning-new-feature:
 	@if [ -z "$(FEATURE)" ]; then echo "ERROR: set FEATURE=<feature_dir_name>"; exit 2; fi
 	@set -euo pipefail; \
 	cmd="scripts/planning/new_feature.sh --feature \"$(FEATURE)\""; \
+	if [ -n "$(SLICE_PREFIX)" ]; then cmd="$$cmd --slice-prefix \"$(SLICE_PREFIX)\""; fi; \
 	if [ "$(DECISION_HEAVY)" = "1" ]; then cmd="$$cmd --decision-heavy"; fi; \
 	if [ "$(CROSS_PLATFORM)" = "1" ]; then cmd="$$cmd --cross-platform"; fi; \
 	if [ -n "$(BEHAVIOR_PLATFORMS)" ]; then cmd="$$cmd --behavior-platforms \"$(BEHAVIOR_PLATFORMS)\""; fi; \
@@ -216,6 +218,7 @@ planning-new-feature-ps:
 	@if ! command -v pwsh >/dev/null 2>&1; then echo "ERROR: pwsh not found on PATH"; exit 2; fi
 	@set -euo pipefail; \
 	cmd="pwsh -File scripts/planning/new_feature.ps1 -Feature \"$(FEATURE)\""; \
+	if [ -n "$(SLICE_PREFIX)" ]; then cmd="$$cmd -SlicePrefix \"$(SLICE_PREFIX)\""; fi; \
 	if [ "$(DECISION_HEAVY)" = "1" ]; then cmd="$$cmd -DecisionHeavy"; fi; \
 	if [ "$(CROSS_PLATFORM)" = "1" ]; then cmd="$$cmd -CrossPlatform"; fi; \
 	if [ -n "$(BEHAVIOR_PLATFORMS)" ]; then cmd="$$cmd -BehaviorPlatforms \"$(BEHAVIOR_PLATFORMS)\""; fi; \

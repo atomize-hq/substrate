@@ -11,8 +11,8 @@ Purpose:
     - scaffold an automation-enabled, cross-platform Planning Pack
     - write minimal (lintable) docs + ADR + smoke scripts + deterministic kickoff prompts
     - complete the feature start gate (F0-exec-preflight) on orchestration branch
-    - start C0-code + C0-test in parallel worktrees and launch Codex headless for both
-    - finish C0-code + C0-test (commit to their task branches; no merge to orchestration)
+    - start first-slice code + test in parallel worktrees and launch Codex headless for both
+    - finish first-slice code + test (commit to their task branches; no merge to orchestration)
 
 Options:
   --feature <name>            Feature dir name under docs/project_management/next/ (default: e2e-triad-smoke-<utc>)
@@ -250,6 +250,13 @@ ORCH_BRANCH="feat/${FEATURE}"
 FEATURE_DIR="docs/project_management/next/${FEATURE}"
 FEATURE_DIR_ABS="$(python_abs_path "${FEATURE_DIR}")"
 
+SLICE_PREFIX="E2E"
+SLICE_ID="${SLICE_PREFIX}0"
+CODE_TASK_ID="${SLICE_ID}-code"
+TEST_TASK_ID="${SLICE_ID}-test"
+INTEG_CORE_TASK_ID="${SLICE_ID}-integ-core"
+INTEG_TASK_ID="${SLICE_ID}-integ"
+
 if [[ -z "${LOG_DIR}" ]]; then
     LOG_DIR="target/e2e/${FEATURE}"
 fi
@@ -282,7 +289,7 @@ log "Creating orchestration branch: ${ORCH_BRANCH}"
 run git checkout -b "${ORCH_BRANCH}"
 
 log "Scaffolding Planning Pack (cross-platform + automation)"
-scaffold_args=(scripts/planning/new_feature.sh --feature "${FEATURE}" --cross-platform --automation)
+scaffold_args=(scripts/planning/new_feature.sh --feature "${FEATURE}" --slice-prefix "${SLICE_PREFIX}" --cross-platform --automation)
 if [[ "${RUN_WSL}" -eq 1 ]]; then
     scaffold_args+=(--wsl-required)
     if [[ "${WSL_SEPARATE}" -eq 1 ]]; then
@@ -294,12 +301,12 @@ run "${scaffold_args[@]}"
 TASKS_JSON="${FEATURE_DIR_ABS}/tasks.json"
 SESSION_LOG="${FEATURE_DIR_ABS}/session_log.md"
 
-log "Writing minimal C0 spec"
+log "Writing minimal ${SLICE_ID} spec"
 if [[ "${DRY_RUN}" -eq 1 ]]; then
-    echo "+ write ${FEATURE_DIR}/C0-spec.md" >&2
+    echo "+ write ${FEATURE_DIR}/${SLICE_ID}-spec.md" >&2
 else
-    cat >"${FEATURE_DIR_ABS}/C0-spec.md" <<'MD'
-# C0-spec (E2E triad smoke)
+    cat >"${FEATURE_DIR_ABS}/${SLICE_ID}-spec.md" <<MD
+# ${SLICE_ID}-spec (E2E triad smoke)
 
 ## Scope
 - Add a new workspace member crate `crates/triad_e2e_smoke_demo/`.
@@ -374,8 +381,8 @@ log "Writing deterministic kickoff prompts (E2E)"
 if [[ "${DRY_RUN}" -eq 1 ]]; then
     echo "+ write ${FEATURE_DIR}/kickoff_prompts/* (override)" >&2
 else
-    cat >"${FEATURE_DIR_ABS}/kickoff_prompts/C0-code.md" <<'MD'
-# Kickoff: C0-code (E2E smoke)
+    cat >"${FEATURE_DIR_ABS}/kickoff_prompts/${CODE_TASK_ID}.md" <<MD
+# Kickoff: ${CODE_TASK_ID} (E2E smoke)
 
 Do not edit planning docs inside the worktree.
 
@@ -393,11 +400,11 @@ Required:
 - Run `cargo clippy --workspace --all-targets -- -D warnings`
 
 Finish:
-- From inside this worktree run: `make triad-task-finish TASK_ID="C0-code"`
+- From inside this worktree run: `make triad-task-finish TASK_ID="${CODE_TASK_ID}"`
 MD
 
-    cat >"${FEATURE_DIR_ABS}/kickoff_prompts/C0-test.md" <<'MD'
-# Kickoff: C0-test (E2E smoke)
+    cat >"${FEATURE_DIR_ABS}/kickoff_prompts/${TEST_TASK_ID}.md" <<MD
+# Kickoff: ${TEST_TASK_ID} (E2E smoke)
 
 Do not edit planning docs inside the worktree.
 
@@ -409,16 +416,16 @@ Constraints:
 - Keep changes minimal and deterministic.
 
 Finish:
-- From inside this worktree run: `make triad-task-finish TASK_ID="C0-test"`
+- From inside this worktree run: `make triad-task-finish TASK_ID="${TEST_TASK_ID}"`
 MD
 
-    cat >"${FEATURE_DIR_ABS}/kickoff_prompts/C0-integ-core.md" <<MD
-# Kickoff: C0-integ-core (E2E smoke)
+    cat >"${FEATURE_DIR_ABS}/kickoff_prompts/${INTEG_CORE_TASK_ID}.md" <<MD
+# Kickoff: ${INTEG_CORE_TASK_ID} (E2E smoke)
 
 Do not edit planning docs inside the worktree.
 
 Goal:
-- Merge C0-code + C0-test branches, make the slice green, and dispatch cross-platform smoke via CI.
+- Merge ${CODE_TASK_ID} + ${TEST_TASK_ID} branches, make the slice green, and dispatch cross-platform smoke via CI.
 
 Steps:
 1) Merge the task branches:
@@ -428,17 +435,18 @@ Steps:
 3) Dispatch smoke:
    - \`make feature-smoke FEATURE_DIR="${FEATURE_DIR}" PLATFORM=all WORKFLOW_REF="${ORCH_BRANCH}"\`
 4) If any platform smoke fails, start only failing platform-fix tasks:
-   - \`make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="${FEATURE_DIR}" SLICE_ID="C0" SMOKE_RUN_ID="<run-id>"\`
+   - \`make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="${FEATURE_DIR}" SLICE_ID="${SLICE_ID}" SMOKE_RUN_ID="<run-id>"\`
 5) After all failing platforms are green, start the final aggregator:
-   - \`make triad-task-start-integ-final FEATURE_DIR="${FEATURE_DIR}" SLICE_ID="C0"\`
+   - \`make triad-task-start-integ-final FEATURE_DIR="${FEATURE_DIR}" SLICE_ID="${SLICE_ID}"\`
 
 Finish:
-- From inside this worktree run: \`make triad-task-finish TASK_ID="C0-integ-core"\`
+- From inside this worktree run: \`make triad-task-finish TASK_ID="${INTEG_CORE_TASK_ID}"\`
 MD
 
     for p in linux macos windows; do
-        cat >"${FEATURE_DIR_ABS}/kickoff_prompts/C0-integ-${p}.md" <<MD
-# Kickoff: C0-integ-${p} (E2E smoke)
+        task_id="${SLICE_ID}-integ-${p}"
+        cat >"${FEATURE_DIR_ABS}/kickoff_prompts/${task_id}.md" <<MD
+# Kickoff: ${task_id} (E2E smoke)
 
 Do not edit planning docs inside the worktree.
 
@@ -446,17 +454,18 @@ Goal:
 - Confirm the merged slice is green on ${p} and fix if needed.
 
 Steps:
-1) Merge C0-integ-core into this branch.
+1) Merge ${INTEG_CORE_TASK_ID} into this branch.
 2) Run CI smoke for ${p} until green (repeat after fixes):
    - \`make feature-smoke FEATURE_DIR="${FEATURE_DIR}" PLATFORM=${p} WORKFLOW_REF="${ORCH_BRANCH}"\`
 3) Finish (commits to this task branch; does not merge back to orchestration):
-   - \`make triad-task-finish TASK_ID="C0-integ-${p}"\`
+   - \`make triad-task-finish TASK_ID="${task_id}"\`
 MD
     done
 
     if jq -e '.meta.wsl_required == true and .meta.wsl_task_mode == "separate"' "${TASKS_JSON}" >/dev/null 2>&1; then
-        cat >"${FEATURE_DIR_ABS}/kickoff_prompts/C0-integ-wsl.md" <<MD
-# Kickoff: C0-integ-wsl (E2E smoke)
+        task_id="${SLICE_ID}-integ-wsl"
+        cat >"${FEATURE_DIR_ABS}/kickoff_prompts/${task_id}.md" <<MD
+# Kickoff: ${task_id} (E2E smoke)
 
 Do not edit planning docs inside the worktree.
 
@@ -464,28 +473,28 @@ Goal:
 - Confirm the merged slice is green in WSL and fix if needed.
 
 Steps:
-1) Merge C0-integ-core into this branch.
+1) Merge ${INTEG_CORE_TASK_ID} into this branch.
 2) Run CI smoke for wsl until green:
    - \`make feature-smoke FEATURE_DIR="${FEATURE_DIR}" PLATFORM=wsl RUNNER_KIND=self-hosted WORKFLOW_REF="${ORCH_BRANCH}"\`
 3) Finish:
-   - \`make triad-task-finish TASK_ID="C0-integ-wsl"\`
+   - \`make triad-task-finish TASK_ID="${task_id}"\`
 MD
     fi
 
-    cat >"${FEATURE_DIR_ABS}/kickoff_prompts/C0-integ.md" <<MD
-# Kickoff: C0-integ (E2E smoke final aggregator)
+    cat >"${FEATURE_DIR_ABS}/kickoff_prompts/${INTEG_TASK_ID}.md" <<MD
+# Kickoff: ${INTEG_TASK_ID} (E2E smoke final aggregator)
 
 Do not edit planning docs inside the worktree.
 
 Goal:
-- Merge C0-integ-core and any platform-fix branches, re-run checks + smoke, and fast-forward merge back to orchestration.
+- Merge ${INTEG_CORE_TASK_ID} and any platform-fix branches, re-run checks + smoke, and fast-forward merge back to orchestration.
 
 Required:
 - \`make integ-checks\`
 - \`make feature-smoke FEATURE_DIR="${FEATURE_DIR}" PLATFORM=all WORKFLOW_REF="${ORCH_BRANCH}"\`
 
 Finish:
-- From inside this worktree run: \`make triad-task-finish TASK_ID="C0-integ"\`
+- From inside this worktree run: \`make triad-task-finish TASK_ID="${INTEG_TASK_ID}"\`
 MD
 fi
 
@@ -523,7 +532,7 @@ if [[ "${SKIP_SEQUENCING_UPDATE}" -eq 0 ]]; then
     if [[ "${DRY_RUN}" -eq 1 ]]; then
         echo "+ update docs/project_management/next/sequencing.json" >&2
     else
-        python3 - "${FEATURE_DIR}" "${FEATURE}" "${ORCH_BRANCH}" <<'PY'
+        python3 - "${FEATURE_DIR}" "${FEATURE}" "${ORCH_BRANCH}" "${SLICE_ID}" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -534,6 +543,7 @@ sprints = data.get("sprints", [])
 feat_dir = sys.argv[1]
 feat_id = f"e2e_{sys.argv[2]}"
 branch = sys.argv[3]
+slice_id = sys.argv[4]
 
 if any(s.get("directory") == feat_dir for s in sprints if isinstance(s, dict)):
     raise SystemExit("sequencing.json already has an entry for this directory")
@@ -548,7 +558,7 @@ sprints.append(
         "directory": feat_dir,
         "plan": f"{feat_dir}/plan.md",
         "status": "not_started",
-        "sequence": [{"id": "C0", "name": "E2E smoke slice"}],
+        "sequence": [{"id": slice_id, "name": "E2E smoke slice"}],
     }
 )
 data["sprints"] = sprints
@@ -589,8 +599,8 @@ append_session_log "${SESSION_LOG}" "END   $(utc_now) F0-exec-preflight (ACCEPT)
 run git add "${TASKS_JSON}" "${SESSION_LOG}" "${FEATURE_DIR_ABS}/execution_preflight_report.md"
 run git commit -m "docs: complete F0-exec-preflight (${FEATURE})"
 
-log "Starting C0 code+test in parallel (worktrees + optional Codex headless)"
-pair_cmd=(make triad-task-start-pair FEATURE_DIR="${FEATURE_DIR}" SLICE_ID="C0")
+log "Starting ${SLICE_ID} code+test in parallel (worktrees + optional Codex headless)"
+pair_cmd=(make triad-task-start-pair FEATURE_DIR="${FEATURE_DIR}" SLICE_ID="${SLICE_ID}")
 if [[ "${SKIP_CODEX}" -eq 0 ]]; then pair_cmd+=(LAUNCH_CODEX=1); fi
 if [[ -n "${CODEX_PROFILE}" ]]; then pair_cmd+=(CODEX_PROFILE="${CODEX_PROFILE}"); fi
 if [[ -n "${CODEX_MODEL}" ]]; then pair_cmd+=(CODEX_MODEL="${CODEX_MODEL}"); fi
@@ -612,21 +622,21 @@ if [[ -z "${CODE_WORKTREE}" || -z "${TEST_WORKTREE}" ]]; then
     die "Could not parse worktree paths from triad-task-start-pair output"
 fi
 
-log "Finishing C0-code (commit only; no merge back)"
-run bash -lc "cd \"${CODE_WORKTREE}\" && make triad-task-finish TASK_ID=\"C0-code\""
+log "Finishing ${CODE_TASK_ID} (commit only; no merge back)"
+run bash -lc "cd \"${CODE_WORKTREE}\" && make triad-task-finish TASK_ID=\"${CODE_TASK_ID}\""
 
-log "Finishing C0-test (commit only; no merge back)"
-run bash -lc "cd \"${TEST_WORKTREE}\" && make triad-task-finish TASK_ID=\"C0-test\""
+log "Finishing ${TEST_TASK_ID} (commit only; no merge back)"
+run bash -lc "cd \"${TEST_WORKTREE}\" && make triad-task-finish TASK_ID=\"${TEST_TASK_ID}\""
 
-log "Marking C0-code and C0-test completed in tasks.json (orchestration branch)"
+log "Marking ${CODE_TASK_ID} and ${TEST_TASK_ID} completed in tasks.json (orchestration branch)"
 run git checkout "${ORCH_BRANCH}"
-set_task_status "${TASKS_JSON}" "C0-code" "completed"
-set_task_status "${TASKS_JSON}" "C0-test" "completed"
+set_task_status "${TASKS_JSON}" "${CODE_TASK_ID}" "completed"
+set_task_status "${TASKS_JSON}" "${TEST_TASK_ID}" "completed"
 append_session_log "${SESSION_LOG}" ""
-append_session_log "${SESSION_LOG}" "END   $(utc_now) C0-code (e2e smoke)"
-append_session_log "${SESSION_LOG}" "END   $(utc_now) C0-test (e2e smoke)"
+append_session_log "${SESSION_LOG}" "END   $(utc_now) ${CODE_TASK_ID} (e2e smoke)"
+append_session_log "${SESSION_LOG}" "END   $(utc_now) ${TEST_TASK_ID} (e2e smoke)"
 run git add "${TASKS_JSON}" "${SESSION_LOG}"
-run git commit -m "docs: complete C0 code+test (${FEATURE})"
+run git commit -m "docs: complete ${SLICE_ID} code+test (${FEATURE})"
 
 echo ""
 echo "PHASE1_OK=1"

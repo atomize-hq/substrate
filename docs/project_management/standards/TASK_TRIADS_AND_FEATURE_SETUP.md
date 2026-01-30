@@ -15,6 +15,22 @@ This document explains, step by step, how to create a new feature directory, def
 - Docs/tasks/session log edits happen **only** on the orchestration branch (never in worktrees).
 - Specs are the single source of truth; integration reconciles code/tests to the spec.
 
+## Slice IDs (non-negotiable)
+
+Slice IDs must be feature-derived and stable for the lifetime of the feature directory.
+
+Rules:
+- Slice ID format: `<SLICE_PREFIX><N>` (e.g., `WCU0`, `WCU1`, `WCU2`).
+- The prefix must be derived from the feature name (or explicitly chosen to match it). Do not use generic `C0/C1/...` for new features.
+- All artifacts must use the same slice id:
+  - spec: `<SLICE_ID>-spec.md`
+  - tasks: `<SLICE_ID>-code`, `<SLICE_ID>-test`, `<SLICE_ID>-integ-*`
+  - kickoff prompts: `kickoff_prompts/<task-id>.md`
+
+Scaffolding:
+- `make planning-new-feature FEATURE=<feature>` auto-derives a prefix from `<feature>` and uses the first slice `<prefix>0`.
+- To force a specific prefix: `make planning-new-feature FEATURE=<feature> SLICE_PREFIX=<prefix>`.
+
 ## Worktree execution (automation mode)
 
 When tasks are started via triad automation (preferred) and agents run inside an already-created task worktree, follow:
@@ -27,11 +43,11 @@ When tasks are started via triad automation (preferred) and agents run inside an
    - `plan.md` (runbook/guardrails/triad overview).
    - `tasks.json` (all tasks with ids, worktrees, deps, prompts).
    - `session_log.md` (START/END entries only).
-   - Specs: `C0-spec.md`, `C1-spec.md`, ... (one per triad).
-   - `kickoff_prompts/` directory with `<triad>-code.md`, `<triad>-test.md`, `<triad>-integ.md`.
+   - Specs: `<SLICE_ID>-spec.md`, ... (one per slice/triad).
+   - `kickoff_prompts/` directory with `<task-id>.md` (e.g., `<SLICE_ID>-code.md`, `<SLICE_ID>-test.md`, `<SLICE_ID>-integ.md`).
    - Execution gates (when used):
      - `execution_preflight_report.md`
-     - `<triad>-closeout_report.md` (e.g., `C0-closeout_report.md`)
+     - `<SLICE_ID>-closeout_report.md` (e.g., `WCU0-closeout_report.md`)
    - Optional user-facing drafts (e.g., `DRAFT_*.md`).
 4. Update `plan.md` triad overview to list all triads.
 5. Commit the scaffolding on the orchestration branch.
@@ -56,39 +72,37 @@ When tasks are started via triad automation (preferred) and agents run inside an
 - Example entry:
 ```json
 {
-  "id": "C2-code",
-  "name": "Manual sync (non-PTY)",
+  "id": "<SLICE_ID>-code",
+  "name": "<SLICE_ID> slice (code)",
   "type": "code",
-  "phase": "World Sync",
+  "phase": "<SLICE_ID>",
   "status": "pending",
-  "description": "Implement manual world→host sync per C2-spec.",
-  "references": ["docs/project_management/next/world-sync/C2-spec.md"],
+  "description": "Implement <SLICE_ID> spec (production code only).",
+  "references": ["docs/project_management/next/<feature>/<SLICE_ID>-spec.md"],
   "acceptance_criteria": [
-    "Sync applies world→host per conflict policy and filters",
-    "Protected paths are skipped",
-    "Size guard enforced"
+    "Meets all acceptance criteria in <SLICE_ID>-spec.md"
   ],
   "start_checklist": [
-    "Checkout feat/world-sync, pull ff-only",
+    "Checkout feat/<feature>, pull ff-only",
     "Set status to in_progress, log START, commit docs",
-    "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world-sync\" SLICE_ID=\"C2\""
+    "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/<feature>\" SLICE_ID=\"<SLICE_ID>\""
   ],
   "end_checklist": [
     "Run fmt/clippy",
-    "From inside the worktree: make triad-task-finish TASK_ID=\"C2-code\"",
+    "From inside the worktree: make triad-task-finish TASK_ID=\"<SLICE_ID>-code\"",
     "Update tasks/session log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
   ],
-  "worktree": "wt/world-sync-c2-sync-code",
-  "git_branch": "world-sync-c2-sync-code",
+  "worktree": "wt/<feature>-<slice>-code",
+  "git_branch": "<feature>-<slice>-code",
   "required_make_targets": ["triad-code-checks"],
-  "integration_task": "C2-integ",
-  "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C2-code.md",
-  "depends_on": ["C1-integ"],
-  "concurrent_with": ["C2-test"]
+  "integration_task": "<SLICE_ID>-integ",
+  "kickoff_prompt": "docs/project_management/next/<feature>/kickoff_prompts/<SLICE_ID>-code.md",
+  "depends_on": ["<PREV_SLICE_ID>-integ"],
+  "concurrent_with": ["<SLICE_ID>-test"]
 }
 ```
 
-### Specs (`C*-spec.md`)
+### Specs (`<SLICE_ID>-spec.md`)
 Must include:
 - Scope (explicit behaviors, defaults, error handling, platform guards, protected paths).
 - Acceptance (observable outcomes).
@@ -263,16 +277,16 @@ Anti-patterns (avoid):
 If relevant to the feature (e.g., sync/FS operations), explicitly list in specs/prompts: `.git`, `.substrate-git`, `.substrate`, sockets, device nodes, and any feature-specific exclusions.
 
 ## Typical Triad Ordering (example: world-sync)
-- C0: Init & gating
-- C1: Config/CLI surface
-- C2: Manual path A
-- C3: Auto path A
-- C4: Additional path (e.g., PTY)
-- C5: Opposite direction
-- C6: Internal system (host)
-- C7: Rollback/CLI
-- C8: Internal system (world/bridge)
-- C9: UX/migration polish
+- WS0: Init & gating
+- WS1: Config/CLI surface
+- WS2: Manual path A
+- WS3: Auto path A
+- WS4: Additional path (e.g., PTY)
+- WS5: Opposite direction
+- WS6: Internal system (host)
+- WS7: Rollback/CLI
+- WS8: Internal system (world/bridge)
+- WS9: UX/migration polish
 Adjust counts to keep each triad ≤ ~40–50% of a 272k context window (~110–140k tokens).
 
 ## Session Log Usage
@@ -280,7 +294,7 @@ Adjust counts to keep each triad ≤ ~40–50% of a 272k context window (~110–
 - Use a consistent template (can copy the settings-stack template) and do not edit from worktrees.
 
 ## Adding New Triads (step-by-step)
-1. Create spec file (`C*-spec.md`) with scope/acceptance/out-of-scope.
+1. Create spec file (`<SLICE_ID>-spec.md`) with scope/acceptance/out-of-scope.
 2. Add tasks (code/test/integ) to tasks.json with worktrees/branches/deps/prompts.
 3. Create kickoff prompts for code/test/integ.
 4. Update plan.md triad overview.

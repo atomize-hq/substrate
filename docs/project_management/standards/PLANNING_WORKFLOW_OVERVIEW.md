@@ -2,6 +2,7 @@
 
 This diagram shows the intended handoff flow:
 - ADR creation (after brainstorming converges)
+- Spec determination (ADR → required spec set + ownership map)
 - Operator review via `## Executive Summary (Operator)` + drift guard
 - Planning Pack creation (execution-ready specs/tasks/prompts)
 - Platform parity plan (required when cross-platform)
@@ -19,6 +20,10 @@ flowchart TD
   A[Brainstorming session]
   B["ADR authoring agent reads: docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md"]
   C[ADR draft created]
+  SM["Spec determination agent reads: docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md"]
+  SMD[spec_manifest.md created]
+  IM["Impact map agent reads: docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md"]
+  IMD[impact_map.md created]
   D{ADR accepted}
   D_NO[ADR not accepted]
   D_YES[ADR accepted]
@@ -37,7 +42,7 @@ flowchart TD
 
   A --> B
   B --> C
-  C --> D
+  C --> SM --> SMD --> IM --> IMD --> D
   D --> D_NO
   D --> D_YES
   D_NO --> B

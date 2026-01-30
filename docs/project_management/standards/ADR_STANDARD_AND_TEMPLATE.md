@@ -6,6 +6,11 @@ This file defines:
 
 ADRs are used to record the **shape of a body of work** once initial discovery converges. ADRs are written **before** execution triads begin.
 
+After drafting an ADR, you must derive the required spec set (and ownership map) before producing the Planning Pack:
+- `docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md`
+Then produce the impact map (touch set + cascading implications + cross-queue conflicts):
+- `docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md`
+
 ## ADR scope
 
 An ADR must:
@@ -117,10 +122,18 @@ Every ADR must include all sections below. Every behavior statement must be sing
 
 ## File naming and placement
 
-- ADRs for upcoming work live under `docs/project_management/next/`:
-  - `docs/project_management/next/ADR-000X-<kebab-title>.md` (cross-cutting ADR), and/or
-  - `docs/project_management/next/<feature>/ADR-000X-<kebab-title>.md` (feature-local ADR).
-- If both exist, the cross-cutting ADR is authoritative and the feature-local ADR must defer to it.
+Preferred ADR registry location (canonical):
+- `docs/project_management/adrs/`
+  - Draft: `docs/project_management/adrs/draft/ADR-000X-<kebab-title>.md`
+  - Queued/unimplemented: `docs/project_management/adrs/queued/ADR-000X-<kebab-title>.md`
+  - Implemented: `docs/project_management/adrs/implemented/ADR-000X-<kebab-title>.md`
+  - Superseded: `docs/project_management/adrs/superseded/ADR-000X-<kebab-title>.md`
+
+Legacy locations (still supported):
+- `docs/project_management/next/ADR-000X-<kebab-title>.md` (cross-cutting ADR), and/or
+- `docs/project_management/next/<feature>/ADR-000X-<kebab-title>.md` (feature-local ADR).
+
+If both a cross-cutting ADR and a feature-local ADR exist, the cross-cutting ADR is authoritative and the feature-local ADR must defer to it.
 
 ## ADR template (copy/paste)
 
@@ -143,10 +156,11 @@ Every ADR must include all sections below. Every behavior statement must be sing
 ## Related Docs
 - Plan: `docs/project_management/next/<feature>/plan.md`
 - Tasks: `docs/project_management/next/<feature>/tasks.json`
+- Spec manifest: `docs/project_management/next/<feature>/spec_manifest.md`
 - Specs: <list spec paths>
 - Contract (if present): `docs/project_management/next/<feature>/contract.md`
 - Decision Register: `docs/project_management/next/<feature>/decision_register.md` (if required)
-- Integration Map: `docs/project_management/next/<feature>/integration_map.md` (if required)
+- Impact Map: `docs/project_management/next/<feature>/impact_map.md` (if required)
 - Manual Playbook: `docs/project_management/next/<feature>/manual_testing_playbook.md` (if required)
 
 ## Executive Summary (Operator)

@@ -8,7 +8,7 @@ Usage:
 
 Required:
   --feature-dir <path>   Feature Planning Pack dir (docs/project_management/next/<feature> or equivalent)
-  --slice-id <slice>     Slice prefix (e.g., C0)
+  --slice-id <slice>     Slice id (e.g., WCU0)
 
 Options:
   --launch-codex         Launch Codex headless after worktree creation

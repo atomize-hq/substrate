@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
     cat <<'USAGE'
 Usage:
-  scripts/planning/new_feature.sh --feature <feature_dir_name> [--decision-heavy] [--cross-platform] [--behavior-platforms <csv>] [--ci-parity-platforms <csv>] [--wsl-required] [--wsl-separate] [--automation]
+  scripts/planning/new_feature.sh --feature <feature_dir_name> [--slice-prefix <code>] [--decision-heavy] [--cross-platform] [--behavior-platforms <csv>] [--ci-parity-platforms <csv>] [--wsl-required] [--wsl-separate] [--automation]
 
 Example:
   scripts/planning/new_feature.sh --feature world-sync --decision-heavy --cross-platform
@@ -15,11 +15,14 @@ Creates:
     tasks.json
     session_log.md
     contract.md
+    spec_manifest.md
+    impact_map.md
     kickoff_prompts/
 USAGE
 }
 
 FEATURE=""
+SLICE_PREFIX=""
 DECISION_HEAVY=0
 CROSS_PLATFORM=0
 WSL_REQUIRED=0
@@ -32,6 +35,10 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --feature)
             FEATURE="${2:-}"
+            shift 2
+            ;;
+        --slice-prefix)
+            SLICE_PREFIX="${2:-}"
             shift 2
             ;;
         --decision-heavy)
@@ -80,6 +87,61 @@ if [[ -z "${FEATURE}" ]]; then
     exit 2
 fi
 
+derive_slice_prefix() {
+    local raw="$1"
+    local -a parts=()
+    IFS='-_.' read -r -a parts <<<"${raw}"
+
+    local -a words=()
+    for w in "${parts[@]}"; do
+        w="$(echo "$w" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+//g')"
+        [[ -z "$w" ]] && continue
+        case "$w" in
+            and|or|the|a|an|of|to|for|in|on|with|via|vs|by) continue ;;
+        esac
+        words+=("$w")
+    done
+
+    if [[ "${#words[@]}" -eq 0 ]]; then
+        echo "X"
+        return 0
+    fi
+
+    local last="${words[-1]}"
+    case "$last" in
+        simplification|refactor|cleanup|hardening|migration|parity|stability|integration|reliability|improvement|improvements|fix|fixes|update|updates)
+            if [[ "${#words[@]}" -ge 3 ]]; then
+                printf "%s%s%s" "${words[0]:0:1}" "${words[1]:0:1}" "${words[2]:0:1}" | tr '[:lower:]' '[:upper:]'
+                return 0
+            fi
+            ;;
+    esac
+
+    if [[ "${#words[@]}" -ge 3 ]]; then
+        printf "%s%s%s" "${words[0]:0:1}" "${words[1]:0:1}" "${words[-1]:0:1}" | tr '[:lower:]' '[:upper:]'
+        return 0
+    fi
+
+    if [[ "${#words[@]}" -eq 2 ]]; then
+        printf "%s%s" "${words[0]:0:1}" "${words[1]:0:1}" | tr '[:lower:]' '[:upper:]'
+        return 0
+    fi
+
+    echo "${words[0]:0:3}" | tr '[:lower:]' '[:upper:]'
+}
+
+if [[ -z "${SLICE_PREFIX}" ]]; then
+    SLICE_PREFIX="$(derive_slice_prefix "${FEATURE}")"
+fi
+
+if ! [[ "${SLICE_PREFIX}" =~ ^[A-Za-z][A-Za-z0-9]*$ ]]; then
+    echo "Invalid --slice-prefix: ${SLICE_PREFIX} (expected alnum, starting with a letter)" >&2
+    exit 2
+fi
+
+SLICE_ID="${SLICE_PREFIX}0"
+SLICE_ID_LOWER="$(echo "${SLICE_ID}" | tr '[:upper:]' '[:lower:]')"
+
 if [[ "${WSL_REQUIRED}" -eq 0 && "${WSL_SEPARATE}" -eq 1 ]]; then
     echo "--wsl-separate requires --wsl-required" >&2
     exit 2
@@ -119,17 +181,18 @@ render() {
     local tmpl="$1"
     local out="$2"
     local task_id="${3:-}"
-    local spec_file="${4:-C0-spec.md}"
+    local spec_file="${4:-${SLICE_ID}-spec.md}"
     local branch="${5:-}"
     local worktree="${6:-}"
     local platform="${7:-}"
-    local slice_id="${8:-}"
+    local slice_id="${8:-${SLICE_ID}}"
 
     sed \
         -e "s|{{FEATURE}}|${FEATURE}|g" \
         -e "s|{{FEATURE_DIR}}|${FEATURE_DIR}|g" \
         -e "s|{{ORCH_BRANCH}}|${ORCH_BRANCH}|g" \
         -e "s|{{NOW_UTC}}|${NOW_UTC}|g" \
+        -e "s|{{SLICE_PREFIX}}|${SLICE_PREFIX}|g" \
         -e "s|{{TASK_ID}}|${task_id}|g" \
         -e "s|{{SPEC_FILE}}|${spec_file}|g" \
         -e "s|{{BRANCH}}|${branch}|g" \
@@ -144,9 +207,11 @@ mkdir -p "${FEATURE_DIR}/kickoff_prompts"
 render "${TEMPLATES_DIR}/plan.md.tmpl" "${FEATURE_DIR}/plan.md"
 render "${TEMPLATES_DIR}/session_log.md.tmpl" "${FEATURE_DIR}/session_log.md"
 render "${TEMPLATES_DIR}/contract.md.tmpl" "${FEATURE_DIR}/contract.md"
+render "${TEMPLATES_DIR}/spec_manifest.md.tmpl" "${FEATURE_DIR}/spec_manifest.md"
+render "${TEMPLATES_DIR}/impact_map.md.tmpl" "${FEATURE_DIR}/impact_map.md"
 
-cat >"${FEATURE_DIR}/C0-spec.md" <<'MD'
-# C0-spec
+cat >"${FEATURE_DIR}/${SLICE_ID}-spec.md" <<MD
+# ${SLICE_ID}-spec
 
 ## Scope
 - None yet.
@@ -162,20 +227,24 @@ cat >"${FEATURE_DIR}/C0-spec.md" <<'MD'
 MD
 
 render "${TEMPLATES_DIR}/execution_preflight_report.md.tmpl" "${FEATURE_DIR}/execution_preflight_report.md"
-render "${TEMPLATES_DIR}/slice_closeout_report.md.tmpl" "${FEATURE_DIR}/C0-closeout_report.md" "" "C0-spec.md" "" "" "" "C0"
+render "${TEMPLATES_DIR}/slice_closeout_report.md.tmpl" "${FEATURE_DIR}/${SLICE_ID}-closeout_report.md" "" "${SLICE_ID}-spec.md" "" "" "" "${SLICE_ID}"
 
 render "${TEMPLATES_DIR}/kickoff_exec_preflight.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/F0-exec-preflight.md" "F0-exec-preflight"
 if [[ "${AUTOMATION}" -eq 1 ]]; then
     render "${TEMPLATES_DIR}/kickoff_feature_cleanup.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/FZ-feature-cleanup.md" "FZ-feature-cleanup"
 fi
 
-FEATURE="${FEATURE}" FEATURE_DIR="${FEATURE_DIR}" CROSS_PLATFORM="${CROSS_PLATFORM}" BEHAVIOR_PLATFORMS="${BEHAVIOR_PLATFORMS}" CI_PARITY_PLATFORMS="${CI_PARITY_PLATFORMS}" WSL_REQUIRED="${WSL_REQUIRED}" WSL_SEPARATE="${WSL_SEPARATE}" AUTOMATION="${AUTOMATION}" \
+FEATURE="${FEATURE}" FEATURE_DIR="${FEATURE_DIR}" SLICE_ID="${SLICE_ID}" SLICE_ID_LOWER="${SLICE_ID_LOWER}" CROSS_PLATFORM="${CROSS_PLATFORM}" BEHAVIOR_PLATFORMS="${BEHAVIOR_PLATFORMS}" CI_PARITY_PLATFORMS="${CI_PARITY_PLATFORMS}" WSL_REQUIRED="${WSL_REQUIRED}" WSL_SEPARATE="${WSL_SEPARATE}" AUTOMATION="${AUTOMATION}" \
 python3 - <<'PY'
 import json
 import os
 
 feature = os.environ["FEATURE"]
 feature_dir = os.environ["FEATURE_DIR"]
+slice_id = os.environ["SLICE_ID"]
+slice_id_lower = os.environ.get("SLICE_ID_LOWER", slice_id.lower())
+slice_spec = f"{slice_id}-spec.md"
+slice_closeout = f"{slice_id}-closeout_report.md"
 cross_platform = os.environ["CROSS_PLATFORM"] == "1"
 behavior_platforms_csv = os.environ.get("BEHAVIOR_PLATFORMS", "")
 ci_parity_platforms_csv = os.environ.get("CI_PARITY_PLATFORMS", "")
@@ -222,7 +291,12 @@ def kickoff(task_id: str) -> str:
 
 
 def refs(*extra: str) -> list:
-    base = [os.path.join(feature_dir, "plan.md"), os.path.join(feature_dir, "C0-spec.md")]
+    base = [
+        os.path.join(feature_dir, "plan.md"),
+        os.path.join(feature_dir, "spec_manifest.md"),
+        os.path.join(feature_dir, "impact_map.md"),
+        os.path.join(feature_dir, slice_spec),
+    ]
     return base + [os.path.join(feature_dir, x) for x in extra]
 
 
@@ -233,21 +307,21 @@ def _branch(suffix: str) -> str:
 def code_task(task_id: str, other_id: str) -> dict:
     task = {
         "id": task_id,
-        "name": "C0 slice (code)",
+        "name": f"{slice_id} slice (code)",
         "type": "code",
-        "phase": "C0",
+        "phase": slice_id,
         "status": "pending",
-        "description": "Implement C0 spec (production code only).",
+        "description": f"Implement {slice_id} spec (production code only).",
         "references": refs(),
-        "acceptance_criteria": ["Meets all acceptance criteria in C0-spec.md"],
+        "acceptance_criteria": [f"Meets all acceptance criteria in {slice_spec}"],
         "start_checklist": [
             f"git checkout feat/{feature} && git pull --ff-only",
-            "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
+            f"Read plan.md, tasks.json, session_log.md, {slice_spec}, kickoff prompt",
             "Set status to in_progress; add START entry; commit docs",
             (
-                f"Run: make triad-task-start-pair FEATURE_DIR=\"{feature_dir}\" SLICE_ID=\"C0\""
+                f"Run: make triad-task-start-pair FEATURE_DIR=\"{feature_dir}\" SLICE_ID=\"{slice_id}\""
                 if automation
-                else f"Run: git worktree add -b c0-code wt/{feature}-c0-code feat/{feature}"
+                else f"Run: git worktree add -b {slice_id_lower}-code wt/{feature}-{slice_id_lower}-code feat/{feature}"
             ),
         ],
         "end_checklist": [
@@ -261,17 +335,17 @@ def code_task(task_id: str, other_id: str) -> dict:
             (
                 "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
                 if automation
-                else f"Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/{feature}-c0-code (per plan.md)"
+                else f"Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/{feature}-{slice_id_lower}-code (per plan.md)"
             ),
         ],
-        "worktree": f"wt/{feature}-c0-code",
-        "integration_task": "C0-integ-core" if cross_platform else "C0-integ",
+        "worktree": f"wt/{feature}-{slice_id_lower}-code",
+        "integration_task": f"{slice_id}-integ-core" if cross_platform else f"{slice_id}-integ",
         "kickoff_prompt": os.path.join(feature_dir, "kickoff_prompts", f"{task_id}.md"),
         "depends_on": ["F0-exec-preflight"],
         "concurrent_with": [other_id],
     }
     if automation:
-        task["git_branch"] = _branch("c0-code")
+        task["git_branch"] = _branch(f"{slice_id_lower}-code")
         task["required_make_targets"] = ["triad-code-checks"]
     return task
 
@@ -279,21 +353,21 @@ def code_task(task_id: str, other_id: str) -> dict:
 def test_task(task_id: str, other_id: str) -> dict:
     task = {
         "id": task_id,
-        "name": "C0 slice (test)",
+        "name": f"{slice_id} slice (test)",
         "type": "test",
-        "phase": "C0",
+        "phase": slice_id,
         "status": "pending",
-        "description": "Add/modify tests for C0 spec (tests only).",
+        "description": f"Add/modify tests for {slice_id} spec (tests only).",
         "references": refs(),
-        "acceptance_criteria": ["Tests enforce C0 acceptance criteria"],
+        "acceptance_criteria": [f"Tests enforce {slice_id} acceptance criteria"],
         "start_checklist": [
             f"git checkout feat/{feature} && git pull --ff-only",
-            "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
+            f"Read plan.md, tasks.json, session_log.md, {slice_spec}, kickoff prompt",
             "Set status to in_progress; add START entry; commit docs",
             (
-                f"Run: make triad-task-start-pair FEATURE_DIR=\"{feature_dir}\" SLICE_ID=\"C0\""
+                f"Run: make triad-task-start-pair FEATURE_DIR=\"{feature_dir}\" SLICE_ID=\"{slice_id}\""
                 if automation
-                else f"Run: git worktree add -b c0-test wt/{feature}-c0-test feat/{feature}"
+                else f"Run: git worktree add -b {slice_id_lower}-test wt/{feature}-{slice_id_lower}-test feat/{feature}"
             ),
         ],
         "end_checklist": [
@@ -307,17 +381,17 @@ def test_task(task_id: str, other_id: str) -> dict:
             (
                 "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
                 if automation
-                else f"Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/{feature}-c0-test (per plan.md)"
+                else f"Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/{feature}-{slice_id_lower}-test (per plan.md)"
             ),
         ],
-        "worktree": f"wt/{feature}-c0-test",
-        "integration_task": "C0-integ-core" if cross_platform else "C0-integ",
+        "worktree": f"wt/{feature}-{slice_id_lower}-test",
+        "integration_task": f"{slice_id}-integ-core" if cross_platform else f"{slice_id}-integ",
         "kickoff_prompt": os.path.join(feature_dir, "kickoff_prompts", f"{task_id}.md"),
         "depends_on": ["F0-exec-preflight"],
         "concurrent_with": [other_id],
     }
     if automation:
-        task["git_branch"] = _branch("c0-test")
+        task["git_branch"] = _branch(f"{slice_id_lower}-test")
         task["required_make_targets"] = ["triad-test-checks"]
     return task
 
@@ -350,49 +424,49 @@ def integ_core_task() -> dict:
         end_checklist.append(f"Dispatch behavioral smoke via CI: {dispatch} (record run ids/URLs)")
     end_checklist.extend(
         [
-            f"If any platform smoke fails: start only failing platform-fix tasks via: make triad-task-start-platform-fixes-from-smoke FEATURE_DIR=\"{feature_dir}\" SLICE_ID=\"C0\" SMOKE_RUN_ID=\"<run-id>\"",
-            f"After all failing platforms are green: start final aggregator via: make triad-task-start-integ-final FEATURE_DIR=\"{feature_dir}\" SLICE_ID=\"C0\"",
+            f"If any platform smoke fails: start only failing platform-fix tasks via: make triad-task-start-platform-fixes-from-smoke FEATURE_DIR=\"{feature_dir}\" SLICE_ID=\"{slice_id}\" SMOKE_RUN_ID=\"<run-id>\"",
+            f"After all failing platforms are green: start final aggregator via: make triad-task-start-integ-final FEATURE_DIR=\"{feature_dir}\" SLICE_ID=\"{slice_id}\"",
             (
-                "From inside the worktree: make triad-task-finish TASK_ID=\"C0-integ-core\""
+                f"From inside the worktree: make triad-task-finish TASK_ID=\"{slice_id}-integ-core\""
                 if automation
-                else f"From inside the worktree: git add -A && git commit -m \"integ: {feature} C0-integ-core\""
+                else f"From inside the worktree: git add -A && git commit -m \"integ: {feature} {slice_id}-integ-core\""
             ),
             (
                 "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
                 if automation
-                else f"Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/{feature}-c0-integ-core (per plan.md)"
+                else f"Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/{feature}-{slice_id_lower}-integ-core (per plan.md)"
             ),
         ]
     )
 
     task = {
-        "id": "C0-integ-core",
-        "name": "C0 slice (integration core)",
+        "id": f"{slice_id}-integ-core",
+        "name": f"{slice_id} slice (integration core)",
         "type": "integration",
-        "phase": "C0",
+        "phase": slice_id,
         "status": "pending",
-        "description": "Merge C0 code+tests and make the slice green on the primary dev platform.",
+        "description": f"Merge {slice_id} code+tests and make the slice green on the primary dev platform.",
         "references": refs(*smoke_refs),
         "acceptance_criteria": ["Core slice is green under make integ-checks and matches the spec"],
         "start_checklist": [
             f"git checkout feat/{feature} && git pull --ff-only",
-            "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
+            f"Read plan.md, tasks.json, session_log.md, {slice_spec}, kickoff prompt",
             "Set status to in_progress; add START entry; commit docs",
             (
-                f"Run: make triad-task-start FEATURE_DIR=\"{feature_dir}\" TASK_ID=\"C0-integ-core\""
+                f"Run: make triad-task-start FEATURE_DIR=\"{feature_dir}\" TASK_ID=\"{slice_id}-integ-core\""
                 if automation
-                else f"Run: git worktree add -b c0-integ-core wt/{feature}-c0-integ-core feat/{feature}"
+                else f"Run: git worktree add -b {slice_id_lower}-integ-core wt/{feature}-{slice_id_lower}-integ-core feat/{feature}"
             ),
         ],
         "end_checklist": end_checklist,
-        "worktree": f"wt/{feature}-c0-integ-core",
-        "integration_task": "C0-integ-core",
-        "kickoff_prompt": kickoff("C0-integ-core"),
-        "depends_on": ["C0-code", "C0-test"],
+        "worktree": f"wt/{feature}-{slice_id_lower}-integ-core",
+        "integration_task": f"{slice_id}-integ-core",
+        "kickoff_prompt": kickoff(f"{slice_id}-integ-core"),
+        "depends_on": [f"{slice_id}-code", f"{slice_id}-test"],
         "concurrent_with": [],
     }
     if automation:
-        task["git_branch"] = _branch("c0-integ-core")
+        task["git_branch"] = _branch(f"{slice_id_lower}-integ-core")
         task["required_make_targets"] = ["integ-checks"]
         task["merge_to_orchestration"] = False
     return task
@@ -402,7 +476,7 @@ def integ_platform_task(platform: str) -> dict:
     smoke_required = platform in behavior_platforms or platform == "wsl"
     if platform == "linux":
         smoke_refs = ("smoke/linux-smoke.sh",)
-        name = "C0 slice (integration Linux)"
+        name = f"{slice_id} slice (integration Linux)"
         desc = "Linux platform-fix integration task (may be a no-op if already green)."
         if wsl_required and not wsl_separate:
             dispatch = f'scripts/ci/dispatch_feature_smoke.sh --feature-dir "{feature_dir}" --runner-kind self-hosted --platform linux --run-wsl --workflow-ref "feat/{feature}" --cleanup'
@@ -410,17 +484,17 @@ def integ_platform_task(platform: str) -> dict:
             dispatch = f'scripts/ci/dispatch_feature_smoke.sh --feature-dir "{feature_dir}" --runner-kind self-hosted --platform linux --workflow-ref "feat/{feature}" --cleanup'
     elif platform == "macos":
         smoke_refs = ("smoke/macos-smoke.sh",)
-        name = "C0 slice (integration macOS)"
+        name = f"{slice_id} slice (integration macOS)"
         desc = "macOS platform-fix integration task (may be a no-op if already green)."
         dispatch = f'scripts/ci/dispatch_feature_smoke.sh --feature-dir "{feature_dir}" --runner-kind self-hosted --platform macos --workflow-ref "feat/{feature}" --cleanup'
     elif platform == "windows":
         smoke_refs = ("smoke/windows-smoke.ps1",)
-        name = "C0 slice (integration Windows)"
+        name = f"{slice_id} slice (integration Windows)"
         desc = "Windows platform-fix integration task (may be a no-op if already green)."
         dispatch = f'scripts/ci/dispatch_feature_smoke.sh --feature-dir "{feature_dir}" --runner-kind self-hosted --platform windows --workflow-ref "feat/{feature}" --cleanup'
     elif platform == "wsl":
         smoke_refs = ("smoke/linux-smoke.sh",)
-        name = "C0 slice (integration WSL)"
+        name = f"{slice_id} slice (integration WSL)"
         desc = "WSL platform-fix integration task (Linux-in-WSL)."
         dispatch = f'scripts/ci/dispatch_feature_smoke.sh --feature-dir "{feature_dir}" --runner-kind self-hosted --platform wsl --workflow-ref "feat/{feature}" --cleanup'
     else:
@@ -428,16 +502,16 @@ def integ_platform_task(platform: str) -> dict:
 
     if not smoke_required:
         smoke_refs = ()
-        name = f"C0 slice (integration CI parity: {platform})"
+        name = f"{slice_id} slice (integration CI parity: {platform})"
         desc = f"{platform} CI parity fix task (compile/test/lint only; no behavioral smoke required for this platform)."
         dispatch = f"make ci-compile-parity CI_WORKFLOW_REF=\"feat/{feature}\" CI_REMOTE=origin CI_CLEANUP=1"
 
-    task_id = f"C0-integ-{platform}"
+    task_id = f"{slice_id}-integ-{platform}"
     task = {
         "id": task_id,
         "name": name,
         "type": "integration",
-        "phase": "C0",
+        "phase": slice_id,
         "status": "pending",
         "description": desc,
         "references": refs(*smoke_refs),
@@ -447,12 +521,12 @@ def integ_platform_task(platform: str) -> dict:
         "start_checklist": [
             f"Run on {platform} host if possible",
             f"git checkout feat/{feature} && git pull --ff-only",
-            "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
+            f"Read plan.md, tasks.json, session_log.md, {slice_spec}, kickoff prompt",
             "Set status to in_progress; add START entry; commit docs",
             (
                 f"Run: make triad-task-start FEATURE_DIR=\"{feature_dir}\" TASK_ID=\"{task_id}\""
                 if automation
-                else f"Run: git worktree add -b c0-integ-{platform} wt/{feature}-c0-integ-{platform} feat/{feature}"
+                else f"Run: git worktree add -b {slice_id_lower}-integ-{platform} wt/{feature}-{slice_id_lower}-integ-{platform} feat/{feature}"
             ),
         ],
         "end_checklist": [
@@ -467,20 +541,20 @@ def integ_platform_task(platform: str) -> dict:
             (
                 "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
                 if automation
-                else f"Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/{feature}-c0-integ-{platform} (per plan.md)"
+                else f"Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/{feature}-{slice_id_lower}-integ-{platform} (per plan.md)"
             ),
         ],
-        "worktree": f"wt/{feature}-c0-integ-{platform}",
+        "worktree": f"wt/{feature}-{slice_id_lower}-integ-{platform}",
         "integration_task": task_id,
         "kickoff_prompt": kickoff(task_id),
-        "depends_on": ["C0-integ-core"],
+        "depends_on": [f"{slice_id}-integ-core"],
         "concurrent_with": [],
         "platform": platform,
         "runner": "github-actions",
         "workflow": (".github/workflows/feature-smoke.yml" if smoke_required else ".github/workflows/ci-compile-parity.yml"),
     }
     if automation:
-        task["git_branch"] = _branch(f"c0-integ-{platform}")
+        task["git_branch"] = _branch(f"{slice_id_lower}-integ-{platform}")
         task["required_make_targets"] = ["triad-code-checks"]
         task["merge_to_orchestration"] = False
     return task
@@ -514,48 +588,48 @@ def integ_final_task(platform_tasks: list) -> dict:
         end_checklist.append(f"Re-run behavioral smoke via CI: {dispatch}")
     end_checklist.extend(
         [
-            f"Complete slice closeout gate report: {os.path.join(feature_dir, 'C0-closeout_report.md')}",
+            f"Complete slice closeout gate report: {os.path.join(feature_dir, slice_closeout)}",
             (
-                "From inside the worktree: make triad-task-finish TASK_ID=\"C0-integ\""
+                f"From inside the worktree: make triad-task-finish TASK_ID=\"{slice_id}-integ\""
                 if automation
-                else f"From inside the worktree: git add -A && git commit -m \"integ: {feature} C0-integ\""
+                else f"From inside the worktree: git add -A && git commit -m \"integ: {feature} {slice_id}-integ\""
             ),
             (
                 "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
                 if automation
-                else f"Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/{feature}-c0-integ (per plan.md)"
+                else f"Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/{feature}-{slice_id_lower}-integ (per plan.md)"
             ),
         ]
     )
 
     task = {
-        "id": "C0-integ",
-        "name": "C0 slice (integration final)",
+        "id": f"{slice_id}-integ",
+        "name": f"{slice_id} slice (integration final)",
         "type": "integration",
-        "phase": "C0",
+        "phase": slice_id,
         "status": "pending",
         "description": "Final integration: merge any platform fixes and confirm behavioral smoke + CI parity are green.",
-        "references": refs(*smoke_refs, "C0-closeout_report.md"),
+        "references": refs(*smoke_refs, slice_closeout),
         "acceptance_criteria": ["All required platforms are green and the slice matches the spec"],
         "start_checklist": [
             f"git checkout feat/{feature} && git pull --ff-only",
-            "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
+            f"Read plan.md, tasks.json, session_log.md, {slice_spec}, kickoff prompt",
             "Set status to in_progress; add START entry; commit docs",
             (
-                f"Run: make triad-task-start FEATURE_DIR=\"{feature_dir}\" TASK_ID=\"C0-integ\""
+                f"Run: make triad-task-start FEATURE_DIR=\"{feature_dir}\" TASK_ID=\"{slice_id}-integ\""
                 if automation
-                else f"Run: git worktree add -b c0-integ wt/{feature}-c0-integ feat/{feature}"
+                else f"Run: git worktree add -b {slice_id_lower}-integ wt/{feature}-{slice_id_lower}-integ feat/{feature}"
             ),
         ],
         "end_checklist": end_checklist,
-        "worktree": f"wt/{feature}-c0-integ",
-        "integration_task": "C0-integ",
-        "kickoff_prompt": kickoff("C0-integ"),
-        "depends_on": ["C0-integ-core"] + [f"C0-integ-{p}" for p in platform_tasks],
+        "worktree": f"wt/{feature}-{slice_id_lower}-integ",
+        "integration_task": f"{slice_id}-integ",
+        "kickoff_prompt": kickoff(f"{slice_id}-integ"),
+        "depends_on": [f"{slice_id}-integ-core"] + [f"{slice_id}-integ-{p}" for p in platform_tasks],
         "concurrent_with": [],
     }
     if automation:
-        task["git_branch"] = _branch("c0-integ")
+        task["git_branch"] = _branch(f"{slice_id_lower}-integ")
         task["required_make_targets"] = ["integ-checks"]
         task["merge_to_orchestration"] = True
     return task
@@ -563,22 +637,22 @@ def integ_final_task(platform_tasks: list) -> dict:
 
 def integ_single_task() -> dict:
     task = {
-        "id": "C0-integ",
-        "name": "C0 slice (integration)",
+        "id": f"{slice_id}-integ",
+        "name": f"{slice_id} slice (integration)",
         "type": "integration",
-        "phase": "C0",
+        "phase": slice_id,
         "status": "pending",
-        "description": "Integrate C0 code+tests, reconcile to spec, and run integration gate.",
-        "references": refs("C0-closeout_report.md"),
+        "description": f"Integrate {slice_id} code+tests, reconcile to spec, and run integration gate.",
+        "references": refs(slice_closeout),
         "acceptance_criteria": ["Slice is green under make integ-checks and matches the spec"],
         "start_checklist": [
             f"git checkout feat/{feature} && git pull --ff-only",
-            "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
+            f"Read plan.md, tasks.json, session_log.md, {slice_spec}, kickoff prompt",
             "Set status to in_progress; add START entry; commit docs",
             (
-                f"Run: make triad-task-start FEATURE_DIR=\"{feature_dir}\" TASK_ID=\"C0-integ\""
+                f"Run: make triad-task-start FEATURE_DIR=\"{feature_dir}\" TASK_ID=\"{slice_id}-integ\""
                 if automation
-                else f"Run: git worktree add -b c0-integ wt/{feature}-c0-integ feat/{feature}"
+                else f"Run: git worktree add -b {slice_id_lower}-integ wt/{feature}-{slice_id_lower}-integ feat/{feature}"
             ),
         ],
         "end_checklist": [
@@ -586,26 +660,26 @@ def integ_single_task() -> dict:
             "cargo clippy --workspace --all-targets -- -D warnings",
             "Run relevant tests",
             "make integ-checks",
-            f"Complete slice closeout gate report: {os.path.join(feature_dir, 'C0-closeout_report.md')}",
+            f"Complete slice closeout gate report: {os.path.join(feature_dir, slice_closeout)}",
             (
-                "From inside the worktree: make triad-task-finish TASK_ID=\"C0-integ\""
+                f"From inside the worktree: make triad-task-finish TASK_ID=\"{slice_id}-integ\""
                 if automation
-                else f"From inside the worktree: git add -A && git commit -m \"integ: {feature} C0-integ\""
+                else f"From inside the worktree: git add -A && git commit -m \"integ: {feature} {slice_id}-integ\""
             ),
             (
                 "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
                 if automation
-                else f"Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/{feature}-c0-integ (per plan.md)"
+                else f"Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/{feature}-{slice_id_lower}-integ (per plan.md)"
             ),
         ],
-        "worktree": f"wt/{feature}-c0-integ",
-        "integration_task": "C0-integ",
-        "kickoff_prompt": kickoff("C0-integ"),
-        "depends_on": ["C0-code", "C0-test"],
+        "worktree": f"wt/{feature}-{slice_id_lower}-integ",
+        "integration_task": f"{slice_id}-integ",
+        "kickoff_prompt": kickoff(f"{slice_id}-integ"),
+        "depends_on": [f"{slice_id}-code", f"{slice_id}-test"],
         "concurrent_with": [],
     }
     if automation:
-        task["git_branch"] = _branch("c0-integ")
+        task["git_branch"] = _branch(f"{slice_id_lower}-integ")
         task["required_make_targets"] = ["integ-checks"]
         task["merge_to_orchestration"] = True
     return task
@@ -632,6 +706,8 @@ tasks.append(
         "description": "Run the execution preflight gate to confirm smoke/manual/CI plans are adequate before starting triads.",
         "references": [
             os.path.join(feature_dir, "plan.md"),
+            os.path.join(feature_dir, "spec_manifest.md"),
+            os.path.join(feature_dir, "impact_map.md"),
             os.path.join(feature_dir, "tasks.json"),
             os.path.join(feature_dir, "session_log.md"),
             os.path.join(feature_dir, "execution_preflight_report.md"),
@@ -653,8 +729,10 @@ tasks.append(
         "concurrent_with": [],
     }
 )
-tasks.append(code_task("C0-code", "C0-test"))
-tasks.append(test_task("C0-test", "C0-code"))
+code_id = f"{slice_id}-code"
+test_id = f"{slice_id}-test"
+tasks.append(code_task(code_id, test_id))
+tasks.append(test_task(test_id, code_id))
 
 if cross_platform:
     meta["behavior_platforms_required"] = behavior_platforms
@@ -707,7 +785,7 @@ if automation:
             "worktree": None,
             "integration_task": None,
             "kickoff_prompt": os.path.join(feature_dir, "kickoff_prompts", "FZ-feature-cleanup.md"),
-            "depends_on": ["C0-integ"],
+            "depends_on": [f"{slice_id}-integ"],
             "concurrent_with": [],
         }
     )
@@ -719,382 +797,37 @@ with open(tasks_path, "w", encoding="utf-8") as handle:
 PY
 
 : <<'LEGACY_TASKS_JSON'
-if [[ "${CROSS_PLATFORM}" -eq 1 ]]; then
-    cat >"${FEATURE_DIR}/tasks.json" <<JSON
-{
-  "meta": {
-    "schema_version": 2,
-    "feature": "${FEATURE}",
-    "cross_platform": true,
-    "platforms_required": ["linux", "macos", "windows"]$( [[ "${WSL_REQUIRED}" -eq 1 ]] && echo "," || echo "" )
-    $( [[ "${WSL_REQUIRED}" -eq 1 ]] && echo "\"wsl_required\": true," || echo "" )
-    $( [[ "${WSL_REQUIRED}" -eq 1 ]] && echo "\"wsl_task_mode\": \"$( [[ \"${WSL_SEPARATE}\" -eq 1 ]] && echo "separate" || echo "bundled" )\"" || echo "" )
-  },
-  "tasks": [
-    {
-      "id": "C0-code",
-      "name": "C0 slice (code)",
-      "type": "code",
-      "phase": "C0",
-      "status": "pending",
-      "description": "Implement C0 spec (production code only).",
-      "references": ["${FEATURE_DIR}/plan.md", "${FEATURE_DIR}/C0-spec.md"],
-      "acceptance_criteria": ["Meets all acceptance criteria in C0-spec.md"],
-      "start_checklist": [
-        "git checkout feat/${FEATURE} && git pull --ff-only",
-        "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
-        "Set status to in_progress; add START entry; commit docs",
-        "Create branch c0-code and worktree wt/${FEATURE}-c0-code; do not edit planning docs inside the worktree"
-      ],
-      "end_checklist": [
-        "cargo fmt",
-        "cargo clippy --workspace --all-targets -- -D warnings",
-        "Commit changes to the task branch; do not merge to orchestration; update docs; do not delete the worktree (cleanup at feature end)"
-      ],
-      "worktree": "wt/${FEATURE}-c0-code",
-      "integration_task": "C0-integ",
-      "kickoff_prompt": "${FEATURE_DIR}/kickoff_prompts/C0-code.md",
-      "depends_on": [],
-      "concurrent_with": ["C0-test"]
-    },
-    {
-      "id": "C0-test",
-      "name": "C0 slice (test)",
-      "type": "test",
-      "phase": "C0",
-      "status": "pending",
-      "description": "Add/modify tests for C0 spec (tests only).",
-      "references": ["${FEATURE_DIR}/plan.md", "${FEATURE_DIR}/C0-spec.md"],
-      "acceptance_criteria": ["Tests enforce C0 acceptance criteria"],
-      "start_checklist": [
-        "git checkout feat/${FEATURE} && git pull --ff-only",
-        "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
-        "Set status to in_progress; add START entry; commit docs",
-        "Create branch c0-test and worktree wt/${FEATURE}-c0-test; do not edit planning docs inside the worktree"
-      ],
-      "end_checklist": [
-        "cargo fmt",
-        "Run the targeted tests you add/touch",
-        "Commit changes to the task branch; do not merge to orchestration; update docs; do not delete the worktree (cleanup at feature end)"
-      ],
-      "worktree": "wt/${FEATURE}-c0-test",
-      "integration_task": "C0-integ",
-      "kickoff_prompt": "${FEATURE_DIR}/kickoff_prompts/C0-test.md",
-      "depends_on": [],
-      "concurrent_with": ["C0-code"]
-    },
-    {
-      "id": "C0-integ-core",
-      "name": "C0 slice (integration core)",
-      "type": "integration",
-      "phase": "C0",
-      "status": "pending",
-      "description": "Merge C0 code+tests and make the slice green on the primary dev platform.",
-      "references": ["${FEATURE_DIR}/plan.md", "${FEATURE_DIR}/C0-spec.md"],
-      "acceptance_criteria": ["Core slice is green under make integ-checks and matches the spec"],
-      "start_checklist": [
-        "git checkout feat/${FEATURE} && git pull --ff-only",
-        "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
-        "Set status to in_progress; add START entry; commit docs",
-        "Create branch c0-integ-core and worktree wt/${FEATURE}-c0-integ-core; do not edit planning docs inside the worktree"
-      ],
-      "end_checklist": [
-        "cargo fmt",
-        "cargo clippy --workspace --all-targets -- -D warnings",
-        "Run relevant tests",
-        "make integ-checks",
-        "Dispatch cross-platform smoke via CI (record run ids/URLs): scripts/ci/dispatch_feature_smoke.sh --feature-dir \"${FEATURE_DIR}\" --runner-kind self-hosted --platform all$( [[ \"${WSL_REQUIRED}\" -eq 1 ]] && echo \" --run-wsl\" || echo \"\" ) --workflow-ref \"feat/${FEATURE}\" --cleanup",
-        "Commit worktree changes; do not merge to orchestration yet; update docs; do not delete the worktree (cleanup at feature end)"
-      ],
-      "worktree": "wt/${FEATURE}-c0-integ-core",
-      "integration_task": "C0-integ-core",
-      "kickoff_prompt": "${FEATURE_DIR}/kickoff_prompts/C0-integ-core.md",
-      "depends_on": ["C0-code", "C0-test"],
-      "concurrent_with": []
-    },
-    {
-      "id": "C0-integ-linux",
-      "name": "C0 slice (integration linux)",
-      "type": "integration",
-      "phase": "C0",
-      "status": "pending",
-      "description": "Linux platform-fix integration task (may be a no-op if already green).",
-      "references": ["${FEATURE_DIR}/plan.md", "${FEATURE_DIR}/C0-spec.md"],
-      "acceptance_criteria": ["Linux smoke is green for this slice"],
-      "start_checklist": [
-        "Run on Linux host if possible",
-        "git checkout feat/${FEATURE} && git pull --ff-only",
-        "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
-        "Set status to in_progress; add START entry; commit docs",
-        "Create branch c0-integ-linux and worktree wt/${FEATURE}-c0-integ-linux; do not edit planning docs inside the worktree"
-      ],
-      "end_checklist": [
-        "Dispatch platform smoke via CI: scripts/ci/dispatch_feature_smoke.sh --feature-dir \"${FEATURE_DIR}\" --runner-kind self-hosted --platform linux$( [[ \"${WSL_REQUIRED}\" -eq 1 && \"${WSL_SEPARATE}\" -eq 0 ]] && echo \" --run-wsl\" || echo \"\" ) --workflow-ref \"feat/${FEATURE}\" --cleanup",
-        "If needed: fix + fmt/clippy + targeted tests",
-        "Ensure Linux smoke is green; record run id/URL",
-        "Commit changes to the platform-fix branch (if any); do not merge to orchestration; update docs; do not delete the worktree (cleanup at feature end)"
-      ],
-      "worktree": "wt/${FEATURE}-c0-integ-linux",
-      "integration_task": "C0-integ-linux",
-      "kickoff_prompt": "${FEATURE_DIR}/kickoff_prompts/C0-integ-linux.md",
-      "depends_on": ["C0-integ-core"],
-      "concurrent_with": [],
-      "platform": "linux",
-      "runner": "github-actions",
-      "workflow": ".github/workflows/feature-smoke.yml"
-    },
-    {
-      "id": "C0-integ-macos",
-      "name": "C0 slice (integration macOS)",
-      "type": "integration",
-      "phase": "C0",
-      "status": "pending",
-      "description": "macOS platform-fix integration task (may be a no-op if already green).",
-      "references": ["${FEATURE_DIR}/plan.md", "${FEATURE_DIR}/C0-spec.md"],
-      "acceptance_criteria": ["macOS smoke is green for this slice"],
-      "start_checklist": [
-        "Run on macOS host if possible",
-        "git checkout feat/${FEATURE} && git pull --ff-only",
-        "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
-        "Set status to in_progress; add START entry; commit docs",
-        "Create branch c0-integ-macos and worktree wt/${FEATURE}-c0-integ-macos; do not edit planning docs inside the worktree"
-      ],
-      "end_checklist": [
-        "Dispatch platform smoke via CI: scripts/ci/dispatch_feature_smoke.sh --feature-dir \"${FEATURE_DIR}\" --runner-kind self-hosted --platform macos --workflow-ref \"feat/${FEATURE}\" --cleanup",
-        "If needed: fix + fmt/clippy + targeted tests",
-        "Ensure macOS smoke is green; record run id/URL",
-        "Commit changes to the platform-fix branch (if any); do not merge to orchestration; update docs; do not delete the worktree (cleanup at feature end)"
-      ],
-      "worktree": "wt/${FEATURE}-c0-integ-macos",
-      "integration_task": "C0-integ-macos",
-      "kickoff_prompt": "${FEATURE_DIR}/kickoff_prompts/C0-integ-macos.md",
-      "depends_on": ["C0-integ-core"],
-      "concurrent_with": [],
-      "platform": "macos",
-      "runner": "github-actions",
-      "workflow": ".github/workflows/feature-smoke.yml"
-    },
-    {
-      "id": "C0-integ-windows",
-      "name": "C0 slice (integration Windows)",
-      "type": "integration",
-      "phase": "C0",
-      "status": "pending",
-      "description": "Windows platform-fix integration task (may be a no-op if already green).",
-      "references": ["${FEATURE_DIR}/plan.md", "${FEATURE_DIR}/C0-spec.md"],
-      "acceptance_criteria": ["Windows smoke is green for this slice"],
-      "start_checklist": [
-        "Run on Windows host if possible",
-        "git checkout feat/${FEATURE} && git pull --ff-only",
-        "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
-        "Set status to in_progress; add START entry; commit docs",
-        "Create branch c0-integ-windows and worktree wt/${FEATURE}-c0-integ-windows; do not edit planning docs inside the worktree"
-      ],
-      "end_checklist": [
-        "Dispatch platform smoke via CI: scripts/ci/dispatch_feature_smoke.sh --feature-dir \"${FEATURE_DIR}\" --runner-kind self-hosted --platform windows --workflow-ref \"feat/${FEATURE}\" --cleanup",
-        "If needed: fix + fmt/clippy + targeted tests",
-        "Ensure Windows smoke is green; record run id/URL",
-        "Commit changes to the platform-fix branch (if any); do not merge to orchestration; update docs; do not delete the worktree (cleanup at feature end)"
-      ],
-      "worktree": "wt/${FEATURE}-c0-integ-windows",
-      "integration_task": "C0-integ-windows",
-      "kickoff_prompt": "${FEATURE_DIR}/kickoff_prompts/C0-integ-windows.md",
-      "depends_on": ["C0-integ-core"],
-      "concurrent_with": [],
-      "platform": "windows",
-      "runner": "github-actions",
-      "workflow": ".github/workflows/feature-smoke.yml"
-    },
-    $( [[ "${WSL_REQUIRED}" -eq 1 && "${WSL_SEPARATE}" -eq 1 ]] && cat <<'WSLTASK'
-    {
-      "id": "C0-integ-wsl",
-      "name": "C0 slice (integration WSL)",
-      "type": "integration",
-      "phase": "C0",
-      "status": "pending",
-      "description": "WSL platform-fix integration task (Linux-in-WSL).",
-      "references": ["{{FEATURE_DIR}}/plan.md", "{{FEATURE_DIR}}/C0-spec.md"],
-      "acceptance_criteria": ["WSL smoke is green for this slice"],
-      "start_checklist": [
-        "Run on WSL runner host if possible",
-        "git checkout feat/{{FEATURE}} && git pull --ff-only",
-        "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
-        "Set status to in_progress; add START entry; commit docs",
-        "Create branch c0-integ-wsl and worktree wt/{{FEATURE}}-c0-integ-wsl; do not edit planning docs inside the worktree"
-      ],
-      "end_checklist": [
-        "Dispatch WSL smoke via CI: scripts/ci/dispatch_feature_smoke.sh --feature-dir \"{{FEATURE_DIR}}\" --runner-kind self-hosted --platform wsl --workflow-ref \"feat/{{FEATURE}}\" --cleanup",
-        "If needed: fix + fmt/clippy + targeted tests",
-        "Ensure WSL smoke is green; record run id/URL",
-        "Commit changes to the platform-fix branch (if any); do not merge to orchestration; update docs; do not delete the worktree (cleanup at feature end)"
-      ],
-      "worktree": "wt/{{FEATURE}}-c0-integ-wsl",
-      "integration_task": "C0-integ-wsl",
-      "kickoff_prompt": "{{FEATURE_DIR}}/kickoff_prompts/C0-integ-wsl.md",
-      "depends_on": ["C0-integ-core"],
-      "concurrent_with": [],
-      "platform": "wsl",
-      "runner": "github-actions",
-      "workflow": ".github/workflows/feature-smoke.yml"
-    },
-WSLTASK
-    )
-    {
-      "id": "C0-integ",
-      "name": "C0 slice (integration final)",
-      "type": "integration",
-      "phase": "C0",
-      "status": "pending",
-      "description": "Final cross-platform integration: merge any platform fixes and confirm all platforms are green.",
-      "references": ["${FEATURE_DIR}/plan.md", "${FEATURE_DIR}/C0-spec.md"],
-      "acceptance_criteria": ["All required platforms are green and the slice matches the spec"],
-      "start_checklist": [
-        "git checkout feat/${FEATURE} && git pull --ff-only",
-        "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
-        "Set status to in_progress; add START entry; commit docs",
-        "Create branch c0-integ and worktree wt/${FEATURE}-c0-integ; do not edit planning docs inside the worktree"
-      ],
-      "end_checklist": [
-        "Merge platform-fix branches (if any) + resolve conflicts",
-        "cargo fmt",
-        "cargo clippy --workspace --all-targets -- -D warnings",
-        "Run relevant tests",
-        "make integ-checks",
-        "Dispatch cross-platform smoke via CI (record run ids/URLs): scripts/ci/dispatch_feature_smoke.sh --feature-dir \"${FEATURE_DIR}\" --runner-kind self-hosted --platform all$( [[ \"${WSL_REQUIRED}\" -eq 1 ]] && echo \" --run-wsl\" || echo \"\" ) --workflow-ref \"feat/${FEATURE}\" --cleanup",
-        "Commit worktree changes; fast-forward merge this branch into feat/${FEATURE}; update docs; do not delete the worktree (cleanup at feature end)"
-      ],
-      "worktree": "wt/${FEATURE}-c0-integ",
-      "integration_task": "C0-integ",
-      "kickoff_prompt": "${FEATURE_DIR}/kickoff_prompts/C0-integ.md",
-      "depends_on": ["C0-integ-core", "C0-integ-linux", "C0-integ-macos", "C0-integ-windows"$( [[ \"${WSL_REQUIRED}\" -eq 1 && \"${WSL_SEPARATE}\" -eq 1 ]] && echo ", \"C0-integ-wsl\"" || echo "" )],
-      "concurrent_with": []
-    }
-  ]
-}
-JSON
-else
-    cat >"${FEATURE_DIR}/tasks.json" <<JSON
-{
-  "meta": {
-    "schema_version": 2,
-    "feature": "${FEATURE}",
-    "cross_platform": false
-  },
-  "tasks": [
-    {
-      "id": "C0-code",
-      "name": "C0 slice (code)",
-      "type": "code",
-      "phase": "C0",
-      "status": "pending",
-      "description": "Implement C0 spec (production code only).",
-      "references": ["${FEATURE_DIR}/plan.md", "${FEATURE_DIR}/C0-spec.md"],
-      "acceptance_criteria": ["Meets all acceptance criteria in C0-spec.md"],
-      "start_checklist": [
-        "git checkout feat/${FEATURE} && git pull --ff-only",
-        "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
-        "Set status to in_progress; add START entry; commit docs",
-        "Create branch c0-code and worktree wt/${FEATURE}-c0-code; do not edit planning docs inside the worktree"
-      ],
-      "end_checklist": [
-        "cargo fmt",
-        "cargo clippy --workspace --all-targets -- -D warnings",
-        "Commit changes to the task branch; do not merge to orchestration; update docs; do not delete the worktree (cleanup at feature end)"
-      ],
-      "worktree": "wt/${FEATURE}-c0-code",
-      "integration_task": "C0-integ",
-      "kickoff_prompt": "${FEATURE_DIR}/kickoff_prompts/C0-code.md",
-      "depends_on": [],
-      "concurrent_with": ["C0-test"]
-    },
-    {
-      "id": "C0-test",
-      "name": "C0 slice (test)",
-      "type": "test",
-      "phase": "C0",
-      "status": "pending",
-      "description": "Add/modify tests for C0 spec (tests only).",
-      "references": ["${FEATURE_DIR}/plan.md", "${FEATURE_DIR}/C0-spec.md"],
-      "acceptance_criteria": ["Tests enforce C0 acceptance criteria"],
-      "start_checklist": [
-        "git checkout feat/${FEATURE} && git pull --ff-only",
-        "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
-        "Set status to in_progress; add START entry; commit docs",
-        "Create branch c0-test and worktree wt/${FEATURE}-c0-test; do not edit planning docs inside the worktree"
-      ],
-      "end_checklist": [
-        "cargo fmt",
-        "Run the targeted tests you add/touch",
-        "Commit changes to the task branch; do not merge to orchestration; update docs; do not delete the worktree (cleanup at feature end)"
-      ],
-      "worktree": "wt/${FEATURE}-c0-test",
-      "integration_task": "C0-integ",
-      "kickoff_prompt": "${FEATURE_DIR}/kickoff_prompts/C0-test.md",
-      "depends_on": [],
-      "concurrent_with": ["C0-code"]
-    },
-    {
-      "id": "C0-integ",
-      "name": "C0 slice (integration)",
-      "type": "integration",
-      "phase": "C0",
-      "status": "pending",
-      "description": "Integrate C0 code+tests, reconcile to spec, and run integration gate.",
-      "references": ["${FEATURE_DIR}/plan.md", "${FEATURE_DIR}/C0-spec.md"],
-      "acceptance_criteria": ["Slice is green under make integ-checks and matches the spec"],
-      "start_checklist": [
-        "git checkout feat/${FEATURE} && git pull --ff-only",
-        "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
-        "Set status to in_progress; add START entry; commit docs",
-        "Create branch c0-integ and worktree wt/${FEATURE}-c0-integ; do not edit planning docs inside the worktree"
-      ],
-      "end_checklist": [
-        "cargo fmt",
-        "cargo clippy --workspace --all-targets -- -D warnings",
-        "Run relevant tests",
-        "make integ-checks",
-        "Commit worktree changes; fast-forward merge this branch into feat/${FEATURE}; update docs; do not delete the worktree (cleanup at feature end)"
-      ],
-      "worktree": "wt/${FEATURE}-c0-integ",
-      "integration_task": "C0-integ",
-      "kickoff_prompt": "${FEATURE_DIR}/kickoff_prompts/C0-integ.md",
-      "depends_on": ["C0-code", "C0-test"],
-      "concurrent_with": []
-    }
-  ]
-}
-JSON
-fi
+Legacy tasks.json generator removed; tasks.json is produced by the Python generator above.
 LEGACY_TASKS_JSON
 
 if [[ "${AUTOMATION}" -eq 1 ]]; then
-    C0_CODE_BRANCH="${FEATURE}-c0-code"
-    C0_TEST_BRANCH="${FEATURE}-c0-test"
-    C0_INTEG_BRANCH="${FEATURE}-c0-integ"
-    C0_INTEG_CORE_BRANCH="${FEATURE}-c0-integ-core"
+    SLICE_CODE_BRANCH="${FEATURE}-${SLICE_ID_LOWER}-code"
+    SLICE_TEST_BRANCH="${FEATURE}-${SLICE_ID_LOWER}-test"
+    SLICE_INTEG_BRANCH="${FEATURE}-${SLICE_ID_LOWER}-integ"
+    SLICE_INTEG_CORE_BRANCH="${FEATURE}-${SLICE_ID_LOWER}-integ-core"
 else
-    C0_CODE_BRANCH="c0-code"
-    C0_TEST_BRANCH="c0-test"
-    C0_INTEG_BRANCH="c0-integ"
-    C0_INTEG_CORE_BRANCH="c0-integ-core"
+    SLICE_CODE_BRANCH="${SLICE_ID_LOWER}-code"
+    SLICE_TEST_BRANCH="${SLICE_ID_LOWER}-test"
+    SLICE_INTEG_BRANCH="${SLICE_ID_LOWER}-integ"
+    SLICE_INTEG_CORE_BRANCH="${SLICE_ID_LOWER}-integ-core"
 fi
 
-render "${TEMPLATES_DIR}/kickoff_code.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-code.md" "C0-code" "C0-spec.md" "${C0_CODE_BRANCH}" "wt/${FEATURE}-c0-code"
-render "${TEMPLATES_DIR}/kickoff_test.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-test.md" "C0-test" "C0-spec.md" "${C0_TEST_BRANCH}" "wt/${FEATURE}-c0-test"
+render "${TEMPLATES_DIR}/kickoff_code.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/${SLICE_ID}-code.md" "${SLICE_ID}-code" "${SLICE_ID}-spec.md" "${SLICE_CODE_BRANCH}" "wt/${FEATURE}-${SLICE_ID_LOWER}-code" "" "${SLICE_ID}"
+render "${TEMPLATES_DIR}/kickoff_test.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/${SLICE_ID}-test.md" "${SLICE_ID}-test" "${SLICE_ID}-spec.md" "${SLICE_TEST_BRANCH}" "wt/${FEATURE}-${SLICE_ID_LOWER}-test" "" "${SLICE_ID}"
 if [[ "${CROSS_PLATFORM}" -eq 1 ]]; then
-    render "${TEMPLATES_DIR}/kickoff_integ_core.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-integ-core.md" "C0-integ-core" "C0-spec.md" "${C0_INTEG_CORE_BRANCH}" "wt/${FEATURE}-c0-integ-core"
+    render "${TEMPLATES_DIR}/kickoff_integ_core.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/${SLICE_ID}-integ-core.md" "${SLICE_ID}-integ-core" "${SLICE_ID}-spec.md" "${SLICE_INTEG_CORE_BRANCH}" "wt/${FEATURE}-${SLICE_ID_LOWER}-integ-core" "" "${SLICE_ID}"
     IFS=',' read -r -a ci_platforms <<<"${CI_PARITY_PLATFORMS}"
     for p in "${ci_platforms[@]}"; do
         p="$(echo "${p}" | xargs)"
         [[ -z "${p}" ]] && continue
-        render "${TEMPLATES_DIR}/kickoff_integ_platform.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-integ-${p}.md" "C0-integ-${p}" "C0-spec.md" "${FEATURE}-c0-integ-${p}" "wt/${FEATURE}-c0-integ-${p}" "${p}"
+        render "${TEMPLATES_DIR}/kickoff_integ_platform.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/${SLICE_ID}-integ-${p}.md" "${SLICE_ID}-integ-${p}" "${SLICE_ID}-spec.md" "${FEATURE}-${SLICE_ID_LOWER}-integ-${p}" "wt/${FEATURE}-${SLICE_ID_LOWER}-integ-${p}" "${p}" "${SLICE_ID}"
     done
     if [[ "${WSL_REQUIRED}" -eq 1 && "${WSL_SEPARATE}" -eq 1 ]]; then
-        render "${TEMPLATES_DIR}/kickoff_integ_platform.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-integ-wsl.md" "C0-integ-wsl" "C0-spec.md" "${FEATURE}-c0-integ-wsl" "wt/${FEATURE}-c0-integ-wsl" "wsl"
+        render "${TEMPLATES_DIR}/kickoff_integ_platform.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/${SLICE_ID}-integ-wsl.md" "${SLICE_ID}-integ-wsl" "${SLICE_ID}-spec.md" "${FEATURE}-${SLICE_ID_LOWER}-integ-wsl" "wt/${FEATURE}-${SLICE_ID_LOWER}-integ-wsl" "wsl" "${SLICE_ID}"
     fi
-    render "${TEMPLATES_DIR}/kickoff_integ_final.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-integ.md" "C0-integ" "C0-spec.md" "${C0_INTEG_BRANCH}" "wt/${FEATURE}-c0-integ"
+    render "${TEMPLATES_DIR}/kickoff_integ_final.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/${SLICE_ID}-integ.md" "${SLICE_ID}-integ" "${SLICE_ID}-spec.md" "${SLICE_INTEG_BRANCH}" "wt/${FEATURE}-${SLICE_ID_LOWER}-integ" "" "${SLICE_ID}"
 else
-    render "${TEMPLATES_DIR}/kickoff_integ.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-integ.md" "C0-integ" "C0-spec.md" "${C0_INTEG_BRANCH}" "wt/${FEATURE}-c0-integ"
+    render "${TEMPLATES_DIR}/kickoff_integ.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/${SLICE_ID}-integ.md" "${SLICE_ID}-integ" "${SLICE_ID}-spec.md" "${SLICE_INTEG_BRANCH}" "wt/${FEATURE}-${SLICE_ID_LOWER}-integ" "" "${SLICE_ID}"
 fi
 
 if [[ "${DECISION_HEAVY}" -eq 1 || "${CROSS_PLATFORM}" -eq 1 ]]; then
@@ -1102,13 +835,6 @@ if [[ "${DECISION_HEAVY}" -eq 1 || "${CROSS_PLATFORM}" -eq 1 ]]; then
 # Decision Register
 
 Use the template in:
-- `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-MD
-
-    cat >"${FEATURE_DIR}/integration_map.md" <<'MD'
-# Integration Map
-
-Use the standard in:
 - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
 MD
 

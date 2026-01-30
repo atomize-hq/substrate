@@ -9,7 +9,7 @@ This gate is **execution-time** (not a planning quality gate):
 
 ## When it runs
 - After the Planning Pack has a quality gate report with `RECOMMENDATION: ACCEPT`.
-- Before starting the first slice (before `C0-code` / `C0-test`).
+- Before starting the first slice (before `<SLICE_ID>-code` / `<SLICE_ID>-test`).
 
 ## Required artifacts
 For features that opt in (`tasks.json` meta: `execution_gates: true`):
@@ -27,7 +27,7 @@ For features that opt in (`tasks.json` meta: `execution_gates: true`):
 - ADR accepted and still matches the intended work.
 - Planning Pack is complete and internally consistent:
   - `plan.md`, `tasks.json`, `session_log.md`, specs, kickoff prompts.
-  - `integration_map.md` and `manual_testing_playbook.md` exist when required by the planning standard.
+  - `impact_map.md` and `manual_testing_playbook.md` exist when required by the planning standard.
 
 ### 2) Cross-platform implications are explicitly covered
 - `tasks.json` declares platform requirements:
@@ -60,7 +60,7 @@ Smoke scripts must be a runnable, minimal version of how a careful human would v
 ## Output and rules
 - Fill `execution_preflight_report.md` with:
   - Recommendation (`ACCEPT` or `REVISE`).
-  - Any required fixes before starting C0.
+  - Any required fixes before starting the first slice.
   - If `REVISE`: do not start triads until the issues are fixed and the preflight is re-run.
 
 If the recommendation is `ACCEPT`, prefer starting the first slice via `docs/project_management/standards/TRIAD_WRAPPER_PROMPT.md` (runs `make triad-task-start-pair ... LAUNCH_CODEX=1` and reports Codex artifacts deterministically).

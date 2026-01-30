@@ -9,7 +9,7 @@ Usage:
 Required:
   --feature-dir <path>     Feature Planning Pack dir (docs/project_management/next/<feature> or equivalent)
   One of:
-    --slice-id <slice>     Slice prefix (e.g., C0 -> C0-code and C0-test)
+    --slice-id <slice>     Slice id (e.g., WCU0 -> WCU0-code and WCU0-test)
     --code-task-id <id>    Code task id (type=code)
     --test-task-id <id>    Test task id (type=test)
 

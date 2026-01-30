@@ -8,10 +8,10 @@ Usage:
 
 Purpose:
   Phase 2 of the end-to-end triad automation smoke:
-    - start and finish C0-integ-core (merge code+test into integ-core; run integ-checks)
+    - start and finish first-slice integ-core (merge code+test into integ-core; run integ-checks)
     - dispatch cross-platform smoke via GitHub Actions (self-hosted runners by default)
     - optionally start platform-fix integration tasks in parallel and run per-platform smoke
-    - start and finish the final aggregator (C0-integ), re-run smoke, and fast-forward merge back to orchestration
+    - start and finish the final aggregator, re-run smoke, and fast-forward merge back to orchestration
     - optionally run feature cleanup (remove retained worktrees/prune branches)
 
 Required:
@@ -289,6 +289,15 @@ if [[ -z "${WORKFLOW_REF}" ]]; then
     WORKFLOW_REF="${ORCH_BRANCH}"
 fi
 
+SLICE_ID="$(jq -r '.tasks[] | select(.type=="code") | .phase' "${TASKS_JSON}" | head -n 1)"
+if [[ -z "${SLICE_ID}" || "${SLICE_ID}" == "null" ]]; then
+    die "Could not infer SLICE_ID from tasks.json (expected at least one code task with .phase set)"
+fi
+CODE_TASK_ID="${SLICE_ID}-code"
+TEST_TASK_ID="${SLICE_ID}-test"
+INTEG_CORE_TASK_ID="${SLICE_ID}-integ-core"
+INTEG_TASK_ID="${SLICE_ID}-integ"
+
 if [[ -z "${LOG_DIR}" ]]; then
     LOG_DIR="target/e2e/${FEATURE_NAME}"
 fi
@@ -309,8 +318,8 @@ log "Log: ${LOG_PATH}"
 log "Ensuring orchestration branch exists/checked out"
 run make triad-orch-ensure FEATURE_DIR="${FEATURE_DIR}"
 
-log "Starting C0-integ-core (worktree + optional Codex headless)"
-start_core=(make triad-task-start FEATURE_DIR="${FEATURE_DIR}" TASK_ID="C0-integ-core")
+log "Starting ${INTEG_CORE_TASK_ID} (worktree + optional Codex headless)"
+start_core=(make triad-task-start FEATURE_DIR="${FEATURE_DIR}" TASK_ID="${INTEG_CORE_TASK_ID}")
 if [[ "${SKIP_CODEX}" -eq 0 ]]; then start_core+=(LAUNCH_CODEX=1); fi
 if [[ -n "${CODEX_PROFILE}" ]]; then start_core+=(CODEX_PROFILE="${CODEX_PROFILE}"); fi
 if [[ -n "${CODEX_MODEL}" ]]; then start_core+=(CODEX_MODEL="${CODEX_MODEL}"); fi
@@ -319,27 +328,27 @@ core_out="$("${start_core[@]}")"
 echo "${core_out}"
 core_wt="$(printf '%s' "${core_out}" | awk -F= '$1=="WORKTREE"{sub($1"=","",$0); print $0}')"
 if [[ -z "${core_wt}" ]]; then
-    die "Could not parse WORKTREE from C0-integ-core task_start output"
+    die "Could not parse WORKTREE from ${INTEG_CORE_TASK_ID} task_start output"
 fi
 
-code_branch="$(task_branch "${TASKS_JSON}" "C0-code")"
-test_branch="$(task_branch "${TASKS_JSON}" "C0-test")"
-core_branch="$(task_branch "${TASKS_JSON}" "C0-integ-core")"
+code_branch="$(task_branch "${TASKS_JSON}" "${CODE_TASK_ID}")"
+test_branch="$(task_branch "${TASKS_JSON}" "${TEST_TASK_ID}")"
+core_branch="$(task_branch "${TASKS_JSON}" "${INTEG_CORE_TASK_ID}")"
 
-log "Merging code/test into C0-integ-core worktree"
+log "Merging code/test into ${INTEG_CORE_TASK_ID} worktree"
 merge_if_needed "${core_wt}" "${code_branch}"
 merge_if_needed "${core_wt}" "${test_branch}"
 
-log "Finishing C0-integ-core (runs integ-checks; no merge-back)"
-run bash -lc "cd \"${core_wt}\" && make triad-task-finish TASK_ID=\"C0-integ-core\""
+log "Finishing ${INTEG_CORE_TASK_ID} (runs integ-checks; no merge-back)"
+run bash -lc "cd \"${core_wt}\" && make triad-task-finish TASK_ID=\"${INTEG_CORE_TASK_ID}\""
 
-log "Marking C0-integ-core completed in tasks.json (orchestration branch)"
+log "Marking ${INTEG_CORE_TASK_ID} completed in tasks.json (orchestration branch)"
 run git checkout "${ORCH_BRANCH}"
-set_task_status "${TASKS_JSON}" "C0-integ-core" "completed"
+set_task_status "${TASKS_JSON}" "${INTEG_CORE_TASK_ID}" "completed"
 append_session_log "${SESSION_LOG}" ""
-append_session_log "${SESSION_LOG}" "END   $(utc_now) C0-integ-core (e2e smoke)"
+append_session_log "${SESSION_LOG}" "END   $(utc_now) ${INTEG_CORE_TASK_ID} (e2e smoke)"
 run git add "${TASKS_JSON}" "${SESSION_LOG}"
-run git commit -m "docs: complete C0-integ-core (${FEATURE_NAME})"
+run git commit -m "docs: complete ${INTEG_CORE_TASK_ID} (${FEATURE_NAME})"
 
 log "Dispatching cross-platform smoke (PLATFORM=all)"
 smoke_cmd=(make feature-smoke FEATURE_DIR="${FEATURE_DIR}" PLATFORM=all RUNNER_KIND="${RUNNER_KIND}" WORKFLOW_REF="${WORKFLOW_REF}" REMOTE="${REMOTE}" CLEANUP=1)
@@ -365,7 +374,7 @@ if [[ "${smoke_all_rc}" -ne 0 && -z "${PLATFORM_FIXES_CSV}" ]]; then
         die "Cross-platform smoke failed and RUN_ID could not be parsed; re-run with --platform-fixes linux,macos,windows[,wsl]"
     fi
     log "Cross-platform smoke failed; auto-starting only failing platform-fix tasks from run ${smoke_run_id_all}"
-    pf_cmd=(make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="${FEATURE_DIR}" SLICE_ID="C0" SMOKE_RUN_ID="${smoke_run_id_all}")
+    pf_cmd=(make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="${FEATURE_DIR}" SLICE_ID="${SLICE_ID}" SMOKE_RUN_ID="${smoke_run_id_all}")
     if [[ "${SKIP_CODEX}" -eq 0 ]]; then pf_cmd+=(LAUNCH_CODEX=1); fi
     if [[ -n "${CODEX_PROFILE}" ]]; then pf_cmd+=(CODEX_PROFILE="${CODEX_PROFILE}"); fi
     if [[ -n "${CODEX_MODEL}" ]]; then pf_cmd+=(CODEX_MODEL="${CODEX_MODEL}"); fi
@@ -393,7 +402,7 @@ if [[ "${smoke_all_rc}" -eq 0 && -z "${PLATFORM_FIXES_CSV}" ]]; then
     for p in "${platforms[@]}"; do
         p="$(echo "${p}" | xargs)"
         [[ -z "${p}" ]] && continue
-        task_id="C0-integ-${p}"
+        task_id="${SLICE_ID}-integ-${p}"
         run git checkout "${ORCH_BRANCH}"
         set_task_status "${TASKS_JSON}" "${task_id}" "completed"
         append_session_log "${SESSION_LOG}" "END   $(utc_now) ${task_id} (no-op; smoke green)"
@@ -405,7 +414,7 @@ fi
 if [[ -n "${PLATFORM_FIXES_CSV}" ]]; then
     if [[ "${PLATFORM_FIXES_STARTED}" -eq 0 ]]; then
         log "Starting platform-fix tasks in parallel: ${PLATFORM_FIXES_CSV}"
-        pf_cmd=(make triad-task-start-platform-fixes FEATURE_DIR="${FEATURE_DIR}" SLICE_ID="C0" PLATFORMS="${PLATFORM_FIXES_CSV}")
+        pf_cmd=(make triad-task-start-platform-fixes FEATURE_DIR="${FEATURE_DIR}" SLICE_ID="${SLICE_ID}" PLATFORMS="${PLATFORM_FIXES_CSV}")
         if [[ "${SKIP_CODEX}" -eq 0 ]]; then pf_cmd+=(LAUNCH_CODEX=1); fi
         if [[ -n "${CODEX_PROFILE}" ]]; then pf_cmd+=(CODEX_PROFILE="${CODEX_PROFILE}"); fi
         if [[ -n "${CODEX_MODEL}" ]]; then pf_cmd+=(CODEX_MODEL="${CODEX_MODEL}"); fi
@@ -419,7 +428,7 @@ if [[ -n "${PLATFORM_FIXES_CSV}" ]]; then
     for p in "${platforms[@]}"; do
         p="$(echo "${p}" | xargs)"
         [[ -z "${p}" ]] && continue
-        task_id="C0-integ-${p}"
+        task_id="${SLICE_ID}-integ-${p}"
         wt_rel="$(jq -r --arg id "${task_id}" '.tasks[] | select(.id==$id) | .worktree' "${TASKS_JSON}")"
         wt_abs="$(python_abs_path "${wt_rel}")"
 
@@ -442,8 +451,8 @@ if [[ -n "${PLATFORM_FIXES_CSV}" ]]; then
     done
 fi
 
-log "Starting final aggregator (C0-integ) via wrapper (requires deps completed)"
-start_final=(make triad-task-start-integ-final FEATURE_DIR="${FEATURE_DIR}" SLICE_ID="C0")
+log "Starting final aggregator (${INTEG_TASK_ID}) via wrapper (requires deps completed)"
+start_final=(make triad-task-start-integ-final FEATURE_DIR="${FEATURE_DIR}" SLICE_ID="${SLICE_ID}")
 if [[ "${SKIP_CODEX}" -eq 0 ]]; then start_final+=(LAUNCH_CODEX=1); fi
 if [[ -n "${CODEX_PROFILE}" ]]; then start_final+=(CODEX_PROFILE="${CODEX_PROFILE}"); fi
 if [[ -n "${CODEX_MODEL}" ]]; then start_final+=(CODEX_MODEL="${CODEX_MODEL}"); fi
@@ -463,7 +472,7 @@ if [[ -n "${PLATFORM_FIXES_CSV}" ]]; then
     for p in "${platforms[@]}"; do
         p="$(echo "${p}" | xargs)"
         [[ -z "${p}" ]] && continue
-        merge_if_needed "${final_wt}" "$(task_branch "${TASKS_JSON}" "C0-integ-${p}")"
+        merge_if_needed "${final_wt}" "$(task_branch "${TASKS_JSON}" "${SLICE_ID}-integ-${p}")"
     done
 fi
 
@@ -471,14 +480,14 @@ log "Final aggregator: dispatching cross-platform smoke (PLATFORM=all)"
 run bash -lc "cd \"${final_wt}\" && ${smoke_cmd[*]}"
 
 log "Final aggregator: finishing (runs integ-checks; merges back FF-only)"
-run bash -lc "cd \"${final_wt}\" && make triad-task-finish TASK_ID=\"C0-integ\""
+run bash -lc "cd \"${final_wt}\" && make triad-task-finish TASK_ID=\"${INTEG_TASK_ID}\""
 
-log "Marking C0-integ completed in tasks.json (orchestration branch)"
+log "Marking ${INTEG_TASK_ID} completed in tasks.json (orchestration branch)"
 run git checkout "${ORCH_BRANCH}"
-set_task_status "${TASKS_JSON}" "C0-integ" "completed"
-append_session_log "${SESSION_LOG}" "END   $(utc_now) C0-integ (e2e smoke)"
+set_task_status "${TASKS_JSON}" "${INTEG_TASK_ID}" "completed"
+append_session_log "${SESSION_LOG}" "END   $(utc_now) ${INTEG_TASK_ID} (e2e smoke)"
 run git add "${TASKS_JSON}" "${SESSION_LOG}"
-run git commit -m "docs: complete C0-integ (${FEATURE_NAME})"
+run git commit -m "docs: complete ${INTEG_TASK_ID} (${FEATURE_NAME})"
 
 if [[ "${PUSH_ORCH}" -eq 1 ]]; then
     log "Pushing orchestration branch: ${ORCH_BRANCH} -> ${REMOTE}"

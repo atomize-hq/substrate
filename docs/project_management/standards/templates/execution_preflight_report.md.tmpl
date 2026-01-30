@@ -18,7 +18,7 @@ RECOMMENDATION: **ACCEPT** | **REVISE**
 - [ ] ADR accepted and still matches intent
 - [ ] Planning Pack complete (`plan.md`, `tasks.json`, `session_log.md`, specs, kickoff prompts)
 - [ ] Triad sizing is appropriate (each slice is one behavior delta; no “grab bag” slices)
-- [ ] Required planning artifacts exist (when required by planning standards): `integration_map.md`, `manual_testing_playbook.md`
+- [ ] Required planning artifacts exist (when required by planning standards): `impact_map.md`, `manual_testing_playbook.md`
 - [ ] Cross-platform plan is explicit (tasks.json meta: behavior + CI parity platforms, plus WSL mode if needed)
 
 ## 0) Slice Sizing (one behavior delta each)
@@ -71,7 +71,7 @@ Integration task dispatch commands (copy verbatim from `tasks.json` integration 
     - `scripts/ci-audit/ci_audit_record.sh --ledger-path "{{FEATURE_DIR}}/logs/<slice>/ci-audit/ledger.jsonl" --kind <ci-testing|feature-smoke> --orch-branch "<orch-branch>" --run-id "<id>" --tested-sha "<sha>" --feature-dir "{{FEATURE_DIR}}"`
 
 Policy note:
-- Docs/planning-only changes (anything under `docs/`) may skip all CI/smoke. `ci_audit.sh` should recommend `RECOMMEND=skip` with `DIFF_CLASS=docs_only`.
+- Docs/planning-only changes (anything under `docs/`) may skip all CI/smoke **only when** the advisory audit outputs `DIFF_CLASS=docs_only` and `RECOMMEND=skip`.
 
 Runner readiness:
 - Required self-hosted runners exist and are labeled correctly:
@@ -83,6 +83,6 @@ Run ids/URLs (if executed during preflight):
 - Windows smoke:
 - WSL smoke:
 
-## 4) Required Fixes Before Starting C0 (if any)
+## 4) Required Fixes Before Starting The First Slice (if any)
 
 - 

@@ -26,6 +26,8 @@ The system is designed for:
 - `docs/project_management/standards/PLANNING_WORKFLOW_OVERVIEW.md`
 - `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
 - `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`
+- `docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md`
+- `docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md`
 
 **Execution**
 - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
@@ -64,13 +66,16 @@ This creates:
 - `docs/project_management/next/<feature>/plan.md`
 - `docs/project_management/next/<feature>/tasks.json`
 - `docs/project_management/next/<feature>/session_log.md`
+- `docs/project_management/next/<feature>/spec_manifest.md`
+- `docs/project_management/next/<feature>/impact_map.md`
 - `docs/project_management/next/<feature>/kickoff_prompts/*`
-- execution gates (when enabled by scaffolder): `execution_preflight_report.md`, `C0-closeout_report.md`
+- execution gates (when enabled by scaffolder): `execution_preflight_report.md`, `<SLICE_ID>-closeout_report.md`
 - cross-platform smoke scaffolds if requested
 
 ### 1) Write the planning docs (planning agent work)
 
 Fill/update:
+- `spec_manifest.md` (derived from the ADR(s); owns spec selection + surface ownership)
 - specs (`*-spec*.md`) with explicit scope/acceptance/out-of-scope,
 - `tasks.json` with explicit start/end checklists and dependencies,
 - kickoff prompts (`kickoff_prompts/*.md`) with role boundaries and required commands.
@@ -105,11 +110,11 @@ Orchestration branch bootstrap (used by the opening gate):
 
 Start both worktrees:
 - Preferred (post-preflight): use `docs/project_management/standards/TRIAD_WRAPPER_PROMPT.md` (runs start-pair with `LAUNCH_CODEX=1` and reports exit codes + last messages + artifact paths).
-- `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="C0" LAUNCH_CODEX=1`
+- `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<SLICE_ID>" LAUNCH_CODEX=1`
 
 Finish each task from inside its worktree (commits to the task branch; does not merge to orchestration):
-- `make triad-task-finish TASK_ID="C0-code"`
-- `make triad-task-finish TASK_ID="C0-test"`
+- `make triad-task-finish TASK_ID="<SLICE_ID>-code"`
+- `make triad-task-finish TASK_ID="<SLICE_ID>-test"`
 
 #### Integration (single merge-back point)
 
@@ -118,7 +123,7 @@ Integration tasks should set `merge_to_orchestration` in `tasks.json`:
 - final aggregator integration task: `true` (the only task that merges back to orchestration)
 
 Start integration worktree:
-- `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="C0-integ-core"`
+- `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="<SLICE_ID>-integ-core"`
 
 Optional: run an end-to-end integration orchestration wrapper (integ-core -> smoke -> platform-fix -> final) with artifact reporting:
 - `docs/project_management/standards/TRIAD_INTEGRATION_WRAPPER_PROMPT.md`
@@ -133,15 +138,15 @@ Recommended (reduces redundant CI):
 - Docs/planning-only changes (anything under `docs/`) may skip all CI/smoke when the audit shows `DIFF_CLASS=docs_only` and `RECOMMEND=skip`.
 
 If smoke fails, start only the failing platform-fix tasks:
-- Single smoke run id case (`PLATFORM=behavior`): `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="C0" SMOKE_RUN_ID="<run-id>" LAUNCH_CODEX=1`
-- Multi-run case (per-platform smoke): `make triad-task-start-platform-fixes FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="C0" PLATFORMS="<csv>" LAUNCH_CODEX=1`
+- Single smoke run id case (`PLATFORM=behavior`): `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<SLICE_ID>" SMOKE_RUN_ID="<run-id>" LAUNCH_CODEX=1`
+- Multi-run case (per-platform smoke): `make triad-task-start-platform-fixes FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<SLICE_ID>" PLATFORMS="<csv>" LAUNCH_CODEX=1`
 
 After all failing platform-fix tasks are green, start the final aggregator:
-- `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="C0" LAUNCH_CODEX=1`
-  - Note: the final aggregator task id is `C0-integ` (the command name contains `integ-final`).
+- `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<SLICE_ID>" LAUNCH_CODEX=1`
+  - Note: the final aggregator task id is `<SLICE_ID>-integ` (the command name contains `integ-final`).
 
 Finish integration from inside the worktree:
-- `make triad-task-finish TASK_ID="C0-integ"`
+- `make triad-task-finish TASK_ID="<SLICE_ID>-integ"`
 
 Guardrail: the finisher will only merge back to orchestration when the task has `merge_to_orchestration=true`.
 
@@ -182,6 +187,6 @@ At feature end, remove retained worktrees and optionally prune branches:
 ## End-to-End Smoke Scripts (for debugging the workflow)
 
 These are intentionally operator-facing scripts to exercise the full system (planning pack scaffolding, triad worktrees, Codex headless launch, CI smoke dispatch, and final merge-back):
-- Phase 1 (scaffold + C0 code/test parallel): `scripts/e2e/triad_e2e_phase1.sh`
+- Phase 1 (scaffold + first-slice code/test parallel): `scripts/e2e/triad_e2e_phase1.sh`
 - Phase 2 (integration + CI smoke + optional platform-fix tasks + final aggregator): `scripts/e2e/triad_e2e_phase2.sh`
 - Combined runner: `scripts/e2e/triad_e2e_all.sh`

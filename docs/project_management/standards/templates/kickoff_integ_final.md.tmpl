@@ -55,7 +55,7 @@ After any CI dispatch completes, record evidence (recommended):
       - `SMOKE_SLICE_ID` is optional; when provided, the workflow exports `SUBSTRATE_SMOKE_SLICE_ID` for slice-scoped smoke scripts.
       - If WSL coverage is required for this feature, add `RUN_WSL=1`.
 - Complete the slice closeout gate report:
-  - `{{FEATURE_DIR}}/<SLICE>-closeout_report.md` (e.g., `{{FEATURE_DIR}}/C0-closeout_report.md`)
+  - `{{FEATURE_DIR}}/<SLICE>-closeout_report.md` (e.g., `{{FEATURE_DIR}}/{{SLICE_ID}}-closeout_report.md`)
 
 ## End Checklist
 1. Ensure all required platforms are green (include run ids/URLs).

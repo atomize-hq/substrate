@@ -8,7 +8,7 @@ Usage:
 
 Required:
   --feature-dir <path>   Feature Planning Pack dir (e.g., docs/project_management/next/<feature>)
-  --task-id <id>         Task id in tasks.json (e.g., C0-code)
+  --task-id <id>         Task id in tasks.json (e.g., WCU0-code)
 
 Options:
   --launch-codex         Launch Codex headless after worktree creation

@@ -68,12 +68,13 @@ Reference: `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
 Mark `YES` only if read end-to-end.
 
 - ADR(s): `YES|NO`
+- `spec_manifest.md`: `YES|NO`
 - `plan.md`: `YES|NO`
 - `tasks.json`: `YES|NO`
 - `session_log.md`: `YES|NO`
 - All specs in scope: `YES|NO`
 - `decision_register.md` (if present/required): `YES|NO|N/A`
-- `integration_map.md` (if present/required): `YES|NO|N/A`
+- `impact_map.md` (if present/required): `YES|NO|N/A`
 - `manual_testing_playbook.md` (if present/required): `YES|NO|N/A`
 - Feature smoke scripts under `smoke/` (if required): `YES|NO|N/A`
 - `docs/project_management/next/sequencing.json`: `YES|NO`

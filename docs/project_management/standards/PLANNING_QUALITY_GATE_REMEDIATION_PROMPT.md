@@ -24,7 +24,7 @@ Constraints (non-negotiable):
 Inputs (must read end-to-end):
 - `docs/project_management/next/<feature>/quality_gate_report.md` (the most recent review pass and all findings)
 - The feature’s planning pack:
-  - `decision_register.md`, `integration_map.md`, `plan.md`, `tasks.json`, `session_log.md`
+  - `decision_register.md`, `impact_map.md`, `plan.md`, `tasks.json`, `session_log.md`
   - all specs in the feature/track
   - `manual_testing_playbook.md` and feature `smoke/*` scripts (if present)
 - ADR(s) referenced by the pack
@@ -82,4 +82,3 @@ Output requirements (in your response):
 - List all commands run with exit codes.
 - If blocked: list required human decisions explicitly.
 ```
-

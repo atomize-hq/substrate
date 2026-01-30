@@ -59,7 +59,7 @@ flowchart TD
   %% ======== Triad execution ========
   subgraph ORCH["Orchestration Branch (docs edits only)"]
     ORCH_ENSURE["Ensure orchestration branch exists (make triad-orch-ensure)"]
-    START["Pick triad slice: X (e.g., C3)"]
+    START["Pick triad slice: X (e.g., WCU0)"]
     TASKS["tasks.json statuses (START/END in session_log.md)"]
     START_PAIR["Start X-code + X-test in parallel (make triad-task-start-pair SLICE_ID=X; optional LAUNCH_CODEX=1)"]
   end
@@ -156,7 +156,7 @@ flowchart TD
   %% ======== Triad execution ========
   subgraph ORCH["Orchestration Branch (docs edits only)"]
     ORCH_ENSURE["Ensure orchestration branch exists (make triad-orch-ensure)"]
-    START["Pick triad slice: X (e.g., C3)"]
+    START["Pick triad slice: X (e.g., WCU0)"]
     TASKS["tasks.json statuses (START/END in session_log.md)"]
     START_PAIR["Start X-code + X-test in parallel (make triad-task-start-pair SLICE_ID=X; optional LAUNCH_CODEX=1)"]
   end

@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$Feature,
+    [string]$SlicePrefix = "",
     [switch]$DecisionHeavy,
     [switch]$CrossPlatform,
     [string]$BehaviorPlatforms = "",
@@ -35,6 +36,49 @@ if (($hasBehaviorPlatforms -or $hasCiParityPlatforms) -and -not $CrossPlatform.I
 
 $nowUtc = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
 
+function Derive-SlicePrefix([string]$Raw) {
+    $stop = @("and", "or", "the", "a", "an", "of", "to", "for", "in", "on", "with", "via", "vs", "by")
+    $genericTail = @("simplification", "refactor", "cleanup", "hardening", "migration", "parity", "stability", "integration", "reliability", "improvement", "improvements", "fix", "fixes", "update", "updates")
+
+    $parts = $Raw -split "[-_.]"
+    $words = @()
+    foreach ($p in $parts) {
+        $w = ($p.ToLowerInvariant() -replace "[^a-z0-9]", "")
+        if ([string]::IsNullOrWhiteSpace($w)) { continue }
+        if ($stop -contains $w) { continue }
+        $words += $w
+    }
+
+    if ($words.Count -eq 0) { return "X" }
+
+    $last = $words[$words.Count - 1]
+    if (($genericTail -contains $last) -and $words.Count -ge 3) {
+        return (($words[0].Substring(0, 1) + $words[1].Substring(0, 1) + $words[2].Substring(0, 1)).ToUpperInvariant())
+    }
+
+    if ($words.Count -ge 3) {
+        return (($words[0].Substring(0, 1) + $words[1].Substring(0, 1) + $last.Substring(0, 1)).ToUpperInvariant())
+    }
+    if ($words.Count -eq 2) {
+        return (($words[0].Substring(0, 1) + $words[1].Substring(0, 1)).ToUpperInvariant())
+    }
+    return ($words[0].Substring(0, [Math]::Min(3, $words[0].Length)).ToUpperInvariant())
+}
+
+$slicePrefixResolved = $SlicePrefix
+if ([string]::IsNullOrWhiteSpace($slicePrefixResolved)) {
+    $slicePrefixResolved = Derive-SlicePrefix $Feature
+}
+if ($slicePrefixResolved -notmatch '^[A-Za-z][A-Za-z0-9]*$') {
+    throw "Invalid -SlicePrefix: $slicePrefixResolved (expected alnum, starting with a letter)"
+}
+
+$script:SlicePrefix = $slicePrefixResolved
+$script:SliceId = "$slicePrefixResolved" + "0"
+$script:SliceIdLower = $script:SliceId.ToLowerInvariant()
+$script:SliceSpecFile = "$($script:SliceId)-spec.md"
+$script:SliceCloseoutFile = "$($script:SliceId)-closeout_report.md"
+
 function Render-Template([string]$TemplatePath, [string]$OutPath, [hashtable]$Vars) {
     $text = Get-Content -LiteralPath $TemplatePath -Raw
     foreach ($k in $Vars.Keys) {
@@ -49,6 +93,8 @@ $vars = @{
     FEATURE_DIR = $featureDir
     NOW_UTC     = $nowUtc
     ORCH_BRANCH = "feat/$Feature"
+    SLICE_PREFIX = $script:SlicePrefix
+    SLICE_ID     = $script:SliceId
 }
 
 New-Item -ItemType Directory -Force -Path (Join-Path $featureDir "kickoff_prompts") | Out-Null
@@ -56,9 +102,11 @@ New-Item -ItemType Directory -Force -Path (Join-Path $featureDir "kickoff_prompt
 Render-Template (Join-Path $templatesDir "plan.md.tmpl") (Join-Path $featureDir "plan.md") $vars
 Render-Template (Join-Path $templatesDir "session_log.md.tmpl") (Join-Path $featureDir "session_log.md") $vars
 Render-Template (Join-Path $templatesDir "contract.md.tmpl") (Join-Path $featureDir "contract.md") $vars
+Render-Template (Join-Path $templatesDir "spec_manifest.md.tmpl") (Join-Path $featureDir "spec_manifest.md") $vars
+Render-Template (Join-Path $templatesDir "impact_map.md.tmpl") (Join-Path $featureDir "impact_map.md") $vars
 
 @"
-# C0-spec
+# $($script:SliceId)-spec
 
 ## Scope
 - None yet.
@@ -71,17 +119,17 @@ Render-Template (Join-Path $templatesDir "contract.md.tmpl") (Join-Path $feature
 
 ## Out of scope
 - None yet.
-"@ | Set-Content -LiteralPath (Join-Path $featureDir "C0-spec.md")
+"@ | Set-Content -LiteralPath (Join-Path $featureDir $script:SliceSpecFile)
 
 function New-TaskBase([string]$Id, [string]$Name, [string]$Type, [string]$Description) {
     return @{
         id                 = $Id
         name               = $Name
         type               = $Type
-        phase              = "C0"
+        phase              = $script:SliceId
         status             = "pending"
         description        = $Description
-        references         = @("$featureDir/plan.md", "$featureDir/C0-spec.md")
+        references         = @("$featureDir/plan.md", "$featureDir/spec_manifest.md", "$featureDir/impact_map.md", "$featureDir/$($script:SliceSpecFile)")
         acceptance_criteria = @()
         start_checklist    = @()
         end_checklist      = @()
@@ -162,6 +210,8 @@ $tasks += @{
     description = "Run the execution preflight gate to confirm smoke/manual/CI plans are adequate before starting triads."
     references = @(
         "$featureDir/plan.md",
+        "$featureDir/spec_manifest.md",
+        "$featureDir/impact_map.md",
         "$featureDir/tasks.json",
         "$featureDir/session_log.md",
         "$featureDir/execution_preflight_report.md"
@@ -183,55 +233,60 @@ $tasks += @{
     concurrent_with = @()
 }
 
-$code = New-TaskBase "C0-code" "C0 slice (code)" "code" "Implement C0 spec (production code only)."
-$code.acceptance_criteria = @("Meets all acceptance criteria in C0-spec.md")
+$codeId = "$($script:SliceId)-code"
+$testId = "$($script:SliceId)-test"
+$integId = "$($script:SliceId)-integ"
+$integCoreId = "$($script:SliceId)-integ-core"
+
+$code = New-TaskBase $codeId "$($script:SliceId) slice (code)" "code" "Implement $($script:SliceId) spec (production code only)."
+$code.acceptance_criteria = @("Meets all acceptance criteria in $($script:SliceSpecFile)")
 $code.start_checklist = @(
     "git checkout feat/$Feature && git pull --ff-only",
-    "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
+    "Read plan.md, tasks.json, session_log.md, $($script:SliceSpecFile), kickoff prompt",
     "Set status to in_progress; add START entry; commit docs",
-    $(if ($Automation.IsPresent) { "Run: make triad-task-start-pair FEATURE_DIR=`"$featureDir`" SLICE_ID=`"C0`"" } else { "Run: git worktree add -b c0-code wt/$Feature-c0-code feat/$Feature" })
+    $(if ($Automation.IsPresent) { "Run: make triad-task-start-pair FEATURE_DIR=`"$featureDir`" SLICE_ID=`"$($script:SliceId)`"" } else { "Run: git worktree add -b $($script:SliceIdLower)-code wt/$Feature-$($script:SliceIdLower)-code feat/$Feature" })
 )
 $code.end_checklist = @(
     "cargo fmt",
     "cargo clippy --workspace --all-targets -- -D warnings",
-    $(if ($Automation.IsPresent) { "From inside the worktree: make triad-task-finish TASK_ID=`"C0-code`"" } else { "From inside the worktree: git add -A && git commit -m `"code: $Feature C0-code`"" }),
-    $(if ($Automation.IsPresent) { "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)" } else { "Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/$Feature-c0-code (per plan.md)" })
+    $(if ($Automation.IsPresent) { "From inside the worktree: make triad-task-finish TASK_ID=`"$codeId`"" } else { "From inside the worktree: git add -A && git commit -m `"code: $Feature $codeId`"" }),
+    $(if ($Automation.IsPresent) { "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)" } else { "Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/$Feature-$($script:SliceIdLower)-code (per plan.md)" })
 )
-$code.worktree = "wt/$Feature-c0-code"
-$code.git_branch = if ($Automation.IsPresent) { "$Feature-c0-code" } else { "c0-code" }
+$code.worktree = "wt/$Feature-$($script:SliceIdLower)-code"
+$code.git_branch = if ($Automation.IsPresent) { "$Feature-$($script:SliceIdLower)-code" } else { "$($script:SliceIdLower)-code" }
 $code.required_make_targets = if ($Automation.IsPresent) { @("triad-code-checks") } else { $null }
-$code.integration_task = if ($CrossPlatform.IsPresent) { "C0-integ-core" } else { "C0-integ" }
-$code.kickoff_prompt = "$featureDir/kickoff_prompts/C0-code.md"
+$code.integration_task = if ($CrossPlatform.IsPresent) { $integCoreId } else { $integId }
+$code.kickoff_prompt = "$featureDir/kickoff_prompts/$codeId.md"
 $code.depends_on = @("F0-exec-preflight")
-$code.concurrent_with = @("C0-test")
+$code.concurrent_with = @($testId)
 $tasks += $code
 
-$test = New-TaskBase "C0-test" "C0 slice (test)" "test" "Add/modify tests for C0 spec (tests only)."
-$test.acceptance_criteria = @("Tests enforce C0 acceptance criteria")
+$test = New-TaskBase $testId "$($script:SliceId) slice (test)" "test" "Add/modify tests for $($script:SliceId) spec (tests only)."
+$test.acceptance_criteria = @("Tests enforce $($script:SliceId) acceptance criteria")
 $test.start_checklist = @(
     "git checkout feat/$Feature && git pull --ff-only",
-    "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
+    "Read plan.md, tasks.json, session_log.md, $($script:SliceSpecFile), kickoff prompt",
     "Set status to in_progress; add START entry; commit docs",
-    $(if ($Automation.IsPresent) { "Run: make triad-task-start-pair FEATURE_DIR=`"$featureDir`" SLICE_ID=`"C0`"" } else { "Run: git worktree add -b c0-test wt/$Feature-c0-test feat/$Feature" })
+    $(if ($Automation.IsPresent) { "Run: make triad-task-start-pair FEATURE_DIR=`"$featureDir`" SLICE_ID=`"$($script:SliceId)`"" } else { "Run: git worktree add -b $($script:SliceIdLower)-test wt/$Feature-$($script:SliceIdLower)-test feat/$Feature" })
 )
 $test.end_checklist = @(
     "cargo fmt",
     "Run the targeted tests you add/touch",
-    $(if ($Automation.IsPresent) { "From inside the worktree: make triad-task-finish TASK_ID=`"C0-test`"" } else { "From inside the worktree: git add -A && git commit -m `"test: $Feature C0-test`"" }),
-    $(if ($Automation.IsPresent) { "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)" } else { "Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/$Feature-c0-test (per plan.md)" })
+    $(if ($Automation.IsPresent) { "From inside the worktree: make triad-task-finish TASK_ID=`"$testId`"" } else { "From inside the worktree: git add -A && git commit -m `"test: $Feature $testId`"" }),
+    $(if ($Automation.IsPresent) { "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)" } else { "Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/$Feature-$($script:SliceIdLower)-test (per plan.md)" })
 )
-$test.worktree = "wt/$Feature-c0-test"
-$test.git_branch = if ($Automation.IsPresent) { "$Feature-c0-test" } else { "c0-test" }
+$test.worktree = "wt/$Feature-$($script:SliceIdLower)-test"
+$test.git_branch = if ($Automation.IsPresent) { "$Feature-$($script:SliceIdLower)-test" } else { "$($script:SliceIdLower)-test" }
 $test.required_make_targets = if ($Automation.IsPresent) { @("triad-test-checks") } else { $null }
-$test.integration_task = if ($CrossPlatform.IsPresent) { "C0-integ-core" } else { "C0-integ" }
-$test.kickoff_prompt = "$featureDir/kickoff_prompts/C0-test.md"
+$test.integration_task = if ($CrossPlatform.IsPresent) { $integCoreId } else { $integId }
+$test.kickoff_prompt = "$featureDir/kickoff_prompts/$testId.md"
 $test.depends_on = @("F0-exec-preflight")
-$test.concurrent_with = @("C0-code")
+$test.concurrent_with = @($codeId)
 $tasks += $test
 
 if ($CrossPlatform.IsPresent) {
-    $core = New-TaskBase "C0-integ-core" "C0 slice (integration core)" "integration" "Merge C0 code+tests and make the slice green on the primary dev platform."
-    $core.integration_task = "C0-integ-core"
+    $core = New-TaskBase $integCoreId "$($script:SliceId) slice (integration core)" "integration" "Merge $($script:SliceId) code+tests and make the slice green on the primary dev platform."
+    $core.integration_task = $integCoreId
     $core.acceptance_criteria = @("Core slice is green under make integ-checks and matches the spec")
     foreach ($p in $behaviorPlatformsList) {
         switch ($p) {
@@ -242,9 +297,9 @@ if ($CrossPlatform.IsPresent) {
     }
     $core.start_checklist = @(
         "git checkout feat/$Feature && git pull --ff-only",
-        "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
+        "Read plan.md, tasks.json, session_log.md, $($script:SliceSpecFile), kickoff prompt",
         "Set status to in_progress; add START entry; commit docs",
-        $(if ($Automation.IsPresent) { "Run: make triad-task-start FEATURE_DIR=`"$featureDir`" TASK_ID=`"C0-integ-core`"" } else { "Run: git worktree add -b c0-integ-core wt/$Feature-c0-integ-core feat/$Feature" })
+        $(if ($Automation.IsPresent) { "Run: make triad-task-start FEATURE_DIR=`"$featureDir`" TASK_ID=`"$integCoreId`"" } else { "Run: git worktree add -b $($script:SliceIdLower)-integ-core wt/$Feature-$($script:SliceIdLower)-integ-core feat/$Feature" })
     )
     $dispatchBase = "scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --workflow-ref `\"feat/$Feature`\""
     $dispatches = @()
@@ -269,28 +324,28 @@ if ($CrossPlatform.IsPresent) {
         "Run relevant tests",
         "make integ-checks"
     ) + $dispatchLines + @(
-        "If any platform smoke fails: start only failing platform-fix tasks via: make triad-task-start-platform-fixes-from-smoke FEATURE_DIR=`"$featureDir`" SLICE_ID=`"C0`" SMOKE_RUN_ID=`"<run-id>`"",
-        "After all failing platforms are green: start final aggregator via: make triad-task-start-integ-final FEATURE_DIR=`"$featureDir`" SLICE_ID=`"C0`"",
-        $(if ($Automation.IsPresent) { "From inside the worktree: make triad-task-finish TASK_ID=`"C0-integ-core`"" } else { "From inside the worktree: git add -A && git commit -m `"integ: $Feature C0-integ-core`"" }),
-        $(if ($Automation.IsPresent) { "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)" } else { "Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/$Feature-c0-integ-core (per plan.md)" })
+        "If any platform smoke fails: start only failing platform-fix tasks via: make triad-task-start-platform-fixes-from-smoke FEATURE_DIR=`"$featureDir`" SLICE_ID=`"$($script:SliceId)`" SMOKE_RUN_ID=`"<run-id>`"",
+        "After all failing platforms are green: start final aggregator via: make triad-task-start-integ-final FEATURE_DIR=`"$featureDir`" SLICE_ID=`"$($script:SliceId)`"",
+        $(if ($Automation.IsPresent) { "From inside the worktree: make triad-task-finish TASK_ID=`"$integCoreId`"" } else { "From inside the worktree: git add -A && git commit -m `"integ: $Feature $integCoreId`"" }),
+        $(if ($Automation.IsPresent) { "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)" } else { "Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/$Feature-$($script:SliceIdLower)-integ-core (per plan.md)" })
     )
-    $core.worktree = "wt/$Feature-c0-integ-core"
-    $core.git_branch = if ($Automation.IsPresent) { "$Feature-c0-integ-core" } else { "c0-integ-core" }
+    $core.worktree = "wt/$Feature-$($script:SliceIdLower)-integ-core"
+    $core.git_branch = if ($Automation.IsPresent) { "$Feature-$($script:SliceIdLower)-integ-core" } else { "$($script:SliceIdLower)-integ-core" }
     $core.required_make_targets = if ($Automation.IsPresent) { @("integ-checks") } else { $null }
     $core.merge_to_orchestration = if ($Automation.IsPresent) { $false } else { $null }
-    $core.kickoff_prompt = "$featureDir/kickoff_prompts/C0-integ-core.md"
-    $core.depends_on = @("C0-code", "C0-test")
+    $core.kickoff_prompt = "$featureDir/kickoff_prompts/$integCoreId.md"
+    $core.depends_on = @($codeId, $testId)
     $tasks += $core
 
     $platforms = @($ciParityPlatformsList)
     if ($WslRequired.IsPresent -and $WslSeparate.IsPresent) { $platforms += "wsl" }
 
     foreach ($platform in $platforms) {
-        $id = "C0-integ-$platform"
+        $id = "$($script:SliceId)-integ-$platform"
         $smokeRequired = ($behaviorPlatformsList -contains $platform) -or ($platform -eq "wsl")
         switch ($platform) {
             "linux" {
-                $name = "C0 slice (integration Linux)"
+                $name = "$($script:SliceId) slice (integration Linux)"
                 $desc = "Linux platform-fix integration task (may be a no-op if already green)."
                 $refs = @("$featureDir/smoke/linux-smoke.sh")
                 $dispatch = "scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --platform linux --workflow-ref `\"feat/$Feature`\""
@@ -298,19 +353,19 @@ if ($CrossPlatform.IsPresent) {
                 $dispatch += " --cleanup"
             }
             "macos" {
-                $name = "C0 slice (integration macOS)"
+                $name = "$($script:SliceId) slice (integration macOS)"
                 $desc = "macOS platform-fix integration task (may be a no-op if already green)."
                 $refs = @("$featureDir/smoke/macos-smoke.sh")
                 $dispatch = "scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --platform macos --workflow-ref `\"feat/$Feature`\" --cleanup"
             }
             "windows" {
-                $name = "C0 slice (integration Windows)"
+                $name = "$($script:SliceId) slice (integration Windows)"
                 $desc = "Windows platform-fix integration task (may be a no-op if already green)."
                 $refs = @("$featureDir/smoke/windows-smoke.ps1")
                 $dispatch = "scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --platform windows --workflow-ref `\"feat/$Feature`\" --cleanup"
             }
             "wsl" {
-                $name = "C0 slice (integration WSL)"
+                $name = "$($script:SliceId) slice (integration WSL)"
                 $desc = "WSL platform-fix integration task (Linux-in-WSL)."
                 $refs = @("$featureDir/smoke/linux-smoke.sh")
                 $dispatch = "scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --platform wsl --workflow-ref `\"feat/$Feature`\" --cleanup"
@@ -318,7 +373,7 @@ if ($CrossPlatform.IsPresent) {
         }
 
         if (-not $smokeRequired) {
-            $name = "C0 slice (integration CI parity: $platform)"
+            $name = "$($script:SliceId) slice (integration CI parity: $platform)"
             $desc = "$platform CI parity fix task (compile/test/lint only; no behavioral smoke required for this platform)."
             $refs = @()
             $dispatch = "make ci-compile-parity CI_WORKFLOW_REF=`\"feat/$Feature`\" CI_REMOTE=origin CI_CLEANUP=1"
@@ -332,31 +387,31 @@ if ($CrossPlatform.IsPresent) {
         $t.start_checklist = @(
             "Run on $platform host if possible",
             "git checkout feat/$Feature && git pull --ff-only",
-            "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
+            "Read plan.md, tasks.json, session_log.md, $($script:SliceSpecFile), kickoff prompt",
             "Set status to in_progress; add START entry; commit docs",
-            $(if ($Automation.IsPresent) { "Run: make triad-task-start FEATURE_DIR=`"$featureDir`" TASK_ID=`"$id`"" } else { "Run: git worktree add -b c0-integ-$platform wt/$Feature-c0-integ-$platform feat/$Feature" })
+            $(if ($Automation.IsPresent) { "Run: make triad-task-start FEATURE_DIR=`"$featureDir`" TASK_ID=`"$id`"" } else { "Run: git worktree add -b $($script:SliceIdLower)-integ-$platform wt/$Feature-$($script:SliceIdLower)-integ-$platform feat/$Feature" })
         )
         $t.end_checklist = @(
             $(if ($smokeRequired) { "Dispatch platform smoke via CI: $dispatch" } else { "Dispatch CI parity via: $dispatch" }),
             "If needed: fix + fmt/clippy + targeted tests",
             $(if ($smokeRequired) { "Ensure smoke is green; record run id/URL" } else { "Ensure CI parity is green; record run id/URL" }),
             $(if ($Automation.IsPresent) { "From inside the worktree: make triad-task-finish TASK_ID=`"$id`"" } else { "From inside the worktree: git add -A && git commit -m `"integ: $Feature $id`"" }),
-            $(if ($Automation.IsPresent) { "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)" } else { "Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/$Feature-c0-integ-$platform (per plan.md)" })
+            $(if ($Automation.IsPresent) { "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)" } else { "Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/$Feature-$($script:SliceIdLower)-integ-$platform (per plan.md)" })
         )
-        $t.worktree = "wt/$Feature-c0-integ-$platform"
-        $t.git_branch = if ($Automation.IsPresent) { "$Feature-c0-integ-$platform" } else { "c0-integ-$platform" }
+        $t.worktree = "wt/$Feature-$($script:SliceIdLower)-integ-$platform"
+        $t.git_branch = if ($Automation.IsPresent) { "$Feature-$($script:SliceIdLower)-integ-$platform" } else { "$($script:SliceIdLower)-integ-$platform" }
         $t.required_make_targets = if ($Automation.IsPresent) { @("triad-code-checks") } else { $null }
         $t.merge_to_orchestration = if ($Automation.IsPresent) { $false } else { $null }
         $t.kickoff_prompt = "$featureDir/kickoff_prompts/$id.md"
-        $t.depends_on = @("C0-integ-core")
+        $t.depends_on = @($integCoreId)
         $t.platform = $platform
         $t.runner = "github-actions"
         $t.workflow = $workflow
         $tasks += $t
     }
 
-    $final = New-TaskBase "C0-integ" "C0 slice (integration final)" "integration" "Final integration: merge any platform fixes and confirm behavioral smoke + CI parity are green."
-    $final.integration_task = "C0-integ"
+    $final = New-TaskBase $integId "$($script:SliceId) slice (integration final)" "integration" "Final integration: merge any platform fixes and confirm behavioral smoke + CI parity are green."
+    $final.integration_task = $integId
     $final.acceptance_criteria = @("All required platforms are green and the slice matches the spec")
     foreach ($p in $behaviorPlatformsList) {
         switch ($p) {
@@ -365,12 +420,12 @@ if ($CrossPlatform.IsPresent) {
             "windows" { $final.references += @("$featureDir/smoke/windows-smoke.ps1") }
         }
     }
-    $final.references += @("$featureDir/C0-closeout_report.md")
+    $final.references += @("$featureDir/$($script:SliceCloseoutFile)")
     $final.start_checklist = @(
         "git checkout feat/$Feature && git pull --ff-only",
-        "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
+        "Read plan.md, tasks.json, session_log.md, $($script:SliceSpecFile), kickoff prompt",
         "Set status to in_progress; add START entry; commit docs",
-        $(if ($Automation.IsPresent) { "Run: make triad-task-start FEATURE_DIR=`"$featureDir`" TASK_ID=`"C0-integ`"" } else { "Run: git worktree add -b c0-integ wt/$Feature-c0-integ feat/$Feature" })
+        $(if ($Automation.IsPresent) { "Run: make triad-task-start FEATURE_DIR=`"$featureDir`" TASK_ID=`"$integId`"" } else { "Run: git worktree add -b $($script:SliceIdLower)-integ wt/$Feature-$($script:SliceIdLower)-integ feat/$Feature" })
     )
     $dispatchBaseFinal = "scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --workflow-ref `\"feat/$Feature`\""
     $dispatchesFinal = @()
@@ -395,43 +450,43 @@ if ($CrossPlatform.IsPresent) {
         "Run relevant tests",
         "make integ-checks"
     ) + $dispatchLinesFinal + @(
-        "Complete slice closeout gate report: $featureDir/C0-closeout_report.md",
-        $(if ($Automation.IsPresent) { "From inside the worktree: make triad-task-finish TASK_ID=`"C0-integ`"" } else { "From inside the worktree: git add -A && git commit -m `"integ: $Feature C0-integ`"" }),
-        $(if ($Automation.IsPresent) { "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)" } else { "Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/$Feature-c0-integ (per plan.md)" })
+        "Complete slice closeout gate report: $featureDir/$($script:SliceCloseoutFile)",
+        $(if ($Automation.IsPresent) { "From inside the worktree: make triad-task-finish TASK_ID=`"$integId`"" } else { "From inside the worktree: git add -A && git commit -m `"integ: $Feature $integId`"" }),
+        $(if ($Automation.IsPresent) { "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)" } else { "Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/$Feature-$($script:SliceIdLower)-integ (per plan.md)" })
     )
-    $final.worktree = "wt/$Feature-c0-integ"
-    $final.git_branch = if ($Automation.IsPresent) { "$Feature-c0-integ" } else { "c0-integ" }
+    $final.worktree = "wt/$Feature-$($script:SliceIdLower)-integ"
+    $final.git_branch = if ($Automation.IsPresent) { "$Feature-$($script:SliceIdLower)-integ" } else { "$($script:SliceIdLower)-integ" }
     $final.required_make_targets = if ($Automation.IsPresent) { @("integ-checks") } else { $null }
     $final.merge_to_orchestration = if ($Automation.IsPresent) { $true } else { $null }
-    $final.kickoff_prompt = "$featureDir/kickoff_prompts/C0-integ.md"
-    $final.depends_on = @("C0-integ-core") + ($platforms | ForEach-Object { "C0-integ-$_" })
+    $final.kickoff_prompt = "$featureDir/kickoff_prompts/$integId.md"
+    $final.depends_on = @($integCoreId) + ($platforms | ForEach-Object { "$($script:SliceId)-integ-$_" })
     $tasks += $final
 } else {
-    $integ = New-TaskBase "C0-integ" "C0 slice (integration)" "integration" "Integrate C0 code+tests, reconcile to spec, and run integration gate."
-    $integ.integration_task = "C0-integ"
+    $integ = New-TaskBase $integId "$($script:SliceId) slice (integration)" "integration" "Integrate $($script:SliceId) code+tests, reconcile to spec, and run integration gate."
+    $integ.integration_task = $integId
     $integ.acceptance_criteria = @("Slice is green under make integ-checks and matches the spec")
-    $integ.references += @("$featureDir/C0-closeout_report.md")
+    $integ.references += @("$featureDir/$($script:SliceCloseoutFile)")
     $integ.start_checklist = @(
         "git checkout feat/$Feature && git pull --ff-only",
-        "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
+        "Read plan.md, tasks.json, session_log.md, $($script:SliceSpecFile), kickoff prompt",
         "Set status to in_progress; add START entry; commit docs",
-        $(if ($Automation.IsPresent) { "Run: make triad-task-start FEATURE_DIR=`"$featureDir`" TASK_ID=`"C0-integ`"" } else { "Run: git worktree add -b c0-integ wt/$Feature-c0-integ feat/$Feature" })
+        $(if ($Automation.IsPresent) { "Run: make triad-task-start FEATURE_DIR=`"$featureDir`" TASK_ID=`"$integId`"" } else { "Run: git worktree add -b $($script:SliceIdLower)-integ wt/$Feature-$($script:SliceIdLower)-integ feat/$Feature" })
     )
     $integ.end_checklist = @(
         "cargo fmt",
         "cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant tests",
         "make integ-checks",
-        "Complete slice closeout gate report: $featureDir/C0-closeout_report.md",
-        $(if ($Automation.IsPresent) { "From inside the worktree: make triad-task-finish TASK_ID=`"C0-integ`"" } else { "From inside the worktree: git add -A && git commit -m `"integ: $Feature C0-integ`"" }),
-        $(if ($Automation.IsPresent) { "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)" } else { "Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/$Feature-c0-integ (per plan.md)" })
+        "Complete slice closeout gate report: $featureDir/$($script:SliceCloseoutFile)",
+        $(if ($Automation.IsPresent) { "From inside the worktree: make triad-task-finish TASK_ID=`"$integId`"" } else { "From inside the worktree: git add -A && git commit -m `"integ: $Feature $integId`"" }),
+        $(if ($Automation.IsPresent) { "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)" } else { "Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/$Feature-$($script:SliceIdLower)-integ (per plan.md)" })
     )
-    $integ.worktree = "wt/$Feature-c0-integ"
-    $integ.git_branch = if ($Automation.IsPresent) { "$Feature-c0-integ" } else { "c0-integ" }
+    $integ.worktree = "wt/$Feature-$($script:SliceIdLower)-integ"
+    $integ.git_branch = if ($Automation.IsPresent) { "$Feature-$($script:SliceIdLower)-integ" } else { "$($script:SliceIdLower)-integ" }
     $integ.required_make_targets = if ($Automation.IsPresent) { @("integ-checks") } else { $null }
     $integ.merge_to_orchestration = if ($Automation.IsPresent) { $true } else { $null }
-    $integ.kickoff_prompt = "$featureDir/kickoff_prompts/C0-integ.md"
-    $integ.depends_on = @("C0-code", "C0-test")
+    $integ.kickoff_prompt = "$featureDir/kickoff_prompts/$integId.md"
+    $integ.depends_on = @($codeId, $testId)
     $tasks += $integ
 }
 
@@ -463,7 +518,7 @@ if ($Automation.IsPresent) {
         worktree = $null
         integration_task = $null
         kickoff_prompt = "$featureDir/kickoff_prompts/FZ-feature-cleanup.md"
-        depends_on = @("C0-integ")
+        depends_on = @($integId)
         concurrent_with = @()
     }
 }
@@ -475,365 +530,55 @@ $varsExec = $vars.Clone()
 Render-Template (Join-Path $templatesDir "execution_preflight_report.md.tmpl") (Join-Path $featureDir "execution_preflight_report.md") $varsExec
 
 $varsCloseout = $vars.Clone()
-$varsCloseout["SLICE_ID"] = "C0"
-$varsCloseout["SPEC_FILE"] = "C0-spec.md"
-Render-Template (Join-Path $templatesDir "slice_closeout_report.md.tmpl") (Join-Path $featureDir "C0-closeout_report.md") $varsCloseout
+$varsCloseout["SLICE_ID"] = $script:SliceId
+$varsCloseout["SPEC_FILE"] = $script:SliceSpecFile
+Render-Template (Join-Path $templatesDir "slice_closeout_report.md.tmpl") (Join-Path $featureDir $script:SliceCloseoutFile) $varsCloseout
 
-<# LEGACY tasks.json generator (string heredoc). Keep temporarily for diffability; safe to delete later.
-if ($CrossPlatform.IsPresent) {
-@"
-{
-  `"meta`": {
-    `"schema_version`": 2,
-    `"feature`": `"$Feature`",
-    `"cross_platform`": true,
-    `"platforms_required`": [`"linux`", `"macos`", `"windows`"]
-  },
-  `"tasks`": [
-    {
-      `"id`": `"C0-code`",
-      `"name`": `"C0 slice (code)`",
-      `"type`": `"code`",
-      `"phase`": `"C0`",
-      `"status`": `"pending`",
-      `"description`": `"Implement C0 spec (production code only).`",
-      `"references`": [`"$featureDir/plan.md`", `"$featureDir/C0-spec.md`"],
-      `"acceptance_criteria`": [`"Meets all acceptance criteria in C0-spec.md`"],
-      `"start_checklist`": [
-        `"git checkout feat/$Feature && git pull --ff-only`",
-        `"Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt`",
-        `"Set status to in_progress; add START entry; commit docs`",
-        `"Create branch c0-code and worktree wt/$Feature-c0-code; do not edit planning docs inside the worktree`"
-      ],
-      `"end_checklist`": [
-        `"cargo fmt`",
-        `"cargo clippy --workspace --all-targets -- -D warnings`",
-        `"Commit changes to the task branch; do not merge to orchestration; update docs; do not delete the worktree (cleanup at feature end)`"
-      ],
-      `"worktree`": `"wt/$Feature-c0-code`",
-      `"integration_task`": `"C0-integ`",
-      `"kickoff_prompt`": `"$featureDir/kickoff_prompts/C0-code.md`",
-      `"depends_on`": [],
-      `"concurrent_with`": [`"C0-test`"]
-    },
-    {
-      `"id`": `"C0-test`",
-      `"name`": `"C0 slice (test)`",
-      `"type`": `"test`",
-      `"phase`": `"C0`",
-      `"status`": `"pending`",
-      `"description`": `"Add/modify tests for C0 spec (tests only).`",
-      `"references`": [`"$featureDir/plan.md`", `"$featureDir/C0-spec.md`"],
-      `"acceptance_criteria`": [`"Tests enforce C0 acceptance criteria`"],
-      `"start_checklist`": [
-        `"git checkout feat/$Feature && git pull --ff-only`",
-        `"Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt`",
-        `"Set status to in_progress; add START entry; commit docs`",
-        `"Create branch c0-test and worktree wt/$Feature-c0-test; do not edit planning docs inside the worktree`"
-      ],
-      `"end_checklist`": [
-        `"cargo fmt`",
-        `"Run the targeted tests you add/touch`",
-        `"Commit changes to the task branch; do not merge to orchestration; update docs; do not delete the worktree (cleanup at feature end)`"
-      ],
-      `"worktree`": `"wt/$Feature-c0-test`",
-      `"integration_task`": `"C0-integ`",
-      `"kickoff_prompt`": `"$featureDir/kickoff_prompts/C0-test.md`",
-      `"depends_on`": [],
-      `"concurrent_with`": [`"C0-code`"]
-    },
-    {
-      `"id`": `"C0-integ-core`",
-      `"name`": `"C0 slice (integration core)`",
-      `"type`": `"integration`",
-      `"phase`": `"C0`",
-      `"status`": `"pending`",
-      `"description`": `"Merge C0 code+tests and make the slice green on the primary dev platform.`",
-      `"references`": [`"$featureDir/plan.md`", `"$featureDir/C0-spec.md`"],
-      `"acceptance_criteria`": [`"Core slice is green under make integ-checks and matches the spec`"],
-      `"start_checklist`": [
-        `"git checkout feat/$Feature && git pull --ff-only`",
-        `"Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt`",
-        `"Set status to in_progress; add START entry; commit docs`",
-        `"Create branch c0-integ-core and worktree wt/$Feature-c0-integ-core; do not edit planning docs inside the worktree`"
-      ],
-      `"end_checklist`": [
-        `"cargo fmt`",
-        `"cargo clippy --workspace --all-targets -- -D warnings`",
-        `"Run relevant tests`",
-        `"make integ-checks`",
-        `"Dispatch cross-platform smoke via CI (record run ids/URLs): scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --platform all --workflow-ref `"feat/$Feature`" --cleanup`",
-        `"Commit worktree changes; do not merge to orchestration yet; update docs; do not delete the worktree (cleanup at feature end)`"
-      ],
-      `"worktree`": `"wt/$Feature-c0-integ-core`",
-      `"integration_task`": `"C0-integ-core`",
-      `"kickoff_prompt`": `"$featureDir/kickoff_prompts/C0-integ-core.md`",
-      `"depends_on`": [`"C0-code`", `"C0-test`"],
-      `"concurrent_with`": []
-    },
-    {
-      `"id`": `"C0-integ-linux`",
-      `"name`": `"C0 slice (integration linux)`",
-      `"type`": `"integration`",
-      `"phase`": `"C0`",
-      `"status`": `"pending`",
-      `"description`": `"Linux platform-fix integration task (may be a no-op if already green).`",
-      `"references`": [`"$featureDir/plan.md`", `"$featureDir/C0-spec.md`"],
-      `"acceptance_criteria`": [`"Linux smoke is green for this slice`"],
-      `"start_checklist`": [
-        `"Run on Linux host if possible`",
-        `"git checkout feat/$Feature && git pull --ff-only`",
-        `"Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt`",
-        `"Set status to in_progress; add START entry; commit docs`",
-        `"Create branch c0-integ-linux and worktree wt/$Feature-c0-integ-linux; do not edit planning docs inside the worktree`"
-      ],
-      `"end_checklist`": [
-        `"Dispatch platform smoke via CI: scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --platform linux --workflow-ref `"feat/$Feature`" --cleanup`",
-        `"If needed: fix + fmt/clippy + targeted tests`",
-        `"Ensure Linux smoke is green; record run id/URL`",
-        `"Commit changes to the platform-fix branch (if any); do not merge to orchestration; update docs; do not delete the worktree (cleanup at feature end)`"
-      ],
-      `"worktree`": `"wt/$Feature-c0-integ-linux`",
-      `"integration_task`": `"C0-integ-linux`",
-      `"kickoff_prompt`": `"$featureDir/kickoff_prompts/C0-integ-linux.md`",
-      `"depends_on`": [`"C0-integ-core`"],
-      `"concurrent_with`": [],
-      `"platform`": `"linux`",
-      `"runner`": `"github-actions`",
-      `"workflow`": `".github/workflows/feature-smoke.yml`"
-    },
-    {
-      `"id`": `"C0-integ-macos`",
-      `"name`": `"C0 slice (integration macOS)`",
-      `"type`": `"integration`",
-      `"phase`": `"C0`",
-      `"status`": `"pending`",
-      `"description`": `"macOS platform-fix integration task (may be a no-op if already green).`",
-      `"references`": [`"$featureDir/plan.md`", `"$featureDir/C0-spec.md`"],
-      `"acceptance_criteria`": [`"macOS smoke is green for this slice`"],
-      `"start_checklist`": [
-        `"Run on macOS host if possible`",
-        `"git checkout feat/$Feature && git pull --ff-only`",
-        `"Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt`",
-        `"Set status to in_progress; add START entry; commit docs`",
-        `"Create branch c0-integ-macos and worktree wt/$Feature-c0-integ-macos; do not edit planning docs inside the worktree`"
-      ],
-      `"end_checklist`": [
-        `"Dispatch platform smoke via CI: scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --platform macos --workflow-ref `"feat/$Feature`" --cleanup`",
-        `"If needed: fix + fmt/clippy + targeted tests`",
-        `"Ensure macOS smoke is green; record run id/URL`",
-        `"Commit changes to the platform-fix branch (if any); do not merge to orchestration; update docs; do not delete the worktree (cleanup at feature end)`"
-      ],
-      `"worktree`": `"wt/$Feature-c0-integ-macos`",
-      `"integration_task`": `"C0-integ-macos`",
-      `"kickoff_prompt`": `"$featureDir/kickoff_prompts/C0-integ-macos.md`",
-      `"depends_on`": [`"C0-integ-core`"],
-      `"concurrent_with`": [],
-      `"platform`": `"macos`",
-      `"runner`": `"github-actions`",
-      `"workflow`": `".github/workflows/feature-smoke.yml`"
-    },
-    {
-      `"id`": `"C0-integ-windows`",
-      `"name`": `"C0 slice (integration Windows)`",
-      `"type`": `"integration`",
-      `"phase`": `"C0`",
-      `"status`": `"pending`",
-      `"description`": `"Windows platform-fix integration task (may be a no-op if already green).`",
-      `"references`": [`"$featureDir/plan.md`", `"$featureDir/C0-spec.md`"],
-      `"acceptance_criteria`": [`"Windows smoke is green for this slice`"],
-      `"start_checklist`": [
-        `"Run on Windows host if possible`",
-        `"git checkout feat/$Feature && git pull --ff-only`",
-        `"Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt`",
-        `"Set status to in_progress; add START entry; commit docs`",
-        `"Create branch c0-integ-windows and worktree wt/$Feature-c0-integ-windows; do not edit planning docs inside the worktree`"
-      ],
-      `"end_checklist`": [
-        `"Dispatch platform smoke via CI: scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --platform windows --workflow-ref `"feat/$Feature`" --cleanup`",
-        `"If needed: fix + fmt/clippy + targeted tests`",
-        `"Ensure Windows smoke is green; record run id/URL`",
-        `"Commit changes to the platform-fix branch (if any); do not merge to orchestration; update docs; do not delete the worktree (cleanup at feature end)`"
-      ],
-      `"worktree`": `"wt/$Feature-c0-integ-windows`",
-      `"integration_task`": `"C0-integ-windows`",
-      `"kickoff_prompt`": `"$featureDir/kickoff_prompts/C0-integ-windows.md`",
-      `"depends_on`": [`"C0-integ-core`"],
-      `"concurrent_with`": [],
-      `"platform`": `"windows`",
-      `"runner`": `"github-actions`",
-      `"workflow`": `".github/workflows/feature-smoke.yml`"
-    },
-    {
-      `"id`": `"C0-integ`",
-      `"name`": `"C0 slice (integration final)`",
-      `"type`": `"integration`",
-      `"phase`": `"C0`",
-      `"status`": `"pending`",
-      `"description`": `"Final cross-platform integration: merge any platform fixes and confirm all platforms are green.`",
-      `"references`": [`"$featureDir/plan.md`", `"$featureDir/C0-spec.md`"],
-      `"acceptance_criteria`": [`"All required platforms are green and the slice matches the spec`"],
-      `"start_checklist`": [
-        `"git checkout feat/$Feature && git pull --ff-only`",
-        `"Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt`",
-        `"Set status to in_progress; add START entry; commit docs`",
-        `"Create branch c0-integ and worktree wt/$Feature-c0-integ; do not edit planning docs inside the worktree`"
-      ],
-      `"end_checklist`": [
-        `"Merge platform-fix branches (if any) + resolve conflicts`",
-        `"cargo fmt`",
-        `"cargo clippy --workspace --all-targets -- -D warnings`",
-        `"Run relevant tests`",
-        `"make integ-checks`",
-        `"Dispatch cross-platform smoke via CI (record run ids/URLs): scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --platform all --workflow-ref `"feat/$Feature`" --cleanup`",
-        `"Commit worktree changes; fast-forward merge this branch into feat/$Feature; update docs; do not delete the worktree (cleanup at feature end)`"
-      ],
-      `"worktree`": `"wt/$Feature-c0-integ`",
-      `"integration_task`": `"C0-integ`",
-      `"kickoff_prompt`": `"$featureDir/kickoff_prompts/C0-integ.md`",
-      `"depends_on`": [`"C0-integ-core`", `"C0-integ-linux`", `"C0-integ-macos`", `"C0-integ-windows`"],
-      `"concurrent_with`": []
-    }
-  ]
-}
-"@ | Set-Content -LiteralPath (Join-Path $featureDir "tasks.json")
-} else {
-@"
-{
-  `"meta`": {
-    `"schema_version`": 2,
-    `"feature`": `"$Feature`",
-    `"cross_platform`": false
-  },
-  `"tasks`": [
-    {
-      `"id`": `"C0-code`",
-      `"name`": `"C0 slice (code)`",
-      `"type`": `"code`",
-      `"phase`": `"C0`",
-      `"status`": `"pending`",
-      `"description`": `"Implement C0 spec (production code only).`",
-      `"references`": [`"$featureDir/plan.md`", `"$featureDir/C0-spec.md`"],
-      `"acceptance_criteria`": [`"Meets all acceptance criteria in C0-spec.md`"],
-      `"start_checklist`": [
-        `"git checkout feat/$Feature && git pull --ff-only`",
-        `"Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt`",
-        `"Set status to in_progress; add START entry; commit docs`",
-        `"Create branch c0-code and worktree wt/$Feature-c0-code; do not edit planning docs inside the worktree`"
-      ],
-      `"end_checklist`": [
-        `"cargo fmt`",
-        `"cargo clippy --workspace --all-targets -- -D warnings`",
-        `"Commit changes to the task branch; do not merge to orchestration; update docs; do not delete the worktree (cleanup at feature end)`"
-      ],
-      `"worktree`": `"wt/$Feature-c0-code`",
-      `"integration_task`": `"C0-integ`",
-      `"kickoff_prompt`": `"$featureDir/kickoff_prompts/C0-code.md`",
-      `"depends_on`": [],
-      `"concurrent_with`": [`"C0-test`"]
-    },
-    {
-      `"id`": `"C0-test`",
-      `"name`": `"C0 slice (test)`",
-      `"type`": `"test`",
-      `"phase`": `"C0`",
-      `"status`": `"pending`",
-      `"description`": `"Add/modify tests for C0 spec (tests only).`",
-      `"references`": [`"$featureDir/plan.md`", `"$featureDir/C0-spec.md`"],
-      `"acceptance_criteria`": [`"Tests enforce C0 acceptance criteria`"],
-      `"start_checklist`": [
-        `"git checkout feat/$Feature && git pull --ff-only`",
-        `"Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt`",
-        `"Set status to in_progress; add START entry; commit docs`",
-        `"Create branch c0-test and worktree wt/$Feature-c0-test; do not edit planning docs inside the worktree`"
-      ],
-      `"end_checklist`": [
-        `"cargo fmt`",
-        `"Run the targeted tests you add/touch`",
-        `"Commit changes to the task branch; do not merge to orchestration; update docs; do not delete the worktree (cleanup at feature end)`"
-      ],
-      `"worktree`": `"wt/$Feature-c0-test`",
-      `"integration_task`": `"C0-integ`",
-      `"kickoff_prompt`": `"$featureDir/kickoff_prompts/C0-test.md`",
-      `"depends_on`": [],
-      `"concurrent_with`": [`"C0-code`"]
-    },
-    {
-      `"id`": `"C0-integ`",
-      `"name`": `"C0 slice (integration)`",
-      `"type`": `"integration`",
-      `"phase`": `"C0`",
-      `"status`": `"pending`",
-      `"description`": `"Integrate C0 code+tests, reconcile to spec, and run integration gate.`",
-      `"references`": [`"$featureDir/plan.md`", `"$featureDir/C0-spec.md`"],
-      `"acceptance_criteria`": [`"Slice is green under make integ-checks and matches the spec`"],
-      `"start_checklist`": [
-        `"git checkout feat/$Feature && git pull --ff-only`",
-        `"Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt`",
-        `"Set status to in_progress; add START entry; commit docs`",
-        `"Create branch c0-integ and worktree wt/$Feature-c0-integ; do not edit planning docs inside the worktree`"
-      ],
-      `"end_checklist`": [
-        `"cargo fmt`",
-        `"cargo clippy --workspace --all-targets -- -D warnings`",
-        `"Run relevant tests`",
-        `"make integ-checks`",
-        `"Commit worktree changes; fast-forward merge this branch into feat/$Feature; update docs; do not delete the worktree (cleanup at feature end)`"
-      ],
-      `"worktree`": `"wt/$Feature-c0-integ`",
-      `"integration_task`": `"C0-integ`",
-      `"kickoff_prompt`": `"$featureDir/kickoff_prompts/C0-integ.md`",
-      `"depends_on`": [`"C0-code`", `"C0-test`"],
-      `"concurrent_with`": []
-    }
-  ]
-}
-"@ | Set-Content -LiteralPath (Join-Path $featureDir "tasks.json")
-}
-#>
+<# Legacy tasks.json generator removed (kept for history). #>
 
 function Render-Kickoff([string]$Template, [string]$OutFile, [string]$TaskId, [string]$Branch, [string]$Worktree, [string]$Platform = "") {
     $vars2 = $vars.Clone()
     $vars2["TASK_ID"] = $TaskId
-    $vars2["SPEC_FILE"] = "C0-spec.md"
+    $vars2["SPEC_FILE"] = $script:SliceSpecFile
     $vars2["BRANCH"] = $Branch
     $vars2["WORKTREE"] = $Worktree
     $vars2["PLATFORM"] = $Platform
     Render-Template (Join-Path $templatesDir $Template) (Join-Path $featureDir "kickoff_prompts/$OutFile") $vars2
 }
 
-$c0CodeBranch = if ($Automation.IsPresent) { "$Feature-c0-code" } else { "c0-code" }
-$c0TestBranch = if ($Automation.IsPresent) { "$Feature-c0-test" } else { "c0-test" }
-$c0IntegBranch = if ($Automation.IsPresent) { "$Feature-c0-integ" } else { "c0-integ" }
-$c0IntegCoreBranch = if ($Automation.IsPresent) { "$Feature-c0-integ-core" } else { "c0-integ-core" }
+$sliceCodeBranch = if ($Automation.IsPresent) { "$Feature-$($script:SliceIdLower)-code" } else { "$($script:SliceIdLower)-code" }
+$sliceTestBranch = if ($Automation.IsPresent) { "$Feature-$($script:SliceIdLower)-test" } else { "$($script:SliceIdLower)-test" }
+$sliceIntegBranch = if ($Automation.IsPresent) { "$Feature-$($script:SliceIdLower)-integ" } else { "$($script:SliceIdLower)-integ" }
+$sliceIntegCoreBranch = if ($Automation.IsPresent) { "$Feature-$($script:SliceIdLower)-integ-core" } else { "$($script:SliceIdLower)-integ-core" }
 
-Render-Kickoff "kickoff_code.md.tmpl" "C0-code.md" "C0-code" $c0CodeBranch "wt/$Feature-c0-code"
-Render-Kickoff "kickoff_test.md.tmpl" "C0-test.md" "C0-test" $c0TestBranch "wt/$Feature-c0-test"
+Render-Kickoff "kickoff_code.md.tmpl" "$codeId.md" $codeId $sliceCodeBranch "wt/$Feature-$($script:SliceIdLower)-code"
+Render-Kickoff "kickoff_test.md.tmpl" "$testId.md" $testId $sliceTestBranch "wt/$Feature-$($script:SliceIdLower)-test"
 Render-Kickoff "kickoff_exec_preflight.md.tmpl" "F0-exec-preflight.md" "F0-exec-preflight" "" "" ""
 if ($Automation.IsPresent) {
     Render-Kickoff "kickoff_feature_cleanup.md.tmpl" "FZ-feature-cleanup.md" "FZ-feature-cleanup" "" "" ""
 }
 if ($CrossPlatform.IsPresent) {
-    Render-Kickoff "kickoff_integ_core.md.tmpl" "C0-integ-core.md" "C0-integ-core" $c0IntegCoreBranch "wt/$Feature-c0-integ-core"
+    Render-Kickoff "kickoff_integ_core.md.tmpl" "$integCoreId.md" $integCoreId $sliceIntegCoreBranch "wt/$Feature-$($script:SliceIdLower)-integ-core"
     foreach ($p in $ciParityPlatformsList) {
         $p = $p.Trim()
         if (-not $p) { continue }
-        $branch = if ($Automation.IsPresent) { "$Feature-c0-integ-$p" } else { "c0-integ-$p" }
-        Render-Kickoff "kickoff_integ_platform.md.tmpl" "C0-integ-$p.md" "C0-integ-$p" $branch "wt/$Feature-c0-integ-$p" $p
+        $branch = if ($Automation.IsPresent) { "$Feature-$($script:SliceIdLower)-integ-$p" } else { "$($script:SliceIdLower)-integ-$p" }
+        $taskId = "$($script:SliceId)-integ-$p"
+        Render-Kickoff "kickoff_integ_platform.md.tmpl" "$taskId.md" $taskId $branch "wt/$Feature-$($script:SliceIdLower)-integ-$p" $p
     }
     if ($WslRequired.IsPresent -and $WslSeparate.IsPresent) {
-        Render-Kickoff "kickoff_integ_platform.md.tmpl" "C0-integ-wsl.md" "C0-integ-wsl" $(if ($Automation.IsPresent) { "$Feature-c0-integ-wsl" } else { "c0-integ-wsl" }) "wt/$Feature-c0-integ-wsl" "wsl"
+        $wslBranch = if ($Automation.IsPresent) { "$Feature-$($script:SliceIdLower)-integ-wsl" } else { "$($script:SliceIdLower)-integ-wsl" }
+        $wslTaskId = "$($script:SliceId)-integ-wsl"
+        Render-Kickoff "kickoff_integ_platform.md.tmpl" "$wslTaskId.md" $wslTaskId $wslBranch "wt/$Feature-$($script:SliceIdLower)-integ-wsl" "wsl"
     }
-    Render-Kickoff "kickoff_integ_final.md.tmpl" "C0-integ.md" "C0-integ" $c0IntegBranch "wt/$Feature-c0-integ"
+    Render-Kickoff "kickoff_integ_final.md.tmpl" "$integId.md" $integId $sliceIntegBranch "wt/$Feature-$($script:SliceIdLower)-integ"
 } else {
-    Render-Kickoff "kickoff_integ.md.tmpl" "C0-integ.md" "C0-integ" $c0IntegBranch "wt/$Feature-c0-integ"
+    Render-Kickoff "kickoff_integ.md.tmpl" "$integId.md" $integId $sliceIntegBranch "wt/$Feature-$($script:SliceIdLower)-integ"
 }
 
 		if ($DecisionHeavy.IsPresent -or $CrossPlatform.IsPresent) {
 		    "# Decision Register`n`nUse the template in:`n- `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`" |
 		        Set-Content -LiteralPath (Join-Path $featureDir "decision_register.md")
-		    "# Integration Map`n`nUse the standard in:`n- `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`" |
-		        Set-Content -LiteralPath (Join-Path $featureDir "integration_map.md")
 
 		    if ($CrossPlatform.IsPresent) {
 		        $lines = @()

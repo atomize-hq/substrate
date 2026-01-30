@@ -19,12 +19,14 @@ Constraints:
 
 Inputs (must read end-to-end):
 - The ADR(s) for the feature/track
-- The feature’s `decision_register.md`, `integration_map.md`, `plan.md`, `tasks.json`, `session_log.md`
+- `spec_manifest.md` for the feature/track
+- The feature’s `decision_register.md`, `impact_map.md`, `plan.md`, `tasks.json`, `session_log.md`
 - All specs in the track
 - `docs/project_management/next/sequencing.json`
 - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
 - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
 - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+- `docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md`
 - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 - `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
 - `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`
@@ -34,18 +36,21 @@ Review checklist (pass/fail):
    - Every major decision has exactly 2 viable options, both actually viable.
    - Pros/cons/implications/risks/unlocks/quick wins are complete and non-hand-wavy.
    - The selected option is justified and matches the constraints (security posture, platform parity, config format).
-2) Contract consistency:
+2) Spec coverage:
+   - `spec_manifest.md` enumerates every contract/protocol/schema/env-var surface implied by the ADR(s).
+   - Every surface is assigned to exactly one authoritative document.
+3) Contract consistency:
    - CLI commands/flags/defaults and exit codes are consistent across ADR/specs/playbooks.
    - Exit code meanings match `docs/project_management/standards/EXIT_CODE_TAXONOMY.md` unless an ADR explicitly overrides.
    - Config filenames/paths/precedence are consistent everywhere.
-3) Sequencing readiness:
+4) Sequencing readiness:
    - No task can start before prerequisites are integrated (tasks.json deps match sequencing.json).
-4) Testability:
+5) Testability:
    - Acceptance criteria are runnable and include expected exit codes/output.
    - Manual playbooks exist where required.
    - Smoke scripts exist where required and are referenced by the manual playbook.
    - If `tasks.json` opts into schema v2 cross-platform parity (`meta.schema_version >= 2` and `meta.ci_parity_platforms_required` or legacy `meta.platforms_required`), the required `X-integ-core`, `X-integ-<platform>`, and `X-integ` tasks exist and are correctly wired (platform-fix tasks range over CI parity platforms; smoke scripts range over behavior platforms).
-5) Auditability:
+6) Auditability:
    - Decisions map to triad task IDs via `references` and follow-up tasks.
 
 Required reviewer actions (non-negotiable):

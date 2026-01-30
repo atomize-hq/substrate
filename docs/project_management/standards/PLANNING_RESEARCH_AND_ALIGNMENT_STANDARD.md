@@ -60,16 +60,20 @@ Planning work must use these standards:
 - A runbook: scope boundaries, triad overview, invariants, and operator UX expectations.
   - Include a short triad sizing plan: each slice should represent one behavior delta and avoid “grab bag” scope (see `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`).
 
-2) `tasks.json`
+2) `spec_manifest.md`
+- Deterministically selects the exact spec documents required by the ADR(s) and assigns each contract/protocol/schema/env-var surface to exactly one authoritative document.
+  - Standard: `docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md`
+
+3) `tasks.json`
 - Triad tasks (code/test/integration) with explicit dependencies, references, and acceptance criteria.
 
-3) `session_log.md`
+4) `session_log.md`
 - Append-only START/END entries for planning and (later) execution sessions.
 
-4) Specs (`<slice>-spec*.md`)
+5) Specs (`<slice>-spec*.md`)
 - One or more spec slices with: scope, exact behavior, error handling, platform rules, acceptance criteria, out-of-scope.
 
-5) Kickoff prompts (`kickoff_prompts/<task>-{code,test,integ}.md`)
+6) Kickoff prompts (`kickoff_prompts/<task>-{code,test,integ}.md`)
 - Each prompt must clearly bound role responsibilities and required commands.
 
 ### 3.1.1 Strict task-triad interoperability (required)
@@ -103,8 +107,10 @@ Add these files when the work introduces new user contracts, config, or platform
 1) `decision_register.md`
 - A single source of truth for all architectural decisions.
 
-2) `integration_map.md`
-- An end-to-end map of affected components and how this work composes with adjacent tracks (config, policy, platform).
+2) `impact_map.md`
+- An end-to-end impact analysis that enumerates the touch set (files/surfaces) and documents cascading behavioral/UX implications and contradiction risks across the product.
+  - Standard: `docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md`
+  - Legacy: `integration_map.md` is deprecated and should not be created for new Planning Packs.
 
 3) `manual_testing_playbook.md`
 - A human-run checklist with explicit commands and expected exit codes/output. No “verify it works” steps.
@@ -204,21 +210,25 @@ Every Decision Register entry must be executable, not just readable. Therefore:
 
 ---
 
-## 5) Integration Map Standard
+## 5) Impact Map Standard (replaces integration_map.md)
 
-The integration map must be end-to-end and must answer:
+The impact map must be end-to-end and must answer:
+- What files/surfaces change (create/edit/deprecate/delete), with concrete repo-relative paths?
 - What components change (CLI, policy, world backends, installer scripts, schemas)?
-- What inputs exist (config files, env vars, manifests)?
-- What derived state exists (selection, routing, cage mode, backend identity)?
-- What actions happen and where (status vs sync vs provision vs replay)?
+- What externally-visible behavior/UX changes occur, and what second-order changes are required to keep the experience coherent?
+- What contradictions exist with current semantics, and how are they resolved deterministically?
 - What cross-track prerequisites exist and where they live in sequencing?
+- What overlaps/conflicts exist with queued/unimplemented ADRs and Planning Packs, and how are they resolved?
 
 Minimum sections:
-- Scope / non-scope
-- End-to-end data flow (inputs → derived state → actions)
-- Component map (what changes where)
-- Composition with adjacent tracks (explicit dependencies; no circulars)
+- Inputs (ADR(s) + spec_manifest)
+- Touch set (create/edit/deprecate/delete)
+- Cascading implications (behavior/UX) + contradiction risks
+- Cross-queue scan (ADRs + Planning Packs) and explicit resolutions
 - Sequencing alignment (final; no “placeholder” language)
+
+Standard:
+- `docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md`
 
 ---
 
@@ -358,7 +368,7 @@ Deliverables (must create files):
 - plan.md, tasks.json, session_log.md
 - specs: <list>
 - kickoff_prompts: <list>
-- decision_register.md, integration_map.md, manual_testing_playbook.md (required for UX/provisioning work)
+- decision_register.md, impact_map.md, manual_testing_playbook.md (required for UX/provisioning work; legacy: integration_map.md is deprecated)
 
 Decision rule:
 - Every architectural decision must be recorded as exactly two options with pros/cons/implications/risks/unlocks/quick wins,

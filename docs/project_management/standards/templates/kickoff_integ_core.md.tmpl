@@ -120,7 +120,7 @@ If any platform smoke fails:
     - `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="{{FEATURE_DIR}}" SLICE_ID="<slice>" SMOKE_RUN_ID="<run-id>" LAUNCH_CODEX=1`
   - If you dispatched per-platform smoke (multiple run ids):
     - `make triad-task-start-platform-fixes FEATURE_DIR="{{FEATURE_DIR}}" SLICE_ID="<slice>" PLATFORMS="<csv>" LAUNCH_CODEX=1`
-  - `<slice>` is the triad id prefix (e.g., `C0`, `C3`).
+  - `<slice>` is the triad id prefix (e.g., `{{SLICE_ID}}`, `X1`, `WCU3`).
   - `<run-id>` is the `RUN_ID` from the failing smoke run (only used for `triad-task-start-platform-fixes-from-smoke`).
   - `<csv>` is the comma-separated list of platforms you need platform-fix tasks for (typically the failing behavior platforms, plus `wsl` if `wsl_task_mode="separate"`).
 
