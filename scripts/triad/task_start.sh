@@ -36,6 +36,7 @@ Notes:
   - Feature registry location is deterministic and shared across worktrees:
     <git-common-dir>/triad/features/<feature>/worktrees.json
   - Codex artifacts are written under <feature_dir>/logs/<slice>/<task-kind>/ to avoid being deleted by `cargo clean`.
+  - For ops tasks (worktree=null), this script runs on the orchestration checkout (repo root) and does not create a worktree.
 USAGE
 }
 
@@ -312,9 +313,9 @@ KICKOFF_RELPATH="$(jq -r '.kickoff_prompt' <<<"${TASK_JSON}")"
 TASK_BRANCH="$(jq -r '.git_branch // empty' <<<"${TASK_JSON}")"
 
 case "${TASK_TYPE}" in
-    code|test|integration) ;;
+    code|test|integration|ops) ;;
     *)
-        die "task_start only supports code/test/integration tasks; got type=${TASK_TYPE}"
+        die "task_start only supports code/test/integration/ops tasks; got type=${TASK_TYPE}"
         ;;
 esac
 
@@ -325,17 +326,9 @@ require_feature_start_gates "${TASKS_JSON}" "${FEATURE_DIR_ABS}"
 # Task-level gating: refuse to start unless depends_on tasks are completed.
 require_task_deps_completed "${TASKS_JSON}" "${TASK_ID}"
 
-if [[ -z "${WORKTREE_RELPATH}" || "${WORKTREE_RELPATH}" == "null" ]]; then
-    die "tasks.json task.worktree must be set for ${TASK_ID}"
-fi
 if [[ -z "${KICKOFF_RELPATH}" || "${KICKOFF_RELPATH}" == "null" ]]; then
     die "tasks.json task.kickoff_prompt must be set for ${TASK_ID}"
 fi
-if [[ -z "${TASK_BRANCH}" ]]; then
-    die "tasks.json task.git_branch is required for automation packs (task ${TASK_ID})"
-fi
-
-WORKTREE_ABS="$(python_abs_path "${WORKTREE_RELPATH}")"
 KICKOFF_ABS="$(python_abs_path "${KICKOFF_RELPATH}")"
 
 if [[ ! -f "${KICKOFF_ABS}" ]]; then
@@ -581,12 +574,25 @@ checkout_orch_branch
 created_from_sha="$(git rev-parse HEAD)"
 created_at_utc="$(utc_now)"
 
-create_worktree_if_needed
+WORKTREE_ABS=""
+if [[ "${TASK_TYPE}" != "ops" ]]; then
+    if [[ -z "${WORKTREE_RELPATH}" || "${WORKTREE_RELPATH}" == "null" ]]; then
+        die "tasks.json task.worktree must be set for ${TASK_ID}"
+    fi
+    if [[ -z "${TASK_BRANCH}" ]]; then
+        die "tasks.json task.git_branch is required for automation packs (task ${TASK_ID})"
+    fi
+    WORKTREE_ABS="$(python_abs_path "${WORKTREE_RELPATH}")"
+    create_worktree_if_needed
 
-if [[ "${DRY_RUN}" -eq 0 ]]; then
-    mkdir -p "${REGISTRY_DIR}"
-    write_taskmeta "${created_from_sha}" "${created_at_utc}"
-    update_registry "${created_from_sha}" "${created_at_utc}"
+    if [[ "${DRY_RUN}" -eq 0 ]]; then
+        mkdir -p "${REGISTRY_DIR}"
+        write_taskmeta "${created_from_sha}" "${created_at_utc}"
+        update_registry "${created_from_sha}" "${created_at_utc}"
+    fi
+else
+    # Ops tasks run on the orchestration checkout (repo root) and do not create worktrees.
+    WORKTREE_ABS="${REPO_ROOT}"
 fi
 
 codex_cmd="codex exec --dangerously-bypass-approvals-and-sandbox --cd \"${WORKTREE_ABS}\""
