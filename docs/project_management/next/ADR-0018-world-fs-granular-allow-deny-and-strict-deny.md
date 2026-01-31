@@ -15,11 +15,12 @@
 
 ## Related Docs
 - Plan: `docs/project_management/next/world-fs-granular-allow-deny/plan.md`
+- Spec manifest: `docs/project_management/next/world-fs-granular-allow-deny/spec_manifest.md`
 - Decision Register: `docs/project_management/next/world-fs-granular-allow-deny/decision_register.md`
 - Schema (authoritative): `docs/project_management/next/world-fs-granular-allow-deny/SCHEMA.md`
 - Protocol (authoritative): `docs/project_management/next/world-fs-granular-allow-deny/PROTOCOL.md`
 - Env var contract (authoritative): `docs/project_management/next/world-fs-granular-allow-deny/ENV.md`
-- Integration map: `docs/project_management/next/world-fs-granular-allow-deny/integration_map.md`
+- Impact map: `docs/project_management/next/world-fs-granular-allow-deny/impact_map.md`
 - Manual playbook: `docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md`
 - Related ADRs / grounding:
   - Policy snapshot direction and threat model: `docs/project_management/next/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
@@ -30,7 +31,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 64ac13a560ad971697a15a9014565a944d30e2b146b80730223a2ed1f1e9cdb6
+ADR_BODY_SHA256: 63b12f77da720d80441ffaf697b974e60e3619f9b390b156b299bc39bd7c116a
 ### Changes (operator-facing)
 - Add granular `allow_list` + `deny_list` for world filesystem reads/writes (and optional directory visibility)
   - Existing: `world_fs.read_allowlist` / `world_fs.write_allowlist` are allowlist-only; invalid patterns (e.g., `..`) can be accepted but ignored; there is no deny list; “allow all except secrets” cannot be expressed.
@@ -46,7 +47,7 @@ ADR_BODY_SHA256: 64ac13a560ad971697a15a9014565a944d30e2b146b80730223a2ed1f1e9cdb
   - Why: Deny rules are intended to protect secrets under compromise, not only prevent accidental reads.
   - Links:
     - `docs/project_management/next/world-fs-granular-allow-deny/ENV.md`
-    - `docs/project_management/next/world-fs-granular-allow-deny/integration_map.md`
+    - `docs/project_management/next/world-fs-granular-allow-deny/impact_map.md`
 
 - Break policy snapshot and policy YAML schemas (no backwards compatibility)
   - Existing: World-agent accepts `PolicySnapshotV1` with `read_allowlist`/`write_allowlist`, and YAML/patch formats match that.

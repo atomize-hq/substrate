@@ -4,6 +4,20 @@ Status: Approved
 Owner: Substrate core team  
 Date: 2026-01-18  
 
+## Executive Summary (Operator)
+
+ADR_BODY_SHA256: f593408c9cc872e61a9c5fb74272f077ada540949a67630eae622cb43c1f1d14
+
+### Changes (operator-facing)
+- Host-resolved policy snapshot becomes the sole policy input to world-agent enforcement.
+  - Existing: world-agent resolves policy internally and relies on shared broker state, which can diverge from the invoking user’s effective policy and can contaminate concurrent requests.
+  - New: world-agent consumes an explicit host-provided policy snapshot per request/session and uses only that snapshot as the policy input to isolation enforcement.
+  - Why: eliminates global policy home mismatch and cross-request policy contamination; makes enforcement deterministic and auditable.
+  - Links:
+    - `crates/shell/src/execution/policy_snapshot.rs`
+    - `crates/world-agent/src/service.rs`
+    - `crates/world-agent/src/pty.rs`
+
 ## Context
 
 Substrate policy is designed to be resolved as a single “effective merged policy” per directory:

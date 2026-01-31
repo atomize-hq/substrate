@@ -1,29 +1,31 @@
-# Plan — World FS Granular Allow/Deny (V2) + Strict Deny
-
-This planning pack supports:
-- `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+# world-fs-granular-allow-deny — plan
 
 ## Scope
+- Feature directory: `docs/project_management/next/world-fs-granular-allow-deny`
+- Orchestration branch: `feat/world-fs-granular-allow-deny`
+- Spec ownership map: `docs/project_management/next/world-fs-granular-allow-deny/spec_manifest.md`
+- Impact map: `docs/project_management/next/world-fs-granular-allow-deny/impact_map.md`
+
 - Linux full isolation only (`world_fs.isolation=full`).
 - Breaking schema changes (no backwards compatibility).
 
-## Deliverables
-- ADR (accepted): `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
-- Schema (authoritative): `docs/project_management/next/world-fs-granular-allow-deny/SCHEMA.md`
-- Protocol (authoritative): `docs/project_management/next/world-fs-granular-allow-deny/PROTOCOL.md`
-- Env contract (authoritative): `docs/project_management/next/world-fs-granular-allow-deny/ENV.md`
-- Integration map: `docs/project_management/next/world-fs-granular-allow-deny/integration_map.md`
+## Goal
+- Implement ADR-0018 for Linux full isolation only with no backwards compatibility.
+
+## Guardrails (non-negotiable)
+- Specs are the single source of truth.
+- Planning Pack docs are edited only on the orchestration branch.
+- Do not edit planning docs inside the worktree.
+
+## Deliverables (authoritative)
+- ADR: `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+- Contract: `docs/project_management/next/world-fs-granular-allow-deny/contract.md`
+- Schema: `docs/project_management/next/world-fs-granular-allow-deny/SCHEMA.md`
+- Protocol: `docs/project_management/next/world-fs-granular-allow-deny/PROTOCOL.md`
+- Env var contract: `docs/project_management/next/world-fs-granular-allow-deny/ENV.md`
+- Security invariants: `docs/project_management/next/world-fs-granular-allow-deny/SECURITY.md`
+- Requirements mapping: `docs/project_management/next/world-fs-granular-allow-deny/requirements_traceability.md`
 - Manual testing playbook: `docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md`
 
-## Implementation phases (high-level)
-1) Schema + snapshot plumbing
-   - Broker policy schema v2 (no compat)
-   - `agent-api-types` snapshot v2 + request updates
-   - Shell emits v2 snapshots (non-PTY + persistent session)
-2) World-agent enforcement
-   - Helper applies deny masks + strict lockdown before `exec sh -c`
-   - Landlock allowlists updated for discover/read split
-3) Validation + ergonomics
-   - Unit/integration tests
-   - Manual playbook + smoke scripts
-
+## Triads
+- C0: V2 policy snapshot + strict deny (code/test/integ)

@@ -1,54 +1,97 @@
-# Quality Gate Report — World FS Granular Allow/Deny (V2) + Strict Deny
+# Planning Quality Gate Report — world-fs-granular-allow-deny
 
-This report is the execution-phase “source of truth” checklist for planning completeness and zero-ambiguity specs.
+RECOMMENDATION: ACCEPT
 
-Authoritative spec pack:
-- `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
-- `docs/project_management/next/world-fs-granular-allow-deny/contract.md`
-- `docs/project_management/next/world-fs-granular-allow-deny/SCHEMA.md`
-- `docs/project_management/next/world-fs-granular-allow-deny/PROTOCOL.md`
-- `docs/project_management/next/world-fs-granular-allow-deny/ENV.md`
-- `docs/project_management/next/world-fs-granular-allow-deny/SECURITY.md`
+## Metadata
+- Feature directory: `docs/project_management/next/world-fs-granular-allow-deny`
+- Reviewed commit: `f6c1ca2e8e439df51ea57577e48ffdebf138f9bb`
+- Reviewer: Codex CLI (automated planning update)
+- Date (UTC): 2026-01-31
 
-## Mechanical planning gates
-- ADR executive summary hash:
-  - `make adr-check ADR=docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
-- tasks.json validation:
-  - `make planning-validate FEATURE_DIR="docs/project_management/next/world-fs-granular-allow-deny"`
+## Evidence: Commands Run (verbatim)
+- `make planning-lint FEATURE_DIR="docs/project_management/next/world-fs-granular-allow-deny"` → `0` → `PASS`
+- `python3 scripts/planning/check_adr_exec_summary.py --adr docs/project_management/next/ADR-0014-world-agent-policy-resolution-and-concurrency.md --fix` → `0` → `PASS`
+- `python3 scripts/planning/check_adr_exec_summary.py --adr docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md --fix` → `0` → `PASS`
+- `python3 scripts/planning/check_adr_exec_summary.py --adr docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md --fix` → `0` → `PASS`
+
+## Required Inputs Read End-to-End (checklist)
+- ADR(s): `YES`
+- `docs/project_management/next/world-fs-granular-allow-deny/spec_manifest.md`: `YES`
+- `docs/project_management/next/world-fs-granular-allow-deny/plan.md`: `YES`
+- `docs/project_management/next/world-fs-granular-allow-deny/tasks.json`: `YES`
+- `docs/project_management/next/world-fs-granular-allow-deny/session_log.md`: `YES`
+- All specs in scope: `YES`
+- `docs/project_management/next/world-fs-granular-allow-deny/decision_register.md`: `YES`
+- `docs/project_management/next/world-fs-granular-allow-deny/impact_map.md`: `YES`
+- `docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md`: `YES`
+- Feature smoke scripts under `docs/project_management/next/world-fs-granular-allow-deny/smoke/`: `N/A` (no smoke directory)
+- `docs/project_management/next/sequencing.json`: `YES`
+- Standards:
+  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
+  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
+  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`: `YES`
 
 ## Gate Results (PASS/FAIL with evidence)
 
-### 1) Zero-ambiguity contracts (no open questions)
-- Result: `PASS` (docs)
-- Evidence required:
-  - All MUST statements in `contract.md`, `SCHEMA.md`, `PROTOCOL.md`, `ENV.md`, `SECURITY.md` are mapped in `requirements_traceability.md`.
+### 1) Zero-ambiguity contracts
+- Result: `PASS`
+- Evidence:
+  - `docs/project_management/next/world-fs-granular-allow-deny/contract.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny/SCHEMA.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny/PROTOCOL.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny/ENV.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny/SECURITY.md`
+- Notes:
+  - Normative MUST/MUST NOT statements are mapped to tasks and validation steps in `docs/project_management/next/world-fs-granular-allow-deny/requirements_traceability.md`.
 
-### 2) Decision quality (A/B options, explicit selection)
-- Result: `PASS` (docs)
-- Evidence required:
-  - `docs/project_management/next/world-fs-granular-allow-deny/decision_register.md`
+### 2) Decision quality (2 options, explicit tradeoffs, explicit selection)
+- Result: `PASS`
+- Evidence: `docs/project_management/next/world-fs-granular-allow-deny/decision_register.md` (DR-0001 through DR-0008)
+- Notes: Each DR entry is recorded as A/B with explicit selection.
 
 ### 3) Cross-doc consistency (CLI/config/exit codes/paths)
-- Result: `PASS` (docs)
-- Evidence required:
-  - `contract.md` is the conflict resolver; other docs link to it and do not contradict it.
+- Result: `PASS`
+- Evidence:
+  - `docs/project_management/next/world-fs-granular-allow-deny/spec_manifest.md` (ownership map)
+  - `docs/project_management/next/world-fs-granular-allow-deny/contract.md` (conflict resolver)
+- Notes: Contract surfaces are owned by one document per `spec_manifest.md`.
 
-### 4) Testability and validation readiness
-- Result: `PENDING` (requires implementation + test runs)
-- Evidence required:
-  - `manual_testing_playbook.md` includes strict bypass attempt and expected outcome.
-  - Integration tests cover strict deny and deny-overrides-allow semantics.
+### 4) Sequencing and dependency alignment
+- Result: `PASS`
+- Evidence:
+  - `docs/project_management/next/sequencing.json` includes `docs/project_management/next/world-fs-granular-allow-deny`.
+  - `docs/project_management/next/world-fs-granular-allow-deny/tasks.json` deps are internally consistent.
 
-## Findings (must be exhaustive)
-- Finding 001 — Planning pack created (docs-only)
-  - Status: `VERIFIED`
-  - Evidence:
-    - Files exist: `contract.md`, `tasks.json`, `requirements_traceability.md`, `quality_gate_report.md`, `SECURITY.md`
+### 5) Testability and validation readiness
+- Result: `PASS`
+- Evidence:
+  - `docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny/requirements_traceability.md`
+- Notes: Smoke scripts are not in scope until execution adds `docs/project_management/next/world-fs-granular-allow-deny/smoke/`.
 
-- Finding 002 — Spec pack tightened to zero-ambiguity contract
-  - Status: `VERIFIED`
-  - Evidence:
-    - Workspace vs full isolation is hard-error-scoped in `contract.md` and `SCHEMA.md`.
-    - Pattern grammar is deterministic (no engine-dependent behavior) and examples are provided in `SCHEMA.md`.
-    - Protocol rejection signaling is specified for HTTP and WS in `PROTOCOL.md`.
-    - Env var helper invocation and enforcement plan schema are explicit in `ENV.md`.
+### 5.1) Cross-platform parity task structure (schema v2/v3/v4)
+- Result: `N/A` (meta.cross_platform=false)
+
+### 6) Triad interoperability (execution workflow)
+- Result: `PASS`
+- Evidence:
+  - `docs/project_management/next/world-fs-granular-allow-deny/tasks.json` schema v4 with automation enabled.
+  - kickoff prompts include the sentinel `Do not edit planning docs inside the worktree.`
+
+## Findings (exhaustive)
+
+### Finding 001 — Planning Pack meets v4 mechanical requirements
+- Status: `VERIFIED`
+- Evidence: `make planning-lint FEATURE_DIR="docs/project_management/next/world-fs-granular-allow-deny"` exit `0`
+- Impact: Enables triad automation and deterministic review gates.
+- Fix required (exact): `NONE`
+
+### Finding 002 — Legacy integration map replaced by impact map
+- Status: `VERIFIED`
+- Evidence: `docs/project_management/next/world-fs-granular-allow-deny/impact_map.md`
+- Impact: Planning Pack has a single authoritative touch set and cross-queue scan surface.
+- Fix required (exact): `NONE`
+
+## Decision: ACCEPT
+- Summary: Planning Pack is execution-ready (mechanical lint passes; specs are explicit; triad automation is wired).
+- Next step: Execution triads may begin.

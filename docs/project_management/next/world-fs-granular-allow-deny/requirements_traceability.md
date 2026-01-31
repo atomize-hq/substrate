@@ -12,7 +12,7 @@ Authoritative spec pack (no drift allowed):
 - `docs/project_management/next/world-fs-granular-allow-deny/ENV.md`
 - `docs/project_management/next/world-fs-granular-allow-deny/SECURITY.md`
 - `docs/project_management/next/world-fs-granular-allow-deny/decision_register.md`
-- `docs/project_management/next/world-fs-granular-allow-deny/integration_map.md`
+- `docs/project_management/next/world-fs-granular-allow-deny/impact_map.md`
 - `docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md`
 
 ## Canonical requirements (stable IDs)

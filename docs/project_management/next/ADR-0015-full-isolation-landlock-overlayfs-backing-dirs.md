@@ -24,8 +24,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: e2e35964543818cb613112ba9325f5b183727aab284ce90a32d1070a7a9aba40
-
+ADR_BODY_SHA256: 095953089da59f2a338b1e13e3f52ad448de588763b2a95bfa11e5a9164cd5ac
 ### Changes (operator-facing)
 - Full isolation writable allowlists stop failing with EPERM on Linux
   - Existing: With `world_fs.isolation=full` and `world_fs.mode=writable`, project writes can fail with `Operation not permitted` even when `world_fs.write_allowlist` explicitly allows the target project prefix.
