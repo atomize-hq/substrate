@@ -2,6 +2,9 @@
 
 This map ties the planning artifacts to concrete code surfaces and validation points.
 
+Deprecated:
+- Replaced by `docs/project_management/next/warn-config-global-show-workspace-overrides/impact_map.md`
+
 ## Primary code surfaces
 
 ### CLI implementation

@@ -13,15 +13,36 @@ It specifies the protocol surfaces that carry `PolicySnapshotV2` to world-agent.
 `ExecuteRequest.policy_snapshot` MUST use `PolicySnapshotV2`.
 
 Fail-closed rules:
-- If `policy_snapshot.schema_version != 2`, world-agent MUST reject the request as invalid (HTTP 400).
-- If `world_fs.isolation=workspace` includes deny/strict fields, world-agent MUST reject the request as invalid (HTTP 400).
+- World-agent MUST validate `policy_snapshot` against `docs/project_management/next/world-fs-granular-allow-deny/SCHEMA.md`.
+- On any schema violation (wrong `schema_version`, unknown fields, invalid key combinations, or invalid patterns), world-agent MUST reject the request as invalid (HTTP 400).
+
+### 1.1 Rejection response shape (grounded in `crates/world-agent/src/handlers.rs`)
+For HTTP 400 rejections, the response body MUST be JSON with the following shape:
+```json
+{ "error": "<human-readable diagnostic>" }
+```
 
 ## 2) WebSocket `/v1/stream` `start_session`
 The REPL persistent-session protocol includes `start_session.policy_snapshot`.
 
 Rules:
 - `start_session.policy_snapshot` MUST be `PolicySnapshotV2` (schema_version 2).
-- World-agent MUST reject the session start if schema validation fails.
+- World-agent MUST validate `start_session.policy_snapshot` against `docs/project_management/next/world-fs-granular-allow-deny/SCHEMA.md`.
+- On any schema violation, world-agent MUST reject the session start as invalid.
+
+### 2.1 Rejection signaling (grounded in `crates/world-agent/src/pty.rs`)
+For invalid `start_session` frames (including invalid JSON, unsupported `protocol_version`, or invalid `policy_snapshot`):
+- World-agent MUST send a single fatal error frame with the following JSON shape:
+  ```json
+  {
+    "type": "error",
+    "code": "bad_request|unsupported_protocol_version",
+    "message": "<human-readable diagnostic>",
+    "fatal": true
+  }
+  ```
+- `seq` MUST be omitted for `start_session` failures.
+- After sending the fatal error frame, world-agent MUST close the WebSocket connection (no session is established).
 
 ## 3) Snapshot hashing and drift
 Host-side drift detection hashes the entire snapshot JSON payload.
@@ -35,4 +56,3 @@ Because compat is explicitly forbidden by ADR-0018:
 - A V2-emitting shell talking to a V1-only world-agent will fail.
 - A V2-only world-agent receiving V1 snapshots will fail.
 - Operator rollout MUST treat shell + world-agent as a lockstep update.
-

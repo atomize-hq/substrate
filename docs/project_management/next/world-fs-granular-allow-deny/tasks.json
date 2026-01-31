@@ -56,12 +56,12 @@
         "docs/project_management/next/world-fs-granular-allow-deny/SCHEMA.md"
       ],
       "acceptance_criteria": [
-        "Unit tests cover schema hard errors (legacy keys, invalid patterns, workspace deny disallowed)",
-        "Integration tests cover deny-overrides-allow and strict bypass prevention on Linux full isolation"
+        "Unit tests cover schema hard errors (legacy keys, invalid patterns, workspace deny disallowed, enforcement/deny invariants, deny requires require_world=true)",
+        "Integration tests cover deny-overrides-allow, strict bypass prevention (mount/umount), deny enforcement across both `/project/...` and `$SUBSTRATE_MOUNT_PROJECT_DIR/...`, deterministic deny errno behavior (`EACCES`/`EROFS`), and enforcement-plan parse/validation failures (fail closed) on Linux full isolation"
       ],
       "start_checklist": [
         "Map tests to requirements_traceability.md Req IDs",
-        "Decide gating behavior for kernels without Landlock support (fail closed vs skip) per contract"
+        "Ensure tests are deterministic across kernels: Landlock-dependent integration tests MUST detect Landlock support and skip (with an explicit message) when unsupported; schema validation tests MUST always run"
       ],
       "end_checklist": [
         "Update requirements_traceability.md with any new stable requirement IDs",
@@ -110,4 +110,3 @@
     }
   ]
 }
-

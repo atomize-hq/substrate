@@ -1,7 +1,7 @@
 # Plan — Warn on `config global show` when workspace config overrides
 
 This plan is anchored by:
-- `docs/project_management/next/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md`
+- `docs/project_management/adrs/draft/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md`
 - `docs/project_management/next/warn-config-global-show-workspace-overrides/decision_register.md`
 
 ## Goal
@@ -33,10 +33,12 @@ effective config view: `substrate config show --explain`.
 - `docs/project_management/next/warn-config-global-show-workspace-overrides/plan.md`
 - `docs/project_management/next/warn-config-global-show-workspace-overrides/tasks.json`
 - `docs/project_management/next/warn-config-global-show-workspace-overrides/session_log.md`
+- `docs/project_management/next/warn-config-global-show-workspace-overrides/spec_manifest.md`
 - Spec (slice-level): `docs/project_management/next/warn-config-global-show-workspace-overrides/C0-spec.md`
 - Contract: `docs/project_management/next/warn-config-global-show-workspace-overrides/contract.md`
 - Decision Register: `docs/project_management/next/warn-config-global-show-workspace-overrides/decision_register.md`
-- Integration Map: `docs/project_management/next/warn-config-global-show-workspace-overrides/integration_map.md`
+- Impact Map: `docs/project_management/next/warn-config-global-show-workspace-overrides/impact_map.md`
+- CI checkpoint plan: `docs/project_management/next/warn-config-global-show-workspace-overrides/ci_checkpoint_plan.md`
 - Manual Playbook: `docs/project_management/next/warn-config-global-show-workspace-overrides/manual_testing_playbook.md`
 - Smoke scripts:
   - `docs/project_management/next/warn-config-global-show-workspace-overrides/smoke/linux-smoke.sh`
@@ -87,7 +89,7 @@ Tests MUST cover:
 
 ## CI dispatch policy (recommended-first)
 
-Integration tasks use:
+Checkpoint tasks and platform-fix tasks use:
 - `scripts/ci-audit/ci_audit.sh` (recommended before dispatch)
 - `scripts/ci/dispatch_ci_testing.sh` (compile/test parity)
 - `scripts/ci/dispatch_feature_smoke.sh` (feature smoke scripts)

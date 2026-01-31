@@ -126,7 +126,7 @@ If any platform smoke fails:
 
 If behavioral smoke is green for all behavior platforms:
 - Platform-fix tasks (if present in the pack) may still be required for CI-only failures (e.g., clippy warnings on macOS/Windows), so do not mark them no-op yet.
-- The wrapper/final gate should run CI Testing; if CI Testing is green, then mark platform-fix tasks `completed` as no-ops to unblock the final aggregator’s `depends_on`:
+- The wrapper/final gate MUST run CI Testing; if CI Testing is green, then mark platform-fix tasks `completed` as no-ops to unblock the final aggregator’s `depends_on`:
   - `scripts/triad/mark_noop_platform_fixes_completed.sh --feature-dir "docs/project_management/next/warn-config-global-show-workspace-overrides" --slice-id "<slice>"` (optional: add `--from-smoke-run "<run-id>"` for logging)
 
 Once all required platform-fix tasks are completed, ask the operator to start the final aggregator from the orchestration checkout:
@@ -136,12 +136,14 @@ Once all required platform-fix tasks are completed, ask the operator to start th
 ## End Checklist
 1. Ensure your merged state is committed and local integration gates are green:
    - From inside the worktree, run: `make triad-task-finish TASK_ID="C0-integ-core"`
-2. Smoke gate (dispatch or skip per ci-audit):
-   - If ci-audit recommends `RECOMMEND=run`, dispatch cross-platform smoke from this worktree and include these exact key/value lines in your handoff (wrapper agents parse them):
+2. Checkpoint gate (`CP1-ci-checkpoint`):
+   - Do not dispatch cross-platform smoke from this worktree.
+   - From the orchestration checkout, start and complete `CP1-ci-checkpoint` using `docs/project_management/next/warn-config-global-show-workspace-overrides/kickoff_prompts/CP1-ci-checkpoint.md`.
+   - If `ci_audit` recommends `RECOMMEND=skip` (including `DIFF_CLASS=docs_only`), do not dispatch; include the audit output lines in the handoff.
+   - If dispatch runs, include the smoke run evidence in the handoff:
      - `RUN_ID=<id>`
-     - `RUN_URL=<url>` (if printed)
+     - `RUN_URL=<url>`
      - `SMOKE_PASSED_PLATFORMS=<csv>`
-     - `SMOKE_FAILED_PLATFORMS=<csv>` (empty means success)
-   - If ci-audit recommends `RECOMMEND=skip` (including `DIFF_CLASS=docs_only`), do not dispatch smoke; include the ci-audit output lines (at minimum `RECOMMEND=...`, `REASON=...`, and last-green run id/URL if available) in your handoff.
+     - `SMOKE_FAILED_PLATFORMS=<csv>`
 3. Hand off run ids/URLs and next-step instructions to the operator (do not edit planning docs inside the worktree).
 4. Do not delete the worktree (feature cleanup removes worktrees at feature end).

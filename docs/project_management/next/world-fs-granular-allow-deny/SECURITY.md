@@ -53,8 +53,8 @@ If the workload retains mount authority in its namespace (e.g., due to userns ro
 ## Scope constraints
 - Strict/best-effort enforcement is supported only in `world_fs.isolation=full`.
 - Any attempt to configure strict/best-effort in `world_fs.isolation=workspace` is a hard error (no “ignore” behavior).
+- If any `deny_list` is non-empty, `world_fs.require_world` MUST be `true` (deny rules cannot be configured in a mode that allows fallback/degradation).
 
 ## Known limitations
-- Filename glob denies (e.g., `**/*.pem`) are enforced as “snapshot at exec start” per `SCHEMA.md`.
+- Wildcard denies (e.g., `**/*.pem`) are enforced as “snapshot at exec start” per `SCHEMA.md`.
 - This feature does not guarantee denial of files created/renamed and accessed within a single long-running process after exec.
-

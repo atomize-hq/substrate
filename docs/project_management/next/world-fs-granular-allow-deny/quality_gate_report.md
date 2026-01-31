@@ -19,22 +19,22 @@ Authoritative spec pack:
 ## Gate Results (PASS/FAIL with evidence)
 
 ### 1) Zero-ambiguity contracts (no open questions)
-- Result: `PENDING`
+- Result: `PASS` (docs)
 - Evidence required:
   - All MUST statements in `contract.md`, `SCHEMA.md`, `PROTOCOL.md`, `ENV.md`, `SECURITY.md` are mapped in `requirements_traceability.md`.
 
 ### 2) Decision quality (A/B options, explicit selection)
-- Result: `PENDING`
+- Result: `PASS` (docs)
 - Evidence required:
   - `docs/project_management/next/world-fs-granular-allow-deny/decision_register.md`
 
 ### 3) Cross-doc consistency (CLI/config/exit codes/paths)
-- Result: `PENDING`
+- Result: `PASS` (docs)
 - Evidence required:
   - `contract.md` is the conflict resolver; other docs link to it and do not contradict it.
 
 ### 4) Testability and validation readiness
-- Result: `PENDING`
+- Result: `PENDING` (requires implementation + test runs)
 - Evidence required:
   - `manual_testing_playbook.md` includes strict bypass attempt and expected outcome.
   - Integration tests cover strict deny and deny-overrides-allow semantics.
@@ -45,3 +45,10 @@ Authoritative spec pack:
   - Evidence:
     - Files exist: `contract.md`, `tasks.json`, `requirements_traceability.md`, `quality_gate_report.md`, `SECURITY.md`
 
+- Finding 002 — Spec pack tightened to zero-ambiguity contract
+  - Status: `VERIFIED`
+  - Evidence:
+    - Workspace vs full isolation is hard-error-scoped in `contract.md` and `SCHEMA.md`.
+    - Pattern grammar is deterministic (no engine-dependent behavior) and examples are provided in `SCHEMA.md`.
+    - Protocol rejection signaling is specified for HTTP and WS in `PROTOCOL.md`.
+    - Env var helper invocation and enforcement plan schema are explicit in `ENV.md`.

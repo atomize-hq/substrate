@@ -18,7 +18,7 @@ RECOMMENDATION: **ACCEPT** | **REVISE**
 - [ ] ADR accepted and still matches intent
 - [ ] Planning Pack complete (`plan.md`, `tasks.json`, `session_log.md`, specs, kickoff prompts)
 - [ ] Triad sizing is appropriate (each slice is one behavior delta; no “grab bag” slices)
-- [ ] Required planning artifacts exist (when required by planning standards): `integration_map.md`, `manual_testing_playbook.md`
+- [ ] Required planning artifacts exist (when required by planning standards): `spec_manifest.md`, `impact_map.md`, `ci_checkpoint_plan.md`, `manual_testing_playbook.md`
 - [ ] Cross-platform plan is explicit (tasks.json meta: behavior + CI parity platforms, plus WSL mode if needed)
 
 ## 0) Slice Sizing (one behavior delta each)
@@ -61,7 +61,7 @@ Gaps (must fix before execution begins):
 
 ## 3) CI Dispatch Path Is Runnable (if applicable)
 
-Integration task dispatch commands (copy verbatim from `tasks.json` integration checklists):
+Checkpoint task dispatch commands (copy verbatim from `docs/project_management/next/warn-config-global-show-workspace-overrides/kickoff_prompts/CP1-ci-checkpoint.md`):
 - CI compile parity:
 - Feature Smoke dispatch:
 - Advisory CI audit (recommended before any dispatch):
@@ -71,7 +71,7 @@ Integration task dispatch commands (copy verbatim from `tasks.json` integration 
     - `scripts/ci-audit/ci_audit_record.sh --ledger-path "docs/project_management/next/warn-config-global-show-workspace-overrides/logs/<slice>/ci-audit/ledger.jsonl" --kind <ci-testing|feature-smoke> --orch-branch "<orch-branch>" --run-id "<id>" --tested-sha "<sha>" --feature-dir "docs/project_management/next/warn-config-global-show-workspace-overrides"`
 
 Policy note:
-- Docs/planning-only changes (anything under `docs/`) may skip all CI/smoke. `ci_audit.sh` should recommend `RECOMMEND=skip` with `DIFF_CLASS=docs_only`.
+- Docs/planning-only changes (anything under `docs/`) may skip all CI/smoke. `ci_audit.sh` MUST report `RECOMMEND=skip` with `DIFF_CLASS=docs_only`.
 
 Runner readiness:
 - Required self-hosted runners exist and are labeled correctly:

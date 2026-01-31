@@ -1,42 +1,105 @@
-# Planning Gate Report — warn-config-global-show-workspace-overrides
+# Planning Quality Gate Report — warn-config-global-show-workspace-overrides
 
-Date (UTC): 2026-01-30T00:04:13Z
+## Metadata
+- Feature directory: `docs/project_management/next/warn-config-global-show-workspace-overrides/`
+- Reviewed commit: `0c37e3c751668a2b2448354067ebdd9de4dbae02`
+- Reviewer: `codex-cli (agent)`
+- Date (UTC): `2026-01-31`
+- Recommendation: `ACCEPT`
 
-Reviewer: (pending)
+RECOMMENDATION: ACCEPT
 
-Plan: `docs/project_management/next/warn-config-global-show-workspace-overrides/plan.md`
-ADR: `docs/project_management/next/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md`
+## Evidence: Commands Run (verbatim)
 
-## Recommendation
+```bash
+FEATURE_DIR="docs/project_management/next/warn-config-global-show-workspace-overrides"
 
-**FLAG FOR HUMAN REVIEW**
+# JSON validity
+jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
+jq -e . docs/project_management/next/sequencing.json >/dev/null
 
-Reason:
-- Planning pack was generated/filled, but local lint/quality checks were not run in this environment
-  (owner will run them).
+# tasks.json invariants
+python3 scripts/planning/validate_tasks_json.py --feature-dir "$FEATURE_DIR"
 
-## Checklist (what to validate)
+# spec manifest + checkpoints
+python3 scripts/planning/validate_spec_manifest.py --feature-dir "$FEATURE_DIR"
+python3 scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "$FEATURE_DIR"
 
-### Doc completeness
-- [ ] Plan/spec/contract/decision register are present and consistent.
-- [ ] Tasks are triad-structured and references resolve.
-- [ ] Manual testing playbook exists and is mirrored by smoke scripts.
-- [ ] ADR exists and has a valid `ADR_BODY_SHA256` (run `make adr-check` or the script below).
+# ADR exec-summary drift
+python3 scripts/planning/check_adr_exec_summary.py --adr docs/project_management/adrs/draft/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md
+python3 scripts/planning/check_adr_exec_summary.py --adr docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md
+python3 scripts/planning/check_adr_exec_summary.py --adr docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md
 
-### Suggested commands (run by owner)
+# Mechanical Planning Pack lint (includes smoke linkage, kickoff sentinel, sequencing alignment)
+scripts/planning/lint.sh --feature-dir "$FEATURE_DIR"
+```
 
-> NOTE: Do not run these in this environment if you are deferring linting/quality gates to a separate workflow.
+Exit codes:
+- `jq` checks → `0`
+- `validate_tasks_json.py` → `0`
+- `validate_spec_manifest.py` → `0`
+- `validate_ci_checkpoint_plan.py` → `0`
+- ADR exec-summary drift checks → `0`
+- `scripts/planning/lint.sh` → `0`
 
-- Planning lint:
-  - `scripts/planning/lint.sh --feature-dir docs/project_management/next/warn-config-global-show-workspace-overrides`
-- Tasks schema check:
-  - `scripts/planning/check_tasks_json.py --feature-dir docs/project_management/next/warn-config-global-show-workspace-overrides`
-- ADR exec summary drift check:
-  - `scripts/planning/check_adr_exec_summary.py --adr docs/project_management/next/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md`
-- Kickoff prompt sentinel check:
-  - `scripts/planning/ensure_kickoff_prompt_sentinel.py --feature-dir docs/project_management/next/warn-config-global-show-workspace-overrides`
+## Required Inputs Read End-to-End (checklist)
+- ADR(s): `YES`
+- `spec_manifest.md`: `YES`
+- `plan.md`: `YES`
+- `tasks.json`: `YES`
+- `session_log.md`: `YES`
+- All specs in scope: `YES` (`C0-spec.md`)
+- `decision_register.md`: `YES`
+- `impact_map.md`: `YES`
+- `manual_testing_playbook.md`: `YES`
+- Feature smoke scripts under `smoke/`: `YES`
+- `docs/project_management/next/sequencing.json`: `YES`
+- Standards:
+  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
+  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
+  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`: `YES`
 
-## Evidence
+## Gate Results (PASS/FAIL with evidence)
 
-- Commands run: (pending)
-- Outputs/artifacts: (pending)
+### 1) Zero-ambiguity contracts
+- Result: `PASS`
+- Evidence: `docs/project_management/next/warn-config-global-show-workspace-overrides/contract.md`
+
+### 2) Decision quality (2 options, explicit tradeoffs, explicit selection)
+- Result: `PASS`
+- Evidence: `docs/project_management/next/warn-config-global-show-workspace-overrides/decision_register.md`
+
+### 3) Cross-doc consistency (CLI/config/exit codes/paths)
+- Result: `PASS`
+- Evidence:
+  - `docs/project_management/adrs/draft/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md`
+  - `docs/project_management/next/warn-config-global-show-workspace-overrides/C0-spec.md`
+  - `docs/project_management/next/warn-config-global-show-workspace-overrides/contract.md`
+
+### 4) Sequencing and dependency alignment
+- Result: `PASS`
+- Evidence:
+  - `docs/project_management/next/sequencing.json` sprint: `warn_config_global_show_workspace_overrides`
+  - `docs/project_management/next/warn-config-global-show-workspace-overrides/tasks.json`
+
+### 5) Testability and validation readiness
+- Result: `PASS`
+- Evidence:
+  - Manual playbook: `docs/project_management/next/warn-config-global-show-workspace-overrides/manual_testing_playbook.md`
+  - Smoke scripts: `docs/project_management/next/warn-config-global-show-workspace-overrides/smoke/`
+  - Integration tasks reference smoke: `docs/project_management/next/warn-config-global-show-workspace-overrides/tasks.json`
+
+### 5.1) Cross-platform parity task structure (schema v4)
+- Result: `PASS`
+- Evidence:
+  - `docs/project_management/next/warn-config-global-show-workspace-overrides/ci_checkpoint_plan.md`
+  - `docs/project_management/next/warn-config-global-show-workspace-overrides/tasks.json`
+
+### 6) Triad interoperability (execution workflow)
+- Result: `PASS`
+- Evidence:
+  - Kickoff prompts contain sentinel phrase: `docs/project_management/next/warn-config-global-show-workspace-overrides/kickoff_prompts/`
+
+## Decision: ACCEPT
+- Summary: Planning Pack is mechanically linted and includes the schema v4 artifacts (`spec_manifest.md`, `impact_map.md`, `ci_checkpoint_plan.md`) with checkpoint wiring in `tasks.json`.
+- Next step: Execution triads may begin.

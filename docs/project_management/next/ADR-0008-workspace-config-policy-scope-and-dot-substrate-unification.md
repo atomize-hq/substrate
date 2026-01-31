@@ -26,7 +26,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: f67a8678eaddb56ecbc41bd9b73d53f9ab0af2c253e088f8c62a3fff002c2d37
+ADR_BODY_SHA256: a0e0da9f20a579189aee520872e2093c343d52323835f5191e87688643515fd2
 ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md` after drafting>
 
 ### Changes (operator-facing)

@@ -1,7 +1,7 @@
 # Manual Testing Playbook — Warn on `config global show` when workspace config overrides
 
 This playbook is authoritative for the manual validation described in:
-- `docs/project_management/next/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md`
+- `docs/project_management/adrs/draft/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md`
 - `docs/project_management/next/warn-config-global-show-workspace-overrides/C0-spec.md`
 
 ## Preconditions
@@ -11,6 +11,11 @@ This playbook is authoritative for the manual validation described in:
 
 Environment variables used in the cases below:
 - `SUBSTRATE_HOME` (global patch lives at `$SUBSTRATE_HOME/config.yaml`)
+
+Smoke scripts (mirror these cases):
+- `smoke/linux-smoke.sh`
+- `smoke/macos-smoke.sh`
+- `smoke/windows-smoke.ps1`
 
 ## Cases
 

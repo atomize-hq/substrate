@@ -28,8 +28,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: c67df2c96a14a7c15b622e29729fb3c9cb8a0936792552e4b0c8ef8cc23119a6
-
+ADR_BODY_SHA256: f08a3eac55efed865813161d1b57a08363635c960fa843dfa8210a75f7a23a30
 ### Changes (operator-facing)
 - Workspace config always wins over sourced exports
   - Existing: If your shell environment contains `SUBSTRATE_*` values (often because `$SUBSTRATE_HOME/env.sh` is sourced), those env vars override `.substrate/workspace.yaml`, so workspace settings like `world.caged: false` can appear “ignored”.

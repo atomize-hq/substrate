@@ -1,6 +1,6 @@
 {
   "meta": {
-    "schema_version": 3,
+    "schema_version": 4,
     "feature": "warn-config-global-show-workspace-overrides",
     "cross_platform": true,
     "execution_gates": true,
@@ -17,6 +17,9 @@
       "linux",
       "macos",
       "windows"
+    ],
+    "checkpoint_boundaries": [
+      "C0"
     ]
   },
   "tasks": [
@@ -30,12 +33,14 @@
       "references": [
         "docs/project_management/next/warn-config-global-show-workspace-overrides/execution_preflight_report.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/plan.md",
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/spec_manifest.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/C0-spec.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/contract.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/decision_register.md (DR-0001, DR-0002, DR-0003)",
-        "docs/project_management/next/warn-config-global-show-workspace-overrides/integration_map.md",
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/impact_map.md",
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/ci_checkpoint_plan.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/manual_testing_playbook.md",
-        "docs/project_management/next/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md",
+        "docs/project_management/adrs/draft/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md",
         "docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md"
       ],
       "acceptance_criteria": [
@@ -67,12 +72,13 @@
       "description": "Implement the workspace-override stderr note for `substrate config global show` per the C0 spec/contract.",
       "references": [
         "docs/project_management/next/warn-config-global-show-workspace-overrides/plan.md",
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/spec_manifest.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/C0-spec.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/contract.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/decision_register.md (DR-0001, DR-0002, DR-0003)",
-        "docs/project_management/next/warn-config-global-show-workspace-overrides/integration_map.md",
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/impact_map.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/manual_testing_playbook.md",
-        "docs/project_management/next/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md"
+        "docs/project_management/adrs/draft/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md"
       ],
       "acceptance_criteria": [
         "`substrate config global show` emits the workspace-override note on stderr only when the workspace override is active (per spec).",
@@ -115,12 +121,13 @@
       "description": "Add/extend tests to cover `config global show` workspace-override stderr behavior and stdout invariants.",
       "references": [
         "docs/project_management/next/warn-config-global-show-workspace-overrides/plan.md",
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/spec_manifest.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/C0-spec.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/contract.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/decision_register.md (DR-0001, DR-0002, DR-0003)",
-        "docs/project_management/next/warn-config-global-show-workspace-overrides/integration_map.md",
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/impact_map.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/manual_testing_playbook.md",
-        "docs/project_management/next/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md"
+        "docs/project_management/adrs/draft/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md"
       ],
       "acceptance_criteria": [
         "Tests cover: outside workspace (no note), empty workspace patch (no note), non-empty workspace patch (note), invalid YAML workspace patch (note + success).",
@@ -159,23 +166,24 @@
       "type": "integration",
       "phase": "C0",
       "status": "pending",
-      "description": "Integrate C0 implementation and dispatch required CI + feature smoke.",
+      "description": "Integrate C0 implementation and make it green on the primary dev platform (pre-checkpoint).",
       "references": [
         "docs/project_management/next/warn-config-global-show-workspace-overrides/plan.md",
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/spec_manifest.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/C0-spec.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/contract.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/decision_register.md (DR-0001, DR-0002, DR-0003)",
-        "docs/project_management/next/warn-config-global-show-workspace-overrides/integration_map.md",
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/impact_map.md",
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/ci_checkpoint_plan.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/manual_testing_playbook.md",
-        "docs/project_management/next/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md",
+        "docs/project_management/adrs/draft/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/smoke/linux-smoke.sh",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/smoke/macos-smoke.sh",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/smoke/windows-smoke.ps1"
       ],
       "acceptance_criteria": [
-        "CI audit ledger is created/updated for the slice.",
-        "Compile/test CI dispatch completes successfully on required parity platforms.",
-        "Feature smoke dispatch completes successfully (linux/macos/windows)."
+        "Local integration gates are green for C0 (fmt, clippy, tests, integ-checks).",
+        "Core integration branch is ready for checkpoint validation (`CP1-ci-checkpoint`)."
       ],
       "start_checklist": [
         "git checkout feat/warn-config-global-show-workspace-overrides && git pull --ff-only",
@@ -188,9 +196,7 @@
         "cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant tests",
         "make integ-checks",
-        "Dispatch behavioral smoke via CI: scripts/ci/dispatch_feature_smoke.sh --feature-dir \"docs/project_management/next/warn-config-global-show-workspace-overrides\" --runner-kind self-hosted --workflow-ref \"feat/warn-config-global-show-workspace-overrides\" --platform all --cleanup (record run ids/URLs)",
-        "If any platform smoke fails: start only failing platform-fix tasks via: make triad-task-start-platform-fixes-from-smoke FEATURE_DIR=\"docs/project_management/next/warn-config-global-show-workspace-overrides\" SLICE_ID=\"C0\" SMOKE_RUN_ID=\"<run-id>\"",
-        "After all failing platforms are green: start final aggregator via: make triad-task-start-integ-final FEATURE_DIR=\"docs/project_management/next/warn-config-global-show-workspace-overrides\" SLICE_ID=\"C0\"",
+        "On the orchestration branch, run checkpoint task: CP1-ci-checkpoint",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C0-integ-core\"",
         "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
       ],
@@ -209,6 +215,46 @@
       "merge_to_orchestration": false
     },
     {
+      "id": "CP1-ci-checkpoint",
+      "name": "CP1 CI checkpoint (cross-platform validation)",
+      "type": "ops",
+      "phase": "CP1",
+      "status": "pending",
+      "description": "Run cross-platform compile parity + feature smoke for slice C0 (schema v4 checkpoint boundary).",
+      "references": [
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/ci_checkpoint_plan.md",
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/tasks.json",
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/session_log.md",
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/impact_map.md",
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/smoke/linux-smoke.sh",
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/smoke/macos-smoke.sh",
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md"
+      ],
+      "acceptance_criteria": [
+        "CI audit ledger is created/updated for the checkpoint.",
+        "Compile parity is green for the checkpoint checkout SHA.",
+        "Feature smoke is green for the checkpoint checkout SHA on behavior platforms."
+      ],
+      "start_checklist": [
+        "git checkout feat/warn-config-global-show-workspace-overrides && git pull --ff-only",
+        "Read ci_checkpoint_plan.md, tasks.json, session_log.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs"
+      ],
+      "end_checklist": [
+        "Run ci_audit for ci-testing and feature-smoke (record the audit output lines in session_log.md)",
+        "Dispatch compile parity and feature smoke per kickoff prompt; record run ids/URLs",
+        "Set status to completed; add END entry; commit docs"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/warn-config-global-show-workspace-overrides/kickoff_prompts/CP1-ci-checkpoint.md",
+      "depends_on": [
+        "C0-integ-core"
+      ],
+      "concurrent_with": []
+    },
+    {
       "id": "C0-integ-linux",
       "name": "C0 slice (integration Linux)",
       "type": "integration",
@@ -217,12 +263,14 @@
       "description": "Linux platform-fix integration task (may be a no-op if already green).",
       "references": [
         "docs/project_management/next/warn-config-global-show-workspace-overrides/plan.md",
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/spec_manifest.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/C0-spec.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/contract.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/decision_register.md (DR-0001, DR-0002, DR-0003)",
-        "docs/project_management/next/warn-config-global-show-workspace-overrides/integration_map.md",
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/impact_map.md",
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/ci_checkpoint_plan.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/manual_testing_playbook.md",
-        "docs/project_management/next/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md",
+        "docs/project_management/adrs/draft/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/smoke/linux-smoke.sh",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/smoke/macos-smoke.sh",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/smoke/windows-smoke.ps1"
@@ -248,7 +296,8 @@
       "integration_task": "C0-integ-linux",
       "kickoff_prompt": "docs/project_management/next/warn-config-global-show-workspace-overrides/kickoff_prompts/C0-integ-linux.md",
       "depends_on": [
-        "C0-integ-core"
+        "C0-integ-core",
+        "CP1-ci-checkpoint"
       ],
       "concurrent_with": [],
       "platform": "linux",
@@ -269,12 +318,14 @@
       "description": "macOS platform-fix integration task (may be a no-op if already green).",
       "references": [
         "docs/project_management/next/warn-config-global-show-workspace-overrides/plan.md",
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/spec_manifest.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/C0-spec.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/contract.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/decision_register.md (DR-0001, DR-0002, DR-0003)",
-        "docs/project_management/next/warn-config-global-show-workspace-overrides/integration_map.md",
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/impact_map.md",
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/ci_checkpoint_plan.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/manual_testing_playbook.md",
-        "docs/project_management/next/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md",
+        "docs/project_management/adrs/draft/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/smoke/linux-smoke.sh",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/smoke/macos-smoke.sh",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/smoke/windows-smoke.ps1"
@@ -300,7 +351,8 @@
       "integration_task": "C0-integ-macos",
       "kickoff_prompt": "docs/project_management/next/warn-config-global-show-workspace-overrides/kickoff_prompts/C0-integ-macos.md",
       "depends_on": [
-        "C0-integ-core"
+        "C0-integ-core",
+        "CP1-ci-checkpoint"
       ],
       "concurrent_with": [],
       "platform": "macos",
@@ -321,12 +373,14 @@
       "description": "Windows platform-fix integration task (may be a no-op if already green).",
       "references": [
         "docs/project_management/next/warn-config-global-show-workspace-overrides/plan.md",
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/spec_manifest.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/C0-spec.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/contract.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/decision_register.md (DR-0001, DR-0002, DR-0003)",
-        "docs/project_management/next/warn-config-global-show-workspace-overrides/integration_map.md",
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/impact_map.md",
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/ci_checkpoint_plan.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/manual_testing_playbook.md",
-        "docs/project_management/next/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md",
+        "docs/project_management/adrs/draft/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/smoke/linux-smoke.sh",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/smoke/macos-smoke.sh",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/smoke/windows-smoke.ps1"
@@ -352,7 +406,8 @@
       "integration_task": "C0-integ-windows",
       "kickoff_prompt": "docs/project_management/next/warn-config-global-show-workspace-overrides/kickoff_prompts/C0-integ-windows.md",
       "depends_on": [
-        "C0-integ-core"
+        "C0-integ-core",
+        "CP1-ci-checkpoint"
       ],
       "concurrent_with": [],
       "platform": "windows",
@@ -373,12 +428,14 @@
       "description": "Finalize C0 integration across required platforms (aggregate integration gate).",
       "references": [
         "docs/project_management/next/warn-config-global-show-workspace-overrides/plan.md",
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/spec_manifest.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/C0-spec.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/contract.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/decision_register.md (DR-0001, DR-0002, DR-0003)",
-        "docs/project_management/next/warn-config-global-show-workspace-overrides/integration_map.md",
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/impact_map.md",
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/ci_checkpoint_plan.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/manual_testing_playbook.md",
-        "docs/project_management/next/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md",
+        "docs/project_management/adrs/draft/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/smoke/linux-smoke.sh",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/smoke/macos-smoke.sh",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/smoke/windows-smoke.ps1"
@@ -410,6 +467,7 @@
       "kickoff_prompt": "docs/project_management/next/warn-config-global-show-workspace-overrides/kickoff_prompts/C0-integ.md",
       "depends_on": [
         "C0-integ-core",
+        "CP1-ci-checkpoint",
         "C0-integ-linux",
         "C0-integ-macos",
         "C0-integ-windows"
@@ -431,12 +489,14 @@
       "references": [
         "docs/project_management/next/warn-config-global-show-workspace-overrides/C0-closeout_report.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/plan.md",
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/spec_manifest.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/C0-spec.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/contract.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/decision_register.md (DR-0001, DR-0002, DR-0003)",
-        "docs/project_management/next/warn-config-global-show-workspace-overrides/integration_map.md",
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/impact_map.md",
+        "docs/project_management/next/warn-config-global-show-workspace-overrides/ci_checkpoint_plan.md",
         "docs/project_management/next/warn-config-global-show-workspace-overrides/manual_testing_playbook.md",
-        "docs/project_management/next/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md"
+        "docs/project_management/adrs/draft/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md"
       ],
       "acceptance_criteria": [
         "C0 closeout report is completed.",

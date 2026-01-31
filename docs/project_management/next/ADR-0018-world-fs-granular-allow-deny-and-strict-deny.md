@@ -62,7 +62,7 @@ ADR_BODY_SHA256: 64ac13a560ad971697a15a9014565a944d30e2b146b80730223a2ed1f1e9cdb
 - The current codebase has a known foot-gun: allowlist patterns containing `..` can be accepted by higher layers but are silently ignored during allowlist resolution, which can disable enforcement while policy *appears* set.
   - See: `crates/world-agent/src/service.rs` (`resolve_landlock_allowlist_paths` drops `..` segments).
 - Full isolation command execution routes through a single chokepoint:
-  - `unshare --mount … sh -c PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT` → optional Landlock exec wrapper (`__substrate_world_landlock_exec`) → `sh -c/-lc $SUBSTRATE_INNER_CMD`.
+  - `unshare --mount … sh -c PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT` → conditional Landlock exec wrapper (`__substrate_world_landlock_exec`) → `sh -c/-lc $SUBSTRATE_INNER_CMD`.
   - See: `crates/world/src/exec.rs`, `crates/world-agent/src/internal_exec.rs`.
 - If Substrate introduces mount-based deny masking without preventing later mount/umount by the workload, deny rules are bypassable in an adversarial model.
 
@@ -79,7 +79,7 @@ ADR_BODY_SHA256: 64ac13a560ad971697a15a9014565a944d30e2b146b80730223a2ed1f1e9cdb
 
 ## Non-Goals
 - Supporting strict deny enforcement in `world_fs.isolation=workspace` (this ADR explicitly forbids it).
-- Guaranteeing “dynamic” filename-glob denies within a single long-running command (e.g., creating `x.pem` then reading it later in the same process invocation). Filename-glob denies are snapshot-scanned per exec boundary (documented in schema/guarantees).
+- Guaranteeing “dynamic” wildcard denies within a single long-running command (e.g., creating `x.pem` then reading it later in the same process invocation). Wildcard denies are snapshot-scanned per exec boundary (documented in schema/guarantees).
 - Cross-platform parity for strict deny (Linux full isolation is the initial scope; other platforms are out of scope for this ADR).
 
 ## User Contract (Authoritative)
@@ -104,6 +104,8 @@ ADR_BODY_SHA256: 64ac13a560ad971697a15a9014565a944d30e2b146b80730223a2ed1f1e9cdb
   - Patterns MUST be project-relative; absolute paths and `..` segments are invalid.
   - `allow_list` MUST be non-empty for all configured dimensions.
   - `deny_list` defaults to empty.
+  - `world_fs.enforcement` MUST be present iff at least one `deny_list` is non-empty.
+  - If any `deny_list` is non-empty, `world_fs.require_world` MUST be `true`.
 - Isolation constraints:
   - `world_fs.enforcement=strict` is valid only when `world_fs.isolation=full`.
   - Any `deny_list` usage is valid only when `world_fs.isolation=full`.
@@ -112,9 +114,9 @@ ADR_BODY_SHA256: 64ac13a560ad971697a15a9014565a944d30e2b146b80730223a2ed1f1e9cdb
 - Linux:
   - Full isolation (`world_fs.isolation=full`) is the only supported mode for deny enforcement.
   - Strict mode MUST prevent the workload from undoing deny mounts (security boundary).
-  - When strict prerequisites are unavailable, behavior MUST fail closed when `world_fs.require_world=true` (no silent downgrade).
+  - When strict prerequisites are unavailable, behavior MUST fail closed (no silent downgrade).
 - macOS/Windows:
-  - Out of scope for this ADR (guests may add support later; if unsupported, must fail closed when strict is requested).
+  - Out of scope for this ADR (future work: guests can add support later; until then, fail closed when strict is requested).
 
 ## Architecture Shape
 - Components:
@@ -140,7 +142,9 @@ ADR_BODY_SHA256: 64ac13a560ad971697a15a9014565a944d30e2b146b80730223a2ed1f1e9cdb
     - mount script sets up minimal root + overlay bind-mounts
     - helper applies deny mounts and strict lockdown before executing the workload
   - Outputs:
-    - denied paths return `EACCES` or `EROFS` per dimension
+    - denied operations are deterministic:
+      - discover/read denies return `EACCES` (`Permission denied`)
+      - write denies return `EROFS` (`Read-only file system`)
     - strict mode blocks bypass via `mount/umount` by the workload
 
 ## Sequencing / Dependencies
@@ -151,7 +155,7 @@ ADR_BODY_SHA256: 64ac13a560ad971697a15a9014565a944d30e2b146b80730223a2ed1f1e9cdb
 
 ## Security / Safety Posture
 - Fail-closed rules (full isolation):
-  - If `world_fs.enforcement=strict` is requested but strict prerequisites cannot be applied, the world execution MUST fail (no best-effort fallback) when `world_fs.require_world=true`.
+  - If `world_fs.enforcement=strict` is requested but strict prerequisites cannot be applied, the world execution MUST fail (no best-effort fallback).
   - If the policy requires Landlock (e.g., `read.allow_list` narrower than `.`), but Landlock is unsupported, execution MUST fail closed when `require_world=true`.
 - Invariants:
   - No silent ignore of invalid patterns (`..`, absolute paths).
@@ -169,13 +173,13 @@ ADR_BODY_SHA256: 64ac13a560ad971697a15a9014565a944d30e2b146b80730223a2ed1f1e9cdb
 - Integration tests (Linux):
   - Full isolation: allow `.` + deny `./secrets/**` returns `EACCES` for reads and cannot be bypassed by attempted `umount` in strict mode.
   - Discover/read split: allow discover `.` but deny read for specific file(s) produces “visible but not readable” behavior (when configured).
-  - Filename glob denies (`**/*.pem`) enforced for matching files present at exec start (documented limitation for within-process creation).
+  - Wildcard denies (`**/*.pem`) enforced for matching files present at exec start (documented limitation for within-process creation).
 
 ### Manual validation
 - Manual playbook is required and authoritative: `docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md`
 
 ### Smoke scripts
-- Linux smoke script(s) should live under `docs/project_management/next/world-fs-granular-allow-deny/smoke/` (added during execution triads).
+- Linux smoke script(s) MUST live under `docs/project_management/next/world-fs-granular-allow-deny/smoke/` (added during execution triads).
 
 ## Rollout / Backwards Compatibility
 - No backwards compatibility is provided:

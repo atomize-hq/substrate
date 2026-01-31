@@ -28,7 +28,7 @@ At minimum, verify:
 - The advisory CI audit + evidence ledger tooling exists and is referenced by integration prompts:
   - `scripts/ci-audit/ci_audit.sh`
   - `scripts/ci-audit/ci_audit_record.sh`
-  - (Policy) docs/planning-only changes may skip all CI (ci-audit should recommend `RECOMMEND=skip` with `DIFF_CLASS=docs_only`).
+  - (Policy) docs/planning-only changes may skip all CI (ci-audit MUST report `RECOMMEND=skip` with `DIFF_CLASS=docs_only`).
 
 ## End Checklist
 

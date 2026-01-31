@@ -19,7 +19,7 @@ Each decision is recorded as A/B with explicit selection.
 
 ## DR-0003 — Deny enforcement posture
 - Option A: `strict` deny: denies are a hard security boundary; workload cannot undo masks.
-- Option B: `best_effort` deny: apply masks at startup only; workload may undo them.
+- Option B: `best_effort` deny: apply masks at startup only; workload can undo them.
 - Selected: Both, as a policy lever (strict recommended default when denies exist).
 
 ## DR-0004 — Isolation support
@@ -34,15 +34,15 @@ Each decision is recorded as A/B with explicit selection.
 - Selected: A
 - Rationale: “visible but not readable” and “can access known child but not list parent” must be expressible without side effects.
 
-## DR-0006 — Filename glob denies (`**/*.pem`) semantics
+## DR-0006 — Wildcard denies (`**/*.pem`) semantics
 - Option A: Snapshot-at-exec-start semantics (scan and mask existing matches each exec).
 - Option B: Promise “always denied” semantics via inotify/fanotify or deep kernel features.
 - Selected: A
 - Rationale: robust “always denied” cannot be guaranteed for within-process creation/rename; do not overpromise.
 
 ## DR-0007 — Where glob resolution happens
-- Option A: Resolve filename glob denies inside the helper (after mounts exist), per exec.
-- Option B: Resolve filename glob denies on the host or in world-agent service before entering the mount namespace.
+- Option A: Resolve wildcard deny matches inside the helper (after mounts exist), per exec.
+- Option B: Resolve wildcard deny matches on the host or in world-agent service before entering the mount namespace.
 - Selected: A
 - Rationale: helper sees the authoritative in-namespace filesystem view and can fail closed consistently at the final chokepoint.
 
@@ -51,4 +51,3 @@ Each decision is recorded as A/B with explicit selection.
 - Option B: Rely on convention only (document “don’t mount/umount”) or on Landlock alone.
 - Selected: A
 - Rationale: without this, mount-based denies are bypassable; Landlock cannot express deny exceptions under broad allows.
-

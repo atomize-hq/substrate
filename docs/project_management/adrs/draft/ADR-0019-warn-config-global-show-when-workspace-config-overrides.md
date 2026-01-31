@@ -8,16 +8,25 @@ Owners: Substrate maintainers
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: bb95ac8d63eaee391a9351aab2fb82322412e0a632d310acae36e3d647f1cfc5
-
-- Add a single stderr note to `substrate config global show` when run inside an enabled workspace whose workspace config patch is active (non-empty or unparseable). The note points operators to `substrate config show --explain` for the effective view.
-- Preserve stdout as patch-only output (YAML/JSON) and preserve exit codes; the note is stderr-only and single-line.
-- Suppress the existing “global config patch is empty (no overrides)” note when the new workspace-override note is emitted (to avoid double-notes).
+ADR_BODY_SHA256: 923e0afc8199fa223bb72691526679c0553105a991b785747fbfadc07aa509da
+### Changes (operator-facing)
+- Workspace override note for `substrate config global show`
+  - Existing: `substrate config global show` prints the global config patch, which can be misinterpreted as the effective config when run inside a workspace.
+  - New: when run inside an enabled workspace whose workspace config override is active (non-empty or unparseable), the command emits a single stderr note routing operators to `substrate config show --explain`; stdout and exit codes remain unchanged.
+  - Why: reduce operator confusion while preserving script safety (stdout patch-only; stderr-only note).
+- Existing note interaction
+  - Existing: the command emits an informational note when the global patch is empty.
+  - New: when the workspace-override note is emitted, the global-empty note is suppressed for that invocation.
+  - Why: keep stderr high-signal and avoid double-notes.
 
 Links:
 - Plan: `docs/project_management/next/warn-config-global-show-workspace-overrides/plan.md`
+- Tasks: `docs/project_management/next/warn-config-global-show-workspace-overrides/tasks.json`
+- Spec manifest: `docs/project_management/next/warn-config-global-show-workspace-overrides/spec_manifest.md`
 - Spec: `docs/project_management/next/warn-config-global-show-workspace-overrides/C0-spec.md`
 - Contract: `docs/project_management/next/warn-config-global-show-workspace-overrides/contract.md`
+- Impact map: `docs/project_management/next/warn-config-global-show-workspace-overrides/impact_map.md`
+- CI checkpoint plan: `docs/project_management/next/warn-config-global-show-workspace-overrides/ci_checkpoint_plan.md`
 - Manual Playbook: `docs/project_management/next/warn-config-global-show-workspace-overrides/manual_testing_playbook.md`
 
 ## Context
@@ -31,7 +40,7 @@ adds a high-signal note to route operators to the correct command when a workspa
 
 Related ADRs / background:
 - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-- `docs/project_management/next/ADR-0005-workspace-config-precedence-over-env-vars.md`
+- `docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md`
 
 ## Goals
 
