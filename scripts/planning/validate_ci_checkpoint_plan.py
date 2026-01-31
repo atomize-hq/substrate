@@ -154,6 +154,12 @@ def _validate_against_tasks(feature_dir: Path, tasks_data: dict[str, Any], defau
     if not slice_ids:
         _fail("tasks.json does not contain any slice final integration tasks (*-integ); cannot validate checkpoint coverage")
 
+    meta = tasks_data.get("meta") if isinstance(tasks_data, dict) else None
+    if not isinstance(meta, dict):
+        meta = {}
+    schema_version = meta.get("schema_version", 1)
+    cross_platform = meta.get("cross_platform") is True
+
     slices_in_plan: list[str] = []
     for c in checkpoints:
         slices_in_plan.extend(c.slices)
@@ -177,6 +183,21 @@ def _validate_against_tasks(feature_dir: Path, tasks_data: dict[str, Any], defau
         _fail(f"ci_checkpoint_plan.md missing slices present in tasks.json: {', '.join(missing)}")
     if extra:
         _fail(f"ci_checkpoint_plan.md references slices not present in tasks.json: {', '.join(extra)}")
+
+    # Schema v4 cross-platform packs require tasks.json meta.checkpoint_boundaries to match the
+    # checkpoint boundaries (the last slice of each checkpoint group) exactly.
+    if cross_platform and isinstance(schema_version, int) and schema_version >= 4:
+        boundaries = meta.get("checkpoint_boundaries")
+        if not isinstance(boundaries, list) or not all(isinstance(x, str) and x for x in boundaries):
+            _fail("tasks.json meta.checkpoint_boundaries must be an array of non-empty strings for schema v4 cross-platform packs")
+        if len(set(boundaries)) != len(boundaries):
+            _fail("tasks.json meta.checkpoint_boundaries contains duplicates")
+        expected_boundaries = [c.slices[-1] for c in checkpoints]
+        if boundaries != expected_boundaries:
+            _fail(
+                "tasks.json meta.checkpoint_boundaries must match the checkpoint group boundaries in ci_checkpoint_plan.md "
+                f"(expected {expected_boundaries}, got {boundaries})"
+            )
 
     # Bounds (default): enforce min/max per checkpoint, except when total slices < min.
     total = len(slice_ids)

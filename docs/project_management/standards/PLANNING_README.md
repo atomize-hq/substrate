@@ -182,7 +182,12 @@ Required interoperability rules:
     - Declare both scopes in `tasks.json` (P3-008):
       - `meta.behavior_platforms_required: [...]` (smoke scripts required here)
       - `meta.ci_parity_platforms_required: [...]` (platform-fix tasks required here; legacy: `meta.platforms_required`)
-    - Per slice, create the full task shape: `X-integ-core`, `X-integ-<platform>` (for each CI parity platform), and `X-integ` (final aggregator).
+    - Task model depends on schema version:
+      - Schema v2/v3 (legacy): per slice, create the full task shape: `X-integ-core`, `X-integ-<platform>` (for each CI parity platform), and `X-integ` (final aggregator).
+      - Schema v4+ (boundary-only): include full platform-fix tasks only for checkpoint-boundary slices:
+        - `meta.checkpoint_boundaries` lists the slice ids that are the **last slice** in each checkpoint group (must match `ci_checkpoint_plan.md`).
+        - Normal slices use only `X-integ` as the per-slice merge task.
+        - Boundary slices use `B-integ-core`, `B-integ-<platform>`, and `B-integ`.
     - This is enforced mechanically by `make planning-validate` (via `scripts/planning/validate_tasks_json.py`).
   - If WSL coverage is required, use `meta.wsl_required: true` and `meta.wsl_task_mode: "bundled"|"separate"` (do not add `"wsl"` to `meta.behavior_platforms_required` or `meta.ci_parity_platforms_required`).
   - Preferred smoke dispatch examples:

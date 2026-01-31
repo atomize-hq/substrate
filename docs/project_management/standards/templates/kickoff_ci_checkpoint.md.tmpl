@@ -12,6 +12,7 @@ Do not edit planning docs inside the worktree.
 3. Confirm which slice id this checkpoint is validating (per `ci_checkpoint_plan.md`). Use that slice id for:
    - `SMOKE_SLICE_ID="<slice>"`
    - platform-fix task ids and wrappers (e.g., `<slice>-integ-linux`)
+   - Schema v4+ note: confirm `<slice>` is listed in `tasks.json` `meta.checkpoint_boundaries` (checkpoint-boundary slice).
 4. Determine the exact commit that this checkpoint validates:
    - This checkpoint validates the **core integration branch** for the checkpoint slice (`<slice>-integ-core`).
    - Compute `CHECKOUT_SHA` from `tasks.json` without checking out the branch:

@@ -5,6 +5,11 @@ Use this **after** `F0-exec-preflight` is completed for a feature, to:
 - start the slice’s **integration merge** task (one Codex session), then
 - report **exit codes + final messages** plus artifact paths.
 
+Fast path (preferred when available):
+- Run the fully automated wrapper command instead of doing the manual bookkeeping steps in this prompt:
+  - `make triad-task-start-complete FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>"`
+  - It updates `tasks.json` + `session_log.md`, runs code+test in parallel, runs the slice’s integration task as wired in `tasks.json` (`<slice>-code.integration_task`), and writes a wrapper summary under `FEATURE_DIR/logs/<slice>/wrapper/`.
+
 Notes:
 - Run this from the **orchestration checkout** (repo root on the orchestration branch), **not** inside a task worktree.
 - Code and test are separate concerns:

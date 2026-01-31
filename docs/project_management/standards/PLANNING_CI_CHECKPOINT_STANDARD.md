@@ -80,7 +80,7 @@ Avoid boundaries that:
 
 For each checkpoint group `CPk`:
 - Create an ops task `CPk-ci-checkpoint` (or similar) that:
-  - depends on the final integration task of the checkpoint group’s ending slice (e.g., `WCU3-integ`),
+  - depends on the **core integration task** of the checkpoint group’s ending slice (e.g., `WCU3-integ-core`),
   - has a kickoff prompt under `kickoff_prompts/`,
   - references `ci_checkpoint_plan.md`.
 - The first slice of the next group must depend on `CPk-ci-checkpoint` (so work cannot proceed past the checkpoint without completing the CI gate).
@@ -88,3 +88,11 @@ For each checkpoint group `CPk`:
 Kickoff template:
 - `docs/project_management/standards/templates/kickoff_ci_checkpoint.md.tmpl`
 
+## Boundary-only platform-fix (schema v4+; recommended)
+
+To avoid per-slice platform-fix task explosions, schema v4 cross-platform automation packs add:
+- `tasks.json` `meta.checkpoint_boundaries`: the slice ids that are the **last slice** in each checkpoint group.
+
+Rules:
+- `meta.checkpoint_boundaries` must match the checkpoint group boundaries defined in `ci_checkpoint_plan.md` (mechanically validated by planning lint).
+- Only slices listed in `meta.checkpoint_boundaries` may define `*-integ-core` / `*-integ-<platform>` tasks; normal slices use only `X-integ` as their integration merge task.

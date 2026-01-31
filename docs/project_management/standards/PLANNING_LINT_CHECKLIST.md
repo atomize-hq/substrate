@@ -31,7 +31,9 @@ This runner checks (at minimum):
 - Hard-ban scan (no `TBD/TODO/WIP/TBA`, no “open question”, no “etc.”/“and so on”)
 - Ambiguity scan (no `should|could|might|maybe` in behavior/contracts)
 - `tasks.json` invariants (`make planning-validate`)
-  - If `meta.cross_platform=true` (schema v2+), it must include the required `X-integ-core`, `X-integ-<platform>`, and `X-integ` tasks per slice (where `<platform>` ranges over CI parity platforms, plus optional `wsl` when `wsl_task_mode="separate"`).
+  - If `meta.cross_platform=true` (schema v2+):
+    - Schema v2/v3: it must include `X-integ-core`, `X-integ-<platform>`, and `X-integ` tasks per slice (where `<platform>` ranges over CI parity platforms, plus optional `wsl` when `wsl_task_mode="separate"`).
+    - Schema v4+: it must include `meta.checkpoint_boundaries`, and only checkpoint-boundary slices may define `*-integ-core` / `*-integ-<platform>` tasks (normal slices use only `X-integ` as the per-slice merge task).
   - If WSL coverage is required, use `meta.wsl_required: true` + `meta.wsl_task_mode: "bundled"|"separate"` (do not include `"wsl"` in `meta.behavior_platforms_required` or `meta.ci_parity_platforms_required`).
   - If `FEATURE_DIR/smoke/` exists, smoke scripts are required only for `meta.behavior_platforms_required` (or inferred legacy behavior platforms); `manual_testing_playbook.md` must reference each required smoke script.
   - If `meta.execution_gates: true`, it must include the execution preflight task/report and per-slice closeout report linkage.

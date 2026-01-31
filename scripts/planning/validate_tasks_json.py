@@ -511,10 +511,17 @@ def _validate_platform_integ_model(
       - meta.schema_version >= 2
       - meta.ci_parity_platforms_required must be present (legacy: meta.platforms_required)
 
-    Model (per slice X):
+    Schema v2/v3 model (per slice X):
       - X-integ-core (integration): merges code+tests and gets primary-platform green
       - X-integ-<platform> (integration, platform set): platform-fix task (may be no-op if already green)
       - X-integ (integration): final aggregator merges any platform fixes and records results
+
+    Schema v4 model (boundary-only platform-fix):
+      - Normal slices: X-code, X-test, X-integ (single merge task)
+      - Checkpoint-boundary slices only: full platform-fix model (B-integ-core, B-integ-<platform>, B-integ)
+
+    Boundary detection (schema v4):
+      - tasks.json meta.checkpoint_boundaries: array of slice ids that are the last slice in each checkpoint group
     """
     schema_version = meta.get("schema_version", DEFAULT_SCHEMA_VERSION)
     cross_platform = meta.get("cross_platform") is True
@@ -568,6 +575,149 @@ def _validate_platform_integ_model(
             errors,
             f"{path}: meta.cross_platform=true requires per-slice integration tasks with ids '*-integ' (final aggregators), plus '*-integ-core' and '*-integ-<platform>' for each CI parity platform",
         )
+        return
+
+    if isinstance(schema_version, int) and schema_version >= 4:
+        boundaries = meta.get("checkpoint_boundaries")
+        if not isinstance(boundaries, list) or not all(isinstance(x, str) and x for x in boundaries):
+            _error(errors, f"{path}: meta.schema_version>=4 with meta.cross_platform=true requires meta.checkpoint_boundaries to be an array of non-empty strings")
+            return
+        if len(set(boundaries)) != len(boundaries):
+            _error(errors, f"{path}: meta.checkpoint_boundaries contains duplicates")
+            return
+        unknown = sorted(set(boundaries) - set(slices))
+        if unknown:
+            _error(errors, f"{path}: meta.checkpoint_boundaries contains slice ids not present in tasks.json: {', '.join(unknown)}")
+            return
+        if not boundaries:
+            _error(errors, f"{path}: meta.checkpoint_boundaries must be non-empty for schema v4 cross-platform packs")
+            return
+
+        boundary_set: Set[str] = set(boundaries)
+
+        for slice_id in sorted(slices):
+            code_id = f"{slice_id}-code"
+            test_id = f"{slice_id}-test"
+            final_id = f"{slice_id}-integ"
+
+            code = tasks_by_id.get(code_id)
+            test = tasks_by_id.get(test_id)
+            final = tasks_by_id.get(final_id)
+
+            if code is None:
+                _error(errors, f"{path}: cross-platform slice {slice_id!r} missing required code task: {code_id!r}")
+                continue
+            if test is None:
+                _error(errors, f"{path}: cross-platform slice {slice_id!r} missing required test task: {test_id!r}")
+                continue
+            if final is None:
+                _error(errors, f"{path}: cross-platform slice {slice_id!r} missing required integration task: {final_id!r}")
+                continue
+            if final.get("type") != "integration":
+                _error(errors, f"{path}: {final_id!r} must have type=integration")
+
+            is_boundary = slice_id in boundary_set
+            expected_integration_task = f"{slice_id}-integ-core" if is_boundary else f"{slice_id}-integ"
+
+            if code.get("integration_task") != expected_integration_task:
+                _error(
+                    errors,
+                    f"{path}: {code_id!r} integration_task must be {expected_integration_task!r} (boundary={is_boundary})",
+                )
+            if test.get("integration_task") != expected_integration_task:
+                _error(
+                    errors,
+                    f"{path}: {test_id!r} integration_task must be {expected_integration_task!r} (boundary={is_boundary})",
+                )
+
+            final_deps = final.get("depends_on")
+            if not isinstance(final_deps, list):
+                _error(errors, f"{path}: {final_id!r} depends_on must be an array")
+                continue
+
+            if not is_boundary:
+                # Normal slice: no platform-fix structure should exist.
+                core_id = f"{slice_id}-integ-core"
+                if core_id in tasks_by_id:
+                    _error(errors, f"{path}: non-boundary slice {slice_id!r} must not define {core_id!r} (platform-fix tasks are boundary-only in schema v4)")
+                for platform in effective_platform_tasks:
+                    platform_id = f"{slice_id}-integ-{platform}"
+                    if platform_id in tasks_by_id:
+                        _error(errors, f"{path}: non-boundary slice {slice_id!r} must not define {platform_id!r} (platform-fix tasks are boundary-only in schema v4)")
+
+                if code_id not in final_deps or test_id not in final_deps:
+                    _error(errors, f"{path}: {final_id!r} depends_on must include {code_id!r} and {test_id!r} for non-boundary slices")
+
+                if automation_enabled and final.get("merge_to_orchestration") is not True:
+                    _error(errors, f"{path}: {final_id!r} merge_to_orchestration must be true (normal slice integration merge)")
+                if final.get("platform"):
+                    _error(errors, f"{path}: {final_id!r} must not set platform for non-boundary slices")
+                continue
+
+            # Boundary slice: require full platform-fix model.
+            core_id = f"{slice_id}-integ-core"
+            core = tasks_by_id.get(core_id)
+            if core is None:
+                _error(errors, f"{path}: boundary slice {slice_id!r} missing required core integration task: {core_id!r}")
+                continue
+            if core.get("type") != "integration":
+                _error(errors, f"{path}: {core_id!r} must have type=integration")
+                continue
+            if automation_enabled and core.get("merge_to_orchestration") is not False:
+                _error(errors, f"{path}: {core_id!r} merge_to_orchestration must be false (core merge task must not merge to orchestration)")
+
+            core_deps = core.get("depends_on")
+            if not isinstance(core_deps, list):
+                _error(errors, f"{path}: {core_id!r} depends_on must be an array")
+            else:
+                if code_id not in core_deps or test_id not in core_deps:
+                    _error(errors, f"{path}: {core_id!r} depends_on must include {code_id!r} and {test_id!r}")
+
+            platforms_present: Set[str] = set()
+            for platform in effective_platform_tasks:
+                platform_id = f"{slice_id}-integ-{platform}"
+                platform_task = tasks_by_id.get(platform_id)
+                if platform_task is None:
+                    _error(errors, f"{path}: boundary slice {slice_id!r} missing required platform integration task: {platform_id!r}")
+                    continue
+                platforms_present.add(platform)
+                if platform_task.get("type") != "integration":
+                    _error(errors, f"{path}: {platform_id!r} must have type=integration")
+                    continue
+                if platform_task.get("platform") != platform:
+                    _error(errors, f"{path}: {platform_id!r} must set platform={platform!r}")
+                if automation_enabled and platform_task.get("merge_to_orchestration") is not False:
+                    _error(errors, f"{path}: {platform_id!r} merge_to_orchestration must be false")
+
+                depends_on = platform_task.get("depends_on")
+                if not isinstance(depends_on, list) or core_id not in depends_on:
+                    _error(errors, f"{path}: {platform_id!r} depends_on must include {core_id!r}")
+
+                # Bundled WSL: require the Linux platform task to include WSL smoke.
+                if wsl_required and wsl_task_mode == "bundled" and platform == "linux":
+                    txt = "\n".join(platform_task.get("references", []) + platform_task.get("end_checklist", []))
+                    if (
+                        "--run-wsl" not in txt
+                        and "run_wsl=true" not in txt
+                        and "run_wsl" not in txt
+                        and "RUN_WSL=1" not in txt
+                        and "RUN_WSL=true" not in txt
+                    ):
+                        _error(
+                            errors,
+                            f"{path}: {platform_id!r} must include WSL smoke dispatch (expected '--run-wsl' or 'RUN_WSL=1') because meta.wsl_required=true and meta.wsl_task_mode='bundled'",
+                        )
+
+            if automation_enabled and final.get("merge_to_orchestration") is not True:
+                _error(errors, f"{path}: {final_id!r} merge_to_orchestration must be true")
+
+            if core_id not in final_deps:
+                _error(errors, f"{path}: {final_id!r} depends_on must include {core_id!r}")
+            for platform in effective_platform_tasks:
+                platform_id = f"{slice_id}-integ-{platform}"
+                if platform_id in tasks_by_id and platform_id not in final_deps:
+                    _error(errors, f"{path}: {final_id!r} depends_on must include {platform_id!r}")
+
         return
 
     for slice_id in sorted(slices):

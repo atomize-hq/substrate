@@ -188,7 +188,7 @@ if ($WslRequired.IsPresent -and -not ($behaviorPlatformsList -contains "linux"))
     throw "-WslRequired requires linux in -BehaviorPlatforms (behavior platform set)"
 }
 
-$schemaVersion = if ($Automation.IsPresent) { 3 } elseif ($CrossPlatform.IsPresent) { 2 } else { 1 }
+$schemaVersion = if ($Automation.IsPresent -and $CrossPlatform.IsPresent) { 4 } elseif ($Automation.IsPresent) { 3 } elseif ($CrossPlatform.IsPresent) { 2 } else { 1 }
 $meta = @{
     schema_version = $schemaVersion
     feature        = $Feature
@@ -210,6 +210,11 @@ if ($CrossPlatform.IsPresent) {
         $meta.wsl_required = $true
         $meta.wsl_task_mode = if ($WslSeparate.IsPresent) { "separate" } else { "bundled" }
     }
+}
+
+# Schema v4 cross-platform packs require explicit boundary markers.
+if ($Automation.IsPresent -and $CrossPlatform.IsPresent) {
+    $meta.checkpoint_boundaries = @($script:SliceId)
 }
 
 $tasks = @()

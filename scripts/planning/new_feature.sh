@@ -674,13 +674,17 @@ def integ_single_task() -> dict:
 
 
 meta = {
-    "schema_version": 3 if automation else (2 if cross_platform else 1),
+    "schema_version": (4 if (automation and cross_platform) else (3 if automation else (2 if cross_platform else 1))),
     "feature": feature,
     "cross_platform": cross_platform,
     "execution_gates": True,
 }
 if automation:
     meta["automation"] = {"enabled": True, "orchestration_branch": f"feat/{feature}"}
+if automation and cross_platform:
+    # Schema v4 cross-platform packs require explicit boundary markers to avoid per-slice platform-fix task explosions.
+    # Initial scaffold has a single slice, so it is necessarily a checkpoint boundary.
+    meta["checkpoint_boundaries"] = [slice_id]
 
 tasks = []
 

@@ -115,11 +115,13 @@ Mark `YES` only if read end-to-end.
   - `tasks.json` integration end_checklist includes smoke: `<task ids>`
 - Notes:
 
-### 5.1) Cross-platform parity task structure (schema v2)
+### 5.1) Cross-platform parity task structure (schema v2/v3/v4)
 - Result: `PASS|FAIL|N/A`
 - Evidence:
   - `tasks.json` meta: `schema_version`, `behavior_platforms_required`, and `ci_parity_platforms_required` (legacy: `platforms_required`) (if applicable)
-  - Per slice: `X-integ-core`, `X-integ-<platform>`, `X-integ` tasks and deps
+  - Task model depends on schema:
+    - v2/v3: per slice `X-integ-core`, `X-integ-<platform>`, `X-integ` tasks and deps
+    - v4+: `meta.checkpoint_boundaries` exists and only boundary slices define `*-integ-core` / `*-integ-<platform>` tasks (normal slices use only `X-integ`)
 - Notes:
 
 ### 6) Triad interoperability (execution workflow)

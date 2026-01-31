@@ -1,6 +1,6 @@
 # CI Checkpointing (Ad-Hoc Notes)
 
-Status: **draft (implementation in-progress)**
+Status: **implemented (CI checkpoints + boundary-only platform-fix + single wrapper)**
 
 This document captures an operator decision made during an interactive planning-system iteration, so we do not lose context.
 
@@ -63,3 +63,58 @@ The plan must include a machine-readable section, and lint should validate:
    - Dispatch cross-platform CI only when the checkpoint plan says this slice is a checkpoint.
 5) Update planning lint to fail when checkpoint plan and tasks drift (missing tasks, missing coverage, bounds violations).
 
+## Implemented (CI checkpoints)
+
+The following items are implemented in the repo:
+- `docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md`
+- `docs/project_management/standards/templates/ci_checkpoint_plan.md.tmpl`
+- `docs/project_management/standards/templates/kickoff_ci_checkpoint.md.tmpl`
+- `scripts/planning/validate_ci_checkpoint_plan.py`
+- Planning lint requires and validates `ci_checkpoint_plan.md` for automation-enabled cross-platform packs.
+- Integration kickoff templates explicitly remove “run cross-platform CI per slice” defaults (CI is a checkpoint-only activity).
+- Cross-platform dispatch scripts support validating an exact commit (checkout-ref) so checkpoints can validate the merged state deterministically.
+
+## Implemented: boundary-only platform-fix + single wrapper
+
+### Problem (follow-on)
+
+Even with checkpoints, a cross-platform pack currently encourages per-slice cross-platform task fan-out:
+- `<slice>-integ-core`
+- `<slice>-integ-<platform>`
+- `<slice>-integ` (final aggregator)
+
+That “platform-fix task explosion” is the slow part for many-triad features and doesn’t match the intent of checkpoints.
+
+### Decision
+
+Adopt **boundary-only platform-fix**:
+- For **normal slices**: only `X-code`, `X-test`, `X-integ` exist (single per-slice integration merge task).
+- For **checkpoint-boundary slices only**: full cross-platform structure exists:
+  - `B-integ-core`
+  - `B-integ-<platform>` (for each CI parity platform; plus WSL if required/separate)
+  - `B-integ` (final aggregator)
+
+### Detection primitive (machine-readable)
+
+Add `tasks.json` meta:
+- `meta.checkpoint_boundaries`: array of slice ids that are **the last slice** in each checkpoint group.
+
+Rules:
+- `meta.checkpoint_boundaries` must match `ci_checkpoint_plan.md` boundaries (lint/validation enforced).
+- Only slices in `meta.checkpoint_boundaries` may define `*-integ-core` / `*-integ-<platform>` tasks.
+- Code/test tasks’ `integration_task` must point to:
+  - `X-integ` for normal slices
+  - `B-integ-core` for boundary slices
+
+### Operator UX: single wrapper entrypoint
+
+Add a single automation entrypoint to run a slice “start → complete” end-to-end:
+- `make triad-task-start-complete FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>"`
+
+Requirements:
+- Wrapper runs from the orchestration checkout and uses Codex-enabled automation internally (no extra flags required in the common case).
+- Wrapper writes a deterministic log + summary under `{{FEATURE_DIR}}/logs/<slice>/wrapper/` rather than only printing to stdout.
+- Wrapper selects the correct per-slice integration merge task dynamically based on `tasks.json` (via the code/test task’s `integration_task` field).
+
+Notes:
+- CI checkpoint tasks (e.g. `CPk-ci-checkpoint`) remain explicit ops tasks; this wrapper’s primary responsibility is the slice’s code/test/merge closure.

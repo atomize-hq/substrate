@@ -108,9 +108,10 @@ Orchestration branch bootstrap (used by the opening gate):
 
 #### Code + test (always parallel)
 
-Start both worktrees:
-- Preferred (post-preflight): use `docs/project_management/standards/TRIAD_WRAPPER_PROMPT.md` (runs start-pair with `LAUNCH_CODEX=1` and reports exit codes + last messages + artifact paths).
-- `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<SLICE_ID>" LAUNCH_CODEX=1`
+	Start both worktrees:
+	- Preferred (post-preflight): use `docs/project_management/standards/TRIAD_WRAPPER_PROMPT.md` (runs start-pair with `LAUNCH_CODEX=1` and reports exit codes + last messages + artifact paths).
+	- Preferred (fully automated): `make triad-task-start-complete FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<SLICE_ID>"` (runs code+test in parallel, then runs the slice’s integration merge task as wired in `tasks.json`, and writes a wrapper summary under `FEATURE_DIR/logs/<slice>/wrapper/`).
+	- `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<SLICE_ID>" LAUNCH_CODEX=1`
 
 Finish each task from inside its worktree (commits to the task branch; does not merge to orchestration):
 - `make triad-task-finish TASK_ID="<SLICE_ID>-code"`
@@ -122,8 +123,11 @@ Integration tasks should set `merge_to_orchestration` in `tasks.json`:
 - platform-fix integration tasks: `false` (never merge back to orchestration)
 - final aggregator integration task: `true` (the only task that merges back to orchestration)
 
-Start integration worktree:
-- `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="<SLICE_ID>-integ-core"`
+	Start integration worktree:
+	- Determine the per-slice integration merge task id from `tasks.json` (do not guess):
+	  - `INTEG_TASK_ID="$(jq -r --arg id "<SLICE_ID>-code" '.tasks[] | select(.id==$id) | .integration_task' "docs/project_management/next/<feature>/tasks.json")"`
+	- Start it:
+	  - `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="$INTEG_TASK_ID"`
 
 Optional: run an end-to-end integration orchestration wrapper for a CI checkpoint boundary slice (integ-core -> checkpoint CI -> platform-fix -> final) with artifact reporting:
 - `docs/project_management/standards/TRIAD_INTEGRATION_WRAPPER_PROMPT.md`
@@ -173,6 +177,9 @@ At feature end, remove retained worktrees and optionally prune branches:
 - **v3** (`meta.schema_version: 3` + `meta.automation.enabled=true`): execution automation is enabled.
   - Required structured fields are enforced by `scripts/planning/validate_tasks_json.py`.
   - Integration tasks must include `merge_to_orchestration` to make merge-back behavior explicit.
+- **v4** (`meta.schema_version: 4` + `meta.cross_platform=true`): boundary-only platform-fix for cross-platform automation packs.
+  - Requires `meta.checkpoint_boundaries` to match the checkpoint group boundaries in `ci_checkpoint_plan.md`.
+  - Only boundary slices define `*-integ-core` / `*-integ-<platform>` tasks; normal slices use `X-integ` as the per-slice merge task.
 
 ## Hard Guardrails (Non-Negotiable)
 

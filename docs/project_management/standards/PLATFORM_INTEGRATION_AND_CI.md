@@ -46,7 +46,9 @@ Common setup (runner installed under `/opt/actions-runner`):
 For cross-platform work, split integration into:
 - **Option A (validation-only):** one integration task runs the smoke workflow for the feature’s **behavior platforms** (P3-008) and records the run id/URL in `session_log.md`.
   - Prefer a single dispatch with `platform=behavior` (the workflow reads `tasks.json` and runs only required behavior platforms).
-- **Option B (platform-fix when needed):** split integration into core + platform-fix tasks:
+- **Option B (platform-fix when needed):** split integration into core + platform-fix tasks.
+  - Schema v4+ (recommended): create this **only for checkpoint-boundary slices** (boundary-only platform-fix; determined by `tasks.json` `meta.checkpoint_boundaries` which must match `ci_checkpoint_plan.md`).
+  - Schema v2/v3 (legacy): this structure may exist per slice.
   - `X-integ-core` (core integration): merges code+tests and gets primary-platform green.
   - `CPk-ci-checkpoint` (ops task; planned boundary): dispatches compile parity + Feature Smoke for the checkpoint slice’s `X-integ-core` commit (uses `CI_CHECKOUT_REF` / `SMOKE_CHECKOUT_REF`) and starts platform-fix tasks only when needed.
   - `X-integ-linux` (platform-fix): if Linux is a behavior platform, runs Linux smoke (and bundled WSL smoke if required); otherwise treats Linux as CI parity-only.

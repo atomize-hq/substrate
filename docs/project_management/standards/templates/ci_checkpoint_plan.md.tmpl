@@ -14,6 +14,7 @@ Standard:
 ## Operator rules
 - This plan is authoritative for **CI cadence**.
 - If you discover a mismatch between the plan and reality (new slice added, new platform scope, new contract surface), update this plan first, then update `tasks.json` and kickoff prompts.
+- For schema v4+ cross-platform automation packs: update `tasks.json` `meta.checkpoint_boundaries` to list the **last slice** in each checkpoint group (this is linted).
 
 ## Machine-readable plan (linted)
 
@@ -46,4 +47,3 @@ For each checkpoint, explain:
 - Why the boundary is code-grounded (subsystem seam / contract completion / enabling refactor / UX seam).
 - What surfaces are stabilized by this checkpoint (from `spec_manifest.md`).
 - What risk is reduced by running cross-platform CI here (from `impact_map.md`).
-

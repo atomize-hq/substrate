@@ -10,6 +10,9 @@ It shows:
 - a final cross-platform integration aggregator (`X-integ`) that merges platform fixes and re-validates.
 - worktrees retained through the feature and removed only by the feature cleanup task (`FZ-feature-cleanup`).
 
+Schema note:
+- In schema v4+ (boundary-only platform-fix), the platform-fix tasks shown in this doc (`X-integ-<platform>` and `X-integ` as a final aggregator) exist only for checkpoint-boundary slices listed in `tasks.json` `meta.checkpoint_boundaries` (which must match `ci_checkpoint_plan.md`). Normal slices use `X-integ` as the single per-slice merge task and do not fan out per-platform tasks.
+
 Operational notes (important for correct orchestration):
 - CI dispatch validates a specific commit by creating/pushing a throwaway branch at `checkout_ref`:
   - Feature Smoke: `SMOKE_CHECKOUT_REF=<sha>` (via `make feature-smoke ...`)
@@ -228,6 +231,7 @@ flowchart TD
     ENSURE["make triad-orch-ensure (ensures orchestration branch exists, checks out, ff-only pull)"]
     DOCS_START["docs: set task status in tasks.json; START entry in session_log.md; commit"]
     START_PAIR_RUN["make triad-task-start-pair FEATURE_DIR=... SLICE_ID=X (code+test; optional LAUNCH_CODEX=1)"]
+    START_COMPLETE_RUN["make triad-task-start-complete FEATURE_DIR=... SLICE_ID=X (code+test+merge; Codex enabled; writes wrapper summary)"]
     START_PF_RUN["make triad-task-start-platform-fixes-from-smoke FEATURE_DIR=... SLICE_ID=X SMOKE_RUN_ID=<run-id> (optional LAUNCH_CODEX=1)"]
     START_FINAL_RUN["make triad-task-start-integ-final FEATURE_DIR=... SLICE_ID=X (optional LAUNCH_CODEX=1)"]
     START_RUN["make triad-task-start FEATURE_DIR=... TASK_ID=... (single task; optional LAUNCH_CODEX=1)"]

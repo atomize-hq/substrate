@@ -32,7 +32,7 @@ flowchart TD
 
   P["Planning agent reads: docs/project_management/standards/PLANNING_README.md"]
   PACK[Planning Pack created under docs/project_management/next/**FEATURE_NAME**/]
-  PP["Platform parity plan (schema v2/v3; required when meta.cross_platform=true)\n- meta.schema_version\n- v3: meta.automation.enabled=true\n- meta.behavior_platforms_required\n- meta.ci_parity_platforms_required (legacy: meta.platforms_required)\n- meta.wsl_required + meta.wsl_task_mode (if needed)\n- X-integ-core / X-integ-<platform> / X-integ (per slice)\n- ci_checkpoint_plan.md (bounded CI checkpoints between groups of triads)"]
+  PP["Platform parity plan (cross-platform; required when meta.cross_platform=true)\n- meta.schema_version\n  - v2/v3: platform-fix tasks per slice\n  - v4: boundary-only platform-fix\n- v3+: meta.automation.enabled=true\n- v4: meta.checkpoint_boundaries (slice ids)\n- meta.behavior_platforms_required\n- meta.ci_parity_platforms_required (legacy: meta.platforms_required)\n- meta.wsl_required + meta.wsl_task_mode (if needed)\n- v2/v3 model: X-integ-core / X-integ-<platform> / X-integ (per slice)\n- v4 model: normal slices use X-integ; boundary slices use B-integ-core / B-integ-<platform> / B-integ\n- ci_checkpoint_plan.md (bounded CI checkpoints between groups of triads)"]
 
   Q["Quality gate reviewer reads: docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md"]
   LINT["Run mechanical checks: docs/project_management/standards/PLANNING_LINT_CHECKLIST.md"]

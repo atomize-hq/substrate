@@ -37,8 +37,11 @@ For features that opt in (`tasks.json` meta: `execution_gates: true`):
     - `meta.ci_parity_platforms_required: [...]` (subset allowed).
     - Legacy compatibility: `meta.platforms_required` is accepted as an alias for `meta.ci_parity_platforms_required`.
   - If WSL coverage is required: `meta.wsl_required: true` and `meta.wsl_task_mode: "bundled"|"separate"`.
-- Platform-fix integration structure is present if using schema v2 parity model:
-  - `X-integ-core`, `X-integ-<platform>`, `X-integ` per slice, where `<platform>` ranges over CI parity platforms (plus optional WSL task when `wsl_task_mode="separate"`).
+- Platform-fix integration structure is present (cross-platform packs):
+  - Schema v2/v3: `X-integ-core`, `X-integ-<platform>`, `X-integ` per slice, where `<platform>` ranges over CI parity platforms (plus optional WSL task when `wsl_task_mode="separate"`).
+  - Schema v4+: boundary-only platform-fix:
+    - `meta.checkpoint_boundaries` exists and matches the checkpoint group boundaries in `ci_checkpoint_plan.md`.
+    - Only boundary slices define `*-integ-core` / `*-integ-<platform>` tasks; normal slices use only `X-integ`.
 
 ### 3) Smoke scripts are not “toy” checks
 Smoke scripts must be a runnable, minimal version of how a careful human would validate the feature:
