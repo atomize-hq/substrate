@@ -1,13 +1,16 @@
 # Triad Wrapper Prompt (Post-Preflight Automation)
 
-Use this **after** `F0-exec-preflight` is completed for a feature, to start **code + test in parallel** via triad automation **with Codex enabled**, then report **exit codes + final messages** plus artifact paths.
+Use this **after** `F0-exec-preflight` is completed for a feature, to:
+- start **code + test in parallel** via triad automation **with Codex enabled**, then
+- start the slice’s **integration merge** task (one Codex session), then
+- report **exit codes + final messages** plus artifact paths.
 
 Notes:
 - Run this from the **orchestration checkout** (repo root on the orchestration branch), **not** inside a task worktree.
 - Code and test are separate concerns:
   - Code agent = production code only.
   - Test agent = tests only.
-  - Integration owns final green + merge/reconcile.
+  - Integration (per-slice merge task) owns green + merge/reconcile for the slice’s spec.
 - This wrapper must invoke triad automation with Codex enabled: `LAUNCH_CODEX=1`.
 - This wrapper is responsible for orchestration-branch bookkeeping:
   - Mark `tasks.json` START/END status updates.
@@ -160,10 +163,64 @@ SLICE_ID="<SET_ME>"      # e.g. PCP0
        - `git commit -m "docs: finish ${CODE_TASK_ID}"`
        - `git commit -m "docs: finish ${TEST_TASK_ID}"`
 
+7) Determine the per-slice integration task id (orchestration checkout)
+   - Cross-platform automation packs use `*-integ-core` as the per-slice merge task.
+   - Non-cross-platform packs use `*-integ`.
+
+   Determine which exists in `tasks.json`:
+   - Prefer integ-core when present:
+     - `INTEG_TASK_ID="$(jq -r --arg s "$SLICE_ID" '.tasks[] | select(.id==($s+\"-integ-core\")) | .id' \"$FEATURE_DIR/tasks.json\" | head -n 1)"`
+   - If empty, fall back to:
+     - `INTEG_TASK_ID="${SLICE_ID}-integ"`
+
+8) START bookkeeping for integration (orchestration branch)
+   - Update `"$FEATURE_DIR/tasks.json"`:
+     - Set `INTEG_TASK_ID` status to `in_progress`.
+   - Append a START entry to `"$FEATURE_DIR/session_log.md"` (UTC timestamp) with:
+     - task id, expected branch/worktree (from tasks.json), and dispatch command:
+       - `make triad-task-start FEATURE_DIR="$FEATURE_DIR" TASK_ID="$INTEG_TASK_ID" LAUNCH_CODEX=1`
+   - Commit the START update:
+     - `git add "$FEATURE_DIR/tasks.json" "$FEATURE_DIR/session_log.md"`
+     - `git commit -m "docs: start ${INTEG_TASK_ID}"`
+
+9) Run integration (one Codex session)
+   `make triad-task-start FEATURE_DIR="$FEATURE_DIR" TASK_ID="$INTEG_TASK_ID" LAUNCH_CODEX=1`
+
+10) Parse the script stdout contract (key=value lines). Collect at minimum:
+   - `WORKTREE` (store as `INTEG_WORKTREE`)
+   - `CODEX_EXIT`
+   - `CODEX_LAST_MESSAGE_PATH`
+   - (if present) `CODEX_EVENTS_PATH`, `CODEX_STDERR_PATH`
+
+11) Capture the integration commit SHA:
+   - `INTEG_HEAD_SHA=$(git -C "$INTEG_WORKTREE" rev-parse HEAD)`
+
+12) Read and include the full contents of:
+   - `CODEX_LAST_MESSAGE_PATH`
+   If the file is missing, report that clearly (do not guess).
+
+13) END bookkeeping for integration (orchestration branch)
+   - Ensure the integration worktree is actually finished:
+     - `cd "$INTEG_WORKTREE" && make triad-task-finish TASK_ID="$INTEG_TASK_ID" VERIFY_ONLY=1`
+     - If `VERIFY_ONLY=1` fails, run:
+       - `cd "$INTEG_WORKTREE" && make triad-task-finish TASK_ID="$INTEG_TASK_ID"`
+   - Update `"$FEATURE_DIR/tasks.json"`:
+     - If the task is finished successfully: set status to `completed`.
+     - If Codex exited non-zero or the task cannot be finished cleanly: set status to `blocked`.
+   - Append an END entry to `"$FEATURE_DIR/session_log.md"` (UTC timestamp) with:
+     - worktree, branch, HEAD sha, finisher summary, and Codex artifacts paths.
+   - Commit the END update:
+     - `git add "$FEATURE_DIR/tasks.json" "$FEATURE_DIR/session_log.md"`
+     - `git commit -m "docs: finish ${INTEG_TASK_ID}"`
+
+Next steps note (checkpointed cross-platform packs):
+- Cross-platform CI dispatch does not run from the per-slice merge task. If this slice is the end of a checkpoint group, run the checkpoint task (for example `CP1-ci-checkpoint`) using the checkpoint kickoff prompt, or use `docs/project_management/standards/TRIAD_INTEGRATION_WRAPPER_PROMPT.md` for checkpoint-boundary slices.
+
 ## Output to operator
 Return a concise summary that includes:
 - Code task: exit code + `CODE_HEAD_SHA` + final message + artifact paths
 - Test task: exit code + `TEST_HEAD_SHA` + final message + artifact paths
+- Integration task: exit code + `INTEG_HEAD_SHA` + final message + artifact paths
 - Links/paths to the full artifacts (last_message/events/stderr) for both tasks
 
 Do NOT inline huge logs (events/stderr). Paths + short summary only.
