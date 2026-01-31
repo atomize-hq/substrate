@@ -5,9 +5,8 @@ This diagram is the “execution phase” complement to:
 
 It shows:
 - code/test running in parallel worktrees (created via the triad task runner),
-- a core integration merge task (`X-integ-core`),
-- parallel platform-fix integration tasks (`X-integ-<platform>`) that only make changes if a platform fails, and
-- a final cross-platform integration aggregator (`X-integ`) that merges platform fixes and re-validates.
+- a normal per-slice integration merge task (`X-integ`) for non-boundary slices, and
+- for checkpoint-boundary slices only: a core integration task (`X-integ-core`), optional platform-fix tasks (`X-integ-<platform>`), and the final aggregator (`X-integ`) that merges platform fixes and re-validates.
 - worktrees retained through the feature and removed only by the feature cleanup task (`FZ-feature-cleanup`).
 
 Schema note:
@@ -65,11 +64,13 @@ flowchart TD
     ORCH_ENSURE["Ensure orchestration branch exists (make triad-orch-ensure)"]
     START["Pick triad slice: X (e.g., WCU0)"]
     TASKS["tasks.json statuses (START/END in session_log.md)"]
-    START_PAIR["Start X-code + X-test in parallel (make triad-task-start-pair SLICE_ID=X; optional LAUNCH_CODEX=1)"]
+    START_COMPLETE["Preferred: make triad-task-start-complete (code+test+merge; Codex enabled; writes wrapper summary)"]
+    START_PAIR["Alternative: start X-code + X-test in parallel (make triad-task-start-pair SLICE_ID=X; optional LAUNCH_CODEX=1)"]
   end
 
   GATE --> ORCH_ENSURE --> START
   START --> TASKS
+  TASKS --> START_COMPLETE
   TASKS --> START_PAIR
 
   subgraph WT["Parallel Worktrees (no docs edits)"]
@@ -79,6 +80,14 @@ flowchart TD
 
   START_PAIR --> CODE
   START_PAIR --> TEST
+
+  %% ======== Boundary routing (schema v4+) ========
+  BOUNDARY{"Is X a checkpoint boundary?\n(tasks.json meta.checkpoint_boundaries)"}
+
+  %% ======== Normal slice integration (non-boundary) ========
+  subgraph INTEG_NORMAL["Normal Slice Integration (non-boundary)"]
+    INTEG_SINGLE["X-integ (single merge task; run integ checks; complete closeout report; merge back to orchestration)"]
+  end
 
   subgraph INTEG_CORE["Core Integration (primary dev platform)"]
     MERGE["X-integ-core (merge X-code + X-test; resolve spec drift)"]
@@ -94,8 +103,11 @@ flowchart TD
     CP_START_PF["If any gate fails: start failing platform-fix tasks"]
   end
 
-  CODE --> MERGE
-  TEST --> MERGE
+  CODE --> BOUNDARY
+  TEST --> BOUNDARY
+  BOUNDARY -- "NO (normal slice)" --> INTEG_SINGLE
+  BOUNDARY -- "YES (boundary slice)" --> MERGE
+
   MERGE --> CORE_CHECKS --> CORE_LOCAL_SMOKE --> CP --> CP_PARITY --> CP_SMOKE --> CP_START_PF
 
   %% ======== Platform-fix tasks (parallel, only if needed) ========
@@ -113,7 +125,7 @@ flowchart TD
 
   %% ======== Final aggregator ========
   subgraph INTEG_FINAL["Final Cross-Platform Integration"]
-    AGG["X-integ (final; merge platform fixes; run integ checks; complete closeout report)"]
+    AGG["X-integ (boundary slice final; merge platform fixes; run integ checks; complete closeout report)"]
     MERGE_BACK["Merge back to orchestration branch; update tasks.json/session_log.md (worktrees retained; cleanup at feature end)"]
   end
 
@@ -123,6 +135,7 @@ flowchart TD
   WSL --> AGG
   CP_SMOKE --> AGG
   AGG --> MERGE_BACK --> TASKS
+  INTEG_SINGLE --> MERGE_BACK
 
   %% ======== Feature end cleanup ========
   CLEANUP["FZ-feature-cleanup (make triad-feature-cleanup; remove worktrees; optional prune branches)"]
@@ -151,10 +164,12 @@ flowchart TD
     ORCH_ENSURE["Ensure orchestration branch exists (make triad-orch-ensure)"]
     START["Pick triad slice: X (e.g., WCU0)"]
     TASKS["tasks.json statuses (START/END in session_log.md)"]
-    START_PAIR["Start X-code + X-test in parallel (make triad-task-start-pair SLICE_ID=X; optional LAUNCH_CODEX=1)"]
+    START_COMPLETE["Preferred: make triad-task-start-complete (code+test+merge; Codex enabled; writes wrapper summary)"]
+    START_PAIR["Alternative: start X-code + X-test in parallel (make triad-task-start-pair SLICE_ID=X; optional LAUNCH_CODEX=1)"]
   end
 
-  GATE --> ORCH_ENSURE --> START --> TASKS --> START_PAIR
+  GATE --> ORCH_ENSURE --> START --> TASKS --> START_COMPLETE
+  TASKS --> START_PAIR
 
   subgraph WT["Parallel Worktrees (no docs edits)"]
     CODE["X-code (prod code only; created via make triad-task-start-pair; writes .taskmeta.json)"]
@@ -163,6 +178,14 @@ flowchart TD
 
   START_PAIR --> CODE
   START_PAIR --> TEST
+
+  %% ======== Boundary routing (schema v4+) ========
+  BOUNDARY{"Is X a checkpoint boundary?\n(tasks.json meta.checkpoint_boundaries)"}
+
+  %% ======== Normal slice integration (non-boundary) ========
+  subgraph INTEG_NORMAL["Normal Slice Integration (non-boundary)"]
+    INTEG_SINGLE["X-integ (single merge task; run integ checks; closeout report; merge back)"]
+  end
 
   subgraph INTEG_CORE["Core Integration (primary dev platform)"]
     CORE["X-integ-core (merge X-code + X-test; resolve spec drift)"]
@@ -178,8 +201,11 @@ flowchart TD
     CP_START_PF["If any gate fails: start failing platform-fix tasks"]
   end
 
-  CODE --> CORE
-  TEST --> CORE
+  CODE --> BOUNDARY
+  TEST --> BOUNDARY
+  BOUNDARY -- "NO (normal slice)" --> INTEG_SINGLE
+  BOUNDARY -- "YES (boundary slice)" --> CORE
+
   CORE --> CORE_CHECKS --> CORE_LOCAL_SMOKE --> CP --> CP_PARITY --> CP_SMOKE --> CP_START_PF
 
   %% ======== Platform-fix tasks (parallel, only if needed) ========
@@ -197,7 +223,7 @@ flowchart TD
 
   %% ======== Final aggregator ========
   subgraph INTEG_FINAL["Final Cross-Platform Integration"]
-    FINAL["X-integ (final; merge platform fixes; run integ checks; complete closeout report)"]
+    FINAL["X-integ (boundary slice final; merge platform fixes; run integ checks; complete closeout report)"]
     MERGE_BACK["Merge back to orchestration branch; update tasks.json/session_log.md (worktrees retained; cleanup at feature end)"]
   end
 
@@ -207,6 +233,7 @@ flowchart TD
   WSL --> FINAL
   CP_SMOKE --> FINAL
   FINAL --> MERGE_BACK --> TASKS
+  INTEG_SINGLE --> MERGE_BACK
 
   %% ======== Feature end cleanup ========
   CLEANUP["FZ-feature-cleanup (make triad-feature-cleanup; remove worktrees; optional prune branches)"]
@@ -256,6 +283,16 @@ flowchart TD
     PAIR_STDOUT["stdout contract: CODE_WORKTREE=..., TEST_WORKTREE=..., ..."]
   end
 
+  %% ======== task_start_complete internals ========
+  subgraph START_COMPLETE_INT["scripts/triad/task_start_complete.sh (automation wrapper)"]
+    COMPLETE_PRE["prechecks: orch clean; code/test deps completed; boundary detection via meta.checkpoint_boundaries"]
+    COMPLETE_START["start code+test pair (calls task_start_pair.sh; optional codex exec)"]
+    COMPLETE_FINISH_PAIR["finish code+test (calls task_finish.sh in each worktree)"]
+    COMPLETE_INTEG_SELECT["select integration task from X-code.integration_task"]
+    COMPLETE_INTEG_RUN["start+finish integration task (calls task_start.sh + task_finish.sh)"]
+    COMPLETE_ARTIFACTS["write wrapper artifacts under FEATURE_DIR/logs/<slice>/wrapper/"]
+  end
+
   %% ======== task_start_platform_fixes internals ========
   subgraph START_PF_INT["scripts/triad/task_start_platform_fixes.sh (automation)"]
     PF_PARSE["parse tasks.json (requires schema_version>=3 and meta.automation.enabled=true)"]
@@ -298,6 +335,7 @@ flowchart TD
 
   ENSURE --> DOCS_START
   DOCS_START --> START_PAIR_RUN --> PAIR_PARSE --> PAIR_VALIDATE --> PAIR_CALLS --> PAIR_CODEX --> PAIR_STDOUT
+  DOCS_START --> START_COMPLETE_RUN --> COMPLETE_PRE --> COMPLETE_START --> COMPLETE_FINISH_PAIR --> COMPLETE_INTEG_SELECT --> COMPLETE_INTEG_RUN --> COMPLETE_ARTIFACTS
   DOCS_START --> START_RUN --> START_PARSE --> START_WT --> START_META --> START_REG --> START_STDOUT
   DOCS_START --> START_PF_RUN --> PF_PARSE --> PF_SELECT --> PF_CALLS --> PF_CODEX --> PF_STDOUT
   DOCS_START --> START_FINAL_RUN --> FINAL_PARSE --> FINAL_VALIDATE --> FINAL_DEPS --> FINAL_START
