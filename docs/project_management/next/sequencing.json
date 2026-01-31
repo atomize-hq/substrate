@@ -437,6 +437,24 @@
       ]
     },
     {
+      "order": 39.9,
+      "id": "warn_config_global_show_workspace_overrides",
+      "title": "Warn on config global show when workspace config overrides",
+      "branch": "feat/warn-config-global-show-workspace-overrides",
+      "directory": "docs/project_management/next/warn-config-global-show-workspace-overrides",
+      "plan": "docs/project_management/next/warn-config-global-show-workspace-overrides/plan.md",
+      "status": "not_started",
+      "sequence": [
+        {
+          "id": "C0",
+          "spec": "docs/project_management/next/warn-config-global-show-workspace-overrides/C0-spec.md"
+        }
+      ],
+      "notes": [
+        "Backlog: docs/BACKLOG.md (P1)"
+      ]
+    },
+    {
       "order": 40,
       "id": "json_mode",
       "title": "JSON mode (structured CLI I/O)",
