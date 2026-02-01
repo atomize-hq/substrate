@@ -225,7 +225,7 @@ Optional flags (when needed):
 
 Automation wrapper:
 - `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
-- `make triad-task-start-complete FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>"` (code+test in parallel, then the slice’s integration task; writes wrapper summary)
+- `make triad-task-start-complete FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>"` (code+test in parallel, then runs the integration task wired via `<slice>-code.integration_task`; writes wrapper summary; does not run CI checkpoint ops tasks)
 
 ## Role Command Requirements
 - Code: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; optional targeted/manual sanity checks allowed but not required; no unit/integration suite requirement.
@@ -268,8 +268,8 @@ Kickoff prompt templates for this model:
 - Final aggregator integration: `docs/project_management/standards/templates/kickoff_integ_final.md.tmpl`
 
 ## Context Budget & Triad Sizing
-- Agents typically have a 272k token context window. Size each task so a single agent needs no more than ~40–50% of that window (roughly 110–150k tokens) to hold the spec, plan, code/tests, and recent history.
-- If a task risks breaching that budget (large migration, many platforms, or broad refactors), split into additional triads or narrower phases before kickoff.
+- Agents typically have a 272k token context window. Every triad task (code/test/integ) MUST be scoped so a single agent can execute it within 40% of that window (≤ 108,800 tokens) while holding the spec, plan, and relevant code/tests and history in-context.
+- If a task risks breaching that budget (large migration, many platforms, or broad refactors), split into additional triads or narrower phases before kickoff. If you are uncertain, split.
 - Use specs to keep scope crisp; avoid “grab bag” triads. Aim for small, testable chunks with clear acceptance criteria.
 
 Practical sizing rules (recommended):
@@ -308,7 +308,7 @@ If relevant to the feature (e.g., sync/FS operations), explicitly list in specs/
 - WS7: Rollback/CLI
 - WS8: Internal system (world/bridge)
 - WS9: UX/migration polish
-Adjust counts to keep each triad ≤ ~40–50% of a 272k context window (~110–140k tokens).
+Adjust counts to keep each triad task (code/test/integ) ≤ 40% of a 272k context window (≤ 108,800 tokens).
 
 ## Session Log Usage
 - Only START/END entries. Include: timestamp (UTC), agent role, task ID, commands run (fmt/clippy/tests/scripts), results (pass/fail, temp roots if applicable), worktree/commits touched, prompts created/verified, blockers/next steps.

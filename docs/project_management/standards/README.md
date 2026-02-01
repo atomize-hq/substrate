@@ -110,7 +110,8 @@ Orchestration branch bootstrap (used by the opening gate):
 
 	Start both worktrees:
 	- Preferred (post-preflight): use `docs/project_management/standards/TRIAD_WRAPPER_PROMPT.md` (runs start-pair with `LAUNCH_CODEX=1` and reports exit codes + last messages + artifact paths).
-	- Preferred (fully automated): `make triad-task-start-complete FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<SLICE_ID>"` (runs code+test in parallel, then runs the slice’s integration merge task as wired in `tasks.json`, and writes a wrapper summary under `FEATURE_DIR/logs/<slice>/wrapper/`).
+	- Preferred (fully automated): `make triad-task-start-complete FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<SLICE_ID>"` (runs code+test in parallel, then runs the slice’s integration task as wired in `tasks.json` (`<slice>-code.integration_task`), and writes a wrapper summary under `FEATURE_DIR/logs/<slice>/wrapper/`).
+	  - For schema v4+ checkpointed cross-platform packs: on checkpoint-boundary slices, `<slice>-code.integration_task` is expected to be `<slice>-integ-core`. This command does not run `CPk-ci-checkpoint`, does not start any `*-integ-<platform>` platform-fix tasks, and does not start `<slice>-integ` final aggregation.
 	- `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<SLICE_ID>" LAUNCH_CODEX=1`
 
 Finish each task from inside its worktree (commits to the task branch; does not merge to orchestration):
@@ -131,6 +132,8 @@ Integration tasks should set `merge_to_orchestration` in `tasks.json`:
 
 Optional: run an end-to-end integration orchestration wrapper for a CI checkpoint boundary slice (integ-core -> checkpoint CI -> platform-fix -> final) with artifact reporting:
 - `docs/project_management/standards/TRIAD_INTEGRATION_WRAPPER_PROMPT.md`
+Optional: use a single unified wrapper prompt that covers both normal slices and checkpoint-boundary slices:
+- `docs/project_management/standards/TRIAD_WRAPPER_PROMPT_UNIFIED.md`
 
 Run the planned CI checkpoint (bounded; only at checkpoint boundaries):
 - Read: `docs/project_management/next/<feature>/ci_checkpoint_plan.md`

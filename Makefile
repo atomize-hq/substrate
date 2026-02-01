@@ -372,6 +372,16 @@ triad-task-start-integ-final:
 	if [ "$(DRY_RUN)" = "1" ]; then cmd="$$cmd --dry-run"; fi; \
 	eval "$$cmd"
 
+.PHONY: triad-mark-noop-platform-fixes-completed
+triad-mark-noop-platform-fixes-completed:
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@if [ -z "$(SLICE_ID)" ]; then echo "ERROR: set SLICE_ID=<slice>"; exit 2; fi
+	@set -euo pipefail; \
+	cmd="scripts/triad/mark_noop_platform_fixes_completed.sh --feature-dir \"$(FEATURE_DIR)\" --slice-id \"$(SLICE_ID)\""; \
+	if [ -n "$(SMOKE_RUN_ID)" ]; then cmd="$$cmd --from-smoke-run \"$(SMOKE_RUN_ID)\""; fi; \
+	if [ "$(DRY_RUN)" = "1" ]; then cmd="$$cmd --dry-run"; fi; \
+	eval "$$cmd"
+
 .PHONY: triad-task-finish
 triad-task-finish:
 	@if [ -z "$(TASK_ID)" ]; then echo "ERROR: set TASK_ID=<task-id>"; exit 2; fi

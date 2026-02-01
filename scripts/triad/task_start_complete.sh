@@ -25,6 +25,9 @@ Behavior:
   - Starts the slice’s integration merge task (determined from <slice>-code.integration_task), with Codex enabled.
   - Finishes the integration worktree via triad-task-finish (commits + merges to orchestration when configured).
   - Marks the integration task completed in tasks.json + appends END entry (commits).
+  - For schema v4+ checkpointed cross-platform packs: on checkpoint-boundary slices, the integration task is expected to be <slice>-integ-core.
+    - This wrapper does not run any CI checkpoint ops task (CPk-ci-checkpoint), does not start any platform-fix tasks (<slice>-integ-<platform>), and does not start final aggregation (<slice>-integ).
+    - It emits NEXT_CHECKPOINT_TASK_ID so the operator can run the planned checkpoint next.
 
 Outputs:
   - Writes a log + JSON summary under <feature_dir>/logs/<slice>/wrapper/

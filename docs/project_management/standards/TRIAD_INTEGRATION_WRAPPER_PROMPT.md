@@ -11,6 +11,8 @@ Notes:
 - Run this from the **orchestration checkout** (repo root), not inside any task worktree.
 - This wrapper assumes an automation-enabled Planning Pack (`tasks.json` meta: `schema_version >= 3` and `meta.automation.enabled=true`).
 - This wrapper is for **checkpoint boundary slices only**. If `<SLICE>` is not the last slice in its checkpoint group, run integ-core and stop (do not dispatch cross-platform CI from this wrapper).
+- If you want a single prompt that covers both normal slices and checkpoint-boundary slices, use:
+  - `docs/project_management/standards/TRIAD_WRAPPER_PROMPT_UNIFIED.md`
 - Schema v4+ note (boundary-only platform-fix): only slices listed in `tasks.json` `meta.checkpoint_boundaries` will have `*-integ-core` / `*-integ-<platform>` tasks. If a slice does not have `${SLICE_ID}-integ-core` in `tasks.json`, this wrapper is not applicable.
 - This wrapper does not assume you are editing `tasks.json`/`session_log.md`, but **`make triad-task-start-integ-final` requires `depends_on` tasks are `status=completed`**. If CI smoke is green and platform-fix tasks were no-ops, the operator must still mark them `completed` on the orchestration branch to unblock the final aggregator.
 - Naming note: the final aggregator task id is `${SLICE_ID}-integ` (started via `make triad-task-start-integ-final ...`), not `${SLICE_ID}-integ-final`.

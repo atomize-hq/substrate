@@ -1,7 +1,7 @@
 # ADR-0018 — World FS Granular Allow/Deny (Read/Discover/Write) + Strict Deny (Full Isolation Only)
 
 ## Status
-- Status: Draft
+- Status: Accepted
 - Date (UTC): 2026-01-29
 - Owner(s): spenser, Substrate maintainers
 
@@ -31,7 +31,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 63b12f77da720d80441ffaf697b974e60e3619f9b390b156b299bc39bd7c116a
+ADR_BODY_SHA256: 2e4cb6e253a357d8e84deb21a860b1d4f9f195eb1e0e74f829dd0b154d2082ce
 ### Changes (operator-facing)
 - Add granular `allow_list` + `deny_list` for world filesystem reads/writes (and optional directory visibility)
   - Existing: `world_fs.read_allowlist` / `world_fs.write_allowlist` are allowlist-only; invalid patterns (e.g., `..`) can be accepted but ignored; there is no deny list; “allow all except secrets” cannot be expressed.
