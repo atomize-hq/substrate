@@ -19,6 +19,7 @@ Authoring standards:
 - `docs/project_management/next/world-fs-granular-allow-deny/spec_manifest.md` — v4 planning standard required artifact (spec ownership map).
 - `docs/project_management/next/world-fs-granular-allow-deny/impact_map.md` — v4 planning standard required artifact (replaces integration_map.md).
 - `docs/project_management/next/world-fs-granular-allow-deny/session_log.md` — v4 planning standard required artifact.
+- `docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md` — bounded CI checkpoint plan for cross-platform parity.
 - `docs/project_management/next/world-fs-granular-allow-deny/WFGAD0-spec.md` — required slice spec artifact.
 - `docs/project_management/next/world-fs-granular-allow-deny/WFGAD1-spec.md` — required slice spec artifact.
 - `docs/project_management/next/world-fs-granular-allow-deny/WFGAD2-spec.md` — required slice spec artifact.
@@ -43,6 +44,21 @@ Authoring standards:
 - `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD5-code.md` — kickoff prompt for WFGAD5 code task.
 - `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD5-test.md` — kickoff prompt for WFGAD5 test task.
 - `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD5-integ.md` — kickoff prompt for WFGAD5 integration task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD1-integ-core.md` — kickoff prompt for WFGAD1 integration core task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD1-integ-linux.md` — kickoff prompt for WFGAD1 linux platform-fix task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD1-integ-macos.md` — kickoff prompt for WFGAD1 macos platform-fix task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD1-integ-windows.md` — kickoff prompt for WFGAD1 windows platform-fix task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD3-integ-core.md` — kickoff prompt for WFGAD3 integration core task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD3-integ-linux.md` — kickoff prompt for WFGAD3 linux platform-fix task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD3-integ-macos.md` — kickoff prompt for WFGAD3 macos platform-fix task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD3-integ-windows.md` — kickoff prompt for WFGAD3 windows platform-fix task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD5-integ-core.md` — kickoff prompt for WFGAD5 integration core task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD5-integ-linux.md` — kickoff prompt for WFGAD5 linux platform-fix task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD5-integ-macos.md` — kickoff prompt for WFGAD5 macos platform-fix task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD5-integ-windows.md` — kickoff prompt for WFGAD5 windows platform-fix task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/CP1-ci-checkpoint.md` — kickoff prompt for CP1 CI checkpoint task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/CP2-ci-checkpoint.md` — kickoff prompt for CP2 CI checkpoint task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/CP3-ci-checkpoint.md` — kickoff prompt for CP3 CI checkpoint task.
 - `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/FZ-feature-cleanup.md` — required for v3+ automation packs.
 
 ### Edit

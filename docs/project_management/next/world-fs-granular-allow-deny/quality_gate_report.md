@@ -70,7 +70,10 @@ RECOMMENDATION: ACCEPT
 - Notes: Smoke scripts are not in scope until execution adds `docs/project_management/next/world-fs-granular-allow-deny/smoke/`.
 
 ### 5.1) Cross-platform parity task structure (schema v2/v3/v4)
-- Result: `N/A` (meta.cross_platform=false)
+- Result: `PASS`
+- Evidence:
+  - `docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny/tasks.json`
 
 ### 6) Triad interoperability (execution workflow)
 - Result: `PASS`

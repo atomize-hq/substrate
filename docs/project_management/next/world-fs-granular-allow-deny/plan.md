@@ -5,9 +5,11 @@
 - Orchestration branch: `feat/world-fs-granular-allow-deny`
 - Spec ownership map: `docs/project_management/next/world-fs-granular-allow-deny/spec_manifest.md`
 - Impact map: `docs/project_management/next/world-fs-granular-allow-deny/impact_map.md`
+- CI checkpoint plan: `docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md`
 
 - Linux full isolation only (`world_fs.isolation=full`).
 - Breaking schema changes (no backwards compatibility).
+- Cross-platform CI parity is required (linux/macos/windows) to prevent build/compile regressions from landing.
 
 ## Goal
 - Implement ADR-0018 for Linux full isolation only with no backwards compatibility.

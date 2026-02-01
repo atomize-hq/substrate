@@ -32,6 +32,7 @@ Authoring standard:
 - `docs/project_management/next/world-fs-granular-allow-deny/requirements_traceability.md` — MUST/MUST NOT mapping to tasks and validation steps
 - `docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md` — manual validation cases (authoritative)
 - `docs/project_management/next/world-fs-granular-allow-deny/quality_gate_report.md` — planning quality gate outcome
+- `docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md` — bounded CI checkpoint plan (cross-platform automation packs)
 
 ## Coverage matrix (surface → authoritative doc)
 

@@ -2,11 +2,22 @@
   "meta": {
     "schema_version": 4,
     "feature": "world-fs-granular-allow-deny",
-    "cross_platform": false,
+    "cross_platform": true,
     "automation": {
       "enabled": true,
       "orchestration_branch": "feat/world-fs-granular-allow-deny"
-    }
+    },
+    "behavior_platforms_required": [],
+    "ci_parity_platforms_required": [
+      "linux",
+      "macos",
+      "windows"
+    ],
+    "checkpoint_boundaries": [
+      "WFGAD1",
+      "WFGAD3",
+      "WFGAD5"
+    ]
   },
   "tasks": [
     {
@@ -17,7 +28,6 @@
       "status": "pending",
       "description": "Implement broker policy schema v2 parsing and validation (breaking; hard errors; deterministic pattern rules).",
       "references": [
-        "docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md",
         "docs/project_management/next/world-fs-granular-allow-deny/plan.md",
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD0-spec.md",
         "docs/project_management/next/world-fs-granular-allow-deny/SCHEMA.md",
@@ -63,7 +73,8 @@
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD0-spec.md",
         "docs/project_management/next/world-fs-granular-allow-deny/SCHEMA.md",
-        "docs/project_management/next/world-fs-granular-allow-deny/requirements_traceability.md"
+        "docs/project_management/next/world-fs-granular-allow-deny/requirements_traceability.md",
+        "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
         "Tests enforce WFGAD0-spec.md acceptance requirements."
@@ -98,8 +109,7 @@
       "status": "pending",
       "description": "Merge and validate broker policy schema v2 work for WFGAD0.",
       "references": [
-        "docs/project_management/next/world-fs-granular-allow-deny/WFGAD0-spec.md",
-        "docs/project_management/next/world-fs-granular-allow-deny/quality_gate_report.md"
+        "docs/project_management/next/world-fs-granular-allow-deny/WFGAD0-spec.md"
       ],
       "acceptance_criteria": [
         "WFGAD0 acceptance criteria are implemented and validated."
@@ -132,6 +142,7 @@
       ],
       "merge_to_orchestration": true
     },
+
     {
       "id": "WFGAD1-code",
       "name": "WFGAD1 slice (code)",
@@ -140,6 +151,7 @@
       "status": "pending",
       "description": "Introduce PolicySnapshotV2 and enforce world-agent V1 rejection for request handlers (breaking).",
       "references": [
+        "docs/project_management/next/world-fs-granular-allow-deny/plan.md",
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD1-spec.md",
         "docs/project_management/next/world-fs-granular-allow-deny/PROTOCOL.md",
         "docs/project_management/next/world-fs-granular-allow-deny/SCHEMA.md",
@@ -160,7 +172,7 @@
         "From inside the worktree: make triad-task-finish TASK_ID=\"WFGAD1-code\""
       ],
       "worktree": "wt/world-fs-granular-allow-deny-wfgad1-code",
-      "integration_task": "WFGAD1-integ",
+      "integration_task": "WFGAD1-integ-core",
       "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD1-code.md",
       "depends_on": [
         "WFGAD0-integ"
@@ -182,7 +194,8 @@
       "description": "Add tests for PolicySnapshotV2 strict validation and world-agent V1 rejection behavior (HTTP and WS).",
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD1-spec.md",
-        "docs/project_management/next/world-fs-granular-allow-deny/PROTOCOL.md"
+        "docs/project_management/next/world-fs-granular-allow-deny/PROTOCOL.md",
+        "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
         "Tests enforce WFGAD1-spec.md acceptance requirements."
@@ -198,7 +211,7 @@
         "From inside the worktree: make triad-task-finish TASK_ID=\"WFGAD1-test\""
       ],
       "worktree": "wt/world-fs-granular-allow-deny-wfgad1-test",
-      "integration_task": "WFGAD1-integ",
+      "integration_task": "WFGAD1-integ-core",
       "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD1-test.md",
       "depends_on": [
         "WFGAD0-integ"
@@ -212,17 +225,215 @@
       ]
     },
     {
-      "id": "WFGAD1-integ",
-      "name": "WFGAD1 slice (integration)",
+      "id": "WFGAD1-integ-core",
+      "name": "WFGAD1 slice (integration core)",
       "type": "integration",
       "phase": "WFGAD1",
       "status": "pending",
-      "description": "Merge and validate PolicySnapshotV2 strict ingestion and V1 rejection for WFGAD1.",
+      "description": "Merge and validate WFGAD1 on the primary dev platform (pre-checkpoint core integration).",
       "references": [
-        "docs/project_management/next/world-fs-granular-allow-deny/WFGAD1-spec.md"
+        "docs/project_management/next/world-fs-granular-allow-deny/WFGAD1-spec.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md"
       ],
       "acceptance_criteria": [
-        "WFGAD1 acceptance criteria are implemented and validated."
+        "WFGAD1 core integration is green (local integration gates)."
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGAD1-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" TASK_ID=\"WFGAD1-integ-core\""
+      ],
+      "end_checklist": [
+        "Merge code + test branches; resolve conflicts",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGAD1-integ-core\""
+      ],
+      "worktree": "wt/world-fs-granular-allow-deny-wfgad1-integ-core",
+      "integration_task": "WFGAD1-integ-core",
+      "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD1-integ-core.md",
+      "depends_on": [
+        "WFGAD1-code",
+        "WFGAD1-test"
+      ],
+      "concurrent_with": [],
+      "git_branch": "world-fs-granular-allow-deny-wfgad1-integ-core",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "CP1-ci-checkpoint",
+      "name": "CP1 CI checkpoint (WFGAD0-WFGAD1)",
+      "type": "ops",
+      "phase": "CP1",
+      "status": "pending",
+      "description": "Run bounded cross-platform CI gates for CP1 per ci_checkpoint_plan.md.",
+      "references": [
+        "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/impact_map.md"
+      ],
+      "acceptance_criteria": [
+        "Compile parity is green for linux/macos/windows for the checkpoint commit.",
+        "CI testing (quick) is green for the checkpoint commit."
+      ],
+      "start_checklist": [
+        "git checkout feat/world-fs-granular-allow-deny && git pull --ff-only",
+        "Read: ci_checkpoint_plan.md, tasks.json, session_log.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs"
+      ],
+      "end_checklist": [
+        "Record run ids/URLs in session_log.md",
+        "Set status to completed; add END entry; commit docs"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/CP1-ci-checkpoint.md",
+      "depends_on": [
+        "WFGAD1-integ-core"
+      ],
+      "concurrent_with": []
+    },
+    {
+      "id": "WFGAD1-integ-linux",
+      "name": "WFGAD1 slice (platform-fix — linux)",
+      "type": "integration",
+      "phase": "WFGAD1",
+      "status": "pending",
+      "description": "Fix Linux CI parity failures for WFGAD1 (checkpoint boundary platform-fix).",
+      "references": [
+        "docs/project_management/next/world-fs-granular-allow-deny/WFGAD1-spec.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md"
+      ],
+      "acceptance_criteria": [
+        "Linux CI parity failures for WFGAD1 are resolved."
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGAD1-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" TASK_ID=\"WFGAD1-integ-linux\" TASK_PLATFORM=linux"
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGAD1-integ-linux\""
+      ],
+      "worktree": "wt/world-fs-granular-allow-deny-wfgad1-integ-linux",
+      "integration_task": "WFGAD1-integ-linux",
+      "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD1-integ-linux.md",
+      "depends_on": [
+        "WFGAD1-integ-core",
+        "CP1-ci-checkpoint"
+      ],
+      "concurrent_with": [],
+      "git_branch": "world-fs-granular-allow-deny-wfgad1-integ-linux",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": false,
+      "platform": "linux"
+    },
+    {
+      "id": "WFGAD1-integ-macos",
+      "name": "WFGAD1 slice (platform-fix — macos)",
+      "type": "integration",
+      "phase": "WFGAD1",
+      "status": "pending",
+      "description": "Fix macOS CI parity failures for WFGAD1 (checkpoint boundary platform-fix).",
+      "references": [
+        "docs/project_management/next/world-fs-granular-allow-deny/WFGAD1-spec.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md"
+      ],
+      "acceptance_criteria": [
+        "macOS CI parity failures for WFGAD1 are resolved."
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGAD1-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" TASK_ID=\"WFGAD1-integ-macos\" TASK_PLATFORM=macos"
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGAD1-integ-macos\""
+      ],
+      "worktree": "wt/world-fs-granular-allow-deny-wfgad1-integ-macos",
+      "integration_task": "WFGAD1-integ-macos",
+      "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD1-integ-macos.md",
+      "depends_on": [
+        "WFGAD1-integ-core",
+        "CP1-ci-checkpoint"
+      ],
+      "concurrent_with": [],
+      "git_branch": "world-fs-granular-allow-deny-wfgad1-integ-macos",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": false,
+      "platform": "macos"
+    },
+    {
+      "id": "WFGAD1-integ-windows",
+      "name": "WFGAD1 slice (platform-fix — windows)",
+      "type": "integration",
+      "phase": "WFGAD1",
+      "status": "pending",
+      "description": "Fix Windows CI parity failures for WFGAD1 (checkpoint boundary platform-fix).",
+      "references": [
+        "docs/project_management/next/world-fs-granular-allow-deny/WFGAD1-spec.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md"
+      ],
+      "acceptance_criteria": [
+        "Windows CI parity failures for WFGAD1 are resolved."
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGAD1-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" TASK_ID=\"WFGAD1-integ-windows\" TASK_PLATFORM=windows"
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGAD1-integ-windows\""
+      ],
+      "worktree": "wt/world-fs-granular-allow-deny-wfgad1-integ-windows",
+      "integration_task": "WFGAD1-integ-windows",
+      "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD1-integ-windows.md",
+      "depends_on": [
+        "WFGAD1-integ-core",
+        "CP1-ci-checkpoint"
+      ],
+      "concurrent_with": [],
+      "git_branch": "world-fs-granular-allow-deny-wfgad1-integ-windows",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": false,
+      "platform": "windows"
+    },
+    {
+      "id": "WFGAD1-integ",
+      "name": "WFGAD1 slice (integration final)",
+      "type": "integration",
+      "phase": "WFGAD1",
+      "status": "pending",
+      "description": "Finalize WFGAD1 after checkpoint + platform fixes and merge back to orchestration.",
+      "references": [
+        "docs/project_management/next/world-fs-granular-allow-deny/WFGAD1-spec.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md"
+      ],
+      "acceptance_criteria": [
+        "WFGAD1 is green on linux/macos/windows and merged back to orchestration."
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
@@ -231,7 +442,7 @@
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" TASK_ID=\"WFGAD1-integ\""
       ],
       "end_checklist": [
-        "Merge code + test branches; resolve conflicts",
+        "Merge core + platform-fix branches; resolve conflicts",
         "cargo fmt",
         "cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant tests",
@@ -242,8 +453,10 @@
       "integration_task": "WFGAD1-integ",
       "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD1-integ.md",
       "depends_on": [
-        "WFGAD1-code",
-        "WFGAD1-test"
+        "WFGAD1-integ-core",
+        "WFGAD1-integ-linux",
+        "WFGAD1-integ-macos",
+        "WFGAD1-integ-windows"
       ],
       "concurrent_with": [],
       "git_branch": "world-fs-granular-allow-deny-wfgad1-integ",
@@ -252,6 +465,7 @@
       ],
       "merge_to_orchestration": true
     },
+
     {
       "id": "WFGAD2-code",
       "name": "WFGAD2 slice (code)",
@@ -260,9 +474,11 @@
       "status": "pending",
       "description": "Emit PolicySnapshotV2 from shell and construct validated enforcement plan env inputs for helper execution.",
       "references": [
+        "docs/project_management/next/world-fs-granular-allow-deny/plan.md",
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD2-spec.md",
         "docs/project_management/next/world-fs-granular-allow-deny/ENV.md",
-        "docs/project_management/next/world-fs-granular-allow-deny/PROTOCOL.md"
+        "docs/project_management/next/world-fs-granular-allow-deny/PROTOCOL.md",
+        "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
         "Implements WFGAD2-spec.md acceptance exactly."
@@ -282,6 +498,7 @@
       "integration_task": "WFGAD2-integ",
       "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD2-code.md",
       "depends_on": [
+        "CP1-ci-checkpoint",
         "WFGAD1-integ"
       ],
       "concurrent_with": [
@@ -301,7 +518,8 @@
       "description": "Add tests for enforcement plan env parsing/validation and helper invocation gating (fail closed).",
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD2-spec.md",
-        "docs/project_management/next/world-fs-granular-allow-deny/ENV.md"
+        "docs/project_management/next/world-fs-granular-allow-deny/ENV.md",
+        "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
         "Tests enforce WFGAD2-spec.md acceptance requirements."
@@ -320,6 +538,7 @@
       "integration_task": "WFGAD2-integ",
       "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD2-test.md",
       "depends_on": [
+        "CP1-ci-checkpoint",
         "WFGAD1-integ"
       ],
       "concurrent_with": [
@@ -372,6 +591,7 @@
       ],
       "merge_to_orchestration": true
     },
+
     {
       "id": "WFGAD3-code",
       "name": "WFGAD3 slice (code)",
@@ -380,10 +600,12 @@
       "status": "pending",
       "description": "Implement deny masking (mount masking) and wildcard deny snapshot scanning with deterministic errno behavior.",
       "references": [
+        "docs/project_management/next/world-fs-granular-allow-deny/plan.md",
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD3-spec.md",
         "docs/project_management/next/world-fs-granular-allow-deny/contract.md",
         "docs/project_management/next/world-fs-granular-allow-deny/SECURITY.md",
-        "docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md"
+        "docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md",
+        "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
         "Implements WFGAD3-spec.md acceptance exactly."
@@ -400,7 +622,7 @@
         "From inside the worktree: make triad-task-finish TASK_ID=\"WFGAD3-code\""
       ],
       "worktree": "wt/world-fs-granular-allow-deny-wfgad3-code",
-      "integration_task": "WFGAD3-integ",
+      "integration_task": "WFGAD3-integ-core",
       "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD3-code.md",
       "depends_on": [
         "WFGAD2-integ"
@@ -422,7 +644,8 @@
       "description": "Add tests for deny masking semantics, wildcard deny snapshot behavior, and deterministic errno expectations.",
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD3-spec.md",
-        "docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md"
+        "docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md",
+        "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
         "Tests enforce WFGAD3-spec.md acceptance requirements."
@@ -438,7 +661,7 @@
         "From inside the worktree: make triad-task-finish TASK_ID=\"WFGAD3-test\""
       ],
       "worktree": "wt/world-fs-granular-allow-deny-wfgad3-test",
-      "integration_task": "WFGAD3-integ",
+      "integration_task": "WFGAD3-integ-core",
       "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD3-test.md",
       "depends_on": [
         "WFGAD2-integ"
@@ -452,18 +675,215 @@
       ]
     },
     {
-      "id": "WFGAD3-integ",
-      "name": "WFGAD3 slice (integration)",
+      "id": "WFGAD3-integ-core",
+      "name": "WFGAD3 slice (integration core)",
       "type": "integration",
       "phase": "WFGAD3",
       "status": "pending",
-      "description": "Merge and validate deny masking semantics for WFGAD3 (includes manual playbook cases for deny semantics).",
+      "description": "Merge and validate WFGAD3 on the primary dev platform (pre-checkpoint core integration).",
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD3-spec.md",
-        "docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md"
+        "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md"
       ],
       "acceptance_criteria": [
-        "WFGAD3 acceptance criteria are implemented and validated."
+        "WFGAD3 core integration is green (local integration gates)."
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGAD3-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" TASK_ID=\"WFGAD3-integ-core\""
+      ],
+      "end_checklist": [
+        "Merge code + test branches; resolve conflicts",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGAD3-integ-core\""
+      ],
+      "worktree": "wt/world-fs-granular-allow-deny-wfgad3-integ-core",
+      "integration_task": "WFGAD3-integ-core",
+      "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD3-integ-core.md",
+      "depends_on": [
+        "WFGAD3-code",
+        "WFGAD3-test"
+      ],
+      "concurrent_with": [],
+      "git_branch": "world-fs-granular-allow-deny-wfgad3-integ-core",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "CP2-ci-checkpoint",
+      "name": "CP2 CI checkpoint (WFGAD2-WFGAD3)",
+      "type": "ops",
+      "phase": "CP2",
+      "status": "pending",
+      "description": "Run bounded cross-platform CI gates for CP2 per ci_checkpoint_plan.md.",
+      "references": [
+        "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/impact_map.md"
+      ],
+      "acceptance_criteria": [
+        "Compile parity is green for linux/macos/windows for the checkpoint commit.",
+        "CI testing (quick) is green for the checkpoint commit."
+      ],
+      "start_checklist": [
+        "git checkout feat/world-fs-granular-allow-deny && git pull --ff-only",
+        "Read: ci_checkpoint_plan.md, tasks.json, session_log.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs"
+      ],
+      "end_checklist": [
+        "Record run ids/URLs in session_log.md",
+        "Set status to completed; add END entry; commit docs"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/CP2-ci-checkpoint.md",
+      "depends_on": [
+        "WFGAD3-integ-core"
+      ],
+      "concurrent_with": []
+    },
+    {
+      "id": "WFGAD3-integ-linux",
+      "name": "WFGAD3 slice (platform-fix — linux)",
+      "type": "integration",
+      "phase": "WFGAD3",
+      "status": "pending",
+      "description": "Fix Linux CI parity failures for WFGAD3 (checkpoint boundary platform-fix).",
+      "references": [
+        "docs/project_management/next/world-fs-granular-allow-deny/WFGAD3-spec.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md"
+      ],
+      "acceptance_criteria": [
+        "Linux CI parity failures for WFGAD3 are resolved."
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGAD3-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" TASK_ID=\"WFGAD3-integ-linux\" TASK_PLATFORM=linux"
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGAD3-integ-linux\""
+      ],
+      "worktree": "wt/world-fs-granular-allow-deny-wfgad3-integ-linux",
+      "integration_task": "WFGAD3-integ-linux",
+      "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD3-integ-linux.md",
+      "depends_on": [
+        "WFGAD3-integ-core",
+        "CP2-ci-checkpoint"
+      ],
+      "concurrent_with": [],
+      "git_branch": "world-fs-granular-allow-deny-wfgad3-integ-linux",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": false,
+      "platform": "linux"
+    },
+    {
+      "id": "WFGAD3-integ-macos",
+      "name": "WFGAD3 slice (platform-fix — macos)",
+      "type": "integration",
+      "phase": "WFGAD3",
+      "status": "pending",
+      "description": "Fix macOS CI parity failures for WFGAD3 (checkpoint boundary platform-fix).",
+      "references": [
+        "docs/project_management/next/world-fs-granular-allow-deny/WFGAD3-spec.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md"
+      ],
+      "acceptance_criteria": [
+        "macOS CI parity failures for WFGAD3 are resolved."
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGAD3-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" TASK_ID=\"WFGAD3-integ-macos\" TASK_PLATFORM=macos"
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGAD3-integ-macos\""
+      ],
+      "worktree": "wt/world-fs-granular-allow-deny-wfgad3-integ-macos",
+      "integration_task": "WFGAD3-integ-macos",
+      "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD3-integ-macos.md",
+      "depends_on": [
+        "WFGAD3-integ-core",
+        "CP2-ci-checkpoint"
+      ],
+      "concurrent_with": [],
+      "git_branch": "world-fs-granular-allow-deny-wfgad3-integ-macos",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": false,
+      "platform": "macos"
+    },
+    {
+      "id": "WFGAD3-integ-windows",
+      "name": "WFGAD3 slice (platform-fix — windows)",
+      "type": "integration",
+      "phase": "WFGAD3",
+      "status": "pending",
+      "description": "Fix Windows CI parity failures for WFGAD3 (checkpoint boundary platform-fix).",
+      "references": [
+        "docs/project_management/next/world-fs-granular-allow-deny/WFGAD3-spec.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md"
+      ],
+      "acceptance_criteria": [
+        "Windows CI parity failures for WFGAD3 are resolved."
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGAD3-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" TASK_ID=\"WFGAD3-integ-windows\" TASK_PLATFORM=windows"
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGAD3-integ-windows\""
+      ],
+      "worktree": "wt/world-fs-granular-allow-deny-wfgad3-integ-windows",
+      "integration_task": "WFGAD3-integ-windows",
+      "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD3-integ-windows.md",
+      "depends_on": [
+        "WFGAD3-integ-core",
+        "CP2-ci-checkpoint"
+      ],
+      "concurrent_with": [],
+      "git_branch": "world-fs-granular-allow-deny-wfgad3-integ-windows",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": false,
+      "platform": "windows"
+    },
+    {
+      "id": "WFGAD3-integ",
+      "name": "WFGAD3 slice (integration final)",
+      "type": "integration",
+      "phase": "WFGAD3",
+      "status": "pending",
+      "description": "Finalize WFGAD3 after checkpoint + platform fixes and merge back to orchestration.",
+      "references": [
+        "docs/project_management/next/world-fs-granular-allow-deny/WFGAD3-spec.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md"
+      ],
+      "acceptance_criteria": [
+        "WFGAD3 is green on linux/macos/windows and merged back to orchestration."
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
@@ -472,7 +892,7 @@
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" TASK_ID=\"WFGAD3-integ\""
       ],
       "end_checklist": [
-        "Merge code + test branches; resolve conflicts",
+        "Merge core + platform-fix branches; resolve conflicts",
         "cargo fmt",
         "cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant tests",
@@ -483,8 +903,10 @@
       "integration_task": "WFGAD3-integ",
       "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD3-integ.md",
       "depends_on": [
-        "WFGAD3-code",
-        "WFGAD3-test"
+        "WFGAD3-integ-core",
+        "WFGAD3-integ-linux",
+        "WFGAD3-integ-macos",
+        "WFGAD3-integ-windows"
       ],
       "concurrent_with": [],
       "git_branch": "world-fs-granular-allow-deny-wfgad3-integ",
@@ -493,6 +915,7 @@
       ],
       "merge_to_orchestration": true
     },
+
     {
       "id": "WFGAD4-code",
       "name": "WFGAD4 slice (code)",
@@ -501,9 +924,11 @@
       "status": "pending",
       "description": "Implement discover vs read dimension semantics and Landlock support for directory visibility behavior.",
       "references": [
+        "docs/project_management/next/world-fs-granular-allow-deny/plan.md",
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD4-spec.md",
         "docs/project_management/next/world-fs-granular-allow-deny/SCHEMA.md",
-        "docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md"
+        "docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md",
+        "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
         "Implements WFGAD4-spec.md acceptance exactly."
@@ -523,6 +948,7 @@
       "integration_task": "WFGAD4-integ",
       "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD4-code.md",
       "depends_on": [
+        "CP2-ci-checkpoint",
         "WFGAD3-integ"
       ],
       "concurrent_with": [
@@ -542,7 +968,8 @@
       "description": "Add tests for discover vs read behavior and defaulting rules (discover mirrors read when omitted).",
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD4-spec.md",
-        "docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md"
+        "docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md",
+        "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
         "Tests enforce WFGAD4-spec.md acceptance requirements."
@@ -561,6 +988,7 @@
       "integration_task": "WFGAD4-integ",
       "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD4-test.md",
       "depends_on": [
+        "CP2-ci-checkpoint",
         "WFGAD3-integ"
       ],
       "concurrent_with": [
@@ -577,7 +1005,7 @@
       "type": "integration",
       "phase": "WFGAD4",
       "status": "pending",
-      "description": "Merge and validate discover vs read semantics for WFGAD4 (includes manual playbook Case 3).",
+      "description": "Merge and validate discover vs read semantics for WFGAD4.",
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD4-spec.md",
         "docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md"
@@ -613,6 +1041,7 @@
       ],
       "merge_to_orchestration": true
     },
+
     {
       "id": "WFGAD5-code",
       "name": "WFGAD5 slice (code)",
@@ -621,10 +1050,12 @@
       "status": "pending",
       "description": "Implement strict-mode lockdown (cap drop + seccomp) to prevent deny bypass via mount/umount/remount.",
       "references": [
+        "docs/project_management/next/world-fs-granular-allow-deny/plan.md",
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD5-spec.md",
         "docs/project_management/next/world-fs-granular-allow-deny/SECURITY.md",
         "docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md",
-        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0008)"
+        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0008)",
+        "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
         "Implements WFGAD5-spec.md acceptance exactly."
@@ -641,7 +1072,7 @@
         "From inside the worktree: make triad-task-finish TASK_ID=\"WFGAD5-code\""
       ],
       "worktree": "wt/world-fs-granular-allow-deny-wfgad5-code",
-      "integration_task": "WFGAD5-integ",
+      "integration_task": "WFGAD5-integ-core",
       "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD5-code.md",
       "depends_on": [
         "WFGAD4-integ"
@@ -663,7 +1094,8 @@
       "description": "Add tests for strict-mode lockdown behavior (mount-family syscalls denied; bypass prevention).",
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD5-spec.md",
-        "docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md"
+        "docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md",
+        "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
         "Tests enforce WFGAD5-spec.md acceptance requirements."
@@ -679,7 +1111,7 @@
         "From inside the worktree: make triad-task-finish TASK_ID=\"WFGAD5-test\""
       ],
       "worktree": "wt/world-fs-granular-allow-deny-wfgad5-test",
-      "integration_task": "WFGAD5-integ",
+      "integration_task": "WFGAD5-integ-core",
       "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD5-test.md",
       "depends_on": [
         "WFGAD4-integ"
@@ -693,18 +1125,215 @@
       ]
     },
     {
-      "id": "WFGAD5-integ",
-      "name": "WFGAD5 slice (integration)",
+      "id": "WFGAD5-integ-core",
+      "name": "WFGAD5 slice (integration core)",
       "type": "integration",
       "phase": "WFGAD5",
       "status": "pending",
-      "description": "Merge and validate strict-mode lockdown behavior for WFGAD5 (includes manual playbook Case 2).",
+      "description": "Merge and validate WFGAD5 on the primary dev platform (pre-checkpoint core integration).",
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD5-spec.md",
-        "docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md"
+        "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md"
       ],
       "acceptance_criteria": [
-        "WFGAD5 acceptance criteria are implemented and validated."
+        "WFGAD5 core integration is green (local integration gates)."
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGAD5-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" TASK_ID=\"WFGAD5-integ-core\""
+      ],
+      "end_checklist": [
+        "Merge code + test branches; resolve conflicts",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGAD5-integ-core\""
+      ],
+      "worktree": "wt/world-fs-granular-allow-deny-wfgad5-integ-core",
+      "integration_task": "WFGAD5-integ-core",
+      "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD5-integ-core.md",
+      "depends_on": [
+        "WFGAD5-code",
+        "WFGAD5-test"
+      ],
+      "concurrent_with": [],
+      "git_branch": "world-fs-granular-allow-deny-wfgad5-integ-core",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "CP3-ci-checkpoint",
+      "name": "CP3 CI checkpoint (WFGAD4-WFGAD5)",
+      "type": "ops",
+      "phase": "CP3",
+      "status": "pending",
+      "description": "Run bounded cross-platform CI gates for CP3 per ci_checkpoint_plan.md.",
+      "references": [
+        "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/impact_map.md"
+      ],
+      "acceptance_criteria": [
+        "Compile parity is green for linux/macos/windows for the checkpoint commit.",
+        "CI testing (quick) is green for the checkpoint commit."
+      ],
+      "start_checklist": [
+        "git checkout feat/world-fs-granular-allow-deny && git pull --ff-only",
+        "Read: ci_checkpoint_plan.md, tasks.json, session_log.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs"
+      ],
+      "end_checklist": [
+        "Record run ids/URLs in session_log.md",
+        "Set status to completed; add END entry; commit docs"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/CP3-ci-checkpoint.md",
+      "depends_on": [
+        "WFGAD5-integ-core"
+      ],
+      "concurrent_with": []
+    },
+    {
+      "id": "WFGAD5-integ-linux",
+      "name": "WFGAD5 slice (platform-fix — linux)",
+      "type": "integration",
+      "phase": "WFGAD5",
+      "status": "pending",
+      "description": "Fix Linux CI parity failures for WFGAD5 (checkpoint boundary platform-fix).",
+      "references": [
+        "docs/project_management/next/world-fs-granular-allow-deny/WFGAD5-spec.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md"
+      ],
+      "acceptance_criteria": [
+        "Linux CI parity failures for WFGAD5 are resolved."
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGAD5-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" TASK_ID=\"WFGAD5-integ-linux\" TASK_PLATFORM=linux"
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGAD5-integ-linux\""
+      ],
+      "worktree": "wt/world-fs-granular-allow-deny-wfgad5-integ-linux",
+      "integration_task": "WFGAD5-integ-linux",
+      "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD5-integ-linux.md",
+      "depends_on": [
+        "WFGAD5-integ-core",
+        "CP3-ci-checkpoint"
+      ],
+      "concurrent_with": [],
+      "git_branch": "world-fs-granular-allow-deny-wfgad5-integ-linux",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": false,
+      "platform": "linux"
+    },
+    {
+      "id": "WFGAD5-integ-macos",
+      "name": "WFGAD5 slice (platform-fix — macos)",
+      "type": "integration",
+      "phase": "WFGAD5",
+      "status": "pending",
+      "description": "Fix macOS CI parity failures for WFGAD5 (checkpoint boundary platform-fix).",
+      "references": [
+        "docs/project_management/next/world-fs-granular-allow-deny/WFGAD5-spec.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md"
+      ],
+      "acceptance_criteria": [
+        "macOS CI parity failures for WFGAD5 are resolved."
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGAD5-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" TASK_ID=\"WFGAD5-integ-macos\" TASK_PLATFORM=macos"
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGAD5-integ-macos\""
+      ],
+      "worktree": "wt/world-fs-granular-allow-deny-wfgad5-integ-macos",
+      "integration_task": "WFGAD5-integ-macos",
+      "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD5-integ-macos.md",
+      "depends_on": [
+        "WFGAD5-integ-core",
+        "CP3-ci-checkpoint"
+      ],
+      "concurrent_with": [],
+      "git_branch": "world-fs-granular-allow-deny-wfgad5-integ-macos",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": false,
+      "platform": "macos"
+    },
+    {
+      "id": "WFGAD5-integ-windows",
+      "name": "WFGAD5 slice (platform-fix — windows)",
+      "type": "integration",
+      "phase": "WFGAD5",
+      "status": "pending",
+      "description": "Fix Windows CI parity failures for WFGAD5 (checkpoint boundary platform-fix).",
+      "references": [
+        "docs/project_management/next/world-fs-granular-allow-deny/WFGAD5-spec.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md"
+      ],
+      "acceptance_criteria": [
+        "Windows CI parity failures for WFGAD5 are resolved."
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGAD5-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" TASK_ID=\"WFGAD5-integ-windows\" TASK_PLATFORM=windows"
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGAD5-integ-windows\""
+      ],
+      "worktree": "wt/world-fs-granular-allow-deny-wfgad5-integ-windows",
+      "integration_task": "WFGAD5-integ-windows",
+      "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD5-integ-windows.md",
+      "depends_on": [
+        "WFGAD5-integ-core",
+        "CP3-ci-checkpoint"
+      ],
+      "concurrent_with": [],
+      "git_branch": "world-fs-granular-allow-deny-wfgad5-integ-windows",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": false,
+      "platform": "windows"
+    },
+    {
+      "id": "WFGAD5-integ",
+      "name": "WFGAD5 slice (integration final)",
+      "type": "integration",
+      "phase": "WFGAD5",
+      "status": "pending",
+      "description": "Finalize WFGAD5 after checkpoint + platform fixes and merge back to orchestration.",
+      "references": [
+        "docs/project_management/next/world-fs-granular-allow-deny/WFGAD5-spec.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md"
+      ],
+      "acceptance_criteria": [
+        "WFGAD5 is green on linux/macos/windows and merged back to orchestration."
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
@@ -713,7 +1342,7 @@
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" TASK_ID=\"WFGAD5-integ\""
       ],
       "end_checklist": [
-        "Merge code + test branches; resolve conflicts",
+        "Merge core + platform-fix branches; resolve conflicts",
         "cargo fmt",
         "cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant tests",
@@ -724,8 +1353,10 @@
       "integration_task": "WFGAD5-integ",
       "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD5-integ.md",
       "depends_on": [
-        "WFGAD5-code",
-        "WFGAD5-test"
+        "WFGAD5-integ-core",
+        "WFGAD5-integ-linux",
+        "WFGAD5-integ-macos",
+        "WFGAD5-integ-windows"
       ],
       "concurrent_with": [],
       "git_branch": "world-fs-granular-allow-deny-wfgad5-integ",
@@ -734,6 +1365,7 @@
       ],
       "merge_to_orchestration": true
     },
+
     {
       "id": "FZ-feature-cleanup",
       "name": "Feature cleanup (worktrees + branches)",
@@ -753,6 +1385,7 @@
         "docs/project_management/next/world-fs-granular-allow-deny/contract.md",
         "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0001 through DR-0008)",
         "docs/project_management/next/world-fs-granular-allow-deny/impact_map.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md",
         "docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md",
         "docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md"
       ],
