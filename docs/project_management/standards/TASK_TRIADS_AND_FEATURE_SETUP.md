@@ -15,6 +15,18 @@ This document explains, step by step, how to create a new feature directory, def
 - Docs/tasks/session log edits happen **only** on the orchestration branch (never in worktrees).
 - Specs are the single source of truth; integration reconciles code/tests to the spec.
 
+## Slice sizing (context budget; non-negotiable)
+
+This repo assumes a typical maximum model context of 272k tokens. Every triad task (code/test/integ) MUST be scoped so a single agent can execute it within 40% of that window.
+
+Hard limit (per task):
+- Maximum task context budget: 108,800 tokens (40% of 272,000 tokens).
+
+Enforcement rules (planning-time):
+- If a slice cannot be made green deterministically within the per-task context budget, the slice MUST be split into multiple smaller triads before execution begins.
+- If a slice requires editing multiple independent subsystems with unrelated acceptance criteria, the slice MUST be split.
+- If a slice requires reading most of the Planning Pack to execute, the slice MUST be split.
+
 ## Slice IDs (non-negotiable)
 
 Slice IDs must be feature-derived and stable for the lifetime of the feature directory.

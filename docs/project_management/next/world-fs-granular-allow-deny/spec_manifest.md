@@ -17,7 +17,12 @@ Authoring standard:
 - `docs/project_management/next/world-fs-granular-allow-deny/plan.md` — execution runbook + sequencing overview
 - `docs/project_management/next/world-fs-granular-allow-deny/tasks.json` — triad task graph + acceptance criteria
 - `docs/project_management/next/world-fs-granular-allow-deny/session_log.md` — planning + execution audit log
-- `docs/project_management/next/world-fs-granular-allow-deny/C0-spec.md` — C0 slice definition and acceptance routing
+- `docs/project_management/next/world-fs-granular-allow-deny/WFGAD0-spec.md` — WFGAD0 slice definition and acceptance routing
+- `docs/project_management/next/world-fs-granular-allow-deny/WFGAD1-spec.md` — WFGAD1 slice definition and acceptance routing
+- `docs/project_management/next/world-fs-granular-allow-deny/WFGAD2-spec.md` — WFGAD2 slice definition and acceptance routing
+- `docs/project_management/next/world-fs-granular-allow-deny/WFGAD3-spec.md` — WFGAD3 slice definition and acceptance routing
+- `docs/project_management/next/world-fs-granular-allow-deny/WFGAD4-spec.md` — WFGAD4 slice definition and acceptance routing
+- `docs/project_management/next/world-fs-granular-allow-deny/WFGAD5-spec.md` — WFGAD5 slice definition and acceptance routing
 - `docs/project_management/next/world-fs-granular-allow-deny/contract.md` — operator-facing contract (inputs, invariants, hard errors)
 - `docs/project_management/next/world-fs-granular-allow-deny/SCHEMA.md` — policy and snapshot schema (authoritative)
 - `docs/project_management/next/world-fs-granular-allow-deny/PROTOCOL.md` — host↔world-agent protocol requirements (authoritative)

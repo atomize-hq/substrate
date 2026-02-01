@@ -19,15 +19,36 @@ Authoring standards:
 - `docs/project_management/next/world-fs-granular-allow-deny/spec_manifest.md` — v4 planning standard required artifact (spec ownership map).
 - `docs/project_management/next/world-fs-granular-allow-deny/impact_map.md` — v4 planning standard required artifact (replaces integration_map.md).
 - `docs/project_management/next/world-fs-granular-allow-deny/session_log.md` — v4 planning standard required artifact.
-- `docs/project_management/next/world-fs-granular-allow-deny/C0-spec.md` — required slice spec artifact.
+- `docs/project_management/next/world-fs-granular-allow-deny/WFGAD0-spec.md` — required slice spec artifact.
+- `docs/project_management/next/world-fs-granular-allow-deny/WFGAD1-spec.md` — required slice spec artifact.
+- `docs/project_management/next/world-fs-granular-allow-deny/WFGAD2-spec.md` — required slice spec artifact.
+- `docs/project_management/next/world-fs-granular-allow-deny/WFGAD3-spec.md` — required slice spec artifact.
+- `docs/project_management/next/world-fs-granular-allow-deny/WFGAD4-spec.md` — required slice spec artifact.
+- `docs/project_management/next/world-fs-granular-allow-deny/WFGAD5-spec.md` — required slice spec artifact.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD0-code.md` — kickoff prompt for WFGAD0 code task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD0-test.md` — kickoff prompt for WFGAD0 test task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD0-integ.md` — kickoff prompt for WFGAD0 integration task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD1-code.md` — kickoff prompt for WFGAD1 code task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD1-test.md` — kickoff prompt for WFGAD1 test task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD1-integ.md` — kickoff prompt for WFGAD1 integration task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD2-code.md` — kickoff prompt for WFGAD2 code task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD2-test.md` — kickoff prompt for WFGAD2 test task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD2-integ.md` — kickoff prompt for WFGAD2 integration task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD3-code.md` — kickoff prompt for WFGAD3 code task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD3-test.md` — kickoff prompt for WFGAD3 test task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD3-integ.md` — kickoff prompt for WFGAD3 integration task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD4-code.md` — kickoff prompt for WFGAD4 code task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD4-test.md` — kickoff prompt for WFGAD4 test task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD4-integ.md` — kickoff prompt for WFGAD4 integration task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD5-code.md` — kickoff prompt for WFGAD5 code task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD5-test.md` — kickoff prompt for WFGAD5 test task.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD5-integ.md` — kickoff prompt for WFGAD5 integration task.
 - `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/FZ-feature-cleanup.md` — required for v3+ automation packs.
 
 ### Edit
 - `docs/project_management/next/world-fs-granular-allow-deny/tasks.json` — upgrade to schema v4 with triad automation enabled.
 - `docs/project_management/next/world-fs-granular-allow-deny/plan.md` — update to reference spec_manifest and impact_map and document guardrails.
-- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/C0-code.md` — add v4 automation workflow and required sentinel.
-- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/C0-test.md` — add v4 automation workflow and required sentinel.
-- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/C0-integ.md` — add v4 automation workflow and required sentinel.
+- `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/` — replace legacy C0 kickoff prompts with WFGAD0-WFGAD5 kickoff prompts with v4 automation workflow and required sentinel.
 - `docs/project_management/next/world-fs-granular-allow-deny/requirements_traceability.md` — replace legacy integration_map reference with impact_map.
 - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` — update Related Docs list to include spec_manifest and impact_map.
 - `docs/project_management/next/sequencing.json` — add sprint entry for this Planning Pack directory.

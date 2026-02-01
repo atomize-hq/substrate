@@ -15,7 +15,7 @@
 
 ## END — 2026-01-31T20:15:59Z — planning — v4 migration
 - Summary of changes (exhaustive):
-  - Added v4-required Planning Pack artifacts (`spec_manifest.md`, `impact_map.md`, `session_log.md`, `C0-spec.md`).
+  - Added v4-required Planning Pack artifacts (`spec_manifest.md`, `impact_map.md`, `session_log.md`) and slice specs (`WFGAD0-spec.md` through `WFGAD5-spec.md`).
   - Upgraded `tasks.json` to schema v4 with triad automation enabled and added `FZ-feature-cleanup`.
   - Updated legacy `integration_map.md` references to `impact_map.md` and retained `integration_map.md` as deprecated.
   - Updated kickoff prompts to include the required sentinel and v4 automation workflow.
@@ -24,14 +24,34 @@
   - `docs/project_management/next/world-fs-granular-allow-deny/spec_manifest.md`
   - `docs/project_management/next/world-fs-granular-allow-deny/impact_map.md`
   - `docs/project_management/next/world-fs-granular-allow-deny/session_log.md`
-  - `docs/project_management/next/world-fs-granular-allow-deny/C0-spec.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny/WFGAD0-spec.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny/WFGAD1-spec.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny/WFGAD2-spec.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny/WFGAD3-spec.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny/WFGAD4-spec.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny/WFGAD5-spec.md`
   - `docs/project_management/next/world-fs-granular-allow-deny/tasks.json`
   - `docs/project_management/next/world-fs-granular-allow-deny/plan.md`
   - `docs/project_management/next/world-fs-granular-allow-deny/integration_map.md`
   - `docs/project_management/next/world-fs-granular-allow-deny/requirements_traceability.md`
-  - `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/C0-code.md`
-  - `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/C0-test.md`
-  - `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/C0-integ.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD0-code.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD0-test.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD0-integ.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD1-code.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD1-test.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD1-integ.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD2-code.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD2-test.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD2-integ.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD3-code.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD3-test.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD3-integ.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD4-code.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD4-test.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD4-integ.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD5-code.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD5-test.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD5-integ.md`
   - `docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/FZ-feature-cleanup.md`
   - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
   - `docs/project_management/next/sequencing.json`

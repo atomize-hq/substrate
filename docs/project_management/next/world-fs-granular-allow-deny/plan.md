@@ -16,6 +16,7 @@
 - Specs are the single source of truth.
 - Planning Pack docs are edited only on the orchestration branch.
 - Do not edit planning docs inside the worktree.
+- Each task (code/test/integ) must be scoped to fit within 40% of a typical 272k context window.
 
 ## Deliverables (authoritative)
 - ADR: `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
@@ -28,4 +29,9 @@
 - Manual testing playbook: `docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md`
 
 ## Triads
-- C0: V2 policy snapshot + strict deny (code/test/integ)
+- WFGAD0: broker policy schema v2 (breaking)
+- WFGAD1: PolicySnapshotV2 + request/response model v2
+- WFGAD2: host snapshot emission + enforcement plan env contract
+- WFGAD3: deny masking (allow/deny semantics + wildcard snapshot)
+- WFGAD4: discover vs read dimension (directory visibility)
+- WFGAD5: strict deny lockdown (bypass prevention)

@@ -446,8 +446,28 @@
       "status": "not_started",
       "sequence": [
         {
-          "id": "C0",
-          "spec": "docs/project_management/next/world-fs-granular-allow-deny/C0-spec.md"
+          "id": "WFGAD0",
+          "spec": "docs/project_management/next/world-fs-granular-allow-deny/WFGAD0-spec.md"
+        },
+        {
+          "id": "WFGAD1",
+          "spec": "docs/project_management/next/world-fs-granular-allow-deny/WFGAD1-spec.md"
+        },
+        {
+          "id": "WFGAD2",
+          "spec": "docs/project_management/next/world-fs-granular-allow-deny/WFGAD2-spec.md"
+        },
+        {
+          "id": "WFGAD3",
+          "spec": "docs/project_management/next/world-fs-granular-allow-deny/WFGAD3-spec.md"
+        },
+        {
+          "id": "WFGAD4",
+          "spec": "docs/project_management/next/world-fs-granular-allow-deny/WFGAD4-spec.md"
+        },
+        {
+          "id": "WFGAD5",
+          "spec": "docs/project_management/next/world-fs-granular-allow-deny/WFGAD5-spec.md"
         }
       ],
       "notes": [
