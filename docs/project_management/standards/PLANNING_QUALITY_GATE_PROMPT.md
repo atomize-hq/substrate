@@ -27,6 +27,9 @@ Inputs (must read end-to-end):
 - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
 - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
 - `docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md`
+- `docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md` (cross-platform bounded checkpoints, schema v4 boundary-only platform-fix)
+- `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md` (CI parity vs behavior smoke gates)
+- `docs/project_management/standards/TRIAD_WORKFLOW_CROSS_PLATFORM_INTEG.md` (checkpoint/boundary execution model)
 - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 - `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
 - `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`
@@ -49,11 +52,23 @@ Review checklist (pass/fail):
    - Acceptance criteria are runnable and include expected exit codes/output.
    - Manual playbooks exist where required.
    - Smoke scripts exist where required and are referenced by the manual playbook.
-   - If `tasks.json` opts into schema v2 cross-platform parity (`meta.schema_version >= 2` and `meta.ci_parity_platforms_required` or legacy `meta.platforms_required`), the required `X-integ-core`, `X-integ-<platform>`, and `X-integ` tasks exist and are correctly wired (platform-fix tasks range over CI parity platforms; smoke scripts range over behavior platforms).
+   - Context budget / triad sizing is enforced:
+     - Every triad task (code/test/integ) is plausibly executable by a single agent within the 40% / 108,800 token context budget constraint in `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`.
+     - If any slice is oversized or “grab bag”, the plan must be flagged and resliced before execution begins.
+   - Cross-platform gates are correct when `tasks.json` `meta.cross_platform=true` (P3-008):
+     - `meta.behavior_platforms_required` enumerates smoke-required platforms (requires `FEATURE_DIR/smoke/*` when non-empty).
+     - `meta.ci_parity_platforms_required` enumerates compile/CI parity platforms (platform-fix tasks range over these).
+   - Cross-platform integration task model matches schema version:
+     - Schema v2/v3 (legacy; per-slice platform-fix): each slice has `X-integ-core`, `X-integ-<platform>` for each CI parity platform, and `X-integ`.
+     - Schema v4+ (boundary-only platform-fix): only checkpoint-boundary slices (listed in `tasks.json` `meta.checkpoint_boundaries`) define `B-integ-core` and `B-integ-<platform>` tasks; normal slices use only `X-integ` as the per-slice merge task.
    - If the pack is cross-platform + automation-enabled (schema v3+ and `meta.automation.enabled=true`), `ci_checkpoint_plan.md` exists and defines bounded CI checkpoints:
      - default group size bounds: min=2 triads, max=4 triads (unless explicitly justified),
      - every slice belongs to exactly one checkpoint group,
      - checkpoint boundaries are code-grounded and justified using `impact_map.md` and `spec_manifest.md`.
+     - For schema v4+: `meta.checkpoint_boundaries` matches `ci_checkpoint_plan.md` group endings, and only those boundary slices contain platform-fix tasks.
+     - Checkpoints are wired into `tasks.json` deterministically:
+       - Each checkpoint has an ops task (e.g., `CP1-ci-checkpoint`) with a kickoff prompt and `depends_on` the checkpoint boundary slice’s `*-integ-core` task.
+       - Execution cannot bypass a checkpoint: the first slice of the next checkpoint group depends on the prior checkpoint task (via `tasks.json` `depends_on` and aligned `sequencing.json`).
 6) Auditability:
    - Decisions map to triad task IDs via `references` and follow-up tasks.
 

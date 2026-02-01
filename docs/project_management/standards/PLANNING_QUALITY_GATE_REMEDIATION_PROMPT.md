@@ -34,8 +34,11 @@ Inputs (must read end-to-end):
   - `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
   - `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`
   - `docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md`
+  - `docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md`
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+  - `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`
+  - `docs/project_management/standards/TRIAD_WORKFLOW_CROSS_PLATFORM_INTEG.md`
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
 
@@ -51,6 +54,19 @@ Remediation workflow (required):
    - Fix each defect surgically. Do not refactor for cleanliness.
    - Maintain cross-doc consistency:
      - If you change the authoritative contract in an ADR/spec, update every dependent doc (specs/playbook/smoke/tasks/prompts) so names/flags/paths/exit codes match exactly.
+   - If the feature is cross-platform (`tasks.json` `meta.cross_platform=true`), ensure the remediation preserves the required execution model:
+     - Platform scopes are explicit and non-overlapping:
+       - `meta.behavior_platforms_required` (smoke-required platforms),
+       - `meta.ci_parity_platforms_required` (compile/CI parity platforms).
+     - Integration task model matches schema version:
+       - Schema v2/v3: per-slice platform-fix (`X-integ-core`, `X-integ-<platform>`, `X-integ` for every slice).
+       - Schema v4+: boundary-only platform-fix:
+         - `ci_checkpoint_plan.md` exists,
+         - `tasks.json` `meta.checkpoint_boundaries` matches `ci_checkpoint_plan.md` checkpoint group endings,
+         - only boundary slices define `*-integ-core` / `*-integ-<platform>` tasks; normal slices use only `X-integ`.
+         - checkpoint ops tasks exist and are wired:
+           - `CPk-ci-checkpoint` depends on the checkpoint boundary slice’s `*-integ-core`,
+           - the first slice of the next group depends on `CPk-ci-checkpoint` (so work cannot proceed past the checkpoint without completing the CI gate).
    - If you touch an ADR:
      - Run `make adr-fix ADR=<path>` (or equivalent) so the exec-summary drift guard is updated.
 
