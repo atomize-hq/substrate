@@ -98,6 +98,7 @@ REMOTE="origin"
 CLEANUP=0
 CHECKOUT_REF=""
 MODE=""
+QUEUE_TIMEOUT_SECS="${CI_TESTING_QUEUE_TIMEOUT_SECS:-0}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -180,6 +181,22 @@ echo "Temp branch: ${temp_branch}" >&2
 git branch -f "${temp_branch}" "${head_sha}"
 if ! run_with_timeout "${GIT_PUSH_TIMEOUT_SECS}" git push -u "${REMOTE}" "${temp_branch}:${temp_branch}" >&2; then
     die "git push timed out or failed (branch=${temp_branch})"
+fi
+
+cleanup_temp_branch() {
+    if [[ "${CLEANUP}" -ne 1 ]]; then
+        return 0
+    fi
+    if [[ -z "${temp_branch:-}" ]]; then
+        return 0
+    fi
+    echo "Cleaning up remote branch: ${temp_branch}" >&2
+    run_with_timeout "${GIT_PUSH_TIMEOUT_SECS}" git push "${REMOTE}" ":${temp_branch}" >&2 || true
+    git branch -D "${temp_branch}" >/dev/null 2>&1 || true
+}
+
+if [[ "${CLEANUP}" -eq 1 ]]; then
+    trap cleanup_temp_branch EXIT
 fi
 
 echo "Dispatching workflow: ${WORKFLOW}" >&2
@@ -278,10 +295,13 @@ next_heartbeat_at="$((started_watch_at + 60))"
 consecutive_errors=0
 
 echo "Watching run status (interval=${WATCH_INTERVAL_SECS}s timeout=${WATCH_TIMEOUT_SECS}s)..." >&2
+queued_since=""
 while true; do
     now="$(date +%s)"
     elapsed="$((now - started_watch_at))"
     if [[ "${elapsed}" -ge "${WATCH_TIMEOUT_SECS}" ]]; then
+        echo "WARN: timed out waiting for CI Testing run ${run_id} after ${elapsed}s; cancelling run" >&2
+        run_with_timeout "${GH_TIMEOUT_SECS}" gh run cancel "${run_id}" >/dev/null 2>&1 || true
         die "Timed out waiting for CI Testing run ${run_id} to complete after ${elapsed}s"
     fi
 
@@ -297,6 +317,22 @@ while true; do
     fi
     if [[ "${status}" == "completed" ]]; then
         break
+    fi
+
+    if [[ "${QUEUE_TIMEOUT_SECS}" -gt 0 ]]; then
+        if [[ "${status}" == "queued" ]]; then
+            if [[ -z "${queued_since}" ]]; then
+                queued_since="${now}"
+            fi
+            queued_elapsed="$((now - queued_since))"
+            if [[ "${queued_elapsed}" -ge "${QUEUE_TIMEOUT_SECS}" ]]; then
+                echo "WARN: CI Testing run ${run_id} has been queued for ${queued_elapsed}s; cancelling" >&2
+                run_with_timeout "${GH_TIMEOUT_SECS}" gh run cancel "${run_id}" >/dev/null 2>&1 || true
+                die "CI Testing run ${run_id} queued too long (${queued_elapsed}s)"
+            fi
+        else
+            queued_since=""
+        fi
     fi
 
     if [[ "${now}" -ge "${next_heartbeat_at}" ]]; then
@@ -369,14 +405,6 @@ printf 'CONCLUSION=%s\n' "${conclusion}"
 printf 'CI_PASSED_OSES=%s\n' "${passed_oses}"
 printf 'CI_FAILED_OSES=%s\n' "${failed_oses}"
 printf 'CI_FAILED_JOBS=%s\n' "${failed_jobs}"
-
-if [[ "${CLEANUP}" -eq 1 ]]; then
-    echo "Cleaning up remote branch: ${temp_branch}" >&2
-    if ! run_with_timeout "${GIT_PUSH_TIMEOUT_SECS}" git push "${REMOTE}" ":${temp_branch}" >&2; then
-        echo "WARN: failed to delete remote branch (continuing): ${temp_branch}" >&2
-    fi
-    git branch -D "${temp_branch}" >/dev/null 2>&1 || true
-fi
 
 if [[ "${conclusion}" != "success" ]]; then
     exit 1
