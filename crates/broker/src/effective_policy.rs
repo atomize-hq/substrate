@@ -1,4 +1,4 @@
-use crate::policy::{Policy, WorldFsIsolation};
+use crate::policy::{Policy, WorldFsDimensionPolicy, WorldFsEnforcement, WorldFsIsolation};
 use anyhow::{anyhow, Context, Result};
 use serde::ser::SerializeMap;
 use serde::{Deserialize, Serialize};
@@ -67,9 +67,13 @@ pub struct WorldFsPatch {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub require_world: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub read_allowlist: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub write_allowlist: Option<Vec<String>>,
+    pub enforcement: Option<WorldFsEnforcement>,
+    #[serde(skip_serializing_if = "WorldFsDimensionPatch::is_empty")]
+    pub discover: WorldFsDimensionPatch,
+    #[serde(skip_serializing_if = "WorldFsDimensionPatch::is_empty")]
+    pub read: WorldFsDimensionPatch,
+    #[serde(skip_serializing_if = "WorldFsDimensionPatch::is_empty")]
+    pub write: WorldFsDimensionPatch,
 }
 
 impl WorldFsPatch {
@@ -77,8 +81,25 @@ impl WorldFsPatch {
         self.mode.is_none()
             && self.isolation.is_none()
             && self.require_world.is_none()
-            && self.read_allowlist.is_none()
-            && self.write_allowlist.is_none()
+            && self.enforcement.is_none()
+            && self.discover.is_empty()
+            && self.read.is_empty()
+            && self.write.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub struct WorldFsDimensionPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allow_list: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deny_list: Option<Vec<String>>,
+}
+
+impl WorldFsDimensionPatch {
+    fn is_empty(&self) -> bool {
+        self.allow_list.is_none() && self.deny_list.is_none()
     }
 }
 
@@ -230,7 +251,7 @@ pub fn load_policy_from_path(path: &Path) -> Result<Policy> {
 
     let mut policy = Policy::default();
     apply_policy_patch_over(&mut policy, &patch);
-    validate_effective_policy(&policy)?;
+    validate_and_finalize_effective_policy(&mut policy)?;
     Ok(policy)
 }
 
@@ -257,7 +278,7 @@ pub fn load_effective_policy_for_cwd(cwd: &Path) -> Result<(Policy, EffectivePol
     if let Some((workspace_patch, _path)) = &workspace_layer {
         apply_policy_patch_over(&mut policy, workspace_patch);
     }
-    validate_effective_policy(&policy)?;
+    validate_and_finalize_effective_policy(&mut policy)?;
 
     Ok((
         policy,
@@ -449,43 +470,131 @@ pub fn resolve_effective_policy_with_explain(
         );
     }
 
-    let (read_allow, read_allow_src) = resolve_replace(
-        effective.fs_read.clone(),
-        global_patch.world_fs.read_allowlist.clone(),
-        workspace_patch.and_then(|p| p.world_fs.read_allowlist.clone()),
+    let (enforcement, enforcement_src) = resolve_replace_opt(
+        effective.world_fs_enforcement,
+        global_patch.world_fs.enforcement,
+        workspace_patch.and_then(|p| p.world_fs.enforcement),
         workspace_enabled,
     );
-    effective.fs_read = read_allow;
+    effective.world_fs_enforcement = enforcement;
     if let Some(keys) = &mut explain_keys {
         keys.insert(
-            "world_fs.read_allowlist".to_string(),
-            PolicyExplainKey {
-                merge_strategy: "replace".to_string(),
-                sources: vec![explain_source(read_allow_src, &global_path, workspace_path)],
-            },
-        );
-    }
-
-    let (write_allow, write_allow_src) = resolve_replace(
-        effective.fs_write.clone(),
-        global_patch.world_fs.write_allowlist.clone(),
-        workspace_patch.and_then(|p| p.world_fs.write_allowlist.clone()),
-        workspace_enabled,
-    );
-    effective.fs_write = write_allow;
-    if let Some(keys) = &mut explain_keys {
-        keys.insert(
-            "world_fs.write_allowlist".to_string(),
+            "world_fs.enforcement".to_string(),
             PolicyExplainKey {
                 merge_strategy: "replace".to_string(),
                 sources: vec![explain_source(
-                    write_allow_src,
+                    enforcement_src,
                     &global_path,
                     workspace_path,
                 )],
             },
         );
     }
+
+    let mut resolve_string_list =
+        |key: &str,
+         default: Option<Vec<String>>,
+         global: Option<Vec<String>>,
+         workspace: Option<Vec<String>>| {
+            let (value, src) = resolve_replace_opt(default, global, workspace, workspace_enabled);
+            if let Some(keys) = &mut explain_keys {
+                keys.insert(
+                    key.to_string(),
+                    PolicyExplainKey {
+                        merge_strategy: "replace".to_string(),
+                        sources: vec![explain_source(src, &global_path, workspace_path)],
+                    },
+                );
+            }
+            value
+        };
+
+    let read_default_allow = effective
+        .world_fs_read
+        .as_ref()
+        .map(|d| d.allow_list.clone());
+    let read_default_deny = effective
+        .world_fs_read
+        .as_ref()
+        .map(|d| d.deny_list.clone());
+    let read_allow = resolve_string_list(
+        "world_fs.read.allow_list",
+        read_default_allow,
+        global_patch.world_fs.read.allow_list.clone(),
+        workspace_patch.and_then(|p| p.world_fs.read.allow_list.clone()),
+    );
+    let read_deny = resolve_string_list(
+        "world_fs.read.deny_list",
+        read_default_deny,
+        global_patch.world_fs.read.deny_list.clone(),
+        workspace_patch.and_then(|p| p.world_fs.read.deny_list.clone()),
+    );
+    effective.world_fs_read = if read_allow.is_none() && read_deny.is_none() {
+        None
+    } else {
+        Some(WorldFsDimensionPolicy {
+            allow_list: read_allow.unwrap_or_default(),
+            deny_list: read_deny.unwrap_or_default(),
+        })
+    };
+
+    let discover_default_allow = effective
+        .world_fs_discover
+        .as_ref()
+        .map(|d| d.allow_list.clone());
+    let discover_default_deny = effective
+        .world_fs_discover
+        .as_ref()
+        .map(|d| d.deny_list.clone());
+    let discover_allow = resolve_string_list(
+        "world_fs.discover.allow_list",
+        discover_default_allow,
+        global_patch.world_fs.discover.allow_list.clone(),
+        workspace_patch.and_then(|p| p.world_fs.discover.allow_list.clone()),
+    );
+    let discover_deny = resolve_string_list(
+        "world_fs.discover.deny_list",
+        discover_default_deny,
+        global_patch.world_fs.discover.deny_list.clone(),
+        workspace_patch.and_then(|p| p.world_fs.discover.deny_list.clone()),
+    );
+    effective.world_fs_discover = if discover_allow.is_none() && discover_deny.is_none() {
+        None
+    } else {
+        Some(WorldFsDimensionPolicy {
+            allow_list: discover_allow.unwrap_or_default(),
+            deny_list: discover_deny.unwrap_or_default(),
+        })
+    };
+
+    let write_default_allow = effective
+        .world_fs_write
+        .as_ref()
+        .map(|d| d.allow_list.clone());
+    let write_default_deny = effective
+        .world_fs_write
+        .as_ref()
+        .map(|d| d.deny_list.clone());
+    let write_allow = resolve_string_list(
+        "world_fs.write.allow_list",
+        write_default_allow,
+        global_patch.world_fs.write.allow_list.clone(),
+        workspace_patch.and_then(|p| p.world_fs.write.allow_list.clone()),
+    );
+    let write_deny = resolve_string_list(
+        "world_fs.write.deny_list",
+        write_default_deny,
+        global_patch.world_fs.write.deny_list.clone(),
+        workspace_patch.and_then(|p| p.world_fs.write.deny_list.clone()),
+    );
+    effective.world_fs_write = if write_allow.is_none() && write_deny.is_none() {
+        None
+    } else {
+        Some(WorldFsDimensionPolicy {
+            allow_list: write_allow.unwrap_or_default(),
+            deny_list: write_deny.unwrap_or_default(),
+        })
+    };
 
     let (net_allowed, net_allowed_src) = resolve_replace(
         effective.net_allowed.clone(),
@@ -714,7 +823,7 @@ pub fn resolve_effective_policy_with_explain(
         );
     }
 
-    validate_effective_policy(&effective)?;
+    validate_and_finalize_effective_policy(&mut effective)?;
 
     let explain = explain_keys.map(|keys| PolicyExplainV1 {
         kind: "substrate.policy.explain.v1".to_string(),
@@ -740,12 +849,14 @@ fn apply_policy_patch_over(target: &mut Policy, patch: &PolicyPatch) {
     if let Some(v) = patch.world_fs.require_world {
         target.world_fs_require_world = v;
     }
-    if let Some(v) = &patch.world_fs.read_allowlist {
-        target.fs_read = v.clone();
+    if let Some(v) = patch.world_fs.enforcement {
+        target.world_fs_enforcement = Some(v);
     }
-    if let Some(v) = &patch.world_fs.write_allowlist {
-        target.fs_write = v.clone();
-    }
+
+    apply_world_fs_dimension_patch(&mut target.world_fs_discover, &patch.world_fs.discover);
+    apply_world_fs_dimension_patch(&mut target.world_fs_read, &patch.world_fs.read);
+    apply_world_fs_dimension_patch(&mut target.world_fs_write, &patch.world_fs.write);
+
     if let Some(v) = &patch.net_allowed {
         target.net_allowed = v.clone();
     }
@@ -781,18 +892,214 @@ fn apply_policy_patch_over(target: &mut Policy, patch: &PolicyPatch) {
     }
 }
 
-fn validate_effective_policy(policy: &Policy) -> Result<()> {
-    if policy.world_fs_mode == WorldFsMode::ReadOnly && !policy.world_fs_require_world {
+fn apply_world_fs_dimension_patch(
+    target: &mut Option<WorldFsDimensionPolicy>,
+    patch: &WorldFsDimensionPatch,
+) {
+    if patch.is_empty() {
+        return;
+    }
+
+    if target.is_none() {
+        *target = Some(WorldFsDimensionPolicy {
+            allow_list: Vec::new(),
+            deny_list: Vec::new(),
+        });
+    }
+
+    let Some(target) = target.as_mut() else {
+        return;
+    };
+
+    if let Some(v) = &patch.allow_list {
+        target.allow_list = v.clone();
+    }
+    if let Some(v) = &patch.deny_list {
+        target.deny_list = v.clone();
+    }
+}
+
+fn validate_and_finalize_effective_policy(policy: &mut Policy) -> Result<()> {
+    match policy.world_fs_isolation {
+        WorldFsIsolation::Workspace => {
+            if policy.world_fs_enforcement.is_some() {
+                return Err(anyhow!(
+                    "world_fs.enforcement is only supported when world_fs.isolation=full"
+                ));
+            }
+            if policy.world_fs_read.is_some()
+                || policy.world_fs_discover.is_some()
+                || policy.world_fs_write.is_some()
+            {
+                return Err(anyhow!(
+                    "world_fs.read/discover/write are only supported when world_fs.isolation=full"
+                ));
+            }
+        }
+        WorldFsIsolation::Full => {
+            if policy.world_fs_read.is_none() {
+                return Err(anyhow!(
+                    "world_fs.read.allow_list is required when world_fs.isolation=full"
+                ));
+            }
+
+            match policy.world_fs_mode {
+                WorldFsMode::ReadOnly => {
+                    if policy.world_fs_write.is_some() {
+                        return Err(anyhow!(
+                            "world_fs.write must be omitted when world_fs.mode=read_only"
+                        ));
+                    }
+                }
+                WorldFsMode::Writable => {
+                    if policy.world_fs_write.is_none() {
+                        return Err(anyhow!(
+                            "world_fs.write.allow_list is required when world_fs.mode=writable"
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    if let Some(dimension) = policy.world_fs_read.as_mut() {
+        normalize_and_validate_dimension("world_fs.read", dimension)?;
+    }
+    if let Some(dimension) = policy.world_fs_discover.as_mut() {
+        normalize_and_validate_dimension("world_fs.discover", dimension)?;
+    }
+    if let Some(dimension) = policy.world_fs_write.as_mut() {
+        normalize_and_validate_dimension("world_fs.write", dimension)?;
+    }
+
+    let any_deny = policy
+        .world_fs_read
+        .as_ref()
+        .is_some_and(|d| !d.deny_list.is_empty())
+        || policy
+            .world_fs_discover
+            .as_ref()
+            .is_some_and(|d| !d.deny_list.is_empty())
+        || policy
+            .world_fs_write
+            .as_ref()
+            .is_some_and(|d| !d.deny_list.is_empty());
+
+    if any_deny {
+        if policy.world_fs_isolation != WorldFsIsolation::Full {
+            return Err(anyhow!(
+                "deny_list is only supported when world_fs.isolation=full"
+            ));
+        }
+        if policy.world_fs_enforcement.is_none() {
+            return Err(anyhow!(
+                "world_fs.enforcement must be present when any deny_list is non-empty"
+            ));
+        }
+        if !policy.world_fs_require_world {
+            return Err(anyhow!("deny_list requires world_fs.require_world=true"));
+        }
+    } else if policy.world_fs_enforcement.is_some() {
         return Err(anyhow!(
-            "world_fs.mode=read_only requires world_fs.require_world=true"
+            "world_fs.enforcement is only valid when at least one deny_list is non-empty"
         ));
     }
-    if policy.world_fs_isolation == WorldFsIsolation::Full && !policy.world_fs_require_world {
-        return Err(anyhow!(
-            "world_fs.isolation=full requires world_fs.require_world=true"
-        ));
+
+    // Compatibility: callers currently consume fs_read/fs_write as the effective read/write allow
+    // lists. Under V2, those are sourced from read/write.allow_list.
+    if let Some(dimension) = policy.world_fs_read.as_ref() {
+        policy.fs_read = dimension.allow_list.clone();
+    }
+    if let Some(dimension) = policy.world_fs_write.as_ref() {
+        policy.fs_write = dimension.allow_list.clone();
+    }
+
+    Ok(())
+}
+
+fn normalize_and_validate_dimension(
+    prefix: &str,
+    dimension: &mut WorldFsDimensionPolicy,
+) -> Result<()> {
+    if dimension.allow_list.is_empty() {
+        return Err(anyhow!("{prefix}.allow_list must be non-empty"));
+    }
+
+    let mut allow_out = Vec::with_capacity(dimension.allow_list.len());
+    for raw in &dimension.allow_list {
+        let normalized =
+            normalize_project_pattern(raw).map_err(|e| anyhow!("{prefix}.allow_list: {e}"))?;
+        if normalized.contains(['*', '?', '[', ']']) {
+            return Err(anyhow!(
+                "{prefix}.allow_list contains glob metacharacters; wildcards are not supported in allow_list"
+            ));
+        }
+        allow_out.push(normalized);
+    }
+    dimension.allow_list = allow_out;
+
+    let mut deny_out = Vec::with_capacity(dimension.deny_list.len());
+    for raw in &dimension.deny_list {
+        let normalized =
+            normalize_project_pattern(raw).map_err(|e| anyhow!("{prefix}.deny_list: {e}"))?;
+        if normalized.contains(['?', '[', ']']) {
+            return Err(anyhow!(
+                "{prefix}.deny_list contains unsupported glob metacharacters ('?' or character classes)"
+            ));
+        }
+        validate_deny_wildcards(&normalized).map_err(|e| anyhow!("{prefix}.deny_list: {e}"))?;
+        deny_out.push(normalized);
+    }
+    dimension.deny_list = deny_out;
+    Ok(())
+}
+
+fn validate_deny_wildcards(pattern: &str) -> Result<(), String> {
+    let mut run = 0usize;
+    for ch in pattern.chars() {
+        if ch == '*' {
+            run += 1;
+            if run > 2 {
+                return Err(
+                    "deny_list wildcard runs must be '*' or '**' (no '***' or longer)".to_string(),
+                );
+            }
+        } else {
+            run = 0;
+        }
     }
     Ok(())
+}
+
+fn normalize_project_pattern(raw: &str) -> Result<String, String> {
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return Err("pattern must not be empty".to_string());
+    }
+
+    if raw.starts_with('/') {
+        return Err("absolute patterns are invalid".to_string());
+    }
+
+    // Split on '/', drop empty segments and '.' segments, and reject '..'.
+    let mut segments: Vec<&str> = Vec::new();
+    for seg in raw.split('/') {
+        let seg = seg.trim();
+        if seg.is_empty() || seg == "." {
+            continue;
+        }
+        if seg == ".." {
+            return Err("pattern must not contain '..' segments".to_string());
+        }
+        segments.push(seg);
+    }
+
+    let normalized = if segments.is_empty() {
+        ".".to_string()
+    } else {
+        segments.join("/")
+    };
+    Ok(normalized)
 }
 
 fn btree_to_hashmap(map: &BTreeMap<String, String>) -> HashMap<String, String> {

@@ -24,7 +24,10 @@ pub use broker::Broker;
 pub use effective_policy::{EffectivePolicySources, PolicyExplainV1};
 pub use handle::BrokerHandle;
 pub use mode::PolicyMode;
-pub use policy::{Decision, Policy, Restriction, RestrictionType, WorldFsIsolation, WorldFsPolicy};
+pub use policy::{
+    Decision, Policy, Restriction, RestrictionType, WorldFsDimensionPolicy, WorldFsEnforcement,
+    WorldFsIsolation, WorldFsPolicy,
+};
 pub use profile::ProfileDetector;
 #[cfg(any(test, feature = "policy-watcher"))]
 pub use watcher::{spawn_policy_watcher, MultiPolicyWatcher, PolicyWatcher};
