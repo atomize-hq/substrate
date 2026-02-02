@@ -210,18 +210,20 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
 
                             if world_session.is_some() {
                                 ensure_no_policy_drift(&mut world_session, &agent_printer).await?;
-                                let session = world_session
-                                    .as_mut()
-                                    .expect("world_session present after ensure_no_policy_drift");
-                                let mut io_ctx = ReplIo {
-                                    agent_rx: &mut agent_rx,
-                                    resize_rx: &mut resize_rx,
-                                    sigint_rx: &mut sigint_rx,
-                                    telemetry: &mut telemetry,
-                                    agent_printer: &agent_printer,
+                                let exit_code = {
+                                    let session = world_session
+                                        .as_mut()
+                                        .expect("world_session present after ensure_no_policy_drift");
+                                    let mut io_ctx = ReplIo {
+                                        agent_rx: &mut agent_rx,
+                                        resize_rx: &mut resize_rx,
+                                        sigint_rx: &mut sigint_rx,
+                                        telemetry: &mut telemetry,
+                                        agent_printer: &agent_printer,
+                                    };
+                                    exec_world_pty(session, pty_cmd, &cmd_id, &mut io_ctx).await?
                                 };
-                                let exit_code =
-                                    exec_world_pty(session, pty_cmd, &cmd_id, &mut io_ctx).await?;
+                                ensure_no_policy_drift(&mut world_session, &agent_printer).await?;
                                 let status = exit_status_from_code(exit_code);
                                 report_nonzero_status(&status);
                                 publish_command_completion(&trimmed_owned, &status);
@@ -233,22 +235,25 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
 
                     if world_session.is_some() {
                         ensure_no_policy_drift(&mut world_session, &agent_printer).await?;
-                        let session = world_session
-                            .as_mut()
-                            .expect("world_session present after ensure_no_policy_drift");
                         let pty = needs_pty(trimmed);
-                        let mut io_ctx = ReplIo {
-                            agent_rx: &mut agent_rx,
-                            resize_rx: &mut resize_rx,
-                            sigint_rx: &mut sigint_rx,
-                            telemetry: &mut telemetry,
-                            agent_printer: &agent_printer,
+                        let exit_code = {
+                            let session = world_session
+                                .as_mut()
+                                .expect("world_session present after ensure_no_policy_drift");
+                            let mut io_ctx = ReplIo {
+                                agent_rx: &mut agent_rx,
+                                resize_rx: &mut resize_rx,
+                                sigint_rx: &mut sigint_rx,
+                                telemetry: &mut telemetry,
+                                agent_printer: &agent_printer,
+                            };
+                            if pty {
+                                exec_world_pty(session, &command, &cmd_id, &mut io_ctx).await?
+                            } else {
+                                exec_world_line(session, &command, &cmd_id, &mut io_ctx).await?
+                            }
                         };
-                        let exit_code = if pty {
-                            exec_world_pty(session, &command, &cmd_id, &mut io_ctx).await?
-                        } else {
-                            exec_world_line(session, &command, &cmd_id, &mut io_ctx).await?
-                        };
+                        ensure_no_policy_drift(&mut world_session, &agent_printer).await?;
                         let status = exit_status_from_code(exit_code);
                         report_nonzero_status(&status);
                         publish_command_completion(&trimmed_owned, &status);
