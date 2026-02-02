@@ -1,5 +1,6 @@
 //! World agent library for execution inside worlds/VMs.
 
+mod enforcement_plan;
 pub mod gc;
 pub mod handlers;
 pub mod internal_exec;

@@ -33,6 +33,8 @@ use tokio_stream::wrappers::UnboundedReceiverStream;
 use world::stream::{install_stream_sink, StreamKind, StreamSink};
 use world_api::{WorldBackend, WorldHandle, WorldSpec};
 
+use crate::enforcement_plan;
+
 pub(crate) const ANCHOR_MODE_ENV: &str = "SUBSTRATE_ANCHOR_MODE";
 pub(crate) const ANCHOR_PATH_ENV: &str = "SUBSTRATE_ANCHOR_PATH";
 pub(crate) const WORLD_FS_MODE_ENV: &str = "SUBSTRATE_WORLD_FS_MODE";
@@ -183,6 +185,7 @@ impl WorldAgentService {
             write_allowlist_prefixes,
             landlock_read_paths,
             landlock_write_paths,
+            enforcement_plan_b64,
         } = policy_inputs;
 
         // Create world spec from request
@@ -221,27 +224,14 @@ impl WorldAgentService {
         #[cfg(not(target_os = "linux"))]
         let landlock_supported = false;
 
-        let landlock_env_needed = isolation_full
-            && landlock_supported
-            && (!landlock_read_paths.is_empty() || !landlock_write_paths.is_empty());
-        if landlock_env_needed {
-            if !landlock_read_paths.is_empty() {
-                env_map.insert(
-                    WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV.to_string(),
-                    landlock_read_paths.join("\n"),
-                );
-            }
-            if !landlock_write_paths.is_empty() {
-                env_map.insert(
-                    WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV.to_string(),
-                    landlock_write_paths.join("\n"),
-                );
-            }
-            if let Ok(exe) = std::env::current_exe() {
-                env_map
-                    .entry(LANDLOCK_HELPER_SRC_ENV.to_string())
-                    .or_insert_with(|| exe.display().to_string());
-            }
+        if isolation_full {
+            apply_full_isolation_helper_env(
+                &mut env_map,
+                landlock_supported,
+                &landlock_read_paths,
+                &landlock_write_paths,
+                enforcement_plan_b64.as_deref(),
+            );
         }
         let exec_req = world_api::ExecRequest {
             cmd: req.cmd,
@@ -313,6 +303,7 @@ impl WorldAgentService {
             write_allowlist_prefixes,
             landlock_read_paths,
             landlock_write_paths,
+            ..
         } = policy_inputs;
         let always_isolate = should_always_isolate(&req);
 
@@ -532,6 +523,7 @@ struct PolicyInputs {
     write_allowlist_prefixes: Vec<String>,
     landlock_read_paths: Vec<String>,
     landlock_write_paths: Vec<String>,
+    enforcement_plan_b64: Option<String>,
 }
 
 fn resolve_policy_inputs(
@@ -548,6 +540,9 @@ fn resolve_policy_inputs(
             snapshot.world_fs.isolation,
             PolicySnapshotWorldFsIsolationV2::Full
         );
+
+        let enforcement_plan_b64 = enforcement_plan::maybe_encode_from_snapshot(snapshot)
+            .map_err(|err| BadRequestError::new(err.to_string()))?;
 
         let (write_allowlist_prefixes, landlock_read_paths, landlock_write_paths) =
             if isolation_full {
@@ -582,6 +577,7 @@ fn resolve_policy_inputs(
                 write_allowlist_prefixes,
                 landlock_read_paths,
                 landlock_write_paths,
+                enforcement_plan_b64,
             },
         ));
     }
@@ -617,8 +613,50 @@ fn resolve_policy_inputs(
             write_allowlist_prefixes,
             landlock_read_paths,
             landlock_write_paths,
+            enforcement_plan_b64: None,
         },
     ))
+}
+
+pub(crate) fn apply_full_isolation_helper_env(
+    env_map: &mut HashMap<String, String>,
+    landlock_supported: bool,
+    landlock_read_paths: &[String],
+    landlock_write_paths: &[String],
+    enforcement_plan_b64: Option<&str>,
+) {
+    if let Some(plan) = enforcement_plan_b64 {
+        env_map.insert(
+            enforcement_plan::WORLD_FS_ENFORCEMENT_PLAN_B64_ENV.to_string(),
+            plan.to_string(),
+        );
+    }
+
+    let landlock_env_needed =
+        landlock_supported && (!landlock_read_paths.is_empty() || !landlock_write_paths.is_empty());
+    if landlock_env_needed {
+        if !landlock_read_paths.is_empty() {
+            env_map.insert(
+                WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV.to_string(),
+                landlock_read_paths.join("\n"),
+            );
+        }
+        if !landlock_write_paths.is_empty() {
+            env_map.insert(
+                WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV.to_string(),
+                landlock_write_paths.join("\n"),
+            );
+        }
+    }
+
+    let helper_needed = landlock_env_needed || enforcement_plan_b64.is_some();
+    if helper_needed {
+        if let Ok(exe) = std::env::current_exe() {
+            env_map
+                .entry(LANDLOCK_HELPER_SRC_ENV.to_string())
+                .or_insert_with(|| exe.display().to_string());
+        }
+    }
 }
 
 impl WorldAgentService {

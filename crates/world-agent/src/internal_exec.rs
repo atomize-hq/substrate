@@ -1,3 +1,4 @@
+use crate::enforcement_plan;
 use anyhow::{Context, Result};
 #[cfg(target_os = "linux")]
 use serde_json::json;
@@ -18,6 +19,27 @@ const LANDLOCK_READ_ENV: &str = "SUBSTRATE_WORLD_FS_LANDLOCK_READ_ALLOWLIST";
 const LANDLOCK_WRITE_ENV: &str = "SUBSTRATE_WORLD_FS_LANDLOCK_WRITE_ALLOWLIST";
 
 pub fn run_landlock_exec() -> Result<()> {
+    if let Err(err) = enforcement_plan::read_from_env_and_validate() {
+        #[cfg(target_os = "linux")]
+        {
+            eprintln!(
+                "substrate: error: invalid enforcement plan: {}",
+                serde_json::to_string(&json!({
+                    "feature": "world-fs-enforcement-plan",
+                    "env": enforcement_plan::WORLD_FS_ENFORCEMENT_PLAN_B64_ENV,
+                    "reason": err.to_string(),
+                    "remediation": "ensure SUBSTRATE_WORLD_FS_ENFORCEMENT_PLAN_B64 is base64 JSON matching the v1 schema; unknown fields are rejected",
+                }))
+                .unwrap_or_else(|_| "<unserializable>".to_string())
+            );
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            eprintln!("substrate: error: invalid enforcement plan: {err}");
+        }
+        std::process::exit(4);
+    }
+
     let read_paths = parse_allowlist_env(LANDLOCK_READ_ENV);
     let write_paths = parse_allowlist_env(LANDLOCK_WRITE_ENV);
 
