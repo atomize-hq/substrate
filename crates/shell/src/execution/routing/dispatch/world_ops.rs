@@ -987,6 +987,10 @@ fn build_agent_client_and_request_impl(
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
     let policy_snapshot =
         crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&host_cwd)?.snapshot;
+    crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
+        &policy_snapshot,
+        &mut env_map,
+    )?;
 
     let request = ExecuteRequest {
         profile,
