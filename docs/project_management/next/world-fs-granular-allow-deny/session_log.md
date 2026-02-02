@@ -153,3 +153,9 @@
 
 ## END — 2026-02-02T13:42:57Z — ci-checkpoint — CP1-ci-checkpoint
 - Result: `PASS`
+
+## END — 2026-02-02T13:44:10Z — integration — WFGAD1-integ-macos
+- Result: `NOOP` (checkpoint green; platform-fix not required)
+
+## END — 2026-02-02T13:44:10Z — integration — WFGAD1-integ-windows
+- Result: `NOOP` (checkpoint green; platform-fix not required)
