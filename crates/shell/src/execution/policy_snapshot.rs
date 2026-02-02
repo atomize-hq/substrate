@@ -1,8 +1,8 @@
 use agent_api_types::{
-    PolicySnapshotLimitsV1, PolicySnapshotV1, PolicySnapshotWorldFsIsolationV1,
-    PolicySnapshotWorldFsV1,
+    PolicySnapshotLimitsV2, PolicySnapshotV2, PolicySnapshotWorldFsDimensionV2,
+    PolicySnapshotWorldFsIsolationV2, PolicySnapshotWorldFsV2, WorldFsEnforcementV2,
 };
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::Read;
@@ -12,7 +12,7 @@ use std::time::SystemTime;
 
 #[derive(Debug, Clone)]
 pub(crate) struct ResolvedPolicySnapshot {
-    pub(crate) snapshot: PolicySnapshotV1,
+    pub(crate) snapshot: PolicySnapshotV2,
     pub(crate) snapshot_hash: String,
 }
 
@@ -67,7 +67,7 @@ struct CacheEntry {
     workspace_path: Option<PathBuf>,
     global_stat: FileStatKey,
     workspace_stat: Option<FileStatKey>,
-    snapshot: PolicySnapshotV1,
+    snapshot: PolicySnapshotV2,
     snapshot_hash: String,
 }
 
@@ -112,7 +112,7 @@ pub(crate) fn resolve_policy_snapshot_for_cwd(cwd: &Path) -> Result<ResolvedPoli
 
     let (policy, _) = substrate_broker::resolve_effective_policy_with_explain(cwd, false)
         .map_err(|err| crate::execution::config_model::user_error(err.to_string()))?;
-    let snapshot = snapshot_from_policy(&policy);
+    let snapshot = snapshot_from_policy(&policy)?;
     let snapshot_hash = compute_snapshot_hash(&snapshot)?;
 
     if let Ok(mut guard) = cache.lock() {
@@ -133,35 +133,67 @@ pub(crate) fn resolve_policy_snapshot_for_cwd(cwd: &Path) -> Result<ResolvedPoli
     })
 }
 
-fn snapshot_from_policy(policy: &substrate_broker::Policy) -> PolicySnapshotV1 {
+fn snapshot_from_policy(policy: &substrate_broker::Policy) -> Result<PolicySnapshotV2> {
     let isolation = match policy.world_fs_isolation {
         substrate_broker::WorldFsIsolation::Workspace => {
-            PolicySnapshotWorldFsIsolationV1::Workspace
+            PolicySnapshotWorldFsIsolationV2::Workspace
         }
-        substrate_broker::WorldFsIsolation::Full => PolicySnapshotWorldFsIsolationV1::Full,
+        substrate_broker::WorldFsIsolation::Full => PolicySnapshotWorldFsIsolationV2::Full,
     };
 
-    PolicySnapshotV1 {
-        schema_version: 1,
-        world_fs: PolicySnapshotWorldFsV1 {
+    let enforcement = policy.world_fs_enforcement.map(|mode| match mode {
+        substrate_broker::WorldFsEnforcement::Strict => WorldFsEnforcementV2::Strict,
+        substrate_broker::WorldFsEnforcement::BestEffort => WorldFsEnforcementV2::BestEffort,
+    });
+
+    let dim = |dim: &substrate_broker::WorldFsDimensionPolicy| PolicySnapshotWorldFsDimensionV2 {
+        allow_list: dim.allow_list.clone(),
+        deny_list: dim.deny_list.clone(),
+    };
+
+    let (discover, read, write) = match isolation {
+        PolicySnapshotWorldFsIsolationV2::Workspace => (None, None, None),
+        PolicySnapshotWorldFsIsolationV2::Full => {
+            let read = policy
+                .world_fs_read
+                .as_ref()
+                .map(dim)
+                .ok_or_else(|| anyhow!("missing world_fs.read dimension in resolved policy"))?;
+            let discover = policy.world_fs_discover.as_ref().map(dim);
+            let write = policy.world_fs_write.as_ref().map(dim);
+            (discover, Some(read), write)
+        }
+    };
+
+    let snapshot = PolicySnapshotV2 {
+        schema_version: 2,
+        world_fs: PolicySnapshotWorldFsV2 {
             mode: policy.world_fs_mode,
             isolation,
             require_world: policy.world_fs_require_world,
-            read_allowlist: policy.fs_read.clone(),
-            write_allowlist: policy.fs_write.clone(),
+            enforcement,
+            discover,
+            read,
+            write,
         },
         net_allowed: policy.net_allowed.clone(),
-        limits: PolicySnapshotLimitsV1 {
+        limits: PolicySnapshotLimitsV2 {
             max_memory_mb: policy.limits.max_memory_mb,
             max_cpu_percent: policy.limits.max_cpu_percent,
             max_runtime_ms: policy.limits.max_runtime_ms,
             max_egress_bytes: policy.limits.max_egress_bytes,
         },
-    }
+    };
+
+    snapshot
+        .validate()
+        .map_err(|err| anyhow!("invalid PolicySnapshotV2 derived from broker policy: {err}"))?;
+
+    Ok(snapshot)
 }
 
-fn compute_snapshot_hash(snapshot: &PolicySnapshotV1) -> Result<String> {
-    let bytes = serde_json::to_vec(snapshot).context("serialize PolicySnapshotV1")?;
+fn compute_snapshot_hash(snapshot: &PolicySnapshotV2) -> Result<String> {
+    let bytes = serde_json::to_vec(snapshot).context("serialize PolicySnapshotV2")?;
     let mut hasher = Sha256::new();
     hasher.update(&bytes);
     Ok(format!("{:x}", hasher.finalize()))
