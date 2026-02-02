@@ -147,6 +147,28 @@ expect_fail_contains() {
   fi
 }
 
+expect_fail_contains_any() {
+  local cmd="$1"
+  local needle_a="$2"
+  local needle_b="$3"
+  local out
+  if out="$(run_world "$cmd")"; then
+    echo "FAIL: expected failure: $cmd" >&2
+    echo "$out" >&2
+    exit 1
+  fi
+  if grep -Fq "$needle_a" <<<"$out" || grep -Fq "$needle_b" <<<"$out"; then
+    return 0
+  fi
+  echo "FAIL: expected output to contain either:" >&2
+  echo " - $needle_a" >&2
+  echo " - $needle_b" >&2
+  echo "CMD: $cmd" >&2
+  echo "OUT:" >&2
+  echo "$out" >&2
+  exit 1
+}
+
 case "$mode" in
   schema)
     schema_smoke
@@ -180,7 +202,7 @@ expect_ok 'cat ./docs/public.txt >/dev/null'
 
 if [[ "$mode" == "full" ]]; then
   echo "== Case 2: attempted bypass (strict) =="
-  expect_fail_contains 'umount /project/secrets' 'Operation not permitted'
+  expect_fail_contains_any 'umount /project/secrets' 'Operation not permitted' 'must be superuser to unmount'
   expect_fail_contains 'cat ./secrets/secret.txt' 'Permission denied'
   expect_fail_contains 'cat "$SUBSTRATE_MOUNT_PROJECT_DIR/secrets/secret.txt"' 'Permission denied'
 fi
