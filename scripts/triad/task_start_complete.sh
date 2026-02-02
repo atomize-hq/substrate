@@ -328,6 +328,68 @@ finish_one() {
     printf '\n' >>"${LOG_PATH}"
 }
 
+task_logs_dir_for() {
+    local task_id="$1"
+    local slice="${task_id%%-*}"
+    local kind="${task_id#${slice}-}"
+    if [[ -z "${slice}" || -z "${kind}" || "${slice}" == "${task_id}" || "${kind}" == "${task_id}" ]]; then
+        slice="${task_id}"
+        kind="task"
+    fi
+    printf '%s/logs/%s/%s\n' "${FEATURE_DIR_ABS}" "${slice}" "${kind}"
+}
+
+wait_for_codex_if_running() {
+    local task_id="$1"
+
+    local out_dir
+    out_dir="$(task_logs_dir_for "${task_id}")"
+    local pid_path="${out_dir}/codex.pid"
+    if [[ ! -f "${pid_path}" ]]; then
+        return 0
+    fi
+
+    local pid
+    pid="$(tr -d '[:space:]' < "${pid_path}" || true)"
+    if [[ -z "${pid}" ]]; then
+        rm -f "${pid_path}" >/dev/null 2>&1 || true
+        return 0
+    fi
+
+    if ! kill -0 "${pid}" 2>/dev/null; then
+        rm -f "${pid_path}" >/dev/null 2>&1 || true
+        return 0
+    fi
+
+    local worktree_rel
+    worktree_rel="$(jq -r --arg id "${task_id}" '.tasks[] | select(.id==$id) | .worktree // empty' "${TASKS_JSON}")"
+    local worktree_abs=""
+    if [[ -n "${worktree_rel}" && "${worktree_rel}" != "null" ]]; then
+        worktree_abs="$(python_abs_path "${worktree_rel}")"
+    fi
+
+    local cmd
+    cmd="$(ps -p "${pid}" -o cmd= 2>/dev/null || true)"
+    if [[ -z "${cmd}" ]]; then
+        rm -f "${pid_path}" >/dev/null 2>&1 || true
+        return 0
+    fi
+
+    if [[ -n "${worktree_abs}" ]]; then
+        if ! printf '%s\n' "${cmd}" | rg -F -q -- "--cd ${worktree_abs}"; then
+            log_to_file "WARN: stale codex.pid for ${task_id} (pid=${pid}) does not match expected --cd ${worktree_abs}; removing pid file"
+            rm -f "${pid_path}" >/dev/null 2>&1 || true
+            return 0
+        fi
+    fi
+
+    log_to_file "-- waiting for Codex to exit: task=${task_id} pid=${pid}"
+    while kill -0 "${pid}" 2>/dev/null; do
+        sleep 2
+    done
+    rm -f "${pid_path}" >/dev/null 2>&1 || true
+}
+
 if [[ "${CODE_TEST_STATUS}" == "pending" ]]; then
     log_to_file "-- planning-pack START (code+test)"
     python3 - "${TASKS_JSON}" "${SESSION_LOG}" "${now_utc}" "${CODE_TASK_ID}" "${TEST_TASK_ID}" <<'PY'
@@ -416,6 +478,9 @@ if [[ "${CODE_TEST_STATUS}" != "completed" ]]; then
     if [[ -z "${CODE_WORKTREE}" || -z "${TEST_WORKTREE}" ]]; then
         die "Missing CODE_WORKTREE/TEST_WORKTREE for ${CODE_TASK_ID}/${TEST_TASK_ID}; see ${LOG_PATH}"
     fi
+
+    wait_for_codex_if_running "${CODE_TASK_ID}"
+    wait_for_codex_if_running "${TEST_TASK_ID}"
 
     code_finish_out="$(mktemp)"
     test_finish_out="$(mktemp)"
@@ -558,6 +623,8 @@ if [[ "${INTEG_STATUS}" != "completed" ]]; then
     if [[ -z "${INTEG_WORKTREE}" ]]; then
         die "Missing INTEG_WORKTREE for ${INTEG_TASK_ID}; see ${LOG_PATH}"
     fi
+
+    wait_for_codex_if_running "${INTEG_TASK_ID}"
 
     integ_finish_out="$(mktemp)"
     finish_one "${INTEG_TASK_ID}" "${INTEG_WORKTREE}" "${integ_finish_out}"
