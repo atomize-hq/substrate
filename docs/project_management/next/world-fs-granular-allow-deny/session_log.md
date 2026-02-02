@@ -282,3 +282,7 @@
 
 ## END — 2026-02-02T22:38:58Z — ci-checkpoint — CP2-ci-checkpoint
 - Result: PASS (self-hosted runners)
+
+## START — 2026-02-02T22:48:54Z — integration — WFGAD3-integ
+- Dispatch:
+  - `make triad-task-start-integ-final FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny" SLICE_ID="WFGAD3" LAUNCH_CODEX=1`
