@@ -262,3 +262,13 @@
 ## UPDATE — 2026-02-02T21:44:48Z — integration platform-fix — WFGAD3-integ-macos
 - Reopened due to CP2 self-hosted CI testing failure on macos-14:
   - https://github.com/atomize-hq/substrate/actions/runs/21607565529
+
+## CP2-ci-checkpoint (self-hosted rerun 4 attempt)
+- checkout_sha: c5956a2c756b86f52162efbf439be97d99ce3976
+- ci_testing (quick): cancelled/hung (macos)
+  - https://github.com/atomize-hq/substrate/actions/runs/21607764571
+
+## CP2-ci-checkpoint (self-hosted rerun 5 attempt)
+- checkout_sha: 430fe4e6e766f67c2b0428e45719b81f29fd25dc
+- ci_testing (quick): cancelled (macos hung after `repl_world_first_rendering_v1.rs` / before routing test names)
+  - https://github.com/atomize-hq/substrate/actions/runs/21608501228
