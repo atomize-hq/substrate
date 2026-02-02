@@ -51,10 +51,6 @@ world_fs:
   mode: writable
   isolation: workspace
   require_world: false
-  read_allowlist:
-    - /tmp/*
-  write_allowlist:
-    - /tmp/*
 net_allowed:
   - github.com
 cmd_allowed:
@@ -94,36 +90,27 @@ metadata: {}
 
 #[test]
 fn minimal_policy_parses_with_required_world_fs() {
-    let raw = r#"
-id: minimal
-name: Minimal Profile
+    let dir = tempdir().unwrap();
+    let policy_path = dir.path().join("policy.yaml");
+    std::fs::write(
+        &policy_path,
+        r#"
 world_fs:
   mode: read_only
   isolation: workspace
   require_world: true
-  read_allowlist: ["*"]
-  write_allowlist: []
-net_allowed: []
-cmd_allowed: []
-cmd_denied: ["ls"]
-cmd_isolated: []
-require_approval: false
-allow_shell_operators: true
-limits:
-  max_memory_mb: null
-  max_cpu_percent: null
-  max_runtime_ms: null
-  max_egress_bytes: null
-metadata: {}
-"#;
+cmd_denied:
+  - ls
+"#,
+    )
+    .unwrap();
 
-    let policy: Policy = serde_yaml::from_str(raw).expect("policy should parse");
-    assert_eq!(policy.id, "minimal");
+    let policy = crate::effective_policy::load_policy_from_path(&policy_path)
+        .expect("policy patch should load");
+
     assert_eq!(policy.world_fs_mode, WorldFsMode::ReadOnly);
-    assert_eq!(policy.fs_read, vec!["*".to_string()]);
-    assert!(policy.fs_write.is_empty());
-    assert!(policy.net_allowed.is_empty());
-    assert!(policy.cmd_allowed.is_empty());
+    assert_eq!(policy.world_fs_isolation, WorldFsIsolation::Workspace);
+    assert!(policy.world_fs_require_world);
 }
 
 #[test]
@@ -188,8 +175,6 @@ world_fs:
   mode: writable
   isolation: workspace
   require_world: false
-  read_allowlist: ["*"]
-  write_allowlist: []
 net_allowed: []
 cmd_allowed:
   - alpha-allowed
@@ -216,8 +201,6 @@ world_fs:
   mode: writable
   isolation: workspace
   require_world: false
-  read_allowlist: ["*"]
-  write_allowlist: []
 net_allowed: []
 cmd_allowed:
   - beta-allowed
@@ -300,8 +283,6 @@ world_fs:
   mode: invalid
   isolation: workspace
   require_world: false
-  read_allowlist: ["*"]
-  write_allowlist: []
 net_allowed: []
 cmd_allowed: []
 cmd_denied: []
@@ -326,155 +307,271 @@ metadata: {}
     );
 }
 
-mod i0_strict_policy_schema_world_fs {
+mod wfgad0_policy_schema_v2 {
     use super::*;
 
-    const BASE_POLICY_YAML: &str = r#"
-id: p
-name: Policy
+    fn load_policy_from_yaml(raw: &str) -> anyhow::Result<Policy> {
+        let dir = tempdir().expect("tempdir");
+        let policy_path = dir.path().join("policy.yaml");
+        std::fs::write(&policy_path, raw).expect("write policy.yaml");
+        crate::effective_policy::load_policy_from_path(&policy_path)
+    }
+
+    fn expect_err(raw: &str) -> String {
+        load_policy_from_yaml(raw)
+            .expect_err("expected policy patch to be rejected")
+            .to_string()
+    }
+
+    fn expect_err_contains(raw: &str, needle: &str) {
+        let err = expect_err(raw);
+        assert!(
+            err.contains(needle),
+            "expected error to contain {needle:?}, got: {err}"
+        );
+    }
+
+    #[test]
+    fn rejects_legacy_world_fs_allowlist_keys() {
+        // R-001: breaking schema; legacy keys must hard error.
+        expect_err_contains(
+            r#"
 world_fs:
   mode: writable
   isolation: workspace
   require_world: false
   read_allowlist: ["*"]
   write_allowlist: []
-net_allowed: []
-cmd_allowed: []
-cmd_denied: []
-cmd_isolated: []
-require_approval: false
-allow_shell_operators: true
-limits:
-  max_memory_mb: null
-  max_cpu_percent: null
-  max_runtime_ms: null
-  max_egress_bytes: null
-metadata: {}
-"#;
-
-    fn parse_err(raw: &str) -> String {
-        serde_yaml::from_str::<Policy>(raw)
-            .expect_err("expected policy parse error")
-            .to_string()
-    }
-
-    #[test]
-    fn missing_world_fs_fails_with_actionable_error() {
-        let err = parse_err(
-            r#"
-id: p
-name: Policy
 "#,
-        );
-
-        assert!(
-            err.contains("missing field `world_fs`"),
-            "unexpected error: {err}"
+            "read_allowlist",
         );
     }
 
     #[test]
-    fn invalid_world_fs_mode_fails_with_allowed_values() {
-        let err = parse_err(&BASE_POLICY_YAML.replace("mode: writable", "mode: invalid"));
-        assert!(
-            err.contains("invalid world_fs.mode"),
-            "unexpected error: {err}"
-        );
-        assert!(err.contains("writable"), "unexpected error: {err}");
-        assert!(err.contains("read_only"), "unexpected error: {err}");
-    }
-
-    #[test]
-    fn invalid_world_fs_isolation_fails_with_allowed_values() {
-        let err =
-            parse_err(&BASE_POLICY_YAML.replace("isolation: workspace", "isolation: invalid"));
-        assert!(
-            err.contains("invalid world_fs.isolation"),
-            "unexpected error: {err}"
-        );
-        assert!(err.contains("workspace"), "unexpected error: {err}");
-        assert!(err.contains("full"), "unexpected error: {err}");
-    }
-
-    #[test]
-    fn read_only_requires_require_world_true() {
-        let err = parse_err(&BASE_POLICY_YAML.replace("mode: writable", "mode: read_only"));
-        assert!(
-            err.contains("mode=read_only") && err.contains("require_world=true"),
-            "unexpected error: {err}"
+    fn rejects_legacy_isolation_project_value() {
+        // R-001: breaking schema; legacy values must hard error (only workspace|full allowed).
+        expect_err_contains(
+            r#"
+world_fs:
+  mode: writable
+  isolation: project
+  require_world: false
+"#,
+            "world_fs.isolation",
         );
     }
 
     #[test]
-    fn full_isolation_requires_require_world_true() {
-        let err = parse_err(&BASE_POLICY_YAML.replace("isolation: workspace", "isolation: full"));
-        assert!(
-            err.contains("isolation=full") && err.contains("require_world=true"),
-            "unexpected error: {err}"
-        );
-    }
-
-    #[test]
-    fn write_allowlist_can_be_empty_but_required() {
-        serde_yaml::from_str::<Policy>(BASE_POLICY_YAML).expect("empty write_allowlist allowed");
-
-        let raw_missing_write_allowlist = r#"
-id: p
-name: Policy
+    fn denies_and_enforcement_are_rejected_in_workspace_isolation() {
+        // R-002: deny lists + enforcement are full-isolation only.
+        let err = expect_err(
+            r#"
 world_fs:
   mode: writable
   isolation: workspace
   require_world: false
-  read_allowlist: ["*"]
-net_allowed: []
-cmd_allowed: []
-cmd_denied: []
-cmd_isolated: []
-require_approval: false
-allow_shell_operators: true
-limits:
-  max_memory_mb: null
-  max_cpu_percent: null
-  max_runtime_ms: null
-  max_egress_bytes: null
-metadata: {}
-"#;
-
-        let err = parse_err(raw_missing_write_allowlist);
+  enforcement: strict
+  read:
+    allow_list: ["."]
+    deny_list: ["secrets/**"]
+"#,
+        );
         assert!(
-            err.contains("missing field `write_allowlist`"),
+            err.contains("workspace") || err.contains("isolation"),
             "unexpected error: {err}"
         );
     }
 
     #[test]
-    fn legacy_keys_are_rejected() {
-        let err = parse_err(
-            &BASE_POLICY_YAML.replace("name: Policy", "name: Policy\nworld_fs_mode: writable"),
+    fn allow_list_must_be_present_and_non_empty() {
+        // R-005: allow_list required + non-empty for any configured dimension.
+        let err_missing = expect_err(
+            r#"
+world_fs:
+  mode: read_only
+  isolation: full
+  require_world: true
+  read:
+    deny_list: []
+  enforcement: best_effort
+"#,
         );
         assert!(
-            err.contains("unknown field") && err.contains("world_fs_mode"),
-            "unexpected error: {err}"
+            err_missing.contains("allow_list") || err_missing.contains("read"),
+            "unexpected error: {err_missing}"
+        );
+
+        let err_empty = expect_err(
+            r#"
+world_fs:
+  mode: read_only
+  isolation: full
+  require_world: true
+  read:
+    allow_list: []
+    deny_list: []
+  enforcement: best_effort
+"#,
+        );
+        assert!(
+            err_empty.contains("allow_list") || err_empty.contains("empty"),
+            "unexpected error: {err_empty}"
         );
     }
 
     #[test]
-    fn minimal_world_fs_policy_passes() {
-        let policy: Policy =
-            serde_yaml::from_str(&BASE_POLICY_YAML.replace("[\"*\"]", "[\"./*\"]"))
-                .expect("minimal world_fs policy should parse");
-        assert_eq!(policy.world_fs_mode, WorldFsMode::Writable);
-        assert_eq!(policy.world_fs_isolation, WorldFsIsolation::Workspace);
-        assert!(!policy.world_fs_require_world);
+    fn allow_list_rejects_glob_metacharacters() {
+        // R-004: allow_list must not contain glob metacharacters (* ? [ ]).
+        expect_err(
+            r#"
+world_fs:
+  mode: read_only
+  isolation: full
+  require_world: true
+  enforcement: strict
+  read:
+    allow_list: ["src/**"]
+    deny_list: []
+"#,
+        );
     }
 
     #[test]
-    fn legacy_isolation_project_is_accepted() {
-        let policy: Policy = serde_yaml::from_str(
-            &BASE_POLICY_YAML.replace("isolation: workspace", "isolation: project"),
+    fn deny_list_rejects_unsupported_glob_metacharacters() {
+        // R-004: deny_list supports only * and ** wildcards; ? and [...] must hard error.
+        expect_err(
+            r#"
+world_fs:
+  mode: read_only
+  isolation: full
+  require_world: true
+  enforcement: strict
+  read:
+    allow_list: ["."]
+    deny_list: ["file?.txt"]
+"#,
+        );
+        expect_err(
+            r#"
+world_fs:
+  mode: read_only
+  isolation: full
+  require_world: true
+  enforcement: strict
+  read:
+    allow_list: ["."]
+    deny_list: ["file[0-9].txt"]
+"#,
+        );
+    }
+
+    #[test]
+    fn patterns_must_be_project_root_relative() {
+        // R-004: absolute paths and any ".." segment must hard error.
+        expect_err(
+            r#"
+world_fs:
+  mode: read_only
+  isolation: full
+  require_world: true
+  enforcement: strict
+  read:
+    allow_list: ["/etc/passwd"]
+    deny_list: []
+"#,
+        );
+        expect_err(
+            r#"
+world_fs:
+  mode: read_only
+  isolation: full
+  require_world: true
+  enforcement: strict
+  read:
+    allow_list: ["../secrets"]
+    deny_list: []
+"#,
+        );
+        expect_err(
+            r#"
+world_fs:
+  mode: read_only
+  isolation: full
+  require_world: true
+  enforcement: strict
+  read:
+    allow_list: ["a/../b"]
+    deny_list: []
+"#,
+        );
+    }
+
+    #[test]
+    fn enforcement_must_be_present_iff_any_deny_list_is_non_empty() {
+        // R-018: enforcement present iff any deny_list is non-empty.
+
+        // enforcement present with empty denies => reject
+        expect_err(
+            r#"
+world_fs:
+  mode: read_only
+  isolation: full
+  require_world: true
+  enforcement: strict
+  read:
+    allow_list: ["."]
+    deny_list: []
+"#,
+        );
+
+        // deny_list non-empty without enforcement => reject
+        expect_err(
+            r#"
+world_fs:
+  mode: read_only
+  isolation: full
+  require_world: true
+  read:
+    allow_list: ["."]
+    deny_list: ["secrets/**"]
+"#,
+        );
+    }
+
+    #[test]
+    fn denies_require_require_world_true() {
+        // R-019: denies require a security boundary.
+        expect_err(
+            r#"
+world_fs:
+  mode: read_only
+  isolation: full
+  require_world: false
+  enforcement: strict
+  read:
+    allow_list: ["."]
+    deny_list: ["secrets/**"]
+"#,
+        );
+    }
+
+    #[test]
+    fn accepts_normalized_literals_and_wildcard_denies_in_full_isolation() {
+        // R-004: leading "./" and trailing "/" are normalized (accepted) and semantics are deterministic.
+        // Also validates that a minimal full-isolation deny configuration is accepted when consistent.
+        load_policy_from_yaml(
+            r#"
+world_fs:
+  mode: read_only
+  isolation: full
+  require_world: true
+  enforcement: best_effort
+  read:
+    allow_list: ["./src/"]
+    deny_list: ["./secrets/", "**/*.pem"]
+"#,
         )
-        .expect("legacy isolation=project should still parse");
-        assert_eq!(policy.world_fs_isolation, WorldFsIsolation::Workspace);
+        .expect("expected a valid v2 world_fs configuration to load");
     }
 }
 
@@ -665,8 +762,6 @@ world_fs:
   mode: writable
   isolation: workspace
   require_world: false
-  read_allowlist: ["*"]
-  write_allowlist: []
 net_allowed: []
 cmd_allowed:
 {cmd_allowed_yaml}cmd_denied: []
@@ -681,6 +776,34 @@ limits:
 metadata: {{}}
 "#
         )
+    }
+
+    #[test]
+    #[serial]
+    fn c0_invalid_world_fs_schema_exits_2() {
+        // R-016: "Hard error" for invalid policy/config is exit code 2 on the host CLI.
+        // R-001: legacy keys must hard error (breaking schema v2).
+        let fixture = Fixture::new();
+        fixture.write_workspace_marker();
+
+        fixture.write_global_policy(
+            r#"
+world_fs:
+  mode: writable
+  isolation: workspace
+  require_world: false
+  read_allowlist: ["*"]
+  write_allowlist: []
+"#,
+        );
+
+        let cwd = fixture.child_dir();
+        let output = fixture.run_substrate(&cwd, &["policy", "current", "show", "--json"]);
+        assert_eq!(
+            output.status.code(),
+            Some(2),
+            "expected invalid policy schema to exit 2, got: {output:?}"
+        );
     }
 
     #[test]
