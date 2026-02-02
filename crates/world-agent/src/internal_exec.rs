@@ -255,6 +255,11 @@ pub fn run_landlock_exec() -> Result<()> {
         let _ = (&read_paths, &write_paths, &enforcement_plan);
     }
 
+    #[cfg(target_os = "linux")]
+    if let Some(plan) = enforcement_plan.as_ref() {
+        drop_caps_for_deny_enforcement(plan)?;
+    }
+
     let cwd = std::env::var(MOUNT_CWD_ENV).unwrap_or_else(|_| "/".to_string());
     std::env::set_current_dir(&cwd).with_context(|| format!("failed to set cwd to {cwd:?}"))?;
 
@@ -704,6 +709,24 @@ struct DenyMaskSources {
 
 #[cfg(target_os = "linux")]
 fn ensure_deny_mask_sources() -> Result<DenyMaskSources> {
+    fn enforce_mode_000(path: &Path) -> Result<()> {
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o000))
+            .with_context(|| format!("chmod 000 {}", path.display()))?;
+        let mode = std::fs::metadata(path)
+            .with_context(|| format!("stat {}", path.display()))?
+            .permissions()
+            .mode()
+            & 0o777;
+        if mode != 0 {
+            anyhow::bail!(
+                "deny mask source {} has mode {:03o}, expected 000",
+                path.display(),
+                mode
+            );
+        }
+        Ok(())
+    }
+
     // Keep these sources out of the default Landlock allowlists (which include `/tmp`) so that
     // access-denied masks deterministically fail with `EACCES` even when `/project` is broadly
     // allowed (e.g., allow_list += '.').
@@ -712,19 +735,108 @@ fn ensure_deny_mask_sources() -> Result<DenyMaskSources> {
 
     let deny_dir = root.join("deny_dir");
     std::fs::create_dir_all(&deny_dir).context("create deny_dir source")?;
-    // Best-effort: make the source inaccessible via DAC as well (Landlock is the primary signal).
-    let _ = std::fs::set_permissions(&deny_dir, std::fs::Permissions::from_mode(0o000));
+    enforce_mode_000(&deny_dir)?;
 
     let deny_file = root.join("deny_file");
     if !deny_file.exists() {
         std::fs::write(&deny_file, []).context("create deny_file source")?;
     }
-    let _ = std::fs::set_permissions(&deny_file, std::fs::Permissions::from_mode(0o000));
+    enforce_mode_000(&deny_file)?;
 
     Ok(DenyMaskSources {
         deny_dir,
         deny_file,
     })
+}
+
+#[cfg(target_os = "linux")]
+fn drop_caps_for_deny_enforcement(plan: &enforcement_plan::EnforcementPlanV1) -> Result<()> {
+    #[repr(C)]
+    struct CapHeader {
+        version: u32,
+        pid: i32,
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct CapData {
+        effective: u32,
+        permitted: u32,
+        inheritable: u32,
+    }
+
+    // From linux/capability.h
+    const LINUX_CAPABILITY_VERSION_3: u32 = 0x20080522;
+    const CAP_DAC_OVERRIDE: u32 = 1;
+    const CAP_DAC_READ_SEARCH: u32 = 2;
+    const CAP_SYS_ADMIN: u32 = 21;
+
+    // Glibc exposes capget/capset wrappers; the libc crate doesn't currently surface them.
+    extern "C" {
+        fn capget(hdrp: *mut CapHeader, datap: *mut CapData) -> libc::c_int;
+        fn capset(hdrp: *mut CapHeader, datap: *const CapData) -> libc::c_int;
+    }
+
+    fn clear_ambient_caps() {
+        const PR_CAP_AMBIENT: libc::c_int = 47;
+        const PR_CAP_AMBIENT_CLEAR_ALL: libc::c_ulong = 4;
+        unsafe {
+            let _ = libc::prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_CLEAR_ALL, 0, 0, 0);
+        }
+    }
+
+    fn drop_caps(caps: &[u32]) -> Result<()> {
+        let mut header = CapHeader {
+            version: LINUX_CAPABILITY_VERSION_3,
+            pid: 0,
+        };
+        let mut data = [
+            CapData {
+                effective: 0,
+                permitted: 0,
+                inheritable: 0,
+            },
+            CapData {
+                effective: 0,
+                permitted: 0,
+                inheritable: 0,
+            },
+        ];
+
+        let rc = unsafe { capget(&mut header, data.as_mut_ptr()) };
+        if rc != 0 {
+            return Err(std::io::Error::last_os_error()).context("capget");
+        }
+
+        for cap in caps {
+            let idx = (cap / 32) as usize;
+            let bit = 1u32 << (cap % 32);
+            if idx < data.len() {
+                data[idx].effective &= !bit;
+                data[idx].permitted &= !bit;
+                data[idx].inheritable &= !bit;
+            }
+        }
+
+        let rc = unsafe { capset(&mut header, data.as_ptr()) };
+        if rc != 0 {
+            return Err(std::io::Error::last_os_error()).context("capset");
+        }
+
+        Ok(())
+    }
+
+    // Ensure deny-masked paths produce deterministic EACCES for the workload (even though the
+    // workload runs as uid=0 inside the mount namespace) by dropping DAC bypass capabilities.
+    drop_caps(&[CAP_DAC_OVERRIDE, CAP_DAC_READ_SEARCH])?;
+
+    if plan.enforcement == enforcement_plan::EnforcementPlanModeV1::Strict {
+        // Strict-mode safety: do not allow the workload to undo deny masks via mount syscalls.
+        drop_caps(&[CAP_SYS_ADMIN])?;
+    }
+
+    clear_ambient_caps();
+    Ok(())
 }
 
 #[cfg(target_os = "linux")]

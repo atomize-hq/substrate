@@ -148,7 +148,11 @@ pub(super) fn execute_world_pty_over_ws(
         let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
         let policy_snapshot =
             crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd)?.snapshot;
-        let env_map: std::collections::HashMap<String, String> = std::env::vars().collect();
+        let mut env_map: std::collections::HashMap<String, String> = std::env::vars().collect();
+        crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
+            &policy_snapshot,
+            &mut env_map,
+        )?;
         #[cfg(target_os = "linux")]
         let (cols, rows) = get_term_size();
         #[cfg(not(target_os = "linux"))]
@@ -594,6 +598,10 @@ pub(super) fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyho
                 crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd)?.snapshot;
             let mut env_map = build_world_env_map();
             normalize_env_for_linux_guest(&mut env_map);
+            crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
+                &policy_snapshot,
+                &mut env_map,
+            )?;
             env_map
                 .entry("XDG_DATA_HOME".to_string())
                 .or_insert_with(|| "/root/.local/share".to_string());
@@ -833,10 +841,14 @@ fn build_agent_client_and_request_impl(
     let client = AgentClient::unix_socket(&socket_path)?;
     let cwd_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     let cwd = cwd_path.display().to_string();
-    let env_map = build_world_env_map();
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
     let policy_snapshot =
         crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
+    let mut env_map = build_world_env_map();
+    crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
+        &policy_snapshot,
+        &mut env_map,
+    )?;
 
     let request = ExecuteRequest {
         profile: current_world_request_profile(),
@@ -873,6 +885,10 @@ fn build_agent_client_and_request_impl(
         let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
         let policy_snapshot =
             crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
+        crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
+            &policy_snapshot,
+            &mut env_map,
+        )?;
 
         let request = ExecuteRequest {
             profile: current_world_request_profile(),
@@ -915,6 +931,10 @@ fn build_agent_client_and_request_impl(
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
     let policy_snapshot =
         crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
+    crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
+        &policy_snapshot,
+        &mut env_map,
+    )?;
 
     let request = ExecuteRequest {
         profile: current_world_request_profile(),
