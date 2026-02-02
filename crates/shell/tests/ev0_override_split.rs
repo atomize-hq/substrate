@@ -73,8 +73,6 @@ world_fs:
   mode: writable
   isolation: workspace
   require_world: false
-  read_allowlist: ["*"]
-  write_allowlist: []
 
 net_allowed: []
 cmd_allowed: []

@@ -618,8 +618,10 @@ mod c0_policy_patch_only_broker_effective_resolution {
         static BUILD_ONCE: OnceLock<()> = OnceLock::new();
         BUILD_ONCE.get_or_init(|| {
             let target_dir = c0_target_dir();
+            let cargo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
             let status = Command::new("cargo")
                 .args(["build", "-p", "substrate"])
+                .current_dir(&cargo_root)
                 .env("CARGO_TARGET_DIR", &target_dir)
                 .status()
                 .expect("failed to invoke cargo build -p substrate");

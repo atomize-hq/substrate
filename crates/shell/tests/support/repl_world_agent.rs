@@ -6,12 +6,14 @@ use base64::Engine;
 use futures::{SinkExt, StreamExt};
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
     Arc, Mutex,
 };
 use std::thread;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone)]
 pub struct PersistentStartSessionRecord {
@@ -119,6 +121,7 @@ impl ReplWorldAgentStub {
         }
 
         let path_buf = path.to_path_buf();
+        let ready_path = path_buf.clone();
         let shutdown = Arc::new(AtomicBool::new(false));
         let shutdown_for_thread = shutdown.clone();
         let connections = Arc::new(AtomicUsize::new(0));
@@ -746,6 +749,30 @@ impl ReplWorldAgentStub {
                 }
             });
         });
+
+        // Avoid races with callers that immediately probe `GET /v1/capabilities` (e.g.
+        // `ensure_world_agent_ready()`): wait until the socket responds with 200.
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < deadline {
+            if let Ok(mut stream) = std::os::unix::net::UnixStream::connect(&ready_path) {
+                let _ = stream.set_read_timeout(Some(Duration::from_millis(150)));
+                let _ = stream.set_write_timeout(Some(Duration::from_millis(150)));
+                let req = b"GET /v1/capabilities HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
+                if stream.write_all(req).is_ok() {
+                    let mut buf = [0u8; 512];
+                    if let Ok(n) = stream.read(&mut buf) {
+                        if n > 0
+                            && std::str::from_utf8(&buf[..n])
+                                .unwrap_or("")
+                                .contains(" 200 ")
+                        {
+                            break;
+                        }
+                    }
+                }
+            }
+            thread::sleep(Duration::from_millis(25));
+        }
 
         Self {
             path: path.to_path_buf(),

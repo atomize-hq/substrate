@@ -25,9 +25,6 @@ world_fs:
   mode: writable
   isolation: workspace
   require_world: true
-  read_allowlist:
-    - "*"
-  write_allowlist: []
 net_allowed: []
 cmd_allowed: []
 cmd_denied: []
@@ -54,9 +51,6 @@ world_fs:
   mode: writable
   isolation: workspace
   require_world: {require_world}
-  read_allowlist:
-    - "*"
-  write_allowlist: []
 net_allowed: []
 cmd_allowed: []
 cmd_denied: []

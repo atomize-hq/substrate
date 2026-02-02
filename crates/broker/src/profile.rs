@@ -146,11 +146,16 @@ world_fs:
   mode: writable            # writable | read_only
   isolation: full           # workspace | full
   require_world: true       # true = world required (no host fallback)
-  read_allowlist:
-    - "*"                   # Allow reading all files
-  write_allowlist:
-    - "dist/**"             # Allow writing to dist directory
-    - "build/**"            # And build directory (prefix globs)
+  # V2 schema:
+  # - allow_list entries are literal project-root-relative paths (no wildcards); use "." for entire project.
+  # - deny_list is optional; wildcard denies are supported there only.
+  read:
+    allow_list:
+      - "."                 # Allow reading all files
+  write:
+    allow_list:
+      - "dist"              # Allow writing to dist/...
+      - "build"             # And build/...
 
 # Network permissions
 net_allowed:

@@ -71,7 +71,7 @@ impl FromStr for WorldFsIsolation {
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value.trim().to_ascii_lowercase().as_str() {
-            "workspace" | "project" => Ok(Self::Workspace),
+            "workspace" => Ok(Self::Workspace),
             "full" => Ok(Self::Full),
             other => Err(format!(
                 "invalid world_fs.isolation: {} (expected workspace or full)",
