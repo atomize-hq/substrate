@@ -272,3 +272,13 @@
 - checkout_sha: 430fe4e6e766f67c2b0428e45719b81f29fd25dc
 - ci_testing (quick): cancelled (macos hung after `repl_world_first_rendering_v1.rs` / before routing test names)
   - https://github.com/atomize-hq/substrate/actions/runs/21608501228
+
+## CP2-ci-checkpoint (self-hosted rerun 6)
+- checkout_sha: 3eb386ec1a6ce376a9b7703378f991544a3fb0de
+- compile_parity: PASS
+  - https://github.com/atomize-hq/substrate/actions/runs/21608794782
+- ci_testing (quick): PASS
+  - https://github.com/atomize-hq/substrate/actions/runs/21608828008
+
+## END — 2026-02-02T22:38:58Z — ci-checkpoint — CP2-ci-checkpoint
+- Result: PASS (self-hosted runners)

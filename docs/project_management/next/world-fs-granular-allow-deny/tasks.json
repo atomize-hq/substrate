@@ -860,7 +860,7 @@
         "Read: ci_checkpoint_plan.md, tasks.json, session_log.md, kickoff prompt",
         "Set status to in_progress; add START entry; commit docs"
       ],
-      "status": "in_progress",
+      "status": "completed",
       "type": "ops",
       "worktree": null
     },
