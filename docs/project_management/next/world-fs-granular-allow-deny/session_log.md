@@ -250,3 +250,15 @@
 - HEAD: `03558206a75f53b2c5ff23fbeaee72adda5c03ac`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny/logs/WFGAD3/integ-macos/last_message.md`
 - Notes: Deflakes REPL drift-restart routing test; includes Windows clippy fix so CP2 can validate a single candidate SHA.
+
+## CP2-ci-checkpoint (self-hosted rerun 3)
+- checkout_sha: 03558206a75f53b2c5ff23fbeaee72adda5c03ac
+- local smoke preflight (linux): PASS (`docs/project_management/next/world-fs-granular-allow-deny/smoke/linux-smoke.sh`)
+- compile_parity: PASS
+  - https://github.com/atomize-hq/substrate/actions/runs/21607529790
+- ci_testing (quick): FAIL (macos-14 failed)
+  - https://github.com/atomize-hq/substrate/actions/runs/21607565529
+
+## UPDATE — 2026-02-02T21:44:48Z — integration platform-fix — WFGAD3-integ-macos
+- Reopened due to CP2 self-hosted CI testing failure on macos-14:
+  - https://github.com/atomize-hq/substrate/actions/runs/21607565529
