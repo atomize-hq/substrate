@@ -127,3 +127,7 @@
 - Dispatch:
   - `make ci-compile-parity CI_WORKFLOW_REF="feat/world-fs-granular-allow-deny" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF="07070723e882fe9562ba18b65b7dc3e5c9bf76c5"`
   - `scripts/ci/dispatch_ci_testing.sh --workflow-ref "feat/world-fs-granular-allow-deny" --remote origin --cleanup --mode quick --checkout-ref "07070723e882fe9562ba18b65b7dc3e5c9bf76c5"`
+
+## START — 2026-02-02T13:08:40Z — integration — WFGAD1-integ-linux
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny" TASK_ID="WFGAD1-integ-linux" LAUNCH_CODEX=1`
