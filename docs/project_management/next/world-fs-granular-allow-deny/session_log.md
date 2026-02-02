@@ -191,3 +191,11 @@
 ## END — 2026-02-02T14:47:54Z — integration — WFGAD2-integ
 - HEAD: `a3848e9a7fd8f9685badb4c932a6626cbcb16768`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny/logs/WFGAD2/integ/last_message.md`
+
+## START — 2026-02-02T16:08:59Z — code — WFGAD3-code
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny" SLICE_ID="WFGAD3"`
+
+## START — 2026-02-02T16:08:59Z — test — WFGAD3-test
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny" SLICE_ID="WFGAD3"`
