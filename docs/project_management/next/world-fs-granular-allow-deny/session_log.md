@@ -286,3 +286,9 @@
 ## START — 2026-02-02T22:48:54Z — integration — WFGAD3-integ
 - Dispatch:
   - `make triad-task-start-integ-final FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny" SLICE_ID="WFGAD3" LAUNCH_CODEX=1`
+
+## END — 2026-02-02T22:49:44Z — integration — WFGAD3-integ
+- Result: PASS
+- Merged slice branch: `world-fs-granular-allow-deny-wfgad3-integ` @ `f056d6c5`
+- Checkpoint-validated SHA: `3eb386ec1a6ce376a9b7703378f991544a3fb0de`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny/logs/WFGAD3/integ/last_message.md`
