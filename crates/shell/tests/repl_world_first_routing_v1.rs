@@ -521,6 +521,16 @@ fn c3_drift_restart_refreshes_anchor_env_for_new_cwd() {
     repl.send_line("cd ..");
     repl.send_line("cd ..");
     repl.send_line("pwd");
+    let parent_raw = temp.path().to_string_lossy().to_string();
+    let parent_canon = temp
+        .path()
+        .canonicalize()
+        .unwrap_or_else(|_| temp.path().to_path_buf())
+        .to_string_lossy()
+        .to_string();
+    repl.wait_for_output(&parent_raw, Duration::from_secs(2))
+        .or_else(|_| repl.wait_for_output(&parent_canon, Duration::from_secs(2)))
+        .expect("pwd after leaving workspace root");
     repl.send_line("exit");
     let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
 
