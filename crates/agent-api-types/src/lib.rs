@@ -7,37 +7,239 @@ pub use substrate_common::{FsDiff, WorldFsMode};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum PolicySnapshotWorldFsIsolationV1 {
+pub enum PolicySnapshotWorldFsIsolationV2 {
     Workspace,
     Full,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorldFsEnforcementV2 {
+    Strict,
+    BestEffort,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct PolicySnapshotWorldFsV1 {
+pub struct PolicySnapshotWorldFsDimensionV2 {
+    pub allow_list: Vec<String>,
+    #[serde(default)]
+    pub deny_list: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PolicySnapshotWorldFsV2 {
     pub mode: WorldFsMode,
-    pub isolation: PolicySnapshotWorldFsIsolationV1,
+    pub isolation: PolicySnapshotWorldFsIsolationV2,
     pub require_world: bool,
-    pub read_allowlist: Vec<String>,
-    pub write_allowlist: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enforcement: Option<WorldFsEnforcementV2>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discover: Option<PolicySnapshotWorldFsDimensionV2>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub read: Option<PolicySnapshotWorldFsDimensionV2>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub write: Option<PolicySnapshotWorldFsDimensionV2>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct PolicySnapshotLimitsV1 {
-    pub max_memory_mb: Option<u64>,
-    pub max_cpu_percent: Option<u32>,
-    pub max_runtime_ms: Option<u64>,
-    pub max_egress_bytes: Option<u64>,
+pub struct PolicySnapshotLimitsV2 {
+    pub max_memory_mb: u64,
+    pub max_cpu_percent: u32,
+    pub max_runtime_ms: u64,
+    pub max_egress_bytes: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct PolicySnapshotV1 {
+pub struct PolicySnapshotV2 {
     pub schema_version: u32,
-    pub world_fs: PolicySnapshotWorldFsV1,
+    pub world_fs: PolicySnapshotWorldFsV2,
     pub net_allowed: Vec<String>,
-    pub limits: PolicySnapshotLimitsV1,
+    pub limits: PolicySnapshotLimitsV2,
+}
+
+impl PolicySnapshotV2 {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.schema_version != 2 {
+            return Err(format!(
+                "unsupported policy_snapshot.schema_version: {} (expected 2)",
+                self.schema_version
+            ));
+        }
+        validate_world_fs_snapshot(&self.world_fs)
+    }
+}
+
+fn normalize_project_pattern(raw: &str) -> Result<String, String> {
+    let mut pattern = raw.trim();
+    if pattern.is_empty() {
+        return Err("pattern must be non-empty".to_string());
+    }
+    if pattern.starts_with('/') {
+        return Err("absolute paths are not allowed".to_string());
+    }
+
+    while let Some(stripped) = pattern.strip_prefix("./") {
+        pattern = stripped;
+    }
+
+    let mut normalized = pattern.trim_end_matches('/').to_string();
+    if normalized.is_empty() {
+        normalized = ".".to_string();
+    }
+
+    if normalized.split('/').any(|segment| segment == "..") {
+        return Err("path segments must not be '..'".to_string());
+    }
+
+    Ok(normalized)
+}
+
+fn contains_any_glob_metacharacters(value: &str) -> bool {
+    value.contains('*') || value.contains('?') || value.contains('[') || value.contains(']')
+}
+
+fn contains_unsupported_deny_metacharacters(value: &str) -> bool {
+    value.contains('?') || value.contains('[') || value.contains(']')
+}
+
+fn validate_deny_wildcards(pattern: &str) -> Result<(), String> {
+    let mut run = 0usize;
+    for ch in pattern.chars() {
+        if ch == '*' {
+            run += 1;
+            continue;
+        }
+        if run > 0 && run != 1 && run != 2 {
+            return Err("deny_list wildcard runs must be '*' or '**' (no '***' or longer)".into());
+        }
+        run = 0;
+    }
+    if run > 0 && run != 1 && run != 2 {
+        return Err("deny_list wildcard runs must be '*' or '**' (no '***' or longer)".into());
+    }
+    Ok(())
+}
+
+fn validate_dimension(prefix: &str, dim: &PolicySnapshotWorldFsDimensionV2) -> Result<(), String> {
+    if dim.allow_list.is_empty() {
+        return Err(format!("{prefix}.allow_list must be non-empty"));
+    }
+
+    for raw in &dim.allow_list {
+        let normalized =
+            normalize_project_pattern(raw).map_err(|e| format!("{prefix}.allow_list: {e}"))?;
+        if contains_any_glob_metacharacters(&normalized) {
+            return Err(format!(
+                "{prefix}.allow_list contains glob metacharacters; wildcards are not supported in allow_list"
+            ));
+        }
+    }
+
+    for raw in &dim.deny_list {
+        let normalized =
+            normalize_project_pattern(raw).map_err(|e| format!("{prefix}.deny_list: {e}"))?;
+        if contains_unsupported_deny_metacharacters(&normalized) {
+            return Err(format!(
+                "{prefix}.deny_list contains unsupported glob metacharacters ('?' or character classes)"
+            ));
+        }
+        validate_deny_wildcards(&normalized).map_err(|e| format!("{prefix}.deny_list: {e}"))?;
+    }
+
+    Ok(())
+}
+
+fn validate_world_fs_snapshot(world_fs: &PolicySnapshotWorldFsV2) -> Result<(), String> {
+    match world_fs.isolation {
+        PolicySnapshotWorldFsIsolationV2::Workspace => {
+            if world_fs.enforcement.is_some() {
+                return Err(
+                    "world_fs.enforcement must be omitted when world_fs.isolation=workspace"
+                        .to_string(),
+                );
+            }
+            if world_fs.discover.is_some() {
+                return Err(
+                    "world_fs.discover must be omitted when world_fs.isolation=workspace"
+                        .to_string(),
+                );
+            }
+            if world_fs.read.is_some() {
+                return Err(
+                    "world_fs.read must be omitted when world_fs.isolation=workspace".to_string(),
+                );
+            }
+            if world_fs.write.is_some() {
+                return Err(
+                    "world_fs.write must be omitted when world_fs.isolation=workspace".to_string(),
+                );
+            }
+            Ok(())
+        }
+        PolicySnapshotWorldFsIsolationV2::Full => {
+            let read = world_fs.read.as_ref().ok_or_else(|| {
+                "world_fs.read must be present when world_fs.isolation=full".to_string()
+            })?;
+            validate_dimension("world_fs.read", read)?;
+
+            if let Some(discover) = world_fs.discover.as_ref() {
+                validate_dimension("world_fs.discover", discover)?;
+            }
+
+            match world_fs.mode {
+                WorldFsMode::ReadOnly => {
+                    if world_fs.write.is_some() {
+                        return Err(
+                            "world_fs.write must be omitted when world_fs.mode=read_only"
+                                .to_string(),
+                        );
+                    }
+                }
+                WorldFsMode::Writable => {
+                    let write = world_fs.write.as_ref().ok_or_else(|| {
+                        "world_fs.write must be present when world_fs.mode=writable".to_string()
+                    })?;
+                    validate_dimension("world_fs.write", write)?;
+                }
+            }
+
+            let any_deny = world_fs
+                .read
+                .as_ref()
+                .is_some_and(|d| !d.deny_list.is_empty())
+                || world_fs
+                    .discover
+                    .as_ref()
+                    .is_some_and(|d| !d.deny_list.is_empty())
+                || world_fs
+                    .write
+                    .as_ref()
+                    .is_some_and(|d| !d.deny_list.is_empty());
+
+            if any_deny {
+                if world_fs.enforcement.is_none() {
+                    return Err(
+                        "world_fs.enforcement must be present when any deny_list is non-empty"
+                            .to_string(),
+                    );
+                }
+                if !world_fs.require_world {
+                    return Err("deny_list requires world_fs.require_world=true".to_string());
+                }
+            } else if world_fs.enforcement.is_some() {
+                return Err(
+                    "world_fs.enforcement is only valid when at least one deny_list is non-empty"
+                        .to_string(),
+                );
+            }
+
+            Ok(())
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,7 +259,7 @@ pub struct ExecuteRequest {
     pub agent_id: String,
     pub budget: Option<Budget>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub policy_snapshot: Option<PolicySnapshotV1>,
+    pub policy_snapshot: Option<PolicySnapshotV2>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub world_fs_mode: Option<WorldFsMode>,
 }
@@ -136,7 +338,7 @@ pub struct WorldDoctorReportV1 {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum PolicyResolutionModeV1 {
-    SnapshotV1,
+    SnapshotV2,
     LegacyLocal,
 }
 
@@ -246,21 +448,23 @@ mod tests {
             pty: false,
             agent_id: "tester".into(),
             budget: None,
-            policy_snapshot: Some(PolicySnapshotV1 {
-                schema_version: 1,
-                world_fs: PolicySnapshotWorldFsV1 {
+            policy_snapshot: Some(PolicySnapshotV2 {
+                schema_version: 2,
+                world_fs: PolicySnapshotWorldFsV2 {
                     mode: WorldFsMode::Writable,
-                    isolation: PolicySnapshotWorldFsIsolationV1::Workspace,
+                    isolation: PolicySnapshotWorldFsIsolationV2::Workspace,
                     require_world: false,
-                    read_allowlist: vec!["*".to_string()],
-                    write_allowlist: vec!["dist/**".to_string()],
+                    enforcement: None,
+                    discover: None,
+                    read: None,
+                    write: None,
                 },
                 net_allowed: vec!["github.com".to_string()],
-                limits: PolicySnapshotLimitsV1 {
-                    max_memory_mb: Some(4096),
-                    max_cpu_percent: Some(80),
-                    max_runtime_ms: Some(600_000),
-                    max_egress_bytes: Some(1_073_741_824),
+                limits: PolicySnapshotLimitsV2 {
+                    max_memory_mb: 4096,
+                    max_cpu_percent: 80,
+                    max_runtime_ms: 600_000,
+                    max_egress_bytes: 1_073_741_824,
                 },
             }),
             world_fs_mode: None,
@@ -275,22 +479,19 @@ mod tests {
         let snapshot = back
             .policy_snapshot
             .expect("snapshot missing after deserialize");
-        assert_eq!(snapshot.schema_version, 1);
+        assert_eq!(snapshot.schema_version, 2);
         assert_eq!(snapshot.world_fs.mode, WorldFsMode::Writable);
         assert_eq!(
             snapshot.world_fs.isolation,
-            PolicySnapshotWorldFsIsolationV1::Workspace
+            PolicySnapshotWorldFsIsolationV2::Workspace
         );
-        assert_eq!(snapshot.world_fs.read_allowlist, vec!["*".to_string()]);
-        assert_eq!(
-            snapshot.world_fs.write_allowlist,
-            vec!["dist/**".to_string()]
-        );
+        assert!(snapshot.world_fs.read.is_none());
+        assert!(snapshot.world_fs.write.is_none());
         assert_eq!(snapshot.net_allowed, vec!["github.com".to_string()]);
-        assert_eq!(snapshot.limits.max_memory_mb, Some(4096));
-        assert_eq!(snapshot.limits.max_cpu_percent, Some(80));
-        assert_eq!(snapshot.limits.max_runtime_ms, Some(600_000));
-        assert_eq!(snapshot.limits.max_egress_bytes, Some(1_073_741_824));
+        assert_eq!(snapshot.limits.max_memory_mb, 4096);
+        assert_eq!(snapshot.limits.max_cpu_percent, 80);
+        assert_eq!(snapshot.limits.max_runtime_ms, 600_000);
+        assert_eq!(snapshot.limits.max_egress_bytes, 1_073_741_824);
     }
 
     #[test]
@@ -300,7 +501,7 @@ mod tests {
             ok: true,
             collected_at_utc: "2026-01-08T00:00:00Z".to_string(),
             policy_snapshot_v1_supported: true,
-            policy_resolution_mode: Some(super::PolicyResolutionModeV1::SnapshotV1),
+            policy_resolution_mode: Some(super::PolicyResolutionModeV1::SnapshotV2),
             landlock: super::WorldDoctorLandlockV1 {
                 supported: true,
                 abi: Some(3),

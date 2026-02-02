@@ -7,6 +7,7 @@ use agent_api_types::{
     WorldDoctorWorldFsStrategyProbeV1, WorldDoctorWorldFsStrategyV1,
 };
 use axum::{
+    body::Bytes,
     extract::{Json, Path, State},
     http::StatusCode,
     response::{IntoResponse, Json as ResponseJson, Response},
@@ -33,8 +34,15 @@ impl IntoResponse for ApiErrorResponse {
             ApiError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };
 
+        let message = match &self.0 {
+            ApiError::BadRequest(message) => message.as_str(),
+            ApiError::NotFound(message) => message.as_str(),
+            ApiError::RateLimited(message) => message.as_str(),
+            ApiError::Internal(message) => message.as_str(),
+        };
+
         let body = json!({
-            "error": self.0.to_string(),
+            "error": message,
         });
 
         (status, ResponseJson(body)).into_response()
@@ -47,7 +55,7 @@ pub async fn capabilities() -> Result<ResponseJson<Value>, ApiErrorResponse> {
         "version": "v1",
         "features": [
             "execute",
-            "policy_snapshot_v1",
+            "policy_snapshot_v2",
             "pty_streaming",
             "trace_retrieval",
             "scope_requests"
@@ -137,8 +145,12 @@ pub async fn doctor_world(
 /// Execute a command in the world.
 pub async fn execute(
     State(service): State<WorldAgentService>,
-    Json(req): Json<ExecuteRequest>,
+    body: Bytes,
 ) -> Result<ResponseJson<ExecuteResponse>, ApiErrorResponse> {
+    let payload: Value = serde_json::from_slice(&body)
+        .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
+    let req: ExecuteRequest = serde_json::from_value(payload)
+        .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
     let response = service.execute(req).await.map_err(|e| {
         if let Some(bad) = e.downcast_ref::<crate::service::BadRequestError>() {
             ApiErrorResponse(ApiError::BadRequest(bad.message().to_string()))
@@ -153,8 +165,12 @@ pub async fn execute(
 /// Execute a command and stream incremental output.
 pub async fn execute_stream(
     State(service): State<WorldAgentService>,
-    Json(req): Json<ExecuteRequest>,
+    body: Bytes,
 ) -> Result<Response, ApiErrorResponse> {
+    let payload: Value = serde_json::from_slice(&body)
+        .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
+    let req: ExecuteRequest = serde_json::from_value(payload)
+        .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
     service.execute_stream(req).await.map_err(|e| {
         if let Some(bad) = e.downcast_ref::<crate::service::BadRequestError>() {
             ApiErrorResponse(ApiError::BadRequest(bad.message().to_string()))

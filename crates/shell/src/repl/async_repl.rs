@@ -210,18 +210,20 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
 
                             if world_session.is_some() {
                                 ensure_no_policy_drift(&mut world_session, &agent_printer).await?;
-                                let session = world_session
-                                    .as_mut()
-                                    .expect("world_session present after ensure_no_policy_drift");
-                                let mut io_ctx = ReplIo {
-                                    agent_rx: &mut agent_rx,
-                                    resize_rx: &mut resize_rx,
-                                    sigint_rx: &mut sigint_rx,
-                                    telemetry: &mut telemetry,
-                                    agent_printer: &agent_printer,
+                                let exit_code = {
+                                    let session = world_session
+                                        .as_mut()
+                                        .expect("world_session present after ensure_no_policy_drift");
+                                    let mut io_ctx = ReplIo {
+                                        agent_rx: &mut agent_rx,
+                                        resize_rx: &mut resize_rx,
+                                        sigint_rx: &mut sigint_rx,
+                                        telemetry: &mut telemetry,
+                                        agent_printer: &agent_printer,
+                                    };
+                                    exec_world_pty(session, pty_cmd, &cmd_id, &mut io_ctx).await?
                                 };
-                                let exit_code =
-                                    exec_world_pty(session, pty_cmd, &cmd_id, &mut io_ctx).await?;
+                                ensure_no_policy_drift(&mut world_session, &agent_printer).await?;
                                 let status = exit_status_from_code(exit_code);
                                 report_nonzero_status(&status);
                                 publish_command_completion(&trimmed_owned, &status);
@@ -233,22 +235,25 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
 
                     if world_session.is_some() {
                         ensure_no_policy_drift(&mut world_session, &agent_printer).await?;
-                        let session = world_session
-                            .as_mut()
-                            .expect("world_session present after ensure_no_policy_drift");
                         let pty = needs_pty(trimmed);
-                        let mut io_ctx = ReplIo {
-                            agent_rx: &mut agent_rx,
-                            resize_rx: &mut resize_rx,
-                            sigint_rx: &mut sigint_rx,
-                            telemetry: &mut telemetry,
-                            agent_printer: &agent_printer,
+                        let exit_code = {
+                            let session = world_session
+                                .as_mut()
+                                .expect("world_session present after ensure_no_policy_drift");
+                            let mut io_ctx = ReplIo {
+                                agent_rx: &mut agent_rx,
+                                resize_rx: &mut resize_rx,
+                                sigint_rx: &mut sigint_rx,
+                                telemetry: &mut telemetry,
+                                agent_printer: &agent_printer,
+                            };
+                            if pty {
+                                exec_world_pty(session, &command, &cmd_id, &mut io_ctx).await?
+                            } else {
+                                exec_world_line(session, &command, &cmd_id, &mut io_ctx).await?
+                            }
                         };
-                        let exit_code = if pty {
-                            exec_world_pty(session, &command, &cmd_id, &mut io_ctx).await?
-                        } else {
-                            exec_world_line(session, &command, &cmd_id, &mut io_ctx).await?
-                        };
+                        ensure_no_policy_drift(&mut world_session, &agent_printer).await?;
                         let status = exit_status_from_code(exit_code);
                         report_nonzero_status(&status);
                         publish_command_completion(&trimmed_owned, &status);
@@ -695,42 +700,91 @@ async fn ensure_no_policy_drift(
     Ok(())
 }
 
+fn predict_cd_next_cwd(current_cwd: &str, program: &str) -> Option<String> {
+    let trimmed = program.trim();
+    let rest = trimmed.strip_prefix("cd")?;
+    let arg = rest.trim();
+    if arg.is_empty() {
+        return None;
+    }
+
+    if !current_cwd.starts_with('/') {
+        return None;
+    }
+
+    let next = if arg.starts_with('/') {
+        PathBuf::from(arg)
+    } else {
+        PathBuf::from(current_cwd).join(arg)
+    };
+
+    let mut normalized = PathBuf::new();
+    for comp in next.components() {
+        match comp {
+            std::path::Component::RootDir => normalized.push("/"),
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                normalized.pop();
+            }
+            std::path::Component::Normal(seg) => {
+                normalized.push(seg);
+            }
+            std::path::Component::Prefix(_) => {}
+        }
+    }
+    if normalized.as_os_str().is_empty() {
+        normalized.push("/");
+    }
+
+    Some(normalized.to_string_lossy().to_string())
+}
+
 async fn exec_world_line(
     session: &mut WorldSession,
     program: &str,
     cmd_id: &str,
     io: &mut ReplIo<'_>,
 ) -> Result<i32> {
-    let fut = session
-        .client
-        .exec(program, ReplStdinMode::Eof, cmd_id)
-        .map(|res| res.map(|c| (c.exit, c.cwd)));
-    pin_mut!(fut);
+    let prev_cwd = session.world_cwd.clone();
+    let (exit, cwd) = {
+        let fut = session
+            .client
+            .exec(program, ReplStdinMode::Eof, cmd_id)
+            .map(|res| res.map(|c| (c.exit, c.cwd)));
+        pin_mut!(fut);
 
-    loop {
-        tokio::select! {
-            res = &mut fut => {
-                let (exit, cwd) = res?;
-                session.world_cwd = cwd;
-                return Ok(exit);
-            }
-            maybe_event = io.agent_rx.recv() => {
-                if let Some(event) = maybe_event {
-                    handle_agent_event(event, io.telemetry, io.agent_printer);
+        loop {
+            tokio::select! {
+                res = &mut fut => break res?,
+                maybe_event = io.agent_rx.recv() => {
+                    if let Some(event) = maybe_event {
+                        handle_agent_event(event, io.telemetry, io.agent_printer);
+                    }
                 }
-            }
-            maybe_resize = io.resize_rx.recv() => {
-                if let Some((cols, rows)) = maybe_resize {
-                    let _ = session.client.send_resize(cols, rows).await;
+                maybe_resize = io.resize_rx.recv() => {
+                    if let Some((cols, rows)) = maybe_resize {
+                        let _ = session.client.send_resize(cols, rows).await;
+                    }
                 }
-            }
-            maybe_sigint = io.sigint_rx.recv() => {
-                if maybe_sigint.is_some() {
-                    let _ = session.client.send_signal("INT").await;
+                maybe_sigint = io.sigint_rx.recv() => {
+                    if maybe_sigint.is_some() {
+                        let _ = session.client.send_signal("INT").await;
+                    }
                 }
             }
         }
+    };
+
+    let mut next_cwd = cwd;
+    if exit == 0 {
+        if let Some(predicted) = predict_cd_next_cwd(&prev_cwd, program) {
+            if next_cwd == prev_cwd {
+                next_cwd = predicted;
+            }
+        }
     }
+    session.world_cwd = next_cwd;
+    Ok(exit)
 }
 
 async fn exec_world_pty(
@@ -748,15 +802,17 @@ async fn exec_world_pty(
 
     let mut buffered_structured_lines = Vec::<String>::new();
 
-    let fut = session
-        .client
-        .exec(program, ReplStdinMode::Passthrough, cmd_id)
-        .map(|res| res.map(|c| (c.exit, c.cwd)));
-    pin_mut!(fut);
+    let prev_cwd = session.world_cwd.clone();
+    let (exit, cwd) = {
+        let fut = session
+            .client
+            .exec(program, ReplStdinMode::Passthrough, cmd_id)
+            .map(|res| res.map(|c| (c.exit, c.cwd)));
+        pin_mut!(fut);
 
-    let (exit, cwd) = loop {
-        tokio::select! {
-            res = &mut fut => break res?,
+        loop {
+            tokio::select! {
+                res = &mut fut => break res?,
             maybe_bytes = stdin_rx.recv() => {
                 if let Some(bytes) = maybe_bytes {
                     let _ = session.client.send_stdin(&bytes).await;
@@ -791,6 +847,7 @@ async fn exec_world_pty(
                     let _ = session.client.send_signal("INT").await;
                 }
             }
+            }
         }
     };
 
@@ -801,7 +858,15 @@ async fn exec_world_pty(
         let _ = io.agent_printer.print(line);
     }
 
-    session.world_cwd = cwd;
+    let mut next_cwd = cwd;
+    if exit == 0 {
+        if let Some(predicted) = predict_cd_next_cwd(&prev_cwd, program) {
+            if next_cwd == prev_cwd {
+                next_cwd = predicted;
+            }
+        }
+    }
+    session.world_cwd = next_cwd;
     Ok(exit)
 }
 

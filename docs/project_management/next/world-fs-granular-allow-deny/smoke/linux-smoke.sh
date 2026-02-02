@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-FEATURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-
 SUBSTRATE_BIN="${SUBSTRATE_BIN:-substrate}"
 
 if [[ "${OSTYPE:-}" != linux* ]]; then
