@@ -1,5 +1,6 @@
 //! PTY WebSocket handler for world-agent implementing JSON frame protocol
 
+#[cfg(target_os = "linux")]
 use crate::enforcement_plan;
 use crate::service::WorldAgentService;
 #[cfg(target_os = "linux")]
