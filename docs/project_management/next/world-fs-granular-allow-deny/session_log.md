@@ -222,6 +222,6 @@
 - ci_testing: https://github.com/atomize-hq/substrate/actions/runs/21603091889 
 
 ## END — 2026-02-02T19:11:58Z — integration platform-fix — WFGAD3-integ-windows
-- HEAD: 
-- Codex last message: 
+- HEAD: `1daea9e11214dddaecaf16f1ec4a761ad8b41aec`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny/logs/WFGAD3/integ-windows/last_message.md`
 - Notes: Fixes Windows CI clippy dead-code by injecting enforcement plan env in WSL request builder.
