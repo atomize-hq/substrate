@@ -64,6 +64,9 @@ SLICE_ID="<SET_ME>"      # e.g. WFGAD1
 ## Step 4: Handle checkpoint failures deterministically
 - If the checkpoint gates fail:
   - Identify which OS(es) failed using the dispatcher outputs and/or GitHub run logs.
+  - If you cannot start a required `<SLICE>-integ-<platform>` task because it is blocked by `depends_on`:
+    - This is a Planning Pack wiring mismatch. For schema v4+ boundary-only platform-fix, platform-fix tasks must be startable while the checkpoint task is still `in_progress`.
+    - Fix `tasks.json` so `<SLICE>-integ-<platform>` depends on `<SLICE>-integ-core` (not `CPk-ci-checkpoint`), then proceed.
   - If the failure is a compile parity failure (build does not compile on some OS):
     - Fix it on the checkpoint slice’s `<SLICE>-integ-core` worktree/branch (not a platform-fix task), commit, and re-run the checkpoint gates until green.
   - If the failure is an OS-specific CI testing failure (tests fail only on certain OSes):
@@ -90,4 +93,3 @@ Return a concise summary that includes:
 - Platform-fix tasks started (if any): task ids + final message paths
 - Final aggregator: `FINAL_TASK_ID` + final message path
 ```
-
