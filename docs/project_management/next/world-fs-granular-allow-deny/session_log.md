@@ -135,3 +135,7 @@
 ## END — 2026-02-02T13:18:20Z — integration — WFGAD1-integ-linux
 - HEAD: `9f5139e371b62049f5031d778ecdf3142bf514cb`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny/logs/WFGAD1/integ-linux/last_message.md`
+
+## UPDATE — 2026-02-02T13:28:29Z — integration — WFGAD1-integ-linux
+- Reopened due to CI checkpoint failure on linux:
+  - `https://github.com/atomize-hq/substrate/actions/runs/21591734006`
