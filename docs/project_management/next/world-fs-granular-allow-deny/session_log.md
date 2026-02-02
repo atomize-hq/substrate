@@ -215,3 +215,8 @@
 ## END — 2026-02-02T17:16:37Z — integration — WFGAD3-integ-core
 - HEAD: `f9d4e62a7dfda827784a362567b1f4261859906b`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny/logs/WFGAD3/integ-core/last_message.md`
+
+## CP2-ci-checkpoint
+- checkout_sha: d991b81023cf85be7a4ced68ce8ef14033a5f2d0
+- compile_parity: https://github.com/atomize-hq/substrate/actions/runs/21603002353 
+- ci_testing: https://github.com/atomize-hq/substrate/actions/runs/21603091889 
