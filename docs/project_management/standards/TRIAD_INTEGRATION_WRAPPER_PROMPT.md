@@ -50,6 +50,9 @@ LEDGER_PATH="$FEATURE_DIR/logs/$SLICE_ID/ci-audit/ledger.jsonl"
    Store `WORKTREE` as `INTEG_CORE_WORKTREE`.
    Also capture the commit SHA after the run:
    - `INTEG_CORE_HEAD_SHA=$(git -C "$INTEG_CORE_WORKTREE" rev-parse HEAD)`
+   - Set the initial checkpoint validation SHA:
+     - `CHECKOUT_SHA="$INTEG_CORE_HEAD_SHA"`
+   - If you land any fixes on integ-core or a platform-fix branch, update `CHECKOUT_SHA` to the commit you are validating before re-dispatching checkpoint gates.
 
 1.5) Confirm local behavioral smoke preflight was run (fast fail; when possible):
    - The integ-core kickoff prompt requires a local behavioral smoke preflight when `"$FEATURE_DIR/smoke/"` exists and the platform matches.
@@ -76,36 +79,36 @@ LEDGER_PATH="$FEATURE_DIR/logs/$SLICE_ID/ci-audit/ledger.jsonl"
    - Find the checkpoint that contains `$SLICE_ID`.
    - If `$SLICE_ID` is not the **last** slice listed in that checkpoint’s `slices[]`, stop after step (1.5) and return a summary. Do not dispatch cross-platform CI from this wrapper.
 
-3) Run cross-platform compile parity for the integ-core commit (fast fail; do this before relying on smoke):
-   - Run from the orchestration checkout (validates `INTEG_CORE_HEAD_SHA` via checkout_ref):
-     - `make ci-compile-parity CI_WORKFLOW_REF="$ORCH_BRANCH" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF="$INTEG_CORE_HEAD_SHA"`
+3) If the checkpoint plan requires compile parity, run cross-platform compile parity for the current candidate commit (fast fail; do this before relying on smoke):
+   - Run from the orchestration checkout (validates `CHECKOUT_SHA` via checkout_ref):
+     - `make ci-compile-parity CI_WORKFLOW_REF="$ORCH_BRANCH" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF="$CHECKOUT_SHA"`
    - Parse and report the dispatcher stdout contract:
      - `RUN_ID`, `RUN_URL`, `CONCLUSION`, `CI_FAILED_OSES`, `CI_FAILED_JOBS`
    - Before dispatching, run advisory audit (skip allowed for docs/planning-only changes):
      - `scripts/ci-audit/ci_audit.sh --ledger-path "$LEDGER_PATH" --kind ci-testing --orch-branch "$ORCH_BRANCH"`
      - If `RECOMMEND=skip`, do not dispatch compile parity; treat this gate as satisfied and report the ci-audit output in the wrapper summary (include `LAST_GREEN_RUN_ID/LAST_GREEN_RUN_URL` when available).
    - If you dispatch and it succeeds, record evidence:
-     - `scripts/ci-audit/ci_audit_record.sh --ledger-path "$LEDGER_PATH" --kind ci-testing --orch-branch "$ORCH_BRANCH" --run-id "$RUN_ID" --tested-sha "$INTEG_CORE_HEAD_SHA"`
+     - `scripts/ci-audit/ci_audit_record.sh --ledger-path "$LEDGER_PATH" --kind ci-testing --orch-branch "$ORCH_BRANCH" --run-id "$RUN_ID" --tested-sha "$CHECKOUT_SHA"`
    - If compile parity is green: continue to step (4).
    - If compile parity fails:
      - Treat this as **blocking**: do not proceed to Feature Smoke dispatch or platform-fix selection yet.
      - Use the run logs (`RUN_URL` / `gh run view "$RUN_ID" --log-failed`) to identify the compile errors.
      - Fix compile parity on the **integ-core branch/worktree** (these are typically missing `#[cfg]` guards / platform gates, or accidental platform-specific APIs leaking into cross-platform crates).
      - Commit the fix(es) on the integ-core task branch, update:
-       - `INTEG_CORE_HEAD_SHA=$(git -C "$INTEG_CORE_WORKTREE" rev-parse HEAD)`
-     - Re-run this compile parity step until green, then continue to step (3).
+       - `CHECKOUT_SHA=$(git -C "$INTEG_CORE_WORKTREE" rev-parse HEAD)`
+     - Re-run this compile parity step until green, then continue to step (4).
 
-4) Dispatch Feature Smoke for the integ-core commit (only after compile parity is green):
+4) If the checkpoint plan requires Feature Smoke, dispatch it for the current candidate commit (only after compile parity is green):
    - Smoke is required only for the feature’s **behavior platforms** (P3-008; see `tasks.json` meta: `behavior_platforms_required`).
    - Dispatch exactly one run using `PLATFORM=behavior`:
-     - `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=behavior SMOKE_SLICE_ID="$SLICE_ID" SMOKE_CHECKOUT_REF="$INTEG_CORE_HEAD_SHA" RUNNER_KIND=self-hosted WORKFLOW_REF="$ORCH_BRANCH" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=0`
+     - `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=behavior SMOKE_SLICE_ID="$SLICE_ID" SMOKE_CHECKOUT_REF="$CHECKOUT_SHA" RUNNER_KIND=self-hosted WORKFLOW_REF="$ORCH_BRANCH" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=0`
    - Before requiring smoke keys, run advisory audit for Feature Smoke:
      - `scripts/ci-audit/ci_audit.sh --ledger-path "$LEDGER_PATH" --kind feature-smoke --orch-branch "$ORCH_BRANCH" --feature-dir "$FEATURE_DIR"`
      - If `RECOMMEND=skip` (including `DIFF_CLASS=docs_only`), do not dispatch smoke; record the ci-audit output in the wrapper summary and skip steps (5)–(6).
    - Parse and report the smoke dispatcher stdout contract:
      - `RUN_ID`, `RUN_URL`, `CONCLUSION`, `SMOKE_PASSED_PLATFORMS`, `SMOKE_FAILED_PLATFORMS`
    - If you dispatch and it succeeds, record evidence:
-     - `scripts/ci-audit/ci_audit_record.sh --ledger-path "$LEDGER_PATH" --kind feature-smoke --orch-branch "$ORCH_BRANCH" --run-id "$RUN_ID" --tested-sha "$INTEG_CORE_HEAD_SHA" --feature-dir "$FEATURE_DIR"`
+     - `scripts/ci-audit/ci_audit_record.sh --ledger-path "$LEDGER_PATH" --kind feature-smoke --orch-branch "$ORCH_BRANCH" --run-id "$RUN_ID" --tested-sha "$CHECKOUT_SHA" --feature-dir "$FEATURE_DIR"`
 
 5) If smoke failed, start only failing platform-fix tasks with Codex enabled (parallel):
    - If you have a single smoke run id that includes all failing platforms (typical `PLATFORM=behavior` case), use:
@@ -139,8 +142,8 @@ LEDGER_PATH="$FEATURE_DIR/logs/$SLICE_ID/ci-audit/ledger.jsonl"
    Also capture the commit SHA after the run:
    - `FINAL_HEAD_SHA=$(git -C "$FINAL_WORKTREE" rev-parse HEAD)`
 
-9) If the feature requires a full CI Testing gate at this checkpoint, dispatch it from the orchestration checkout using checkout_ref:
-   - `scripts/ci/dispatch_ci_testing.sh --workflow-ref "$ORCH_BRANCH" --remote origin --cleanup --mode full --checkout-ref "$FINAL_HEAD_SHA"`
+9) If the checkpoint plan requires CI Testing, dispatch it from the orchestration checkout using checkout_ref (mode `quick` or `full` per the plan):
+   - `scripts/ci/dispatch_ci_testing.sh --workflow-ref "$ORCH_BRANCH" --remote origin --cleanup --mode <quick|full> --checkout-ref "$CHECKOUT_SHA"`
 
 ## Output to operator
 Return a concise summary that includes:
