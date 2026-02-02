@@ -239,3 +239,4 @@
 ## CP2-ci-checkpoint (rerun 2 attempt)
 - run_url: https://github.com/atomize-hq/substrate/actions/runs/21604517174
 - status: cancelled (queued linux/windows for extended time)
+- note: GitHub Actions was reporting a major outage / partial system outage while linux/windows jobs were stuck waiting for hosted runners.
