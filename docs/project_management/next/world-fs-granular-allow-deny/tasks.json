@@ -687,7 +687,7 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" TASK_ID=\"WFGAD2-integ\""
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "integration",
       "worktree": "wt/world-fs-granular-allow-deny-wfgad2-integ"
     },
