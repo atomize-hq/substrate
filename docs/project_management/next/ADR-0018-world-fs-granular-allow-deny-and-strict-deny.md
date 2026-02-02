@@ -31,7 +31,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 2e4cb6e253a357d8e84deb21a860b1d4f9f195eb1e0e74f829dd0b154d2082ce
+ADR_BODY_SHA256: 0d3cd3546737a560b94c1d63502807d5e9833241bb2bd6706f1bbf768a7efb97
 ### Changes (operator-facing)
 - Add granular `allow_list` + `deny_list` for world filesystem reads/writes (and optional directory visibility)
   - Existing: `world_fs.read_allowlist` / `world_fs.write_allowlist` are allowlist-only; invalid patterns (e.g., `..`) can be accepted but ignored; there is no deny list; “allow all except secrets” cannot be expressed.
@@ -193,3 +193,58 @@ ADR_BODY_SHA256: 2e4cb6e253a357d8e84deb21a860b1d4f9f195eb1e0e74f829dd0b154d2082c
 ## Decision Summary
 - Decision Register: `docs/project_management/next/world-fs-granular-allow-deny/decision_register.md`
   - DR-0001 through DR-0008
+
+## Decision Detail (Authoritative) — Deny enforcement posture (`strict` vs `best_effort`)
+
+This section is authoritative for the deny enforcement posture decision previously summarized as DR-0003.
+
+**Problem / Context**
+- Deny masking (mount-based subtraction) is only a security boundary if the workload cannot later undo it via mount-family syscalls.
+- Some legitimate tools/workloads require mount operations inside the world; strictly blocking mount syscalls would break those workflows.
+
+**Option A — Strict-only denies**
+- Meaning: If any `deny_list` is non-empty, enforcement is always strict (no policy lever).
+- Pros:
+  - Strong security posture by default; denies are always a hard boundary under adversarial workloads.
+  - Fewer operator foot-guns (cannot accidentally select an unsafe mode when relying on denies to protect secrets).
+- Cons:
+  - Breaks workloads that require mount operations inside the world even when the operator accepts the risk.
+  - Increases rollout friction (strict prerequisites become mandatory for any deny usage).
+- Cascading implications:
+  - Broker/schema must reject `best_effort` entirely whenever denies exist.
+  - Documentation must state that “deny implies strict” and that strict prerequisites are required.
+- Risks:
+  - Operators may choose to avoid deny lists entirely to preserve workflow compatibility, leading to weaker real-world security.
+- Unlocks:
+  - Simplifies enforcement logic (single posture).
+- Quick wins:
+  - Fewer configuration states to test.
+
+**Option B — Policy lever (`strict|best_effort`)**
+- Meaning: When denies are used, the operator must explicitly choose `world_fs.enforcement=strict|best_effort`.
+- Note: This option intentionally enables both enforcement postures as an explicit operator lever (it is a single A/B decision selection, not an “Option A and Option B” selection).
+- Pros:
+  - Allows strict mode to be a true security boundary while still permitting compatibility workflows under best-effort.
+  - Forces explicitness: the operator must opt into strict vs best-effort rather than silently “best effort”.
+- Cons:
+  - Adds a foot-gun: `best_effort` is not a security boundary under adversarial workloads.
+  - Adds configuration and validation complexity (must tie `enforcement` presence to deny usage).
+- Cascading implications:
+  - Broker/schema must enforce: `world_fs.enforcement` MUST be present iff any `deny_list` is non-empty.
+  - Strict mode must fail closed when strict prerequisites cannot be applied and `require_world=true`.
+  - Best-effort mode must be clearly documented as not preventing deliberate bypass by a malicious workload.
+- Risks:
+  - Operators may mistakenly select `best_effort` while expecting strict security.
+- Unlocks:
+  - Enables incremental adoption: operators can start with best-effort for compatibility, then move to strict when ready.
+- Quick wins:
+  - Avoids blocking adoption for mount-dependent tooling.
+
+**Recommendation**
+- Selected: Option B — policy lever (`strict|best_effort`).
+- Rationale (crisp): Strict deny must be available as a real security boundary, but deny-as-a-feature must not categorically block mount-dependent workflows; requiring an explicit `enforcement` choice plus fail-closed strict behavior provides both safety and operability.
+
+**Follow-up tasks (planning mapping)**
+- Schema/validation wiring: `WFGAD0-*` (tie `enforcement` to deny usage; reject invalid combos).
+- Deny masking semantics: `WFGAD3-*` (masking + deterministic error behavior).
+- Strict lockdown security boundary: `WFGAD5-*` (bypass prevention; fail closed when strict prerequisites missing).

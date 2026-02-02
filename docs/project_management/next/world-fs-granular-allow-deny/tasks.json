@@ -7,7 +7,9 @@
       "enabled": true,
       "orchestration_branch": "feat/world-fs-granular-allow-deny"
     },
-    "behavior_platforms_required": [],
+    "behavior_platforms_required": [
+      "linux"
+    ],
     "ci_parity_platforms_required": [
       "linux",
       "macos",
@@ -20,6 +22,42 @@
     ]
   },
   "tasks": [
+    {
+      "id": "F0-exec-preflight",
+      "name": "Execution preflight gate (feature start)",
+      "type": "ops",
+      "phase": "F0",
+      "status": "pending",
+      "description": "Execution-time preflight gate: validate the Planning Pack and smoke/playbook scaffolding before starting WFGAD0.",
+      "references": [
+        "docs/project_management/next/world-fs-granular-allow-deny/plan.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/tasks.json",
+        "docs/project_management/next/world-fs-granular-allow-deny/quality_gate_report.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/execution_preflight_report.md",
+        "docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md"
+      ],
+      "acceptance_criteria": [
+        "Run: make planning-lint FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" → exit 0",
+        "Run: bash -n docs/project_management/next/world-fs-granular-allow-deny/smoke/linux-smoke.sh → exit 0",
+        "Run: bash -n docs/project_management/next/world-fs-granular-allow-deny/smoke/macos-smoke.sh → exit 0",
+        "File updated: docs/project_management/next/world-fs-granular-allow-deny/execution_preflight_report.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-fs-granular-allow-deny && git pull --ff-only",
+        "Read: plan.md, tasks.json, session_log.md, quality_gate_report.md, manual_testing_playbook.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs"
+      ],
+      "end_checklist": [
+        "Run required commands; capture outputs in execution_preflight_report.md",
+        "Set status to completed; add END entry; commit docs"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/F0-exec-preflight.md",
+      "depends_on": [],
+      "concurrent_with": []
+    },
     {
       "id": "WFGAD0-code",
       "name": "WFGAD0 slice (code)",
@@ -36,9 +74,10 @@
         "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
-        "Implements WFGAD0-spec.md acceptance exactly.",
-        "Legacy keys are hard errors (no compatibility).",
-        "Invalid patterns are hard errors (no silent ignore)."
+        "Run: cargo fmt → exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
+        "Run: cargo test -p substrate-broker --tests --no-run → exit 0",
+        "Implements WFGAD0-spec.md acceptance (V2 schema validation and hard errors)."
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
@@ -54,7 +93,9 @@
       "worktree": "wt/world-fs-granular-allow-deny-wfgad0-code",
       "integration_task": "WFGAD0-integ",
       "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD0-code.md",
-      "depends_on": [],
+      "depends_on": [
+        "F0-exec-preflight"
+      ],
       "concurrent_with": [
         "WFGAD0-test"
       ],
@@ -73,11 +114,14 @@
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD0-spec.md",
         "docs/project_management/next/world-fs-granular-allow-deny/SCHEMA.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0001, DR-0003, DR-0004)",
         "docs/project_management/next/world-fs-granular-allow-deny/requirements_traceability.md",
         "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
-        "Tests enforce WFGAD0-spec.md acceptance requirements."
+        "Run: cargo fmt → exit 0",
+        "Run: cargo test -p substrate-broker --tests --no-run → exit 0",
+        "Tests encode WFGAD0-spec.md acceptance requirements (schema validation hard errors)."
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
@@ -92,7 +136,9 @@
       "worktree": "wt/world-fs-granular-allow-deny-wfgad0-test",
       "integration_task": "WFGAD0-integ",
       "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD0-test.md",
-      "depends_on": [],
+      "depends_on": [
+        "F0-exec-preflight"
+      ],
       "concurrent_with": [
         "WFGAD0-code"
       ],
@@ -109,10 +155,17 @@
       "status": "pending",
       "description": "Merge and validate broker policy schema v2 work for WFGAD0.",
       "references": [
-        "docs/project_management/next/world-fs-granular-allow-deny/WFGAD0-spec.md"
+        "docs/project_management/next/world-fs-granular-allow-deny/WFGAD0-spec.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0001, DR-0003, DR-0004)",
+        "docs/project_management/next/world-fs-granular-allow-deny/requirements_traceability.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/smoke/linux-smoke.sh"
       ],
       "acceptance_criteria": [
-        "WFGAD0 acceptance criteria are implemented and validated."
+        "Run: cargo fmt → exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
+        "Run: cargo test -p substrate-broker → exit 0",
+        "Run: SUBSTRATE_SMOKE_SLICE_ID=WFGAD0 bash docs/project_management/next/world-fs-granular-allow-deny/smoke/linux-smoke.sh → exit 0",
+        "Run: make integ-checks → exit 0"
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
@@ -155,10 +208,15 @@
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD1-spec.md",
         "docs/project_management/next/world-fs-granular-allow-deny/PROTOCOL.md",
         "docs/project_management/next/world-fs-granular-allow-deny/SCHEMA.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0001)",
         "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
-        "Implements WFGAD1-spec.md acceptance exactly."
+        "Run: cargo fmt → exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
+        "Run: cargo test -p agent-api-types --tests --no-run → exit 0",
+        "Run: cargo test -p world-agent --tests --no-run → exit 0",
+        "Implements WFGAD1-spec.md acceptance (V2 snapshot model + strict rejection behavior)."
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
@@ -195,10 +253,15 @@
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD1-spec.md",
         "docs/project_management/next/world-fs-granular-allow-deny/PROTOCOL.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0001)",
+        "docs/project_management/next/world-fs-granular-allow-deny/requirements_traceability.md",
         "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
-        "Tests enforce WFGAD1-spec.md acceptance requirements."
+        "Run: cargo fmt → exit 0",
+        "Run: cargo test -p world-agent --tests --no-run → exit 0",
+        "Run: cargo test -p agent-api-types --tests --no-run → exit 0",
+        "Tests encode WFGAD1-spec.md acceptance (HTTP/WS invalid snapshot rejection shapes)."
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
@@ -233,10 +296,15 @@
       "description": "Merge and validate WFGAD1 on the primary dev platform (pre-checkpoint core integration).",
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD1-spec.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0001)",
         "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md"
       ],
       "acceptance_criteria": [
-        "WFGAD1 core integration is green (local integration gates)."
+        "Run: cargo fmt → exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
+        "Run: cargo test -p world-agent → exit 0",
+        "Run: make integ-checks → exit 0",
+        "WFGAD1 core integration is green (ready for CP1)."
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
@@ -278,8 +346,9 @@
         "docs/project_management/next/world-fs-granular-allow-deny/impact_map.md"
       ],
       "acceptance_criteria": [
-        "Compile parity is green for linux/macos/windows for the checkpoint commit.",
-        "CI testing (quick) is green for the checkpoint commit."
+        "Run: export FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"; scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch \"feat/world-fs-granular-allow-deny\" --ledger-path \"$FEATURE_DIR/logs/CP1/ci-audit/ledger.jsonl\" → exit 0",
+        "Run: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-fs-granular-allow-deny\" CI_REMOTE=origin CI_CLEANUP=1 → exit 0",
+        "Run: make ci-testing CI_WORKFLOW_REF=\"feat/world-fs-granular-allow-deny\" CI_REMOTE=origin CI_CLEANUP=1 CI_MODE=quick → exit 0"
       ],
       "start_checklist": [
         "git checkout feat/world-fs-granular-allow-deny && git pull --ff-only",
@@ -307,10 +376,14 @@
       "description": "Fix Linux CI parity failures for WFGAD1 (checkpoint boundary platform-fix).",
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD1-spec.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0001)",
         "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md"
       ],
       "acceptance_criteria": [
-        "Linux CI parity failures for WFGAD1 are resolved."
+        "Run: cargo fmt → exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
+        "Run: cargo test -p world-agent --tests --no-run → exit 0",
+        "Linux CI parity failures for WFGAD1 are resolved (compile parity green)."
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
@@ -348,10 +421,14 @@
       "description": "Fix macOS CI parity failures for WFGAD1 (checkpoint boundary platform-fix).",
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD1-spec.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0001)",
         "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md"
       ],
       "acceptance_criteria": [
-        "macOS CI parity failures for WFGAD1 are resolved."
+        "Run: cargo fmt → exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
+        "Run: cargo test -p world-agent --tests --no-run → exit 0",
+        "macOS CI parity failures for WFGAD1 are resolved (compile parity green)."
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
@@ -389,10 +466,14 @@
       "description": "Fix Windows CI parity failures for WFGAD1 (checkpoint boundary platform-fix).",
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD1-spec.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0001)",
         "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md"
       ],
       "acceptance_criteria": [
-        "Windows CI parity failures for WFGAD1 are resolved."
+        "Run: cargo fmt → exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
+        "Run: cargo test -p world-agent --tests --no-run → exit 0",
+        "Windows CI parity failures for WFGAD1 are resolved (compile parity green)."
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
@@ -430,9 +511,16 @@
       "description": "Finalize WFGAD1 after checkpoint + platform fixes and merge back to orchestration.",
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD1-spec.md",
-        "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md"
+        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0001)",
+        "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/smoke/linux-smoke.sh"
       ],
       "acceptance_criteria": [
+        "Run: cargo fmt → exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
+        "Run: cargo test -p world-agent → exit 0",
+        "Run: SUBSTRATE_SMOKE_SLICE_ID=WFGAD1 bash docs/project_management/next/world-fs-granular-allow-deny/smoke/linux-smoke.sh → exit 0",
+        "Run: make integ-checks → exit 0",
         "WFGAD1 is green on linux/macos/windows and merged back to orchestration."
       ],
       "start_checklist": [
@@ -478,10 +566,15 @@
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD2-spec.md",
         "docs/project_management/next/world-fs-granular-allow-deny/ENV.md",
         "docs/project_management/next/world-fs-granular-allow-deny/PROTOCOL.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0003, DR-0007)",
         "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
-        "Implements WFGAD2-spec.md acceptance exactly."
+        "Run: cargo fmt → exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
+        "Run: cargo test -p shell --tests --no-run → exit 0",
+        "Run: cargo test -p world-agent --tests --no-run → exit 0",
+        "Implements WFGAD2-spec.md acceptance (enforcement plan env contract + helper invocation gating)."
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
@@ -519,10 +612,15 @@
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD2-spec.md",
         "docs/project_management/next/world-fs-granular-allow-deny/ENV.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0003, DR-0007)",
+        "docs/project_management/next/world-fs-granular-allow-deny/requirements_traceability.md",
         "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
-        "Tests enforce WFGAD2-spec.md acceptance requirements."
+        "Run: cargo fmt → exit 0",
+        "Run: cargo test -p world-agent --tests --no-run → exit 0",
+        "Run: cargo test -p shell --tests --no-run → exit 0",
+        "Tests encode WFGAD2-spec.md acceptance (enforcement plan validation + fail-closed behavior)."
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
@@ -558,10 +656,17 @@
       "description": "Merge and validate host snapshot emission and enforcement plan env contract for WFGAD2.",
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD2-spec.md",
-        "docs/project_management/next/world-fs-granular-allow-deny/ENV.md"
+        "docs/project_management/next/world-fs-granular-allow-deny/ENV.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0003, DR-0007)",
+        "docs/project_management/next/world-fs-granular-allow-deny/smoke/linux-smoke.sh"
       ],
       "acceptance_criteria": [
-        "WFGAD2 acceptance criteria are implemented and validated."
+        "Run: cargo fmt → exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
+        "Run: cargo test -p world-agent → exit 0",
+        "Run: cargo test -p shell → exit 0",
+        "Run: SUBSTRATE_SMOKE_SLICE_ID=WFGAD2 bash docs/project_management/next/world-fs-granular-allow-deny/smoke/linux-smoke.sh → exit 0",
+        "Run: make integ-checks → exit 0"
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
@@ -605,10 +710,15 @@
         "docs/project_management/next/world-fs-granular-allow-deny/contract.md",
         "docs/project_management/next/world-fs-granular-allow-deny/SECURITY.md",
         "docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0002, DR-0006, DR-0007)",
         "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
-        "Implements WFGAD3-spec.md acceptance exactly."
+        "Run: cargo fmt → exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
+        "Run: cargo test -p world-agent --tests --no-run → exit 0",
+        "Run: cargo test -p world --tests --no-run → exit 0",
+        "Implements WFGAD3-spec.md acceptance (deny masking + deterministic errno)."
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
@@ -645,10 +755,15 @@
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD3-spec.md",
         "docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0002, DR-0006, DR-0007)",
+        "docs/project_management/next/world-fs-granular-allow-deny/requirements_traceability.md",
         "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
-        "Tests enforce WFGAD3-spec.md acceptance requirements."
+        "Run: cargo fmt → exit 0",
+        "Run: cargo test -p world-agent --tests --no-run → exit 0",
+        "Run: cargo test -p world --tests --no-run → exit 0",
+        "Tests encode WFGAD3-spec.md acceptance (deny masking + wildcard snapshot)."
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
@@ -683,10 +798,16 @@
       "description": "Merge and validate WFGAD3 on the primary dev platform (pre-checkpoint core integration).",
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD3-spec.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0002, DR-0006, DR-0007)",
         "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md"
       ],
       "acceptance_criteria": [
-        "WFGAD3 core integration is green (local integration gates)."
+        "Run: cargo fmt → exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
+        "Run: cargo test -p world-agent → exit 0",
+        "Run: cargo test -p world → exit 0",
+        "Run: make integ-checks → exit 0",
+        "WFGAD3 core integration is green (ready for CP2)."
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
@@ -728,8 +849,9 @@
         "docs/project_management/next/world-fs-granular-allow-deny/impact_map.md"
       ],
       "acceptance_criteria": [
-        "Compile parity is green for linux/macos/windows for the checkpoint commit.",
-        "CI testing (quick) is green for the checkpoint commit."
+        "Run: export FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"; scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch \"feat/world-fs-granular-allow-deny\" --ledger-path \"$FEATURE_DIR/logs/CP2/ci-audit/ledger.jsonl\" → exit 0",
+        "Run: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-fs-granular-allow-deny\" CI_REMOTE=origin CI_CLEANUP=1 → exit 0",
+        "Run: make ci-testing CI_WORKFLOW_REF=\"feat/world-fs-granular-allow-deny\" CI_REMOTE=origin CI_CLEANUP=1 CI_MODE=quick → exit 0"
       ],
       "start_checklist": [
         "git checkout feat/world-fs-granular-allow-deny && git pull --ff-only",
@@ -757,10 +879,15 @@
       "description": "Fix Linux CI parity failures for WFGAD3 (checkpoint boundary platform-fix).",
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD3-spec.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0002, DR-0006, DR-0007)",
         "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md"
       ],
       "acceptance_criteria": [
-        "Linux CI parity failures for WFGAD3 are resolved."
+        "Run: cargo fmt → exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
+        "Run: cargo test -p world-agent --tests --no-run → exit 0",
+        "Run: cargo test -p world --tests --no-run → exit 0",
+        "Linux CI parity failures for WFGAD3 are resolved (compile parity green)."
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
@@ -798,10 +925,15 @@
       "description": "Fix macOS CI parity failures for WFGAD3 (checkpoint boundary platform-fix).",
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD3-spec.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0002, DR-0006, DR-0007)",
         "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md"
       ],
       "acceptance_criteria": [
-        "macOS CI parity failures for WFGAD3 are resolved."
+        "Run: cargo fmt → exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
+        "Run: cargo test -p world-agent --tests --no-run → exit 0",
+        "Run: cargo test -p world --tests --no-run → exit 0",
+        "macOS CI parity failures for WFGAD3 are resolved (compile parity green)."
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
@@ -839,10 +971,15 @@
       "description": "Fix Windows CI parity failures for WFGAD3 (checkpoint boundary platform-fix).",
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD3-spec.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0002, DR-0006, DR-0007)",
         "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md"
       ],
       "acceptance_criteria": [
-        "Windows CI parity failures for WFGAD3 are resolved."
+        "Run: cargo fmt → exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
+        "Run: cargo test -p world-agent --tests --no-run → exit 0",
+        "Run: cargo test -p world --tests --no-run → exit 0",
+        "Windows CI parity failures for WFGAD3 are resolved (compile parity green)."
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
@@ -880,9 +1017,17 @@
       "description": "Finalize WFGAD3 after checkpoint + platform fixes and merge back to orchestration.",
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD3-spec.md",
-        "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md"
+        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0002, DR-0006, DR-0007)",
+        "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/smoke/linux-smoke.sh"
       ],
       "acceptance_criteria": [
+        "Run: cargo fmt → exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
+        "Run: cargo test -p world-agent → exit 0",
+        "Run: cargo test -p world → exit 0",
+        "Run: SUBSTRATE_SMOKE_SLICE_ID=WFGAD3 bash docs/project_management/next/world-fs-granular-allow-deny/smoke/linux-smoke.sh → exit 0",
+        "Run: make integ-checks → exit 0",
         "WFGAD3 is green on linux/macos/windows and merged back to orchestration."
       ],
       "start_checklist": [
@@ -928,10 +1073,15 @@
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD4-spec.md",
         "docs/project_management/next/world-fs-granular-allow-deny/SCHEMA.md",
         "docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0005)",
         "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
-        "Implements WFGAD4-spec.md acceptance exactly."
+        "Run: cargo fmt → exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
+        "Run: cargo test -p world-agent --tests --no-run → exit 0",
+        "Run: cargo test -p world --tests --no-run → exit 0",
+        "Implements WFGAD4-spec.md acceptance (discover/read split semantics)."
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
@@ -969,10 +1119,15 @@
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD4-spec.md",
         "docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0005)",
+        "docs/project_management/next/world-fs-granular-allow-deny/requirements_traceability.md",
         "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
-        "Tests enforce WFGAD4-spec.md acceptance requirements."
+        "Run: cargo fmt → exit 0",
+        "Run: cargo test -p world-agent --tests --no-run → exit 0",
+        "Run: cargo test -p world --tests --no-run → exit 0",
+        "Tests encode WFGAD4-spec.md acceptance (discover defaults and behavior)."
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
@@ -1008,10 +1163,17 @@
       "description": "Merge and validate discover vs read semantics for WFGAD4.",
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD4-spec.md",
-        "docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md"
+        "docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0005)",
+        "docs/project_management/next/world-fs-granular-allow-deny/smoke/linux-smoke.sh"
       ],
       "acceptance_criteria": [
-        "WFGAD4 acceptance criteria are implemented and validated."
+        "Run: cargo fmt → exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
+        "Run: cargo test -p world-agent → exit 0",
+        "Run: cargo test -p world → exit 0",
+        "Run: SUBSTRATE_SMOKE_SLICE_ID=WFGAD4 bash docs/project_management/next/world-fs-granular-allow-deny/smoke/linux-smoke.sh → exit 0",
+        "Run: make integ-checks → exit 0"
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
@@ -1054,11 +1216,15 @@
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD5-spec.md",
         "docs/project_management/next/world-fs-granular-allow-deny/SECURITY.md",
         "docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md",
-        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0008)",
+        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0003, DR-0008)",
         "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
-        "Implements WFGAD5-spec.md acceptance exactly."
+        "Run: cargo fmt → exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
+        "Run: cargo test -p world-agent --tests --no-run → exit 0",
+        "Run: cargo test -p world --tests --no-run → exit 0",
+        "Implements WFGAD5-spec.md acceptance (strict lockdown; deterministic EPERM)."
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
@@ -1095,10 +1261,15 @@
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD5-spec.md",
         "docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0003, DR-0008)",
+        "docs/project_management/next/world-fs-granular-allow-deny/requirements_traceability.md",
         "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
-        "Tests enforce WFGAD5-spec.md acceptance requirements."
+        "Run: cargo fmt → exit 0",
+        "Run: cargo test -p world-agent --tests --no-run → exit 0",
+        "Run: cargo test -p world --tests --no-run → exit 0",
+        "Tests encode WFGAD5-spec.md acceptance (strict syscall blocking + bypass prevention)."
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
@@ -1133,10 +1304,16 @@
       "description": "Merge and validate WFGAD5 on the primary dev platform (pre-checkpoint core integration).",
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD5-spec.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0003, DR-0008)",
         "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md"
       ],
       "acceptance_criteria": [
-        "WFGAD5 core integration is green (local integration gates)."
+        "Run: cargo fmt → exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
+        "Run: cargo test -p world-agent → exit 0",
+        "Run: cargo test -p world → exit 0",
+        "Run: make integ-checks → exit 0",
+        "WFGAD5 core integration is green (ready for CP3)."
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
@@ -1178,8 +1355,9 @@
         "docs/project_management/next/world-fs-granular-allow-deny/impact_map.md"
       ],
       "acceptance_criteria": [
-        "Compile parity is green for linux/macos/windows for the checkpoint commit.",
-        "CI testing (quick) is green for the checkpoint commit."
+        "Run: export FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"; scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch \"feat/world-fs-granular-allow-deny\" --ledger-path \"$FEATURE_DIR/logs/CP3/ci-audit/ledger.jsonl\" → exit 0",
+        "Run: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-fs-granular-allow-deny\" CI_REMOTE=origin CI_CLEANUP=1 → exit 0",
+        "Run: make ci-testing CI_WORKFLOW_REF=\"feat/world-fs-granular-allow-deny\" CI_REMOTE=origin CI_CLEANUP=1 CI_MODE=quick → exit 0"
       ],
       "start_checklist": [
         "git checkout feat/world-fs-granular-allow-deny && git pull --ff-only",
@@ -1207,10 +1385,15 @@
       "description": "Fix Linux CI parity failures for WFGAD5 (checkpoint boundary platform-fix).",
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD5-spec.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0003, DR-0008)",
         "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md"
       ],
       "acceptance_criteria": [
-        "Linux CI parity failures for WFGAD5 are resolved."
+        "Run: cargo fmt → exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
+        "Run: cargo test -p world-agent --tests --no-run → exit 0",
+        "Run: cargo test -p world --tests --no-run → exit 0",
+        "Linux CI parity failures for WFGAD5 are resolved (compile parity green)."
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
@@ -1248,10 +1431,15 @@
       "description": "Fix macOS CI parity failures for WFGAD5 (checkpoint boundary platform-fix).",
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD5-spec.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0003, DR-0008)",
         "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md"
       ],
       "acceptance_criteria": [
-        "macOS CI parity failures for WFGAD5 are resolved."
+        "Run: cargo fmt → exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
+        "Run: cargo test -p world-agent --tests --no-run → exit 0",
+        "Run: cargo test -p world --tests --no-run → exit 0",
+        "macOS CI parity failures for WFGAD5 are resolved (compile parity green)."
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
@@ -1289,10 +1477,15 @@
       "description": "Fix Windows CI parity failures for WFGAD5 (checkpoint boundary platform-fix).",
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD5-spec.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0003, DR-0008)",
         "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md"
       ],
       "acceptance_criteria": [
-        "Windows CI parity failures for WFGAD5 are resolved."
+        "Run: cargo fmt → exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
+        "Run: cargo test -p world-agent --tests --no-run → exit 0",
+        "Run: cargo test -p world --tests --no-run → exit 0",
+        "Windows CI parity failures for WFGAD5 are resolved (compile parity green)."
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"",
@@ -1330,9 +1523,17 @@
       "description": "Finalize WFGAD5 after checkpoint + platform fixes and merge back to orchestration.",
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny/WFGAD5-spec.md",
-        "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md"
+        "docs/project_management/next/world-fs-granular-allow-deny/decision_register.md (DR-0003, DR-0008)",
+        "docs/project_management/next/world-fs-granular-allow-deny/ci_checkpoint_plan.md",
+        "docs/project_management/next/world-fs-granular-allow-deny/smoke/linux-smoke.sh"
       ],
       "acceptance_criteria": [
+        "Run: cargo fmt → exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
+        "Run: cargo test -p world-agent → exit 0",
+        "Run: cargo test -p world → exit 0",
+        "Run: SUBSTRATE_SMOKE_SLICE_ID=WFGAD5 bash docs/project_management/next/world-fs-granular-allow-deny/smoke/linux-smoke.sh → exit 0",
+        "Run: make integ-checks → exit 0",
         "WFGAD5 is green on linux/macos/windows and merged back to orchestration."
       ],
       "start_checklist": [
@@ -1390,8 +1591,9 @@
         "docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md"
       ],
       "acceptance_criteria": [
-        "Feature directory documents remain internally consistent.",
-        "All retained task worktrees are removed."
+        "Run: make planning-lint FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" → exit 0",
+        "Run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1 → exit 0",
+        "Run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" REMOVE_WORKTREES=1 PRUNE_LOCAL=1 → exit 0"
       ],
       "start_checklist": [
         "git checkout feat/world-fs-granular-allow-deny && git pull --ff-only",
