@@ -5,14 +5,26 @@ mod support;
 
 use serial_test::serial;
 use std::fs;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use support::{binary_path, ensure_substrate_built, temp_dir, ReplWorldAgentStub, StreamBehavior};
 use tempfile::TempDir;
+
+#[cfg(unix)]
+fn set_fd_nonblocking(fd: i32) {
+    unsafe {
+        let flags = libc::fcntl(fd, libc::F_GETFL);
+        if flags < 0 {
+            return;
+        }
+        let _ = libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
+    }
+}
 
 fn manager_manifest_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../config/manager_hooks.yaml")
@@ -96,10 +108,12 @@ sync:
 
 struct PtyRepl {
     child: Box<dyn portable_pty::Child + Send>,
+    master: Option<Box<dyn portable_pty::MasterPty + Send>>,
     waited: Option<portable_pty::ExitStatus>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
     output: Arc<Mutex<Vec<u8>>>,
     reader_handle: Option<std::thread::JoinHandle<()>>,
+    stop_reader: Arc<AtomicBool>,
 }
 
 impl PtyRepl {
@@ -122,6 +136,16 @@ impl PtyRepl {
                 pixel_height: 0,
             })
             .expect("openpty");
+
+        let master = pair.master;
+
+        #[cfg(unix)]
+        let master_fd = master.as_raw_fd();
+
+        #[cfg(unix)]
+        if let Some(fd) = master_fd {
+            set_fd_nonblocking(fd);
+        }
 
         let mut cmd = CommandBuilder::new(binary_path());
         cmd.args(args);
@@ -146,68 +170,89 @@ impl PtyRepl {
         }
 
         let child = pair.slave.spawn_command(cmd).expect("spawn substrate");
-        let mut reader = pair.master.try_clone_reader().expect("clone reader");
         let writer: Arc<Mutex<Box<dyn Write + Send>>> =
-            Arc::new(Mutex::new(pair.master.take_writer().expect("take writer")));
+            Arc::new(Mutex::new(master.take_writer().expect("take writer")));
 
         let output = Arc::new(Mutex::new(Vec::new()));
+        let stop_reader = Arc::new(AtomicBool::new(false));
         let output_for_thread = output.clone();
         let writer_for_thread = writer.clone();
+        let stop_for_thread = stop_reader.clone();
         let reader_handle = std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
             let mut carry = Vec::<u8>::new();
             loop {
-                match reader.read(&mut buf) {
-                    Ok(0) => break,
-                    Ok(n) => {
-                        // Reedline/crossterm may emit terminal queries which require a response
-                        // from the terminal emulator. When running under a raw PTY in tests,
-                        // provide minimal responses so the REPL can make progress.
-                        //
-                        // - DSR (cursor position): ESC [ 6 n  →  ESC [ 1 ; 1 R
-                        // - Window size request:  ESC [ 18 t →  ESC [ 8 ; rows ; cols t
-                        let chunk = &buf[..n];
-                        // Some terminals split these query bytes across reads. Use a small
-                        // rolling carry buffer to detect queries across chunk boundaries.
-                        let mut probe = carry.clone();
-                        probe.extend_from_slice(chunk);
+                if stop_for_thread.load(Ordering::Relaxed) {
+                    break;
+                }
 
-                        if probe.windows(4).any(|w| w == b"\x1b[6n") {
-                            if let Ok(mut w) = writer_for_thread.lock() {
-                                let _ = w.write_all(b"\x1b[1;1R");
-                                let _ = w.flush();
-                            }
+                #[cfg(unix)]
+                if let Some(fd) = master_fd {
+                    let rc = unsafe { libc::read(fd, buf.as_mut_ptr().cast(), buf.len()) };
+                    if rc == 0 {
+                        break;
+                    }
+                    if rc < 0 {
+                        let e = std::io::Error::last_os_error();
+                        if e.kind() == std::io::ErrorKind::WouldBlock {
+                            std::thread::sleep(Duration::from_millis(25));
+                            continue;
                         }
-                        if probe.windows(5).any(|w| w == b"\x1b[18t") {
-                            if let Ok(mut w) = writer_for_thread.lock() {
-                                let _ = w.write_all(b"\x1b[8;24;80t");
-                                let _ = w.flush();
-                            }
-                        }
+                        break;
+                    }
 
-                        carry.clear();
-                        let keep = 8usize;
-                        if probe.len() > keep {
-                            carry.extend_from_slice(&probe[probe.len() - keep..]);
-                        } else {
-                            carry.extend_from_slice(&probe);
-                        }
+                    let n: usize = rc as usize;
+                    // Reedline/crossterm may emit terminal queries which require a response
+                    // from the terminal emulator. When running under a raw PTY in tests,
+                    // provide minimal responses so the REPL can make progress.
+                    //
+                    // - DSR (cursor position): ESC [ 6 n  →  ESC [ 1 ; 1 R
+                    // - Window size request:  ESC [ 18 t →  ESC [ 8 ; rows ; cols t
+                    let chunk = &buf[..n];
+                    // Some terminals split these query bytes across reads. Use a small
+                    // rolling carry buffer to detect queries across chunk boundaries.
+                    let mut probe = carry.clone();
+                    probe.extend_from_slice(chunk);
 
-                        if let Ok(mut guard) = output_for_thread.lock() {
-                            guard.extend_from_slice(&buf[..n]);
+                    if probe.windows(4).any(|w| w == b"\x1b[6n") {
+                        if let Ok(mut w) = writer_for_thread.lock() {
+                            let _ = w.write_all(b"\x1b[1;1R");
+                            let _ = w.flush();
                         }
                     }
-                    Err(_) => break,
+                    if probe.windows(5).any(|w| w == b"\x1b[18t") {
+                        if let Ok(mut w) = writer_for_thread.lock() {
+                            let _ = w.write_all(b"\x1b[8;24;80t");
+                            let _ = w.flush();
+                        }
+                    }
+
+                    carry.clear();
+                    let keep = 8usize;
+                    if probe.len() > keep {
+                        carry.extend_from_slice(&probe[probe.len() - keep..]);
+                    } else {
+                        carry.extend_from_slice(&probe);
+                    }
+
+                    if let Ok(mut guard) = output_for_thread.lock() {
+                        guard.extend_from_slice(chunk);
+                    }
+                    continue;
                 }
+
+                std::thread::sleep(Duration::from_millis(25));
             }
         });
 
         Self {
             child,
+            master: Some(master),
             waited: None,
             writer,
             output,
             reader_handle: Some(reader_handle),
+            stop_reader,
         }
     }
 
@@ -265,6 +310,8 @@ impl PtyRepl {
     }
 
     fn shutdown(mut self) -> (i32, String) {
+        self.stop_reader.store(true, Ordering::Relaxed);
+        self.master.take();
         if self.waited.is_none() {
             let _ = self.child.kill();
             let status = self.child.wait().expect("wait child");
@@ -516,6 +563,14 @@ fn c3_drift_restart_refreshes_anchor_env_for_new_cwd() {
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
 
+    let project_canon = project.canonicalize().unwrap_or(project.clone());
+    let parent_canon = temp
+        .path()
+        .canonicalize()
+        .unwrap_or_else(|_| temp.path().to_path_buf());
+    let project_str = project_canon.to_string_lossy().into_owned();
+    let parent_str = parent_canon.to_string_lossy().into_owned();
+
     // Move up to project root (still in workspace), then move to parent (workspace_root=None),
     // then run a command to trigger drift restart before execution.
     repl.send_line("cd ..");
@@ -531,6 +586,24 @@ fn c3_drift_restart_refreshes_anchor_env_for_new_cwd() {
     repl.wait_for_output(&parent_raw, Duration::from_secs(2))
         .or_else(|_| repl.wait_for_output(&parent_canon, Duration::from_secs(2)))
         .expect("pwd after leaving workspace root");
+
+    // Ensure the drift restart has actually occurred (i.e., the client re-sent a new StartSession)
+    // before terminating the REPL. Otherwise, a fast `exit` can race the restart and flake.
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < deadline {
+        if repl.try_wait().unwrap_or(false) {
+            break;
+        }
+        let count = records
+            .lock()
+            .expect("lock records")
+            .persistent_start_sessions
+            .len();
+        if count >= 2 {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
     repl.send_line("exit");
     let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
 
@@ -543,20 +616,14 @@ fn c3_drift_restart_refreshes_anchor_env_for_new_cwd() {
     let first = &guard.persistent_start_sessions[0];
     let second = &guard.persistent_start_sessions[1];
 
-    let project_canon = project.canonicalize().unwrap_or(project.clone());
-    let parent_canon = temp
-        .path()
-        .canonicalize()
-        .unwrap_or_else(|_| temp.path().to_path_buf());
-
     assert_eq!(
         first.env.get("SUBSTRATE_ANCHOR_PATH").map(String::as_str),
-        Some(project_canon.to_string_lossy().as_ref()),
+        Some(project_str.as_str()),
         "expected initial anchor path to be workspace root"
     );
     assert_eq!(
         second.env.get("SUBSTRATE_ANCHOR_PATH").map(String::as_str),
-        Some(parent_canon.to_string_lossy().as_ref()),
+        Some(parent_str.as_str()),
         "expected drift restart to refresh anchor path for new cwd"
     );
 }

@@ -5,7 +5,7 @@ mod support;
 
 use serial_test::serial;
 use std::fs;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -86,6 +86,7 @@ fn short_socket_dir(prefix: &str) -> TempDir {
 
 struct PtyRepl {
     child: Box<dyn portable_pty::Child + Send>,
+    master: Option<Box<dyn portable_pty::MasterPty + Send>>,
     waited: Option<portable_pty::ExitStatus>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
     output: Arc<Mutex<Vec<u8>>>,
@@ -113,8 +114,13 @@ impl PtyRepl {
             })
             .expect("openpty");
 
+        let master = pair.master;
+
         #[cfg(unix)]
-        if let Some(fd) = pair.master.as_raw_fd() {
+        let master_fd = master.as_raw_fd();
+
+        #[cfg(unix)]
+        if let Some(fd) = master_fd {
             set_fd_nonblocking(fd);
         }
 
@@ -138,14 +144,13 @@ impl PtyRepl {
         cmd.arg("--shim-skip");
 
         let child = pair.slave.spawn_command(cmd).expect("spawn substrate");
-        let mut reader = pair.master.try_clone_reader().expect("clone reader");
         let writer: Arc<Mutex<Box<dyn Write + Send>>> =
-            Arc::new(Mutex::new(pair.master.take_writer().expect("take writer")));
+            Arc::new(Mutex::new(master.take_writer().expect("take writer")));
 
         let output = Arc::new(Mutex::new(Vec::new()));
         let stop_reader = Arc::new(AtomicBool::new(false));
         let output_for_thread = output.clone();
-        let writer_for_thread = writer.clone();
+        let writer_for_thread = Arc::downgrade(&writer);
         let stop_for_thread = stop_reader.clone();
         let reader_handle = std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
@@ -153,37 +158,56 @@ impl PtyRepl {
                 if stop_for_thread.load(Ordering::Relaxed) {
                     break;
                 }
-                match reader.read(&mut buf) {
-                    Ok(0) => break,
-                    Ok(n) => {
-                        let chunk = &buf[..n];
-                        if chunk.windows(4).any(|w| w == b"\x1b[6n") {
-                            if let Ok(mut w) = writer_for_thread.lock() {
+
+                #[cfg(unix)]
+                if let Some(fd) = master_fd {
+                    let rc = unsafe { libc::read(fd, buf.as_mut_ptr().cast(), buf.len()) };
+                    if rc == 0 {
+                        break;
+                    }
+                    if rc < 0 {
+                        let e = std::io::Error::last_os_error();
+                        if e.kind() == std::io::ErrorKind::WouldBlock {
+                            std::thread::sleep(Duration::from_millis(25));
+                            continue;
+                        }
+                        break;
+                    }
+
+                    let n: usize = rc as usize;
+                    let chunk = &buf[..n];
+                    if chunk.windows(4).any(|w| w == b"\x1b[6n") {
+                        if let Some(writer) = writer_for_thread.upgrade() {
+                            if let Ok(mut w) = writer.lock() {
                                 let _ = w.write_all(b"\x1b[1;1R");
                                 let _ = w.flush();
                             }
                         }
-                        if chunk.windows(5).any(|w| w == b"\x1b[18t") {
-                            if let Ok(mut w) = writer_for_thread.lock() {
+                    }
+                    if chunk.windows(5).any(|w| w == b"\x1b[18t") {
+                        if let Some(writer) = writer_for_thread.upgrade() {
+                            if let Ok(mut w) = writer.lock() {
                                 let _ = w.write_all(b"\x1b[8;24;80t");
                                 let _ = w.flush();
                             }
                         }
+                    }
 
-                        if let Ok(mut guard) = output_for_thread.lock() {
-                            guard.extend_from_slice(&buf[..n]);
-                        }
+                    if let Ok(mut guard) = output_for_thread.lock() {
+                        guard.extend_from_slice(chunk);
                     }
-                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                        std::thread::sleep(Duration::from_millis(25));
-                    }
-                    Err(_) => break,
+                    continue;
                 }
+
+                // If we can't get an FD for non-blocking reads (unexpected on unix), don't
+                // busy-loop. We'll rely on teardown to kill the child and let the thread exit.
+                std::thread::sleep(Duration::from_millis(25));
             }
         });
 
         Self {
             child,
+            master: Some(master),
             waited: None,
             writer,
             output,
@@ -256,6 +280,8 @@ impl PtyRepl {
 
     fn shutdown(mut self) -> (i32, Vec<u8>) {
         self.stop_reader.store(true, Ordering::Relaxed);
+        // Dropping the master PTY handle helps ensure any in-flight read unblocks cleanly.
+        self.master.take();
         if self.waited.is_none() {
             let _ = self.child.kill();
             let deadline = Instant::now() + Duration::from_secs(2);
@@ -271,12 +297,9 @@ impl PtyRepl {
             }
         }
         if let Some(handle) = self.reader_handle.take() {
-            let (tx, rx) = std::sync::mpsc::channel();
-            std::thread::spawn(move || {
-                let _ = handle.join();
-                let _ = tx.send(());
-            });
-            let _ = rx.recv_timeout(Duration::from_secs(2));
+            // Never spawn a detached "joiner" thread here: if the join blocks, it will keep the
+            // whole test binary alive and appear as a CI hang after the last `... ok`.
+            let _ = handle.join();
         }
         let code = self
             .waited
