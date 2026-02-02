@@ -129,6 +129,7 @@ CI_REMOTE ?= origin
 CI_CLEANUP ?= 1
 CI_CHECKOUT_REF ?=
 CI_MODE ?=
+CI_RUNNER_KIND ?=
 
 .PHONY: ci-testing
 ci-testing:
@@ -136,6 +137,7 @@ ci-testing:
 	@set -euo pipefail; \
 	args="--workflow \"$(CI_WORKFLOW)\" --workflow-ref \"$(CI_WORKFLOW_REF)\" --remote \"$(CI_REMOTE)\""; \
 	if [ -n "$(CI_CHECKOUT_REF)" ]; then args="$$args --checkout-ref \"$(CI_CHECKOUT_REF)\""; fi; \
+	if [ -n "$(CI_RUNNER_KIND)" ]; then args="$$args --runner-kind \"$(CI_RUNNER_KIND)\""; fi; \
 	if [ -n "$(CI_MODE)" ]; then args="$$args --mode \"$(CI_MODE)\""; fi; \
 	if [ "$(CI_CLEANUP)" = "1" ]; then args="$$args --cleanup"; fi; \
 	eval "scripts/ci/dispatch_ci_testing.sh $$args"

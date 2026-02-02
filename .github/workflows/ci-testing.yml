@@ -9,6 +9,11 @@ on:
       checkout_ref:
         required: false
         type: string
+      runner_kind:
+        description: "Where to run jobs: github-hosted|self-hosted"
+        required: false
+        type: string
+        default: github-hosted
       mode:
         description: "CI mode: full|quick|compile-parity"
         required: false
@@ -20,6 +25,14 @@ on:
         description: "Git ref to checkout for running CI Testing (defaults to workflow ref HEAD)."
         required: false
         default: ""
+      runner_kind:
+        description: "Where to run jobs: github-hosted|self-hosted"
+        required: false
+        type: choice
+        options:
+          - github-hosted
+          - self-hosted
+        default: github-hosted
       mode:
         description: "CI mode: full|quick|compile-parity (quick skips docs/cross-build; compile-parity skips tests/builds too)"
         required: false
@@ -29,18 +42,25 @@ env:
   CARGO_TERM_COLOR: always
   RUST_TOOLCHAIN: 1.89.0
   CI_MODE: ${{ inputs.mode || 'full' }}
+  CI_RUNNER_KIND: ${{ inputs.runner_kind || 'github-hosted' }}
 
 jobs:
   lint-and-test:
-    name: Lint & Test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    name: Lint & Test (${{ matrix.name }})
+    runs-on: ${{ env.CI_RUNNER_KIND == 'self-hosted' && fromJson(matrix.self_hosted) || matrix.hosted }}
     strategy:
       fail-fast: ${{ github.event_name != 'pull_request' }}
       matrix:
-        os:
-          - ubuntu-24.04
-          - macos-14
-          - windows-2022
+        include:
+          - name: ubuntu-24.04
+            hosted: ubuntu-24.04
+            self_hosted: '["self-hosted","Linux","linux-host"]'
+          - name: macos-14
+            hosted: macos-14
+            self_hosted: '["self-hosted","macOS"]'
+          - name: windows-2022
+            hosted: windows-2022
+            self_hosted: '["self-hosted","Windows"]'
 
     steps:
       - name: Checkout repository (override ref)
@@ -57,16 +77,40 @@ jobs:
           submodules: recursive
 
       - name: Install system dependencies (Linux)
-        if: runner.os == 'Linux' && env.CI_MODE != 'compile-parity'
+        if: runner.os == 'Linux' && env.CI_MODE != 'compile-parity' && env.CI_RUNNER_KIND != 'self-hosted'
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config libseccomp-dev shellcheck shfmt
 
       - name: Install system dependencies (Linux, compile parity)
-        if: runner.os == 'Linux' && env.CI_MODE == 'compile-parity'
+        if: runner.os == 'Linux' && env.CI_MODE == 'compile-parity' && env.CI_RUNNER_KIND != 'self-hosted'
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config libseccomp-dev
+
+      - name: Preflight system dependencies (Linux self-hosted)
+        if: runner.os == 'Linux' && env.CI_RUNNER_KIND == 'self-hosted'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v pkg-config >/dev/null 2>&1; then
+            echo "Missing pkg-config on self-hosted Linux runner." >&2
+            exit 1
+          fi
+          if ! pkg-config --exists libseccomp; then
+            echo "Missing libseccomp development package on self-hosted Linux runner." >&2
+            exit 1
+          fi
+          if [[ "${CI_MODE}" != "compile-parity" ]]; then
+            if ! command -v shellcheck >/dev/null 2>&1; then
+              echo "Missing shellcheck on self-hosted Linux runner." >&2
+              exit 1
+            fi
+            if ! command -v shfmt >/dev/null 2>&1; then
+              echo "Missing shfmt on self-hosted Linux runner." >&2
+              exit 1
+            fi
+          fi
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

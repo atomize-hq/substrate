@@ -6,6 +6,7 @@ usage() {
 Usage:
   scripts/ci/dispatch_ci_testing.sh \
     [--checkout-ref <git-ref>] \
+    [--runner-kind <runner_kind>] \
     [--mode <mode>] \
     [--workflow .github/workflows/ci-testing.yml] \
     [--workflow-ref <ref>] \
@@ -99,11 +100,16 @@ CLEANUP=0
 CHECKOUT_REF=""
 MODE=""
 QUEUE_TIMEOUT_SECS="${CI_TESTING_QUEUE_TIMEOUT_SECS:-0}"
+RUNNER_KIND=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --checkout-ref)
             CHECKOUT_REF="${2:-}"
+            shift 2
+            ;;
+        --runner-kind)
+            RUNNER_KIND="${2:-}"
             shift 2
             ;;
         --mode)
@@ -167,6 +173,11 @@ case "${MODE}" in
     *) die "Invalid --mode: ${MODE} (expected full|quick|compile-parity)" ;;
 esac
 
+case "${RUNNER_KIND}" in
+    ""|github-hosted|self-hosted) ;;
+    *) die "Invalid --runner-kind: ${RUNNER_KIND} (expected github-hosted|self-hosted)" ;;
+esac
+
 head_sha="$(git rev-parse "${CHECKOUT_REF}")"
 ts="$(date -u +%Y%m%dT%H%M%SZ)"
 temp_branch_prefix="tmp/ci-testing"
@@ -221,6 +232,9 @@ dispatch_started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 dispatch_err="$(mktemp)"
 
 dispatch_args=(gh workflow run "${effective_workflow}" --ref "${effective_ref}" -f checkout_ref="${temp_branch}")
+if [[ -n "${RUNNER_KIND}" ]]; then
+    dispatch_args+=(-f runner_kind="${RUNNER_KIND}")
+fi
 if [[ -n "${MODE}" ]]; then
     dispatch_args+=(-f mode="${MODE}")
 fi
@@ -251,6 +265,9 @@ if [[ "${dispatch_rc}" -ne 0 ]]; then
         dispatch_started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
         : >"${dispatch_err}"
         dispatch_args=(gh workflow run "${effective_workflow}" --ref "${effective_ref}" -f checkout_ref="${temp_branch}")
+        if [[ -n "${RUNNER_KIND}" ]]; then
+            dispatch_args+=(-f runner_kind="${RUNNER_KIND}")
+        fi
         if [[ -n "${MODE}" ]]; then
             dispatch_args+=(-f mode="${MODE}")
         fi
@@ -402,6 +419,7 @@ printf 'TEMP_BRANCH=%s\n' "${temp_branch}"
 printf 'RUN_ID=%s\n' "${run_id}"
 printf 'RUN_URL=%s\n' "${run_url}"
 printf 'CONCLUSION=%s\n' "${conclusion}"
+printf 'RUNNER_KIND=%s\n' "${RUNNER_KIND}"
 printf 'CI_PASSED_OSES=%s\n' "${passed_oses}"
 printf 'CI_FAILED_OSES=%s\n' "${failed_oses}"
 printf 'CI_FAILED_JOBS=%s\n' "${failed_jobs}"
