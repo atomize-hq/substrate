@@ -5,8 +5,7 @@ use crate::service::WorldAgentService;
 #[cfg(target_os = "linux")]
 use crate::service::{
     apply_full_isolation_helper_env, is_full_isolation, resolve_landlock_allowlist_paths,
-    resolve_project_dir, resolve_project_write_allowlist_prefixes,
-    WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV, WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV, WORLD_FS_MODE_ENV,
+    resolve_project_dir, resolve_project_write_allowlist_prefixes, WORLD_FS_MODE_ENV,
     WORLD_FS_WRITE_ALLOWLIST_ENV,
 };
 use agent_api_types::PolicySnapshotV2;
