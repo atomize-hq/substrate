@@ -178,10 +178,10 @@ fn snapshot_from_policy(policy: &substrate_broker::Policy) -> Result<PolicySnaps
         },
         net_allowed: policy.net_allowed.clone(),
         limits: PolicySnapshotLimitsV2 {
-            max_memory_mb: policy.limits.max_memory_mb,
-            max_cpu_percent: policy.limits.max_cpu_percent,
-            max_runtime_ms: policy.limits.max_runtime_ms,
-            max_egress_bytes: policy.limits.max_egress_bytes,
+            max_memory_mb: policy.limits.max_memory_mb.unwrap_or(0),
+            max_cpu_percent: policy.limits.max_cpu_percent.unwrap_or(0),
+            max_runtime_ms: policy.limits.max_runtime_ms.unwrap_or(0),
+            max_egress_bytes: policy.limits.max_egress_bytes.unwrap_or(0),
         },
     };
 

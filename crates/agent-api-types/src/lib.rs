@@ -46,10 +46,10 @@ pub struct PolicySnapshotWorldFsV2 {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PolicySnapshotLimitsV2 {
-    pub max_memory_mb: Option<u64>,
-    pub max_cpu_percent: Option<u32>,
-    pub max_runtime_ms: Option<u64>,
-    pub max_egress_bytes: Option<u64>,
+    pub max_memory_mb: u64,
+    pub max_cpu_percent: u32,
+    pub max_runtime_ms: u64,
+    pub max_egress_bytes: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -461,10 +461,10 @@ mod tests {
                 },
                 net_allowed: vec!["github.com".to_string()],
                 limits: PolicySnapshotLimitsV2 {
-                    max_memory_mb: Some(4096),
-                    max_cpu_percent: Some(80),
-                    max_runtime_ms: Some(600_000),
-                    max_egress_bytes: Some(1_073_741_824),
+                    max_memory_mb: 4096,
+                    max_cpu_percent: 80,
+                    max_runtime_ms: 600_000,
+                    max_egress_bytes: 1_073_741_824,
                 },
             }),
             world_fs_mode: None,
@@ -488,10 +488,10 @@ mod tests {
         assert!(snapshot.world_fs.read.is_none());
         assert!(snapshot.world_fs.write.is_none());
         assert_eq!(snapshot.net_allowed, vec!["github.com".to_string()]);
-        assert_eq!(snapshot.limits.max_memory_mb, Some(4096));
-        assert_eq!(snapshot.limits.max_cpu_percent, Some(80));
-        assert_eq!(snapshot.limits.max_runtime_ms, Some(600_000));
-        assert_eq!(snapshot.limits.max_egress_bytes, Some(1_073_741_824));
+        assert_eq!(snapshot.limits.max_memory_mb, 4096);
+        assert_eq!(snapshot.limits.max_cpu_percent, 80);
+        assert_eq!(snapshot.limits.max_runtime_ms, 600_000);
+        assert_eq!(snapshot.limits.max_egress_bytes, 1_073_741_824);
     }
 
     #[test]
