@@ -1,9 +1,5 @@
 #![cfg(all(unix, target_os = "linux"))]
 
-use agent_api_types::{
-    PolicySnapshotLimitsV1, PolicySnapshotV1, PolicySnapshotWorldFsIsolationV1,
-    PolicySnapshotWorldFsV1, WorldFsMode,
-};
 use axum::routing::get;
 use axum::Router;
 use futures_util::{SinkExt, StreamExt};
@@ -23,24 +19,43 @@ use world_agent::WorldAgentService;
 type Ws =
     tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
-fn minimal_policy_snapshot() -> PolicySnapshotV1 {
-    PolicySnapshotV1 {
-        schema_version: 1,
-        world_fs: PolicySnapshotWorldFsV1 {
-            mode: WorldFsMode::Writable,
-            isolation: PolicySnapshotWorldFsIsolationV1::Workspace,
-            require_world: true,
-            read_allowlist: Vec::new(),
-            write_allowlist: Vec::new(),
+fn minimal_policy_snapshot() -> Value {
+    // Prefer PolicySnapshotV2. Some tests fall back to V1 when talking to legacy world-agents.
+    json!({
+        "schema_version": 2,
+        "world_fs": {
+            "mode": "writable",
+            "isolation": "workspace",
+            "require_world": true
         },
-        net_allowed: Vec::new(),
-        limits: PolicySnapshotLimitsV1 {
-            max_memory_mb: None,
-            max_cpu_percent: None,
-            max_runtime_ms: None,
-            max_egress_bytes: None,
+        "net_allowed": [],
+        "limits": {
+            "max_memory_mb": 0,
+            "max_cpu_percent": 0,
+            "max_runtime_ms": 0,
+            "max_egress_bytes": 0
+        }
+    })
+}
+
+fn fallback_policy_snapshot_v1() -> Value {
+    json!({
+        "schema_version": 1,
+        "world_fs": {
+            "mode": "writable",
+            "isolation": "workspace",
+            "require_world": true,
+            "read_allowlist": [],
+            "write_allowlist": []
         },
-    }
+        "net_allowed": [],
+        "limits": {
+            "max_memory_mb": null,
+            "max_cpu_percent": null,
+            "max_runtime_ms": null,
+            "max_egress_bytes": null
+        }
+    })
 }
 
 async fn spawn_world_agent_ws(
@@ -263,6 +278,20 @@ fn start_session_frame(cwd: &std::path::Path, policy_snapshot: Value) -> Value {
     })
 }
 
+fn looks_like_unsupported_policy_snapshot_v2(frame: &Value) -> bool {
+    if frame.get("type").and_then(Value::as_str) != Some("error") {
+        return false;
+    }
+    let message = frame
+        .get("message")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    (message.contains("policy_snapshot.schema_version") && message.contains(": 2"))
+        || message.contains("read_allowlist")
+        || message.contains("write_allowlist")
+}
+
 fn looks_like_missing_world_prereqs(frame: &Value) -> bool {
     if frame.get("type").and_then(Value::as_str) != Some("error") {
         return false;
@@ -276,6 +305,41 @@ fn looks_like_missing_world_prereqs(frame: &Value) -> bool {
         || message.contains("failed to prepare world overlay")
         || message.contains("user namespaces disabled")
         || message.contains("operation not permitted")
+}
+
+async fn connect_and_start_session_or_skip(
+    addr: SocketAddr,
+    cwd: &std::path::Path,
+) -> Option<(Ws, Value)> {
+    let mut ws = ws_connect(addr).await;
+    ws.send(Message::Text(
+        start_session_frame(cwd, minimal_policy_snapshot()).to_string(),
+    ))
+    .await
+    .expect("send start_session");
+    let frame = expect_terminal_frame(&mut ws).await;
+
+    if looks_like_missing_world_prereqs(&frame) {
+        return None;
+    }
+    if looks_like_unsupported_policy_snapshot_v2(&frame) {
+        // Legacy agent expects PolicySnapshotV1. The server will close after fatal errors, so
+        // negotiate using a fresh connection.
+        drop(ws);
+        let mut ws = ws_connect(addr).await;
+        ws.send(Message::Text(
+            start_session_frame(cwd, fallback_policy_snapshot_v1()).to_string(),
+        ))
+        .await
+        .expect("send start_session v1 fallback");
+        let frame = expect_terminal_frame(&mut ws).await;
+        if looks_like_missing_world_prereqs(&frame) {
+            return None;
+        }
+        return Some((ws, frame));
+    }
+
+    Some((ws, frame))
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -384,11 +448,7 @@ async fn persistent_session_enforces_first_frame_start_session() {
 
     // The server MUST NOT emit `ready` after a bad first frame (fail-closed posture).
     ws.send(Message::Text(
-        start_session_frame(
-            cwd.as_path(),
-            serde_json::to_value(minimal_policy_snapshot()).expect("snapshot to JSON"),
-        )
-        .to_string(),
+        start_session_frame(cwd.as_path(), minimal_policy_snapshot()).to_string(),
     ))
     .await
     .ok();
@@ -410,7 +470,7 @@ async fn start_session_rejects_policy_snapshot_with_unknown_fields_fail_closed()
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
-    let mut snapshot = serde_json::to_value(minimal_policy_snapshot()).expect("snapshot to JSON");
+    let mut snapshot = minimal_policy_snapshot();
     snapshot
         .as_object_mut()
         .expect("snapshot object")
@@ -486,16 +546,14 @@ async fn start_session_yields_ready_with_fresh_hex32_session_nonce() {
     let (addr, server) = spawn_world_agent_ws(service).await;
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
-    let snapshot = serde_json::to_value(minimal_policy_snapshot()).expect("snapshot to JSON");
-
-    let mut ws = ws_connect(addr).await;
-    ws.send(Message::Text(
-        start_session_frame(cwd.as_path(), snapshot).to_string(),
-    ))
-    .await
-    .expect("send start_session");
-
-    let frame = expect_terminal_frame(&mut ws).await;
+    let (_ws, frame) = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
+        Some(ok) => ok,
+        None => {
+            eprintln!("skipping start_session ready assertions: world prereqs missing");
+            server.abort();
+            return;
+        }
+    };
     if looks_like_missing_world_prereqs(&frame) {
         eprintln!("skipping start_session ready assertions: world prereqs missing: {frame}");
         server.abort();
@@ -538,16 +596,16 @@ async fn session_nonce_is_unique_per_session_restart() {
 
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
-    let snapshot = serde_json::to_value(minimal_policy_snapshot()).expect("snapshot to JSON");
 
     let (addr1, server1) = spawn_world_agent_ws(service.clone()).await;
-    let mut ws1 = ws_connect(addr1).await;
-    ws1.send(Message::Text(
-        start_session_frame(cwd.as_path(), snapshot.clone()).to_string(),
-    ))
-    .await
-    .expect("send start_session");
-    let ready1 = expect_terminal_frame(&mut ws1).await;
+    let (_ws1, ready1) = match connect_and_start_session_or_skip(addr1, cwd.as_path()).await {
+        Some(ok) => ok,
+        None => {
+            eprintln!("skipping session_nonce uniqueness assertions: world prereqs missing");
+            server1.abort();
+            return;
+        }
+    };
     if looks_like_missing_world_prereqs(&ready1) {
         eprintln!("skipping session_nonce uniqueness assertions: world prereqs missing: {ready1}");
         server1.abort();
@@ -561,13 +619,14 @@ async fn session_nonce_is_unique_per_session_restart() {
     server1.abort();
 
     let (addr2, server2) = spawn_world_agent_ws(service).await;
-    let mut ws2 = ws_connect(addr2).await;
-    ws2.send(Message::Text(
-        start_session_frame(cwd.as_path(), snapshot).to_string(),
-    ))
-    .await
-    .expect("send start_session");
-    let ready2 = expect_terminal_frame(&mut ws2).await;
+    let (_ws2, ready2) = match connect_and_start_session_or_skip(addr2, cwd.as_path()).await {
+        Some(ok) => ok,
+        None => {
+            eprintln!("skipping session_nonce uniqueness assertions: world prereqs missing");
+            server2.abort();
+            return;
+        }
+    };
     if looks_like_missing_world_prereqs(&ready2) {
         eprintln!("skipping session_nonce uniqueness assertions: world prereqs missing: {ready2}");
         server2.abort();
@@ -593,16 +652,16 @@ async fn start_session_fails_closed_when_fionread_watermark_is_unavailable() {
 
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
-    let snapshot = serde_json::to_value(minimal_policy_snapshot()).expect("snapshot to JSON");
 
-    let mut ws = ws_connect(addr).await;
-    ws.send(Message::Text(
-        start_session_frame(cwd.as_path(), snapshot).to_string(),
-    ))
-    .await
-    .expect("send start_session");
-
-    let frame = expect_terminal_frame(&mut ws).await;
+    let (_ws, frame) = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
+        Some(ok) => ok,
+        None => {
+            eprintln!("skipping DR-23 FIONREAD assertions: world prereqs missing");
+            let _ = shutdown.send(());
+            let _ = server_thread.join();
+            return;
+        }
+    };
     if looks_like_missing_world_prereqs(&frame) {
         eprintln!("skipping DR-23 FIONREAD assertions: world prereqs missing: {frame}");
         let _ = shutdown.send(());
@@ -632,7 +691,6 @@ async fn start_session_is_robust_to_inheritable_non_stdio_fds() {
 
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
-    let snapshot = serde_json::to_value(minimal_policy_snapshot()).expect("snapshot to JSON");
 
     let fd_leak_guard = std::fs::File::open("/dev/null").expect("open /dev/null");
     let fd = fd_leak_guard.as_raw_fd();
@@ -640,14 +698,15 @@ async fn start_session_is_robust_to_inheritable_non_stdio_fds() {
     assert_eq!(rc, 0, "clear CLOEXEC");
 
     let (addr, server) = spawn_world_agent_ws(service).await;
-    let mut ws = ws_connect(addr).await;
-    ws.send(Message::Text(
-        start_session_frame(cwd.as_path(), snapshot).to_string(),
-    ))
-    .await
-    .expect("send start_session");
-
-    let frame = expect_terminal_frame(&mut ws).await;
+    let (_ws, frame) = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
+        Some(ok) => ok,
+        None => {
+            eprintln!("skipping DR-22 inheritable-fd assertions: world prereqs missing");
+            server.abort();
+            drop(fd_leak_guard);
+            return;
+        }
+    };
     if looks_like_missing_world_prereqs(&frame) {
         eprintln!("skipping DR-22 inheritable-fd assertions: world prereqs missing: {frame}");
         server.abort();

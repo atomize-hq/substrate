@@ -1,9 +1,5 @@
 #![cfg(all(unix, target_os = "linux"))]
 
-use agent_api_types::{
-    PolicySnapshotLimitsV1, PolicySnapshotV1, PolicySnapshotWorldFsIsolationV1,
-    PolicySnapshotWorldFsV1, WorldFsMode,
-};
 use axum::routing::get;
 use axum::Router;
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -22,24 +18,44 @@ use world_agent::WorldAgentService;
 type Ws =
     tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
-fn minimal_policy_snapshot() -> PolicySnapshotV1 {
-    PolicySnapshotV1 {
-        schema_version: 1,
-        world_fs: PolicySnapshotWorldFsV1 {
-            mode: WorldFsMode::Writable,
-            isolation: PolicySnapshotWorldFsIsolationV1::Workspace,
-            require_world: true,
-            read_allowlist: Vec::new(),
-            write_allowlist: Vec::new(),
+fn minimal_policy_snapshot() -> Value {
+    // Prefer PolicySnapshotV2. Exec protocol tests may fall back to V1 when talking to legacy
+    // world-agents.
+    json!({
+        "schema_version": 2,
+        "world_fs": {
+            "mode": "writable",
+            "isolation": "workspace",
+            "require_world": true
         },
-        net_allowed: Vec::new(),
-        limits: PolicySnapshotLimitsV1 {
-            max_memory_mb: None,
-            max_cpu_percent: None,
-            max_runtime_ms: None,
-            max_egress_bytes: None,
+        "net_allowed": [],
+        "limits": {
+            "max_memory_mb": 0,
+            "max_cpu_percent": 0,
+            "max_runtime_ms": 0,
+            "max_egress_bytes": 0
+        }
+    })
+}
+
+fn fallback_policy_snapshot_v1() -> Value {
+    json!({
+        "schema_version": 1,
+        "world_fs": {
+            "mode": "writable",
+            "isolation": "workspace",
+            "require_world": true,
+            "read_allowlist": [],
+            "write_allowlist": []
         },
-    }
+        "net_allowed": [],
+        "limits": {
+            "max_memory_mb": null,
+            "max_cpu_percent": null,
+            "max_runtime_ms": null,
+            "max_egress_bytes": null
+        }
+    })
 }
 
 async fn spawn_world_agent_ws(
@@ -100,6 +116,20 @@ fn looks_like_missing_world_prereqs(frame: &Value) -> bool {
         || message.contains("operation not permitted")
 }
 
+fn looks_like_unsupported_policy_snapshot_v2(frame: &Value) -> bool {
+    if frame.get("type").and_then(Value::as_str) != Some("error") {
+        return false;
+    }
+    let message = frame
+        .get("message")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    (message.contains("policy_snapshot.schema_version") && message.contains(": 2"))
+        || message.contains("read_allowlist")
+        || message.contains("write_allowlist")
+}
+
 fn start_session_frame(
     cwd: &std::path::Path,
     policy_snapshot: Value,
@@ -141,25 +171,53 @@ fn exec_frame_with_raw_program_b64(seq: u64, stdin_mode: &str, program_b64: &str
     })
 }
 
-async fn start_session_or_skip(ws: &mut Ws, cwd: &std::path::Path) -> Option<Value> {
+async fn connect_and_start_session_or_skip(addr: SocketAddr, cwd: &std::path::Path) -> Option<Ws> {
     let mut env = HashMap::<String, String>::new();
     env.insert("HOME".to_string(), "/root".to_string());
     env.insert("TERM".to_string(), "xterm-256color".to_string());
 
-    let snapshot = serde_json::to_value(minimal_policy_snapshot()).expect("snapshot to JSON");
+    connect_and_start_session_with_env_or_skip(addr, cwd, env).await
+}
+
+async fn connect_and_start_session_with_env_or_skip(
+    addr: SocketAddr,
+    cwd: &std::path::Path,
+    env: HashMap<String, String>,
+) -> Option<Ws> {
+    let mut ws = ws_connect(addr).await;
     ws.send(Message::Text(
-        start_session_frame(cwd, snapshot, env).to_string(),
+        start_session_frame(cwd, minimal_policy_snapshot(), env.clone()).to_string(),
     ))
     .await
     .expect("send start_session");
+    let frame = recv_json(&mut ws).await;
 
-    let frame = recv_json(ws).await;
     if looks_like_missing_world_prereqs(&frame) {
         eprintln!("skipping persistent exec tests: world prereqs missing: {frame}");
         return None;
     }
-    assert_eq!(frame.get("type").and_then(Value::as_str), Some("ready"));
-    Some(frame)
+    if frame.get("type").and_then(Value::as_str) == Some("ready") {
+        return Some(ws);
+    }
+    if looks_like_unsupported_policy_snapshot_v2(&frame) {
+        // Legacy agent expects PolicySnapshotV1; start a new connection (fatal errors close).
+        drop(ws);
+        let mut ws = ws_connect(addr).await;
+        ws.send(Message::Text(
+            start_session_frame(cwd, fallback_policy_snapshot_v1(), env).to_string(),
+        ))
+        .await
+        .expect("send start_session v1 fallback");
+        let frame = recv_json(&mut ws).await;
+        if looks_like_missing_world_prereqs(&frame) {
+            eprintln!("skipping persistent exec tests: world prereqs missing: {frame}");
+            return None;
+        }
+        assert_eq!(frame.get("type").and_then(Value::as_str), Some("ready"));
+        return Some(ws);
+    }
+
+    panic!("unexpected terminal frame for start_session: {frame}");
 }
 
 async fn collect_until_completion(ws: &mut Ws) -> (Vec<u8>, Value) {
@@ -222,14 +280,13 @@ async fn exec_rejects_invalid_base64_fail_closed() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
-    let mut ws = ws_connect(addr).await;
-    if start_session_or_skip(&mut ws, cwd.as_path())
-        .await
-        .is_none()
-    {
-        server.abort();
-        return;
-    }
+    let mut ws = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
+        Some(ws) => ws,
+        None => {
+            server.abort();
+            return;
+        }
+    };
 
     ws.send(Message::Text(
         exec_frame_with_raw_program_b64(1, "eof", "not-base64!!!").to_string(),
@@ -263,14 +320,13 @@ async fn exec_rejects_invalid_utf8_fail_closed() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
-    let mut ws = ws_connect(addr).await;
-    if start_session_or_skip(&mut ws, cwd.as_path())
-        .await
-        .is_none()
-    {
-        server.abort();
-        return;
-    }
+    let mut ws = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
+        Some(ws) => ws,
+        None => {
+            server.abort();
+            return;
+        }
+    };
 
     let invalid = [0xffu8, 0xfeu8, 0xfdu8];
     ws.send(Message::Text(exec_frame(1, "eof", &invalid).to_string()))
@@ -303,14 +359,13 @@ async fn exec_rejects_nul_fail_closed() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
-    let mut ws = ws_connect(addr).await;
-    if start_session_or_skip(&mut ws, cwd.as_path())
-        .await
-        .is_none()
-    {
-        server.abort();
-        return;
-    }
+    let mut ws = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
+        Some(ws) => ws,
+        None => {
+            server.abort();
+            return;
+        }
+    };
 
     let program = b"echo ok\0echo bad";
     ws.send(Message::Text(exec_frame(1, "eof", program).to_string()))
@@ -343,14 +398,13 @@ async fn exec_while_busy_is_fatal_protocol_error() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
-    let mut ws = ws_connect(addr).await;
-    if start_session_or_skip(&mut ws, cwd.as_path())
-        .await
-        .is_none()
-    {
-        server.abort();
-        return;
-    }
+    let mut ws = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
+        Some(ws) => ws,
+        None => {
+            server.abort();
+            return;
+        }
+    };
 
     ws.send(Message::Text(
         exec_frame(1, "passthrough", br#"read -r line; echo "GOT:$line""#).to_string(),
@@ -390,14 +444,13 @@ async fn stdout_is_drained_before_command_complete() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
-    let mut ws = ws_connect(addr).await;
-    if start_session_or_skip(&mut ws, cwd.as_path())
-        .await
-        .is_none()
-    {
-        server.abort();
-        return;
-    }
+    let mut ws = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
+        Some(ws) => ws,
+        None => {
+            server.abort();
+            return;
+        }
+    };
 
     let marker = format!("ENDMARK-{}\n", uuid::Uuid::now_v7());
     let program = format!(r#"for i in $(seq 1 5000); do printf X; done; printf "{marker}""#);
@@ -467,14 +520,13 @@ async fn stdin_is_dropped_unless_passthrough_and_never_leaks_across_commands() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
-    let mut ws = ws_connect(addr).await;
-    if start_session_or_skip(&mut ws, cwd.as_path())
-        .await
-        .is_none()
-    {
-        server.abort();
-        return;
-    }
+    let mut ws = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
+        Some(ws) => ws,
+        None => {
+            server.abort();
+            return;
+        }
+    };
 
     // While idle, stdin MUST be dropped.
     ws.send(Message::Text(
@@ -574,14 +626,13 @@ async fn signal_targets_foreground_process_group_and_session_survives() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
-    let mut ws = ws_connect(addr).await;
-    if start_session_or_skip(&mut ws, cwd.as_path())
-        .await
-        .is_none()
-    {
-        server.abort();
-        return;
-    }
+    let mut ws = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
+        Some(ws) => ws,
+        None => {
+            server.abort();
+            return;
+        }
+    };
 
     ws.send(Message::Text(exec_frame(1, "eof", b"sleep 10").to_string()))
         .await
@@ -635,31 +686,21 @@ async fn persists_physical_cwd_and_exported_env_across_execs() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
-    let mut ws = ws_connect(addr).await;
-    {
-        let mut env = HashMap::<String, String>::new();
-        env.insert("HOME".to_string(), "/root".to_string());
-        env.insert("TERM".to_string(), "xterm-256color".to_string());
-        // Explicitly exercise uncaged traversal: this test depends on being able to persist a cwd
-        // outside the project anchor between commands.
-        env.insert("SUBSTRATE_CAGED".to_string(), "0".to_string());
-        env.insert("SUBSTRATE_ANCHOR_MODE".to_string(), "workspace".to_string());
+    let mut env = HashMap::<String, String>::new();
+    env.insert("HOME".to_string(), "/root".to_string());
+    env.insert("TERM".to_string(), "xterm-256color".to_string());
+    // Explicitly exercise uncaged traversal: this test depends on being able to persist a cwd
+    // outside the project anchor between commands.
+    env.insert("SUBSTRATE_CAGED".to_string(), "0".to_string());
+    env.insert("SUBSTRATE_ANCHOR_MODE".to_string(), "workspace".to_string());
 
-        let snapshot = serde_json::to_value(minimal_policy_snapshot()).expect("snapshot to JSON");
-        ws.send(Message::Text(
-            start_session_frame(cwd.as_path(), snapshot, env).to_string(),
-        ))
-        .await
-        .expect("send start_session");
-
-        let frame = recv_json(&mut ws).await;
-        if looks_like_missing_world_prereqs(&frame) {
-            eprintln!("skipping persistence test: world prereqs missing: {frame}");
+    let mut ws = match connect_and_start_session_with_env_or_skip(addr, cwd.as_path(), env).await {
+        Some(ws) => ws,
+        None => {
             server.abort();
             return;
         }
-        assert_eq!(frame.get("type").and_then(Value::as_str), Some("ready"));
-    }
+    };
 
     let id = uuid::Uuid::now_v7().to_string();
     let real = format!("/tmp/substrate-c1-real-{id}");
@@ -731,29 +772,19 @@ async fn caged_session_prevents_escape_from_anchor() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
-    let mut ws = ws_connect(addr).await;
-    {
-        let mut env = HashMap::<String, String>::new();
-        env.insert("HOME".to_string(), "/root".to_string());
-        env.insert("TERM".to_string(), "xterm-256color".to_string());
-        env.insert("SUBSTRATE_CAGED".to_string(), "1".to_string());
-        env.insert("SUBSTRATE_ANCHOR_MODE".to_string(), "workspace".to_string());
+    let mut env = HashMap::<String, String>::new();
+    env.insert("HOME".to_string(), "/root".to_string());
+    env.insert("TERM".to_string(), "xterm-256color".to_string());
+    env.insert("SUBSTRATE_CAGED".to_string(), "1".to_string());
+    env.insert("SUBSTRATE_ANCHOR_MODE".to_string(), "workspace".to_string());
 
-        let snapshot = serde_json::to_value(minimal_policy_snapshot()).expect("snapshot to JSON");
-        ws.send(Message::Text(
-            start_session_frame(cwd.as_path(), snapshot, env).to_string(),
-        ))
-        .await
-        .expect("send start_session");
-
-        let frame = recv_json(&mut ws).await;
-        if looks_like_missing_world_prereqs(&frame) {
-            eprintln!("skipping caged-escape test: world prereqs missing: {frame}");
+    let mut ws = match connect_and_start_session_with_env_or_skip(addr, cwd.as_path(), env).await {
+        Some(ws) => ws,
+        None => {
             server.abort();
             return;
         }
-        assert_eq!(frame.get("type").and_then(Value::as_str), Some("ready"));
-    }
+    };
 
     ws.send(Message::Text(
         exec_frame(1, "eof", b"cd ..; pwd -P").to_string(),
@@ -792,14 +823,13 @@ async fn evaluator_is_bash_noprofile_norc_and_prompts_suppressed() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
-    let mut ws = ws_connect(addr).await;
-    if start_session_or_skip(&mut ws, cwd.as_path())
-        .await
-        .is_none()
-    {
-        server.abort();
-        return;
-    }
+    let mut ws = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
+        Some(ws) => ws,
+        None => {
+            server.abort();
+            return;
+        }
+    };
 
     let program = r#"set -euo pipefail
 ps -o args= -p $$
@@ -848,14 +878,13 @@ async fn incomplete_construct_does_not_hang_and_session_returns_to_idle() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
-    let mut ws = ws_connect(addr).await;
-    if start_session_or_skip(&mut ws, cwd.as_path())
-        .await
-        .is_none()
-    {
-        server.abort();
-        return;
-    }
+    let mut ws = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
+        Some(ws) => ws,
+        None => {
+            server.abort();
+            return;
+        }
+    };
 
     ws.send(Message::Text(
         exec_frame(1, "eof", b"if true; then echo hi").to_string(),
@@ -896,14 +925,13 @@ async fn program_text_sent_over_stdin_is_not_executed() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
-    let mut ws = ws_connect(addr).await;
-    if start_session_or_skip(&mut ws, cwd.as_path())
-        .await
-        .is_none()
-    {
-        server.abort();
-        return;
-    }
+    let mut ws = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
+        Some(ws) => ws,
+        None => {
+            server.abort();
+            return;
+        }
+    };
 
     ws.send(Message::Text(
         json!({"type":"stdin","data_b64": BASE64.encode(b"echo SHOULD_NOT_RUN\n")}).to_string(),
@@ -956,14 +984,13 @@ async fn evaluator_cannot_see_inherited_socket_fds_dr22_smoke() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
-    let mut ws = ws_connect(addr).await;
-    if start_session_or_skip(&mut ws, cwd.as_path())
-        .await
-        .is_none()
-    {
-        server.abort();
-        return;
-    }
+    let mut ws = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
+        Some(ws) => ws,
+        None => {
+            server.abort();
+            return;
+        }
+    };
 
     let program = r#"set -euo pipefail
 for fd in /proc/self/fd/*; do
