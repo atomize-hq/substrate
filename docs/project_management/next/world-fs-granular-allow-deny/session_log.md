@@ -245,3 +245,8 @@
 - Branch: `world-fs-granular-allow-deny-wfgad3-integ-macos`
 - Worktree: `wt/world-fs-granular-allow-deny-wfgad3-integ-macos`
 - Goal: Fix macOS CI parity failures for WFGAD3.
+
+## END — 2026-02-02T21:16:59Z — integration platform-fix — WFGAD3-integ-macos
+- HEAD: `03558206a75f53b2c5ff23fbeaee72adda5c03ac`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny/logs/WFGAD3/integ-macos/last_message.md`
+- Notes: Deflakes REPL drift-restart routing test; includes Windows clippy fix so CP2 can validate a single candidate SHA.
