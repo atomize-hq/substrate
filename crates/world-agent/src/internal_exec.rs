@@ -41,7 +41,10 @@ pub fn run_landlock_exec() -> Result<()> {
             }
             #[cfg(not(target_os = "linux"))]
             {
-                eprintln!("substrate: error: invalid enforcement plan: {err}");
+                eprintln!(
+                    "substrate: error: invalid enforcement plan (world-fs-enforcement-plan, env={}): {err}",
+                    enforcement_plan::WORLD_FS_ENFORCEMENT_PLAN_B64_ENV
+                );
             }
             std::process::exit(4);
         }
