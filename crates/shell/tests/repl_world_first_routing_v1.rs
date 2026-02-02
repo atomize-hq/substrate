@@ -155,6 +155,7 @@ impl PtyRepl {
         let writer_for_thread = writer.clone();
         let reader_handle = std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
+            let mut carry = Vec::<u8>::new();
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) => break,
@@ -166,17 +167,30 @@ impl PtyRepl {
                         // - DSR (cursor position): ESC [ 6 n  →  ESC [ 1 ; 1 R
                         // - Window size request:  ESC [ 18 t →  ESC [ 8 ; rows ; cols t
                         let chunk = &buf[..n];
-                        if chunk.windows(4).any(|w| w == b"\x1b[6n") {
+                        // Some terminals split these query bytes across reads. Use a small
+                        // rolling carry buffer to detect queries across chunk boundaries.
+                        let mut probe = carry.clone();
+                        probe.extend_from_slice(chunk);
+
+                        if probe.windows(4).any(|w| w == b"\x1b[6n") {
                             if let Ok(mut w) = writer_for_thread.lock() {
                                 let _ = w.write_all(b"\x1b[1;1R");
                                 let _ = w.flush();
                             }
                         }
-                        if chunk.windows(5).any(|w| w == b"\x1b[18t") {
+                        if probe.windows(5).any(|w| w == b"\x1b[18t") {
                             if let Ok(mut w) = writer_for_thread.lock() {
                                 let _ = w.write_all(b"\x1b[8;24;80t");
                                 let _ = w.flush();
                             }
+                        }
+
+                        carry.clear();
+                        let keep = 8usize;
+                        if probe.len() > keep {
+                            carry.extend_from_slice(&probe[probe.len() - keep..]);
+                        } else {
+                            carry.extend_from_slice(&probe);
                         }
 
                         if let Ok(mut guard) = output_for_thread.lock() {
