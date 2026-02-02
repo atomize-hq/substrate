@@ -240,3 +240,8 @@
 - run_url: https://github.com/atomize-hq/substrate/actions/runs/21604517174
 - status: cancelled (queued linux/windows for extended time)
 - note: GitHub Actions was reporting a major outage / partial system outage while linux/windows jobs were stuck waiting for hosted runners.
+
+## START — 2026-02-02T21:04:32Z — integration platform-fix — WFGAD3-integ-macos
+- Branch: `world-fs-granular-allow-deny-wfgad3-integ-macos`
+- Worktree: `wt/world-fs-granular-allow-deny-wfgad3-integ-macos`
+- Goal: Fix macOS CI parity failures for WFGAD3.
