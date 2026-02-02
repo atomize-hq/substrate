@@ -143,3 +143,13 @@
 ## END — 2026-02-02T13:31:23Z — integration — WFGAD1-integ-linux
 - HEAD: `1f8ab9e5d2865d3bd7120bfa27f69ec97125c2f8`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny/logs/WFGAD1/integ-linux/last_message.md`
+
+## UPDATE — 2026-02-02T13:42:57Z — ci-checkpoint — CP1-ci-checkpoint
+- Validates: `1f8ab9e5d2865d3bd7120bfa27f69ec97125c2f8`
+- Compile parity: `PASS`
+  - `https://github.com/atomize-hq/substrate/actions/runs/21592078032`
+- CI testing (quick): `PASS`
+  - `https://github.com/atomize-hq/substrate/actions/runs/21592156754`
+
+## END — 2026-02-02T13:42:57Z — ci-checkpoint — CP1-ci-checkpoint
+- Result: `PASS`
