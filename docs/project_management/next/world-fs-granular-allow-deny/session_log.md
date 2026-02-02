@@ -220,3 +220,8 @@
 - checkout_sha: d991b81023cf85be7a4ced68ce8ef14033a5f2d0
 - compile_parity: https://github.com/atomize-hq/substrate/actions/runs/21603002353 
 - ci_testing: https://github.com/atomize-hq/substrate/actions/runs/21603091889 
+
+## END — 2026-02-02T19:11:58Z — integration platform-fix — WFGAD3-integ-windows
+- HEAD: 
+- Codex last message: 
+- Notes: Fixes Windows CI clippy dead-code by injecting enforcement plan env in WSL request builder.
