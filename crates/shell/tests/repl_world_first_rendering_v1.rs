@@ -114,7 +114,10 @@ impl PtyRepl {
             .expect("openpty");
 
         #[cfg(unix)]
-        if let Some(fd) = pair.master.as_raw_fd() {
+        let master_fd = pair.master.as_raw_fd();
+
+        #[cfg(unix)]
+        if let Some(fd) = master_fd {
             set_fd_nonblocking(fd);
         }
 
@@ -148,11 +151,36 @@ impl PtyRepl {
         let writer_for_thread = writer.clone();
         let stop_for_thread = stop_reader.clone();
         let reader_handle = std::thread::spawn(move || {
+            #[cfg(unix)]
+            fn poll_readable(fd: i32, timeout: Duration) -> bool {
+                let timeout_ms: i32 = timeout
+                    .as_millis()
+                    .try_into()
+                    .unwrap_or(i32::MAX);
+                let mut pfd = libc::pollfd {
+                    fd,
+                    events: libc::POLLIN,
+                    revents: 0,
+                };
+                let rc = unsafe { libc::poll(&mut pfd, 1, timeout_ms) };
+                rc > 0 && (pfd.revents & libc::POLLIN) != 0
+            }
+
             let mut buf = [0u8; 4096];
             loop {
                 if stop_for_thread.load(Ordering::Relaxed) {
                     break;
                 }
+
+                #[cfg(unix)]
+                if let Some(fd) = master_fd {
+                    // Avoid blocking forever on macOS CI: poll with a short timeout so we can
+                    // re-check the stop flag and exit cleanly during teardown.
+                    if !poll_readable(fd, Duration::from_millis(50)) {
+                        continue;
+                    }
+                }
+
                 match reader.read(&mut buf) {
                     Ok(0) => break,
                     Ok(n) => {
@@ -271,12 +299,9 @@ impl PtyRepl {
             }
         }
         if let Some(handle) = self.reader_handle.take() {
-            let (tx, rx) = std::sync::mpsc::channel();
-            std::thread::spawn(move || {
-                let _ = handle.join();
-                let _ = tx.send(());
-            });
-            let _ = rx.recv_timeout(Duration::from_secs(2));
+            // Never spawn a detached "joiner" thread here: if the join blocks, it will keep the
+            // whole test binary alive and appear as a CI hang after the last `... ok`.
+            let _ = handle.join();
         }
         let code = self
             .waited
