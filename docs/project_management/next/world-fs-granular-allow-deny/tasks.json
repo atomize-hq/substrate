@@ -27,7 +27,7 @@
     "name": "Execution preflight gate (feature start)",
     "type": "ops",
     "phase": "F0",
-    "status": "in_progress",
+    "status": "completed",
     "description": "Execution-time preflight gate: validate the Planning Pack and smoke/playbook scaffolding before starting WFGAD0.",
     "references": [
       "docs/project_management/next/world-fs-granular-allow-deny/plan.md",
