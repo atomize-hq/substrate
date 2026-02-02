@@ -175,3 +175,99 @@ fn validate_deny_wildcards(pattern: &str) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agent_api_types::{
+        PolicySnapshotLimitsV2, PolicySnapshotV2, PolicySnapshotWorldFsDimensionV2,
+        PolicySnapshotWorldFsIsolationV2, PolicySnapshotWorldFsV2, WorldFsEnforcementV2,
+    };
+    use std::sync::{Mutex, OnceLock};
+
+    static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+    fn minimal_snapshot_full_read_only() -> PolicySnapshotV2 {
+        PolicySnapshotV2 {
+            schema_version: 2,
+            world_fs: PolicySnapshotWorldFsV2 {
+                mode: substrate_common::WorldFsMode::ReadOnly,
+                isolation: PolicySnapshotWorldFsIsolationV2::Full,
+                require_world: true,
+                enforcement: None,
+                discover: None,
+                read: Some(PolicySnapshotWorldFsDimensionV2 {
+                    allow_list: vec!["src".to_string()],
+                    deny_list: vec![],
+                }),
+                write: None,
+            },
+            net_allowed: vec![],
+            limits: PolicySnapshotLimitsV2 {
+                max_memory_mb: 0,
+                max_cpu_percent: 0,
+                max_runtime_ms: 0,
+                max_egress_bytes: 0,
+            },
+        }
+    }
+
+    #[test]
+    fn encode_returns_none_when_no_deny_lists() {
+        let snapshot = minimal_snapshot_full_read_only();
+        snapshot.validate().expect("snapshot validates");
+        let encoded = maybe_encode_from_snapshot(&snapshot).expect("encode succeeds");
+        assert!(encoded.is_none(), "expected no plan when deny lists empty");
+    }
+
+    #[test]
+    fn encode_defaults_discover_deny_to_read_deny() {
+        let mut snapshot = minimal_snapshot_full_read_only();
+        snapshot.world_fs.enforcement = Some(WorldFsEnforcementV2::Strict);
+        snapshot
+            .world_fs
+            .read
+            .as_mut()
+            .expect("read present")
+            .deny_list = vec!["**/*.pem".to_string()];
+        snapshot.validate().expect("snapshot validates");
+
+        let encoded = maybe_encode_from_snapshot(&snapshot)
+            .expect("encode succeeds")
+            .expect("plan should be present");
+        let bytes = BASE64.decode(encoded.as_bytes()).expect("valid base64");
+        let value: serde_json::Value =
+            serde_json::from_slice(&bytes).expect("valid JSON enforcement plan");
+
+        assert_eq!(value["version"], 1);
+        assert_eq!(value["enforcement"], "strict");
+        assert_eq!(value["read_deny"], serde_json::json!(["**/*.pem"]));
+        assert_eq!(value["discover_deny"], serde_json::json!(["**/*.pem"]));
+        assert_eq!(value["write_deny"], serde_json::json!([]));
+    }
+
+    #[test]
+    fn read_from_env_rejects_unknown_fields() {
+        let _guard = ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
+
+        let plan = serde_json::json!({
+          "version": 1,
+          "enforcement": "strict",
+          "read_deny": ["**/*.pem"],
+          "discover_deny": ["**/*.pem"],
+          "write_deny": [],
+          "extra": "nope"
+        });
+        let encoded = BASE64.encode(serde_json::to_vec(&plan).unwrap());
+        std::env::set_var(WORLD_FS_ENFORCEMENT_PLAN_B64_ENV, encoded);
+        let err = read_from_env_and_validate()
+            .expect_err("unknown fields must be rejected (deny_unknown_fields)");
+        std::env::remove_var(WORLD_FS_ENFORCEMENT_PLAN_B64_ENV);
+
+        let msg = format!("{err:#}");
+        assert!(
+            msg.contains("unknown field") || msg.contains("unknown variant"),
+            "unexpected error: {msg}"
+        );
+    }
+}

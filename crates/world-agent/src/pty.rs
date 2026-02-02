@@ -1,11 +1,13 @@
 //! PTY WebSocket handler for world-agent implementing JSON frame protocol
 
+use crate::enforcement_plan;
 use crate::service::WorldAgentService;
 #[cfg(target_os = "linux")]
 use crate::service::{
-    is_full_isolation, resolve_landlock_allowlist_paths, resolve_project_dir,
-    resolve_project_write_allowlist_prefixes, WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV,
-    WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV, WORLD_FS_MODE_ENV, WORLD_FS_WRITE_ALLOWLIST_ENV,
+    apply_full_isolation_helper_env, is_full_isolation, resolve_landlock_allowlist_paths,
+    resolve_project_dir, resolve_project_write_allowlist_prefixes,
+    WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV, WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV, WORLD_FS_MODE_ENV,
+    WORLD_FS_WRITE_ALLOWLIST_ENV,
 };
 use agent_api_types::PolicySnapshotV2;
 #[cfg(target_os = "linux")]
@@ -1140,6 +1142,107 @@ struct PersistentWorldContext {
 }
 
 #[cfg(target_os = "linux")]
+fn apply_full_isolation_env_from_snapshot(
+    env: &mut HashMap<String, String>,
+    project_dir: &std::path::Path,
+    policy_snapshot: &PolicySnapshotV2,
+) -> Result<(), String> {
+    let write_allowlist = policy_snapshot
+        .world_fs
+        .write
+        .as_ref()
+        .map(|d| d.allow_list.as_slice())
+        .unwrap_or(&[]);
+    let write_allowlist_prefixes =
+        resolve_project_write_allowlist_prefixes(project_dir, write_allowlist);
+    if !write_allowlist_prefixes.is_empty() {
+        env.insert(
+            WORLD_FS_WRITE_ALLOWLIST_ENV.to_string(),
+            write_allowlist_prefixes.join("\n"),
+        );
+    }
+
+    let read_allowlist = policy_snapshot
+        .world_fs
+        .read
+        .as_ref()
+        .map(|d| d.allow_list.as_slice())
+        .unwrap_or(&[]);
+    let landlock_read_paths = resolve_landlock_allowlist_paths(project_dir, read_allowlist);
+    let landlock_write_paths = resolve_landlock_allowlist_paths(project_dir, write_allowlist);
+    let landlock_supported = world::landlock::detect_support().supported;
+
+    let enforcement_plan_b64 = enforcement_plan::maybe_encode_from_snapshot(policy_snapshot)
+        .map_err(|err| err.to_string())?;
+    apply_full_isolation_helper_env(
+        env,
+        landlock_supported,
+        &landlock_read_paths,
+        &landlock_write_paths,
+        enforcement_plan_b64.as_deref(),
+    );
+
+    Ok(())
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod wfgad2_tests {
+    use super::*;
+    use agent_api_types::{
+        PolicySnapshotLimitsV2, PolicySnapshotWorldFsDimensionV2, PolicySnapshotWorldFsIsolationV2,
+        PolicySnapshotWorldFsV2, WorldFsEnforcementV2,
+    };
+
+    #[test]
+    fn pty_full_isolation_env_includes_enforcement_plan_and_helper_src() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+
+        let snapshot = PolicySnapshotV2 {
+            schema_version: 2,
+            world_fs: PolicySnapshotWorldFsV2 {
+                mode: world_api::WorldFsMode::ReadOnly,
+                isolation: PolicySnapshotWorldFsIsolationV2::Full,
+                require_world: true,
+                enforcement: Some(WorldFsEnforcementV2::Strict),
+                discover: None,
+                read: Some(PolicySnapshotWorldFsDimensionV2 {
+                    allow_list: vec!["src".to_string()],
+                    deny_list: vec!["**/*.pem".to_string()],
+                }),
+                write: None,
+            },
+            net_allowed: vec![],
+            limits: PolicySnapshotLimitsV2 {
+                max_memory_mb: 0,
+                max_cpu_percent: 0,
+                max_runtime_ms: 0,
+                max_egress_bytes: 0,
+            },
+        };
+        snapshot.validate().expect("snapshot validates");
+
+        let mut env = HashMap::new();
+        apply_full_isolation_env_from_snapshot(&mut env, tmp.path(), &snapshot)
+            .expect("apply full isolation env");
+
+        let plan_b64 = env
+            .get(enforcement_plan::WORLD_FS_ENFORCEMENT_PLAN_B64_ENV)
+            .expect("enforcement plan env present");
+        let bytes = BASE64.decode(plan_b64.as_bytes()).expect("plan is base64");
+        let value: serde_json::Value = serde_json::from_slice(&bytes).expect("plan is JSON");
+
+        assert_eq!(value["enforcement"], "strict");
+        assert_eq!(value["read_deny"], serde_json::json!(["**/*.pem"]));
+        assert_eq!(value["discover_deny"], serde_json::json!(["**/*.pem"]));
+
+        assert!(
+            env.contains_key(crate::service::LANDLOCK_HELPER_SRC_ENV),
+            "helper src env must be set whenever enforcement plan is present"
+        );
+    }
+}
+
+#[cfg(target_os = "linux")]
 fn prepare_persistent_world_context(
     service: &WorldAgentService,
     session_env: &HashMap<String, String>,
@@ -1189,52 +1292,7 @@ fn prepare_persistent_world_context(
             "SUBSTRATE_WORLD_FS_ISOLATION".to_string(),
             "full".to_string(),
         );
-
-        let write_allowlist = policy_snapshot
-            .world_fs
-            .write
-            .as_ref()
-            .map(|d| d.allow_list.as_slice())
-            .unwrap_or(&[]);
-        let write_allowlist_prefixes =
-            resolve_project_write_allowlist_prefixes(&project_dir, write_allowlist);
-        if !write_allowlist_prefixes.is_empty() {
-            base_env.insert(
-                WORLD_FS_WRITE_ALLOWLIST_ENV.to_string(),
-                write_allowlist_prefixes.join("\n"),
-            );
-        }
-
-        let read_allowlist = policy_snapshot
-            .world_fs
-            .read
-            .as_ref()
-            .map(|d| d.allow_list.as_slice())
-            .unwrap_or(&[]);
-        let landlock_read_paths = resolve_landlock_allowlist_paths(&project_dir, read_allowlist);
-        let landlock_write_paths = resolve_landlock_allowlist_paths(&project_dir, write_allowlist);
-        let landlock_supported = world::landlock::detect_support().supported;
-        let landlock_env_needed = landlock_supported
-            && (!landlock_read_paths.is_empty() || !landlock_write_paths.is_empty());
-        if landlock_env_needed {
-            if !landlock_read_paths.is_empty() {
-                base_env.insert(
-                    WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV.to_string(),
-                    landlock_read_paths.join("\n"),
-                );
-            }
-            if !landlock_write_paths.is_empty() {
-                base_env.insert(
-                    WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV.to_string(),
-                    landlock_write_paths.join("\n"),
-                );
-            }
-            if let Ok(exe) = std::env::current_exe() {
-                base_env
-                    .entry("SUBSTRATE_LANDLOCK_HELPER_SRC".to_string())
-                    .or_insert_with(|| exe.display().to_string());
-            }
-        }
+        apply_full_isolation_env_from_snapshot(&mut base_env, &project_dir, policy_snapshot)?;
     } else {
         base_env.insert(
             "SUBSTRATE_WORLD_FS_ISOLATION".to_string(),
@@ -1994,63 +2052,43 @@ async fn handle_legacy_start(
         service.set_last_policy_resolution_mode(policy_resolution_mode);
 
         if isolation_full {
-            let (prefixes, landlock_read_paths, landlock_write_paths) =
-                if let Some(snapshot) = policy_snapshot.as_ref() {
-                    let read_allowlist = snapshot
-                        .world_fs
-                        .read
-                        .as_ref()
-                        .map(|d| d.allow_list.as_slice())
-                        .unwrap_or(&[]);
-                    let write_allowlist = snapshot
-                        .world_fs
-                        .write
-                        .as_ref()
-                        .map(|d| d.allow_list.as_slice())
-                        .unwrap_or(&[]);
-                    (
-                        resolve_project_write_allowlist_prefixes(&project_dir, write_allowlist),
-                        resolve_landlock_allowlist_paths(&project_dir, read_allowlist),
-                        resolve_landlock_allowlist_paths(&project_dir, write_allowlist),
+            if let Some(snapshot) = policy_snapshot.as_ref() {
+                if let Err(err) =
+                    apply_full_isolation_env_from_snapshot(&mut env, &project_dir, snapshot)
+                {
+                    let _ = send_ws_message(
+                        &tx,
+                        &ServerMessage::Error {
+                            message: format!("Invalid policy_snapshot enforcement plan: {err}"),
+                        },
                     )
-                } else {
-                    let world_fs = substrate_broker::world_fs_policy();
-                    (
-                        resolve_project_write_allowlist_prefixes(
-                            &project_dir,
-                            &world_fs.write_allowlist,
-                        ),
-                        resolve_landlock_allowlist_paths(&project_dir, &world_fs.read_allowlist),
-                        resolve_landlock_allowlist_paths(&project_dir, &world_fs.write_allowlist),
-                    )
-                };
-
-            if !prefixes.is_empty() {
-                env.insert(
-                    WORLD_FS_WRITE_ALLOWLIST_ENV.to_string(),
-                    prefixes.join("\n"),
+                    .await;
+                    return;
+                }
+            } else {
+                let world_fs = substrate_broker::world_fs_policy();
+                let prefixes = resolve_project_write_allowlist_prefixes(
+                    &project_dir,
+                    &world_fs.write_allowlist,
                 );
-            }
-            let landlock_supported = world::landlock::detect_support().supported;
-            let landlock_env_needed = landlock_supported
-                && (!landlock_read_paths.is_empty() || !landlock_write_paths.is_empty());
-            if landlock_env_needed {
-                if !landlock_read_paths.is_empty() {
+                if !prefixes.is_empty() {
                     env.insert(
-                        WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV.to_string(),
-                        landlock_read_paths.join("\n"),
+                        WORLD_FS_WRITE_ALLOWLIST_ENV.to_string(),
+                        prefixes.join("\n"),
                     );
                 }
-                if !landlock_write_paths.is_empty() {
-                    env.insert(
-                        WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV.to_string(),
-                        landlock_write_paths.join("\n"),
-                    );
-                }
-                if let Ok(exe) = std::env::current_exe() {
-                    env.entry("SUBSTRATE_LANDLOCK_HELPER_SRC".to_string())
-                        .or_insert_with(|| exe.display().to_string());
-                }
+                let landlock_read_paths =
+                    resolve_landlock_allowlist_paths(&project_dir, &world_fs.read_allowlist);
+                let landlock_write_paths =
+                    resolve_landlock_allowlist_paths(&project_dir, &world_fs.write_allowlist);
+                let landlock_supported = world::landlock::detect_support().supported;
+                apply_full_isolation_helper_env(
+                    &mut env,
+                    landlock_supported,
+                    &landlock_read_paths,
+                    &landlock_write_paths,
+                    None,
+                );
             }
         }
 
