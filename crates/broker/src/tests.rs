@@ -573,6 +573,33 @@ world_fs:
         )
         .expect("expected a valid v2 world_fs configuration to load");
     }
+
+    #[test]
+    fn writable_full_isolation_defaults_read_allow_list_from_write_when_missing() {
+        // WFGAD3 smoke expects writable full isolation policies to accept write allow/deny lists
+        // without requiring an explicit read.allow_list. Reads default to the write allow list.
+        let policy = load_policy_from_yaml(
+            r#"
+world_fs:
+  mode: writable
+  isolation: full
+  require_world: true
+  enforcement: best_effort
+  write:
+    allow_list: ["."]
+    deny_list: ["./outputs/private/**"]
+"#,
+        )
+        .expect("expected writable full isolation policy to load");
+
+        let read = policy
+            .world_fs_read
+            .as_ref()
+            .expect("read dimension should be synthesized");
+        assert_eq!(read.allow_list, vec![".".to_string()]);
+        assert!(read.deny_list.is_empty());
+        assert_eq!(policy.fs_read, vec![".".to_string()]);
+    }
 }
 
 mod c0_policy_patch_only_broker_effective_resolution {
