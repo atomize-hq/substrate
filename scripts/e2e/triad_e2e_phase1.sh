@@ -305,7 +305,7 @@ log "Writing minimal ${SLICE_ID} spec"
 if [[ "${DRY_RUN}" -eq 1 ]]; then
     echo "+ write ${FEATURE_DIR}/${SLICE_ID}-spec.md" >&2
 else
-    cat >"${FEATURE_DIR_ABS}/${SLICE_ID}-spec.md" <<MD
+	    cat >"${FEATURE_DIR_ABS}/${SLICE_ID}-spec.md" <<'MD'
 # ${SLICE_ID}-spec (E2E triad smoke)
 
 ## Scope
@@ -333,7 +333,7 @@ ADR_PATH="${FEATURE_DIR_ABS}/ADR-0001-e2e-triad-smoke.md"
 if [[ "${DRY_RUN}" -eq 1 ]]; then
     echo "+ write ${ADR_PATH}" >&2
 else
-    cat >"${ADR_PATH}" <<MD
+	    cat >"${ADR_PATH}" <<'MD'
 # ADR-0001: E2E triad automation smoke
 
 ## Executive Summary (Operator)
@@ -387,20 +387,20 @@ else
 Do not edit planning docs inside the worktree.
 
 Goal:
-- Create a new workspace member crate at `crates/triad_e2e_smoke_demo/`.
-- Implement `pub fn answer() -> u32 { 42 }` in `src/lib.rs`.
-- Add the crate to the workspace (root `Cargo.toml` members).
+- Create a new workspace member crate at \`crates/triad_e2e_smoke_demo/\`.
+- Implement \`pub fn answer() -> u32 { 42 }\` in \`src/lib.rs\`.
+- Add the crate to the workspace (root \`Cargo.toml\` members).
 
 Constraints:
 - Production code only; do not add tests in this task.
 - Keep changes minimal and deterministic.
 
 Required:
-- Run `cargo fmt`
-- Run `cargo clippy --workspace --all-targets -- -D warnings`
+- Run \`cargo fmt\`
+- Run \`cargo clippy --workspace --all-targets -- -D warnings\`
 
 Finish:
-- From inside this worktree run: `make triad-task-finish TASK_ID="${CODE_TASK_ID}"`
+- From inside this worktree run: \`make triad-task-finish TASK_ID="${CODE_TASK_ID}"\`
 MD
 
     cat >"${FEATURE_DIR_ABS}/kickoff_prompts/${TEST_TASK_ID}.md" <<MD
@@ -409,14 +409,14 @@ MD
 Do not edit planning docs inside the worktree.
 
 Goal:
-- Add `crates/triad_e2e_smoke_demo/tests/answer.rs` that asserts `triad_e2e_smoke_demo::answer() == 42`.
+- Add \`crates/triad_e2e_smoke_demo/tests/answer.rs\` that asserts \`triad_e2e_smoke_demo::answer() == 42\`.
 
 Constraints:
 - Tests only; do not modify production code.
 - Keep changes minimal and deterministic.
 
 Finish:
-- From inside this worktree run: `make triad-task-finish TASK_ID="${TEST_TASK_ID}"`
+- From inside this worktree run: \`make triad-task-finish TASK_ID="${TEST_TASK_ID}"\`
 MD
 
     cat >"${FEATURE_DIR_ABS}/kickoff_prompts/${INTEG_CORE_TASK_ID}.md" <<MD
