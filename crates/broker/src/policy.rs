@@ -8,6 +8,21 @@ fn default_allow_shell_operators() -> bool {
     true
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorldFsEnforcement {
+    Strict,
+    BestEffort,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WorldFsDimensionPolicy {
+    pub allow_list: Vec<String>,
+    #[serde(default)]
+    pub deny_list: Vec<String>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct StrictWorldFsMode(WorldFsMode);
 
@@ -105,6 +120,10 @@ pub struct Policy {
     pub world_fs_mode: WorldFsMode,           // world_fs.mode
     pub world_fs_isolation: WorldFsIsolation, // world_fs.isolation
     pub world_fs_require_world: bool,         // world_fs.require_world
+    pub world_fs_enforcement: Option<WorldFsEnforcement>, // world_fs.enforcement (V2; full isolation only)
+    pub world_fs_discover: Option<WorldFsDimensionPolicy>, // world_fs.discover (V2; optional)
+    pub world_fs_read: Option<WorldFsDimensionPolicy>,    // world_fs.read (V2)
+    pub world_fs_write: Option<WorldFsDimensionPolicy>, // world_fs.write (V2; required iff mode=writable)
 
     // Network
     pub net_allowed: Vec<String>, // Allowed hosts/domains
@@ -135,6 +154,10 @@ impl Default for Policy {
             world_fs_mode: WorldFsMode::Writable,
             world_fs_isolation: WorldFsIsolation::Workspace,
             world_fs_require_world: false,
+            world_fs_enforcement: None,
+            world_fs_discover: None,
+            world_fs_read: None,
+            world_fs_write: None,
             net_allowed: vec![],
             cmd_allowed: vec![],
             cmd_denied: vec![
@@ -158,21 +181,27 @@ impl Default for Policy {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct RawWorldFsV1 {
+struct RawWorldFsV2 {
     mode: StrictWorldFsMode,
     #[serde(rename = "isolation")]
     isolation: WorldFsIsolation,
     require_world: bool,
-    read_allowlist: Vec<String>,
-    write_allowlist: Vec<String>,
+    #[serde(default)]
+    enforcement: Option<WorldFsEnforcement>,
+    #[serde(default)]
+    discover: Option<WorldFsDimensionPolicy>,
+    #[serde(default)]
+    read: Option<WorldFsDimensionPolicy>,
+    #[serde(default)]
+    write: Option<WorldFsDimensionPolicy>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct RawPolicyV1 {
+struct RawPolicyV2 {
     id: String,
     name: String,
-    world_fs: RawWorldFsV1,
+    world_fs: RawWorldFsV2,
 
     net_allowed: Vec<String>,
 
@@ -190,20 +219,38 @@ struct RawPolicyV1 {
 
 #[derive(Debug, Serialize)]
 #[serde(deny_unknown_fields)]
-struct WorldFsFileV1<'a> {
-    mode: WorldFsMode,
-    isolation: WorldFsIsolation,
-    require_world: bool,
-    read_allowlist: &'a [String],
-    write_allowlist: &'a [String],
+struct WorldFsDimensionFileV2<'a> {
+    allow_list: &'a [String],
+    #[serde(skip_serializing_if = "slice_is_empty")]
+    deny_list: &'a [String],
+}
+
+fn slice_is_empty<T>(value: &[T]) -> bool {
+    value.is_empty()
 }
 
 #[derive(Debug, Serialize)]
 #[serde(deny_unknown_fields)]
-struct PolicyFileV1<'a> {
+struct WorldFsFileV2<'a> {
+    mode: WorldFsMode,
+    isolation: WorldFsIsolation,
+    require_world: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    enforcement: Option<WorldFsEnforcement>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    discover: Option<WorldFsDimensionFileV2<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    read: Option<WorldFsDimensionFileV2<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    write: Option<WorldFsDimensionFileV2<'a>>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(deny_unknown_fields)]
+struct PolicyFileV2<'a> {
     id: &'a str,
     name: &'a str,
-    world_fs: WorldFsFileV1<'a>,
+    world_fs: WorldFsFileV2<'a>,
 
     net_allowed: &'a [String],
 
@@ -291,15 +338,8 @@ impl Policy {
         serde_yaml::to_string(self)
     }
 
-    fn validate_world_fs(world_fs: &RawWorldFsV1) -> Result<(), String> {
-        if world_fs.mode.0 == WorldFsMode::ReadOnly && !world_fs.require_world {
-            return Err("world_fs.mode=read_only requires world_fs.require_world=true".to_string());
-        }
-
-        if world_fs.isolation == WorldFsIsolation::Full && !world_fs.require_world {
-            return Err("world_fs.isolation=full requires world_fs.require_world=true".to_string());
-        }
-
+    fn validate_world_fs(_world_fs: &RawWorldFsV2) -> Result<(), String> {
+        // Full V2 validation happens when resolving effective policy patches (see effective_policy).
         Ok(())
     }
 
@@ -424,17 +464,31 @@ impl<'de> Deserialize<'de> for Policy {
         D: serde::Deserializer<'de>,
     {
         let value = serde_yaml::Value::deserialize(deserializer)?;
-        let raw: RawPolicyV1 = serde_yaml::from_value(value).map_err(serde::de::Error::custom)?;
+        let raw: RawPolicyV2 = serde_yaml::from_value(value).map_err(serde::de::Error::custom)?;
         Policy::validate_world_fs(&raw.world_fs).map_err(serde::de::Error::custom)?;
 
         Ok(Self {
             id: raw.id,
             name: raw.name,
-            fs_read: raw.world_fs.read_allowlist,
-            fs_write: raw.world_fs.write_allowlist,
+            fs_read: raw
+                .world_fs
+                .read
+                .as_ref()
+                .map(|d| d.allow_list.clone())
+                .unwrap_or_default(),
+            fs_write: raw
+                .world_fs
+                .write
+                .as_ref()
+                .map(|d| d.allow_list.clone())
+                .unwrap_or_default(),
             world_fs_mode: raw.world_fs.mode.0,
             world_fs_isolation: raw.world_fs.isolation,
             world_fs_require_world: raw.world_fs.require_world,
+            world_fs_enforcement: raw.world_fs.enforcement,
+            world_fs_discover: raw.world_fs.discover,
+            world_fs_read: raw.world_fs.read,
+            world_fs_write: raw.world_fs.write,
             net_allowed: raw.net_allowed,
             cmd_allowed: raw.cmd_allowed,
             cmd_denied: raw.cmd_denied,
@@ -452,15 +506,36 @@ impl Serialize for Policy {
     where
         S: serde::Serializer,
     {
-        let file = PolicyFileV1 {
+        let read = self.world_fs_read.as_ref().map(|d| WorldFsDimensionFileV2 {
+            allow_list: &d.allow_list,
+            deny_list: &d.deny_list,
+        });
+        let discover = self
+            .world_fs_discover
+            .as_ref()
+            .map(|d| WorldFsDimensionFileV2 {
+                allow_list: &d.allow_list,
+                deny_list: &d.deny_list,
+            });
+        let write = self
+            .world_fs_write
+            .as_ref()
+            .map(|d| WorldFsDimensionFileV2 {
+                allow_list: &d.allow_list,
+                deny_list: &d.deny_list,
+            });
+
+        let file = PolicyFileV2 {
             id: &self.id,
             name: &self.name,
-            world_fs: WorldFsFileV1 {
+            world_fs: WorldFsFileV2 {
                 mode: self.world_fs_mode,
                 isolation: self.world_fs_isolation,
                 require_world: self.world_fs_require_world,
-                read_allowlist: &self.fs_read,
-                write_allowlist: &self.fs_write,
+                enforcement: self.world_fs_enforcement,
+                discover,
+                read,
+                write,
             },
             net_allowed: &self.net_allowed,
             cmd_allowed: &self.cmd_allowed,
