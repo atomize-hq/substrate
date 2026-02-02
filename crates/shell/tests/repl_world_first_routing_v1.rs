@@ -516,11 +516,43 @@ fn c3_drift_restart_refreshes_anchor_env_for_new_cwd() {
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
 
+    let project_canon = project.canonicalize().unwrap_or(project.clone());
+    let parent_canon = temp
+        .path()
+        .canonicalize()
+        .unwrap_or_else(|_| temp.path().to_path_buf());
+    let project_str = project_canon.to_string_lossy().into_owned();
+    let parent_str = parent_canon.to_string_lossy().into_owned();
+
     // Move up to project root (still in workspace), then move to parent (workspace_root=None),
     // then run a command to trigger drift restart before execution.
     repl.send_line("cd ..");
     repl.send_line("cd ..");
     repl.send_line("pwd");
+    repl.wait_for_output(
+        "world session restarting due to snapshot/workspace drift",
+        Duration::from_secs(2),
+    )
+    .expect("drift restart message");
+
+    // Ensure the drift restart has actually occurred (i.e., the client re-sent a new StartSession)
+    // before terminating the REPL. Otherwise, a fast `exit` can race the restart and flake.
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < deadline {
+        if repl.try_wait().unwrap_or(false) {
+            break;
+        }
+        let count = records
+            .lock()
+            .expect("lock records")
+            .persistent_start_sessions
+            .len();
+        if count >= 2 {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+
     repl.send_line("exit");
     let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
 
@@ -533,20 +565,14 @@ fn c3_drift_restart_refreshes_anchor_env_for_new_cwd() {
     let first = &guard.persistent_start_sessions[0];
     let second = &guard.persistent_start_sessions[1];
 
-    let project_canon = project.canonicalize().unwrap_or(project.clone());
-    let parent_canon = temp
-        .path()
-        .canonicalize()
-        .unwrap_or_else(|_| temp.path().to_path_buf());
-
     assert_eq!(
         first.env.get("SUBSTRATE_ANCHOR_PATH").map(String::as_str),
-        Some(project_canon.to_string_lossy().as_ref()),
+        Some(project_str.as_str()),
         "expected initial anchor path to be workspace root"
     );
     assert_eq!(
         second.env.get("SUBSTRATE_ANCHOR_PATH").map(String::as_str),
-        Some(parent_canon.to_string_lossy().as_ref()),
+        Some(parent_str.as_str()),
         "expected drift restart to refresh anchor path for new cwd"
     );
 }
