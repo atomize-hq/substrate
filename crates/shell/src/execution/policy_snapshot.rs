@@ -3,12 +3,17 @@ use agent_api_types::{
     PolicySnapshotWorldFsIsolationV2, PolicySnapshotWorldFsV2, WorldFsEnforcementV2,
 };
 use anyhow::{anyhow, Context, Result};
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine;
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::time::SystemTime;
+
+const WORLD_FS_ENFORCEMENT_PLAN_B64_ENV: &str = "SUBSTRATE_WORLD_FS_ENFORCEMENT_PLAN_B64";
 
 #[derive(Debug, Clone)]
 pub(crate) struct ResolvedPolicySnapshot {
@@ -131,6 +136,88 @@ pub(crate) fn resolve_policy_snapshot_for_cwd(cwd: &Path) -> Result<ResolvedPoli
         snapshot,
         snapshot_hash,
     })
+}
+
+pub(crate) fn inject_world_fs_enforcement_plan_env(
+    snapshot: &PolicySnapshotV2,
+    env: &mut std::collections::HashMap<String, String>,
+) -> Result<()> {
+    if env.contains_key(WORLD_FS_ENFORCEMENT_PLAN_B64_ENV) {
+        return Ok(());
+    }
+
+    let Some(encoded) = maybe_encode_world_fs_enforcement_plan_b64(snapshot)? else {
+        return Ok(());
+    };
+
+    env.insert(WORLD_FS_ENFORCEMENT_PLAN_B64_ENV.to_string(), encoded);
+    Ok(())
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum EnforcementPlanModeV1 {
+    Strict,
+    BestEffort,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(deny_unknown_fields)]
+struct EnforcementPlanV1 {
+    version: u32,
+    enforcement: EnforcementPlanModeV1,
+    read_deny: Vec<String>,
+    discover_deny: Vec<String>,
+    write_deny: Vec<String>,
+}
+
+fn maybe_encode_world_fs_enforcement_plan_b64(
+    snapshot: &PolicySnapshotV2,
+) -> Result<Option<String>> {
+    let read_deny = snapshot
+        .world_fs
+        .read
+        .as_ref()
+        .map(|d| d.deny_list.clone())
+        .unwrap_or_default();
+    let discover_deny = snapshot
+        .world_fs
+        .discover
+        .as_ref()
+        .map(|d| d.deny_list.clone())
+        .unwrap_or_else(|| read_deny.clone());
+    let write_deny = snapshot
+        .world_fs
+        .write
+        .as_ref()
+        .map(|d| d.deny_list.clone())
+        .unwrap_or_default();
+
+    let any_deny = !read_deny.is_empty() || !discover_deny.is_empty() || !write_deny.is_empty();
+    if !any_deny {
+        return Ok(None);
+    }
+
+    let enforcement = snapshot
+        .world_fs
+        .enforcement
+        .ok_or_else(|| anyhow!("world_fs.enforcement missing for deny_list configuration"))?;
+
+    let enforcement = match enforcement {
+        WorldFsEnforcementV2::Strict => EnforcementPlanModeV1::Strict,
+        WorldFsEnforcementV2::BestEffort => EnforcementPlanModeV1::BestEffort,
+    };
+
+    let plan = EnforcementPlanV1 {
+        version: 1,
+        enforcement,
+        read_deny,
+        discover_deny,
+        write_deny,
+    };
+
+    let json_bytes = serde_json::to_vec(&plan).context("serialize enforcement plan JSON")?;
+    Ok(Some(BASE64.encode(json_bytes)))
 }
 
 fn snapshot_from_policy(policy: &substrate_broker::Policy) -> Result<PolicySnapshotV2> {
