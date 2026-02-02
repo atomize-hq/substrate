@@ -539,44 +539,42 @@ fn resolve_policy_inputs(
     cwd: &Path,
     project_dir: &Path,
 ) -> Result<(agent_api_types::PolicyResolutionModeV1, PolicyInputs)> {
-    use agent_api_types::{PolicyResolutionModeV1, PolicySnapshotWorldFsIsolationV1};
+    use agent_api_types::{PolicyResolutionModeV1, PolicySnapshotWorldFsIsolationV2};
 
     if let Some(snapshot) = req.policy_snapshot.as_ref() {
-        if snapshot.schema_version != 1 {
-            return Err(BadRequestError::new(format!(
-                "unsupported policy_snapshot.schema_version: {}",
-                snapshot.schema_version
-            ))
-            .into());
-        }
+        snapshot.validate().map_err(BadRequestError::new)?;
 
         let isolation_full = matches!(
             snapshot.world_fs.isolation,
-            PolicySnapshotWorldFsIsolationV1::Full
+            PolicySnapshotWorldFsIsolationV2::Full
         );
 
         let (write_allowlist_prefixes, landlock_read_paths, landlock_write_paths) =
             if isolation_full {
+                let read_allowlist = snapshot
+                    .world_fs
+                    .read
+                    .as_ref()
+                    .map(|d| d.allow_list.as_slice())
+                    .unwrap_or(&[]);
+                let write_allowlist = snapshot
+                    .world_fs
+                    .write
+                    .as_ref()
+                    .map(|d| d.allow_list.as_slice())
+                    .unwrap_or(&[]);
+
                 (
-                    resolve_project_write_allowlist_prefixes(
-                        project_dir,
-                        &snapshot.world_fs.write_allowlist,
-                    ),
-                    resolve_landlock_allowlist_paths(
-                        project_dir,
-                        &snapshot.world_fs.read_allowlist,
-                    ),
-                    resolve_landlock_allowlist_paths(
-                        project_dir,
-                        &snapshot.world_fs.write_allowlist,
-                    ),
+                    resolve_project_write_allowlist_prefixes(project_dir, write_allowlist),
+                    resolve_landlock_allowlist_paths(project_dir, read_allowlist),
+                    resolve_landlock_allowlist_paths(project_dir, write_allowlist),
                 )
             } else {
                 (Vec::new(), Vec::new(), Vec::new())
             };
 
         return Ok((
-            PolicyResolutionModeV1::SnapshotV1,
+            PolicyResolutionModeV1::SnapshotV2,
             PolicyInputs {
                 fs_mode: snapshot.world_fs.mode,
                 isolation_full,
@@ -625,14 +623,14 @@ fn resolve_policy_inputs(
 
 impl WorldAgentService {
     pub(crate) fn policy_snapshot_v1_supported(&self) -> bool {
-        true
+        false
     }
 
     pub(crate) fn last_policy_resolution_mode(
         &self,
     ) -> Option<agent_api_types::PolicyResolutionModeV1> {
         match self.last_policy_resolution_mode.load(Ordering::Relaxed) {
-            1 => Some(agent_api_types::PolicyResolutionModeV1::SnapshotV1),
+            1 => Some(agent_api_types::PolicyResolutionModeV1::SnapshotV2),
             2 => Some(agent_api_types::PolicyResolutionModeV1::LegacyLocal),
             _ => None,
         }
@@ -643,7 +641,7 @@ impl WorldAgentService {
         mode: agent_api_types::PolicyResolutionModeV1,
     ) {
         let encoded = match mode {
-            agent_api_types::PolicyResolutionModeV1::SnapshotV1 => 1,
+            agent_api_types::PolicyResolutionModeV1::SnapshotV2 => 1,
             agent_api_types::PolicyResolutionModeV1::LegacyLocal => 2,
         };
         self.last_policy_resolution_mode

@@ -1,8 +1,8 @@
 #![cfg(all(unix, target_os = "linux"))]
 
 use agent_api_types::{
-    PolicySnapshotLimitsV1, PolicySnapshotV1, PolicySnapshotWorldFsIsolationV1,
-    PolicySnapshotWorldFsV1, WorldFsMode,
+    PolicySnapshotLimitsV2, PolicySnapshotV2, PolicySnapshotWorldFsIsolationV2,
+    PolicySnapshotWorldFsV2, WorldFsMode,
 };
 use axum::routing::get;
 use axum::Router;
@@ -23,18 +23,20 @@ use world_agent::WorldAgentService;
 type Ws =
     tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
-fn minimal_policy_snapshot() -> PolicySnapshotV1 {
-    PolicySnapshotV1 {
-        schema_version: 1,
-        world_fs: PolicySnapshotWorldFsV1 {
+fn minimal_policy_snapshot() -> PolicySnapshotV2 {
+    PolicySnapshotV2 {
+        schema_version: 2,
+        world_fs: PolicySnapshotWorldFsV2 {
             mode: WorldFsMode::Writable,
-            isolation: PolicySnapshotWorldFsIsolationV1::Workspace,
+            isolation: PolicySnapshotWorldFsIsolationV2::Workspace,
             require_world: true,
-            read_allowlist: Vec::new(),
-            write_allowlist: Vec::new(),
+            enforcement: None,
+            discover: None,
+            read: None,
+            write: None,
         },
         net_allowed: Vec::new(),
-        limits: PolicySnapshotLimitsV1 {
+        limits: PolicySnapshotLimitsV2 {
             max_memory_mb: None,
             max_cpu_percent: None,
             max_runtime_ms: None,
