@@ -937,14 +937,13 @@ fn validate_and_finalize_effective_policy(policy: &mut Policy) -> Result<()> {
             }
         }
         WorldFsIsolation::Full => {
-            if policy.world_fs_read.is_none() {
-                return Err(anyhow!(
-                    "world_fs.read.allow_list is required when world_fs.isolation=full"
-                ));
-            }
-
             match policy.world_fs_mode {
                 WorldFsMode::ReadOnly => {
+                    if policy.world_fs_read.is_none() {
+                        return Err(anyhow!(
+                            "world_fs.read.allow_list is required when world_fs.isolation=full"
+                        ));
+                    }
                     if policy.world_fs_write.is_some() {
                         return Err(anyhow!(
                             "world_fs.write must be omitted when world_fs.mode=read_only"
@@ -956,6 +955,20 @@ fn validate_and_finalize_effective_policy(policy: &mut Policy) -> Result<()> {
                         return Err(anyhow!(
                             "world_fs.write.allow_list is required when world_fs.mode=writable"
                         ));
+                    }
+                    // Convenience: writable-mode policies that specify only write allow/deny lists
+                    // should still have a deterministic read allow list. Default reads to the write
+                    // allow list when read is omitted (deny lists remain dimension-scoped).
+                    if policy.world_fs_read.is_none() {
+                        let Some(write) = policy.world_fs_write.as_ref() else {
+                            return Err(anyhow!(
+                                "world_fs.write.allow_list is required when world_fs.mode=writable"
+                            ));
+                        };
+                        policy.world_fs_read = Some(WorldFsDimensionPolicy {
+                            allow_list: write.allow_list.clone(),
+                            deny_list: Vec::new(),
+                        });
                     }
                 }
             }
