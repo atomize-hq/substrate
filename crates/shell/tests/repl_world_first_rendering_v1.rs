@@ -5,7 +5,7 @@ mod support;
 
 use serial_test::serial;
 use std::fs;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -86,6 +86,7 @@ fn short_socket_dir(prefix: &str) -> TempDir {
 
 struct PtyRepl {
     child: Box<dyn portable_pty::Child + Send>,
+    master: Option<Box<dyn portable_pty::MasterPty + Send>>,
     waited: Option<portable_pty::ExitStatus>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
     output: Arc<Mutex<Vec<u8>>>,
@@ -113,8 +114,10 @@ impl PtyRepl {
             })
             .expect("openpty");
 
+        let master = pair.master;
+
         #[cfg(unix)]
-        let master_fd = pair.master.as_raw_fd();
+        let master_fd = master.as_raw_fd();
 
         #[cfg(unix)]
         if let Some(fd) = master_fd {
@@ -141,31 +144,15 @@ impl PtyRepl {
         cmd.arg("--shim-skip");
 
         let child = pair.slave.spawn_command(cmd).expect("spawn substrate");
-        let mut reader = pair.master.try_clone_reader().expect("clone reader");
         let writer: Arc<Mutex<Box<dyn Write + Send>>> =
-            Arc::new(Mutex::new(pair.master.take_writer().expect("take writer")));
+            Arc::new(Mutex::new(master.take_writer().expect("take writer")));
 
         let output = Arc::new(Mutex::new(Vec::new()));
         let stop_reader = Arc::new(AtomicBool::new(false));
         let output_for_thread = output.clone();
-        let writer_for_thread = writer.clone();
+        let writer_for_thread = Arc::downgrade(&writer);
         let stop_for_thread = stop_reader.clone();
         let reader_handle = std::thread::spawn(move || {
-            #[cfg(unix)]
-            fn poll_readable(fd: i32, timeout: Duration) -> bool {
-                let timeout_ms: i32 = timeout
-                    .as_millis()
-                    .try_into()
-                    .unwrap_or(i32::MAX);
-                let mut pfd = libc::pollfd {
-                    fd,
-                    events: libc::POLLIN,
-                    revents: 0,
-                };
-                let rc = unsafe { libc::poll(&mut pfd, 1, timeout_ms) };
-                rc > 0 && (pfd.revents & libc::POLLIN) != 0
-            }
-
             let mut buf = [0u8; 4096];
             loop {
                 if stop_for_thread.load(Ordering::Relaxed) {
@@ -174,44 +161,53 @@ impl PtyRepl {
 
                 #[cfg(unix)]
                 if let Some(fd) = master_fd {
-                    // Avoid blocking forever on macOS CI: poll with a short timeout so we can
-                    // re-check the stop flag and exit cleanly during teardown.
-                    if !poll_readable(fd, Duration::from_millis(50)) {
-                        continue;
+                    let rc = unsafe { libc::read(fd, buf.as_mut_ptr().cast(), buf.len()) };
+                    if rc == 0 {
+                        break;
                     }
-                }
+                    if rc < 0 {
+                        let e = std::io::Error::last_os_error();
+                        if e.kind() == std::io::ErrorKind::WouldBlock {
+                            std::thread::sleep(Duration::from_millis(25));
+                            continue;
+                        }
+                        break;
+                    }
 
-                match reader.read(&mut buf) {
-                    Ok(0) => break,
-                    Ok(n) => {
-                        let chunk = &buf[..n];
-                        if chunk.windows(4).any(|w| w == b"\x1b[6n") {
-                            if let Ok(mut w) = writer_for_thread.lock() {
+                    let n: usize = rc as usize;
+                    let chunk = &buf[..n];
+                    if chunk.windows(4).any(|w| w == b"\x1b[6n") {
+                        if let Some(writer) = writer_for_thread.upgrade() {
+                            if let Ok(mut w) = writer.lock() {
                                 let _ = w.write_all(b"\x1b[1;1R");
                                 let _ = w.flush();
                             }
                         }
-                        if chunk.windows(5).any(|w| w == b"\x1b[18t") {
-                            if let Ok(mut w) = writer_for_thread.lock() {
+                    }
+                    if chunk.windows(5).any(|w| w == b"\x1b[18t") {
+                        if let Some(writer) = writer_for_thread.upgrade() {
+                            if let Ok(mut w) = writer.lock() {
                                 let _ = w.write_all(b"\x1b[8;24;80t");
                                 let _ = w.flush();
                             }
                         }
+                    }
 
-                        if let Ok(mut guard) = output_for_thread.lock() {
-                            guard.extend_from_slice(&buf[..n]);
-                        }
+                    if let Ok(mut guard) = output_for_thread.lock() {
+                        guard.extend_from_slice(chunk);
                     }
-                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                        std::thread::sleep(Duration::from_millis(25));
-                    }
-                    Err(_) => break,
+                    continue;
                 }
+
+                // If we can't get an FD for non-blocking reads (unexpected on unix), don't
+                // busy-loop. We'll rely on teardown to kill the child and let the thread exit.
+                std::thread::sleep(Duration::from_millis(25));
             }
         });
 
         Self {
             child,
+            master: Some(master),
             waited: None,
             writer,
             output,
@@ -284,6 +280,8 @@ impl PtyRepl {
 
     fn shutdown(mut self) -> (i32, Vec<u8>) {
         self.stop_reader.store(true, Ordering::Relaxed);
+        // Dropping the master PTY handle helps ensure any in-flight read unblocks cleanly.
+        self.master.take();
         if self.waited.is_none() {
             let _ = self.child.kill();
             let deadline = Instant::now() + Duration::from_secs(2);
