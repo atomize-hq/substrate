@@ -230,3 +230,8 @@
 - checkout_sha: 1daea9e11214dddaecaf16f1ec4a761ad8b41aec
 - compile_parity: https://github.com/atomize-hq/substrate/actions/runs/21603821477 
 - ci_testing: https://github.com/atomize-hq/substrate/actions/runs/21603886175 
+
+## END — 2026-02-02T19:34:42Z — integration platform-fix — WFGAD3-integ-linux
+- HEAD: \
+- Codex last message: /home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny/logs/WFGAD3/integ-linux/last_message.md
+- Notes: Stabilize  by waiting for /home/spenser/__Active_code/substrate output before exit.
