@@ -7,9 +7,9 @@ use crate::service::{
     resolve_project_write_allowlist_prefixes, WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV,
     WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV, WORLD_FS_MODE_ENV, WORLD_FS_WRITE_ALLOWLIST_ENV,
 };
-use agent_api_types::PolicySnapshotV1;
+use agent_api_types::PolicySnapshotV2;
 #[cfg(target_os = "linux")]
-use agent_api_types::{PolicyResolutionModeV1, PolicySnapshotWorldFsIsolationV1};
+use agent_api_types::{PolicyResolutionModeV1, PolicySnapshotWorldFsIsolationV2};
 use axum::extract::ws::{Message, WebSocket};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use futures_util::stream::SplitSink;
@@ -101,7 +101,7 @@ pub enum ClientMessage {
         cwd: PathBuf,
         env: HashMap<String, String>,
         #[serde(default)]
-        policy_snapshot: Box<Option<PolicySnapshotV1>>,
+        policy_snapshot: Box<Option<PolicySnapshotV2>>,
         span_id: Option<String>,
         cols: u16,
         rows: u16,
@@ -151,7 +151,7 @@ enum PersistentClientMessage {
         protocol_version: Option<u32>,
         cwd: PathBuf,
         env: HashMap<String, String>,
-        policy_snapshot: PolicySnapshotV1,
+        policy_snapshot: Box<PolicySnapshotV2>,
         cols: u16,
         rows: u16,
     },
@@ -227,6 +227,11 @@ async fn send_persistent_ws_message(
         .map_err(|err| {
             error!(%err, "ws_pty: failed to send persistent server message");
         })
+}
+
+#[cfg(target_os = "linux")]
+async fn close_ws_connection(tx: &Arc<Mutex<WsSender>>) {
+    let _ = tx.lock().await.send(Message::Close(None)).await;
 }
 
 #[cfg(target_os = "linux")]
@@ -624,6 +629,7 @@ async fn handle_persistent_session(
                 },
             )
             .await;
+            close_ws_connection(&tx).await;
             return;
         }
         Err(e) => {
@@ -637,6 +643,7 @@ async fn handle_persistent_session(
                 },
             )
             .await;
+            close_ws_connection(&tx).await;
             return;
         }
     };
@@ -657,23 +664,22 @@ async fn handle_persistent_session(
             },
         )
         .await;
+        close_ws_connection(&tx).await;
         return;
     }
 
-    if policy_snapshot.schema_version != 1 {
+    if let Err(err) = policy_snapshot.validate() {
         let _ = send_persistent_ws_message(
             &tx,
             &PersistentServerMessage::Error {
                 code: "bad_request".to_string(),
-                message: format!(
-                    "Invalid policy_snapshot.schema_version: {}",
-                    policy_snapshot.schema_version
-                ),
+                message: err,
                 fatal: true,
                 seq: None,
             },
         )
         .await;
+        close_ws_connection(&tx).await;
         return;
     }
 
@@ -1099,7 +1105,7 @@ async fn handle_persistent_session(
 fn resolve_ready_cwd(
     env: &HashMap<String, String>,
     requested_cwd: &std::path::Path,
-    _policy_snapshot: &PolicySnapshotV1,
+    _policy_snapshot: &PolicySnapshotV2,
 ) -> Result<PathBuf, String> {
     let project_dir =
         resolve_project_dir(Some(env), Some(requested_cwd)).map_err(|e| e.to_string())?;
@@ -1138,7 +1144,7 @@ fn prepare_persistent_world_context(
     service: &WorldAgentService,
     session_env: &HashMap<String, String>,
     ready_cwd: &std::path::Path,
-    policy_snapshot: &PolicySnapshotV1,
+    policy_snapshot: &PolicySnapshotV2,
 ) -> Result<PersistentWorldContext, String> {
     use world_api::{ResourceLimits, WorldSpec};
 
@@ -1176,7 +1182,7 @@ fn prepare_persistent_world_context(
     let mut base_env: HashMap<String, String> = HashMap::new();
     let isolation_full = matches!(
         policy_snapshot.world_fs.isolation,
-        PolicySnapshotWorldFsIsolationV1::Full
+        PolicySnapshotWorldFsIsolationV2::Full
     );
     if isolation_full {
         base_env.insert(
@@ -1184,10 +1190,14 @@ fn prepare_persistent_world_context(
             "full".to_string(),
         );
 
-        let write_allowlist_prefixes = resolve_project_write_allowlist_prefixes(
-            &project_dir,
-            &policy_snapshot.world_fs.write_allowlist,
-        );
+        let write_allowlist = policy_snapshot
+            .world_fs
+            .write
+            .as_ref()
+            .map(|d| d.allow_list.as_slice())
+            .unwrap_or(&[]);
+        let write_allowlist_prefixes =
+            resolve_project_write_allowlist_prefixes(&project_dir, write_allowlist);
         if !write_allowlist_prefixes.is_empty() {
             base_env.insert(
                 WORLD_FS_WRITE_ALLOWLIST_ENV.to_string(),
@@ -1195,14 +1205,14 @@ fn prepare_persistent_world_context(
             );
         }
 
-        let landlock_read_paths = resolve_landlock_allowlist_paths(
-            &project_dir,
-            &policy_snapshot.world_fs.read_allowlist,
-        );
-        let landlock_write_paths = resolve_landlock_allowlist_paths(
-            &project_dir,
-            &policy_snapshot.world_fs.write_allowlist,
-        );
+        let read_allowlist = policy_snapshot
+            .world_fs
+            .read
+            .as_ref()
+            .map(|d| d.allow_list.as_slice())
+            .unwrap_or(&[]);
+        let landlock_read_paths = resolve_landlock_allowlist_paths(&project_dir, read_allowlist);
+        let landlock_write_paths = resolve_landlock_allowlist_paths(&project_dir, write_allowlist);
         let landlock_supported = world::landlock::detect_support().supported;
         let landlock_env_needed = landlock_supported
             && (!landlock_read_paths.is_empty() || !landlock_write_paths.is_empty());
@@ -1939,14 +1949,11 @@ async fn handle_legacy_start(
         };
         let (policy_resolution_mode, isolation_full, fs_mode, allowed_domains) =
             if let Some(snapshot) = policy_snapshot.as_ref() {
-                if snapshot.schema_version != 1 {
+                if let Err(err) = snapshot.validate() {
                     let _ = send_ws_message(
                         &tx,
                         &ServerMessage::Error {
-                            message: format!(
-                                "Invalid policy_snapshot.schema_version: {}",
-                                snapshot.schema_version
-                            ),
+                            message: format!("Invalid policy_snapshot: {err}"),
                         },
                     )
                     .await;
@@ -1955,10 +1962,10 @@ async fn handle_legacy_start(
 
                 let isolation_full = matches!(
                     snapshot.world_fs.isolation,
-                    PolicySnapshotWorldFsIsolationV1::Full
+                    PolicySnapshotWorldFsIsolationV2::Full
                 );
                 (
-                    PolicyResolutionModeV1::SnapshotV1,
+                    PolicyResolutionModeV1::SnapshotV2,
                     isolation_full,
                     snapshot.world_fs.mode,
                     snapshot.net_allowed.clone(),
@@ -1989,19 +1996,22 @@ async fn handle_legacy_start(
         if isolation_full {
             let (prefixes, landlock_read_paths, landlock_write_paths) =
                 if let Some(snapshot) = policy_snapshot.as_ref() {
+                    let read_allowlist = snapshot
+                        .world_fs
+                        .read
+                        .as_ref()
+                        .map(|d| d.allow_list.as_slice())
+                        .unwrap_or(&[]);
+                    let write_allowlist = snapshot
+                        .world_fs
+                        .write
+                        .as_ref()
+                        .map(|d| d.allow_list.as_slice())
+                        .unwrap_or(&[]);
                     (
-                        resolve_project_write_allowlist_prefixes(
-                            &project_dir,
-                            &snapshot.world_fs.write_allowlist,
-                        ),
-                        resolve_landlock_allowlist_paths(
-                            &project_dir,
-                            &snapshot.world_fs.read_allowlist,
-                        ),
-                        resolve_landlock_allowlist_paths(
-                            &project_dir,
-                            &snapshot.world_fs.write_allowlist,
-                        ),
+                        resolve_project_write_allowlist_prefixes(&project_dir, write_allowlist),
+                        resolve_landlock_allowlist_paths(&project_dir, read_allowlist),
+                        resolve_landlock_allowlist_paths(&project_dir, write_allowlist),
                     )
                 } else {
                     let world_fs = substrate_broker::world_fs_policy();

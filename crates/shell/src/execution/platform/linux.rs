@@ -764,7 +764,7 @@ pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
                     .get("policy_resolution_mode")
                     .and_then(serde_json::Value::as_str)
                 {
-                    Some("snapshot_v1") => pass("policy resolution mode: snapshot_v1"),
+                    Some("snapshot_v2") => pass("policy resolution mode: snapshot_v2"),
                     Some("legacy_local") => warn("policy resolution mode: legacy_local"),
                     Some(other) => warn(&format!("policy resolution mode: {other}")),
                     None => info("policy resolution mode: unknown (no agent executions yet)"),

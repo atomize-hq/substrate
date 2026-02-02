@@ -85,7 +85,7 @@ mod imp {
     pub(crate) struct ReplSessionStartParams {
         pub(crate) cwd: String,
         pub(crate) env: HashMap<String, String>,
-        pub(crate) policy_snapshot: agent_api_types::PolicySnapshotV1,
+        pub(crate) policy_snapshot: agent_api_types::PolicySnapshotV2,
         pub(crate) cols: u16,
         pub(crate) rows: u16,
     }
@@ -93,7 +93,7 @@ mod imp {
     impl ReplSessionStartParams {
         pub(crate) fn for_cwd_and_snapshot(
             cwd: String,
-            policy_snapshot: agent_api_types::PolicySnapshotV1,
+            policy_snapshot: agent_api_types::PolicySnapshotV2,
         ) -> Self {
             let env = build_world_env_map();
             let (cols, rows) = terminal_size_or_default();
@@ -343,7 +343,7 @@ mod imp {
         StartSession {
             cwd: String,
             env: HashMap<String, String>,
-            policy_snapshot: agent_api_types::PolicySnapshotV1,
+            policy_snapshot: Box<agent_api_types::PolicySnapshotV2>,
             cols: u16,
             rows: u16,
         },
@@ -641,7 +641,7 @@ mod imp {
         let start = ClientFrame::StartSession {
             cwd,
             env,
-            policy_snapshot,
+            policy_snapshot: Box::new(policy_snapshot),
             cols,
             rows,
         };
@@ -676,7 +676,7 @@ mod imp {
             let start = ClientFrame::StartSession {
                 cwd,
                 env,
-                policy_snapshot,
+                policy_snapshot: Box::new(policy_snapshot),
                 cols,
                 rows,
             };
@@ -730,7 +730,7 @@ mod imp {
         let start = ClientFrame::StartSession {
             cwd,
             env,
-            policy_snapshot,
+            policy_snapshot: Box::new(policy_snapshot),
             cols,
             rows,
         };
@@ -818,7 +818,7 @@ mod imp {
     pub(crate) struct ReplSessionStartParams {
         pub(crate) cwd: String,
         pub(crate) env: HashMap<String, String>,
-        pub(crate) policy_snapshot: agent_api_types::PolicySnapshotV1,
+        pub(crate) policy_snapshot: agent_api_types::PolicySnapshotV2,
         pub(crate) cols: u16,
         pub(crate) rows: u16,
     }
@@ -826,7 +826,7 @@ mod imp {
     impl ReplSessionStartParams {
         pub(crate) fn for_cwd_and_snapshot(
             cwd: String,
-            policy_snapshot: agent_api_types::PolicySnapshotV1,
+            policy_snapshot: agent_api_types::PolicySnapshotV2,
         ) -> Self {
             Self {
                 cwd,
