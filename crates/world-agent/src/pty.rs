@@ -229,6 +229,7 @@ async fn send_persistent_ws_message(
         })
 }
 
+#[cfg(target_os = "linux")]
 async fn close_ws_connection(tx: &Arc<Mutex<WsSender>>) {
     let _ = tx.lock().await.send(Message::Close(None)).await;
 }
