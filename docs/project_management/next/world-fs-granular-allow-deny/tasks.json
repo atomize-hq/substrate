@@ -22,17 +22,17 @@
     ]
   },
   "tasks": [
-    {
-      "id": "F0-exec-preflight",
-      "name": "Execution preflight gate (feature start)",
-      "type": "ops",
-      "phase": "F0",
-      "status": "pending",
-      "description": "Execution-time preflight gate: validate the Planning Pack and smoke/playbook scaffolding before starting WFGAD0.",
-      "references": [
-        "docs/project_management/next/world-fs-granular-allow-deny/plan.md",
-        "docs/project_management/next/world-fs-granular-allow-deny/tasks.json",
-        "docs/project_management/next/world-fs-granular-allow-deny/quality_gate_report.md",
+  {
+    "id": "F0-exec-preflight",
+    "name": "Execution preflight gate (feature start)",
+    "type": "ops",
+    "phase": "F0",
+    "status": "in_progress",
+    "description": "Execution-time preflight gate: validate the Planning Pack and smoke/playbook scaffolding before starting WFGAD0.",
+    "references": [
+      "docs/project_management/next/world-fs-granular-allow-deny/plan.md",
+      "docs/project_management/next/world-fs-granular-allow-deny/tasks.json",
+      "docs/project_management/next/world-fs-granular-allow-deny/quality_gate_report.md",
         "docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md",
         "docs/project_management/next/world-fs-granular-allow-deny/execution_preflight_report.md",
         "docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md"

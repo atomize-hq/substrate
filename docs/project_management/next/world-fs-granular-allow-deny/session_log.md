@@ -59,3 +59,11 @@
   - `make planning-lint FEATURE_DIR="docs/project_management/next/world-fs-granular-allow-deny"` → `PASS`
 - Blockers:
   - `NONE`
+
+## START — 2026-02-02T01:04:03Z — F0-exec-preflight — execution preflight gate
+- Branch: `feat/world-fs-granular-allow-deny`
+- Goal: Validate the Planning Pack is runnable before starting `WFGAD0`.
+- Commands:
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world-fs-granular-allow-deny"`
+  - `bash -n docs/project_management/next/world-fs-granular-allow-deny/smoke/linux-smoke.sh`
+  - `bash -n docs/project_management/next/world-fs-granular-allow-deny/smoke/macos-smoke.sh`
