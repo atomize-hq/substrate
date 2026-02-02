@@ -72,7 +72,7 @@ parse_kv() {
     local key="$1"
     local src="$2"
     # First exact match, strip "KEY=".
-    rg -n "^${key}=" "${src}" | head -n 1 | sed -E "s/^${key}=//"
+    rg -m 1 "^${key}=" "${src}" | sed -E "s/^${key}=//"
 }
 
 FEATURE_DIR=""
@@ -256,16 +256,30 @@ data = json.loads(tasks_path.read_text(encoding="utf-8"))
 tasks = data.get("tasks") or []
 by_id = {t.get("id"): t for t in tasks if isinstance(t, dict) and isinstance(t.get("id"), str)}
 
+code = by_id.get(code_id)
+test = by_id.get(test_id)
+if not code or not test:
+    missing = code_id if not code else test_id
+    print(f"ERROR: missing task in tasks.json: {missing}", file=sys.stderr)
+    raise SystemExit(2)
+
+code_status = code.get("status")
+test_status = test.get("status")
+if code_status != test_status:
+    print(
+        f"ERROR: code/test statuses must match for {code_id}/{test_id} (code={code_status!r}, test={test_status!r})",
+        file=sys.stderr,
+    )
+    raise SystemExit(2)
+if code_status not in ("pending", "in_progress", "completed"):
+    print(
+        f"ERROR: {code_id}/{test_id} invalid status for wrapper (status={code_status!r})",
+        file=sys.stderr,
+    )
+    raise SystemExit(2)
+
 for tid in (code_id, test_id):
     t = by_id.get(tid)
-    if not t:
-        print(f"ERROR: missing task in tasks.json: {tid}", file=sys.stderr)
-        raise SystemExit(2)
-    status = t.get("status")
-    if status != "pending":
-        print(f"ERROR: {tid} must be status='pending' to start (status={status!r})", file=sys.stderr)
-        raise SystemExit(2)
-
     deps = t.get("depends_on") or []
     if not isinstance(deps, list):
         print(f"ERROR: {tid}.depends_on must be an array", file=sys.stderr)
@@ -283,8 +297,40 @@ PY
 
 now_utc="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-log_to_file "-- planning-pack START (code+test)"
-python3 - "${TASKS_JSON}" "${SESSION_LOG}" "${now_utc}" "${CODE_TASK_ID}" "${TEST_TASK_ID}" <<'PY'
+CODE_TEST_STATUS="$(jq -r --arg id "${CODE_TASK_ID}" '.tasks[] | select(.id==$id) | .status' "${TASKS_JSON}")"
+CODE_TASK_BRANCH="$(jq -r --arg id "${CODE_TASK_ID}" '.tasks[] | select(.id==$id) | .git_branch' "${TASKS_JSON}")"
+TEST_TASK_BRANCH="$(jq -r --arg id "${TEST_TASK_ID}" '.tasks[] | select(.id==$id) | .git_branch' "${TASKS_JSON}")"
+
+CODEX_CODE_LAST_MESSAGE_PATH="${FEATURE_DIR_ABS}/logs/${SLICE_ID}/code/last_message.md"
+CODEX_TEST_LAST_MESSAGE_PATH="${FEATURE_DIR_ABS}/logs/${SLICE_ID}/test/last_message.md"
+
+CODE_WORKTREE=""
+TEST_WORKTREE=""
+pair_stdout=""
+code_finish_out=""
+test_finish_out=""
+
+CODE_HEAD_SHA=""
+TEST_HEAD_SHA=""
+
+finish_one() {
+    local task_id="$1"
+    local worktree="$2"
+    local out="$3"
+
+    log_to_file "-- finish ${task_id} (${worktree})"
+    if [[ "${DRY_RUN}" -eq 1 ]]; then
+        printf 'TASK_BRANCH=dry-run\nWORKTREE=%s\nHEAD=dry-run\nCOMMITS=dry-run\nCHECKS=dry-run\nSMOKE_RUN=\nMERGED_TO_ORCH=\n' "${worktree}" >"${out}"
+        return 0
+    fi
+    (cd "${worktree}" && make triad-task-finish TASK_ID="${task_id}") >"${out}" 2>>"${LOG_PATH}"
+    cat "${out}" >>"${LOG_PATH}"
+    printf '\n' >>"${LOG_PATH}"
+}
+
+if [[ "${CODE_TEST_STATUS}" == "pending" ]]; then
+    log_to_file "-- planning-pack START (code+test)"
+    python3 - "${TASKS_JSON}" "${SESSION_LOG}" "${now_utc}" "${CODE_TASK_ID}" "${TEST_TASK_ID}" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -321,70 +367,67 @@ for kind, tid in (("code", code_id), ("test", test_id)):
 session_log.write_text(session_log.read_text(encoding="utf-8") + "\n" + "\n".join(lines), encoding="utf-8")
 PY
 
-if [[ "${DRY_RUN}" -eq 1 ]]; then
-    log_to_file "DRY_RUN=1: skipping git commit for planning-pack START"
-else
-    git add "${TASKS_JSON}" "${SESSION_LOG}" 1>>"${LOG_PATH}" 2>>"${LOG_PATH}"
-    git commit -m "docs: start ${SLICE_ID} code+test" 1>>"${LOG_PATH}" 2>>"${LOG_PATH}"
-fi
-
-pair_stdout="$(mktemp)"
-pair_stderr="$(mktemp)"
-log_to_file "-- triad-task-start-pair (codex enabled)"
-pair_args=(scripts/triad/task_start_pair.sh --feature-dir "${FEATURE_DIR_ABS}" --slice-id "${SLICE_ID}" --launch-codex)
-if [[ -n "${CODEX_PROFILE}" ]]; then pair_args+=(--codex-profile "${CODEX_PROFILE}"); fi
-if [[ -n "${CODEX_MODEL}" ]]; then pair_args+=(--codex-model "${CODEX_MODEL}"); fi
-if [[ "${CODEX_JSONL}" -eq 1 ]]; then pair_args+=(--codex-jsonl); fi
-if [[ "${DRY_RUN}" -eq 1 ]]; then pair_args+=(--dry-run); fi
-
-set +e
-"${pair_args[@]}" >"${pair_stdout}" 2>"${pair_stderr}"
-pair_rc="$?"
-set -e
-cat "${pair_stdout}" >>"${LOG_PATH}"
-printf '\n' >>"${LOG_PATH}"
-cat "${pair_stderr}" >>"${LOG_PATH}"
-printf '\n' >>"${LOG_PATH}"
-rm -f "${pair_stderr}"
-if [[ "${pair_rc}" -ne 0 ]]; then
-    die "triad-task-start-pair failed; see ${LOG_PATH}"
-fi
-
-CODE_WORKTREE="$(parse_kv CODE_WORKTREE "${pair_stdout}")"
-TEST_WORKTREE="$(parse_kv TEST_WORKTREE "${pair_stdout}")"
-CODEX_CODE_LAST_MESSAGE_PATH="$(parse_kv CODEX_CODE_LAST_MESSAGE_PATH "${pair_stdout}")"
-CODEX_TEST_LAST_MESSAGE_PATH="$(parse_kv CODEX_TEST_LAST_MESSAGE_PATH "${pair_stdout}")"
-
-if [[ -z "${CODE_WORKTREE}" || -z "${TEST_WORKTREE}" ]]; then
-    die "Failed to parse CODE_WORKTREE/TEST_WORKTREE; see ${LOG_PATH}"
-fi
-
-finish_one() {
-    local task_id="$1"
-    local worktree="$2"
-    local out="$3"
-
-    log_to_file "-- finish ${task_id} (${worktree})"
     if [[ "${DRY_RUN}" -eq 1 ]]; then
-        printf 'TASK_BRANCH=dry-run\nWORKTREE=%s\nHEAD=dry-run\nCOMMITS=dry-run\nCHECKS=dry-run\nSMOKE_RUN=\nMERGED_TO_ORCH=\n' "${worktree}" >"${out}"
-        return 0
+        log_to_file "DRY_RUN=1: skipping git commit for planning-pack START"
+    else
+        git add "${TASKS_JSON}" "${SESSION_LOG}" 1>>"${LOG_PATH}" 2>>"${LOG_PATH}"
+        git commit -m "docs: start ${SLICE_ID} code+test" 1>>"${LOG_PATH}" 2>>"${LOG_PATH}"
     fi
-    (cd "${worktree}" && make triad-task-finish TASK_ID="${task_id}") >"${out}" 2>>"${LOG_PATH}"
-    cat "${out}" >>"${LOG_PATH}"
+
+    pair_stdout="$(mktemp)"
+    pair_stderr="$(mktemp)"
+    log_to_file "-- triad-task-start-pair (codex enabled)"
+    pair_args=(scripts/triad/task_start_pair.sh --feature-dir "${FEATURE_DIR_ABS}" --slice-id "${SLICE_ID}" --launch-codex)
+    if [[ -n "${CODEX_PROFILE}" ]]; then pair_args+=(--codex-profile "${CODEX_PROFILE}"); fi
+    if [[ -n "${CODEX_MODEL}" ]]; then pair_args+=(--codex-model "${CODEX_MODEL}"); fi
+    if [[ "${CODEX_JSONL}" -eq 1 ]]; then pair_args+=(--codex-jsonl); fi
+    if [[ "${DRY_RUN}" -eq 1 ]]; then pair_args+=(--dry-run); fi
+
+    set +e
+    "${pair_args[@]}" >"${pair_stdout}" 2>"${pair_stderr}"
+    pair_rc="$?"
+    set -e
+    cat "${pair_stdout}" >>"${LOG_PATH}"
     printf '\n' >>"${LOG_PATH}"
-}
+    cat "${pair_stderr}" >>"${LOG_PATH}"
+    printf '\n' >>"${LOG_PATH}"
+    rm -f "${pair_stderr}"
+    if [[ "${pair_rc}" -ne 0 ]]; then
+        die "triad-task-start-pair failed; see ${LOG_PATH}"
+    fi
 
-code_finish_out="$(mktemp)"
-test_finish_out="$(mktemp)"
-finish_one "${CODE_TASK_ID}" "${CODE_WORKTREE}" "${code_finish_out}"
-finish_one "${TEST_TASK_ID}" "${TEST_WORKTREE}" "${test_finish_out}"
+    CODE_WORKTREE="$(parse_kv CODE_WORKTREE "${pair_stdout}")"
+    TEST_WORKTREE="$(parse_kv TEST_WORKTREE "${pair_stdout}")"
+    CODEX_CODE_LAST_MESSAGE_PATH="$(parse_kv CODEX_CODE_LAST_MESSAGE_PATH "${pair_stdout}")"
+    CODEX_TEST_LAST_MESSAGE_PATH="$(parse_kv CODEX_TEST_LAST_MESSAGE_PATH "${pair_stdout}")"
 
-CODE_HEAD_SHA="$(parse_kv HEAD "${code_finish_out}")"
-TEST_HEAD_SHA="$(parse_kv HEAD "${test_finish_out}")"
+    if [[ -z "${CODE_WORKTREE}" || -z "${TEST_WORKTREE}" ]]; then
+        die "Failed to parse CODE_WORKTREE/TEST_WORKTREE; see ${LOG_PATH}"
+    fi
+elif [[ "${CODE_TEST_STATUS}" == "in_progress" ]]; then
+    CODE_WORKTREE="$(python_abs_path "$(jq -r --arg id "${CODE_TASK_ID}" '.tasks[] | select(.id==$id) | .worktree' "${TASKS_JSON}")")"
+    TEST_WORKTREE="$(python_abs_path "$(jq -r --arg id "${TEST_TASK_ID}" '.tasks[] | select(.id==$id) | .worktree' "${TASKS_JSON}")")"
+else
+    CODE_HEAD_SHA="$(git rev-parse "${CODE_TASK_BRANCH}")"
+    TEST_HEAD_SHA="$(git rev-parse "${TEST_TASK_BRANCH}")"
+fi
 
-now_utc_end="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-log_to_file "-- planning-pack END (code+test)"
-python3 - "${TASKS_JSON}" "${SESSION_LOG}" "${now_utc_end}" "${CODE_TASK_ID}" "${CODE_HEAD_SHA}" "${CODEX_CODE_LAST_MESSAGE_PATH}" "${TEST_TASK_ID}" "${TEST_HEAD_SHA}" "${CODEX_TEST_LAST_MESSAGE_PATH}" <<'PY'
+if [[ "${CODE_TEST_STATUS}" != "completed" ]]; then
+    if [[ -z "${CODE_WORKTREE}" || -z "${TEST_WORKTREE}" ]]; then
+        die "Missing CODE_WORKTREE/TEST_WORKTREE for ${CODE_TASK_ID}/${TEST_TASK_ID}; see ${LOG_PATH}"
+    fi
+
+    code_finish_out="$(mktemp)"
+    test_finish_out="$(mktemp)"
+    finish_one "${CODE_TASK_ID}" "${CODE_WORKTREE}" "${code_finish_out}"
+    finish_one "${TEST_TASK_ID}" "${TEST_WORKTREE}" "${test_finish_out}"
+
+    CODE_HEAD_SHA="$(parse_kv HEAD "${code_finish_out}")"
+    TEST_HEAD_SHA="$(parse_kv HEAD "${test_finish_out}")"
+
+    now_utc_end="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    log_to_file "-- planning-pack END (code+test)"
+    python3 - "${TASKS_JSON}" "${SESSION_LOG}" "${now_utc_end}" "${CODE_TASK_ID}" "${CODE_HEAD_SHA}" "${CODEX_CODE_LAST_MESSAGE_PATH}" "${TEST_TASK_ID}" "${TEST_HEAD_SHA}" "${CODEX_TEST_LAST_MESSAGE_PATH}" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -418,16 +461,27 @@ lines.extend([f"## END — {now_utc} — test — {test_id}", f"- HEAD: `{test_h
 session_log.write_text(session_log.read_text(encoding="utf-8") + "\n" + "\n".join(lines), encoding="utf-8")
 PY
 
-if [[ "${DRY_RUN}" -eq 1 ]]; then
-    log_to_file "DRY_RUN=1: skipping git commit for planning-pack END (code+test)"
-else
-    git add "${TASKS_JSON}" "${SESSION_LOG}" 1>>"${LOG_PATH}" 2>>"${LOG_PATH}"
-    git commit -m "docs: finish ${SLICE_ID} code+test" 1>>"${LOG_PATH}" 2>>"${LOG_PATH}"
+    if [[ "${DRY_RUN}" -eq 1 ]]; then
+        log_to_file "DRY_RUN=1: skipping git commit for planning-pack END (code+test)"
+    else
+        git add "${TASKS_JSON}" "${SESSION_LOG}" 1>>"${LOG_PATH}" 2>>"${LOG_PATH}"
+        git commit -m "docs: finish ${SLICE_ID} code+test" 1>>"${LOG_PATH}" 2>>"${LOG_PATH}"
+    fi
 fi
 
-now_utc_integ_start="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-log_to_file "-- planning-pack START (integration)"
-python3 - "${TASKS_JSON}" "${SESSION_LOG}" "${now_utc_integ_start}" "${INTEG_TASK_ID}" <<'PY'
+INTEG_STATUS="$(jq -r --arg id "${INTEG_TASK_ID}" '.tasks[] | select(.id==$id) | .status' "${TASKS_JSON}")"
+INTEG_TASK_BRANCH="$(jq -r --arg id "${INTEG_TASK_ID}" '.tasks[] | select(.id==$id) | .git_branch' "${TASKS_JSON}")"
+INTEG_KIND="${INTEG_TASK_ID#${SLICE_ID}-}"
+CODEX_INTEG_LAST_MESSAGE_PATH="${FEATURE_DIR_ABS}/logs/${SLICE_ID}/${INTEG_KIND}/last_message.md"
+
+INTEG_WORKTREE=""
+integ_stdout=""
+integ_finish_out=""
+
+if [[ "${INTEG_STATUS}" == "pending" ]]; then
+    now_utc_integ_start="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    log_to_file "-- planning-pack START (integration)"
+    python3 - "${TASKS_JSON}" "${SESSION_LOG}" "${now_utc_integ_start}" "${INTEG_TASK_ID}" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -460,48 +514,58 @@ lines = [
 session_log.write_text(session_log.read_text(encoding="utf-8") + "\n" + "\n".join(lines), encoding="utf-8")
 PY
 
-if [[ "${DRY_RUN}" -eq 1 ]]; then
-    log_to_file "DRY_RUN=1: skipping git commit for planning-pack START (integration)"
+    if [[ "${DRY_RUN}" -eq 1 ]]; then
+        log_to_file "DRY_RUN=1: skipping git commit for planning-pack START (integration)"
+    else
+        git add "${TASKS_JSON}" "${SESSION_LOG}" 1>>"${LOG_PATH}" 2>>"${LOG_PATH}"
+        git commit -m "docs: start ${INTEG_TASK_ID}" 1>>"${LOG_PATH}" 2>>"${LOG_PATH}"
+    fi
+
+    integ_stdout="$(mktemp)"
+    integ_stderr="$(mktemp)"
+    log_to_file "-- triad-task-start (integration; codex enabled): ${INTEG_TASK_ID}"
+    integ_args=(scripts/triad/task_start.sh --feature-dir "${FEATURE_DIR_ABS}" --task-id "${INTEG_TASK_ID}" --launch-codex)
+    if [[ -n "${CODEX_PROFILE}" ]]; then integ_args+=(--codex-profile "${CODEX_PROFILE}"); fi
+    if [[ -n "${CODEX_MODEL}" ]]; then integ_args+=(--codex-model "${CODEX_MODEL}"); fi
+    if [[ "${CODEX_JSONL}" -eq 1 ]]; then integ_args+=(--codex-jsonl); fi
+    if [[ "${DRY_RUN}" -eq 1 ]]; then integ_args+=(--dry-run); fi
+
+    set +e
+    "${integ_args[@]}" >"${integ_stdout}" 2>"${integ_stderr}"
+    integ_rc="$?"
+    set -e
+    cat "${integ_stdout}" >>"${LOG_PATH}"
+    printf '\n' >>"${LOG_PATH}"
+    cat "${integ_stderr}" >>"${LOG_PATH}"
+    printf '\n' >>"${LOG_PATH}"
+    rm -f "${integ_stderr}"
+    if [[ "${integ_rc}" -ne 0 ]]; then
+        die "triad-task-start failed for ${INTEG_TASK_ID}; see ${LOG_PATH}"
+    fi
+
+    INTEG_WORKTREE="$(parse_kv WORKTREE "${integ_stdout}")"
+    CODEX_INTEG_LAST_MESSAGE_PATH="$(parse_kv CODEX_LAST_MESSAGE_PATH "${integ_stdout}")"
+    if [[ -z "${INTEG_WORKTREE}" ]]; then
+        die "Failed to parse integration WORKTREE; see ${LOG_PATH}"
+    fi
+elif [[ "${INTEG_STATUS}" == "in_progress" ]]; then
+    INTEG_WORKTREE="$(python_abs_path "$(jq -r --arg id "${INTEG_TASK_ID}" '.tasks[] | select(.id==$id) | .worktree' "${TASKS_JSON}")")"
 else
-    git add "${TASKS_JSON}" "${SESSION_LOG}" 1>>"${LOG_PATH}" 2>>"${LOG_PATH}"
-    git commit -m "docs: start ${INTEG_TASK_ID}" 1>>"${LOG_PATH}" 2>>"${LOG_PATH}"
+    INTEG_HEAD_SHA="$(git rev-parse "${INTEG_TASK_BRANCH}")"
 fi
 
-integ_stdout="$(mktemp)"
-integ_stderr="$(mktemp)"
-log_to_file "-- triad-task-start (integration; codex enabled): ${INTEG_TASK_ID}"
-integ_args=(scripts/triad/task_start.sh --feature-dir "${FEATURE_DIR_ABS}" --task-id "${INTEG_TASK_ID}" --launch-codex)
-if [[ -n "${CODEX_PROFILE}" ]]; then integ_args+=(--codex-profile "${CODEX_PROFILE}"); fi
-if [[ -n "${CODEX_MODEL}" ]]; then integ_args+=(--codex-model "${CODEX_MODEL}"); fi
-if [[ "${CODEX_JSONL}" -eq 1 ]]; then integ_args+=(--codex-jsonl); fi
-if [[ "${DRY_RUN}" -eq 1 ]]; then integ_args+=(--dry-run); fi
+if [[ "${INTEG_STATUS}" != "completed" ]]; then
+    if [[ -z "${INTEG_WORKTREE}" ]]; then
+        die "Missing INTEG_WORKTREE for ${INTEG_TASK_ID}; see ${LOG_PATH}"
+    fi
 
-set +e
-"${integ_args[@]}" >"${integ_stdout}" 2>"${integ_stderr}"
-integ_rc="$?"
-set -e
-cat "${integ_stdout}" >>"${LOG_PATH}"
-printf '\n' >>"${LOG_PATH}"
-cat "${integ_stderr}" >>"${LOG_PATH}"
-printf '\n' >>"${LOG_PATH}"
-rm -f "${integ_stderr}"
-if [[ "${integ_rc}" -ne 0 ]]; then
-    die "triad-task-start failed for ${INTEG_TASK_ID}; see ${LOG_PATH}"
-fi
+    integ_finish_out="$(mktemp)"
+    finish_one "${INTEG_TASK_ID}" "${INTEG_WORKTREE}" "${integ_finish_out}"
+    INTEG_HEAD_SHA="$(parse_kv HEAD "${integ_finish_out}")"
 
-INTEG_WORKTREE="$(parse_kv WORKTREE "${integ_stdout}")"
-CODEX_INTEG_LAST_MESSAGE_PATH="$(parse_kv CODEX_LAST_MESSAGE_PATH "${integ_stdout}")"
-if [[ -z "${INTEG_WORKTREE}" ]]; then
-    die "Failed to parse integration WORKTREE; see ${LOG_PATH}"
-fi
-
-integ_finish_out="$(mktemp)"
-finish_one "${INTEG_TASK_ID}" "${INTEG_WORKTREE}" "${integ_finish_out}"
-INTEG_HEAD_SHA="$(parse_kv HEAD "${integ_finish_out}")"
-
-now_utc_integ_end="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-log_to_file "-- planning-pack END (integration)"
-python3 - "${TASKS_JSON}" "${SESSION_LOG}" "${now_utc_integ_end}" "${INTEG_TASK_ID}" "${INTEG_HEAD_SHA}" "${CODEX_INTEG_LAST_MESSAGE_PATH}" <<'PY'
+    now_utc_integ_end="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    log_to_file "-- planning-pack END (integration)"
+    python3 - "${TASKS_JSON}" "${SESSION_LOG}" "${now_utc_integ_end}" "${INTEG_TASK_ID}" "${INTEG_HEAD_SHA}" "${CODEX_INTEG_LAST_MESSAGE_PATH}" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -532,11 +596,12 @@ lines = [
 session_log.write_text(session_log.read_text(encoding="utf-8") + "\n" + "\n".join(lines), encoding="utf-8")
 PY
 
-if [[ "${DRY_RUN}" -eq 1 ]]; then
-    log_to_file "DRY_RUN=1: skipping git commit for planning-pack END (integration)"
-else
-    git add "${TASKS_JSON}" "${SESSION_LOG}" 1>>"${LOG_PATH}" 2>>"${LOG_PATH}"
-    git commit -m "docs: finish ${INTEG_TASK_ID}" 1>>"${LOG_PATH}" 2>>"${LOG_PATH}"
+    if [[ "${DRY_RUN}" -eq 1 ]]; then
+        log_to_file "DRY_RUN=1: skipping git commit for planning-pack END (integration)"
+    else
+        git add "${TASKS_JSON}" "${SESSION_LOG}" 1>>"${LOG_PATH}" 2>>"${LOG_PATH}"
+        git commit -m "docs: finish ${INTEG_TASK_ID}" 1>>"${LOG_PATH}" 2>>"${LOG_PATH}"
+    fi
 fi
 
 log_to_file "-- summary"
@@ -586,7 +651,15 @@ with open(summary_path, "w", encoding="utf-8") as f:
     f.write("\n")
 PY
 
-rm -f "${pair_stdout}" "${code_finish_out}" "${test_finish_out}" "${integ_stdout}" "${integ_finish_out}"
+cleanup_files=()
+for f in "${pair_stdout:-}" "${code_finish_out:-}" "${test_finish_out:-}" "${integ_stdout:-}" "${integ_finish_out:-}"; do
+    if [[ -n "${f}" ]]; then
+        cleanup_files+=("${f}")
+    fi
+done
+if [[ "${#cleanup_files[@]}" -gt 0 ]]; then
+    rm -f "${cleanup_files[@]}"
+fi
 
 printf 'SLICE_ID=%s\n' "${SLICE_ID}"
 printf 'CODE_TASK_ID=%s\n' "${CODE_TASK_ID}"
