@@ -42,12 +42,11 @@ env:
   CARGO_TERM_COLOR: always
   RUST_TOOLCHAIN: 1.89.0
   CI_MODE: ${{ inputs.mode || 'full' }}
-  CI_RUNNER_KIND: ${{ inputs.runner_kind || 'github-hosted' }}
 
 jobs:
   lint-and-test:
     name: Lint & Test (${{ matrix.name }})
-    runs-on: ${{ env.CI_RUNNER_KIND == 'self-hosted' && fromJson(matrix.self_hosted) || matrix.hosted }}
+    runs-on: ${{ inputs.runner_kind == 'self-hosted' && fromJson(matrix.self_hosted) || matrix.hosted }}
     strategy:
       fail-fast: ${{ github.event_name != 'pull_request' }}
       matrix:
@@ -77,19 +76,19 @@ jobs:
           submodules: recursive
 
       - name: Install system dependencies (Linux)
-        if: runner.os == 'Linux' && env.CI_MODE != 'compile-parity' && env.CI_RUNNER_KIND != 'self-hosted'
+        if: runner.os == 'Linux' && env.CI_MODE != 'compile-parity' && inputs.runner_kind != 'self-hosted'
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config libseccomp-dev shellcheck shfmt
 
       - name: Install system dependencies (Linux, compile parity)
-        if: runner.os == 'Linux' && env.CI_MODE == 'compile-parity' && env.CI_RUNNER_KIND != 'self-hosted'
+        if: runner.os == 'Linux' && env.CI_MODE == 'compile-parity' && inputs.runner_kind != 'self-hosted'
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config libseccomp-dev
 
       - name: Preflight system dependencies (Linux self-hosted)
-        if: runner.os == 'Linux' && env.CI_RUNNER_KIND == 'self-hosted'
+        if: runner.os == 'Linux' && inputs.runner_kind == 'self-hosted'
         shell: bash
         run: |
           set -euo pipefail
