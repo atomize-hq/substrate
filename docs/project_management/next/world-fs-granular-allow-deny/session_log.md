@@ -113,7 +113,3 @@
 ## END — 2026-02-02T02:16:50Z — test — WFGAD1-test
 - HEAD: `e4b7eb92396c16244f24e5a6e3bdec6c15ee973b`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny/logs/WFGAD1/test/last_message.md`
-
-## START — 2026-02-02T02:16:50Z — integration — WFGAD1-integ-core
-- Dispatch:
-  - `make triad-task-start FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny" TASK_ID="WFGAD1-integ-core" LAUNCH_CODEX=1`
