@@ -232,6 +232,6 @@
 - ci_testing: https://github.com/atomize-hq/substrate/actions/runs/21603886175 
 
 ## END — 2026-02-02T19:34:42Z — integration platform-fix — WFGAD3-integ-linux
-- HEAD: \
+- HEAD: `5949a63f83cb5872e7e9f4603277b33b6a258cf6`
 - Codex last message: /home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny/logs/WFGAD3/integ-linux/last_message.md
-- Notes: Stabilize  by waiting for /home/spenser/__Active_code/substrate output before exit.
+- Notes: Stabilize `c3_drift_restart_refreshes_anchor_env_for_new_cwd` by waiting for `pwd` output before exit.
