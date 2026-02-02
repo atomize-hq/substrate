@@ -375,11 +375,21 @@ wait_for_codex_if_running() {
         return 0
     fi
 
+    # Guard against PID reuse: only trust a live PID if it still looks like a Codex invocation.
+    # If it doesn't, treat codex.pid as stale and remove it so we don't hang waiting on an unrelated process.
+    if ! printf '%s\n' "${cmd}" | rg -qi -- '(^|[[:space:]/])codex([[:space:]]|$)'; then
+        log_to_file "WARN: stale codex.pid for ${task_id} (pid=${pid}) does not look like Codex; removing pid file"
+        log_to_file "WARN: cmd=${cmd}"
+        rm -f "${pid_path}" >/dev/null 2>&1 || true
+        return 0
+    fi
+
+    # If we can determine the expected worktree, prefer it as an additional safety check.
+    # But if the cmdline doesn't match, don't silently proceed: waiting is safer than starting downstream tasks early.
     if [[ -n "${worktree_abs}" ]]; then
         if ! printf '%s\n' "${cmd}" | rg -F -q -- "--cd ${worktree_abs}"; then
-            log_to_file "WARN: stale codex.pid for ${task_id} (pid=${pid}) does not match expected --cd ${worktree_abs}; removing pid file"
-            rm -f "${pid_path}" >/dev/null 2>&1 || true
-            return 0
+            log_to_file "WARN: codex.pid for ${task_id} (pid=${pid}) does not match expected --cd ${worktree_abs}; waiting anyway"
+            log_to_file "WARN: cmd=${cmd}"
         fi
     fi
 
@@ -391,6 +401,7 @@ wait_for_codex_if_running() {
 }
 
 if [[ "${CODE_TEST_STATUS}" == "pending" ]]; then
+    log_to_file "-- code+test status=pending: starting both"
     log_to_file "-- planning-pack START (code+test)"
     python3 - "${TASKS_JSON}" "${SESSION_LOG}" "${now_utc}" "${CODE_TASK_ID}" "${TEST_TASK_ID}" <<'PY'
 import json
@@ -467,9 +478,11 @@ PY
         die "Failed to parse CODE_WORKTREE/TEST_WORKTREE; see ${LOG_PATH}"
     fi
 elif [[ "${CODE_TEST_STATUS}" == "in_progress" ]]; then
+    log_to_file "-- code+test status=in_progress: resuming"
     CODE_WORKTREE="$(python_abs_path "$(jq -r --arg id "${CODE_TASK_ID}" '.tasks[] | select(.id==$id) | .worktree' "${TASKS_JSON}")")"
     TEST_WORKTREE="$(python_abs_path "$(jq -r --arg id "${TEST_TASK_ID}" '.tasks[] | select(.id==$id) | .worktree' "${TASKS_JSON}")")"
 else
+    log_to_file "-- code+test status=completed: skipping start/finish"
     CODE_HEAD_SHA="$(git rev-parse "${CODE_TASK_BRANCH}")"
     TEST_HEAD_SHA="$(git rev-parse "${TEST_TASK_BRANCH}")"
 fi
@@ -544,6 +557,7 @@ integ_stdout=""
 integ_finish_out=""
 
 if [[ "${INTEG_STATUS}" == "pending" ]]; then
+    log_to_file "-- integration status=pending: starting"
     now_utc_integ_start="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     log_to_file "-- planning-pack START (integration)"
     python3 - "${TASKS_JSON}" "${SESSION_LOG}" "${now_utc_integ_start}" "${INTEG_TASK_ID}" <<'PY'
@@ -614,8 +628,10 @@ PY
         die "Failed to parse integration WORKTREE; see ${LOG_PATH}"
     fi
 elif [[ "${INTEG_STATUS}" == "in_progress" ]]; then
+    log_to_file "-- integration status=in_progress: resuming"
     INTEG_WORKTREE="$(python_abs_path "$(jq -r --arg id "${INTEG_TASK_ID}" '.tasks[] | select(.id==$id) | .worktree' "${TASKS_JSON}")")"
 else
+    log_to_file "-- integration status=completed: skipping start/finish"
     INTEG_HEAD_SHA="$(git rev-parse "${INTEG_TASK_BRANCH}")"
 fi
 
