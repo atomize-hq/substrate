@@ -5,7 +5,7 @@ Standard:
 
 ## Metadata
 - Feature directory: `docs/project_management/next/world-fs-granular-allow-deny/`
-- Date (UTC): 2026-02-02T00:26:43Z
+- Date (UTC): 2026-02-02T01:01:48Z
 - Recommendation: `ACCEPT`
 
 ## Evidence (commands run)
@@ -32,4 +32,5 @@ bash -n "$FEATURE_DIR/smoke/macos-smoke.sh"
 
 ## Notes
 - This preflight validates that execution may begin (WFGAD0 code/test).
+- macOS behavior smoke is intentionally unsupported for ADR-0018; `smoke/macos-smoke.sh` exits `4` at runtime but is syntactically valid (`bash -n` passes).
 - Runtime provisioning (e.g., world enablement) is validated by the feature smoke script at execution time.
