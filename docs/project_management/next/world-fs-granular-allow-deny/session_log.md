@@ -225,3 +225,8 @@
 - HEAD: `1daea9e11214dddaecaf16f1ec4a761ad8b41aec`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny/logs/WFGAD3/integ-windows/last_message.md`
 - Notes: Fixes Windows CI clippy dead-code by injecting enforcement plan env in WSL request builder.
+
+## CP2-ci-checkpoint (rerun)
+- checkout_sha: 1daea9e11214dddaecaf16f1ec4a761ad8b41aec
+- compile_parity: https://github.com/atomize-hq/substrate/actions/runs/21603821477 
+- ci_testing: https://github.com/atomize-hq/substrate/actions/runs/21603886175 
