@@ -14,8 +14,17 @@ if ! command -v "$SUBSTRATE_BIN" >/dev/null 2>&1; then
   exit 3
 fi
 
-tmp_root="$(mktemp -d)"
-cleanup() { rm -rf "$tmp_root"; }
+tmp_root="${SUBSTRATE_SMOKE_ROOT:-}"
+if [[ -z "${tmp_root}" ]]; then
+  tmp_root="$(mktemp -d)"
+fi
+
+cleanup() {
+  if [[ "${SUBSTRATE_SMOKE_KEEP:-0}" == "1" ]]; then
+    return 0
+  fi
+  rm -rf "$tmp_root"
+}
 trap cleanup EXIT
 
 export SUBSTRATE_HOME="${SUBSTRATE_HOME:-$tmp_root/substrate-home}"
@@ -265,4 +274,3 @@ if [[ "$mode" == "wfgad4" || "$mode" == "full" ]]; then
 fi
 
 echo "OK: world-fs-granular-allow-deny smoke passed (slice=${slice_id:-full})"
-

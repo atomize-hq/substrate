@@ -228,9 +228,9 @@ ensure_repo_mount() {
     local sentinel
     sentinel=".substrate-lima-mount-sentinel.$RANDOM.$RANDOM"
     echo "sentinel" > "${PROJECT_PATH}/${sentinel}"
-    trap 'rm -f "${PROJECT_PATH:?}/${sentinel}"' RETURN
 
     if limactl shell "${VM_NAME}" test -f "/src/${sentinel}" >/dev/null 2>&1; then
+        rm -f "${PROJECT_PATH}/${sentinel}"
         return 0
     fi
 
@@ -242,6 +242,8 @@ ensure_repo_mount() {
     if ! limactl shell "${VM_NAME}" test -f "/src/${sentinel}" >/dev/null 2>&1; then
         fatal "After recreating Lima VM '${VM_NAME}', /src still does not reflect ${PROJECT_PATH}. Check the Lima profile mounts and rerun."
     fi
+
+    rm -f "${PROJECT_PATH}/${sentinel}"
 }
 
 ensure_substrate_group() {

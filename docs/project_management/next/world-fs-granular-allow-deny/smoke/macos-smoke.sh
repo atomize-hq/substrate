@@ -27,4 +27,8 @@ if ! command -v "$SUBSTRATE_BIN" >/dev/null 2>&1; then
   exit 3
 fi
 
+smoke_root="$REPO_ROOT/.smoke/world-fs-granular-allow-deny.$RANDOM.$RANDOM"
+mkdir -p "$smoke_root"
+export SUBSTRATE_SMOKE_ROOT="$smoke_root"
+
 exec bash "$SMOKE_DIR/_core.sh"
