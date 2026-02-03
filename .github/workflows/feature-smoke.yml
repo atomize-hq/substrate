@@ -339,8 +339,17 @@ jobs:
 
       - name: Install system dependencies
         run: |
+          brew update
           if ! command -v jq >/dev/null 2>&1; then brew install jq; fi
           if ! command -v rg >/dev/null 2>&1; then brew install ripgrep; fi
+          if ! command -v limactl >/dev/null 2>&1; then brew install lima; fi
+          if ! command -v envsubst >/dev/null 2>&1; then brew install gettext; fi
+
+          # Prefer Homebrew gettext/envsubst and Lima on PATH for subsequent steps.
+          if command -v brew >/dev/null 2>&1; then
+            echo \"$(brew --prefix gettext)/bin\" >> \"$GITHUB_PATH\" || true
+            echo \"$(brew --prefix lima)/bin\" >> \"$GITHUB_PATH\" || true
+          fi
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
