@@ -536,39 +536,70 @@ PY
     CODE_WORKTREE="$(parse_kv CODE_WORKTREE "${pair_stdout}")"
     TEST_WORKTREE="$(parse_kv TEST_WORKTREE "${pair_stdout}")"
     CODEX_CODE_LAST_MESSAGE_PATH="$(parse_kv CODEX_CODE_LAST_MESSAGE_PATH "${pair_stdout}")"
-    CODEX_TEST_LAST_MESSAGE_PATH="$(parse_kv CODEX_TEST_LAST_MESSAGE_PATH "${pair_stdout}")"
+	    CODEX_TEST_LAST_MESSAGE_PATH="$(parse_kv CODEX_TEST_LAST_MESSAGE_PATH "${pair_stdout}")"
 
-	    if [[ -z "${CODE_WORKTREE}" || -z "${TEST_WORKTREE}" ]]; then
-	        die "Failed to parse CODE_WORKTREE/TEST_WORKTREE; see ${LOG_PATH}"
-	    fi
-
-	    relaunch_codex_for_task_if_needed "${CODE_TASK_ID}" "${CODEX_CODE_LAST_MESSAGE_PATH}"
-	    relaunch_codex_for_task_if_needed "${TEST_TASK_ID}" "${CODEX_TEST_LAST_MESSAGE_PATH}"
+		    if [[ -z "${CODE_WORKTREE}" || -z "${TEST_WORKTREE}" ]]; then
+		        die "Failed to parse CODE_WORKTREE/TEST_WORKTREE; see ${LOG_PATH}"
+		    fi
 	elif [[ "${CODE_TEST_STATUS}" == "in_progress" ]]; then
-	    log_to_file "-- code+test status=in_progress: resuming"
-	    CODE_WORKTREE="$(python_abs_path "$(jq -r --arg id "${CODE_TASK_ID}" '.tasks[] | select(.id==$id) | .worktree' "${TASKS_JSON}")")"
-	    TEST_WORKTREE="$(python_abs_path "$(jq -r --arg id "${TEST_TASK_ID}" '.tasks[] | select(.id==$id) | .worktree' "${TASKS_JSON}")")"
-	    relaunch_codex_for_task_if_needed "${CODE_TASK_ID}" "${CODEX_CODE_LAST_MESSAGE_PATH}"
-	    relaunch_codex_for_task_if_needed "${TEST_TASK_ID}" "${CODEX_TEST_LAST_MESSAGE_PATH}"
+		    log_to_file "-- code+test status=in_progress: resuming"
+		    CODE_WORKTREE="$(python_abs_path "$(jq -r --arg id "${CODE_TASK_ID}" '.tasks[] | select(.id==$id) | .worktree' "${TASKS_JSON}")")"
+		    TEST_WORKTREE="$(python_abs_path "$(jq -r --arg id "${TEST_TASK_ID}" '.tasks[] | select(.id==$id) | .worktree' "${TASKS_JSON}")")"
 	else
-	    log_to_file "-- code+test status=completed: skipping start/finish"
-	    CODE_HEAD_SHA="$(git rev-parse "${CODE_TASK_BRANCH}")"
-	    TEST_HEAD_SHA="$(git rev-parse "${TEST_TASK_BRANCH}")"
-	    ensure_last_message_or_stub "${CODE_TASK_ID}" "${CODEX_CODE_LAST_MESSAGE_PATH}" "${CODE_HEAD_SHA}" "code"
-	    ensure_last_message_or_stub "${TEST_TASK_ID}" "${CODEX_TEST_LAST_MESSAGE_PATH}" "${TEST_HEAD_SHA}" "test"
+		    log_to_file "-- code+test status=completed: skipping start/finish"
+		    CODE_HEAD_SHA="$(git rev-parse "${CODE_TASK_BRANCH}")"
+		    TEST_HEAD_SHA="$(git rev-parse "${TEST_TASK_BRANCH}")"
+		    ensure_last_message_or_stub "${CODE_TASK_ID}" "${CODEX_CODE_LAST_MESSAGE_PATH}" "${CODE_HEAD_SHA}" "code"
+		    ensure_last_message_or_stub "${TEST_TASK_ID}" "${CODEX_TEST_LAST_MESSAGE_PATH}" "${TEST_HEAD_SHA}" "test"
 	fi
 
-if [[ "${CODE_TEST_STATUS}" != "completed" ]]; then
-    if [[ -z "${CODE_WORKTREE}" || -z "${TEST_WORKTREE}" ]]; then
-        die "Missing CODE_WORKTREE/TEST_WORKTREE for ${CODE_TASK_ID}/${TEST_TASK_ID}; see ${LOG_PATH}"
+    # Resume-safe Codex dispatch:
+    # - If both last_message files exist, don't re-run Codex.
+    # - If one exists, only dispatch the missing one.
+    # - If neither exists, dispatch both (in parallel).
+    if [[ "${CODE_TEST_STATUS}" != "completed" ]]; then
+        # If Codex is still running from a previous interrupted wrapper invocation, wait for it before deciding.
+        wait_for_codex_if_running "${CODE_TASK_ID}"
+        wait_for_codex_if_running "${TEST_TASK_ID}"
+
+        if [[ ! -f "${CODEX_CODE_LAST_MESSAGE_PATH}" || ! -f "${CODEX_TEST_LAST_MESSAGE_PATH}" ]]; then
+            log_to_file "-- code/test last_message missing; dispatching via triad-task-start-pair --launch-codex-missing"
+            pair_resume_stdout="$(mktemp)"
+            pair_resume_stderr="$(mktemp)"
+            pair_resume_args=(scripts/triad/task_start_pair.sh --feature-dir "${FEATURE_DIR_ABS}" --slice-id "${SLICE_ID}" --launch-codex --launch-codex-missing)
+            if [[ -n "${CODEX_PROFILE}" ]]; then pair_resume_args+=(--codex-profile "${CODEX_PROFILE}"); fi
+            if [[ -n "${CODEX_MODEL}" ]]; then pair_resume_args+=(--codex-model "${CODEX_MODEL}"); fi
+            if [[ "${CODEX_JSONL}" -eq 1 ]]; then pair_resume_args+=(--codex-jsonl); fi
+            if [[ "${DRY_RUN}" -eq 1 ]]; then pair_resume_args+=(--dry-run); fi
+
+            set +e
+            "${pair_resume_args[@]}" >"${pair_resume_stdout}" 2>"${pair_resume_stderr}"
+            pair_resume_rc="$?"
+            set -e
+            cat "${pair_resume_stdout}" >>"${LOG_PATH}"
+            printf '\n' >>"${LOG_PATH}"
+            cat "${pair_resume_stderr}" >>"${LOG_PATH}"
+            printf '\n' >>"${LOG_PATH}"
+            rm -f "${pair_resume_stderr}"
+            if [[ "${pair_resume_rc}" -ne 0 ]]; then
+                die "triad-task-start-pair (resume) failed; see ${LOG_PATH}"
+            fi
+
+            CODE_WORKTREE="$(parse_kv CODE_WORKTREE "${pair_resume_stdout}")"
+            TEST_WORKTREE="$(parse_kv TEST_WORKTREE "${pair_resume_stdout}")"
+            CODEX_CODE_LAST_MESSAGE_PATH="$(parse_kv CODEX_CODE_LAST_MESSAGE_PATH "${pair_resume_stdout}")"
+            CODEX_TEST_LAST_MESSAGE_PATH="$(parse_kv CODEX_TEST_LAST_MESSAGE_PATH "${pair_resume_stdout}")"
+        fi
     fi
 
-    wait_for_codex_if_running "${CODE_TASK_ID}"
-    wait_for_codex_if_running "${TEST_TASK_ID}"
+	if [[ "${CODE_TEST_STATUS}" != "completed" ]]; then
+	    if [[ -z "${CODE_WORKTREE}" || -z "${TEST_WORKTREE}" ]]; then
+	        die "Missing CODE_WORKTREE/TEST_WORKTREE for ${CODE_TASK_ID}/${TEST_TASK_ID}; see ${LOG_PATH}"
+	    fi
 
-    code_finish_out="$(mktemp)"
-    test_finish_out="$(mktemp)"
-    finish_one "${CODE_TASK_ID}" "${CODE_WORKTREE}" "${code_finish_out}"
+	    code_finish_out="$(mktemp)"
+	    test_finish_out="$(mktemp)"
+	    finish_one "${CODE_TASK_ID}" "${CODE_WORKTREE}" "${code_finish_out}"
     finish_one "${TEST_TASK_ID}" "${TEST_WORKTREE}" "${test_finish_out}"
 
 	    CODE_HEAD_SHA="$(parse_kv HEAD "${code_finish_out}")"
