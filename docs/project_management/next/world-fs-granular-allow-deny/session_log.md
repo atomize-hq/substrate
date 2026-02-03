@@ -351,6 +351,13 @@
   - `make ci-compile-parity CI_WORKFLOW_REF="feat/world-fs-granular-allow-deny" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF="99255b18d436aebdbc008f91c2b751ab9a258409"`
   - `scripts/ci/dispatch_ci_testing.sh --workflow-ref "feat/world-fs-granular-allow-deny" --remote origin --cleanup --mode quick --checkout-ref "99255b18d436aebdbc008f91c2b751ab9a258409"`
 
+## UPDATE — 2026-02-03T03:28:00Z — ci-checkpoint — CP3-ci-checkpoint
+- Validates: `99255b18d436aebdbc008f91c2b751ab9a258409`
+- Compile parity: `PASS`
+  - `https://github.com/atomize-hq/substrate/actions/runs/21615552178`
+- CI testing (quick): `FAIL` (macos-14 failed; ubuntu/windows cancelled)
+  - `https://github.com/atomize-hq/substrate/actions/runs/21615608284`
+
 ## START — 2026-02-03T04:00:47Z — integration platform-fix — WFGAD5-integ-macos
 - Branch: `world-fs-granular-allow-deny-wfgad5-integ-macos`
 - Worktree: `wt/world-fs-granular-allow-deny-wfgad5-integ-macos`
@@ -362,3 +369,14 @@
 - HEAD: `2ca934374c4b6abd1a8833220aa99c86f8c22e11`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny/logs/WFGAD5/integ-macos/last_message.md`
 - Notes: Deflakes `c3_drift_restart_refreshes_anchor_env_for_new_cwd` on macOS by synchronizing PTY/scripted input.
+
+## UPDATE — 2026-02-03T04:13:07Z — ci-checkpoint — CP3-ci-checkpoint
+- Validates: `2ca934374c4b6abd1a8833220aa99c86f8c22e11`
+- Compile parity: `PASS`
+  - `https://github.com/atomize-hq/substrate/actions/runs/21616459564`
+- CI testing (quick): `PASS`
+  - `https://github.com/atomize-hq/substrate/actions/runs/21616502491`
+
+## END — 2026-02-03T04:13:07Z — ci-checkpoint — CP3-ci-checkpoint
+- Result: `PASS`
+- Checkpoint-validated SHA: `2ca934374c4b6abd1a8833220aa99c86f8c22e11`
