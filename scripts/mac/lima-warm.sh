@@ -363,6 +363,56 @@ build_cli="${BUILD_GUEST_CLI:-0}"
 build_agent="${BUILD_GUEST_AGENT:-0}"
 
 ensure_cargo() {
+    # Cargo.lock v4 requires a newer cargo than Ubuntu 24.04's apt cargo on some images.
+    # Prefer rustup when we detect a v4 lockfile so we don't fail during `cargo build --locked`.
+    local needs_lockfile_v4=0
+    if [[ -f /src/Cargo.lock ]] && grep -qx 'version = 4' /src/Cargo.lock 2>/dev/null; then
+        needs_lockfile_v4=1
+    fi
+
+    if command -v rustup >/dev/null 2>&1; then
+        if [ -f "$HOME/.cargo/env" ]; then
+            # shellcheck disable=SC1090
+            source "$HOME/.cargo/env"
+        fi
+        export PATH="$HOME/.cargo/bin:$PATH"
+        rustup toolchain install stable --profile minimal >/dev/null 2>&1 || true
+        rustup default stable >/dev/null 2>&1 || true
+        if command -v cargo >/dev/null 2>&1; then
+            return 0
+        fi
+    fi
+
+    if [[ "${needs_lockfile_v4}" -eq 1 ]]; then
+        fix_dns() {
+            if getent hosts ports.ubuntu.com >/dev/null 2>&1; then
+                return 0
+            fi
+            echo "[lima-warm] DNS resolution failed inside Lima; applying fallback resolv.conf (1.1.1.1 / 8.8.8.8)..." >&2
+            local SUDO_CMD="sudo"
+            if sudo -n true 2>/dev/null; then
+                SUDO_CMD="sudo -n"
+            fi
+            $SUDO_CMD sh -c "printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > /etc/resolv.conf" || true
+            $SUDO_CMD systemctl restart dnsmasq 2>/dev/null || true
+            $SUDO_CMD systemctl restart systemd-resolved 2>/dev/null || true
+            getent hosts ports.ubuntu.com >/dev/null 2>&1
+        }
+
+        echo "[lima-warm] Cargo.lock v4 detected; installing rustup toolchain (stable)..." >&2
+        fix_dns || true
+        if curl -4 --connect-timeout 10 --retry 3 --retry-delay 1 --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal; then
+            # shellcheck disable=SC1090
+            source "$HOME/.cargo/env"
+            export PATH="$HOME/.cargo/bin:$PATH"
+            rustup toolchain install stable --profile minimal >/dev/null 2>&1 || true
+            rustup default stable >/dev/null 2>&1 || true
+            command -v cargo >/dev/null 2>&1
+            return $?
+        fi
+        return 1
+    fi
+
     if command -v cargo >/dev/null 2>&1; then
         return 0
     fi
