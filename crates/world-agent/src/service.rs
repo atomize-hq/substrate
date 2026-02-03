@@ -46,6 +46,24 @@ pub(crate) const WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV: &str =
     "SUBSTRATE_WORLD_FS_LANDLOCK_WRITE_ALLOWLIST";
 pub(crate) const LANDLOCK_HELPER_SRC_ENV: &str = "SUBSTRATE_LANDLOCK_HELPER_SRC";
 
+const CARGO_BIN_EXE_WORLD_AGENT_ENV: &str = "CARGO_BIN_EXE_world-agent";
+
+fn resolve_landlock_helper_src() -> Option<String> {
+    // When WorldAgentService is embedded in tests, `current_exe()` points at the test harness
+    // binary, not the world-agent binary. Prefer the Cargo-provided bin path when available.
+    if let Ok(candidate) = std::env::var(CARGO_BIN_EXE_WORLD_AGENT_ENV) {
+        let candidate = candidate.trim();
+        if !candidate.is_empty() && std::path::Path::new(candidate).exists() {
+            return Some(candidate.to_string());
+        }
+    }
+
+    std::env::current_exe()
+        .ok()
+        .map(|exe| exe.display().to_string())
+        .filter(|candidate| !candidate.trim().is_empty())
+}
+
 /// Main service running inside the world.
 #[derive(Clone)]
 pub struct WorldAgentService {
@@ -213,6 +231,11 @@ impl WorldAgentService {
 
         // Prepare execution request
         let mut env_map = req.env.unwrap_or_default();
+        // Snapshot isolation should not rely on callers setting legacy env toggles.
+        if req.policy_snapshot.is_some() {
+            let isolation = if isolation_full { "full" } else { "workspace" };
+            env_map.insert(WORLD_FS_ISOLATION_ENV.to_string(), isolation.to_string());
+        }
         if isolation_full && !write_allowlist_prefixes.is_empty() {
             env_map.insert(
                 WORLD_FS_WRITE_ALLOWLIST_ENV.to_string(),
@@ -303,7 +326,7 @@ impl WorldAgentService {
             write_allowlist_prefixes,
             landlock_read_paths,
             landlock_write_paths,
-            ..
+            enforcement_plan_b64,
         } = policy_inputs;
         let always_isolate = should_always_isolate(&req);
 
@@ -331,6 +354,10 @@ impl WorldAgentService {
             cwd: cwd.clone(),
             env: {
                 let mut env_map = req.env.clone().unwrap_or_default();
+                if req.policy_snapshot.is_some() {
+                    let isolation = if isolation_full { "full" } else { "workspace" };
+                    env_map.insert(WORLD_FS_ISOLATION_ENV.to_string(), isolation.to_string());
+                }
                 if isolation_full && !write_allowlist_prefixes.is_empty() {
                     env_map.insert(
                         WORLD_FS_WRITE_ALLOWLIST_ENV.to_string(),
@@ -342,27 +369,14 @@ impl WorldAgentService {
                 #[cfg(not(target_os = "linux"))]
                 let landlock_supported = false;
 
-                let landlock_env_needed = isolation_full
-                    && landlock_supported
-                    && (!landlock_read_paths.is_empty() || !landlock_write_paths.is_empty());
-                if landlock_env_needed {
-                    if !landlock_read_paths.is_empty() {
-                        env_map.insert(
-                            WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV.to_string(),
-                            landlock_read_paths.join("\n"),
-                        );
-                    }
-                    if !landlock_write_paths.is_empty() {
-                        env_map.insert(
-                            WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV.to_string(),
-                            landlock_write_paths.join("\n"),
-                        );
-                    }
-                    if let Ok(exe) = std::env::current_exe() {
-                        env_map
-                            .entry(LANDLOCK_HELPER_SRC_ENV.to_string())
-                            .or_insert_with(|| exe.display().to_string());
-                    }
+                if isolation_full {
+                    apply_full_isolation_helper_env(
+                        &mut env_map,
+                        landlock_supported,
+                        &landlock_read_paths,
+                        &landlock_write_paths,
+                        enforcement_plan_b64.as_deref(),
+                    );
                 }
                 env_map
             },
@@ -651,10 +665,10 @@ pub(crate) fn apply_full_isolation_helper_env(
 
     let helper_needed = landlock_env_needed || enforcement_plan_b64.is_some();
     if helper_needed {
-        if let Ok(exe) = std::env::current_exe() {
+        if let Some(helper_src) = resolve_landlock_helper_src() {
             env_map
                 .entry(LANDLOCK_HELPER_SRC_ENV.to_string())
-                .or_insert_with(|| exe.display().to_string());
+                .or_insert(helper_src);
         }
     }
 }
