@@ -1168,7 +1168,14 @@ fn apply_full_isolation_env_from_snapshot(
         .as_ref()
         .map(|d| d.allow_list.as_slice())
         .unwrap_or(&[]);
+    let discover_allowlist = policy_snapshot
+        .world_fs
+        .discover
+        .as_ref()
+        .map(|d| d.allow_list.as_slice())
+        .unwrap_or(read_allowlist);
     let landlock_read_paths = resolve_landlock_allowlist_paths(project_dir, read_allowlist);
+    let landlock_discover_paths = resolve_landlock_allowlist_paths(project_dir, discover_allowlist);
     let landlock_write_paths = resolve_landlock_allowlist_paths(project_dir, write_allowlist);
     let landlock_supported = world::landlock::detect_support().supported;
 
@@ -1177,6 +1184,7 @@ fn apply_full_isolation_env_from_snapshot(
     apply_full_isolation_helper_env(
         env,
         landlock_supported,
+        &landlock_discover_paths,
         &landlock_read_paths,
         &landlock_write_paths,
         enforcement_plan_b64.as_deref(),
@@ -2081,10 +2089,12 @@ async fn handle_legacy_start(
                     resolve_landlock_allowlist_paths(&project_dir, &world_fs.read_allowlist);
                 let landlock_write_paths =
                     resolve_landlock_allowlist_paths(&project_dir, &world_fs.write_allowlist);
+                let landlock_discover_paths: Vec<String> = Vec::new();
                 let landlock_supported = world::landlock::detect_support().supported;
                 apply_full_isolation_helper_env(
                     &mut env,
                     landlock_supported,
+                    &landlock_discover_paths,
                     &landlock_read_paths,
                     &landlock_write_paths,
                     None,

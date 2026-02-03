@@ -21,6 +21,7 @@ const WORLD_FS_ISOLATION_ENV: &str = "SUBSTRATE_WORLD_FS_ISOLATION";
 
 const LANDLOCK_READ_ENV: &str = "SUBSTRATE_WORLD_FS_LANDLOCK_READ_ALLOWLIST";
 const LANDLOCK_WRITE_ENV: &str = "SUBSTRATE_WORLD_FS_LANDLOCK_WRITE_ALLOWLIST";
+const LANDLOCK_DISCOVER_ENV: &str = "SUBSTRATE_WORLD_FS_LANDLOCK_DISCOVER_ALLOWLIST";
 
 pub fn run_landlock_exec() -> Result<()> {
     let enforcement_plan = match enforcement_plan::read_from_env_and_validate() {
@@ -52,6 +53,12 @@ pub fn run_landlock_exec() -> Result<()> {
 
     let read_paths = parse_allowlist_env(LANDLOCK_READ_ENV);
     let write_paths = parse_allowlist_env(LANDLOCK_WRITE_ENV);
+    let discover_paths = parse_allowlist_env(LANDLOCK_DISCOVER_ENV);
+    let discover_paths = if discover_paths.is_empty() {
+        read_paths.clone()
+    } else {
+        discover_paths
+    };
 
     #[cfg(target_os = "linux")]
     {
@@ -141,16 +148,19 @@ pub fn run_landlock_exec() -> Result<()> {
             .is_some_and(|raw| raw.trim() == "1");
 
         let apply_workload_restrictions = |mut read_paths: Vec<String>,
-                                           mut write_paths: Vec<String>|
+                                           mut write_paths: Vec<String>,
+                                           mut discover_paths: Vec<String>|
          -> Result<()> {
             if isolation_full {
-                let landlock_intended = !(read_paths.is_empty() && write_paths.is_empty());
+                let landlock_intended =
+                    !(read_paths.is_empty() && write_paths.is_empty() && discover_paths.is_empty());
                 let landlock_support = world::landlock::detect_support();
                 let landlock_supported = landlock_support.supported;
 
                 if landlock_intended && landlock_supported {
                     let mut policy = world::landlock::LandlockFilesystemPolicy {
                         exec_paths: vec!["/".to_string(), "/project".to_string()],
+                        discover_paths: Vec::new(),
                         read_paths: vec![
                             "/usr".to_string(),
                             "/bin".to_string(),
@@ -172,6 +182,7 @@ pub fn run_landlock_exec() -> Result<()> {
                         }
                     }
 
+                    policy.discover_paths.append(&mut discover_paths);
                     policy.read_paths.append(&mut read_paths);
                     policy.write_paths.append(&mut write_paths);
 
@@ -221,6 +232,8 @@ pub fn run_landlock_exec() -> Result<()> {
                         }
                     }
 
+                    policy.discover_paths.sort();
+                    policy.discover_paths.dedup();
                     policy.read_paths.sort();
                     policy.read_paths.dedup();
                     policy.write_paths.sort();
@@ -305,7 +318,7 @@ pub fn run_landlock_exec() -> Result<()> {
             }
             if pid == 0 {
                 // Child: apply Landlock + drop caps, then exec the workload.
-                return apply_workload_restrictions(read_paths, write_paths);
+                return apply_workload_restrictions(read_paths, write_paths, discover_paths);
             }
 
             // Parent: wait, then cleanup any synthetic deny mountpoints we created in the overlay.
@@ -323,12 +336,17 @@ pub fn run_landlock_exec() -> Result<()> {
         }
 
         // Fast path: no synthetic mountpoints were created, so we can just exec in-place.
-        apply_workload_restrictions(read_paths, write_paths)?;
+        apply_workload_restrictions(read_paths, write_paths, discover_paths)?;
         unreachable!("workload exec should not return");
     }
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = (&read_paths, &write_paths, &enforcement_plan);
+        let _ = (
+            &read_paths,
+            &write_paths,
+            &discover_paths,
+            &enforcement_plan,
+        );
     }
 
     #[cfg(not(target_os = "linux"))]

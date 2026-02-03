@@ -10,6 +10,7 @@ pub struct LandlockSupport {
 #[derive(Debug, Clone)]
 pub struct LandlockFilesystemPolicy {
     pub exec_paths: Vec<String>,
+    pub discover_paths: Vec<String>,
     pub read_paths: Vec<String>,
     pub write_paths: Vec<String>,
 }
@@ -41,6 +42,7 @@ pub fn detect_support() -> LandlockSupport {
 pub fn apply_path_allowlists(read_paths: &[String], write_paths: &[String]) -> LandlockApplyReport {
     apply_filesystem_policy(&LandlockFilesystemPolicy {
         exec_paths: Vec::new(),
+        discover_paths: read_paths.to_vec(),
         read_paths: read_paths.to_vec(),
         write_paths: write_paths.to_vec(),
     })
@@ -121,6 +123,11 @@ mod linux {
 
     fn exec_access_mask() -> u64 {
         landlock::LANDLOCK_ACCESS_FS_EXECUTE as u64
+    }
+
+    fn discover_access_mask(abi: u32) -> u64 {
+        let supported = abi_supported_access_fs(abi);
+        supported & (landlock::LANDLOCK_ACCESS_FS_READ_DIR as u64)
     }
 
     fn read_access_mask(abi: u32) -> u64 {
@@ -222,6 +229,7 @@ mod linux {
         };
 
         if policy.exec_paths.is_empty()
+            && policy.discover_paths.is_empty()
             && policy.read_paths.is_empty()
             && policy.write_paths.is_empty()
         {
@@ -245,6 +253,7 @@ mod linux {
         }
 
         let exec_mask = exec_access_mask();
+        let discover_mask = discover_access_mask(abi);
         let read_mask = read_access_mask(abi);
         let write_mask = write_access_mask(abi);
 
@@ -255,6 +264,13 @@ mod linux {
                 continue;
             }
             *allowlist.entry(trimmed).or_default() |= exec_mask;
+        }
+        for path in &policy.discover_paths {
+            let trimmed = path.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            *allowlist.entry(trimmed).or_default() |= discover_mask;
         }
         for path in &policy.read_paths {
             let trimmed = path.trim();
