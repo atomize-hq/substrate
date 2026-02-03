@@ -281,7 +281,18 @@ pub fn run_landlock_exec() -> Result<()> {
             }
 
             if let Some(plan) = enforcement_plan.as_ref() {
-                drop_caps_for_deny_enforcement(plan)?;
+                if let Err(err) = drop_caps_for_deny_enforcement(plan) {
+                    eprintln!(
+                        "substrate: error: strict deny enforcement setup failed: {}",
+                        serde_json::to_string(&json!({
+                            "feature": "world-fs-strict-deny-lockdown",
+                            "reason": err.to_string(),
+                            "remediation": "strict deny enforcement requires dropping mount-related capabilities and installing a seccomp filter that returns EPERM for mount-family syscalls",
+                        }))
+                        .unwrap_or_else(|_| "<unserializable>".to_string())
+                    );
+                    std::process::exit(4);
+                }
             }
 
             std::env::set_current_dir(&cwd)
@@ -1044,12 +1055,61 @@ fn drop_caps_for_deny_enforcement(plan: &enforcement_plan::EnforcementPlanV1) ->
         Ok(())
     }
 
+    fn set_no_new_privs() -> Result<()> {
+        let rc = unsafe { libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) };
+        if rc != 0 {
+            return Err(std::io::Error::last_os_error()).context("prctl(PR_SET_NO_NEW_PRIVS)");
+        }
+        Ok(())
+    }
+
+    #[cfg(all(target_os = "linux", not(target_env = "musl")))]
+    fn install_strict_deny_seccomp() -> Result<()> {
+        use libseccomp::{ScmpAction, ScmpFilterContext, ScmpSyscall};
+
+        let mut ctx = ScmpFilterContext::new_filter(ScmpAction::Allow)
+            .map_err(|e| anyhow::anyhow!("seccomp init failed: {e}"))?;
+
+        let syscalls = [
+            "mount",
+            "umount2",
+            "pivot_root",
+            "open_tree",
+            "move_mount",
+            "fsopen",
+            "fsmount",
+            "fspick",
+        ];
+
+        for name in syscalls {
+            let syscall = match ScmpSyscall::from_name(name) {
+                Ok(v) => v,
+                Err(_) => continue, // syscall not present on this kernel/arch (N/A)
+            };
+
+            ctx.add_rule(ScmpAction::Errno(libc::EPERM), syscall)
+                .map_err(|e| anyhow::anyhow!("seccomp add_rule({name}) failed: {e}"))?;
+        }
+
+        ctx.load()
+            .map_err(|e| anyhow::anyhow!("seccomp load failed: {e}"))?;
+
+        Ok(())
+    }
+
+    #[cfg(all(target_os = "linux", target_env = "musl"))]
+    fn install_strict_deny_seccomp() -> Result<()> {
+        anyhow::bail!("strict deny enforcement requires seccomp, but libseccomp is unavailable on musl targets");
+    }
+
     // Ensure deny-masked paths produce deterministic EACCES for the workload (even though the
     // workload runs as uid=0 inside the mount namespace) by dropping DAC bypass capabilities.
     drop_caps(&[CAP_DAC_OVERRIDE, CAP_DAC_READ_SEARCH])?;
 
     if plan.enforcement == enforcement_plan::EnforcementPlanModeV1::Strict {
         // Strict-mode safety: do not allow the workload to undo deny masks via mount syscalls.
+        set_no_new_privs()?;
+        install_strict_deny_seccomp()?;
         drop_caps(&[CAP_SYS_ADMIN])?;
     }
 
