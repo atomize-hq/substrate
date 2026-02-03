@@ -24,9 +24,9 @@
   "tasks": [
     {
       "acceptance_criteria": [
-        "Run: make planning-lint FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" → exit 0",
-        "Run: bash -n docs/project_management/next/world-fs-granular-allow-deny/smoke/linux-smoke.sh → exit 0",
-        "Run: bash -n docs/project_management/next/world-fs-granular-allow-deny/smoke/macos-smoke.sh → exit 0",
+        "Run: make planning-lint FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" \u2192 exit 0",
+        "Run: bash -n docs/project_management/next/world-fs-granular-allow-deny/smoke/linux-smoke.sh \u2192 exit 0",
+        "Run: bash -n docs/project_management/next/world-fs-granular-allow-deny/smoke/macos-smoke.sh \u2192 exit 0",
         "File updated: docs/project_management/next/world-fs-granular-allow-deny/execution_preflight_report.md"
       ],
       "concurrent_with": [],
@@ -60,9 +60,9 @@
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: cargo test -p substrate-broker --tests --no-run → exit 0",
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p substrate-broker --tests --no-run \u2192 exit 0",
         "Implements WFGAD0-spec.md acceptance (V2 schema validation and hard errors)."
       ],
       "concurrent_with": [
@@ -106,8 +106,8 @@
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo test -p substrate-broker --tests --no-run → exit 0",
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo test -p substrate-broker --tests --no-run \u2192 exit 0",
         "Tests encode WFGAD0-spec.md acceptance requirements (schema validation hard errors)."
       ],
       "concurrent_with": [
@@ -149,11 +149,11 @@
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: cargo test -p substrate-broker → exit 0",
-        "Run: SUBSTRATE_SMOKE_SLICE_ID=WFGAD0 bash docs/project_management/next/world-fs-granular-allow-deny/smoke/linux-smoke.sh → exit 0",
-        "Run: make integ-checks → exit 0"
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p substrate-broker \u2192 exit 0",
+        "Run: SUBSTRATE_SMOKE_SLICE_ID=WFGAD0 bash docs/project_management/next/world-fs-granular-allow-deny/smoke/linux-smoke.sh \u2192 exit 0",
+        "Run: make integ-checks \u2192 exit 0"
       ],
       "concurrent_with": [],
       "depends_on": [
@@ -197,10 +197,10 @@
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: cargo test -p agent-api-types --tests --no-run → exit 0",
-        "Run: cargo test -p world-agent --tests --no-run → exit 0",
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p agent-api-types --tests --no-run \u2192 exit 0",
+        "Run: cargo test -p world-agent --tests --no-run \u2192 exit 0",
         "Implements WFGAD1-spec.md acceptance (V2 snapshot model + strict rejection behavior)."
       ],
       "concurrent_with": [
@@ -244,9 +244,9 @@
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo test -p world-agent --tests --no-run → exit 0",
-        "Run: cargo test -p agent-api-types --tests --no-run → exit 0",
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo test -p world-agent --tests --no-run \u2192 exit 0",
+        "Run: cargo test -p agent-api-types --tests --no-run \u2192 exit 0",
         "Tests encode WFGAD1-spec.md acceptance (HTTP/WS invalid snapshot rejection shapes)."
       ],
       "concurrent_with": [
@@ -288,10 +288,10 @@
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: cargo test -p world-agent → exit 0",
-        "Run: make integ-checks → exit 0",
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p world-agent \u2192 exit 0",
+        "Run: make integ-checks \u2192 exit 0",
         "WFGAD1 core integration is green (ready for CP1)."
       ],
       "concurrent_with": [],
@@ -335,9 +335,9 @@
     },
     {
       "acceptance_criteria": [
-        "Run: export FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"; scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch \"feat/world-fs-granular-allow-deny\" --ledger-path \"$FEATURE_DIR/logs/CP1/ci-audit/ledger.jsonl\" → exit 0",
-        "Run: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-fs-granular-allow-deny\" CI_REMOTE=origin CI_CLEANUP=1 → exit 0",
-        "Run: make ci-testing CI_WORKFLOW_REF=\"feat/world-fs-granular-allow-deny\" CI_REMOTE=origin CI_CLEANUP=1 CI_MODE=quick → exit 0"
+        "Run: export FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"; scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch \"feat/world-fs-granular-allow-deny\" --ledger-path \"$FEATURE_DIR/logs/CP1/ci-audit/ledger.jsonl\" \u2192 exit 0",
+        "Run: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-fs-granular-allow-deny\" CI_REMOTE=origin CI_CLEANUP=1 \u2192 exit 0",
+        "Run: make ci-testing CI_WORKFLOW_REF=\"feat/world-fs-granular-allow-deny\" CI_REMOTE=origin CI_CLEANUP=1 CI_MODE=quick \u2192 exit 0"
       ],
       "concurrent_with": [],
       "depends_on": [
@@ -368,9 +368,9 @@
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: cargo test -p world-agent --tests --no-run → exit 0",
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p world-agent --tests --no-run \u2192 exit 0",
         "Linux CI parity failures for WFGAD1 are resolved (compile parity green)."
       ],
       "concurrent_with": [],
@@ -389,7 +389,7 @@
       "integration_task": "WFGAD1-integ-linux",
       "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD1-integ-linux.md",
       "merge_to_orchestration": false,
-      "name": "WFGAD1 slice (platform-fix — linux)",
+      "name": "WFGAD1 slice (platform-fix \u2014 linux)",
       "phase": "WFGAD1",
       "platform": "linux",
       "references": [
@@ -412,9 +412,9 @@
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: cargo test -p world-agent --tests --no-run → exit 0",
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p world-agent --tests --no-run \u2192 exit 0",
         "macOS CI parity failures for WFGAD1 are resolved (compile parity green)."
       ],
       "concurrent_with": [],
@@ -433,7 +433,7 @@
       "integration_task": "WFGAD1-integ-macos",
       "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD1-integ-macos.md",
       "merge_to_orchestration": false,
-      "name": "WFGAD1 slice (platform-fix — macos)",
+      "name": "WFGAD1 slice (platform-fix \u2014 macos)",
       "phase": "WFGAD1",
       "platform": "macos",
       "references": [
@@ -456,9 +456,9 @@
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: cargo test -p world-agent --tests --no-run → exit 0",
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p world-agent --tests --no-run \u2192 exit 0",
         "Windows CI parity failures for WFGAD1 are resolved (compile parity green)."
       ],
       "concurrent_with": [],
@@ -477,7 +477,7 @@
       "integration_task": "WFGAD1-integ-windows",
       "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD1-integ-windows.md",
       "merge_to_orchestration": false,
-      "name": "WFGAD1 slice (platform-fix — windows)",
+      "name": "WFGAD1 slice (platform-fix \u2014 windows)",
       "phase": "WFGAD1",
       "platform": "windows",
       "references": [
@@ -500,11 +500,11 @@
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: cargo test -p world-agent → exit 0",
-        "Run: SUBSTRATE_SMOKE_SLICE_ID=WFGAD1 bash docs/project_management/next/world-fs-granular-allow-deny/smoke/linux-smoke.sh → exit 0",
-        "Run: make integ-checks → exit 0",
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p world-agent \u2192 exit 0",
+        "Run: SUBSTRATE_SMOKE_SLICE_ID=WFGAD1 bash docs/project_management/next/world-fs-granular-allow-deny/smoke/linux-smoke.sh \u2192 exit 0",
+        "Run: make integ-checks \u2192 exit 0",
         "WFGAD1 is green on linux/macos/windows and merged back to orchestration."
       ],
       "concurrent_with": [],
@@ -551,10 +551,10 @@
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: cargo test -p shell --tests --no-run → exit 0",
-        "Run: cargo test -p world-agent --tests --no-run → exit 0",
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p shell --tests --no-run \u2192 exit 0",
+        "Run: cargo test -p world-agent --tests --no-run \u2192 exit 0",
         "Implements WFGAD2-spec.md acceptance (enforcement plan env contract + helper invocation gating)."
       ],
       "concurrent_with": [
@@ -599,9 +599,9 @@
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo test -p world-agent --tests --no-run → exit 0",
-        "Run: cargo test -p shell --tests --no-run → exit 0",
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo test -p world-agent --tests --no-run \u2192 exit 0",
+        "Run: cargo test -p shell --tests --no-run \u2192 exit 0",
         "Tests encode WFGAD2-spec.md acceptance (enforcement plan validation + fail-closed behavior)."
       ],
       "concurrent_with": [
@@ -644,12 +644,12 @@
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: cargo test -p world-agent → exit 0",
-        "Run: cargo test -p shell → exit 0",
-        "Run: SUBSTRATE_SMOKE_SLICE_ID=WFGAD2 bash docs/project_management/next/world-fs-granular-allow-deny/smoke/linux-smoke.sh → exit 0",
-        "Run: make integ-checks → exit 0"
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p world-agent \u2192 exit 0",
+        "Run: cargo test -p shell \u2192 exit 0",
+        "Run: SUBSTRATE_SMOKE_SLICE_ID=WFGAD2 bash docs/project_management/next/world-fs-granular-allow-deny/smoke/linux-smoke.sh \u2192 exit 0",
+        "Run: make integ-checks \u2192 exit 0"
       ],
       "concurrent_with": [],
       "depends_on": [
@@ -693,10 +693,10 @@
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: cargo test -p world-agent --tests --no-run → exit 0",
-        "Run: cargo test -p world --tests --no-run → exit 0",
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p world-agent --tests --no-run \u2192 exit 0",
+        "Run: cargo test -p world --tests --no-run \u2192 exit 0",
         "Implements WFGAD3-spec.md acceptance (deny masking + deterministic errno)."
       ],
       "concurrent_with": [
@@ -741,9 +741,9 @@
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo test -p world-agent --tests --no-run → exit 0",
-        "Run: cargo test -p world --tests --no-run → exit 0",
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo test -p world-agent --tests --no-run \u2192 exit 0",
+        "Run: cargo test -p world --tests --no-run \u2192 exit 0",
         "Tests encode WFGAD3-spec.md acceptance (deny masking + wildcard snapshot)."
       ],
       "concurrent_with": [
@@ -785,11 +785,11 @@
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: cargo test -p world-agent → exit 0",
-        "Run: cargo test -p world → exit 0",
-        "Run: make integ-checks → exit 0",
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p world-agent \u2192 exit 0",
+        "Run: cargo test -p world \u2192 exit 0",
+        "Run: make integ-checks \u2192 exit 0",
         "WFGAD3 core integration is green (ready for CP2)."
       ],
       "concurrent_with": [],
@@ -833,9 +833,9 @@
     },
     {
       "acceptance_criteria": [
-        "Run: export FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"; scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch \"feat/world-fs-granular-allow-deny\" --ledger-path \"$FEATURE_DIR/logs/CP2/ci-audit/ledger.jsonl\" → exit 0",
-        "Run: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-fs-granular-allow-deny\" CI_REMOTE=origin CI_CLEANUP=1 → exit 0",
-        "Run: make ci-testing CI_WORKFLOW_REF=\"feat/world-fs-granular-allow-deny\" CI_REMOTE=origin CI_CLEANUP=1 CI_MODE=quick → exit 0"
+        "Run: export FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"; scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch \"feat/world-fs-granular-allow-deny\" --ledger-path \"$FEATURE_DIR/logs/CP2/ci-audit/ledger.jsonl\" \u2192 exit 0",
+        "Run: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-fs-granular-allow-deny\" CI_REMOTE=origin CI_CLEANUP=1 \u2192 exit 0",
+        "Run: make ci-testing CI_WORKFLOW_REF=\"feat/world-fs-granular-allow-deny\" CI_REMOTE=origin CI_CLEANUP=1 CI_MODE=quick \u2192 exit 0"
       ],
       "concurrent_with": [],
       "depends_on": [
@@ -866,10 +866,10 @@
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: cargo test -p world-agent --tests --no-run → exit 0",
-        "Run: cargo test -p world --tests --no-run → exit 0",
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p world-agent --tests --no-run \u2192 exit 0",
+        "Run: cargo test -p world --tests --no-run \u2192 exit 0",
         "Linux CI parity failures for WFGAD3 are resolved (compile parity green)."
       ],
       "concurrent_with": [],
@@ -888,7 +888,7 @@
       "integration_task": "WFGAD3-integ-linux",
       "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD3-integ-linux.md",
       "merge_to_orchestration": false,
-      "name": "WFGAD3 slice (platform-fix — linux)",
+      "name": "WFGAD3 slice (platform-fix \u2014 linux)",
       "phase": "WFGAD3",
       "platform": "linux",
       "references": [
@@ -911,10 +911,10 @@
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: cargo test -p world-agent --tests --no-run → exit 0",
-        "Run: cargo test -p world --tests --no-run → exit 0",
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p world-agent --tests --no-run \u2192 exit 0",
+        "Run: cargo test -p world --tests --no-run \u2192 exit 0",
         "macOS CI parity failures for WFGAD3 are resolved (compile parity green)."
       ],
       "concurrent_with": [],
@@ -933,7 +933,7 @@
       "integration_task": "WFGAD3-integ-macos",
       "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD3-integ-macos.md",
       "merge_to_orchestration": false,
-      "name": "WFGAD3 slice (platform-fix — macos)",
+      "name": "WFGAD3 slice (platform-fix \u2014 macos)",
       "phase": "WFGAD3",
       "platform": "macos",
       "references": [
@@ -956,10 +956,10 @@
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: cargo test -p world-agent --tests --no-run → exit 0",
-        "Run: cargo test -p world --tests --no-run → exit 0",
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p world-agent --tests --no-run \u2192 exit 0",
+        "Run: cargo test -p world --tests --no-run \u2192 exit 0",
         "Windows CI parity failures for WFGAD3 are resolved (compile parity green)."
       ],
       "concurrent_with": [],
@@ -978,7 +978,7 @@
       "integration_task": "WFGAD3-integ-windows",
       "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD3-integ-windows.md",
       "merge_to_orchestration": false,
-      "name": "WFGAD3 slice (platform-fix — windows)",
+      "name": "WFGAD3 slice (platform-fix \u2014 windows)",
       "phase": "WFGAD3",
       "platform": "windows",
       "references": [
@@ -1001,12 +1001,12 @@
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: cargo test -p world-agent → exit 0",
-        "Run: cargo test -p world → exit 0",
-        "Run: SUBSTRATE_SMOKE_SLICE_ID=WFGAD3 bash docs/project_management/next/world-fs-granular-allow-deny/smoke/linux-smoke.sh → exit 0",
-        "Run: make integ-checks → exit 0",
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p world-agent \u2192 exit 0",
+        "Run: cargo test -p world \u2192 exit 0",
+        "Run: SUBSTRATE_SMOKE_SLICE_ID=WFGAD3 bash docs/project_management/next/world-fs-granular-allow-deny/smoke/linux-smoke.sh \u2192 exit 0",
+        "Run: make integ-checks \u2192 exit 0",
         "WFGAD3 is green on linux/macos/windows and merged back to orchestration."
       ],
       "concurrent_with": [],
@@ -1053,10 +1053,10 @@
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: cargo test -p world-agent --tests --no-run → exit 0",
-        "Run: cargo test -p world --tests --no-run → exit 0",
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p world-agent --tests --no-run \u2192 exit 0",
+        "Run: cargo test -p world --tests --no-run \u2192 exit 0",
         "Implements WFGAD4-spec.md acceptance (discover/read split semantics)."
       ],
       "concurrent_with": [
@@ -1095,15 +1095,15 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" SLICE_ID=\"WFGAD4\""
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "code",
       "worktree": "wt/world-fs-granular-allow-deny-wfgad4-code"
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo test -p world-agent --tests --no-run → exit 0",
-        "Run: cargo test -p world --tests --no-run → exit 0",
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo test -p world-agent --tests --no-run \u2192 exit 0",
+        "Run: cargo test -p world --tests --no-run \u2192 exit 0",
         "Tests encode WFGAD4-spec.md acceptance (discover defaults and behavior)."
       ],
       "concurrent_with": [
@@ -1140,18 +1140,18 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" SLICE_ID=\"WFGAD4\""
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "test",
       "worktree": "wt/world-fs-granular-allow-deny-wfgad4-test"
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: cargo test -p world-agent → exit 0",
-        "Run: cargo test -p world → exit 0",
-        "Run: SUBSTRATE_SMOKE_SLICE_ID=WFGAD4 bash docs/project_management/next/world-fs-granular-allow-deny/smoke/linux-smoke.sh → exit 0",
-        "Run: make integ-checks → exit 0"
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p world-agent \u2192 exit 0",
+        "Run: cargo test -p world \u2192 exit 0",
+        "Run: SUBSTRATE_SMOKE_SLICE_ID=WFGAD4 bash docs/project_management/next/world-fs-granular-allow-deny/smoke/linux-smoke.sh \u2192 exit 0",
+        "Run: make integ-checks \u2192 exit 0"
       ],
       "concurrent_with": [],
       "depends_on": [
@@ -1195,10 +1195,10 @@
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: cargo test -p world-agent --tests --no-run → exit 0",
-        "Run: cargo test -p world --tests --no-run → exit 0",
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p world-agent --tests --no-run \u2192 exit 0",
+        "Run: cargo test -p world --tests --no-run \u2192 exit 0",
         "Implements WFGAD5-spec.md acceptance (strict lockdown; deterministic EPERM)."
       ],
       "concurrent_with": [
@@ -1242,9 +1242,9 @@
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo test -p world-agent --tests --no-run → exit 0",
-        "Run: cargo test -p world --tests --no-run → exit 0",
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo test -p world-agent --tests --no-run \u2192 exit 0",
+        "Run: cargo test -p world --tests --no-run \u2192 exit 0",
         "Tests encode WFGAD5-spec.md acceptance (strict syscall blocking + bypass prevention)."
       ],
       "concurrent_with": [
@@ -1286,11 +1286,11 @@
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: cargo test -p world-agent → exit 0",
-        "Run: cargo test -p world → exit 0",
-        "Run: make integ-checks → exit 0",
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p world-agent \u2192 exit 0",
+        "Run: cargo test -p world \u2192 exit 0",
+        "Run: make integ-checks \u2192 exit 0",
         "WFGAD5 core integration is green (ready for CP3)."
       ],
       "concurrent_with": [],
@@ -1334,9 +1334,9 @@
     },
     {
       "acceptance_criteria": [
-        "Run: export FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"; scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch \"feat/world-fs-granular-allow-deny\" --ledger-path \"$FEATURE_DIR/logs/CP3/ci-audit/ledger.jsonl\" → exit 0",
-        "Run: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-fs-granular-allow-deny\" CI_REMOTE=origin CI_CLEANUP=1 → exit 0",
-        "Run: make ci-testing CI_WORKFLOW_REF=\"feat/world-fs-granular-allow-deny\" CI_REMOTE=origin CI_CLEANUP=1 CI_MODE=quick → exit 0"
+        "Run: export FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\"; scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch \"feat/world-fs-granular-allow-deny\" --ledger-path \"$FEATURE_DIR/logs/CP3/ci-audit/ledger.jsonl\" \u2192 exit 0",
+        "Run: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world-fs-granular-allow-deny\" CI_REMOTE=origin CI_CLEANUP=1 \u2192 exit 0",
+        "Run: make ci-testing CI_WORKFLOW_REF=\"feat/world-fs-granular-allow-deny\" CI_REMOTE=origin CI_CLEANUP=1 CI_MODE=quick \u2192 exit 0"
       ],
       "concurrent_with": [],
       "depends_on": [
@@ -1367,10 +1367,10 @@
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: cargo test -p world-agent --tests --no-run → exit 0",
-        "Run: cargo test -p world --tests --no-run → exit 0",
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p world-agent --tests --no-run \u2192 exit 0",
+        "Run: cargo test -p world --tests --no-run \u2192 exit 0",
         "Linux CI parity failures for WFGAD5 are resolved (compile parity green)."
       ],
       "concurrent_with": [],
@@ -1389,7 +1389,7 @@
       "integration_task": "WFGAD5-integ-linux",
       "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD5-integ-linux.md",
       "merge_to_orchestration": false,
-      "name": "WFGAD5 slice (platform-fix — linux)",
+      "name": "WFGAD5 slice (platform-fix \u2014 linux)",
       "phase": "WFGAD5",
       "platform": "linux",
       "references": [
@@ -1412,10 +1412,10 @@
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: cargo test -p world-agent --tests --no-run → exit 0",
-        "Run: cargo test -p world --tests --no-run → exit 0",
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p world-agent --tests --no-run \u2192 exit 0",
+        "Run: cargo test -p world --tests --no-run \u2192 exit 0",
         "macOS CI parity failures for WFGAD5 are resolved (compile parity green)."
       ],
       "concurrent_with": [],
@@ -1434,7 +1434,7 @@
       "integration_task": "WFGAD5-integ-macos",
       "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD5-integ-macos.md",
       "merge_to_orchestration": false,
-      "name": "WFGAD5 slice (platform-fix — macos)",
+      "name": "WFGAD5 slice (platform-fix \u2014 macos)",
       "phase": "WFGAD5",
       "platform": "macos",
       "references": [
@@ -1457,10 +1457,10 @@
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: cargo test -p world-agent --tests --no-run → exit 0",
-        "Run: cargo test -p world --tests --no-run → exit 0",
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p world-agent --tests --no-run \u2192 exit 0",
+        "Run: cargo test -p world --tests --no-run \u2192 exit 0",
         "Windows CI parity failures for WFGAD5 are resolved (compile parity green)."
       ],
       "concurrent_with": [],
@@ -1479,7 +1479,7 @@
       "integration_task": "WFGAD5-integ-windows",
       "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny/kickoff_prompts/WFGAD5-integ-windows.md",
       "merge_to_orchestration": false,
-      "name": "WFGAD5 slice (platform-fix — windows)",
+      "name": "WFGAD5 slice (platform-fix \u2014 windows)",
       "phase": "WFGAD5",
       "platform": "windows",
       "references": [
@@ -1502,12 +1502,12 @@
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: cargo test -p world-agent → exit 0",
-        "Run: cargo test -p world → exit 0",
-        "Run: SUBSTRATE_SMOKE_SLICE_ID=WFGAD5 bash docs/project_management/next/world-fs-granular-allow-deny/smoke/linux-smoke.sh → exit 0",
-        "Run: make integ-checks → exit 0",
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p world-agent \u2192 exit 0",
+        "Run: cargo test -p world \u2192 exit 0",
+        "Run: SUBSTRATE_SMOKE_SLICE_ID=WFGAD5 bash docs/project_management/next/world-fs-granular-allow-deny/smoke/linux-smoke.sh \u2192 exit 0",
+        "Run: make integ-checks \u2192 exit 0",
         "WFGAD5 is green on linux/macos/windows and merged back to orchestration."
       ],
       "concurrent_with": [],
@@ -1554,9 +1554,9 @@
     },
     {
       "acceptance_criteria": [
-        "Run: make planning-lint FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" → exit 0",
-        "Run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1 → exit 0",
-        "Run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" REMOVE_WORKTREES=1 PRUNE_LOCAL=1 → exit 0"
+        "Run: make planning-lint FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" \u2192 exit 0",
+        "Run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1 \u2192 exit 0",
+        "Run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" REMOVE_WORKTREES=1 PRUNE_LOCAL=1 \u2192 exit 0"
       ],
       "concurrent_with": [],
       "depends_on": [

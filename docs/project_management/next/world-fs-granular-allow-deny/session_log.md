@@ -292,3 +292,11 @@
 - Merged slice branch: `world-fs-granular-allow-deny-wfgad3-integ` @ `f056d6c5`
 - Checkpoint-validated SHA: `3eb386ec1a6ce376a9b7703378f991544a3fb0de`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny/logs/WFGAD3/integ/last_message.md`
+
+## START — 2026-02-03T02:13:40Z — code — WFGAD4-code
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny" SLICE_ID="WFGAD4"`
+
+## START — 2026-02-03T02:13:40Z — test — WFGAD4-test
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny" SLICE_ID="WFGAD4"`
