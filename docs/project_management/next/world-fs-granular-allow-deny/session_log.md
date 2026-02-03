@@ -344,3 +344,9 @@
 ## END — 2026-02-03T03:17:48Z — integration — WFGAD5-integ-core
 - HEAD: `99255b18d436aebdbc008f91c2b751ab9a258409`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny/logs/WFGAD5/integ-core/last_message.md`
+
+## START — 2026-02-03T03:19:17Z — ci-checkpoint — CP3-ci-checkpoint
+- Validates: `99255b18d436aebdbc008f91c2b751ab9a258409`
+- Dispatch:
+  - `make ci-compile-parity CI_WORKFLOW_REF="feat/world-fs-granular-allow-deny" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF="99255b18d436aebdbc008f91c2b751ab9a258409"`
+  - `scripts/ci/dispatch_ci_testing.sh --workflow-ref "feat/world-fs-granular-allow-deny" --remote origin --cleanup --mode quick --checkout-ref "99255b18d436aebdbc008f91c2b751ab9a258409"`
