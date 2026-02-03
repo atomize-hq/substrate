@@ -247,6 +247,36 @@ mod tests {
     }
 
     #[test]
+    fn encode_does_not_default_discover_deny_when_discover_present() {
+        let mut snapshot = minimal_snapshot_full_read_only();
+        snapshot.world_fs.enforcement = Some(WorldFsEnforcementV2::Strict);
+        snapshot
+            .world_fs
+            .read
+            .as_mut()
+            .expect("read present")
+            .deny_list = vec!["secrets/secret.txt".to_string()];
+        snapshot.world_fs.discover = Some(PolicySnapshotWorldFsDimensionV2 {
+            allow_list: vec![".".to_string()],
+            deny_list: vec![],
+        });
+        snapshot.validate().expect("snapshot validates");
+
+        let encoded = maybe_encode_from_snapshot(&snapshot)
+            .expect("encode succeeds")
+            .expect("plan should be present");
+        let bytes = BASE64.decode(encoded.as_bytes()).expect("valid base64");
+        let value: serde_json::Value =
+            serde_json::from_slice(&bytes).expect("valid JSON enforcement plan");
+
+        assert_eq!(
+            value["read_deny"],
+            serde_json::json!(["secrets/secret.txt"])
+        );
+        assert_eq!(value["discover_deny"], serde_json::json!([]));
+    }
+
+    #[test]
     fn read_from_env_rejects_unknown_fields() {
         let _guard = ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
 
