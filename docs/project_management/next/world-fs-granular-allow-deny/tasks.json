@@ -1236,7 +1236,7 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" SLICE_ID=\"WFGAD5\""
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "code",
       "worktree": "wt/world-fs-granular-allow-deny-wfgad5-code"
     },
@@ -1280,7 +1280,7 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny\" SLICE_ID=\"WFGAD5\""
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "test",
       "worktree": "wt/world-fs-granular-allow-deny-wfgad5-test"
     },
