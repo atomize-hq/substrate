@@ -55,8 +55,8 @@ pub fn run_landlock_exec() -> Result<()> {
 
     #[cfg(target_os = "linux")]
     {
-        let mut read_paths = read_paths;
         let mut write_paths = write_paths;
+        let mut deny_report: Option<DenyMaskApplyReport> = None;
 
         fn extend_with_overlayfs_backing_dirs_strict(
             policy: &mut world::landlock::LandlockFilesystemPolicy,
@@ -112,7 +112,8 @@ pub fn run_landlock_exec() -> Result<()> {
 
             match apply_deny_masks_linux(plan, &project_dir) {
                 Ok(report) => {
-                    write_paths.extend(report.write_allowlist_paths);
+                    write_paths.extend(report.write_allowlist_paths.clone());
+                    deny_report = Some(report);
                 }
                 Err(err) => {
                     eprintln!(
@@ -129,164 +130,238 @@ pub fn run_landlock_exec() -> Result<()> {
             }
         }
 
-        if isolation_full {
-            let landlock_intended = !(read_paths.is_empty() && write_paths.is_empty());
-            let landlock_support = world::landlock::detect_support();
-            let landlock_supported = landlock_support.supported;
+        let cleanup_needed = deny_report
+            .as_ref()
+            .is_some_and(|r| !r.cleanup_created_dirs.is_empty());
 
-            if landlock_intended && landlock_supported {
-                let mut policy = world::landlock::LandlockFilesystemPolicy {
-                    exec_paths: vec!["/".to_string(), "/project".to_string()],
-                    read_paths: vec![
-                        "/usr".to_string(),
-                        "/bin".to_string(),
-                        "/lib".to_string(),
-                        "/lib64".to_string(),
-                        "/etc".to_string(),
-                        "/proc".to_string(),
-                    ],
-                    write_paths: vec![
-                        "/tmp".to_string(),
-                        "/dev".to_string(),
-                        "/var/lib/substrate/world-deps".to_string(),
-                    ],
-                };
+        let cwd = std::env::var(MOUNT_CWD_ENV).unwrap_or_else(|_| "/".to_string());
+        let cmd = std::env::var(INNER_CMD_ENV).context("missing SUBSTRATE_INNER_CMD")?;
+        let login_shell = std::env::var(INNER_LOGIN_SHELL_ENV)
+            .ok()
+            .is_some_and(|raw| raw.trim() == "1");
 
-                if let Ok(project_dir) = std::env::var(MOUNT_PROJECT_DIR_ENV) {
-                    if !project_dir.trim().is_empty() {
-                        policy.exec_paths.push(project_dir);
-                    }
-                }
+        let apply_workload_restrictions = |mut read_paths: Vec<String>,
+                                           mut write_paths: Vec<String>|
+         -> Result<()> {
+            if isolation_full {
+                let landlock_intended = !(read_paths.is_empty() && write_paths.is_empty());
+                let landlock_support = world::landlock::detect_support();
+                let landlock_supported = landlock_support.supported;
 
-                policy.read_paths.append(&mut read_paths);
-                policy.write_paths.append(&mut write_paths);
-
-                let mount_fs_mode =
-                    std::env::var(MOUNT_FS_MODE_ENV).unwrap_or_else(|_| "writable".to_string());
-                let fs_mode_writable = !mount_fs_mode.trim().eq_ignore_ascii_case("read_only");
-
-                let derivation_required = fs_mode_writable;
-
-                if derivation_required {
-                    let project_dir = std::env::var(MOUNT_PROJECT_DIR_ENV)
-                        .ok()
-                        .map(|raw| raw.trim().to_string())
-                        .filter(|t| !t.is_empty());
-                    let mount_point = project_dir
-                        .clone()
-                        .unwrap_or_else(|| "<missing>".to_string());
-
-                    let Some(project_dir) = project_dir else {
-                        eprintln!(
-                            "substrate: error: full isolation landlock prerequisites missing: {}",
-                            serde_json::to_string(&json!({
-                                "feature": "full-isolation-landlock-overlayfs-compat",
-                                "mount_point": mount_point,
-                                "reason": "missing or empty SUBSTRATE_MOUNT_PROJECT_DIR",
-                                "remediation": "this full-isolation exec requires deriving overlayfs backing dirs from /proc/self/mountinfo",
-                            }))
-                            .unwrap_or_else(|_| "<unserializable>".to_string())
-                        );
-                        std::process::exit(4);
+                if landlock_intended && landlock_supported {
+                    let mut policy = world::landlock::LandlockFilesystemPolicy {
+                        exec_paths: vec!["/".to_string(), "/project".to_string()],
+                        read_paths: vec![
+                            "/usr".to_string(),
+                            "/bin".to_string(),
+                            "/lib".to_string(),
+                            "/lib64".to_string(),
+                            "/etc".to_string(),
+                            "/proc".to_string(),
+                        ],
+                        write_paths: vec![
+                            "/tmp".to_string(),
+                            "/dev".to_string(),
+                            "/var/lib/substrate/world-deps".to_string(),
+                        ],
                     };
 
-                    if let Err(err) =
-                        extend_with_overlayfs_backing_dirs_strict(&mut policy, &project_dir)
-                    {
+                    if let Ok(project_dir) = std::env::var(MOUNT_PROJECT_DIR_ENV) {
+                        if !project_dir.trim().is_empty() {
+                            policy.exec_paths.push(project_dir);
+                        }
+                    }
+
+                    policy.read_paths.append(&mut read_paths);
+                    policy.write_paths.append(&mut write_paths);
+
+                    let mount_fs_mode =
+                        std::env::var(MOUNT_FS_MODE_ENV).unwrap_or_else(|_| "writable".to_string());
+                    let fs_mode_writable = !mount_fs_mode.trim().eq_ignore_ascii_case("read_only");
+
+                    let derivation_required = fs_mode_writable;
+
+                    if derivation_required {
+                        let project_dir = std::env::var(MOUNT_PROJECT_DIR_ENV)
+                            .ok()
+                            .map(|raw| raw.trim().to_string())
+                            .filter(|t| !t.is_empty());
+                        let mount_point = project_dir
+                            .clone()
+                            .unwrap_or_else(|| "<missing>".to_string());
+
+                        let Some(project_dir) = project_dir else {
+                            eprintln!(
+                                "substrate: error: full isolation landlock prerequisites missing: {}",
+                                serde_json::to_string(&json!({
+                                    "feature": "full-isolation-landlock-overlayfs-compat",
+                                    "mount_point": mount_point,
+                                    "reason": "missing or empty SUBSTRATE_MOUNT_PROJECT_DIR",
+                                    "remediation": "this full-isolation exec requires deriving overlayfs backing dirs from /proc/self/mountinfo",
+                                }))
+                                .unwrap_or_else(|_| "<unserializable>".to_string())
+                            );
+                            std::process::exit(4);
+                        };
+
+                        if let Err(err) =
+                            extend_with_overlayfs_backing_dirs_strict(&mut policy, &project_dir)
+                        {
+                            eprintln!(
+                                "substrate: error: full isolation landlock prerequisites missing: {}",
+                                serde_json::to_string(&json!({
+                                    "feature": "full-isolation-landlock-overlayfs-compat",
+                                    "mount_point": project_dir,
+                                    "reason": err.to_string(),
+                                    "remediation": "this full-isolation exec requires deriving overlayfs backing dirs from /proc/self/mountinfo",
+                                }))
+                                .unwrap_or_else(|_| "<unserializable>".to_string())
+                            );
+                            std::process::exit(4);
+                        }
+                    }
+
+                    policy.read_paths.sort();
+                    policy.read_paths.dedup();
+                    policy.write_paths.sort();
+                    policy.write_paths.dedup();
+
+                    let report = world::landlock::apply_filesystem_policy(&policy);
+                    if report.attempted && !report.applied {
                         eprintln!(
-                            "substrate: error: full isolation landlock prerequisites missing: {}",
+                            "substrate: error: landlock apply failed: {}",
                             serde_json::to_string(&json!({
-                                "feature": "full-isolation-landlock-overlayfs-compat",
-                                "mount_point": project_dir,
-                                "reason": err.to_string(),
-                                "remediation": "this full-isolation exec requires deriving overlayfs backing dirs from /proc/self/mountinfo",
+                                "supported": report.support.supported,
+                                "abi": report.support.abi,
+                                "attempted": report.attempted,
+                                "applied": report.applied,
+                                "rules_added": report.rules_added,
+                                "reason": report.reason,
                             }))
                             .unwrap_or_else(|_| "<unserializable>".to_string())
                         );
                         std::process::exit(4);
                     }
                 }
+            } else {
+                // Workspace isolation keeps host paths readable, but should prevent writes outside the
+                // project and a few scratch locations.
+                let mut write_paths = vec![
+                    "/tmp".to_string(),
+                    "/var/tmp".to_string(),
+                    "/dev".to_string(),
+                    "/var/lib/substrate/world-deps".to_string(),
+                ];
 
-                policy.read_paths.sort();
-                policy.read_paths.dedup();
-                policy.write_paths.sort();
-                policy.write_paths.dedup();
-
-                let report = world::landlock::apply_filesystem_policy(&policy);
-                if report.attempted && !report.applied {
-                    eprintln!(
-                        "substrate: error: landlock apply failed: {}",
-                        serde_json::to_string(&json!({
-                            "supported": report.support.supported,
-                            "abi": report.support.abi,
-                            "attempted": report.attempted,
-                            "applied": report.applied,
-                            "rules_added": report.rules_added,
-                            "reason": report.reason,
-                        }))
-                        .unwrap_or_else(|_| "<unserializable>".to_string())
-                    );
-                    std::process::exit(4);
+                if let Ok(project_dir) = std::env::var(MOUNT_PROJECT_DIR_ENV) {
+                    let trimmed = project_dir.trim();
+                    if !trimmed.is_empty() {
+                        write_paths.push(trimmed.to_string());
+                    }
                 }
-            }
-        } else {
-            // Workspace isolation keeps host paths readable, but should prevent writes outside the
-            // project and a few scratch locations.
-            let mut write_paths = vec![
-                "/tmp".to_string(),
-                "/var/tmp".to_string(),
-                "/dev".to_string(),
-                "/var/lib/substrate/world-deps".to_string(),
-            ];
 
-            if let Ok(project_dir) = std::env::var(MOUNT_PROJECT_DIR_ENV) {
-                let trimmed = project_dir.trim();
-                if !trimmed.is_empty() {
-                    write_paths.push(trimmed.to_string());
-                }
+                write_paths.sort();
+                write_paths.dedup();
+
+                let _report = world::landlock::apply_write_only_allowlist(&write_paths);
+                let _ = _report;
             }
 
-            write_paths.sort();
-            write_paths.dedup();
+            if let Some(plan) = enforcement_plan.as_ref() {
+                drop_caps_for_deny_enforcement(plan)?;
+            }
 
-            let _report = world::landlock::apply_write_only_allowlist(&write_paths);
-            let _ = _report;
+            std::env::set_current_dir(&cwd)
+                .with_context(|| format!("failed to set cwd to {cwd:?}"))?;
+
+            let mut command = std::process::Command::new("sh");
+            if login_shell {
+                command.arg("-lc");
+            } else {
+                command.arg("-c");
+            }
+            command.arg(&cmd);
+
+            #[cfg(unix)]
+            {
+                use std::os::unix::process::CommandExt;
+                let err = command.exec();
+                Err(anyhow::anyhow!("failed to exec inner command: {err}"))
+            }
+
+            #[cfg(not(unix))]
+            {
+                let status = command
+                    .status()
+                    .context("failed to run inner command under landlock exec wrapper")?;
+                std::process::exit(status.code().unwrap_or(1));
+            }
+        };
+
+        if cleanup_needed {
+            let pid = unsafe { libc::fork() };
+            if pid < 0 {
+                return Err(std::io::Error::last_os_error()).context("fork");
+            }
+            if pid == 0 {
+                // Child: apply Landlock + drop caps, then exec the workload.
+                return apply_workload_restrictions(read_paths, write_paths);
+            }
+
+            // Parent: wait, then cleanup any synthetic deny mountpoints we created in the overlay.
+            let mut status: libc::c_int = 0;
+            let rc = unsafe { libc::waitpid(pid, &mut status as *mut _, 0) };
+            if rc < 0 {
+                return Err(std::io::Error::last_os_error()).context("waitpid");
+            }
+
+            if let Some(report) = deny_report.as_ref() {
+                cleanup_deny_mountpoint_artifacts(report)?;
+            }
+
+            std::process::exit(wait_status_to_exit_code(status));
         }
+
+        // Fast path: no synthetic mountpoints were created, so we can just exec in-place.
+        apply_workload_restrictions(read_paths, write_paths)?;
+        unreachable!("workload exec should not return");
     }
     #[cfg(not(target_os = "linux"))]
     {
         let _ = (&read_paths, &write_paths, &enforcement_plan);
     }
 
-    #[cfg(target_os = "linux")]
-    if let Some(plan) = enforcement_plan.as_ref() {
-        drop_caps_for_deny_enforcement(plan)?;
-    }
-
+    #[cfg(not(target_os = "linux"))]
     let cwd = std::env::var(MOUNT_CWD_ENV).unwrap_or_else(|_| "/".to_string());
+    #[cfg(not(target_os = "linux"))]
     std::env::set_current_dir(&cwd).with_context(|| format!("failed to set cwd to {cwd:?}"))?;
 
+    #[cfg(not(target_os = "linux"))]
     let cmd = std::env::var(INNER_CMD_ENV).context("missing SUBSTRATE_INNER_CMD")?;
+    #[cfg(not(target_os = "linux"))]
     let login_shell = std::env::var(INNER_LOGIN_SHELL_ENV)
         .ok()
         .is_some_and(|raw| raw.trim() == "1");
 
+    #[cfg(not(target_os = "linux"))]
     let mut command = std::process::Command::new("sh");
+    #[cfg(not(target_os = "linux"))]
     if login_shell {
         command.arg("-lc");
     } else {
         command.arg("-c");
     }
+    #[cfg(not(target_os = "linux"))]
     command.arg(cmd);
 
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "linux")))]
     {
         use std::os::unix::process::CommandExt;
         let err = command.exec();
         Err(anyhow::anyhow!("failed to exec inner command: {err}"))
     }
 
-    #[cfg(not(unix))]
+    #[cfg(all(not(unix), not(target_os = "linux")))]
     {
         let status = command
             .status()
@@ -314,6 +389,69 @@ struct DenyMaskApplyReport {
     /// Absolute paths to add to the Landlock write allowlist so write-deny mountpoints are still
     /// reachable (writes fail with EROFS from the read-only bind mount, not EACCES from Landlock).
     write_allowlist_paths: Vec<String>,
+    /// Read-only bind-mount targets to unmount after the workload exits (only used when we had to
+    /// create mountpoints to deny future writes under deny prefixes).
+    cleanup_readonly_mount_targets: Vec<PathBuf>,
+    /// Directories created to establish deny mountpoints (remove in reverse order after unmount).
+    cleanup_created_dirs: Vec<PathBuf>,
+}
+
+#[cfg(target_os = "linux")]
+fn wait_status_to_exit_code(status: libc::c_int) -> i32 {
+    // Mirrors common shell semantics:
+    // - exited normally: return the exit status
+    // - terminated by signal: return 128 + signal
+    let signal = status & 0x7f;
+    if signal == 0 {
+        (status >> 8) & 0xff
+    } else {
+        128 + signal
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn cleanup_deny_mountpoint_artifacts(report: &DenyMaskApplyReport) -> Result<()> {
+    fn umount_detach(target: &Path) -> Result<()> {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+        let target_c = CString::new(target.as_os_str().as_bytes())
+            .with_context(|| format!("path contained NUL byte: {}", target.display()))?;
+        let rc = unsafe { libc::umount2(target_c.as_ptr(), libc::MNT_DETACH) };
+        if rc != 0 {
+            let err = std::io::Error::last_os_error();
+            // Ignore common cleanup races: ENOENT (already gone) or EINVAL (not a mountpoint).
+            if matches!(
+                err.kind(),
+                std::io::ErrorKind::NotFound | std::io::ErrorKind::InvalidInput
+            ) {
+                return Ok(());
+            }
+            return Err(err).with_context(|| format!("umount2 {}", target.display()));
+        }
+        Ok(())
+    }
+
+    for target in &report.cleanup_readonly_mount_targets {
+        umount_detach(target)?;
+    }
+
+    let mut dirs = report.cleanup_created_dirs.clone();
+    dirs.sort_by(|a, b| {
+        b.components()
+            .count()
+            .cmp(&a.components().count())
+            .then_with(|| a.display().to_string().cmp(&b.display().to_string()))
+    });
+    for dir in dirs {
+        match std::fs::remove_dir(&dir) {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) if err.kind() == std::io::ErrorKind::DirectoryNotEmpty => {}
+            Err(err) => return Err(err).with_context(|| format!("rmdir {}", dir.display())),
+        }
+    }
+
+    Ok(())
 }
 
 #[cfg(target_os = "linux")]
@@ -377,6 +515,16 @@ fn apply_deny_masks_linux(
 
     report.write_allowlist_paths.sort();
     report.write_allowlist_paths.dedup();
+
+    report
+        .cleanup_readonly_mount_targets
+        .sort_by_key(|a| a.display().to_string());
+    report.cleanup_readonly_mount_targets.dedup();
+    report
+        .cleanup_created_dirs
+        .sort_by_key(|a| a.display().to_string());
+    report.cleanup_created_dirs.dedup();
+
     Ok(report)
 }
 
@@ -385,6 +533,7 @@ fn apply_deny_masks_linux(
 struct ProjectEntry {
     rel: String,
     kind: EntryKind,
+    create_if_missing: bool,
 }
 
 #[cfg(target_os = "linux")]
@@ -442,6 +591,7 @@ fn walk_dir_no_follow(root: &Path, dir: &Path, out: &mut Vec<ProjectEntry>) -> R
         out.push(ProjectEntry {
             rel: rel.clone(),
             kind,
+            create_if_missing: false,
         });
         if kind == EntryKind::Dir {
             // Do not follow symlink dirs: symlink_metadata + kind check ensures we only recurse
@@ -468,6 +618,7 @@ fn resolve_deny_actions(
 
     let mut access_denied_rels: BTreeSet<String> = BTreeSet::new();
     let mut write_readonly_rels: BTreeSet<String> = BTreeSet::new();
+    let mut write_readonly_create_if_missing_rels: BTreeSet<String> = BTreeSet::new();
 
     for raw in read_deny {
         add_denies(raw, &by_rel, &mut access_denied_rels)?;
@@ -477,6 +628,12 @@ fn resolve_deny_actions(
     }
     for raw in write_deny {
         add_denies(raw, &by_rel, &mut write_readonly_rels)?;
+        if let Some(prefix) = write_deny_recursive_prefix_dir(raw)? {
+            write_readonly_rels.insert(prefix.clone());
+            if !by_rel.contains_key(prefix.as_str()) {
+                write_readonly_create_if_missing_rels.insert(prefix);
+            }
+        }
     }
 
     // AccessDenied wins over ReadOnly for the same path.
@@ -484,10 +641,16 @@ fn resolve_deny_actions(
         write_readonly_rels.remove(rel);
     }
 
-    let access_denied =
-        collapse_descendants(project_entries_from_rels(&by_rel, &access_denied_rels));
-    let write_readonly =
-        collapse_descendants(project_entries_from_rels(&by_rel, &write_readonly_rels));
+    let access_denied = collapse_descendants(project_entries_from_rels(
+        &by_rel,
+        &access_denied_rels,
+        None,
+    ));
+    let write_readonly = collapse_descendants(project_entries_from_rels(
+        &by_rel,
+        &write_readonly_rels,
+        Some(&write_readonly_create_if_missing_rels),
+    ));
 
     Ok((access_denied, write_readonly))
 }
@@ -526,19 +689,53 @@ fn add_denies(
 fn project_entries_from_rels(
     entries_by_rel: &std::collections::BTreeMap<&str, EntryKind>,
     rels: &std::collections::BTreeSet<String>,
+    create_if_missing_rels: Option<&std::collections::BTreeSet<String>>,
 ) -> Vec<ProjectEntry> {
     rels.iter()
         .map(|rel| {
             let kind = entries_by_rel
                 .get(rel.as_str())
                 .copied()
-                .unwrap_or(EntryKind::Other);
+                .unwrap_or_else(|| {
+                    if create_if_missing_rels.is_some_and(|rels| rels.contains(rel.as_str())) {
+                        EntryKind::Dir
+                    } else {
+                        EntryKind::Other
+                    }
+                });
             ProjectEntry {
                 rel: rel.clone(),
                 kind,
+                create_if_missing: create_if_missing_rels
+                    .is_some_and(|rels| rels.contains(rel.as_str())),
             }
         })
         .collect()
+}
+
+#[cfg(target_os = "linux")]
+fn write_deny_recursive_prefix_dir(raw_pattern: &str) -> Result<Option<String>> {
+    let normalized = normalize_project_pattern(raw_pattern)
+        .with_context(|| format!("invalid deny pattern {raw_pattern:?}"))?;
+
+    // For recursive directory denies (`foo/bar/**`), deny must prevent new path creation under the
+    // prefix even when it doesn't exist at exec start (e.g. `mkdir -p foo/bar/x`).
+    let Some(prefix) = normalized.strip_suffix("/**") else {
+        return Ok(None);
+    };
+
+    let prefix = prefix.trim_matches('/');
+    if prefix.is_empty() || prefix == "." {
+        return Ok(None);
+    }
+
+    // Defensive: do not attempt to synthesize mountpoints for patterns where the prefix itself
+    // contains wildcards.
+    if prefix.contains('*') {
+        return Ok(None);
+    }
+
+    Ok(Some(prefix.to_string()))
 }
 
 #[cfg(target_os = "linux")]
@@ -859,10 +1056,22 @@ fn apply_deny_mounts_for_root(
 
         let target = root.join(&entry.rel);
         let meta = match std::fs::symlink_metadata(&target) {
-            Ok(m) => m,
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
+            Ok(m) => Some(m),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
             Err(err) => return Err(err).with_context(|| format!("stat {}", target.display())),
         };
+
+        let mut created = Vec::new();
+        if meta.is_none() && entry.create_if_missing && action == DenyMaskAction::ReadOnly {
+            created = create_dir_all_tracking(&target)
+                .with_context(|| format!("mkdir -p {}", target.display()))?;
+        }
+
+        let meta = match meta {
+            Some(m) => Some(m),
+            None => std::fs::symlink_metadata(&target).ok(),
+        };
+        let Some(meta) = meta else { continue };
         let ft = meta.file_type();
         let kind = if ft.is_dir() {
             EntryKind::Dir
@@ -875,9 +1084,52 @@ fn apply_deny_mounts_for_root(
         };
 
         apply_action_for_target(root, &target, kind, action, sources, &mut report)?;
+        if entry.create_if_missing && action == DenyMaskAction::ReadOnly {
+            if let Some(report) = report.as_deref_mut() {
+                report.cleanup_readonly_mount_targets.push(target.clone());
+                if !created.is_empty() {
+                    report.cleanup_created_dirs.extend(created);
+                }
+            }
+        }
     }
 
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn create_dir_all_tracking(target: &Path) -> Result<Vec<PathBuf>> {
+    let mut created = Vec::new();
+    if target.exists() {
+        return Ok(created);
+    }
+
+    let mut ancestor = target.to_path_buf();
+    while !ancestor.exists() {
+        let Some(parent) = ancestor.parent() else {
+            break;
+        };
+        ancestor = parent.to_path_buf();
+    }
+
+    let rel = target
+        .strip_prefix(&ancestor)
+        .with_context(|| format!("strip_prefix({}, {})", ancestor.display(), target.display()))?;
+
+    let mut cur = ancestor;
+    for component in rel.components() {
+        cur.push(component);
+        if cur.exists() {
+            continue;
+        }
+        match std::fs::create_dir(&cur) {
+            Ok(()) => created.push(cur.clone()),
+            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(err) => return Err(err).with_context(|| format!("create_dir {}", cur.display())),
+        }
+    }
+
+    Ok(created)
 }
 
 #[cfg(target_os = "linux")]

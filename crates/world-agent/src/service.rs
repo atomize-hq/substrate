@@ -47,21 +47,83 @@ pub(crate) const WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV: &str =
 pub(crate) const LANDLOCK_HELPER_SRC_ENV: &str = "SUBSTRATE_LANDLOCK_HELPER_SRC";
 
 const CARGO_BIN_EXE_WORLD_AGENT_ENV: &str = "CARGO_BIN_EXE_world-agent";
+const CARGO_BIN_EXE_WORLD_AGENT_ALT_ENV: &str = "CARGO_BIN_EXE_world_agent";
+
+fn resolve_landlock_helper_src_from_exe(exe: &std::path::Path) -> Option<std::path::PathBuf> {
+    let is_world_agent_exe = exe
+        .file_name()
+        .is_some_and(|name| name == std::ffi::OsStr::new("world-agent"));
+    if is_world_agent_exe && exe.is_file() {
+        return Some(exe.to_owned());
+    }
+
+    // Common case in `cargo test`: current_exe is the test harness under `target/*/deps/...`.
+    // Walk up a few parents and look for the workspace-built `world-agent` binary.
+    let mut dir = exe.parent();
+    for _ in 0..8 {
+        let Some(d) = dir else { break };
+        let candidate = d.join("world-agent");
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+        dir = d.parent();
+    }
+
+    None
+}
 
 fn resolve_landlock_helper_src() -> Option<String> {
-    // When WorldAgentService is embedded in tests, `current_exe()` points at the test harness
-    // binary, not the world-agent binary. Prefer the Cargo-provided bin path when available.
-    if let Ok(candidate) = std::env::var(CARGO_BIN_EXE_WORLD_AGENT_ENV) {
+    fn accept_candidate(candidate: &str) -> Option<std::path::PathBuf> {
         let candidate = candidate.trim();
-        if !candidate.is_empty() && std::path::Path::new(candidate).exists() {
-            return Some(candidate.to_string());
+        if candidate.is_empty() {
+            return None;
+        }
+        let path = std::path::Path::new(candidate);
+        if path.is_file() {
+            return Some(path.to_owned());
+        }
+        None
+    }
+
+    fn same_file(a: &std::path::Path, b: &std::path::Path) -> bool {
+        if a == b {
+            return true;
+        }
+        match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+            (Ok(a), Ok(b)) => a == b,
+            _ => false,
         }
     }
 
-    std::env::current_exe()
-        .ok()
-        .map(|exe| exe.display().to_string())
-        .filter(|candidate| !candidate.trim().is_empty())
+    let exe = std::env::current_exe().ok();
+
+    // Prefer explicitly provided helper src (mainly for tests/tools), but avoid accepting the
+    // current process when it is a `cargo test` harness (it will swallow the helper argv and exit 0).
+    if let Ok(candidate) = std::env::var(LANDLOCK_HELPER_SRC_ENV) {
+        if let Some(path) = accept_candidate(&candidate) {
+            let is_test_harness_self = exe.as_ref().is_some_and(|exe| {
+                exe.file_name().is_none_or(|n| n != "world-agent") && same_file(&path, exe)
+            });
+            if !is_test_harness_self {
+                return Some(path.display().to_string());
+            }
+        }
+    }
+
+    // Best-effort: if a runtime env var exists, honor it.
+    for key in [
+        CARGO_BIN_EXE_WORLD_AGENT_ENV,
+        CARGO_BIN_EXE_WORLD_AGENT_ALT_ENV,
+    ] {
+        if let Ok(candidate) = std::env::var(key) {
+            if let Some(path) = accept_candidate(&candidate) {
+                return Some(path.display().to_string());
+            }
+        }
+    }
+
+    let exe = exe?;
+    resolve_landlock_helper_src_from_exe(&exe).map(|p| p.display().to_string())
 }
 
 /// Main service running inside the world.
@@ -940,6 +1002,24 @@ mod tests {
         assert_eq!(fd.writes[0], std::path::PathBuf::from("/tmp/a.txt"));
         assert!(fd.mods.is_empty());
         assert!(fd.deletes.is_empty());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_resolve_helper_src_prefers_sibling_world_agent_over_test_harness() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let deps = tmp.path().join("target").join("debug").join("deps");
+        std::fs::create_dir_all(&deps).expect("create deps");
+
+        let harness = deps.join("wfgad3_wildcard_deny_symlink_handling-abcdef");
+        std::fs::write(&harness, b"").expect("write harness");
+
+        let world_agent = deps.parent().unwrap().join("world-agent");
+        std::fs::write(&world_agent, b"").expect("write world-agent");
+
+        let resolved =
+            resolve_landlock_helper_src_from_exe(&harness).expect("resolve from harness exe");
+        assert_eq!(resolved, world_agent);
     }
 
     #[cfg(target_os = "linux")]
