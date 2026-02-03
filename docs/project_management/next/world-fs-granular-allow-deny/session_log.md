@@ -386,3 +386,7 @@
 
 ## END — 2026-02-03T04:13:55Z — integration — WFGAD5-integ-windows
 - Result: `NOOP` (checkpoint green; platform-fix not required)
+
+## START — 2026-02-03T04:14:10Z — integration — WFGAD5-integ
+- Dispatch:
+  - `make triad-task-start-integ-final FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny" SLICE_ID="WFGAD5" LAUNCH_CODEX=1`
