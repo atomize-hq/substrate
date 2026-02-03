@@ -357,3 +357,8 @@
 - Goal: Fix `cargo test --workspace --all-targets` failure on `macos-14` for CP3.
 - Trigger:
   - `https://github.com/atomize-hq/substrate/actions/runs/21615608284`
+
+## END — 2026-02-03T04:02:02Z — integration platform-fix — WFGAD5-integ-macos
+- HEAD: `2ca934374c4b6abd1a8833220aa99c86f8c22e11`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny/logs/WFGAD5/integ-macos/last_message.md`
+- Notes: Deflakes `c3_drift_restart_refreshes_anchor_env_for_new_cwd` on macOS by synchronizing PTY/scripted input.
