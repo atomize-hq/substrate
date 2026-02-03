@@ -350,3 +350,10 @@
 - Dispatch:
   - `make ci-compile-parity CI_WORKFLOW_REF="feat/world-fs-granular-allow-deny" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF="99255b18d436aebdbc008f91c2b751ab9a258409"`
   - `scripts/ci/dispatch_ci_testing.sh --workflow-ref "feat/world-fs-granular-allow-deny" --remote origin --cleanup --mode quick --checkout-ref "99255b18d436aebdbc008f91c2b751ab9a258409"`
+
+## START — 2026-02-03T04:00:47Z — integration platform-fix — WFGAD5-integ-macos
+- Branch: `world-fs-granular-allow-deny-wfgad5-integ-macos`
+- Worktree: `wt/world-fs-granular-allow-deny-wfgad5-integ-macos`
+- Goal: Fix `cargo test --workspace --all-targets` failure on `macos-14` for CP3.
+- Trigger:
+  - `https://github.com/atomize-hq/substrate/actions/runs/21615608284`
