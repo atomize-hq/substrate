@@ -44,6 +44,8 @@ pub(crate) const WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV: &str =
     "SUBSTRATE_WORLD_FS_LANDLOCK_READ_ALLOWLIST";
 pub(crate) const WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV: &str =
     "SUBSTRATE_WORLD_FS_LANDLOCK_WRITE_ALLOWLIST";
+pub(crate) const WORLD_FS_LANDLOCK_DISCOVER_ALLOWLIST_ENV: &str =
+    "SUBSTRATE_WORLD_FS_LANDLOCK_DISCOVER_ALLOWLIST";
 pub(crate) const LANDLOCK_HELPER_SRC_ENV: &str = "SUBSTRATE_LANDLOCK_HELPER_SRC";
 
 const CARGO_BIN_EXE_WORLD_AGENT_ENV: &str = "CARGO_BIN_EXE_world-agent";
@@ -263,6 +265,7 @@ impl WorldAgentService {
             isolation_full,
             allowed_domains,
             write_allowlist_prefixes,
+            landlock_discover_paths,
             landlock_read_paths,
             landlock_write_paths,
             enforcement_plan_b64,
@@ -313,6 +316,7 @@ impl WorldAgentService {
             apply_full_isolation_helper_env(
                 &mut env_map,
                 landlock_supported,
+                &landlock_discover_paths,
                 &landlock_read_paths,
                 &landlock_write_paths,
                 enforcement_plan_b64.as_deref(),
@@ -386,6 +390,7 @@ impl WorldAgentService {
             isolation_full,
             allowed_domains,
             write_allowlist_prefixes,
+            landlock_discover_paths,
             landlock_read_paths,
             landlock_write_paths,
             enforcement_plan_b64,
@@ -435,6 +440,7 @@ impl WorldAgentService {
                     apply_full_isolation_helper_env(
                         &mut env_map,
                         landlock_supported,
+                        &landlock_discover_paths,
                         &landlock_read_paths,
                         &landlock_write_paths,
                         enforcement_plan_b64.as_deref(),
@@ -597,6 +603,7 @@ struct PolicyInputs {
     isolation_full: bool,
     allowed_domains: Vec<String>,
     write_allowlist_prefixes: Vec<String>,
+    landlock_discover_paths: Vec<String>,
     landlock_read_paths: Vec<String>,
     landlock_write_paths: Vec<String>,
     enforcement_plan_b64: Option<String>,
@@ -620,29 +627,40 @@ fn resolve_policy_inputs(
         let enforcement_plan_b64 = enforcement_plan::maybe_encode_from_snapshot(snapshot)
             .map_err(|err| BadRequestError::new(err.to_string()))?;
 
-        let (write_allowlist_prefixes, landlock_read_paths, landlock_write_paths) =
-            if isolation_full {
-                let read_allowlist = snapshot
-                    .world_fs
-                    .read
-                    .as_ref()
-                    .map(|d| d.allow_list.as_slice())
-                    .unwrap_or(&[]);
-                let write_allowlist = snapshot
-                    .world_fs
-                    .write
-                    .as_ref()
-                    .map(|d| d.allow_list.as_slice())
-                    .unwrap_or(&[]);
+        let (
+            write_allowlist_prefixes,
+            landlock_discover_paths,
+            landlock_read_paths,
+            landlock_write_paths,
+        ) = if isolation_full {
+            let read_allowlist = snapshot
+                .world_fs
+                .read
+                .as_ref()
+                .map(|d| d.allow_list.as_slice())
+                .unwrap_or(&[]);
+            let discover_allowlist = snapshot
+                .world_fs
+                .discover
+                .as_ref()
+                .map(|d| d.allow_list.as_slice())
+                .unwrap_or(read_allowlist);
+            let write_allowlist = snapshot
+                .world_fs
+                .write
+                .as_ref()
+                .map(|d| d.allow_list.as_slice())
+                .unwrap_or(&[]);
 
-                (
-                    resolve_project_write_allowlist_prefixes(project_dir, write_allowlist),
-                    resolve_landlock_allowlist_paths(project_dir, read_allowlist),
-                    resolve_landlock_allowlist_paths(project_dir, write_allowlist),
-                )
-            } else {
-                (Vec::new(), Vec::new(), Vec::new())
-            };
+            (
+                resolve_project_write_allowlist_prefixes(project_dir, write_allowlist),
+                resolve_landlock_allowlist_paths(project_dir, discover_allowlist),
+                resolve_landlock_allowlist_paths(project_dir, read_allowlist),
+                resolve_landlock_allowlist_paths(project_dir, write_allowlist),
+            )
+        } else {
+            (Vec::new(), Vec::new(), Vec::new(), Vec::new())
+        };
 
         return Ok((
             PolicyResolutionModeV1::SnapshotV2,
@@ -651,6 +669,7 @@ fn resolve_policy_inputs(
                 isolation_full,
                 allowed_domains: snapshot.net_allowed.clone(),
                 write_allowlist_prefixes,
+                landlock_discover_paths,
                 landlock_read_paths,
                 landlock_write_paths,
                 enforcement_plan_b64,
@@ -687,6 +706,7 @@ fn resolve_policy_inputs(
             isolation_full,
             allowed_domains: substrate_broker::allowed_domains(),
             write_allowlist_prefixes,
+            landlock_discover_paths: Vec::new(),
             landlock_read_paths,
             landlock_write_paths,
             enforcement_plan_b64: None,
@@ -697,6 +717,7 @@ fn resolve_policy_inputs(
 pub(crate) fn apply_full_isolation_helper_env(
     env_map: &mut HashMap<String, String>,
     landlock_supported: bool,
+    landlock_discover_paths: &[String],
     landlock_read_paths: &[String],
     landlock_write_paths: &[String],
     enforcement_plan_b64: Option<&str>,
@@ -708,9 +729,17 @@ pub(crate) fn apply_full_isolation_helper_env(
         );
     }
 
-    let landlock_env_needed =
-        landlock_supported && (!landlock_read_paths.is_empty() || !landlock_write_paths.is_empty());
+    let landlock_env_needed = landlock_supported
+        && (!landlock_discover_paths.is_empty()
+            || !landlock_read_paths.is_empty()
+            || !landlock_write_paths.is_empty());
     if landlock_env_needed {
+        if !landlock_discover_paths.is_empty() {
+            env_map.insert(
+                WORLD_FS_LANDLOCK_DISCOVER_ALLOWLIST_ENV.to_string(),
+                landlock_discover_paths.join("\n"),
+            );
+        }
         if !landlock_read_paths.is_empty() {
             env_map.insert(
                 WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV.to_string(),

@@ -24,6 +24,7 @@ fn landlock_detect_support_is_consistent() {
 fn landlock_empty_policy_is_noop() {
     let policy = LandlockFilesystemPolicy {
         exec_paths: Vec::new(),
+        discover_paths: Vec::new(),
         read_paths: Vec::new(),
         write_paths: Vec::new(),
     };
