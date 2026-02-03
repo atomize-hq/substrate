@@ -380,3 +380,9 @@
 ## END — 2026-02-03T04:13:07Z — ci-checkpoint — CP3-ci-checkpoint
 - Result: `PASS`
 - Checkpoint-validated SHA: `2ca934374c4b6abd1a8833220aa99c86f8c22e11`
+
+## END — 2026-02-03T04:13:55Z — integration — WFGAD5-integ-linux
+- Result: `NOOP` (checkpoint green; platform-fix not required)
+
+## END — 2026-02-03T04:13:55Z — integration — WFGAD5-integ-windows
+- Result: `NOOP` (checkpoint green; platform-fix not required)
