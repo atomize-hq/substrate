@@ -52,9 +52,10 @@ const CARGO_BIN_EXE_WORLD_AGENT_ENV: &str = "CARGO_BIN_EXE_world-agent";
 const CARGO_BIN_EXE_WORLD_AGENT_ALT_ENV: &str = "CARGO_BIN_EXE_world_agent";
 
 fn resolve_landlock_helper_src_from_exe(exe: &std::path::Path) -> Option<std::path::PathBuf> {
-    let is_world_agent_exe = exe
-        .file_name()
-        .is_some_and(|name| name == std::ffi::OsStr::new("world-agent"));
+    let is_world_agent_exe = exe.file_name().is_some_and(|name| {
+        name == std::ffi::OsStr::new("world-agent")
+            || name == std::ffi::OsStr::new("substrate-world-agent")
+    });
     if is_world_agent_exe && exe.is_file() {
         return Some(exe.to_owned());
     }
@@ -979,6 +980,16 @@ pub(crate) fn resolve_landlock_allowlist_paths(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn landlock_helper_src_accepts_substrate_world_agent_name() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let candidate = tmp.path().join("substrate-world-agent");
+        std::fs::write(&candidate, b"").expect("write");
+
+        let resolved = resolve_landlock_helper_src_from_exe(&candidate);
+        assert_eq!(resolved.as_deref(), Some(candidate.as_path()));
+    }
 
     #[test]
     fn test_budget_tracker() {
