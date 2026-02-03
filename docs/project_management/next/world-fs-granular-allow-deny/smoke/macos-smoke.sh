@@ -20,7 +20,7 @@ if ! command -v limactl >/dev/null 2>&1; then
 fi
 
 echo "== Preflight: warm Lima world (macOS -> Linux VM) =="
-bash "$REPO_ROOT/scripts/mac/lima-warm.sh" "$REPO_ROOT" >/dev/null
+bash "$REPO_ROOT/scripts/mac/lima-warm.sh" "$REPO_ROOT"
 
 if ! command -v "$SUBSTRATE_BIN" >/dev/null 2>&1; then
   echo "world-fs-granular-allow-deny: substrate binary not found (SUBSTRATE_BIN=$SUBSTRATE_BIN)" >&2

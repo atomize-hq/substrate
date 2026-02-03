@@ -218,6 +218,30 @@ ensure_repo_mount() {
     if ! limactl shell "${VM_NAME}" test -d /src >/dev/null 2>&1; then
         fatal "Repository path ${PROJECT_PATH} is not mounted inside the VM. Ensure it exists and rerun."
     fi
+
+    # Verify that the *intended* host checkout is actually mounted as /src.
+    #
+    # Lima mounts are fixed at VM creation time. In CI and multi-checkout dev setups, it's easy for
+    # an existing VM to still be mounted to an older checkout, which silently causes the guest to
+    # build/run the wrong world-agent version. That manifests as schema mismatches (e.g. V2 policy
+    # fields rejected by an older agent).
+    local sentinel
+    sentinel=".substrate-lima-mount-sentinel.$RANDOM.$RANDOM"
+    echo "sentinel" > "${PROJECT_PATH}/${sentinel}"
+    trap 'rm -f "${PROJECT_PATH:?}/${sentinel}"' RETURN
+
+    if limactl shell "${VM_NAME}" test -f "/src/${sentinel}" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    warn "Lima VM '${VM_NAME}' is running but /src does not match the current host checkout (${PROJECT_PATH}). Recreating VM to refresh mounts."
+    destroy_vm
+    create_vm
+    wait_for_running
+
+    if ! limactl shell "${VM_NAME}" test -f "/src/${sentinel}" >/dev/null 2>&1; then
+        fatal "After recreating Lima VM '${VM_NAME}', /src still does not reflect ${PROJECT_PATH}. Check the Lima profile mounts and rerun."
+    fi
 }
 
 ensure_substrate_group() {
