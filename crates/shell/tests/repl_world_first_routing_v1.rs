@@ -571,39 +571,47 @@ fn c3_drift_restart_refreshes_anchor_env_for_new_cwd() {
     let project_str = project_canon.to_string_lossy().into_owned();
     let parent_str = parent_canon.to_string_lossy().into_owned();
 
-    // Move up to project root (still in workspace), then move to parent (workspace_root=None),
-    // then run a command to trigger drift restart before execution.
+    let wait_for_min_records = |min_execs: usize, min_starts: usize, timeout: Duration| {
+        let deadline = Instant::now() + timeout;
+        while Instant::now() < deadline {
+            let guard = records.lock().expect("lock records");
+            if guard.persistent_execs.len() >= min_execs
+                && guard.persistent_start_sessions.len() >= min_starts
+            {
+                return;
+            }
+            drop(guard);
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        let guard = records.lock().expect("lock records");
+        panic!(
+            "timed out waiting for records execs>={min_execs} starts>={min_starts}; got execs={} starts={}; records: {guard:#?}",
+            guard.persistent_execs.len(),
+            guard.persistent_start_sessions.len(),
+        );
+    };
+
+    // Move up to project root (still in workspace), then move to parent (workspace_root=None).
+    // Drift restart should happen immediately after the second `cd` (the REPL checks drift both
+    // before and after each world command). Wait on server-side records to avoid PTY timing
+    // differences across platforms.
     repl.send_line("cd ..");
-    repl.send_line("cd ..");
-    repl.send_line("pwd");
-    let parent_raw = temp.path().to_string_lossy().to_string();
-    let parent_canon = temp
-        .path()
-        .canonicalize()
-        .unwrap_or_else(|_| temp.path().to_path_buf())
-        .to_string_lossy()
-        .to_string();
-    repl.wait_for_output(&parent_raw, Duration::from_secs(2))
-        .or_else(|_| repl.wait_for_output(&parent_canon, Duration::from_secs(2)))
-        .expect("pwd after leaving workspace root");
+    wait_for_min_records(1, 1, Duration::from_secs(3));
+    repl.wait_for_output("__PERSISTENT_EXEC_STUB__ eof cd ..", Duration::from_secs(2))
+        .expect("cd .. executed in persistent session");
+
+    // Use a distinct spelling so we can wait on the second exec deterministically.
+    repl.send_line("cd ../");
+    wait_for_min_records(2, 1, Duration::from_secs(3));
+    repl.wait_for_output(
+        "__PERSISTENT_EXEC_STUB__ eof cd ../",
+        Duration::from_secs(2),
+    )
+    .expect("cd ../ executed in persistent session");
 
     // Ensure the drift restart has actually occurred (i.e., the client re-sent a new StartSession)
     // before terminating the REPL. Otherwise, a fast `exit` can race the restart and flake.
-    let deadline = Instant::now() + Duration::from_secs(3);
-    while Instant::now() < deadline {
-        if repl.try_wait().unwrap_or(false) {
-            break;
-        }
-        let count = records
-            .lock()
-            .expect("lock records")
-            .persistent_start_sessions
-            .len();
-        if count >= 2 {
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(25));
-    }
+    wait_for_min_records(2, 2, Duration::from_secs(5));
     repl.send_line("exit");
     let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
 
