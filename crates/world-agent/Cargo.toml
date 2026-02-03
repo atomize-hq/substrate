@@ -50,5 +50,8 @@ substrate-broker = { path = "../broker" }
 [target.'cfg(target_os = "linux")'.dependencies]
 world = { path = "../world" }
 
+[target.'cfg(all(target_os = "linux", not(target_env = "musl")))'.dependencies]
+libseccomp = "0.3"
+
 [dev-dependencies]
 tempfile = "3"
