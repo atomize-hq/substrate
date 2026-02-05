@@ -65,10 +65,12 @@ world_fs:
   mode: writable            # writable | read_only
   isolation: full           # workspace | full
   require_world: true       # true = no host fallback when world is unavailable
-  read_allowlist:
-    - "*"                   # required, must be non-empty
-  write_allowlist:
-    - "dist/**"             # full isolation uses prefix globs under the project
+  read:
+    allow_list:
+      - "."                 # project-root-relative prefixes (no wildcards)
+  write:
+    allow_list:
+      - "dist"              # project-root-relative prefixes (no wildcards)
 
 cmd_allowed: []
 cmd_denied:

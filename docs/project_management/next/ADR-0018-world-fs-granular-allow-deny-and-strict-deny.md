@@ -31,7 +31,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 0d3cd3546737a560b94c1d63502807d5e9833241bb2bd6706f1bbf768a7efb97
+ADR_BODY_SHA256: 75b2e063e58d7fddb75ad31872e0569d31442925b5710873e069eb43c4d11c3e
 ### Changes (operator-facing)
 - Add granular `allow_list` + `deny_list` for world filesystem reads/writes (and optional directory visibility)
   - Existing: `world_fs.read_allowlist` / `world_fs.write_allowlist` are allowlist-only; invalid patterns (e.g., `..`) can be accepted but ignored; there is no deny list; “allow all except secrets” cannot be expressed.
@@ -248,3 +248,103 @@ This section is authoritative for the deny enforcement posture decision previous
 - Schema/validation wiring: `WFGAD0-*` (tie `enforcement` to deny usage; reject invalid combos).
 - Deny masking semantics: `WFGAD3-*` (masking + deterministic error behavior).
 - Strict lockdown security boundary: `WFGAD5-*` (bypass prevention; fail closed when strict prerequisites missing).
+
+---
+
+## Appendix A (Authoritative) — Policy Schema Renames + Semantics (No Compatibility)
+
+**Date (UTC):** 2026-02-03  
+**Status:** Accepted (appendix; supersedes naming in this ADR body)  
+
+This appendix locks the intent-driven policy surface for world filesystem controls and resolves
+operator confusion caused by implementation-leaky names (`require_world`, `mode`, `enforcement`,
+`isolation=workspace|full`).
+
+### A.1 Goals (explicit)
+- Names should communicate operator intent without reading docs.
+- The schema must not force “set two keys in one command” circular edits.
+- Deny semantics must remain safe by default: no deny lists without an explicit enforcement posture.
+- No backwards compatibility: legacy keys are hard errors once this appendix is implemented.
+
+### A.2 Policy patch schema (YAML) — `world_fs` (V3)
+
+```yaml
+world_fs:
+  # Host path visibility / rootfs isolation:
+  # - true  => host paths remain nameable (former isolation=workspace)
+  # - false => host paths are not nameable (former isolation=full)
+  host_visible: true|false
+
+  # Routing behavior when the world backend is unavailable / handshake fails:
+  fail_closed:
+    routing: true|false
+
+  # Deny enforcement posture (only meaningful when any deny_list is non-empty):
+  # - strict        => deny rules must be a hard security boundary; fail if strict cannot be enforced
+  # - prefer_strict => use strict when available; otherwise fall back without failing
+  # - weak          => deny rules are applied but are not a hard boundary (workload may undo/bypass)
+  deny_enforcement: strict|prefer_strict|weak
+
+  # Directory visibility (full isolation only).
+  discover:
+    allow_list: [ <pattern>, ... ]
+    deny_list:  [ <pattern>, ... ]
+
+  # File read access (full isolation only).
+  read:
+    allow_list: [ <pattern>, ... ]
+    deny_list:  [ <pattern>, ... ]
+
+  # Project write behavior (always valid).
+  write:
+    enabled: true|false
+    # Full isolation only:
+    allow_list: [ <pattern>, ... ]
+    deny_list:  [ <pattern>, ... ]
+```
+
+### A.3 Defaults (explicit; deterministic)
+- `world_fs.host_visible` defaults to `true` (former `isolation=workspace`).
+- `world_fs.fail_closed.routing` defaults to `false` (host fallback allowed).
+- `world_fs.write.enabled` defaults to `true`.
+- `deny_list` defaults to `[]` when omitted (for any dimension where deny_list is allowed).
+- If `discover` is omitted (and `world_fs.host_visible=false`), it defaults to `read` (same allow/deny).
+- In full isolation (`world_fs.host_visible=false`), if `read.allow_list` or `write.allow_list` is omitted, it defaults to `["."]`
+  (the entire project).
+
+### A.4 Validation rules (hard errors; zero ambiguity)
+
+#### A.4.1 Routing invariants
+- If `world_fs.host_visible=false`, then `world_fs.fail_closed.routing` MUST be `true`.
+- If `world_fs.write.enabled=false`, then `world_fs.fail_closed.routing` MUST be `true`.
+
+#### A.4.2 Full-isolation-only keys
+- If `world_fs.host_visible=true`:
+  - `world_fs.read` MUST be omitted.
+  - `world_fs.discover` MUST be omitted.
+  - `world_fs.write.allow_list` / `world_fs.write.deny_list` MUST be omitted.
+  - Any deny list usage MUST be rejected as invalid config (hard error).
+
+#### A.4.3 Allow/deny shape
+- For `read`, `discover`, and `write` (when applicable):
+  - `allow_list` MUST be non-empty after defaulting.
+  - A path is permitted iff it matches at least one `allow_list` entry AND matches no `deny_list` entry.
+  - `deny_list` overrides `allow_list`.
+
+#### A.4.4 Deny enforcement posture (breaking the circular-edit foot-gun)
+- If any `deny_list` is non-empty (in any dimension):
+  - `world_fs.deny_enforcement` MUST be present.
+- If all `deny_list` values are empty (or omitted):
+  - `world_fs.deny_enforcement` MAY be present.
+  - If present in this state, it is a stored preference and has no behavioral effect until a deny_list becomes non-empty.
+
+### A.5 Failure taxonomy (explicit)
+- Policy/config hard errors MUST fail before execution (host exit code `2`).
+- World enforcement failures (e.g., strict deny requested but strict prerequisites cannot be applied) MUST fail closed as a
+  world execution failure (host exit code `4`), not by silently downgrading.
+  - Exception: `deny_enforcement=prefer_strict` explicitly allows downgrade without failing.
+
+### A.6 Output contract (effective policy display)
+- `substrate policy show` MUST render `discover`, `read`, and `write` in the effective policy output when `world_fs.host_visible=false`,
+  including explicit `deny_list: []` when empty, so operators can discover and edit the knobs without reading docs.
+- When `discover` is defaulted from `read`, the effective output MUST still show `discover` explicitly with its effective allow/deny lists.

@@ -940,9 +940,10 @@ fn validate_and_finalize_effective_policy(policy: &mut Policy) -> Result<()> {
             match policy.world_fs_mode {
                 WorldFsMode::ReadOnly => {
                     if policy.world_fs_read.is_none() {
-                        return Err(anyhow!(
-                            "world_fs.read.allow_list is required when world_fs.isolation=full"
-                        ));
+                        policy.world_fs_read = Some(WorldFsDimensionPolicy {
+                            allow_list: vec![".".to_string()],
+                            deny_list: Vec::new(),
+                        });
                     }
                     if policy.world_fs_write.is_some() {
                         return Err(anyhow!(
@@ -952,9 +953,10 @@ fn validate_and_finalize_effective_policy(policy: &mut Policy) -> Result<()> {
                 }
                 WorldFsMode::Writable => {
                     if policy.world_fs_write.is_none() {
-                        return Err(anyhow!(
-                            "world_fs.write.allow_list is required when world_fs.mode=writable"
-                        ));
+                        policy.world_fs_write = Some(WorldFsDimensionPolicy {
+                            allow_list: vec![".".to_string()],
+                            deny_list: Vec::new(),
+                        });
                     }
                     // Convenience: writable-mode policies that specify only write allow/deny lists
                     // should still have a deterministic read allow list. Default reads to the write

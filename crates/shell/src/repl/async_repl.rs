@@ -22,10 +22,12 @@ use crate::execution::agent_events::{
 #[cfg(unix)]
 use crate::execution::get_terminal_size;
 use crate::execution::ReplSessionTelemetry;
+use crate::execution::WorldRootSettings;
 use crate::execution::{
-    execute_command, find_workspace_root, is_shell_stream_event, needs_pty, policy_snapshot,
-    resolve_world_root, setup_signal_handlers, MinimalTerminalGuard, ReplPersistentSessionClient,
-    ReplSessionStartParams, ReplStdinMode, ShellConfig, PTY_ACTIVE,
+    canonicalize_or, enforce_caged_destination, execute_command, find_workspace_root,
+    is_shell_stream_event, needs_pty, policy_snapshot, resolve_world_root, setup_signal_handlers,
+    MinimalTerminalGuard, ReplPersistentSessionClient, ReplSessionStartParams, ReplStdinMode,
+    ShellConfig, PTY_ACTIVE,
 };
 use crate::repl::editor;
 use substrate_common::agent_events::AgentEvent;
@@ -739,6 +741,30 @@ fn predict_cd_next_cwd(current_cwd: &str, program: &str) -> Option<String> {
     Some(normalized.to_string_lossy().to_string())
 }
 
+fn apply_caged_predicted_cwd(
+    world_root: &WorldRootSettings,
+    current_cwd: &str,
+    predicted: String,
+) -> String {
+    let current_path = Path::new(current_cwd);
+    let predicted_path = PathBuf::from(&predicted);
+    if !current_path.is_absolute() || !predicted_path.is_absolute() {
+        return predicted;
+    }
+
+    let requested = canonicalize_or(&predicted_path);
+    let (destination, _warning) = enforce_caged_destination(world_root, current_path, requested);
+    destination.to_string_lossy().to_string()
+}
+
+fn apply_caged_predicted_cwd_from_config(current_cwd: &str, predicted: String) -> String {
+    let current_path = Path::new(current_cwd);
+    let Ok(world_root) = resolve_world_root(None, None, None, current_path) else {
+        return predicted;
+    };
+    apply_caged_predicted_cwd(&world_root, current_cwd, predicted)
+}
+
 async fn exec_world_line(
     session: &mut WorldSession,
     program: &str,
@@ -779,7 +805,7 @@ async fn exec_world_line(
     if exit == 0 {
         if let Some(predicted) = predict_cd_next_cwd(&prev_cwd, program) {
             if next_cwd == prev_cwd {
-                next_cwd = predicted;
+                next_cwd = apply_caged_predicted_cwd_from_config(&prev_cwd, predicted);
             }
         }
     }
@@ -862,12 +888,62 @@ async fn exec_world_pty(
     if exit == 0 {
         if let Some(predicted) = predict_cd_next_cwd(&prev_cwd, program) {
             if next_cwd == prev_cwd {
-                next_cwd = predicted;
+                next_cwd = apply_caged_predicted_cwd_from_config(&prev_cwd, predicted);
             }
         }
     }
     session.world_cwd = next_cwd;
     Ok(exit)
+}
+
+#[cfg(test)]
+mod caged_prediction_tests {
+    use super::*;
+    use substrate_common::WorldRootMode;
+    use tempfile::tempdir;
+
+    #[test]
+    fn apply_caged_predicted_cwd_bounces_outside_anchor() {
+        let temp = tempdir().unwrap();
+        let root = temp.path().join("root");
+        let outside = temp.path().join("outside");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+
+        let settings = WorldRootSettings {
+            mode: WorldRootMode::Project,
+            path: std::fs::canonicalize(&root).unwrap(),
+            caged: true,
+        };
+
+        let current = std::fs::canonicalize(&root).unwrap();
+        let predicted = std::fs::canonicalize(&outside).unwrap();
+        let current_s = current.to_string_lossy().to_string();
+        let predicted_s = predicted.to_string_lossy().to_string();
+        let out = apply_caged_predicted_cwd(&settings, &current_s, predicted_s);
+        assert_eq!(out, settings.path.to_string_lossy().to_string());
+    }
+
+    #[test]
+    fn apply_caged_predicted_cwd_allows_inside_anchor() {
+        let temp = tempdir().unwrap();
+        let root = temp.path().join("root");
+        let inside = root.join("inside");
+        std::fs::create_dir_all(&inside).unwrap();
+
+        let settings = WorldRootSettings {
+            mode: WorldRootMode::Project,
+            path: std::fs::canonicalize(&root).unwrap(),
+            caged: true,
+        };
+
+        let current = std::fs::canonicalize(&root).unwrap();
+        let predicted = std::fs::canonicalize(&inside).unwrap();
+        let current_s = current.to_string_lossy().to_string();
+        let predicted_s = predicted.to_string_lossy().to_string();
+        let out = apply_caged_predicted_cwd(&settings, &current_s, predicted_s.clone());
+        assert_eq!(out, predicted_s);
+    }
 }
 
 fn spawn_passthrough_stdin_thread(

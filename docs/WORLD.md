@@ -158,7 +158,7 @@ Per session world (identified by `WORLD_ID`, e.g., `wld_01994…`):
   - `world_fs.mode=read_only`: the project mount is remounted read-only so both relative and absolute project writes fail (and if mount namespaces are unavailable, Substrate fails closed rather than risking an absolute-path escape).
   - `world_fs.isolation=workspace`: bind-mounts the overlay root onto the project path inside a private mount namespace to prevent absolute-path escapes back into the host project; other host paths are still nameable. On Linux, Substrate applies best-effort host write protection (Landlock) so paths outside the project are not writable, but reads are not restricted.
   - `world_fs.isolation=full`: builds a minimal rootfs and `pivot_root`s so host paths are no longer nameable; only a small set of mounts exist (system dirs read-only, `/project` + the project absolute path, fresh `/tmp` tmpfs, `/proc`, `/dev` read-only, plus `/var/lib/substrate/world-deps` read-write).
-  - `world_fs.write_allowlist` is used in full isolation + `world_fs.mode=writable` to remount specific project prefixes read-write; everything else under the project remains read-only.
+  - In full isolation, `world_fs.read.allow_list` and `world_fs.write.allow_list` control which project paths are readable/writable. If unset, Substrate defaults them to `["."]` (the entire project). `world_fs.discover` is optional and defaults to mirror `read`.
   - `fs_diff` is returned for non‑PTY `/v1/execute`; the PTY streaming API does not include `fs_diff` today.
 
 ---

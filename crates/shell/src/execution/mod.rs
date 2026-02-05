@@ -18,6 +18,7 @@ pub mod repl_persistent_session;
 mod routing;
 mod settings;
 pub(crate) use settings::resolve_world_root;
+pub(crate) use settings::WorldRootSettings;
 pub mod shim_deploy;
 #[cfg(target_os = "linux")]
 pub(crate) mod socket_activation; // Made public for integration tests
