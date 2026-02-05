@@ -15,6 +15,7 @@ What does not belong here:
 ## Sections
 
 - `docs/internals/broker/`
+- `docs/internals/config/`
 - `docs/internals/env/`
 - `docs/internals/repl/`
 - `docs/internals/replay/`

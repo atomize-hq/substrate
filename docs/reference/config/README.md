@@ -1,12 +1,11 @@
 # Configuration Reference
 
-This directory is scaffolding: it is intended to hold the stable operator contract for configuration files and precedence.
+Operator-facing documentation for configuration file schema, precedence, and stable meanings.
 
-Suggested contents:
-- File locations and precedence (global vs workspace)
-- Schema overview and strictness expectations
-- Supported automation surfaces (CLI + env overrides)
+## Documents
+
+- `docs/reference/config/contract.md`: config file locations and precedence contract (global vs workspace).
+- `docs/reference/config/world.md`: world root selection (`anchor_mode` / `anchor_path`) and REPL caging (`caged`).
 
 Existing related docs (top-level):
 - `docs/CONFIGURATION.md`
-
