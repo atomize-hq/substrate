@@ -26,7 +26,7 @@ Keep concise, actionable, and security-focused.
     - Make REPL exit behavior explicit and configurable:
       - Print a note on `exit`/`quit` (and `Ctrl+D` if treated as exit) when `world_cwd != entered_cwd`, e.g. `substrate: note: returning to host cwd: <path>`.
       - Add a config knob to control where the host returns on REPL exit:
-        - `repl.exit_cwd: entered|last_world|unchanged`
+        - `repl.exit_cwd: entered|last_world`
     - Desired policy shape (example):
       - `world_fs:`
       - `  mode: writable`

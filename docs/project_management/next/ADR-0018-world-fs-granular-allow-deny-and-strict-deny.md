@@ -31,7 +31,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 75b2e063e58d7fddb75ad31872e0569d31442925b5710873e069eb43c4d11c3e
+ADR_BODY_SHA256: d75f566a21771b69fd200bbd1a1f2605cc760af84f3f1679e8fdd9fe7c2993c8
 ### Changes (operator-facing)
 - Add granular `allow_list` + `deny_list` for world filesystem reads/writes (and optional directory visibility)
   - Existing: `world_fs.read_allowlist` / `world_fs.write_allowlist` are allowlist-only; invalid patterns (e.g., `..`) can be accepted but ignored; there is no deny list; “allow all except secrets” cannot be expressed.
@@ -315,8 +315,8 @@ world_fs:
 ### A.4 Validation rules (hard errors; zero ambiguity)
 
 #### A.4.1 Routing invariants
-- If `world_fs.host_visible=false`, then `world_fs.fail_closed.routing` MUST be `true`.
 - If `world_fs.write.enabled=false`, then `world_fs.fail_closed.routing` MUST be `true`.
+  - Rationale: `write.enabled=false` is an end-to-end guarantee. Host fallback would re-enable writes.
 
 #### A.4.2 Full-isolation-only keys
 - If `world_fs.host_visible=true`:
@@ -343,8 +343,221 @@ world_fs:
 - World enforcement failures (e.g., strict deny requested but strict prerequisites cannot be applied) MUST fail closed as a
   world execution failure (host exit code `4`), not by silently downgrading.
   - Exception: `deny_enforcement=prefer_strict` explicitly allows downgrade without failing.
+- Policy deny decisions that are enforced by Substrate **before** executing a command (for example, broker-level command
+  denies) MUST use the canonical “safety/policy violation” exit code `5` per
+  `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`.
+- Filesystem deny rules in this ADR are enforced in-world via OS mechanisms (Landlock + deny masking). Therefore they MUST
+  manifest as deterministic errno strings (e.g., `Permission denied`, `Read-only file system`, `Operation not permitted`)
+  and the workload MUST exit non-zero, but the exact numeric exit code is workload-defined (Substrate MUST NOT attempt to
+  translate it to `5`).
 
 ### A.6 Output contract (effective policy display)
 - `substrate policy show` MUST render `discover`, `read`, and `write` in the effective policy output when `world_fs.host_visible=false`,
   including explicit `deny_list: []` when empty, so operators can discover and edit the knobs without reading docs.
 - When `discover` is defaulted from `read`, the effective output MUST still show `discover` explicitly with its effective allow/deny lists.
+
+---
+
+## Appendix B (Authoritative) — Routing Fail-Closed + Caging Requirement + REPL Exit Semantics (No Compatibility)
+
+**Date (UTC):** 2026-02-05  
+**Status:** Accepted (appendix; supersedes naming in the backlog item and in prior drafts)  
+
+This appendix finalizes the operator-facing semantics for:
+
+- routing fail-closed (previously misnamed `world_fs.require_world`), and
+- caging as a policy scope boundary control (not only a UX preference), and
+- REPL exit transparency + return-cwd behavior.
+
+All rules below are normative and MUST be implemented exactly as written. There is **no backwards
+compatibility**: legacy keys and env var names are hard errors once this appendix is implemented.
+
+### B.1 Goals (explicit)
+- Names communicate intent without reading docs.
+- Policy scope boundaries cannot be bypassed by `cd ..` (no silent “fall back to global policy”).
+- Operators can predict what happens when the world backend is unavailable, and when the world is
+  explicitly disabled (`--no-world` / `SUBSTRATE_WORLD=disabled`).
+- REPL exit behavior is explicit, testable, and configurable.
+
+### B.2 Rename `world_fs.require_world` → `world_fs.fail_closed.routing`
+
+#### B.2.1 Policy key (authoritative)
+The policy knob `world_fs.require_world` MUST be deleted and replaced with:
+
+```yaml
+world_fs:
+  fail_closed:
+    routing: true|false
+```
+
+**Meaning (zero ambiguity):**
+
+- `routing=false`: if Substrate cannot route an execution to a world backend (backend unavailable,
+  handshake fails, world-agent unreachable), Substrate MAY fall back to host execution.
+- `routing=true`: if Substrate cannot route an execution to a world backend for any reason, Substrate
+  MUST NOT fall back to host execution. It MUST fail closed.
+
+This key is about **routing fallback**, not about whether the “world feature” is enabled in config.
+
+Important: `world_fs.host_visible` and `world_fs.fail_closed.routing` are independent.
+
+- `world_fs.host_visible=false` configures how execution MUST behave *when routed to the world* (host paths not nameable).
+- `world_fs.fail_closed.routing=false` explicitly allows host fallback if routing to the world fails.
+- Therefore, if an operator sets `world_fs.host_visible=false` and `world_fs.fail_closed.routing=false`, host fallback MAY
+  occur and host paths will be visible during that fallback. Substrate MUST emit a high-signal warning when this happens so
+  the operator cannot miss that isolation was not achieved for that execution.
+
+Warning contract (required content; message format is otherwise implementation-defined):
+
+- The warning MUST be printed to stderr.
+- The warning MUST contain these substrings:
+  - `world routing failed; falling back to host`
+  - `world_fs.host_visible=false was requested`
+  - `world_fs.fail_closed.routing=false allows fallback`
+
+#### B.2.2 Exported state env var (output-only)
+The exported state env var `SUBSTRATE_WORLD_REQUIRE_WORLD` MUST be deleted and replaced with:
+
+- `SUBSTRATE_WORLD_FAIL_CLOSED_ROUTING=1|0`
+
+Rules:
+
+- This env var is derived from the effective policy and is **output-only** (it MUST NOT be consumed as
+  an override input; override inputs remain `SUBSTRATE_OVERRIDE_*` per ADR-0006).
+- It MUST be set consistently for shell, shimmed subprocesses, and world-agent requests so telemetry,
+  replay, and diagnostics observe the same effective state.
+
+#### B.2.3 Failure taxonomy for routing fail-closed
+- If `world_fs.fail_closed.routing=true` and the world is explicitly disabled by operator intent
+  (e.g., `--no-world`, `SUBSTRATE_WORLD=disabled`, or an equivalent effective-config disable), this is
+  a policy/config incompatibility and MUST hard error before execution (host exit code `2`).
+- If `world_fs.fail_closed.routing=true` and the world is enabled but routing fails at runtime:
+  - If routing fails because a required world dependency is unavailable (for example: world-agent socket unreachable,
+    handshake failure, transport unavailable), Substrate MUST fail closed with host exit code `3` (“required dependency
+    unavailable”).
+  - If routing fails because the selected world mode/feature is not supported or prerequisites are missing (for example:
+    required capabilities are unavailable and the feature is not allowed to degrade), Substrate MUST fail closed with host
+    exit code `4` (“not supported / missing prerequisites”).
+
+### B.3 Policy-level caging requirement: `world_fs.caged_required`
+
+#### B.3.1 Policy key (authoritative)
+Introduce a policy key:
+
+```yaml
+world_fs:
+  caged_required: true|false
+```
+
+**Meaning (zero ambiguity):**
+
+- `caged_required=false`: caging is a user/workflow preference controlled by config (`world.caged`).
+- `caged_required=true`: caging is a mandatory safety boundary for this policy scope.
+
+#### B.3.2 “Caging” definition (normative)
+When caging is enabled, Substrate MUST prevent the interactive shell from changing the working
+directory outside a single deterministic boundary (`cage_root`). Attempts to leave MUST be blocked
+or bounced back to `cage_root`, and Substrate MUST print a human-readable note indicating the
+boundary and the destination that was rejected.
+
+#### B.3.3 Cage root derivation (scope boundary; not an implementation detail)
+On REPL/session start, Substrate MUST record:
+
+- `entered_cwd`: the host cwd where the REPL/session was launched, and
+- the effective policy scope for `entered_cwd` (workspace-scoped policy vs global policy).
+
+If and only if the effective policy for `entered_cwd` has `world_fs.caged_required=true`, Substrate
+MUST define:
+
+- If `entered_cwd` is inside a workspace: `cage_root = workspace_root`
+- Else: `cage_root = entered_cwd`
+
+This is a **policy scope boundary** rule. It is intentionally defined in terms of workspace scope
+and launch location so users cannot escape a workspace-scoped policy by `cd ../` and silently
+switching to a different policy.
+
+#### B.3.4 Policy/config compatibility (hard error; no silent override)
+If the effective policy for `entered_cwd` has `world_fs.caged_required=true`, then:
+
+- The effective config MUST have `world.caged=true`.
+- If the effective config has `world.caged=false`, Substrate MUST hard error before starting the
+  REPL or executing commands (host exit code `2`).
+
+Rationale: `caged_required=true` is a safety boundary. A silent override would be surprising and
+would mask an explicit operator choice to run uncaged.
+
+Additionally:
+
+- Any CLI flag or env override that requests “uncaged” behavior MUST be rejected as invalid when
+  `world_fs.caged_required=true` (host exit code `2`).
+
+#### B.3.5 Compatibility with `world.anchor_mode`
+When `world_fs.caged_required=true`:
+
+- `world.anchor_mode=follow-cwd` MUST be rejected as invalid config (host exit code `2`).
+
+Rationale: `follow-cwd` defines the “root” to move with the cwd and disables meaningful caging; it
+is incompatible with a stable policy scope boundary.
+
+### B.4 REPL exit transparency + `repl.exit_cwd`
+
+#### B.4.1 Exit note (always-on transparency)
+On `exit`/`quit` (and `Ctrl+D` if treated as exit), if `world_cwd != entered_cwd`, Substrate MUST
+print a note:
+
+- `substrate: note: returning to host cwd: <path>`
+
+The `<path>` MUST be the resulting host cwd after applying `repl.exit_cwd` rules below (including
+any required fallback behavior).
+
+Important (host shell semantics; zero ambiguity):
+
+- A standalone `substrate` process cannot change the parent shell’s working directory.
+- Therefore, `repl.exit_cwd=entered` requires no special mechanism (the parent shell remains at
+  `entered_cwd` by default).
+- `repl.exit_cwd=last_world` requires a supported shell integration that can apply the chosen
+  `<path>` after the REPL exits (for example, a shell function/wrapper installed by Substrate init
+  scripts).
+- When that integration is not active, Substrate MUST still compute `<path>` and print the note, but
+  the parent shell’s cwd will remain unchanged (so the observed behavior matches `entered`).
+
+If `repl.exit_cwd=last_world` is selected but Substrate cannot safely return the host to the last
+world cwd (e.g., the path is not representable on the host, or does not exist on the host at exit),
+Substrate MUST:
+
+- fall back to returning to `entered_cwd`, and
+- print an additional note explaining the fallback and the reason.
+
+#### B.4.2 Config knob (authoritative)
+Add a config key:
+
+```yaml
+repl:
+  exit_cwd: entered|last_world
+```
+
+Meaning (zero ambiguity):
+
+- `entered`: on REPL exit, set the host cwd to `entered_cwd`.
+- `last_world`: on REPL exit, attempt to set the host cwd to the last observed `world_cwd`.
+  - This is best-effort and MUST be safe: if the last observed `world_cwd` is not representable on
+    the host (e.g., a full-isolation-only path like `/project/...`) or if the target directory does
+    not exist on the host at exit, Substrate MUST fall back to `entered_cwd` and emit the additional
+    fallback note required by B.4.1.
+  - If the shell integration needed to apply a host cwd change is not active, this setting is
+    effectively “note-only”: the host cwd remains `entered_cwd`.
+
+Defaults:
+
+- `repl.exit_cwd` defaults to `entered`.
+
+### B.5 Layer ownership (hard rules)
+- Policy owns safety boundaries and routing constraints:
+  - `world_fs.host_visible`
+  - `world_fs.fail_closed.routing`
+  - `world_fs.caged_required`
+  - allow/deny lists and `world_fs.deny_enforcement`
+- Config owns user interaction preferences and defaults that do not weaken policy:
+  - `world.anchor_mode`, `world.anchor_path` (subject to policy compatibility constraints)
+  - `world.caged` (only when not required by policy)
+  - `repl.exit_cwd`
