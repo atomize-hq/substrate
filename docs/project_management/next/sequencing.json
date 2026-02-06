@@ -475,6 +475,36 @@
       ]
     },
     {
+      "order": 34,
+      "id": "world_fs_granular_allow_deny_appendix",
+      "title": "World FS allow/deny appendix (V3 rename + routing + caging)",
+      "branch": "feat/world-fs-granular-allow-deny-appendix",
+      "directory": "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX",
+      "plan": "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/plan.md",
+      "status": "not_started",
+      "sequence": [
+        {
+          "id": "WFGADAX0",
+          "spec": "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/WFGADAX0-spec.md"
+        },
+        {
+          "id": "WFGADAX1",
+          "spec": "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/WFGADAX1-spec.md"
+        },
+        {
+          "id": "WFGADAX2",
+          "spec": "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/WFGADAX2-spec.md"
+        },
+        {
+          "id": "WFGADAX3",
+          "spec": "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/WFGADAX3-spec.md"
+        }
+      ],
+      "notes": [
+        "Implements ADR-0018 Appendix A + B: policy schema rename V3, routing fail-closed, caging requirement, and REPL exit semantics."
+      ]
+    },
+    {
       "order": 39.9,
       "id": "warn_config_global_show_workspace_overrides",
       "title": "Warn on config global show when workspace config overrides",

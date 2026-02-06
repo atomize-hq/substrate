@@ -22,6 +22,11 @@
 - Env var contract (authoritative): `docs/project_management/next/world-fs-granular-allow-deny/ENV.md`
 - Impact map: `docs/project_management/next/world-fs-granular-allow-deny/impact_map.md`
 - Manual playbook: `docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md`
+- Appendix implementation Planning Pack (Appendix A + B):
+  - Plan: `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/plan.md`
+  - Spec manifest: `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/spec_manifest.md`
+  - Schema (authoritative): `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/SCHEMA.md`
+  - Contract: `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/contract.md`
 - Related ADRs / grounding:
   - Policy snapshot direction and threat model: `docs/project_management/next/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
   - Full isolation mount/exec chokepoint: `crates/world/src/exec.rs`
@@ -31,7 +36,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: d75f566a21771b69fd200bbd1a1f2605cc760af84f3f1679e8fdd9fe7c2993c8
+ADR_BODY_SHA256: 59d67a4085e1e02ed66eebb8210884bf47b49558ba104a6541a6ffa5e2be0bbe
 ### Changes (operator-facing)
 - Add granular `allow_list` + `deny_list` for world filesystem reads/writes (and optional directory visibility)
   - Existing: `world_fs.read_allowlist` / `world_fs.write_allowlist` are allowlist-only; invalid patterns (e.g., `..`) can be accepted but ignored; there is no deny list; “allow all except secrets” cannot be expressed.

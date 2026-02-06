@@ -35,7 +35,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: eddd1c11e664d6ac18e81d2f897fff24c43e91fa218583edf32e1ea5575d0f07
+ADR_BODY_SHA256: a0d89fbe77ca7c9d1d696899c1ba818e2602e1cf196636e0a0dfb082a996fa62
 ### Changes (operator-facing)
 - Split exported state from override inputs
   - Existing: `SUBSTRATE_*` values can be present in the environment because they are exported by `$SUBSTRATE_HOME/env.sh` (stable exports), but some of those same variables are also treated as operator overrides by config resolution. This creates “stale export” surprises where config edits appear not to take effect without re-sourcing.

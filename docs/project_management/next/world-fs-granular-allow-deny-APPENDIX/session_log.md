@@ -1,0 +1,131 @@
+# world-fs-granular-allow-deny-appendix — session log
+
+## START — 2026-02-06 — planning — init
+- Feature: `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX`
+- Branch: `feat/world-fs-granular-allow-deny-appendix`
+- Goal: Establish Appendix A + B Planning Pack scaffolding
+- Inputs to read end-to-end:
+  - `docs/project_management/standards/PLANNING_README.md`
+  - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+
+## END — 2026-02-06 — planning — init
+- Summary of changes (exhaustive):
+  - Created initial Appendix A + B Planning Pack
+- Sequencing alignment:
+  - `sequencing.json` updated: `YES`
+- Blockers:
+  - `NONE`
+
+---
+
+## CI Evidence Ledger (reference)
+
+Audit before dispatch:
+- `scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch "<orch-branch>" --ledger-path "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/logs/<slice>/ci-audit/ledger.jsonl"`
+- `scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch "<orch-branch>" --feature-dir "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX" --ledger-path "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/logs/<slice>/ci-audit/ledger.jsonl"`
+
+Record after dispatch:
+- `scripts/ci-audit/ci_audit_record.sh --ledger-path "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/logs/<slice>/ci-audit/ledger.jsonl" --kind <ci-testing|feature-smoke> --orch-branch "<orch-branch>" --run-id "<id>" --tested-sha "<sha>" --feature-dir "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX"`
+
+---
+
+## START — 2026-02-06T19:39:38Z — planning — quality gate remediation
+- Goal: Resolve blocking Planning Quality Gate defects for execution readiness.
+- Findings in scope: Finding 003, Finding 004, Finding 005, Finding 006, Finding 007, Finding 008.
+- Files in scope:
+  - `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/decision_register.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/spec_manifest.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/SCHEMA.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/contract.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/tasks.json`
+  - `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/manual_testing_playbook.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/*.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/quality_gate_report.md`
+  - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+  - `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md`
+  - `docs/project_management/next/sequencing.json`
+
+## END — 2026-02-06T19:39:38Z — planning — quality gate remediation
+- Findings addressed: Finding 003, Finding 004, Finding 005, Finding 006, Finding 007, Finding 008.
+- Summary of changes (exhaustive):
+  - Decision register rewritten to A/B template with explicit follow-up task IDs.
+  - spec_manifest coverage matrix updated to include config surfaces and authoritative ownership.
+  - SCHEMA.md expanded with explicit pattern validity rules and snapshot canonicalization + hashing rules.
+  - tasks.json acceptance criteria updated to remove non-runnable “Implements …” statements; task references updated to include DR mappings.
+  - manual_testing_playbook.md updated with runnable commands and deterministic expected exit codes/output.
+  - Kickoff prompts updated to include required per-role command checklists.
+  - planning-lint hard-ban violation removed from quality_gate_report.md without changing finding meaning.
+- Commands run (verbatim) and exit codes:
+  - `make adr-fix ADR=docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` → exit 0
+  - `make adr-fix ADR=docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md` → exit 0
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world-fs-granular-allow-deny-APPENDIX"` → exit 2 (hard-ban match in quality_gate_report.md)
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world-fs-granular-allow-deny-APPENDIX"` → exit 0
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/world-fs-granular-allow-deny-APPENDIX"` → exit 0
+  - `jq -e . docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/tasks.json >/dev/null` → exit 0
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → exit 0
+- Blockers: `NONE`
+
+---
+
+## START — 2026-02-06T20:21:04Z — planning — quality gate remediation (pass 2)
+- Goal: Resolve blocking Planning Quality Gate defects for execution readiness (latest pass in `quality_gate_report.md`).
+- Findings in scope: Finding 003, Finding 004, Finding 005, Finding 006.
+- Files changed (exhaustive):
+  - `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/spec_manifest.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/contract.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/manual_testing_playbook.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/impact_map.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/ci_checkpoint_plan.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/tasks.json`
+  - `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/CP1-ci-checkpoint.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/CP2-ci-checkpoint.md`
+
+## END — 2026-02-06T20:21:35Z — planning — quality gate remediation (pass 2)
+- Findings addressed: Finding 003, Finding 004, Finding 005, Finding 006.
+- Summary of changes (exhaustive):
+  - Added missing ADR-mandated contract surfaces to `spec_manifest.md` coverage matrix (`substrate policy show` output contract; routing fallback warning contract).
+  - Authored the owned contracts in `contract.md` (Appendix A.6 output contract; Appendix B.2.1 warning substrings).
+  - Added a runnable manual validation case for the routing fallback warning substrings.
+  - Added an explicit cross-queue scan section to `impact_map.md` with an ordering resolution consistent with `sequencing.json`.
+  - Made CP1/CP2 ops tasks runnable/auditable by adding explicit commands + expected exit codes in `tasks.json` and the CP kickoff prompts.
+  - Aligned `ci_checkpoint_plan.md` gate fields with the checkpoint ops commands (`compile_parity` + `feature_smoke`; `ci_testing=skip`).
+- Commands run (verbatim) and exit codes:
+  - `jq -e . docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/tasks.json >/dev/null` → exit 0
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → exit 0
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world-fs-granular-allow-deny-APPENDIX"` → exit 0
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/world-fs-granular-allow-deny-APPENDIX"` → exit 0
+  - `make adr-fix ADR=docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md` → exit 0
+  - `make adr-fix ADR=docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` → exit 0
+- Blockers: `NONE`
+
+---
+
+## START — 2026-02-06T21:22:30Z — planning — quality gate remediation (pass 3)
+- Goal: Resolve blocking Planning Quality Gate defects for deterministic CI checkpoint execution (latest pass in `quality_gate_report.md`).
+- Findings in scope: Finding 004, Finding 005, Finding 006.
+- Files changed (exhaustive):
+  - `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/tasks.json`
+  - `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/ci_checkpoint_plan.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/CP1-ci-checkpoint.md`
+  - `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/CP2-ci-checkpoint.md`
+
+## END — 2026-02-06T21:22:43Z — planning — quality gate remediation (pass 3)
+- Findings addressed: Finding 004, Finding 005, Finding 006.
+- Summary of changes (exhaustive):
+  - Pinned checkpoint dispatch to the boundary slice’s `*-integ-core` HEAD via `CI_CHECKOUT_REF` / `SMOKE_CHECKOUT_REF` computed from `tasks.json` (`git_branch` + `git rev-parse`), in both CP kickoff prompts and CP acceptance criteria.
+  - Added missing checkpoint gating edges so boundary slice final integration tasks cannot complete before their checkpoint ops tasks:
+    - `WFGADAX1-integ.depends_on` includes `CP1-ci-checkpoint`
+    - `WFGADAX3-integ.depends_on` includes `CP2-ci-checkpoint`
+  - Ensured the next checkpoint group cannot start from an orchestration branch that lacks the prior checkpoint group’s integrated code:
+    - `WFGADAX2-code.depends_on` and `WFGADAX2-test.depends_on` include `WFGADAX1-integ` (while retaining `CP1-ci-checkpoint` gating).
+  - Aligned checkpoint runner_kind contract surfaces:
+    - `ci_checkpoint_plan.md` declares `feature_smoke.runner=self-hosted` and `platform=behavior`
+    - CP kickoff prompts dispatch `make feature-smoke ... RUNNER_KIND=self-hosted PLATFORM=behavior`
+  - Added deterministic failure-path commands to start only failing platform-fix tasks when smoke fails.
+- Commands run (verbatim) and exit codes:
+  - `jq -e . docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/tasks.json >/dev/null` → exit 0
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → exit 0
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world-fs-granular-allow-deny-APPENDIX"` → exit 0
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/world-fs-granular-allow-deny-APPENDIX"` → exit 0
+  - `checkpoint wiring check (final->cp and cp->core)` → exit 0
+- Blockers: `NONE`
