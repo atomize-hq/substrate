@@ -602,6 +602,171 @@ world_fs:
     }
 }
 
+mod wfgadax0_policy_schema_v3 {
+    use super::*;
+
+    fn load_policy_from_yaml(raw: &str) -> anyhow::Result<Policy> {
+        let dir = tempdir().expect("tempdir");
+        let policy_path = dir.path().join("policy.yaml");
+        std::fs::write(&policy_path, raw).expect("write policy.yaml");
+        crate::effective_policy::load_policy_from_path(&policy_path)
+    }
+
+    fn expect_err(raw: &str) -> String {
+        load_policy_from_yaml(raw)
+            .expect_err("expected policy patch to be rejected")
+            .to_string()
+    }
+
+    fn expect_err_contains(raw: &str, needle: &str) {
+        let err = expect_err(raw);
+        assert!(
+            err.contains(needle),
+            "expected error to contain {needle:?}, got: {err}"
+        );
+    }
+
+    #[test]
+    fn wfgadax0_rejects_replaced_world_fs_keys_mode_isolation_require_world_enforcement() {
+        // SCHEMA.md §1.2: Appendix A schema is breaking; replaced keys MUST hard error (exit 2).
+        //
+        // This test uses a previously-valid V2 config; under V3 it must be rejected deterministically.
+        let raw = r#"
+world_fs:
+  mode: read_only
+  isolation: full
+  require_world: true
+  enforcement: strict
+  read:
+    allow_list: ["."]
+    deny_list: ["secrets/**"]
+"#;
+        let err = expect_err(raw);
+        assert!(
+            err.contains("world_fs.mode")
+                || err.contains("world_fs.isolation")
+                || err.contains("world_fs.require_world")
+                || err.contains("world_fs.enforcement")
+                || err.contains("mode")
+                || err.contains("isolation")
+                || err.contains("require_world")
+                || err.contains("enforcement"),
+            "expected a replaced-key diagnostic, got: {err}"
+        );
+    }
+
+    #[test]
+    fn wfgadax0_accepts_host_visible_true_with_no_full_isolation_dimensions() {
+        // SCHEMA.md §1.4: host_visible defaults true; §1.5.2: full-isolation-only keys must be omitted.
+        load_policy_from_yaml(
+            r#"
+world_fs:
+  host_visible: true
+"#,
+        )
+        .expect("expected minimal host_visible=true policy patch to load");
+    }
+
+    #[test]
+    fn wfgadax0_defaults_full_isolation_dimensions_deterministically_when_host_visible_false() {
+        // SCHEMA.md §1.4 defaults:
+        // - host_visible=false => full isolation
+        // - read.allow_list defaults to ["."]
+        // - write.enabled defaults true and write.allow_list defaults to ["."]
+        // - deny_list defaults to []
+        // - discover defaults to read when omitted
+        let policy = load_policy_from_yaml(
+            r#"
+world_fs:
+  host_visible: false
+"#,
+        )
+        .expect("expected minimal host_visible=false policy patch to load");
+
+        let read = policy
+            .world_fs_read
+            .as_ref()
+            .expect("read dimension should be defaulted in full isolation");
+        assert_eq!(read.allow_list, vec![".".to_string()]);
+        assert!(read.deny_list.is_empty());
+
+        let discover = policy
+            .world_fs_discover
+            .as_ref()
+            .expect("discover dimension should default to read in full isolation");
+        assert_eq!(discover.allow_list, vec![".".to_string()]);
+        assert!(discover.deny_list.is_empty());
+
+        let write = policy
+            .world_fs_write
+            .as_ref()
+            .expect("write dimension should be present by default when write.enabled=true");
+        assert_eq!(write.allow_list, vec![".".to_string()]);
+        assert!(write.deny_list.is_empty());
+    }
+
+    #[test]
+    fn wfgadax0_rejects_full_isolation_keys_when_host_visible_true() {
+        // SCHEMA.md §1.5.2: If host_visible=true, read/discover/write.allow_list/deny_list MUST be omitted.
+        // Assert a deterministic diagnostic that mentions both host_visible and the offending key.
+        expect_err_contains(
+            r#"
+world_fs:
+  host_visible: true
+  read:
+    allow_list: ["."]
+"#,
+            "host_visible",
+        );
+        expect_err_contains(
+            r#"
+world_fs:
+  host_visible: true
+  read:
+    allow_list: ["."]
+"#,
+            "read",
+        );
+    }
+
+    #[test]
+    fn wfgadax0_requires_deny_enforcement_when_any_deny_list_is_non_empty() {
+        // SCHEMA.md §1.5.4: deny_enforcement MUST be present iff any deny_list is non-empty.
+        let err = expect_err(
+            r#"
+world_fs:
+  host_visible: false
+  read:
+    allow_list: ["."]
+    deny_list: ["secrets/**"]
+"#,
+        );
+        assert!(
+            err.contains("deny_enforcement"),
+            "expected deny_enforcement diagnostic, got: {err}"
+        );
+    }
+
+    #[test]
+    fn wfgadax0_write_disabled_requires_fail_closed_routing_true() {
+        // SCHEMA.md §1.5.1: If write.enabled=false, fail_closed.routing MUST be true.
+        let err = expect_err(
+            r#"
+world_fs:
+  host_visible: false
+  write:
+    enabled: false
+  fail_closed:
+    routing: false
+"#,
+        );
+        assert!(
+            err.contains("write") && err.contains("fail_closed"),
+            "expected write.enabled/fail_closed.routing diagnostic, got: {err}"
+        );
+    }
+}
+
 mod c0_policy_patch_only_broker_effective_resolution {
     use serial_test::serial;
     use std::ffi::OsString;
