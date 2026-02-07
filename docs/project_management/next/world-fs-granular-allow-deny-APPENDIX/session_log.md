@@ -204,3 +204,12 @@ Record after dispatch:
 - CHECKOUT_SHA: `bdc88cb1693adcccd9d6179821841d5349b0aacc`
 - ci-audit (ci-testing): `recommend: run (no_last_green_run_found)`; `REASON=no_last_green_run_found`
 - ci-audit (feature-smoke): `recommend: run (no_last_green_run_found)`; `REASON=no_last_green_run_found`
+- Dispatch note: initial CI dispatch failed with HTTP 422 (missing `WORKFLOW_REF` on origin); pushed `ORCH_REF` and re-dispatched.
+- ci-compile-parity: run `21773206717` (success): https://github.com/atomize-hq/substrate/actions/runs/21773206717
+- feature-smoke (behavior): run `21773222732` (success): https://github.com/atomize-hq/substrate/actions/runs/21773222732
+
+## END — 2026-02-07T03:15:24Z — ops — CP1-ci-checkpoint
+- ORCH_REF: `feat/world-fs-granular-allow-deny-appendix`
+- CHECKOUT_SHA: `bdc88cb1693adcccd9d6179821841d5349b0aacc`
+- ci-compile-parity: `21773206717` (success)
+- feature-smoke (behavior): `21773222732` (success; linux)
