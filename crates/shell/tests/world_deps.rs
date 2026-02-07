@@ -16,6 +16,7 @@ use socket::{AgentSocket, SocketResponse};
 use std::fs;
 use std::os::unix::fs::{symlink, PermissionsExt};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use tempfile::{Builder, TempDir};
 
 const HOST_SCRIPT_TEMPLATE: &str = r#"#!/usr/bin/env bash
@@ -589,6 +590,25 @@ impl InstalledLayoutFixture {
             .env_remove("SHIM_ORIGINAL_PATH");
         cmd
     }
+
+    fn output_with_retry(&self, args: &[&str]) -> std::process::Output {
+        const MAX_ATTEMPTS: usize = 8;
+        for attempt in 0..MAX_ATTEMPTS {
+            let mut cmd = self.command();
+            cmd.args(args);
+            match cmd.output() {
+                Ok(output) => return output,
+                Err(err) => {
+                    if err.raw_os_error() == Some(26) && attempt + 1 < MAX_ATTEMPTS {
+                        std::thread::sleep(Duration::from_millis(25 * (attempt as u64 + 1)));
+                        continue;
+                    }
+                    panic!("failed to spawn installed substrate binary: {err}");
+                }
+            }
+        }
+        unreachable!("output_with_retry returned early on success or panicked")
+    }
 }
 
 #[test]
@@ -1029,13 +1049,15 @@ fn world_deps_install_surfaces_helper_failures() {
 fn world_deps_uses_versioned_manifest_when_running_from_installed_layout() {
     let fixture = InstalledLayoutFixture::new("9.9.9-test");
 
-    let assert = fixture
-        .command()
-        .args(["world", "deps", "status", "--json"])
-        .assert()
-        .success();
+    let output = fixture.output_with_retry(&["world", "deps", "status", "--json"]);
+    assert_eq!(
+        output.status.code().unwrap_or(-1),
+        0,
+        "expected exit 0, stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 
-    let report = parse_world_deps_status_json(&assert.get_output().stdout);
+    let report = parse_world_deps_status_json(&output.stdout);
     let inventory_base = extract_inventory_base(&report);
     assert_eq!(
         canonicalize_or(&inventory_base),
