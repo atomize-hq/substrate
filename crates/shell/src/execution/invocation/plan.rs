@@ -46,6 +46,9 @@ pub struct ShellConfig {
     pub no_world: bool,
     pub cli_world: bool,
     pub cli_no_world: bool,
+    pub cli_anchor_mode: Option<WorldRootMode>,
+    pub cli_anchor_path: Option<PathBuf>,
+    pub cli_caged: Option<bool>,
     pub world_root: settings::WorldRootSettings,
     pub async_repl: bool,
     pub repl_host_escape: bool,
@@ -512,9 +515,11 @@ impl ShellConfig {
         } else {
             None
         };
+        let cli_anchor_mode = cli.anchor_mode.map(WorldRootMode::from);
+        let cli_anchor_path = cli.anchor_path.clone();
         let world_root_settings = resolve_world_root(
-            cli.anchor_mode.map(WorldRootMode::from),
-            cli.anchor_path.clone(),
+            cli_anchor_mode,
+            cli_anchor_path.clone(),
             cli_caged,
             &launch_cwd,
         )?;
@@ -632,6 +637,9 @@ impl ShellConfig {
             no_world: final_no_world,
             cli_world: cli.world,
             cli_no_world: cli.no_world,
+            cli_anchor_mode,
+            cli_anchor_path,
+            cli_caged,
             world_root: world_root_settings,
             async_repl: async_repl_enabled,
             repl_host_escape,

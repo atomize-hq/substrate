@@ -305,6 +305,9 @@ mod tests {
             no_world: false,
             cli_world: false,
             cli_no_world: false,
+            cli_anchor_mode: None,
+            cli_anchor_path: None,
+            cli_caged: None,
             world_root: WorldRootSettings {
                 mode: WorldRootMode::Project,
                 path: temp.path().to_path_buf(),
