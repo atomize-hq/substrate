@@ -29,6 +29,7 @@ use crate::execution::{
 use anyhow::{Context, Result};
 use serde_json::json;
 use std::env;
+use std::ffi::OsString;
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
@@ -50,6 +51,27 @@ const WORLD_BACKEND_UNAVAILABLE_HINT: &str =
 const WORLD_BACKEND_UNAVAILABLE_HINT: &str = "hint: run 'substrate world doctor --json'";
 
 static WORLD_BACKEND_UNAVAILABLE_WARN_ONCE: Once = Once::new();
+
+struct ParentSpanGuard {
+    previous: Option<OsString>,
+}
+
+impl ParentSpanGuard {
+    fn set_current(span_id: &str) -> Self {
+        let previous = env::var_os("SHIM_PARENT_SPAN");
+        env::set_var("SHIM_PARENT_SPAN", span_id);
+        Self { previous }
+    }
+}
+
+impl Drop for ParentSpanGuard {
+    fn drop(&mut self) {
+        match self.previous.take() {
+            Some(value) => env::set_var("SHIM_PARENT_SPAN", value),
+            None => env::remove_var("SHIM_PARENT_SPAN"),
+        }
+    }
+}
 
 #[cfg(target_os = "linux")]
 const DEFAULT_WORLD_SOCKET_PATH: &str = "/run/substrate.sock";
@@ -335,6 +357,7 @@ pub(crate) fn execute_command(
         });
     }
 
+    let mut _parent_span_guard: Option<ParentSpanGuard> = None;
     let mut span = if let Ok(mut builder) = create_span_builder() {
         builder = builder
             .with_command(&redacted_for_logging)
@@ -344,7 +367,7 @@ pub(crate) fn execute_command(
         }
         match builder.start() {
             Ok(span) => {
-                std::env::set_var("SHIM_PARENT_SPAN", span.get_span_id());
+                _parent_span_guard = Some(ParentSpanGuard::set_current(span.get_span_id()));
                 Some(span)
             }
             Err(e) => {
@@ -360,7 +383,8 @@ pub(crate) fn execute_command(
     if policy_mode == PolicyMode::Enforce {
         if let Some(Decision::Deny(reason)) = decision {
             eprintln!("substrate: command denied by policy: {}", reason);
-            if let Some(active_span) = span.take() {
+            if let Some(mut active_span) = span.take() {
+                active_span.set_outcome("denied");
                 let _ = active_span.finish(126, vec![], None);
             }
             #[cfg(unix)]
@@ -657,7 +681,17 @@ pub(crate) fn execute_command(
     let redacted_command = redacted_for_logging.clone();
 
     // Log command start with redacted command and resolved path
-    let start_extra = resolved.map(|p| json!({ "resolved_path": p }));
+    let span_id_for_cmd_events = span.as_ref().map(|s| s.get_span_id().to_string());
+    let start_extra = {
+        let mut obj = serde_json::Map::new();
+        if let Some(p) = resolved {
+            obj.insert("resolved_path".to_string(), json!(p));
+        }
+        if let Some(span_id) = span_id_for_cmd_events.as_ref() {
+            obj.insert("span_id".to_string(), json!(span_id));
+        }
+        (!obj.is_empty()).then_some(serde_json::Value::Object(obj))
+    };
     log_command_event(
         config,
         "command_start",
@@ -799,6 +833,9 @@ pub(crate) fn execute_command(
                 log_schema::EXIT_CODE: status.code().unwrap_or(-1),
                 log_schema::DURATION_MS: start_time.elapsed().as_millis()
             });
+            if let Some(span_id) = span_id_for_cmd_events.as_ref() {
+                completion_extra["span_id"] = json!(span_id);
+            }
             completion_extra["world_fs_strategy_primary"] =
                 json!(WorldFsStrategy::Overlay.as_str());
             completion_extra["world_fs_strategy_final"] = json!(WorldFsStrategy::Host.as_str());
@@ -868,13 +905,16 @@ pub(crate) fn execute_command(
                             let reason = unavail
                                 .fallback_reason
                                 .unwrap_or(WorldFsStrategyFallbackReason::FallbackMountFailed);
-                            let completion_extra = json!({
+                            let mut completion_extra = json!({
                                 log_schema::EXIT_CODE: 3,
                                 log_schema::DURATION_MS: start_time.elapsed().as_millis(),
                                 "world_fs_strategy_primary": WorldFsStrategy::Overlay.as_str(),
                                 "world_fs_strategy_final": WorldFsStrategy::Fuse.as_str(),
                                 "world_fs_strategy_fallback_reason": reason.as_str(),
                             });
+                            if let Some(span_id) = span_id_for_cmd_events.as_ref() {
+                                completion_extra["span_id"] = json!(span_id);
+                            }
                             log_command_event(
                                 config,
                                 "command_complete",
@@ -941,6 +981,9 @@ pub(crate) fn execute_command(
             log_schema::EXIT_CODE: outcome.exit_code,
             log_schema::DURATION_MS: start_time.elapsed().as_millis()
         });
+        if let Some(span_id) = span_id_for_cmd_events.as_ref() {
+            completion_extra["span_id"] = json!(span_id);
+        }
         if let Some(meta) = outcome.fs_strategy {
             completion_extra["world_fs_strategy_primary"] = json!(meta.primary.as_str());
             completion_extra["world_fs_strategy_final"] = json!(meta.final_strategy.as_str());
@@ -995,6 +1038,10 @@ pub(crate) fn execute_command(
         log_schema::EXIT_CODE: status.code().unwrap_or(-1),
         log_schema::DURATION_MS: duration.as_millis()
     });
+
+    if let Some(span_id) = span_id_for_cmd_events.as_ref() {
+        extra["span_id"] = json!(span_id);
+    }
 
     #[cfg(unix)]
     {

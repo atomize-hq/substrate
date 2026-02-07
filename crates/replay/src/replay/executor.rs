@@ -695,7 +695,8 @@ pub fn record_replay_strategy(
         log_schema::TIMESTAMP: Utc::now().to_rfc3339(),
         log_schema::EVENT_TYPE: "replay_strategy",
         log_schema::SESSION_ID: state.session_id,
-        log_schema::COMMAND_ID: state.span_id,
+        log_schema::COMMAND_ID: &state.span_id,
+        "span_id": &state.span_id,
         log_schema::COMPONENT: "replay",
         "strategy": strategy,
     });

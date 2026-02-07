@@ -76,7 +76,8 @@ fn deny_with_span(
     cwd: &Path,
     policy_decision: Option<TracePolicyDecision>,
 ) -> PolicyResult {
-    if let Ok(Some(span)) = start_span(command_str, cwd, policy_decision) {
+    if let Ok(Some(mut span)) = start_span(command_str, cwd, policy_decision) {
+        span.set_outcome("denied");
         let _ = span.finish(126, vec![], None);
     }
 

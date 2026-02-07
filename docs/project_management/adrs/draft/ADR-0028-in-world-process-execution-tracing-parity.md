@@ -17,7 +17,11 @@
 - Plan: `docs/project_management/next/world_process_exec_tracing_parity/plan.md`
 - Tasks: `docs/project_management/next/world_process_exec_tracing_parity/tasks.json`
 - Spec manifest: `docs/project_management/next/world_process_exec_tracing_parity/spec_manifest.md`
-- Specs: `docs/project_management/next/world_process_exec_tracing_parity/specs/*`
+- Specs:
+  - `docs/project_management/next/world_process_exec_tracing_parity/WPEP0-spec.md`
+  - `docs/project_management/next/world_process_exec_tracing_parity/WPEP1-spec.md`
+  - `docs/project_management/next/world_process_exec_tracing_parity/WPEP2-spec.md`
+  - `docs/project_management/next/world_process_exec_tracing_parity/WPEP3-spec.md`
 - Contract (if present): `docs/project_management/next/world_process_exec_tracing_parity/contract.md`
 - Decision Register: `docs/project_management/next/world_process_exec_tracing_parity/decision_register.md`
 - Impact Map: `docs/project_management/next/world_process_exec_tracing_parity/impact_map.md`
@@ -25,8 +29,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
-
+ADR_BODY_SHA256: f9e9e22657b2e9c68fc485684d410a78ef4acb5430900f1a7ab43a33bcbca42d
 ### Changes (operator-facing)
 - World executions gain subprocess-level visibility (exec/exit telemetry) comparable to host shim tracing
   - Existing: host execution is richly observable via shims, but world execution is observable primarily at “one command per world execute/stream” granularity (no structured visibility into spawned subprocess trees).
@@ -51,9 +54,15 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
   - execution occurs via `std::process::Command` (direct or via wrapper), with no per-process telemetry.
 - `crates/trace/src/span.rs`:
   - bug: `ActiveSpan.finish()` reads `SHIM_PARENT_SPAN` from the environment at finish time, after it was mutated at span start; this can yield self-parent spans, breaking tree reconstruction.
+- `crates/shell/src/execution/invocation/runtime.rs`:
+  - script-mode `command_complete` events do not consistently include the `world_fs_strategy_*` contract fields.
+- `crates/replay/src/replay/executor.rs`:
+  - `replay_strategy` uses `cmd_id` to store a span id (internally consistent with `log_schema::COMMAND_ID`, but easy to mis-join against shell `cmd_id` without an explicit `span_id` field).
 - Redaction:
   - shim argv redaction is robust (`crates/shim/src/logger.rs`), including “flag consumes next arg” semantics.
   - `substrate_common::redact_sensitive()` is not sufficient for safe argv/env capture at process granularity (it does not redact values following flags).
+- Provisioning (Linux-backed backends):
+  - The `substrate-world-agent` systemd unit currently does not grant `CAP_SYS_PTRACE` by default (`scripts/linux/world-provision.sh`, `scripts/mac/lima-warm.sh`), so ptrace-based capture may be blocked unless the unit is updated.
 
 ## Goals
 - Achieve in-world per-process execution tracing parity with the host shim model:
@@ -68,6 +77,10 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
   - policy decisions,
   - filesystem diffs.
 - Fix parent span linkage so process events can reliably attach to spans without broken trees.
+- Make trace trees and joins credible before adding high-volume process events:
+  - ensure `parent_span` is correct on completion spans (no self-parent loops),
+  - enforce `SHIM_PARENT_SPAN` env stack discipline (push on span start; restore on finish),
+  - add an explicit bridge between shell `cmd_id` events and shim `span_id` spans.
 - Provide safe caps/truncation to prevent “dependency install explodes response” scenarios.
 
 ## Non-Goals
@@ -78,6 +91,12 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
 
 ## User Contract (Authoritative)
 
+### CLI
+- No new CLI commands or flags are introduced by this ADR.
+- Operator-visible behavior change:
+  - When world execution succeeds and process tracing is supported, `~/.substrate/trace.jsonl` gains additional event records with `event_type` `world_process_start` and `world_process_exit`.
+  - When process tracing is unavailable or fails, execution MUST still succeed (see “Failure behavior”), but the world-agent response MUST carry an explicit structured diagnostic so operators can distinguish “no subprocesses spawned” from “subprocess tracing unavailable”.
+
 ### World-Agent API (Authoritative)
 This ADR extends the world-agent responses to optionally include process events.
 
@@ -85,18 +104,41 @@ This ADR extends the world-agent responses to optionally include process events.
   - MUST include `span_id` generated before execution.
   - MUST set `ExecRequest.span_id = Some(span_id)` before calling into the world backend.
   - MUST include `process_events: Option<Vec<WorldProcessEvent>>` (when tracing is supported and succeeds).
+  - MUST include `process_events_status`: `"ok" | "truncated" | "unavailable" | "error"` (string).
   - When tracing is unavailable or fails:
     - `process_events` MUST be omitted (`null`),
-    - and the response MUST include a deterministic indicator that tracing was unavailable (e.g., `process_events_unavailable=true` or an equivalent structured diagnostic field).
+    - and the response MUST include a deterministic indicator that tracing was unavailable.
+  - Deterministic diagnostic fields (required when `process_events` is omitted):
+    - `process_events_reason`: one of:
+      - `"unsupported_backend"`
+      - `"ptrace_unavailable"`
+      - `"ptrace_permission_denied"`
+      - `"internal_error"`
 
 - `/v1/stream` Exit frame:
   - MUST include `process_events: Option<Vec<WorldProcessEvent>>` using the same semantics as `/v1/execute`.
+  - MUST include `process_events_status` using the same semantics as `/v1/execute`.
+  - When `process_events` is omitted, MUST include the same diagnostic fields (`process_events_status`, `process_events_reason`).
 
 ### Trace output (Host)
 - The shell MUST append each `WorldProcessEvent` into `~/.substrate/trace.jsonl` using the existing trace append mechanism, and MUST do so before writing the root command `command_complete` span/event so correlations are stable for downstream analysis.
 
+### Span correctness + joinability (Host + Shim)
+- Span parent linkage:
+  - `parent_span` on `command_complete` MUST equal the parent captured at span start (it MUST NOT be re-read from env at finish time).
+  - The active span lifecycle MUST push `SHIM_PARENT_SPAN=<current_span_id>` for the duration of command execution and MUST restore the previous value (or unset) when the command completes.
+- Cross-component joinability:
+  - When `SHIM_PARENT_CMD_ID` is available, spans MUST record it as `parent_cmd_id` on both `command_start` and `command_complete`.
+  - Shell `command_start`/`command_complete` events SHOULD include `span_id` when a span exists for that command, so analysts can join shell summaries ⇄ spans ⇄ world process events deterministically.
+- Completion ergonomics:
+  - `command_complete` spans SHOULD include `duration_ms`.
+  - When a command is denied by policy, the completion span MUST be unambiguous (`outcome: "denied"` and the `policy_decision` must be present on completion).
+- Preexec safety:
+  - When `SUBSTRATE_ENABLE_PREEXEC=1`, `builtin_command` records in the canonical trace MUST omit command bodies (metadata + correlation only).
+  - If raw command bodies are needed, they MUST be written only to an explicit debug-only file path and MUST be clearly labeled as potentially sensitive.
+
 ### Event schema (Authoritative)
-World process events are structured trace events aligned with `crates/common/src/log_schema.rs`.
+World process events are structured trace events aligned with `crates/common/src/lib.rs` (`log_schema` module).
 
 - Event types:
   - `world_process_start`
@@ -105,7 +147,7 @@ World process events are structured trace events aligned with `crates/common/src
 - Minimum required fields (always present):
   - `ts` (timestamp)
   - `event_type` (`world_process_start` or `world_process_exit`)
-  - `component` (`world-agent` or `world`; choose one and standardize across the event family)
+  - `component` (`world-agent`)
   - `session_id` (from `SHIM_SESSION_ID` env propagated into the world execution)
   - `world_id`
   - `pid`, `ppid`
@@ -131,31 +173,32 @@ Default env capture policy for process events:
   - `SHIM_*`, `SUBSTRATE_*`
   - proxy vars (`HTTP*_PROXY`, `NO_PROXY`) with aggressive credential redaction
 - For non-allowlisted keys:
-  - omit entirely (default), or include as `\"<omitted>\"` only if explicitly enabled by a future trace/profile mode.
+  - omit entirely (default), or include as `"<omitted>"` only if explicitly enabled by a future trace/profile mode.
 
 ### Caps / truncation (Authoritative)
 To bound volume:
 - Cap maximum events per execution (default: 10,000).
 - Cap argv length per event and env value lengths (default: 4KB/value).
 - When truncation occurs, the world-agent response MUST include summary fields:
-  - `process_events_truncated: true`
+  - `process_events_status: "truncated"`
   - `process_events_dropped: <n>`
 
 ## Architecture Shape
 - Components:
   - `crates/common`:
-    - extend `crates/common/src/log_schema.rs` with constants needed for correlation + process fields (`PARENT_SPAN`, `PARENT_CMD_ID`, `PID`, `PPID`, `ARGV`, `ENV`, `CWD`, etc.)
+    - extend `crates/common/src/lib.rs` (`log_schema` module) with constants needed for correlation + process fields (`PARENT_SPAN`, `PARENT_CMD_ID`, `PID`, `PPID`, `ARGV`, `ENV`, `CWD`, etc.)
     - add shared redaction helpers (new module) suitable for argv/env redaction at scale
   - `crates/trace`:
     - fix span parent linkage bug in `crates/trace/src/span.rs` by capturing parent span at span start and restoring env stack discipline on finish
   - `crates/world` (Linux only; behind `cfg(target_os=\"linux\")`):
     - implement ptrace-based process tree capture in world exec paths (`crates/world/src/exec.rs`)
+    - note: this Linux runtime powers both native Linux deployments and macOS Lima deployments (world-agent runs in a Linux guest; `docs/WORLD.md`)
     - store captured events in session state keyed by `span_id` and provide take semantics to avoid unbounded growth
   - `crates/world-agent`:
     - generate and plumb `span_id` consistently for `/v1/execute` and `/v1/stream`
     - retrieve captured events from the backend and return them in responses/frames
   - `crates/agent-api-types`:
-    - extend response/frame types to transport `process_events` (optional, backward compatible)
+    - extend response/frame types to transport `process_events` (greenfield; lockstep updates; breaking allowed)
   - `crates/shell`:
     - parse `process_events` from responses/Exit frames
     - append to trace.jsonl via existing trace append pathway
@@ -217,9 +260,8 @@ To bound volume:
 
 ## Rollout / Backwards Compatibility
 - Policy: greenfield breaking is allowed
-- Compat work:
-  - Agent API response additions MUST be backward compatible (`Option`, `serde(default)`, and `skip_serializing_if`).
-  - Trace volume increase is expected; bounded by caps and truncation summaries.
+- Backwards compatibility: not a goal for this ADR. Host + world-agent + API types are updated in lockstep; breaking changes are allowed.
+- Trace volume increase is expected; bounded by caps and truncation summaries.
 
 ## Decision Summary
 - Decision Register entries:
@@ -228,4 +270,8 @@ To bound volume:
     - DR-0002 (Env data minimization policy: allowlist-only vs full redacted map)
     - DR-0003 (Failure behavior: degrade (omit events) vs fail execution)
     - DR-0004 (Span parent linkage fix: capture at start + env stack discipline)
-
+    - DR-0005 (Correlation bridge: shell `cmd_id` ↔ shim `span_id`)
+    - DR-0006 (Deny outcome clarity on completion spans)
+    - DR-0007 (Policy decision visibility on completion spans)
+    - DR-0008 (Shim completion `duration_ms`)
+    - DR-0009 (Preexec/builtin command privacy marker)
