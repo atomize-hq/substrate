@@ -11,7 +11,7 @@ fn manager_manifest_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../config/manager_hooks.yaml")
 }
 
-fn write_profile(project_dir: &Path, fail_closed_routing: bool) {
+fn write_policy(substrate_home: &Path, fail_closed_routing: bool) {
     let routing = if fail_closed_routing { "true" } else { "false" };
     let profile = format!(
         r#"id: test-policy
@@ -36,7 +36,8 @@ limits:
 metadata: {{}}
 "#
     );
-    fs::write(project_dir.join(".substrate-profile"), profile).expect("write .substrate-profile");
+    fs::create_dir_all(substrate_home).expect("create SUBSTRATE_HOME");
+    fs::write(substrate_home.join("policy.yaml"), profile).expect("write policy.yaml");
 }
 
 fn base_cmd(project_dir: &Path, home_dir: &Path, trace_path: &Path) -> assert_cmd::Command {
@@ -59,7 +60,7 @@ fn wfgadax1_fail_closed_routing_true_world_disabled_hard_errors_exit_2() {
     let project = temp.path().join("project");
     fs::create_dir_all(home.join(".substrate")).expect("create SUBSTRATE_HOME");
     fs::create_dir_all(&project).expect("create project");
-    write_profile(&project, true);
+    write_policy(&home.join(".substrate"), true);
 
     let trace_path = temp.path().join("trace.jsonl");
     fs::write(&trace_path, "").expect("seed trace log");
@@ -93,7 +94,7 @@ fn wfgadax1_runtime_routing_fail_closed_missing_socket_maps_to_exit_3() {
     let project = temp.path().join("project");
     fs::create_dir_all(home.join(".substrate")).expect("create SUBSTRATE_HOME");
     fs::create_dir_all(&project).expect("create project");
-    write_profile(&project, true);
+    write_policy(&home.join(".substrate"), true);
 
     let trace_path = temp.path().join("trace.jsonl");
     fs::write(&trace_path, "").expect("seed trace log");
@@ -125,7 +126,7 @@ fn wfgadax1_runtime_routing_fail_closed_strategy_unavailable_maps_to_exit_4() {
     let project = temp.path().join("project");
     fs::create_dir_all(home.join(".substrate")).expect("create SUBSTRATE_HOME");
     fs::create_dir_all(&project).expect("create project");
-    write_profile(&project, true);
+    write_policy(&home.join(".substrate"), true);
 
     let trace_path = temp.path().join("trace.jsonl");
     fs::write(&trace_path, "").expect("seed trace log");
@@ -183,7 +184,7 @@ fn wfgadax1_exports_fail_closed_routing_state_env_var_and_deletes_require_world(
     );
 
     // Policy-derived state should override any input env value.
-    write_profile(&project, true);
+    write_policy(&home.join(".substrate"), true);
 
     let cmd = r#"if [ -z "${SUBSTRATE_WORLD_REQUIRE_WORLD+x}" ]; then req=unset; else req="set:${SUBSTRATE_WORLD_REQUIRE_WORLD}"; fi; printf "fc=%s req=%s\n" "${SUBSTRATE_WORLD_FAIL_CLOSED_ROUTING:-MISSING}" "$req""#;
 
@@ -227,7 +228,7 @@ fn wfgadax1_exports_fail_closed_routing_state_false_is_0_and_output_only() {
         SocketResponse::CapabilitiesAndHostExecute { scopes: vec![] },
     );
 
-    write_profile(&project, false);
+    write_policy(&home.join(".substrate"), false);
 
     let cmd = r#"if [ -z "${SUBSTRATE_WORLD_REQUIRE_WORLD+x}" ]; then req=unset; else req="set:${SUBSTRATE_WORLD_REQUIRE_WORLD}"; fi; printf "fc=%s req=%s\n" "${SUBSTRATE_WORLD_FAIL_CLOSED_ROUTING:-MISSING}" "$req""#;
 
