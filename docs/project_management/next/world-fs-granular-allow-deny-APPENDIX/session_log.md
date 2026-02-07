@@ -269,3 +269,10 @@ Record after dispatch:
 ## END — 2026-02-07T11:49:19Z — integration — WFGADAX3-integ-core
 - HEAD: `94478474b57c088eaf0313107320285acf156f74`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/logs/WFGADAX3/integ-core/last_message.md`
+
+## START — 2026-02-07T11:51:40Z — ops — CP2-ci-checkpoint
+- Dispatch:
+  - `cat docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/CP2-ci-checkpoint.md`
+- ORCH_REF: `feat/world-fs-granular-allow-deny-appendix`
+- CORE_BRANCH: `world-fs-granular-allow-deny-appendix-wfgadax3-integ-core`
+- CHECKOUT_SHA: `94478474b57c088eaf0313107320285acf156f74`
