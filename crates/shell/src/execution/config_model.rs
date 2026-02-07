@@ -100,7 +100,7 @@ pub(crate) struct SubstrateConfig {
     pub repl: ReplConfig,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum ReplExitCwdMode {
     Entered,
@@ -120,6 +120,21 @@ impl ReplExitCwdMode {
             "last_world" => Some(Self::LastWorld),
             _ => None,
         }
+    }
+}
+
+impl<'de> Deserialize<'de> for ReplExitCwdMode {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let raw = String::deserialize(deserializer)?;
+        Self::parse_insensitive(&raw).ok_or_else(|| {
+            serde::de::Error::custom(format!(
+                "invalid repl.exit_cwd '{}'; expected entered or last_world",
+                raw
+            ))
+        })
     }
 }
 

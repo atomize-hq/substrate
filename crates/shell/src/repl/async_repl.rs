@@ -319,53 +319,73 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
             }
         }
 
-        let last_world_cwd = world_session
-            .as_ref()
-            .map(|s| s.world_cwd.as_str())
-            .unwrap_or(&entered_cwd);
-        if last_world_cwd != entered_cwd {
-            let (exit_target, fallback_reason) = match repl_exit_cwd {
-                crate::execution::config_model::ReplExitCwdMode::Entered => {
-                    (entered_cwd.clone(), None)
-                }
-                crate::execution::config_model::ReplExitCwdMode::LastWorld => {
-                    let reason = if has_embedded_newlines(last_world_cwd) {
-                        Some("last world cwd is not representable (embedded newlines)".to_string())
-                    } else if !Path::new(last_world_cwd).is_absolute() {
-                        Some("last world cwd is not representable (not an absolute path)".to_string())
-                    } else if !Path::new(last_world_cwd).is_dir() {
-                        Some("last world cwd does not exist as a directory on the host at exit".to_string())
-                    } else {
-                        None
-                    };
-                    if let Some(reason) = reason {
-                        (entered_cwd.clone(), Some(reason))
-                    } else {
-                        (last_world_cwd.to_string(), None)
+        let note_lines = {
+            let last_world_cwd = world_session
+                .as_ref()
+                .map(|s| s.world_cwd.clone())
+                .unwrap_or_else(|| entered_cwd.clone());
+            if last_world_cwd != entered_cwd {
+                let (exit_target, fallback_reason) = match repl_exit_cwd {
+                    crate::execution::config_model::ReplExitCwdMode::Entered => {
+                        (entered_cwd.clone(), None)
                     }
+                    crate::execution::config_model::ReplExitCwdMode::LastWorld => {
+                        let reason = if has_embedded_newlines(&last_world_cwd) {
+                            Some(
+                                "last world cwd is not representable (embedded newlines)"
+                                    .to_string(),
+                            )
+                        } else if !Path::new(&last_world_cwd).is_absolute() {
+                            Some(
+                                "last world cwd is not representable (not an absolute path)"
+                                    .to_string(),
+                            )
+                        } else if !Path::new(&last_world_cwd).is_dir() {
+                            Some(
+                                "last world cwd does not exist as a directory on the host at exit"
+                                    .to_string(),
+                            )
+                        } else {
+                            None
+                        };
+                        if let Some(reason) = reason {
+                            (entered_cwd.clone(), Some(reason))
+                        } else {
+                            (last_world_cwd, None)
+                        }
+                    }
+                };
+
+                let mut lines = vec![format!(
+                    "substrate: note: returning to host cwd: {}",
+                    exit_target
+                )];
+                if let Some(reason) = fallback_reason {
+                    lines.push(format!(
+                        "substrate: note: repl.exit_cwd=last_world fallback to entered cwd ({})",
+                        reason
+                    ));
                 }
-            };
-
-            let _ = agent_printer.print(format!(
-                "substrate: note: returning to host cwd: {}",
-                exit_target
-            ));
-            if let Some(reason) = fallback_reason {
-                let _ = agent_printer.print(format!(
-                    "substrate: note: repl.exit_cwd=last_world fallback to entered cwd ({})",
-                    reason
-                ));
+                Some(lines)
+            } else {
+                None
             }
-        }
-
-        if let Some(session) = world_session.take() {
-            let _ = session.client.close().await;
-        }
+        };
 
         prompt_worker.shutdown();
         clear_agent_event_sender();
 
+        if let Some(lines) = note_lines {
+            for line in lines {
+                println!("{line}");
+            }
+        }
+
         io::stdout().flush().ok();
+
+        if let Some(session) = world_session.take() {
+            let _ = session.client.close().await;
+        }
 
         Ok::<_, anyhow::Error>(())
     })?;

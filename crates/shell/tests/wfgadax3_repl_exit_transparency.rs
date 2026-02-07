@@ -297,8 +297,6 @@ impl PtyRepl {
     }
 
     fn shutdown(mut self) -> (i32, String) {
-        self.stop_reader.store(true, Ordering::Relaxed);
-        self.master.take();
         if self.waited.is_none() {
             let _ = self.child.kill();
             let status = self.child.wait().expect("wait child");
@@ -307,6 +305,8 @@ impl PtyRepl {
         if let Some(handle) = self.reader_handle.take() {
             let _ = handle.join();
         }
+        self.stop_reader.store(true, Ordering::Relaxed);
+        self.master.take();
         let code = self
             .waited
             .as_ref()
