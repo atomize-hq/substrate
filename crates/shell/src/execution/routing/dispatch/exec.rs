@@ -162,7 +162,12 @@ pub(crate) fn execute_command(
         &cwd_for_profile,
         &CliConfigOverrides {
             world_enabled: cli_world_enabled,
-            ..Default::default()
+            anchor_mode: config.cli_anchor_mode,
+            anchor_path: config
+                .cli_anchor_path
+                .as_ref()
+                .map(|p| p.to_string_lossy().to_string()),
+            caged: config.cli_caged,
         },
     )?;
     let policy_mode = effective_config.policy.mode;
@@ -191,12 +196,26 @@ pub(crate) fn execute_command(
     let fs_mode = world_fs.mode;
     let fail_closed_routing = world_fs.fail_closed_routing;
     let host_visible = world_fs.host_visible;
+    let caged_required = world_fs.caged_required;
     update_world_env(world_disabled);
 
     if fail_closed_routing && world_disabled {
         return Err(config_model::user_error(
             "world_fs.fail_closed.routing=true requires world.enabled=true (effective world disable is a hard error)",
         ));
+    }
+
+    if caged_required {
+        if !effective_config.world.caged {
+            return Err(config_model::user_error(
+                "world_fs.caged_required=true requires world.caged=true (uncaged mode is a hard error)",
+            ));
+        }
+        if effective_config.world.anchor_mode == WorldRootMode::FollowCwd {
+            return Err(config_model::user_error(
+                "world_fs.caged_required=true is incompatible with world.anchor_mode=follow-cwd (hard error)",
+            ));
+        }
     }
 
     // Prepare redacted command once (used for span + logging)

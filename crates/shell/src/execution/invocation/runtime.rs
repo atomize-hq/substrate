@@ -1,6 +1,8 @@
 //! Invocation execution helpers.
 
 use super::plan::{ShellConfig, ShellMode};
+use crate::execution::config_model;
+use crate::execution::config_model::CliConfigOverrides;
 use crate::execution::{
     configure_child_shell_env, execute_command, log_command_event, setup_signal_handlers,
 };
@@ -15,6 +17,57 @@ use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
 use substrate_common::log_schema;
 use uuid::Uuid;
+
+fn preflight_caging_required(config: &ShellConfig) -> Result<()> {
+    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let cli_world_enabled = if config.cli_world {
+        Some(true)
+    } else if config.cli_no_world {
+        Some(false)
+    } else {
+        None
+    };
+    let effective_config = config_model::resolve_effective_config(
+        &cwd,
+        &CliConfigOverrides {
+            world_enabled: cli_world_enabled,
+            anchor_mode: config.cli_anchor_mode,
+            anchor_path: config
+                .cli_anchor_path
+                .as_ref()
+                .map(|p| p.to_string_lossy().to_string()),
+            caged: config.cli_caged,
+        },
+    )?;
+
+    let policy_mode = effective_config.policy.mode;
+    std::env::set_var("SUBSTRATE_POLICY_MODE", policy_mode.as_str());
+    substrate_broker::set_policy_mode(match policy_mode {
+        config_model::PolicyMode::Disabled => substrate_broker::PolicyMode::Disabled,
+        config_model::PolicyMode::Observe => substrate_broker::PolicyMode::Observe,
+        config_model::PolicyMode::Enforce => substrate_broker::PolicyMode::Enforce,
+    });
+
+    substrate_broker::detect_profile(&cwd)
+        .with_context(|| format!("failed to load Substrate profile for cwd {}", cwd.display()))
+        .map_err(|err| config_model::user_error(format!("{:#}", err)))?;
+
+    let world_fs = substrate_broker::world_fs_policy();
+    if world_fs.caged_required {
+        if !effective_config.world.caged {
+            return Err(config_model::user_error(
+                "world_fs.caged_required=true requires world.caged=true (uncaged mode is a hard error)",
+            ));
+        }
+        if effective_config.world.anchor_mode == substrate_common::WorldRootMode::FollowCwd {
+            return Err(config_model::user_error(
+                "world_fs.caged_required=true is incompatible with world.anchor_mode=follow-cwd (hard error)",
+            ));
+        }
+    }
+
+    Ok(())
+}
 
 pub(crate) fn run_wrap_mode(config: &ShellConfig, command: &str) -> Result<i32> {
     let cmd_id = Uuid::now_v7().to_string();
@@ -43,6 +96,8 @@ pub(crate) fn run_script_mode(config: &ShellConfig, script_path: &Path) -> Resul
     // Verify script exists and is readable
     std::fs::metadata(script_path)
         .with_context(|| format!("Failed to stat script: {}", script_path.display()))?;
+
+    preflight_caging_required(config)?;
 
     let mut cmd = Command::new(&config.shell_path);
     let cmd_id = Uuid::now_v7().to_string();

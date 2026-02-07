@@ -40,7 +40,7 @@ pub fn wrap_with_anchor_guard(command: &str, anchor_root: &Path) -> String {
         "__substrate_anchor_root={anchor}; \
          __substrate_anchor_display={display}; \
          substrate_anchor_builtin_cd() {{ if builtin cd \"$@\" 2>/dev/null; then :; else command cd \"$@\"; fi; }}; \
-         substrate_anchor_cd() {{ substrate_anchor_builtin_cd \"$@\" || return $?; dest=$(pwd -P); case \"$dest\" in \"$__substrate_anchor_root\"|\"$__substrate_anchor_root\"/*) ;; *) printf 'substrate: info: caged root guard: returning to %s (%s)\\n' \"$__substrate_anchor_root\" \"$__substrate_anchor_display\" >&2; substrate_anchor_builtin_cd \"$__substrate_anchor_root\" || return $?;; esac; unset dest; }}; \
+         substrate_anchor_cd() {{ substrate_anchor_builtin_cd \"$@\" || return $?; dest=$(pwd -P); case \"$dest\" in \"$__substrate_anchor_root\"|\"$__substrate_anchor_root\"/*) ;; *) printf 'substrate: info: caged root guard: blocked cd to %s (outside %s); returning to %s (%s)\\n' \"$dest\" \"$__substrate_anchor_root\" \"$__substrate_anchor_root\" \"$__substrate_anchor_display\" >&2; substrate_anchor_builtin_cd \"$__substrate_anchor_root\" || return $?;; esac; unset dest; }}; \
          cd() {{ substrate_anchor_cd \"$@\"; }}; \
          substrate_anchor_cd .; ",
         anchor = display_anchor,
