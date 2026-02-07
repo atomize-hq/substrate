@@ -213,3 +213,11 @@ Record after dispatch:
 - CHECKOUT_SHA: `bdc88cb1693adcccd9d6179821841d5349b0aacc`
 - ci-compile-parity: `21773206717` (success)
 - feature-smoke (behavior): `21773222732` (success; linux)
+
+## START — 2026-02-07T03:15:30Z — integration — WFGADAX1-integ
+- Dispatch:
+  - `make triad-task-start-integ-final FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX" SLICE_ID="WFGADAX1" LAUNCH_CODEX=1`
+
+## END — 2026-02-07T03:23:24Z — integration — WFGADAX1-integ
+- HEAD: `09f1c93b47be4a2ca8226c926581c56b5d71e1e3`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/logs/WFGADAX1/integ/last_message.md`
