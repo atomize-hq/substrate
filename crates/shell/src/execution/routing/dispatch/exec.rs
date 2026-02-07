@@ -50,6 +50,7 @@ const WORLD_BACKEND_UNAVAILABLE_HINT: &str =
 const WORLD_BACKEND_UNAVAILABLE_HINT: &str = "hint: run 'substrate world doctor --json'";
 
 static WORLD_BACKEND_UNAVAILABLE_WARN_ONCE: Once = Once::new();
+static WORLD_ROUTING_FALLBACK_WARN_ONCE: Once = Once::new();
 
 #[cfg(target_os = "linux")]
 const DEFAULT_WORLD_SOCKET_PATH: &str = "/run/substrate.sock";
@@ -98,6 +99,20 @@ fn warn_world_backend_unavailable_once() {
     });
 }
 
+fn warn_world_routing_failed_falling_back_to_host_once() {
+    WORLD_ROUTING_FALLBACK_WARN_ONCE.call_once(|| {
+        let socket_note = world_socket_note();
+        let socket_note = socket_note
+            .as_deref()
+            .map(|note| format!(" ({note})"))
+            .unwrap_or_default();
+        eprintln!(
+            "substrate: warn: world routing failed; falling back to host{}; world_fs.host_visible=false was requested; world_fs.fail_closed.routing=false allows fallback ({})",
+            socket_note, WORLD_BACKEND_UNAVAILABLE_HINT
+        );
+    });
+}
+
 fn required_world_backend_unavailable_error(reason: &str) -> anyhow::Error {
     let socket_note = world_socket_note();
     let socket_note = socket_note
@@ -110,6 +125,19 @@ fn required_world_backend_unavailable_error(reason: &str) -> anyhow::Error {
         socket_note,
         WORLD_BACKEND_UNAVAILABLE_HINT
     )
+}
+
+fn exit_status_from_code(code: i32) -> ExitStatus {
+    #[cfg(unix)]
+    {
+        ExitStatus::from_raw((code & 0xff) << 8)
+    }
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::ExitStatusExt;
+        ExitStatus::from_raw(code as u32)
+    }
 }
 
 pub(crate) fn execute_command(
@@ -161,7 +189,15 @@ pub(crate) fn execute_command(
 
     let world_fs = world_fs_policy();
     let fs_mode = world_fs.mode;
+    let fail_closed_routing = world_fs.fail_closed_routing;
+    let host_visible = world_fs.host_visible;
     update_world_env(world_disabled);
+
+    if fail_closed_routing && world_disabled {
+        return Err(config_model::user_error(
+            "world_fs.fail_closed.routing=true requires world.enabled=true (effective world disable is a hard error)",
+        ));
+    }
 
     // Prepare redacted command once (used for span + logging)
     let redacted_for_logging = if std::env::var("SHIM_LOG_OPTS").as_deref() == Ok("raw") {
@@ -289,10 +325,10 @@ pub(crate) fn execute_command(
     };
 
     if world_required && world_disabled {
-        anyhow::bail!(
+        return Err(config_model::user_error(format!(
             "world execution required ({}) but world is disabled (SUBSTRATE_OVERRIDE_WORLD=disabled, --no-world, or world.enabled=false)",
             world_required_reason
-        );
+        )));
     }
 
     let mut policy_decision = None;
@@ -404,15 +440,28 @@ pub(crate) fn execute_command(
         {
             let socket_path = world_socket_path();
             let uds_exists = socket_path.exists();
-            let world_available = world_enabled && uds_exists;
             if world_required && world_enabled && !uds_exists {
                 return Err(required_world_backend_unavailable_error(
                     &world_required_reason,
                 ));
             }
             if world_enabled && !world_required && !uds_exists {
-                warn_world_backend_unavailable_once();
+                if fail_closed_routing {
+                    eprintln!(
+                        "substrate: error: {}",
+                        required_world_backend_unavailable_error(
+                            "world_fs.fail_closed.routing=true"
+                        )
+                    );
+                    return Ok(exit_status_from_code(3));
+                }
+                if host_visible {
+                    warn_world_backend_unavailable_once();
+                } else {
+                    warn_world_routing_failed_falling_back_to_host_once();
+                }
             }
+            let world_available = world_enabled && uds_exists;
             if world_available {
                 let transport_meta = TransportMeta {
                     mode: "unix".to_string(),
@@ -487,9 +536,31 @@ pub(crate) fn execute_command(
                                             WorldFsStrategyFallbackReason::FallbackMountFailed,
                                         ),
                                     );
-                                    let _ = active_span.finish(3, vec![], None);
+                                    let _ = active_span.finish(4, vec![], None);
                                 }
-                                return Ok(ExitStatus::from_raw(3 << 8));
+                                return Ok(exit_status_from_code(4));
+                            }
+                            if fail_closed_routing {
+                                if let Some(mut active_span) = span.take() {
+                                    active_span.set_execution_origin(ExecutionOrigin::World);
+                                    active_span.set_transport(transport_meta);
+                                    if let Ok(resolved) = crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_for_profile) {
+                                        active_span.set_policy_snapshot_meta(
+                                            resolved.snapshot.schema_version,
+                                            resolved.snapshot_hash,
+                                        );
+                                    }
+                                    active_span.set_world_fs_strategy(
+                                        WorldFsStrategy::Overlay,
+                                        WorldFsStrategy::Fuse,
+                                        unavail.fallback_reason.unwrap_or(
+                                            WorldFsStrategyFallbackReason::FallbackMountFailed,
+                                        ),
+                                    );
+                                    let _ = active_span.finish(4, vec![], None);
+                                }
+                                eprintln!("substrate: error: {unavail}");
+                                return Ok(exit_status_from_code(4));
                             }
                             eprintln!("substrate: warn: world unavailable; falling back to host");
                             if let Some(active_span) = span.as_mut() {
@@ -508,6 +579,15 @@ pub(crate) fn execute_command(
                                     e
                                 );
                             }
+                            if fail_closed_routing {
+                                if let Some(mut active_span) = span.take() {
+                                    active_span.set_execution_origin(ExecutionOrigin::World);
+                                    active_span.set_transport(transport_meta);
+                                    let _ = active_span.finish(3, vec![], None);
+                                }
+                                eprintln!("substrate: error: world routing failed: {e}");
+                                return Ok(exit_status_from_code(3));
+                            }
                             let _ = e;
                             warn_world_backend_unavailable_once();
                             // fall through to host PTY
@@ -521,6 +601,12 @@ pub(crate) fn execute_command(
         #[cfg(target_os = "macos")]
         {
             let context = pw::get_context();
+            if world_enabled && fail_closed_routing && context.is_none() {
+                eprintln!(
+                    "substrate: error: world routing failed; world backend unavailable on this platform (world_fs.fail_closed.routing=true)"
+                );
+                return Ok(exit_status_from_code(4));
+            }
             let uds_exists = context
                 .as_ref()
                 .map(|c| match &c.transport {
@@ -535,7 +621,20 @@ pub(crate) fn execute_command(
                 ));
             }
             if world_enabled && !world_required && !uds_exists {
-                warn_world_backend_unavailable_once();
+                if fail_closed_routing {
+                    eprintln!(
+                        "substrate: error: {}",
+                        required_world_backend_unavailable_error(
+                            "world_fs.fail_closed.routing=true"
+                        )
+                    );
+                    return Ok(exit_status_from_code(3));
+                }
+                if host_visible {
+                    warn_world_backend_unavailable_once();
+                } else {
+                    warn_world_routing_failed_falling_back_to_host_once();
+                }
             }
             if world_available {
                 let transport_meta = context
@@ -586,6 +685,17 @@ pub(crate) fn execute_command(
                                 e
                             );
                         }
+                        if fail_closed_routing {
+                            if let Some(mut active_span) = span.take() {
+                                if let Some(meta) = transport_meta {
+                                    active_span.set_transport(meta);
+                                }
+                                active_span.set_execution_origin(ExecutionOrigin::World);
+                                let _ = active_span.finish(3, vec![], None);
+                            }
+                            eprintln!("substrate: error: world routing failed: {e}");
+                            return Ok(exit_status_from_code(3));
+                        }
                         let _ = e;
                         warn_world_backend_unavailable_once();
                         // fall through to host PTY
@@ -599,6 +709,12 @@ pub(crate) fn execute_command(
 	                "world execution required ({}) but no world PTY execution path is available on this platform",
 	                world_required_reason
 	            );
+        }
+        if world_enabled && fail_closed_routing {
+            eprintln!(
+                "substrate: error: world routing failed; no world PTY execution path is available on this platform (world_fs.fail_closed.routing=true)"
+            );
+            return Ok(exit_status_from_code(4));
         }
 
         // Use host PTY execution path as fallback
@@ -673,6 +789,12 @@ pub(crate) fn execute_command(
     #[cfg(target_os = "macos")]
     {
         let context = pw::get_context();
+        if world_enabled && fail_closed_routing && context.is_none() {
+            eprintln!(
+                "substrate: error: world routing failed; world backend unavailable on this platform (world_fs.fail_closed.routing=true)"
+            );
+            return Ok(exit_status_from_code(4));
+        }
         let uds_exists = context
             .as_ref()
             .map(|c| matches!(&c.transport, pw::WorldTransport::Unix(path) if path.exists()))
@@ -684,7 +806,18 @@ pub(crate) fn execute_command(
             ));
         }
         if world_enabled && !world_required && !uds_exists {
-            warn_world_backend_unavailable_once();
+            if fail_closed_routing {
+                eprintln!(
+                    "substrate: error: {}",
+                    required_world_backend_unavailable_error("world_fs.fail_closed.routing=true")
+                );
+                return Ok(exit_status_from_code(3));
+            }
+            if host_visible {
+                warn_world_backend_unavailable_once();
+            } else {
+                warn_world_routing_failed_falling_back_to_host_once();
+            }
         }
         if world_available {
             let transport_meta = context
@@ -719,8 +852,23 @@ pub(crate) fn execute_command(
                             e
                         );
                     }
+                    if fail_closed_routing {
+                        if let Some(mut active_span) = span.take() {
+                            active_span.set_execution_origin(ExecutionOrigin::World);
+                            if let Some(meta) = transport_meta.clone() {
+                                active_span.set_transport(meta);
+                            }
+                            let _ = active_span.finish(3, vec![], None);
+                        }
+                        eprintln!("substrate: error: world routing failed: {e}");
+                        return Ok(exit_status_from_code(3));
+                    }
                     let _ = e;
-                    warn_world_backend_unavailable_once();
+                    if host_visible {
+                        warn_world_backend_unavailable_once();
+                    } else {
+                        warn_world_routing_failed_falling_back_to_host_once();
+                    }
                 }
             }
         }
@@ -729,6 +877,12 @@ pub(crate) fn execute_command(
     #[cfg(target_os = "windows")]
     {
         let context = pw::get_context();
+        if world_enabled && fail_closed_routing && context.is_none() {
+            eprintln!(
+                "substrate: error: world routing failed; world backend unavailable on this platform (world_fs.fail_closed.routing=true)"
+            );
+            return Ok(exit_status_from_code(4));
+        }
         let world_available = world_enabled && context.is_some();
         if world_required && world_enabled && context.is_none() {
             return Err(required_world_backend_unavailable_error(
@@ -736,7 +890,11 @@ pub(crate) fn execute_command(
             ));
         }
         if world_enabled && !world_required && context.is_none() {
-            warn_world_backend_unavailable_once();
+            if host_visible {
+                warn_world_backend_unavailable_once();
+            } else {
+                warn_world_routing_failed_falling_back_to_host_once();
+            }
         }
         if world_available {
             let transport_meta = context
@@ -771,8 +929,23 @@ pub(crate) fn execute_command(
                             e
                         );
                     }
+                    if fail_closed_routing {
+                        if let Some(mut active_span) = span.take() {
+                            active_span.set_execution_origin(ExecutionOrigin::World);
+                            if let Some(meta) = transport_meta.clone() {
+                                active_span.set_transport(meta);
+                            }
+                            let _ = active_span.finish(3, vec![], None);
+                        }
+                        eprintln!("substrate: error: world routing failed: {e}");
+                        return Ok(exit_status_from_code(3));
+                    }
                     let _ = e;
-                    warn_world_backend_unavailable_once();
+                    if host_visible {
+                        warn_world_backend_unavailable_once();
+                    } else {
+                        warn_world_routing_failed_falling_back_to_host_once();
+                    }
                 }
             }
         }
@@ -819,15 +992,26 @@ pub(crate) fn execute_command(
     {
         let socket_path = world_socket_path();
         let uds_exists = socket_path.exists();
-        let world_available = world_enabled && uds_exists;
         if world_required && world_enabled && !uds_exists {
             return Err(required_world_backend_unavailable_error(
                 &world_required_reason,
             ));
         }
         if world_enabled && !world_required && !uds_exists {
-            warn_world_backend_unavailable_once();
+            if fail_closed_routing {
+                eprintln!(
+                    "substrate: error: {}",
+                    required_world_backend_unavailable_error("world_fs.fail_closed.routing=true")
+                );
+                return Ok(exit_status_from_code(3));
+            }
+            if host_visible {
+                warn_world_backend_unavailable_once();
+            } else {
+                warn_world_routing_failed_falling_back_to_host_once();
+            }
         }
+        let world_available = world_enabled && uds_exists;
         if world_available {
             let transport_meta = TransportMeta {
                 mode: "unix".to_string(),
@@ -863,13 +1047,13 @@ pub(crate) fn execute_command(
                                         WorldFsStrategyFallbackReason::FallbackMountFailed,
                                     ),
                                 );
-                                let _ = active_span.finish(3, vec![], None);
+                                let _ = active_span.finish(4, vec![], None);
                             }
                             let reason = unavail
                                 .fallback_reason
                                 .unwrap_or(WorldFsStrategyFallbackReason::FallbackMountFailed);
                             let completion_extra = json!({
-                                log_schema::EXIT_CODE: 3,
+                                log_schema::EXIT_CODE: 4,
                                 log_schema::DURATION_MS: start_time.elapsed().as_millis(),
                                 "world_fs_strategy_primary": WorldFsStrategy::Overlay.as_str(),
                                 "world_fs_strategy_final": WorldFsStrategy::Fuse.as_str(),
@@ -882,10 +1066,30 @@ pub(crate) fn execute_command(
                                 cmd_id,
                                 Some(completion_extra),
                             )?;
-                            return Ok(ExitStatus::from_raw(3 << 8));
+                            return Ok(exit_status_from_code(4));
+                        }
+                        if fail_closed_routing {
+                            if let Some(mut active_span) = span.take() {
+                                active_span.set_execution_origin(ExecutionOrigin::World);
+                                active_span.set_transport(transport_meta);
+                                active_span.set_world_fs_strategy(
+                                    WorldFsStrategy::Overlay,
+                                    WorldFsStrategy::Fuse,
+                                    unavail.fallback_reason.unwrap_or(
+                                        WorldFsStrategyFallbackReason::FallbackMountFailed,
+                                    ),
+                                );
+                                let _ = active_span.finish(4, vec![], None);
+                            }
+                            eprintln!("substrate: error: {unavail}");
+                            return Ok(exit_status_from_code(4));
                         }
 
-                        eprintln!("substrate: warn: world unavailable; falling back to host");
+                        if host_visible {
+                            eprintln!("substrate: warn: world unavailable; falling back to host");
+                        } else {
+                            warn_world_routing_failed_falling_back_to_host_once();
+                        }
                         if let Some(active_span) = span.as_mut() {
                             active_span.set_world_fs_strategy(
                                 WorldFsStrategy::Overlay,
@@ -906,8 +1110,21 @@ pub(crate) fn execute_command(
                                 e
                             );
                         }
+                        if fail_closed_routing {
+                            if let Some(mut active_span) = span.take() {
+                                active_span.set_execution_origin(ExecutionOrigin::World);
+                                active_span.set_transport(transport_meta);
+                                let _ = active_span.finish(3, vec![], None);
+                            }
+                            eprintln!("substrate: error: world routing failed: {e}");
+                            return Ok(exit_status_from_code(3));
+                        }
                         let _ = e;
-                        warn_world_backend_unavailable_once();
+                        if host_visible {
+                            warn_world_backend_unavailable_once();
+                        } else {
+                            warn_world_routing_failed_falling_back_to_host_once();
+                        }
                     }
                 }
             }
@@ -977,6 +1194,12 @@ pub(crate) fn execute_command(
 	            "world execution required (fs_mode={}) but no world execution path is available on this platform",
 	            fs_mode.as_str()
 	        );
+    }
+    if world_enabled && fail_closed_routing {
+        eprintln!(
+            "substrate: error: world routing failed; no world execution path is available on this platform (world_fs.fail_closed.routing=true)"
+        );
+        return Ok(exit_status_from_code(4));
     }
 
     // Execute external command through shell for complex commands or when no builtin matched.
