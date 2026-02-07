@@ -764,7 +764,7 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX3-integ-core\""
       ],
-      "status": "in_progress",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax3-integ-core"
     },
