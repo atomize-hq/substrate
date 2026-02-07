@@ -199,3 +199,8 @@ Record after dispatch:
 ## START — 2026-02-07T03:10:14Z — ops — CP1-ci-checkpoint
 - Dispatch:
   - `cat docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/CP1-ci-checkpoint.md`
+- ORCH_REF: `feat/world-fs-granular-allow-deny-appendix`
+- CORE_BRANCH: `world-fs-granular-allow-deny-appendix-wfgadax1-integ-core`
+- CHECKOUT_SHA: `bdc88cb1693adcccd9d6179821841d5349b0aacc`
+- ci-audit (ci-testing): `recommend: run (no_last_green_run_found)`; `REASON=no_last_green_run_found`
+- ci-audit (feature-smoke): `recommend: run (no_last_green_run_found)`; `REASON=no_last_green_run_found`
