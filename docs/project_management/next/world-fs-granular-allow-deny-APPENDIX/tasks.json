@@ -354,7 +354,7 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX1-integ-linux\""
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax1-integ-linux"
     },
@@ -394,7 +394,7 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX1-integ-macos\""
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax1-integ-macos"
     },
@@ -434,7 +434,7 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX1-integ-windows\""
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax1-integ-windows"
     },
