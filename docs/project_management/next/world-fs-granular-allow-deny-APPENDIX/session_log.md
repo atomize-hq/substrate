@@ -129,3 +129,21 @@ Record after dispatch:
   - `make planning-validate FEATURE_DIR="docs/project_management/next/world-fs-granular-allow-deny-APPENDIX"` → exit 0
   - `checkpoint wiring check (final->cp and cp->core)` → exit 0
 - Blockers: `NONE`
+
+---
+
+## START — 2026-02-07T01:12:32Z — ops — F0-exec-preflight
+- Feature: `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX`
+- Branch: `feat/world-fs-granular-allow-deny-appendix` (local)
+- Goal: Validate the Planning Pack and smoke/playbook scaffolding is runnable before starting `WFGADAX0`.
+- Notes:
+  - No `origin/feat/world-fs-granular-allow-deny-appendix` ref was present at preflight time; created local `feat/world-fs-granular-allow-deny-appendix` from `origin/feat/world-fs-granular-allow-deny` at `304fbad6`.
+
+## END — 2026-02-07T01:13:52Z — ops — F0-exec-preflight
+- Results:
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world-fs-granular-allow-deny-APPENDIX"` → exit 0
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/world-fs-granular-allow-deny-APPENDIX"` → exit 0
+  - `bash -n docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/smoke/linux-smoke.sh` → exit 0
+- Evidence:
+  - `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/execution_preflight_report.md` updated with captured outputs.
+- Blockers: `NONE`

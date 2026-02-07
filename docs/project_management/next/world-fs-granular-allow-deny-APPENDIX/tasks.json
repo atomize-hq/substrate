@@ -52,7 +52,7 @@
         "Read: plan.md, tasks.json, session_log.md, quality_gate_report.md, manual_testing_playbook.md, kickoff prompt",
         "Set status to in_progress; add START entry; commit docs"
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "ops",
       "worktree": null
     },
