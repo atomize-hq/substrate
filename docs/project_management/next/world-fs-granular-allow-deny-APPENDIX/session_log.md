@@ -147,3 +147,11 @@ Record after dispatch:
 - Evidence:
   - `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/execution_preflight_report.md` updated with captured outputs.
 - Blockers: `NONE`
+
+## START — 2026-02-07T01:29:09Z — code — WFGADAX0-code
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX" SLICE_ID="WFGADAX0"`
+
+## START — 2026-02-07T01:29:09Z — test — WFGADAX0-test
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX" SLICE_ID="WFGADAX0"`
