@@ -70,9 +70,11 @@ fn policy_yaml_with_id(id: &str) -> String {
 name: "{id}"
 
 world_fs:
-  mode: writable
-  isolation: workspace
-  require_world: false
+  host_visible: true
+  fail_closed:
+    routing: false
+  write:
+    enabled: true
 
 net_allowed: []
 cmd_allowed: []

@@ -35,13 +35,15 @@ fn write_profile(project_dir: &Path, require_world: bool) {
     let profile = format!(
         r#"id: test-policy
 name: Test Policy
-	world_fs:
-	  mode: writable
-	  isolation: workspace
-	  require_world: {require_world}
-	net_allowed: []
-	cmd_allowed: []
-	cmd_denied: []
+world_fs:
+  host_visible: true
+  fail_closed:
+    routing: {require_world}
+  write:
+    enabled: true
+net_allowed: []
+cmd_allowed: []
+cmd_denied: []
 cmd_isolated: []
 require_approval: false
 allow_shell_operators: true

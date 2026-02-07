@@ -61,9 +61,11 @@ impl CmdDeniedHostOnlyFixture {
 name: "WAPS-0007 cmd_denied host-only regression"
 
 world_fs:
-  mode: writable
-  isolation: workspace
-  require_world: true
+  host_visible: true
+  fail_closed:
+    routing: true
+  write:
+    enabled: true
 
 net_allowed: []
 cmd_allowed: []

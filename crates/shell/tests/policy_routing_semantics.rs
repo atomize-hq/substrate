@@ -62,9 +62,11 @@ impl Pcm2Fixture {
 name: "PCM2 Test Policy"
 
 world_fs:
-  mode: writable
-  isolation: workspace
-  require_world: {require_world}
+  host_visible: true
+  fail_closed:
+    routing: {require_world}
+  write:
+    enabled: true
 
 net_allowed: []
 cmd_allowed: []

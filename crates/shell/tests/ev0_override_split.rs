@@ -70,9 +70,11 @@ impl OverrideSplitFixture {
 name: "EV0 Override Split Test Policy"
 
 world_fs:
-  mode: writable
-  isolation: workspace
-  require_world: false
+  host_visible: true
+  fail_closed:
+    routing: false
+  write:
+    enabled: true
 
 net_allowed: []
 cmd_allowed: []
