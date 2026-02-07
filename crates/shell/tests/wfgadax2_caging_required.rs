@@ -58,8 +58,6 @@ fn base_env_cmd(
         .env("SUBSTRATE_HOME", &substrate_home)
         .env("SUBSTRATE_MANAGER_MANIFEST", manager_manifest_path())
         .env("SHIM_TRACE_LOG", trace_path)
-        .env("SUBSTRATE_CAGED", "0")
-        .arg("--uncaged")
         .env("SUBSTRATE_OVERRIDE_WORLD", "enabled")
         .env("SUBSTRATE_WORLD_SOCKET", socket_path);
     cmd
