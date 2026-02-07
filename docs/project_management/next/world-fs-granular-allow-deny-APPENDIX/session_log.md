@@ -287,3 +287,7 @@ Record after dispatch:
 - CHECKOUT_SHA: `94478474b57c088eaf0313107320285acf156f74`
 - ci-compile-parity: `21779653655` (success)
 - feature-smoke (behavior): `21779680914` (success; linux)
+
+## START — 2026-02-07T12:07:14Z — integration — WFGADAX3-integ
+- Dispatch:
+  - `make triad-task-start-integ-final FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX" SLICE_ID="WFGADAX3" LAUNCH_CODEX=1`
