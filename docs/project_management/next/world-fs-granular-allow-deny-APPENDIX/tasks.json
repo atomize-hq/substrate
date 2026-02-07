@@ -517,7 +517,7 @@
         "Read: ci_checkpoint_plan.md and kickoff prompt",
         "Set status to in_progress; add START entry; commit docs"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "ops",
       "worktree": null
     },

@@ -195,3 +195,7 @@ Record after dispatch:
 ## END — 2026-02-07T03:08:31Z — integration — WFGADAX1-integ-core
 - HEAD: `bdc88cb1693adcccd9d6179821841d5349b0aacc`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/logs/WFGADAX1/integ-core/last_message.md`
+
+## START — 2026-02-07T03:10:14Z — ops — CP1-ci-checkpoint
+- Dispatch:
+  - `cat docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/CP1-ci-checkpoint.md`
