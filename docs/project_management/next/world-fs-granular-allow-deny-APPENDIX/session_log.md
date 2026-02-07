@@ -291,3 +291,8 @@ Record after dispatch:
 ## START — 2026-02-07T12:07:14Z — integration — WFGADAX3-integ
 - Dispatch:
   - `make triad-task-start-integ-final FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX" SLICE_ID="WFGADAX3" LAUNCH_CODEX=1`
+
+## END — 2026-02-07T12:10:30Z — integration — WFGADAX3-integ
+- HEAD: `79d3b052c9035d929b5733b80ed7f97cb7da40bb`
+- Note: merged `world-fs-granular-allow-deny-appendix-wfgadax3-integ-core` into `world-fs-granular-allow-deny-appendix-wfgadax3-integ` and finished via `make triad-task-finish TASK_ID="WFGADAX3-integ"` (MERGED_TO_ORCH=true).
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/logs/WFGADAX3/integ/last_message.md`
