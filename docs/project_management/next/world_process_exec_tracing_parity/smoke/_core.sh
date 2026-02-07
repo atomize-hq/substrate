@@ -6,6 +6,13 @@ set -euo pipefail
 # Caller responsibilities:
 # - Ensure `substrate` is available via `$SUBSTRATE_BIN` (default: `substrate`).
 # - Ensure the world backend is healthy (`substrate world doctor`).
+#
+# Exit codes (aligned to `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`):
+# - 0: smoke passed
+# - 1: smoke assertion failed / unexpected script error
+# - 2: invalid inputs (e.g., unknown SUBSTRATE_SMOKE_SLICE_ID)
+# - 3: required dependency unavailable (e.g., substrate not found)
+# - 4: not supported / missing prerequisites (e.g., world backend not healthy)
 
 SUBSTRATE_BIN="${SUBSTRATE_BIN:-substrate}"
 

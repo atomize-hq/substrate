@@ -18,6 +18,9 @@ Standard:
   - `bash` (Linux/macOS)
   - PowerShell (Windows)
 
+Exit code taxonomy for the smoke scripts:
+- `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+
 ## Smoke scripts (required)
 - Linux: `docs/project_management/next/world_process_exec_tracing_parity/smoke/linux-smoke.sh`
 - macOS: `docs/project_management/next/world_process_exec_tracing_parity/smoke/macos-smoke.sh`

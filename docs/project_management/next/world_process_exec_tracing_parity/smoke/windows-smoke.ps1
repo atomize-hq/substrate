@@ -1,6 +1,12 @@
 #!/usr/bin/env pwsh
 $ErrorActionPreference = "Stop"
 
+# Exit codes (aligned to `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`):
+# - 0: smoke passed
+# - 1: smoke assertion failed / unexpected script error
+# - 2: invalid inputs (e.g., unknown SUBSTRATE_SMOKE_SLICE_ID)
+# - 3: required dependency unavailable (e.g., substrate not found)
+
 $substrate = $env:SUBSTRATE_BIN
 if ([string]::IsNullOrWhiteSpace($substrate)) { $substrate = "substrate" }
 if (-not (Get-Command $substrate -ErrorAction SilentlyContinue)) {
