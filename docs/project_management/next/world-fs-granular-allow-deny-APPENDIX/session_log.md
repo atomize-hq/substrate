@@ -261,3 +261,7 @@ Record after dispatch:
 ## END — 2026-02-07T11:28:11Z — test — WFGADAX3-test
 - HEAD: `fc36c6285e98c08fc0acd29fdc40924acb0bfd9a`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/logs/WFGADAX3/test/last_message.md`
+
+## START — 2026-02-07T11:28:11Z — integration — WFGADAX3-integ-core
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX" TASK_ID="WFGADAX3-integ-core" LAUNCH_CODEX=1`
