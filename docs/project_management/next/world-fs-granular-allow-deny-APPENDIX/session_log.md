@@ -276,3 +276,14 @@ Record after dispatch:
 - ORCH_REF: `feat/world-fs-granular-allow-deny-appendix`
 - CORE_BRANCH: `world-fs-granular-allow-deny-appendix-wfgadax3-integ-core`
 - CHECKOUT_SHA: `94478474b57c088eaf0313107320285acf156f74`
+- Dispatch note: pushed `ORCH_REF` and `CORE_BRANCH` to origin before CI dispatch.
+- ci-audit (ci-testing): `recommend: run (changes_since_last_green)`; `REASON=changes_since_last_green`
+- ci-audit (feature-smoke): `recommend: run (changes_since_last_green)`; `REASON=changes_since_last_green`
+- ci-compile-parity: run `21779653655` (success): https://github.com/atomize-hq/substrate/actions/runs/21779653655
+- feature-smoke (behavior): run `21779680914` (success): https://github.com/atomize-hq/substrate/actions/runs/21779680914
+
+## END — 2026-02-07T11:56:45Z — ops — CP2-ci-checkpoint
+- ORCH_REF: `feat/world-fs-granular-allow-deny-appendix`
+- CHECKOUT_SHA: `94478474b57c088eaf0313107320285acf156f74`
+- ci-compile-parity: `21779653655` (success)
+- feature-smoke (behavior): `21779680914` (success; linux)
