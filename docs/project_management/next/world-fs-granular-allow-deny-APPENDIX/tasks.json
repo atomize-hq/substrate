@@ -560,7 +560,7 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" SLICE_ID=\"WFGADAX2\""
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "code",
       "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax2-code"
     },
@@ -601,7 +601,7 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX2-test\""
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "test",
       "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax2-test"
     },
