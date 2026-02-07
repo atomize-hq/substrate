@@ -50,6 +50,9 @@ pub enum SocketResponse {
     /// Accepts connections but never returns a response (simulates a stuck
     /// systemd-managed socket where the service failed to start).
     Silent,
+    /// Responds to `/v1/capabilities` and `/v1/doctor/world`, and returns an
+    /// `execute/stream` error frame with the provided message.
+    CapabilitiesAndExecuteStreamError { message: String },
 }
 
 /// Minimal Unix socket server used to simulate socket-activated world-agent
@@ -258,6 +261,18 @@ impl AgentSocket {
                                 // Read and drop the request to simulate a hung service.
                                 let mut discard = [0u8; 512];
                                 let _ = stream.read(&mut discard);
+                            }
+                            SocketResponse::CapabilitiesAndExecuteStreamError { message } => {
+                                if first_line.starts_with("GET /v1/capabilities") {
+                                    write_capabilities(&mut stream);
+                                } else if first_line.starts_with("GET /v1/doctor/world") {
+                                    write_world_doctor_report(&mut stream);
+                                } else if first_line.starts_with("POST /v1/execute/stream") {
+                                    let payload = build_stream_error_payload(message);
+                                    write_stream_response(&mut stream, &payload);
+                                } else {
+                                    let _ = stream.write_all(b"HTTP/1.1 400 Bad Request\r\n\r\n");
+                                }
                             }
                         };
                     }
@@ -569,6 +584,27 @@ fn build_stream_payload(exit: i32, stdout: &str, stderr: &str, scopes: &[String]
             "span_id": "agent-span",
             "scopes_used": scopes,
             "fs_diff": serde_json::Value::Null
+        })
+        .to_string(),
+    );
+    frames.push('\n');
+    frames
+}
+
+fn build_stream_error_payload(message: &str) -> String {
+    let mut frames = String::new();
+    frames.push_str(
+        &json!({
+            "type": "start",
+            "span_id": "agent-span"
+        })
+        .to_string(),
+    );
+    frames.push('\n');
+    frames.push_str(
+        &json!({
+            "type": "error",
+            "message": message
         })
         .to_string(),
     );

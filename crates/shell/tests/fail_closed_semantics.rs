@@ -30,15 +30,15 @@ fn count_error_lines(stderr: &str) -> usize {
         .count()
 }
 
-fn write_profile(project_dir: &Path, require_world: bool) {
-    let require_world = if require_world { "true" } else { "false" };
+fn write_policy(substrate_home: &Path, fail_closed_routing: bool) {
+    let fail_closed_routing = if fail_closed_routing { "true" } else { "false" };
     let profile = format!(
         r#"id: test-policy
 name: Test Policy
 world_fs:
   host_visible: true
   fail_closed:
-    routing: {require_world}
+    routing: {fail_closed_routing}
   write:
     enabled: true
 net_allowed: []
@@ -55,7 +55,8 @@ limits:
 metadata: {{}}
 "#
     );
-    fs::write(project_dir.join(".substrate-profile"), profile).expect("write .substrate-profile");
+    fs::create_dir_all(substrate_home).expect("create SUBSTRATE_HOME");
+    fs::write(substrate_home.join("policy.yaml"), profile).expect("write policy.yaml");
 }
 
 fn base_env_cmd(
@@ -65,9 +66,11 @@ fn base_env_cmd(
     trace_path: &Path,
 ) -> assert_cmd::Command {
     let mut cmd = substrate_shell_driver();
+    let substrate_home = home_dir.join(".substrate");
     cmd.current_dir(project_dir)
         .env("HOME", home_dir)
         .env("USERPROFILE", home_dir)
+        .env("SUBSTRATE_HOME", &substrate_home)
         .env("SUBSTRATE_MANAGER_MANIFEST", manager_manifest_path())
         .env("SHIM_TRACE_LOG", trace_path)
         .env("SUBSTRATE_CAGED", "0")
@@ -78,13 +81,13 @@ fn base_env_cmd(
 }
 
 #[test]
-fn require_world_true_allows_host_fallback_in_observe_mode_when_world_socket_unavailable() {
-    let temp = temp_dir("substrate-i1-require-world-");
+fn fail_closed_routing_true_exits_3_when_world_socket_unavailable() {
+    let temp = temp_dir("substrate-i1-fail-closed-routing-");
     let home = temp.path().join("home");
     let project = temp.path().join("project");
     fs::create_dir_all(&home).expect("create home");
     fs::create_dir_all(&project).expect("create project");
-    write_profile(&project, true);
+    write_policy(&home.join(".substrate"), true);
 
     let trace_path = temp.path().join("trace.jsonl");
     fs::write(&trace_path, "").expect("seed trace log");
@@ -92,32 +95,24 @@ fn require_world_true_allows_host_fallback_in_observe_mode_when_world_socket_una
     let socket_path = temp.path().join("sockdir/missing.sock");
     fs::create_dir_all(socket_path.parent().expect("socket parent")).expect("create socket dir");
 
+    let marker = "should-not-run";
     let assert = base_env_cmd(&project, &home, &socket_path, &trace_path)
         .arg("-c")
-        .arg("printf should-not-run")
+        .arg(format!("printf {marker}"))
         .assert()
-        .success();
+        .code(3);
 
     let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
     assert!(
-        stdout.contains("should-not-run"),
-        "expected command to run on host, got stdout: {stdout}"
+        !stdout.contains(marker),
+        "expected fail-closed routing to prevent host fallback, got stdout: {stdout}"
     );
 
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
     assert_eq!(
         count_error_lines(&stderr),
-        0,
-        "expected no errors, got: {stderr}"
-    );
-    assert_eq!(
-        count_warning_lines(&stderr),
         1,
-        "expected exactly one warning for world fallback, got: {stderr}"
-    );
-    assert!(
-        stderr.contains("world backend unavailable") && stderr.contains("running on host"),
-        "expected host fallback warning, got: {stderr}"
+        "expected exactly one error line for fail-closed routing, got: {stderr}"
     );
     assert!(
         stderr.contains("SUBSTRATE_WORLD_SOCKET override")
@@ -134,7 +129,7 @@ fn require_world_false_warns_once_and_falls_back_to_host_when_world_socket_unava
     let project = temp.path().join("project");
     fs::create_dir_all(&home).expect("create home");
     fs::create_dir_all(&project).expect("create project");
-    write_profile(&project, false);
+    write_policy(&home.join(".substrate"), false);
 
     let trace_path = temp.path().join("trace.jsonl");
     fs::write(&trace_path, "").expect("seed trace log");

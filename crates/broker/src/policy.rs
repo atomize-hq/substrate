@@ -113,6 +113,8 @@ pub struct WorldFsPolicy {
     pub mode: WorldFsMode,
     pub isolation: WorldFsIsolation,
     pub require_world: bool,
+    pub host_visible: bool,
+    pub fail_closed_routing: bool,
     pub read_allowlist: Vec<String>,
     pub write_allowlist: Vec<String>,
 }
@@ -339,6 +341,8 @@ impl Policy {
             mode: self.world_fs_mode,
             isolation: self.world_fs_isolation,
             require_world: self.world_fs_require_world,
+            host_visible: self.world_fs_host_visible,
+            fail_closed_routing: self.world_fs_fail_closed_routing,
             read_allowlist: self.fs_read.clone(),
             write_allowlist: self.fs_write.clone(),
         }
