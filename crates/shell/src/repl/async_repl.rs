@@ -35,8 +35,13 @@ use substrate_common::agent_events::AgentEvent;
 
 const MAX_BUFFERED_STRUCTURED_LINES_DURING_PTY: usize = 2048;
 
+struct ReplPreflight {
+    entered_cwd: String,
+    exit_cwd: crate::execution::config_model::ReplExitCwdMode,
+}
+
 pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
-    preflight_caging_required(config)?;
+    let preflight = preflight_caging_required(config)?;
     println!("Substrate v{}", env!("CARGO_PKG_VERSION"));
     println!("Session ID: {}", config.session_id);
     println!("Logging to: {}", config.trace_log_file.display());
@@ -50,6 +55,9 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
         .context("failed to initialize async REPL runtime")?;
 
     let shared_config = Arc::new(config.clone());
+
+    let entered_cwd = preflight.entered_cwd.clone();
+    let repl_exit_cwd = preflight.exit_cwd;
 
     rt.block_on(async move {
         let mut telemetry = ReplSessionTelemetry::new(shared_config.clone(), "async");
@@ -311,14 +319,73 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
             }
         }
 
-        if let Some(session) = world_session.take() {
-            let _ = session.client.close().await;
-        }
+        let note_lines = {
+            let last_world_cwd = world_session
+                .as_ref()
+                .map(|s| s.world_cwd.clone())
+                .unwrap_or_else(|| entered_cwd.clone());
+            if last_world_cwd != entered_cwd {
+                let (exit_target, fallback_reason) = match repl_exit_cwd {
+                    crate::execution::config_model::ReplExitCwdMode::Entered => {
+                        (entered_cwd.clone(), None)
+                    }
+                    crate::execution::config_model::ReplExitCwdMode::LastWorld => {
+                        let reason = if has_embedded_newlines(&last_world_cwd) {
+                            Some(
+                                "last world cwd is not representable (embedded newlines)"
+                                    .to_string(),
+                            )
+                        } else if !Path::new(&last_world_cwd).is_absolute() {
+                            Some(
+                                "last world cwd is not representable (not an absolute path)"
+                                    .to_string(),
+                            )
+                        } else if !Path::new(&last_world_cwd).is_dir() {
+                            Some(
+                                "last world cwd does not exist as a directory on the host at exit"
+                                    .to_string(),
+                            )
+                        } else {
+                            None
+                        };
+                        if let Some(reason) = reason {
+                            (entered_cwd.clone(), Some(reason))
+                        } else {
+                            (last_world_cwd, None)
+                        }
+                    }
+                };
+
+                let mut lines = vec![format!(
+                    "substrate: note: returning to host cwd: {}",
+                    exit_target
+                )];
+                if let Some(reason) = fallback_reason {
+                    lines.push(format!(
+                        "substrate: note: repl.exit_cwd=last_world fallback to entered cwd ({})",
+                        reason
+                    ));
+                }
+                Some(lines)
+            } else {
+                None
+            }
+        };
 
         prompt_worker.shutdown();
         clear_agent_event_sender();
 
+        if let Some(lines) = note_lines {
+            for line in lines {
+                println!("{line}");
+            }
+        }
+
         io::stdout().flush().ok();
+
+        if let Some(session) = world_session.take() {
+            let _ = session.client.close().await;
+        }
 
         Ok::<_, anyhow::Error>(())
     })?;
@@ -549,8 +616,9 @@ fn make_world_stdout_callback(
     })
 }
 
-fn preflight_caging_required(config: &ShellConfig) -> Result<()> {
+fn preflight_caging_required(config: &ShellConfig) -> Result<ReplPreflight> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let entered_cwd = cwd.display().to_string();
     let cli_world_enabled = if config.cli_world {
         Some(true)
     } else if config.cli_no_world {
@@ -571,6 +639,8 @@ fn preflight_caging_required(config: &ShellConfig) -> Result<()> {
             caged: config.cli_caged,
         },
     )?;
+
+    let exit_cwd = effective_config.repl.exit_cwd;
 
     let policy_mode = effective_config.policy.mode;
     std::env::set_var("SUBSTRATE_POLICY_MODE", policy_mode.as_str());
@@ -604,7 +674,10 @@ fn preflight_caging_required(config: &ShellConfig) -> Result<()> {
         }
     }
 
-    Ok(())
+    Ok(ReplPreflight {
+        entered_cwd,
+        exit_cwd,
+    })
 }
 
 fn spawn_sigint_task(sigint_tx: UnboundedSender<()>) {
