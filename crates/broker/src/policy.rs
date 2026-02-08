@@ -10,6 +10,14 @@ fn default_allow_shell_operators() -> bool {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum WorldFsDenyEnforcement {
+    Strict,
+    PreferStrict,
+    Weak,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum WorldFsEnforcement {
     Strict,
     BestEffort,
@@ -105,6 +113,9 @@ pub struct WorldFsPolicy {
     pub mode: WorldFsMode,
     pub isolation: WorldFsIsolation,
     pub require_world: bool,
+    pub host_visible: bool,
+    pub fail_closed_routing: bool,
+    pub caged_required: bool,
     pub read_allowlist: Vec<String>,
     pub write_allowlist: Vec<String>,
 }
@@ -121,6 +132,11 @@ pub struct Policy {
     pub world_fs_isolation: WorldFsIsolation, // world_fs.isolation
     pub world_fs_require_world: bool,         // world_fs.require_world
     pub world_fs_enforcement: Option<WorldFsEnforcement>, // world_fs.enforcement (V2; full isolation only)
+    pub world_fs_host_visible: bool,                      // world_fs.host_visible (V3)
+    pub world_fs_fail_closed_routing: bool,               // world_fs.fail_closed.routing (V3)
+    pub world_fs_deny_enforcement: Option<WorldFsDenyEnforcement>, // world_fs.deny_enforcement (V3)
+    pub world_fs_caged_required: bool,                    // world_fs.caged_required (V3)
+    pub world_fs_write_enabled: bool,                     // world_fs.write.enabled (V3)
     pub world_fs_discover: Option<WorldFsDimensionPolicy>, // world_fs.discover (V2; optional)
     pub world_fs_read: Option<WorldFsDimensionPolicy>,    // world_fs.read (V2)
     pub world_fs_write: Option<WorldFsDimensionPolicy>, // world_fs.write (V2; required iff mode=writable)
@@ -155,6 +171,11 @@ impl Default for Policy {
             world_fs_isolation: WorldFsIsolation::Workspace,
             world_fs_require_world: false,
             world_fs_enforcement: None,
+            world_fs_host_visible: true,
+            world_fs_fail_closed_routing: false,
+            world_fs_deny_enforcement: None,
+            world_fs_caged_required: false,
+            world_fs_write_enabled: true,
             world_fs_discover: None,
             world_fs_read: None,
             world_fs_write: None,
@@ -321,6 +342,9 @@ impl Policy {
             mode: self.world_fs_mode,
             isolation: self.world_fs_isolation,
             require_world: self.world_fs_require_world,
+            host_visible: self.world_fs_host_visible,
+            fail_closed_routing: self.world_fs_fail_closed_routing,
+            caged_required: self.world_fs_caged_required,
             read_allowlist: self.fs_read.clone(),
             write_allowlist: self.fs_write.clone(),
         }
@@ -394,6 +418,16 @@ impl Policy {
             _ => WorldFsIsolation::Workspace,
         };
         self.world_fs_require_world = self.world_fs_require_world || other.world_fs_require_world;
+        self.world_fs_host_visible = self.world_fs_host_visible && other.world_fs_host_visible;
+        self.world_fs_fail_closed_routing =
+            self.world_fs_fail_closed_routing || other.world_fs_fail_closed_routing;
+        self.world_fs_caged_required =
+            self.world_fs_caged_required || other.world_fs_caged_required;
+        self.world_fs_write_enabled = self.world_fs_write_enabled && other.world_fs_write_enabled;
+        self.world_fs_deny_enforcement = merge_deny_enforcement(
+            self.world_fs_deny_enforcement,
+            other.world_fs_deny_enforcement,
+        );
 
         // Merge resource limits (take the more restrictive)
         if let Some(other_mem) = other.limits.max_memory_mb {
@@ -458,6 +492,19 @@ impl Policy {
     }
 }
 
+fn merge_deny_enforcement(
+    a: Option<WorldFsDenyEnforcement>,
+    b: Option<WorldFsDenyEnforcement>,
+) -> Option<WorldFsDenyEnforcement> {
+    use WorldFsDenyEnforcement as D;
+    match (a, b) {
+        (Some(D::Strict), _) | (_, Some(D::Strict)) => Some(D::Strict),
+        (Some(D::PreferStrict), _) | (_, Some(D::PreferStrict)) => Some(D::PreferStrict),
+        (Some(D::Weak), _) | (_, Some(D::Weak)) => Some(D::Weak),
+        _ => None,
+    }
+}
+
 impl<'de> Deserialize<'de> for Policy {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -486,6 +533,14 @@ impl<'de> Deserialize<'de> for Policy {
             world_fs_isolation: raw.world_fs.isolation,
             world_fs_require_world: raw.world_fs.require_world,
             world_fs_enforcement: raw.world_fs.enforcement,
+            world_fs_host_visible: matches!(raw.world_fs.isolation, WorldFsIsolation::Workspace),
+            world_fs_fail_closed_routing: raw.world_fs.require_world,
+            world_fs_deny_enforcement: raw.world_fs.enforcement.map(|e| match e {
+                WorldFsEnforcement::Strict => WorldFsDenyEnforcement::Strict,
+                WorldFsEnforcement::BestEffort => WorldFsDenyEnforcement::Weak,
+            }),
+            world_fs_caged_required: false,
+            world_fs_write_enabled: matches!(raw.world_fs.mode.0, WorldFsMode::Writable),
             world_fs_discover: raw.world_fs.discover,
             world_fs_read: raw.world_fs.read,
             world_fs_write: raw.world_fs.write,

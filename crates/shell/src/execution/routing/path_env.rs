@@ -44,7 +44,9 @@ pub(crate) fn enforce_caged_destination(
         (requested, None)
     } else {
         let message = format!(
-            "substrate: info: caged root guard: returning to {}",
+            "substrate: info: caged root guard: blocked cd to {} (outside {}); returning to {}",
+            requested.display(),
+            anchor_clean.display(),
             anchor_clean.display()
         );
         (anchor_clean, Some(message))

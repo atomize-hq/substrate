@@ -133,7 +133,7 @@ fn waps_0008_policy_patch_edits_visible_to_next_command() {
 
     // Start with a writable world_fs policy so the snapshot is `writable`.
     fixture.write_workspace_policy_patch(
-        "world_fs:\n  mode: writable\n  isolation: workspace\n  require_world: false\n",
+        "world_fs:\n  host_visible: true\n  fail_closed:\n    routing: false\n  write:\n    enabled: true\n",
     );
 
     let records: Arc<Mutex<Vec<serde_json::Value>>> = Arc::new(Mutex::new(Vec::new()));
@@ -156,7 +156,7 @@ fn waps_0008_policy_patch_edits_visible_to_next_command() {
     // Flip to read_only + require_world. Change file size to guarantee cache invalidation even if
     // filesystem mtime is coarse.
     fixture.write_workspace_policy_patch(
-        "world_fs:\n  mode: read_only\n  isolation: workspace\n  require_world: true\n\nmetadata:\n  test_marker: waps-0008\n",
+        "world_fs:\n  host_visible: true\n  write:\n    enabled: false\n  fail_closed:\n    routing: true\n\nmetadata:\n  test_marker: waps-0008\n",
     );
 
     writeln!(stdin, "echo second").expect("write second command");
@@ -204,7 +204,7 @@ fn waps_0008_config_edits_visible_to_next_command() {
         "world:\n  enabled: true\n  anchor_mode: follow-cwd\n  anchor_path: \"\"\n  caged: false\n\npolicy:\n  mode: observe\n\nsync:\n  auto_sync: false\n  direction: from_world\n  conflict_policy: prefer_host\n  exclude: []\n",
     );
     fixture.write_workspace_policy_patch(
-        "world_fs:\n  mode: writable\n  isolation: workspace\n  require_world: false\n",
+        "world_fs:\n  host_visible: true\n  fail_closed:\n    routing: false\n  write:\n    enabled: true\n",
     );
 
     let records: Arc<Mutex<Vec<serde_json::Value>>> = Arc::new(Mutex::new(Vec::new()));

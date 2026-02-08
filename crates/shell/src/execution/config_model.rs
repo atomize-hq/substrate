@@ -97,6 +97,51 @@ pub(crate) struct SubstrateConfig {
     pub world: WorldConfig,
     pub policy: PolicyConfig,
     pub sync: SyncConfig,
+    pub repl: ReplConfig,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ReplExitCwdMode {
+    Entered,
+    LastWorld,
+}
+
+impl Default for ReplExitCwdMode {
+    fn default() -> Self {
+        Self::Entered
+    }
+}
+
+impl ReplExitCwdMode {
+    pub(crate) fn parse_insensitive(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "entered" => Some(Self::Entered),
+            "last_world" => Some(Self::LastWorld),
+            _ => None,
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for ReplExitCwdMode {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let raw = String::deserialize(deserializer)?;
+        Self::parse_insensitive(&raw).ok_or_else(|| {
+            serde::de::Error::custom(format!(
+                "invalid repl.exit_cwd '{}'; expected entered or last_world",
+                raw
+            ))
+        })
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct ReplConfig {
+    pub exit_cwd: ReplExitCwdMode,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -290,11 +335,16 @@ pub(crate) struct SubstrateConfigPatch {
     pub policy: PolicyConfigPatch,
     #[serde(skip_serializing_if = "SyncConfigPatch::is_empty")]
     pub sync: SyncConfigPatch,
+    #[serde(skip_serializing_if = "ReplConfigPatch::is_empty")]
+    pub repl: ReplConfigPatch,
 }
 
 impl SubstrateConfigPatch {
     pub(crate) fn is_empty(&self) -> bool {
-        self.world.is_empty() && self.policy.is_empty() && self.sync.is_empty()
+        self.world.is_empty()
+            && self.policy.is_empty()
+            && self.sync.is_empty()
+            && self.repl.is_empty()
     }
 }
 
@@ -364,6 +414,19 @@ pub(crate) struct SyncConfigPatch {
     pub conflict_policy: Option<SyncConflictPolicy>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub exclude: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct ReplConfigPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exit_cwd: Option<ReplExitCwdMode>,
+}
+
+impl ReplConfigPatch {
+    fn is_empty(&self) -> bool {
+        self.exit_cwd.is_none()
+    }
 }
 
 impl SyncConfigPatch {
@@ -820,6 +883,28 @@ fn resolve_effective_from_layers(
         );
     }
 
+    // repl.exit_cwd
+    let (exit_cwd, exit_cwd_src) = resolve_replace(
+        effective.repl.exit_cwd,
+        global_patch.repl.exit_cwd,
+        workspace_patch
+            .map(|(p, _)| p.repl.exit_cwd)
+            .unwrap_or(None),
+        None,
+        None,
+        workspace_enabled,
+    );
+    effective.repl.exit_cwd = exit_cwd;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "repl.exit_cwd".to_string(),
+            ConfigExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(exit_cwd_src, global_path, workspace_path)],
+            },
+        );
+    }
+
     // policy.mode (from config.yaml/workspace.yaml, not policy.yaml)
     let (policy_mode, policy_mode_src) = resolve_replace(
         effective.policy.mode,
@@ -1271,6 +1356,10 @@ fn apply_update_to_patch(patch: &mut SubstrateConfigPatch, update: &ConfigUpdate
         ),
         "sync.exclude" => apply_string_list_opt(&mut patch.sync.exclude, update),
 
+        "repl.exit_cwd" => {
+            apply_enum_repl_exit_cwd_opt(&mut patch.repl.exit_cwd, &update.op, &update.value)
+        }
+
         _ => Err(user_error(format!(
             "unsupported config key '{}'",
             update.key
@@ -1295,6 +1384,8 @@ fn reset_patch_key(patch: &mut SubstrateConfigPatch, key: &str) -> Result<bool> 
         "sync.direction" => reset_opt(&mut patch.sync.direction),
         "sync.conflict_policy" => reset_opt(&mut patch.sync.conflict_policy),
         "sync.exclude" => reset_opt(&mut patch.sync.exclude),
+
+        "repl.exit_cwd" => reset_opt(&mut patch.repl.exit_cwd),
 
         _ => Err(user_error(format!("unsupported config key '{}'", key))),
     }
@@ -1351,6 +1442,25 @@ fn apply_enum_policy_mode_opt(
     let next = PolicyMode::parse_insensitive(raw).ok_or_else(|| {
         user_error(format!(
             "invalid policy.mode '{}'; expected disabled, observe, or enforce",
+            raw
+        ))
+    })?;
+    let changed = *target != Some(next);
+    *target = Some(next);
+    Ok(changed)
+}
+
+fn apply_enum_repl_exit_cwd_opt(
+    target: &mut Option<ReplExitCwdMode>,
+    op: &UpdateOp,
+    raw: &str,
+) -> Result<bool> {
+    if *op != UpdateOp::Set {
+        return Err(user_error("unsupported operator for enum key"));
+    }
+    let next = ReplExitCwdMode::parse_insensitive(raw).ok_or_else(|| {
+        user_error(format!(
+            "invalid repl.exit_cwd '{}'; expected entered or last_world",
             raw
         ))
     })?;

@@ -30,11 +30,18 @@ use crate::execution::{
     ShellConfig, PTY_ACTIVE,
 };
 use crate::repl::editor;
+use substrate_broker::{detect_profile, world_fs_policy};
 use substrate_common::agent_events::AgentEvent;
 
 const MAX_BUFFERED_STRUCTURED_LINES_DURING_PTY: usize = 2048;
 
+struct ReplPreflight {
+    entered_cwd: String,
+    exit_cwd: crate::execution::config_model::ReplExitCwdMode,
+}
+
 pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
+    let preflight = preflight_caging_required(config)?;
     println!("Substrate v{}", env!("CARGO_PKG_VERSION"));
     println!("Session ID: {}", config.session_id);
     println!("Logging to: {}", config.trace_log_file.display());
@@ -48,6 +55,9 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
         .context("failed to initialize async REPL runtime")?;
 
     let shared_config = Arc::new(config.clone());
+
+    let entered_cwd = preflight.entered_cwd.clone();
+    let repl_exit_cwd = preflight.exit_cwd;
 
     rt.block_on(async move {
         let mut telemetry = ReplSessionTelemetry::new(shared_config.clone(), "async");
@@ -309,14 +319,73 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
             }
         }
 
-        if let Some(session) = world_session.take() {
-            let _ = session.client.close().await;
-        }
+        let note_lines = {
+            let last_world_cwd = world_session
+                .as_ref()
+                .map(|s| s.world_cwd.clone())
+                .unwrap_or_else(|| entered_cwd.clone());
+            if last_world_cwd != entered_cwd {
+                let (exit_target, fallback_reason) = match repl_exit_cwd {
+                    crate::execution::config_model::ReplExitCwdMode::Entered => {
+                        (entered_cwd.clone(), None)
+                    }
+                    crate::execution::config_model::ReplExitCwdMode::LastWorld => {
+                        let reason = if has_embedded_newlines(&last_world_cwd) {
+                            Some(
+                                "last world cwd is not representable (embedded newlines)"
+                                    .to_string(),
+                            )
+                        } else if !Path::new(&last_world_cwd).is_absolute() {
+                            Some(
+                                "last world cwd is not representable (not an absolute path)"
+                                    .to_string(),
+                            )
+                        } else if !Path::new(&last_world_cwd).is_dir() {
+                            Some(
+                                "last world cwd does not exist as a directory on the host at exit"
+                                    .to_string(),
+                            )
+                        } else {
+                            None
+                        };
+                        if let Some(reason) = reason {
+                            (entered_cwd.clone(), Some(reason))
+                        } else {
+                            (last_world_cwd, None)
+                        }
+                    }
+                };
+
+                let mut lines = vec![format!(
+                    "substrate: note: returning to host cwd: {}",
+                    exit_target
+                )];
+                if let Some(reason) = fallback_reason {
+                    lines.push(format!(
+                        "substrate: note: repl.exit_cwd=last_world fallback to entered cwd ({})",
+                        reason
+                    ));
+                }
+                Some(lines)
+            } else {
+                None
+            }
+        };
 
         prompt_worker.shutdown();
         clear_agent_event_sender();
 
+        if let Some(lines) = note_lines {
+            for line in lines {
+                println!("{line}");
+            }
+        }
+
         io::stdout().flush().ok();
+
+        if let Some(session) = world_session.take() {
+            let _ = session.client.close().await;
+        }
 
         Ok::<_, anyhow::Error>(())
     })?;
@@ -547,6 +616,70 @@ fn make_world_stdout_callback(
     })
 }
 
+fn preflight_caging_required(config: &ShellConfig) -> Result<ReplPreflight> {
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let entered_cwd = cwd.display().to_string();
+    let cli_world_enabled = if config.cli_world {
+        Some(true)
+    } else if config.cli_no_world {
+        Some(false)
+    } else {
+        None
+    };
+
+    let effective_config = crate::execution::config_model::resolve_effective_config(
+        &cwd,
+        &crate::execution::config_model::CliConfigOverrides {
+            world_enabled: cli_world_enabled,
+            anchor_mode: config.cli_anchor_mode,
+            anchor_path: config
+                .cli_anchor_path
+                .as_ref()
+                .map(|p| p.to_string_lossy().to_string()),
+            caged: config.cli_caged,
+        },
+    )?;
+
+    let exit_cwd = effective_config.repl.exit_cwd;
+
+    let policy_mode = effective_config.policy.mode;
+    std::env::set_var("SUBSTRATE_POLICY_MODE", policy_mode.as_str());
+    substrate_broker::set_policy_mode(match policy_mode {
+        crate::execution::config_model::PolicyMode::Disabled => {
+            substrate_broker::PolicyMode::Disabled
+        }
+        crate::execution::config_model::PolicyMode::Observe => {
+            substrate_broker::PolicyMode::Observe
+        }
+        crate::execution::config_model::PolicyMode::Enforce => {
+            substrate_broker::PolicyMode::Enforce
+        }
+    });
+
+    detect_profile(&cwd)
+        .with_context(|| format!("failed to load Substrate profile for cwd {}", cwd.display()))
+        .map_err(|err| crate::execution::config_model::user_error(format!("{:#}", err)))?;
+
+    let world_fs = world_fs_policy();
+    if world_fs.caged_required {
+        if !effective_config.world.caged {
+            return Err(crate::execution::config_model::user_error(
+                "world_fs.caged_required=true requires world.caged=true (uncaged mode is a hard error)",
+            ));
+        }
+        if effective_config.world.anchor_mode == substrate_common::WorldRootMode::FollowCwd {
+            return Err(crate::execution::config_model::user_error(
+                "world_fs.caged_required=true is incompatible with world.anchor_mode=follow-cwd (hard error)",
+            ));
+        }
+    }
+
+    Ok(ReplPreflight {
+        entered_cwd,
+        exit_cwd,
+    })
+}
+
 fn spawn_sigint_task(sigint_tx: UnboundedSender<()>) {
     tokio::spawn(async move {
         loop {
@@ -745,22 +878,25 @@ fn apply_caged_predicted_cwd(
     world_root: &WorldRootSettings,
     current_cwd: &str,
     predicted: String,
-) -> String {
+) -> (String, Option<String>) {
     let current_path = Path::new(current_cwd);
     let predicted_path = PathBuf::from(&predicted);
     if !current_path.is_absolute() || !predicted_path.is_absolute() {
-        return predicted;
+        return (predicted, None);
     }
 
     let requested = canonicalize_or(&predicted_path);
-    let (destination, _warning) = enforce_caged_destination(world_root, current_path, requested);
-    destination.to_string_lossy().to_string()
+    let (destination, warning) = enforce_caged_destination(world_root, current_path, requested);
+    (destination.to_string_lossy().to_string(), warning)
 }
 
-fn apply_caged_predicted_cwd_from_config(current_cwd: &str, predicted: String) -> String {
+fn apply_caged_predicted_cwd_from_config(
+    current_cwd: &str,
+    predicted: String,
+) -> (String, Option<String>) {
     let current_path = Path::new(current_cwd);
     let Ok(world_root) = resolve_world_root(None, None, None, current_path) else {
-        return predicted;
+        return (predicted, None);
     };
     apply_caged_predicted_cwd(&world_root, current_cwd, predicted)
 }
@@ -805,7 +941,12 @@ async fn exec_world_line(
     if exit == 0 {
         if let Some(predicted) = predict_cd_next_cwd(&prev_cwd, program) {
             if next_cwd == prev_cwd {
-                next_cwd = apply_caged_predicted_cwd_from_config(&prev_cwd, predicted);
+                let (predicted, warning) =
+                    apply_caged_predicted_cwd_from_config(&prev_cwd, predicted);
+                if let Some(message) = warning {
+                    let _ = io.agent_printer.print(message);
+                }
+                next_cwd = predicted;
             }
         }
     }
@@ -888,7 +1029,12 @@ async fn exec_world_pty(
     if exit == 0 {
         if let Some(predicted) = predict_cd_next_cwd(&prev_cwd, program) {
             if next_cwd == prev_cwd {
-                next_cwd = apply_caged_predicted_cwd_from_config(&prev_cwd, predicted);
+                let (predicted, warning) =
+                    apply_caged_predicted_cwd_from_config(&prev_cwd, predicted);
+                if let Some(message) = warning {
+                    let _ = io.agent_printer.print(message);
+                }
+                next_cwd = predicted;
             }
         }
     }
@@ -920,8 +1066,9 @@ mod caged_prediction_tests {
         let predicted = std::fs::canonicalize(&outside).unwrap();
         let current_s = current.to_string_lossy().to_string();
         let predicted_s = predicted.to_string_lossy().to_string();
-        let out = apply_caged_predicted_cwd(&settings, &current_s, predicted_s);
+        let (out, warning) = apply_caged_predicted_cwd(&settings, &current_s, predicted_s);
         assert_eq!(out, settings.path.to_string_lossy().to_string());
+        assert!(warning.is_some());
     }
 
     #[test]
@@ -941,8 +1088,9 @@ mod caged_prediction_tests {
         let predicted = std::fs::canonicalize(&inside).unwrap();
         let current_s = current.to_string_lossy().to_string();
         let predicted_s = predicted.to_string_lossy().to_string();
-        let out = apply_caged_predicted_cwd(&settings, &current_s, predicted_s.clone());
+        let (out, warning) = apply_caged_predicted_cwd(&settings, &current_s, predicted_s.clone());
         assert_eq!(out, predicted_s);
+        assert!(warning.is_none());
     }
 }
 
@@ -1015,7 +1163,7 @@ async fn exec_host_line(
     world_client: Option<&ReplPersistentSessionClient>,
     io: &mut ReplIo<'_>,
 ) -> Result<i32> {
-    if let Some(code) = try_run_host_builtin(host_state, line, io.agent_printer)? {
+    if let Some(code) = try_run_host_builtin(config, host_state, line, io.agent_printer)? {
         return Ok(code);
     }
 
@@ -1060,6 +1208,7 @@ async fn exec_host_line(
 }
 
 fn try_run_host_builtin(
+    config: &ShellConfig,
     host_state: &mut HostState,
     line: &str,
     agent_printer: &ExternalPrinter<String>,
@@ -1078,22 +1227,39 @@ fn try_run_host_builtin(
         "cd" => {
             let target = tokens.get(1).map(String::as_str).unwrap_or("~");
             let expanded = shellexpand::tilde(target).to_string();
-            let next = PathBuf::from(expanded);
-            let next = if next.is_absolute() {
-                next
+            let prev = host_state.cwd.clone();
+            let candidate = PathBuf::from(&expanded);
+            let absolute = if candidate.is_absolute() {
+                candidate
             } else {
-                host_state.cwd.join(next)
+                prev.join(candidate)
+            };
+            let requested = match std::fs::canonicalize(&absolute) {
+                Ok(path) => path,
+                Err(_) => {
+                    let _ = agent_printer.print(format!(
+                        "substrate: error: :host cd: not a directory: {}",
+                        absolute.display()
+                    ));
+                    return Ok(Some(1));
+                }
             };
 
-            if !next.is_dir() {
-                let _ = agent_printer.print(format!(
-                    "substrate: error: :host cd: not a directory: {}",
-                    next.display()
-                ));
-                return Ok(Some(1));
+            let world_root = resolve_world_root(
+                config.cli_anchor_mode,
+                config.cli_anchor_path.clone(),
+                config.cli_caged,
+                &prev,
+            )?;
+            let (destination, warning) = enforce_caged_destination(&world_root, &prev, requested);
+            if let Some(message) = warning {
+                let _ = agent_printer.print(message);
             }
 
-            host_state.cwd = next;
+            host_state.cwd = destination;
+            host_state
+                .env
+                .insert("PWD".to_string(), host_state.cwd.display().to_string());
             Ok(Some(0))
         }
         "export" => {
