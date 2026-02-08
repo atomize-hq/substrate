@@ -48,9 +48,11 @@ fn write_profile(project_dir: &Path) {
     let profile = r#"id: test-policy
 name: Test Policy
 world_fs:
-  mode: writable
-  isolation: workspace
-  require_world: true
+  host_visible: true
+  fail_closed:
+    routing: true
+  write:
+    enabled: true
 net_allowed: []
 cmd_allowed: []
 cmd_denied: []
@@ -72,9 +74,11 @@ fn write_policy(home_substrate: &Path) {
     let policy = r#"id: test-global-policy
 name: Test Global Policy
 world_fs:
-  mode: writable
-  isolation: workspace
-  require_world: true
+  host_visible: true
+  fail_closed:
+    routing: true
+  write:
+    enabled: true
 net_allowed: []
 cmd_allowed: []
 cmd_denied: []

@@ -48,9 +48,11 @@ fn test_load_policy() {
 id: test-policy
 name: Test Policy
 world_fs:
-  mode: writable
-  isolation: workspace
-  require_world: false
+  host_visible: true
+  fail_closed:
+    routing: false
+  write:
+    enabled: true
 net_allowed:
   - github.com
 cmd_allowed:
@@ -96,9 +98,11 @@ fn minimal_policy_parses_with_required_world_fs() {
         &policy_path,
         r#"
 world_fs:
-  mode: read_only
-  isolation: workspace
-  require_world: true
+  host_visible: true
+  write:
+    enabled: false
+  fail_closed:
+    routing: true
 cmd_denied:
   - ls
 "#,
@@ -172,9 +176,11 @@ fn broker_handles_remain_isolated_in_parallel() {
 id: alpha
 name: Alpha Policy
 world_fs:
-  mode: writable
-  isolation: workspace
-  require_world: false
+  host_visible: true
+  fail_closed:
+    routing: false
+  write:
+    enabled: true
 net_allowed: []
 cmd_allowed:
   - alpha-allowed
@@ -198,9 +204,11 @@ metadata: {}
 id: beta
 name: Beta Policy
 world_fs:
-  mode: writable
-  isolation: workspace
-  require_world: false
+  host_visible: true
+  fail_closed:
+    routing: false
+  write:
+    enabled: true
 net_allowed: []
 cmd_allowed:
   - beta-allowed
@@ -281,8 +289,6 @@ id: bad-fs-mode
 name: Invalid fs mode
 world_fs:
   mode: invalid
-  isolation: workspace
-  require_world: false
 net_allowed: []
 cmd_allowed: []
 cmd_denied: []
@@ -337,9 +343,6 @@ mod wfgad0_policy_schema_v2 {
         expect_err_contains(
             r#"
 world_fs:
-  mode: writable
-  isolation: workspace
-  require_world: false
   read_allowlist: ["*"]
   write_allowlist: []
 "#,
@@ -353,70 +356,50 @@ world_fs:
         expect_err_contains(
             r#"
 world_fs:
-  mode: writable
   isolation: project
-  require_world: false
 "#,
-            "world_fs.isolation",
+            "isolation",
         );
     }
 
     #[test]
     fn denies_and_enforcement_are_rejected_in_workspace_isolation() {
-        // R-002: deny lists + enforcement are full-isolation only.
+        // SCHEMA.md §1.5.2: full-isolation-only keys must be omitted when host_visible=true.
         let err = expect_err(
             r#"
 world_fs:
-  mode: writable
-  isolation: workspace
-  require_world: false
-  enforcement: strict
+  host_visible: true
+  deny_enforcement: strict
   read:
     allow_list: ["."]
     deny_list: ["secrets/**"]
 "#,
         );
         assert!(
-            err.contains("workspace") || err.contains("isolation"),
+            err.contains("host_visible") || err.contains("read"),
             "unexpected error: {err}"
         );
     }
 
     #[test]
     fn allow_list_must_be_present_and_non_empty() {
-        // R-005: allow_list required + non-empty for any configured dimension.
-        let err_missing = expect_err(
+        // SCHEMA.md §1.4 + §1.5.3: allow_list must be non-empty after defaulting.
+        // Empty lists should be defaulted deterministically in full isolation.
+        let policy = load_policy_from_yaml(
             r#"
 world_fs:
-  mode: read_only
-  isolation: full
-  require_world: true
-  read:
-    deny_list: []
-  enforcement: best_effort
-"#,
-        );
-        assert!(
-            err_missing.contains("allow_list") || err_missing.contains("read"),
-            "unexpected error: {err_missing}"
-        );
-
-        let err_empty = expect_err(
-            r#"
-world_fs:
-  mode: read_only
-  isolation: full
-  require_world: true
+  host_visible: false
   read:
     allow_list: []
     deny_list: []
-  enforcement: best_effort
 "#,
         );
-        assert!(
-            err_empty.contains("allow_list") || err_empty.contains("empty"),
-            "unexpected error: {err_empty}"
-        );
+        let policy = policy.expect("expected empty allow_list to be defaulted in full isolation");
+        let read = policy
+            .world_fs_read
+            .as_ref()
+            .expect("read dimension should be present in full isolation");
+        assert_eq!(read.allow_list, vec![".".to_string()]);
     }
 
     #[test]
@@ -425,10 +408,7 @@ world_fs:
         expect_err(
             r#"
 world_fs:
-  mode: read_only
-  isolation: full
-  require_world: true
-  enforcement: strict
+  host_visible: false
   read:
     allow_list: ["src/**"]
     deny_list: []
@@ -442,10 +422,8 @@ world_fs:
         expect_err(
             r#"
 world_fs:
-  mode: read_only
-  isolation: full
-  require_world: true
-  enforcement: strict
+  host_visible: false
+  deny_enforcement: strict
   read:
     allow_list: ["."]
     deny_list: ["file?.txt"]
@@ -454,10 +432,8 @@ world_fs:
         expect_err(
             r#"
 world_fs:
-  mode: read_only
-  isolation: full
-  require_world: true
-  enforcement: strict
+  host_visible: false
+  deny_enforcement: strict
   read:
     allow_list: ["."]
     deny_list: ["file[0-9].txt"]
@@ -471,10 +447,7 @@ world_fs:
         expect_err(
             r#"
 world_fs:
-  mode: read_only
-  isolation: full
-  require_world: true
-  enforcement: strict
+  host_visible: false
   read:
     allow_list: ["/etc/passwd"]
     deny_list: []
@@ -483,10 +456,7 @@ world_fs:
         expect_err(
             r#"
 world_fs:
-  mode: read_only
-  isolation: full
-  require_world: true
-  enforcement: strict
+  host_visible: false
   read:
     allow_list: ["../secrets"]
     deny_list: []
@@ -495,10 +465,7 @@ world_fs:
         expect_err(
             r#"
 world_fs:
-  mode: read_only
-  isolation: full
-  require_world: true
-  enforcement: strict
+  host_visible: false
   read:
     allow_list: ["a/../b"]
     deny_list: []
@@ -508,86 +475,66 @@ world_fs:
 
     #[test]
     fn enforcement_must_be_present_iff_any_deny_list_is_non_empty() {
-        // R-018: enforcement present iff any deny_list is non-empty.
-
-        // enforcement present with empty denies => reject
+        // SCHEMA.md §1.5.4: deny_enforcement is required when any deny_list is non-empty.
         expect_err(
             r#"
 world_fs:
-  mode: read_only
-  isolation: full
-  require_world: true
-  enforcement: strict
+  host_visible: false
+  read:
+    allow_list: ["."]
+    deny_list: ["secrets/**"]
+"#,
+        );
+
+        // deny_enforcement MAY be present even when all deny_list values are empty.
+        load_policy_from_yaml(
+            r#"
+world_fs:
+  host_visible: false
+  deny_enforcement: strict
   read:
     allow_list: ["."]
     deny_list: []
 "#,
-        );
-
-        // deny_list non-empty without enforcement => reject
-        expect_err(
-            r#"
-world_fs:
-  mode: read_only
-  isolation: full
-  require_world: true
-  read:
-    allow_list: ["."]
-    deny_list: ["secrets/**"]
-"#,
-        );
-    }
-
-    #[test]
-    fn denies_require_require_world_true() {
-        // R-019: denies require a security boundary.
-        expect_err(
-            r#"
-world_fs:
-  mode: read_only
-  isolation: full
-  require_world: false
-  enforcement: strict
-  read:
-    allow_list: ["."]
-    deny_list: ["secrets/**"]
-"#,
-        );
+        )
+        .expect("expected deny_enforcement to be allowed with empty denies");
     }
 
     #[test]
     fn accepts_normalized_literals_and_wildcard_denies_in_full_isolation() {
         // R-004: leading "./" and trailing "/" are normalized (accepted) and semantics are deterministic.
         // Also validates that a minimal full-isolation deny configuration is accepted when consistent.
-        load_policy_from_yaml(
+        let policy = load_policy_from_yaml(
             r#"
 world_fs:
-  mode: read_only
-  isolation: full
-  require_world: true
-  enforcement: best_effort
+  host_visible: false
+  deny_enforcement: weak
   read:
     allow_list: ["./src/"]
     deny_list: ["./secrets/", "**/*.pem"]
 "#,
         )
-        .expect("expected a valid v2 world_fs configuration to load");
+        .expect("expected a valid v3 full isolation deny configuration to load");
+        let read = policy
+            .world_fs_read
+            .as_ref()
+            .expect("read dimension should be present");
+        assert_eq!(read.allow_list, vec!["src".to_string()]);
+        assert_eq!(
+            read.deny_list,
+            vec!["secrets".to_string(), "**/*.pem".to_string()]
+        );
     }
 
     #[test]
     fn writable_full_isolation_defaults_read_allow_list_from_write_when_missing() {
-        // WFGAD3 smoke expects writable full isolation policies to accept write allow/deny lists
-        // without requiring an explicit read.allow_list. Reads default to the write allow list.
+        // SCHEMA.md §1.4: read.allow_list defaults to ["."], independent of write.allow_list.
         let policy = load_policy_from_yaml(
             r#"
 world_fs:
-  mode: writable
-  isolation: full
-  require_world: true
-  enforcement: best_effort
+  host_visible: false
   write:
-    allow_list: ["."]
-    deny_list: ["./outputs/private/**"]
+    allow_list: ["./outputs/private/"]
 "#,
         )
         .expect("expected writable full isolation policy to load");
@@ -595,10 +542,179 @@ world_fs:
         let read = policy
             .world_fs_read
             .as_ref()
-            .expect("read dimension should be synthesized");
+            .expect("read dimension should be present in full isolation");
+        assert_eq!(read.allow_list, vec![".".to_string()]);
+
+        let write = policy
+            .world_fs_write
+            .as_ref()
+            .expect("write dimension should be present when write.enabled=true");
+        assert_eq!(write.allow_list, vec!["outputs/private".to_string()]);
+    }
+}
+
+mod wfgadax0_policy_schema_v3 {
+    use super::*;
+
+    fn load_policy_from_yaml(raw: &str) -> anyhow::Result<Policy> {
+        let dir = tempdir().expect("tempdir");
+        let policy_path = dir.path().join("policy.yaml");
+        std::fs::write(&policy_path, raw).expect("write policy.yaml");
+        crate::effective_policy::load_policy_from_path(&policy_path)
+    }
+
+    fn expect_err(raw: &str) -> String {
+        load_policy_from_yaml(raw)
+            .expect_err("expected policy patch to be rejected")
+            .to_string()
+    }
+
+    fn expect_err_contains(raw: &str, needle: &str) {
+        let err = expect_err(raw);
+        assert!(
+            err.contains(needle),
+            "expected error to contain {needle:?}, got: {err}"
+        );
+    }
+
+    #[test]
+    fn wfgadax0_rejects_replaced_world_fs_keys_mode_isolation_require_world_enforcement() {
+        // SCHEMA.md §1.2: Appendix A schema is breaking; replaced keys MUST hard error (exit 2).
+        //
+        // This test uses a previously-valid V2 config; under V3 it must be rejected deterministically.
+        let raw = r#"
+world_fs:
+  mode: read_only
+  isolation: full
+  require_world: true
+  enforcement: strict
+  read:
+    allow_list: ["."]
+    deny_list: ["secrets/**"]
+"#;
+        let err = expect_err(raw);
+        assert!(
+            err.contains("world_fs.mode")
+                || err.contains("world_fs.isolation")
+                || err.contains("world_fs.require_world")
+                || err.contains("world_fs.enforcement")
+                || err.contains("mode")
+                || err.contains("isolation")
+                || err.contains("require_world")
+                || err.contains("enforcement"),
+            "expected a replaced-key diagnostic, got: {err}"
+        );
+    }
+
+    #[test]
+    fn wfgadax0_accepts_host_visible_true_with_no_full_isolation_dimensions() {
+        // SCHEMA.md §1.4: host_visible defaults true; §1.5.2: full-isolation-only keys must be omitted.
+        load_policy_from_yaml(
+            r#"
+world_fs:
+  host_visible: true
+"#,
+        )
+        .expect("expected minimal host_visible=true policy patch to load");
+    }
+
+    #[test]
+    fn wfgadax0_defaults_full_isolation_dimensions_deterministically_when_host_visible_false() {
+        // SCHEMA.md §1.4 defaults:
+        // - host_visible=false => full isolation
+        // - read.allow_list defaults to ["."]
+        // - write.enabled defaults true and write.allow_list defaults to ["."]
+        // - deny_list defaults to []
+        // - discover defaults to read when omitted
+        let policy = load_policy_from_yaml(
+            r#"
+world_fs:
+  host_visible: false
+"#,
+        )
+        .expect("expected minimal host_visible=false policy patch to load");
+
+        let read = policy
+            .world_fs_read
+            .as_ref()
+            .expect("read dimension should be defaulted in full isolation");
         assert_eq!(read.allow_list, vec![".".to_string()]);
         assert!(read.deny_list.is_empty());
-        assert_eq!(policy.fs_read, vec![".".to_string()]);
+
+        let discover = policy
+            .world_fs_discover
+            .as_ref()
+            .expect("discover dimension should default to read in full isolation");
+        assert_eq!(discover.allow_list, vec![".".to_string()]);
+        assert!(discover.deny_list.is_empty());
+
+        let write = policy
+            .world_fs_write
+            .as_ref()
+            .expect("write dimension should be present by default when write.enabled=true");
+        assert_eq!(write.allow_list, vec![".".to_string()]);
+        assert!(write.deny_list.is_empty());
+    }
+
+    #[test]
+    fn wfgadax0_rejects_full_isolation_keys_when_host_visible_true() {
+        // SCHEMA.md §1.5.2: If host_visible=true, read/discover/write.allow_list/deny_list MUST be omitted.
+        // Assert a deterministic diagnostic that mentions both host_visible and the offending key.
+        expect_err_contains(
+            r#"
+world_fs:
+  host_visible: true
+  read:
+    allow_list: ["."]
+"#,
+            "host_visible",
+        );
+        expect_err_contains(
+            r#"
+world_fs:
+  host_visible: true
+  read:
+    allow_list: ["."]
+"#,
+            "read",
+        );
+    }
+
+    #[test]
+    fn wfgadax0_requires_deny_enforcement_when_any_deny_list_is_non_empty() {
+        // SCHEMA.md §1.5.4: deny_enforcement MUST be present iff any deny_list is non-empty.
+        let err = expect_err(
+            r#"
+world_fs:
+  host_visible: false
+  read:
+    allow_list: ["."]
+    deny_list: ["secrets/**"]
+"#,
+        );
+        assert!(
+            err.contains("deny_enforcement"),
+            "expected deny_enforcement diagnostic, got: {err}"
+        );
+    }
+
+    #[test]
+    fn wfgadax0_write_disabled_requires_fail_closed_routing_true() {
+        // SCHEMA.md §1.5.1: If write.enabled=false, fail_closed.routing MUST be true.
+        let err = expect_err(
+            r#"
+world_fs:
+  host_visible: false
+  write:
+    enabled: false
+  fail_closed:
+    routing: false
+"#,
+        );
+        assert!(
+            err.contains("write") && err.contains("fail_closed"),
+            "expected write.enabled/fail_closed.routing diagnostic, got: {err}"
+        );
     }
 }
 
@@ -788,9 +904,11 @@ mod c0_policy_patch_only_broker_effective_resolution {
             r#"id: "{policy_id}"
 name: "{policy_id}"
 world_fs:
-  mode: writable
-  isolation: workspace
-  require_world: false
+  host_visible: true
+  fail_closed:
+    routing: false
+  write:
+    enabled: true
 net_allowed: []
 cmd_allowed:
 {cmd_allowed_yaml}cmd_denied: []

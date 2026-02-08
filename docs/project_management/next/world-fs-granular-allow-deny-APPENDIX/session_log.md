@@ -129,3 +129,170 @@ Record after dispatch:
   - `make planning-validate FEATURE_DIR="docs/project_management/next/world-fs-granular-allow-deny-APPENDIX"` → exit 0
   - `checkpoint wiring check (final->cp and cp->core)` → exit 0
 - Blockers: `NONE`
+
+---
+
+## START — 2026-02-07T01:12:32Z — ops — F0-exec-preflight
+- Feature: `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX`
+- Branch: `feat/world-fs-granular-allow-deny-appendix` (local)
+- Goal: Validate the Planning Pack and smoke/playbook scaffolding is runnable before starting `WFGADAX0`.
+- Notes:
+  - No `origin/feat/world-fs-granular-allow-deny-appendix` ref was present at preflight time; created local `feat/world-fs-granular-allow-deny-appendix` from `origin/feat/world-fs-granular-allow-deny` at `304fbad6`.
+
+## END — 2026-02-07T01:13:52Z — ops — F0-exec-preflight
+- Results:
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world-fs-granular-allow-deny-APPENDIX"` → exit 0
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/world-fs-granular-allow-deny-APPENDIX"` → exit 0
+  - `bash -n docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/smoke/linux-smoke.sh` → exit 0
+- Evidence:
+  - `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/execution_preflight_report.md` updated with captured outputs.
+- Blockers: `NONE`
+
+## START — 2026-02-07T01:29:09Z — code — WFGADAX0-code
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX" SLICE_ID="WFGADAX0"`
+
+## START — 2026-02-07T01:29:09Z — test — WFGADAX0-test
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX" SLICE_ID="WFGADAX0"`
+
+## END — 2026-02-07T01:58:05Z — code — WFGADAX0-code
+- HEAD: `a5497f5d9753ab10a6b0c726ee60e56839d647c7`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/logs/WFGADAX0/code/last_message.md`
+
+## END — 2026-02-07T01:58:05Z — test — WFGADAX0-test
+- HEAD: `550bee820545b5956d7de1978abd0217e07550a5`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/logs/WFGADAX0/test/last_message.md`
+
+## START — 2026-02-07T01:58:05Z — integration — WFGADAX0-integ
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX" TASK_ID="WFGADAX0-integ" LAUNCH_CODEX=1`
+
+## END — 2026-02-07T02:21:39Z — integration — WFGADAX0-integ
+- HEAD: `48c2f997c5edc02cfdd0c06e5c9ba89f4b8029d8`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/logs/WFGADAX0/integ/last_message.md`
+
+## START — 2026-02-07T02:28:45Z — code — WFGADAX1-code
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX" SLICE_ID="WFGADAX1"`
+
+## START — 2026-02-07T02:28:45Z — test — WFGADAX1-test
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX" SLICE_ID="WFGADAX1"`
+
+## END — 2026-02-07T02:49:13Z — code — WFGADAX1-code
+- HEAD: `197cf71abd41561fcc7bc938e53f2079718d8276`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/logs/WFGADAX1/code/last_message.md`
+
+## END — 2026-02-07T02:49:13Z — test — WFGADAX1-test
+- HEAD: `e9af0f9174e6207586f37715e0c9baac5413d7ff`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/logs/WFGADAX1/test/last_message.md`
+
+## START — 2026-02-07T02:49:13Z — integration — WFGADAX1-integ-core
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX" TASK_ID="WFGADAX1-integ-core" LAUNCH_CODEX=1`
+
+## END — 2026-02-07T03:08:31Z — integration — WFGADAX1-integ-core
+- HEAD: `bdc88cb1693adcccd9d6179821841d5349b0aacc`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/logs/WFGADAX1/integ-core/last_message.md`
+
+## START — 2026-02-07T03:10:14Z — ops — CP1-ci-checkpoint
+- Dispatch:
+  - `cat docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/CP1-ci-checkpoint.md`
+- ORCH_REF: `feat/world-fs-granular-allow-deny-appendix`
+- CORE_BRANCH: `world-fs-granular-allow-deny-appendix-wfgadax1-integ-core`
+- CHECKOUT_SHA: `bdc88cb1693adcccd9d6179821841d5349b0aacc`
+- ci-audit (ci-testing): `recommend: run (no_last_green_run_found)`; `REASON=no_last_green_run_found`
+- ci-audit (feature-smoke): `recommend: run (no_last_green_run_found)`; `REASON=no_last_green_run_found`
+- Dispatch note: initial CI dispatch failed with HTTP 422 (missing `WORKFLOW_REF` on origin); pushed `ORCH_REF` and re-dispatched.
+- ci-compile-parity: run `21773206717` (success): https://github.com/atomize-hq/substrate/actions/runs/21773206717
+- feature-smoke (behavior): run `21773222732` (success): https://github.com/atomize-hq/substrate/actions/runs/21773222732
+
+## END — 2026-02-07T03:15:24Z — ops — CP1-ci-checkpoint
+- ORCH_REF: `feat/world-fs-granular-allow-deny-appendix`
+- CHECKOUT_SHA: `bdc88cb1693adcccd9d6179821841d5349b0aacc`
+- ci-compile-parity: `21773206717` (success)
+- feature-smoke (behavior): `21773222732` (success; linux)
+
+## START — 2026-02-07T03:15:30Z — integration — WFGADAX1-integ
+- Dispatch:
+  - `make triad-task-start-integ-final FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX" SLICE_ID="WFGADAX1" LAUNCH_CODEX=1`
+
+## END — 2026-02-07T03:23:24Z — integration — WFGADAX1-integ
+- HEAD: `09f1c93b47be4a2ca8226c926581c56b5d71e1e3`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/logs/WFGADAX1/integ/last_message.md`
+
+## START — 2026-02-07T03:32:02Z — code — WFGADAX2-code
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX" SLICE_ID="WFGADAX2"`
+
+## START — 2026-02-07T03:32:02Z — test — WFGADAX2-test
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX" SLICE_ID="WFGADAX2"`
+
+## END — 2026-02-07T03:56:02Z — code — WFGADAX2-code
+- HEAD: `a96d1afad8f1c7a2ef7ecd6e863cfc105d54199b`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/logs/WFGADAX2/code/last_message.md`
+
+## END — 2026-02-07T03:56:02Z — test — WFGADAX2-test
+- HEAD: `a88148e8de0456ba9bc9ee4badca5725c9b73d5f`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/logs/WFGADAX2/test/last_message.md`
+
+## START — 2026-02-07T03:56:02Z — integration — WFGADAX2-integ
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX" TASK_ID="WFGADAX2-integ" LAUNCH_CODEX=1`
+
+## END — 2026-02-07T04:05:19Z — integration — WFGADAX2-integ
+- HEAD: `cf473d13eb7c3c73670f10a16562a9da35e8c554`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/logs/WFGADAX2/integ/last_message.md`
+
+## START — 2026-02-07T11:15:33Z — code — WFGADAX3-code
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX" SLICE_ID="WFGADAX3"`
+
+## START — 2026-02-07T11:15:33Z — test — WFGADAX3-test
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX" SLICE_ID="WFGADAX3"`
+
+## END — 2026-02-07T11:28:11Z — code — WFGADAX3-code
+- HEAD: `9721e8b1af01cf174fb658015112566033e3b513`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/logs/WFGADAX3/code/last_message.md`
+
+## END — 2026-02-07T11:28:11Z — test — WFGADAX3-test
+- HEAD: `fc36c6285e98c08fc0acd29fdc40924acb0bfd9a`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/logs/WFGADAX3/test/last_message.md`
+
+## START — 2026-02-07T11:28:11Z — integration — WFGADAX3-integ-core
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX" TASK_ID="WFGADAX3-integ-core" LAUNCH_CODEX=1`
+
+## END — 2026-02-07T11:49:19Z — integration — WFGADAX3-integ-core
+- HEAD: `94478474b57c088eaf0313107320285acf156f74`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/logs/WFGADAX3/integ-core/last_message.md`
+
+## START — 2026-02-07T11:51:40Z — ops — CP2-ci-checkpoint
+- Dispatch:
+  - `cat docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/CP2-ci-checkpoint.md`
+- ORCH_REF: `feat/world-fs-granular-allow-deny-appendix`
+- CORE_BRANCH: `world-fs-granular-allow-deny-appendix-wfgadax3-integ-core`
+- CHECKOUT_SHA: `94478474b57c088eaf0313107320285acf156f74`
+- Dispatch note: pushed `ORCH_REF` and `CORE_BRANCH` to origin before CI dispatch.
+- ci-audit (ci-testing): `recommend: run (changes_since_last_green)`; `REASON=changes_since_last_green`
+- ci-audit (feature-smoke): `recommend: run (changes_since_last_green)`; `REASON=changes_since_last_green`
+- ci-compile-parity: run `21779653655` (success): https://github.com/atomize-hq/substrate/actions/runs/21779653655
+- feature-smoke (behavior): run `21779680914` (success): https://github.com/atomize-hq/substrate/actions/runs/21779680914
+
+## END — 2026-02-07T11:56:45Z — ops — CP2-ci-checkpoint
+- ORCH_REF: `feat/world-fs-granular-allow-deny-appendix`
+- CHECKOUT_SHA: `94478474b57c088eaf0313107320285acf156f74`
+- ci-compile-parity: `21779653655` (success)
+- feature-smoke (behavior): `21779680914` (success; linux)
+
+## START — 2026-02-07T12:07:14Z — integration — WFGADAX3-integ
+- Dispatch:
+  - `make triad-task-start-integ-final FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX" SLICE_ID="WFGADAX3" LAUNCH_CODEX=1`
+
+## END — 2026-02-07T12:10:30Z — integration — WFGADAX3-integ
+- HEAD: `79d3b052c9035d929b5733b80ed7f97cb7da40bb`
+- Note: merged `world-fs-granular-allow-deny-appendix-wfgadax3-integ-core` into `world-fs-granular-allow-deny-appendix-wfgadax3-integ` and finished via `make triad-task-finish TASK_ID="WFGADAX3-integ"` (MERGED_TO_ORCH=true).
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/logs/WFGADAX3/integ/last_message.md`

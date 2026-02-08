@@ -7,8 +7,6 @@ use serde_json::{json, Value};
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
-use substrate_broker::Policy;
-use substrate_common::WorldFsMode;
 use support::{substrate_command_for_home, ShellEnvFixture};
 
 fn seed_shims(home: &Path) {
@@ -36,12 +34,14 @@ fn seed_shims(home: &Path) {
 }
 
 fn write_read_only_policy(home: &Path) {
-    let policy = Policy {
-        world_fs_mode: WorldFsMode::ReadOnly,
-        world_fs_require_world: true,
-        ..Default::default()
-    };
-    let yaml = serde_yaml::to_string(&policy).expect("policy yaml");
+    let yaml = r#"
+world_fs:
+  host_visible: true
+  write:
+    enabled: false
+  fail_closed:
+    routing: true
+"#;
     let policy_path = home.join(".substrate").join("policy.yaml");
     fs::create_dir_all(policy_path.parent().unwrap()).expect("policy dir");
     fs::write(policy_path, yaml).expect("write policy");

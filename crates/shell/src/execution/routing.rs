@@ -237,7 +237,14 @@ pub fn run_shell() -> Result<i32> {
 }
 
 pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
-    let mut config = ShellConfig::from_cli(cli)?;
+    let mut config = match ShellConfig::from_cli(cli) {
+        Ok(config) => config,
+        Err(err) if config_model::is_user_error(&err) => {
+            eprintln!("{err}");
+            return Ok(2);
+        }
+        Err(err) => return Err(err),
+    };
 
     if matches!(config.mode, ShellMode::Interactive { .. }) {
         let stdin_is_tty = io::stdin().is_terminal();

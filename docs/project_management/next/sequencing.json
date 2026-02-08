@@ -535,6 +535,32 @@
       ]
     },
     {
+      "order": 34.1,
+      "id": "world_fs_granular_allow_deny_appendix_addon_v3_alignment",
+      "title": "World FS appendix add-on (V3 alignment + no-backcompat enforcement)",
+      "branch": "feat/world-fs-granular-allow-deny-appendix",
+      "directory": "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment",
+      "plan": "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/plan.md",
+      "status": "not_started",
+      "sequence": [
+        {
+          "id": "WFGADAXA0",
+          "spec": "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/WFGADAXA0-spec.md"
+        },
+        {
+          "id": "WFGADAXA1",
+          "spec": "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/WFGADAXA1-spec.md"
+        },
+        {
+          "id": "WFGADAXA2",
+          "spec": "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/WFGADAXA2-spec.md"
+        }
+      ],
+      "notes": [
+        "Closes contract gaps discovered post-automation: effective policy show output is still V2-shaped, and snapshot schema/protocol remains V2 in the host + world-agent pipeline."
+      ]
+    },
+    {
       "order": 39.9,
       "id": "warn_config_global_show_workspace_overrides",
       "title": "Warn on config global show when workspace config overrides",

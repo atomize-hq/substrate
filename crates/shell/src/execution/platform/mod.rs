@@ -117,9 +117,14 @@ pub(crate) fn update_world_env(no_world: bool) {
     env::set_var("SUBSTRATE_WORLD_FS_MODE", world_fs.mode.as_str());
     env::set_var("SUBSTRATE_WORLD_FS_ISOLATION", world_fs.isolation.as_str());
     env::set_var(
-        "SUBSTRATE_WORLD_REQUIRE_WORLD",
-        if world_fs.require_world { "1" } else { "0" },
+        "SUBSTRATE_WORLD_FAIL_CLOSED_ROUTING",
+        if world_fs.fail_closed_routing {
+            "1"
+        } else {
+            "0"
+        },
     );
+    env::remove_var("SUBSTRATE_WORLD_REQUIRE_WORLD");
 }
 
 pub(crate) fn handle_world_command(cmd: &WorldCmd, cli: &Cli) -> Result<()> {
@@ -222,12 +227,18 @@ mod tests {
 
         let temp = tempdir().expect("tempdir");
         let policy_path = temp.path().join("policy.yaml");
-        let policy = substrate_broker::Policy {
-            world_fs_mode: substrate_common::WorldFsMode::ReadOnly,
-            world_fs_require_world: true,
-            ..Default::default()
-        };
-        fs::write(&policy_path, serde_yaml::to_string(&policy).unwrap()).expect("write policy");
+        fs::write(
+            &policy_path,
+            r#"
+world_fs:
+  host_visible: true
+  write:
+    enabled: false
+  fail_closed:
+    routing: true
+"#,
+        )
+        .expect("write policy");
 
         substrate_broker::reload_policy(&policy_path).expect("load policy");
 

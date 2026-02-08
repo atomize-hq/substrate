@@ -23,8 +23,8 @@
   "tasks": [
     {
       "acceptance_criteria": [
-        "Run: make planning-lint FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" → exit 0",
-        "Run: bash -n docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/smoke/linux-smoke.sh → exit 0",
+        "Run: make planning-lint FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" \u2192 exit 0",
+        "Run: bash -n docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/smoke/linux-smoke.sh \u2192 exit 0",
         "File updated: docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/execution_preflight_report.md"
       ],
       "concurrent_with": [],
@@ -52,16 +52,15 @@
         "Read: plan.md, tasks.json, session_log.md, quality_gate_report.md, manual_testing_playbook.md, kickoff prompt",
         "Set status to in_progress; add START entry; commit docs"
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "ops",
       "worktree": null
     },
-
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: cargo test -p substrate-broker --tests --no-run → exit 0"
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p substrate-broker --tests --no-run \u2192 exit 0"
       ],
       "concurrent_with": [
         "WFGADAX0-test"
@@ -100,15 +99,15 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" SLICE_ID=\"WFGADAX0\""
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "code",
       "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax0-code"
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo test -p substrate-broker --tests → exit 0",
-        "Run: cargo test -p substrate-broker wfgadax0 -- --nocapture → exit 0"
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo test -p substrate-broker --tests \u2192 exit 0",
+        "Run: cargo test -p substrate-broker wfgadax0 -- --nocapture \u2192 exit 0"
       ],
       "concurrent_with": [
         "WFGADAX0-code"
@@ -144,15 +143,15 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX0-test\""
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "test",
       "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax0-test"
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: bash docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/smoke/linux-smoke.sh → exit 0"
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: bash docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/smoke/linux-smoke.sh \u2192 exit 0"
       ],
       "concurrent_with": [],
       "depends_on": [
@@ -190,16 +189,15 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX0-integ\""
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax0-integ"
     },
-
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: cargo test -p shell --tests --no-run → exit 0"
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p shell --tests --no-run \u2192 exit 0"
       ],
       "concurrent_with": [
         "WFGADAX1-test"
@@ -234,15 +232,15 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" SLICE_ID=\"WFGADAX1\""
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "code",
       "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax1-code"
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo test --workspace --tests --no-run → exit 0",
-        "Run: cargo test -p shell wfgadax1 -- --nocapture → exit 0"
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo test --workspace --tests --no-run \u2192 exit 0",
+        "Run: cargo test -p shell wfgadax1 -- --nocapture \u2192 exit 0"
       ],
       "concurrent_with": [
         "WFGADAX1-code"
@@ -276,14 +274,14 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX1-test\""
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "test",
       "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax1-test"
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0"
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0"
       ],
       "concurrent_with": [],
       "depends_on": [
@@ -316,14 +314,14 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX1-integ-core\""
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax1-integ-core"
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0"
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0"
       ],
       "concurrent_with": [],
       "depends_on": [
@@ -356,14 +354,14 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX1-integ-linux\""
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax1-integ-linux"
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0"
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0"
       ],
       "concurrent_with": [],
       "depends_on": [
@@ -396,14 +394,14 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX1-integ-macos\""
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax1-integ-macos"
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0"
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0"
       ],
       "concurrent_with": [],
       "depends_on": [
@@ -436,14 +434,14 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX1-integ-windows\""
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax1-integ-windows"
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0"
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0"
       ],
       "concurrent_with": [],
       "depends_on": [
@@ -480,21 +478,20 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX1-integ\""
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax1-integ"
     },
-
     {
       "acceptance_criteria": [
         "Set: export FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\"",
         "Set: export ORCH_REF=\"$(git branch --show-current)\"",
         "Set: export SMOKE_SLICE_ID=\"WFGADAX1\"",
         "Set: CORE_BRANCH=\"$(jq -r --arg id \"WFGADAX1-integ-core\" '.tasks[] | select(.id==$id) | .git_branch' \"$FEATURE_DIR/tasks.json\")\"; CHECKOUT_SHA=\"$(git rev-parse \"$CORE_BRANCH\")\"",
-        "Run: scripts/ci-audit/ci_audit.sh --ledger-path \"$FEATURE_DIR/logs/WFGADAX1/ci-audit/ledger.jsonl\" --kind ci-testing --orch-branch \"$ORCH_REF\" → exit 0 (record the RECOMMENDATION line(s) in session_log.md)",
-        "Run: scripts/ci-audit/ci_audit.sh --ledger-path \"$FEATURE_DIR/logs/WFGADAX1/ci-audit/ledger.jsonl\" --kind feature-smoke --orch-branch \"$ORCH_REF\" --feature-dir \"$FEATURE_DIR\" → exit 0 (record the RECOMMENDATION line(s) in session_log.md)",
-        "If ci-audit recommends RUN for ci-testing: Run: make ci-compile-parity CI_WORKFLOW_REF=\"$ORCH_REF\" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF=\"$CHECKOUT_SHA\" → exit 0",
-        "If ci-audit recommends RUN for feature-smoke: Run: make feature-smoke FEATURE_DIR=\"$FEATURE_DIR\" PLATFORM=behavior SMOKE_SLICE_ID=\"$SMOKE_SLICE_ID\" SMOKE_CHECKOUT_REF=\"$CHECKOUT_SHA\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"$ORCH_REF\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=0 → exit 0",
+        "Run: scripts/ci-audit/ci_audit.sh --ledger-path \"$FEATURE_DIR/logs/WFGADAX1/ci-audit/ledger.jsonl\" --kind ci-testing --orch-branch \"$ORCH_REF\" \u2192 exit 0 (record the RECOMMENDATION line(s) in session_log.md)",
+        "Run: scripts/ci-audit/ci_audit.sh --ledger-path \"$FEATURE_DIR/logs/WFGADAX1/ci-audit/ledger.jsonl\" --kind feature-smoke --orch-branch \"$ORCH_REF\" --feature-dir \"$FEATURE_DIR\" \u2192 exit 0 (record the RECOMMENDATION line(s) in session_log.md)",
+        "If ci-audit recommends RUN for ci-testing: Run: make ci-compile-parity CI_WORKFLOW_REF=\"$ORCH_REF\" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF=\"$CHECKOUT_SHA\" \u2192 exit 0",
+        "If ci-audit recommends RUN for feature-smoke: Run: make feature-smoke FEATURE_DIR=\"$FEATURE_DIR\" PLATFORM=behavior SMOKE_SLICE_ID=\"$SMOKE_SLICE_ID\" SMOKE_CHECKOUT_REF=\"$CHECKOUT_SHA\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"$ORCH_REF\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=0 \u2192 exit 0",
         "If feature-smoke concludes failure: Run: make triad-task-start-platform-fixes-from-smoke FEATURE_DIR=\"$FEATURE_DIR\" SLICE_ID=\"$SMOKE_SLICE_ID\" SMOKE_RUN_ID=\"<run-id>\" LAUNCH_CODEX=1",
         "Record: session_log.md includes ORCH_REF, CHECKOUT_SHA, ci-audit output lines, and dispatched run URLs/ids (or explicit SKIP)"
       ],
@@ -520,16 +517,15 @@
         "Read: ci_checkpoint_plan.md and kickoff prompt",
         "Set status to in_progress; add START entry; commit docs"
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "ops",
       "worktree": null
     },
-
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: cargo test -p shell --tests --no-run → exit 0"
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p shell --tests --no-run \u2192 exit 0"
       ],
       "concurrent_with": [
         "WFGADAX2-test"
@@ -564,14 +560,14 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" SLICE_ID=\"WFGADAX2\""
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "code",
       "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax2-code"
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo test --workspace --tests --no-run → exit 0"
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo test --workspace --tests --no-run \u2192 exit 0"
       ],
       "concurrent_with": [
         "WFGADAX2-code"
@@ -605,14 +601,14 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX2-test\""
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "test",
       "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax2-test"
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0"
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0"
       ],
       "concurrent_with": [],
       "depends_on": [
@@ -646,16 +642,15 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX2-integ\""
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax2-integ"
     },
-
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: cargo test -p shell --tests --no-run → exit 0"
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p shell --tests --no-run \u2192 exit 0"
       ],
       "concurrent_with": [
         "WFGADAX3-test"
@@ -689,14 +684,14 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" SLICE_ID=\"WFGADAX3\""
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "code",
       "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax3-code"
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo test --workspace --tests --no-run → exit 0"
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo test --workspace --tests --no-run \u2192 exit 0"
       ],
       "concurrent_with": [
         "WFGADAX3-code"
@@ -729,14 +724,14 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX3-test\""
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "test",
       "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax3-test"
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0"
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0"
       ],
       "concurrent_with": [],
       "depends_on": [
@@ -769,14 +764,14 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX3-integ-core\""
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax3-integ-core"
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0"
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0"
       ],
       "concurrent_with": [],
       "depends_on": [
@@ -809,14 +804,14 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX3-integ-linux\""
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax3-integ-linux"
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0"
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0"
       ],
       "concurrent_with": [],
       "depends_on": [
@@ -849,14 +844,14 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX3-integ-macos\""
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax3-integ-macos"
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0"
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0"
       ],
       "concurrent_with": [],
       "depends_on": [
@@ -889,14 +884,14 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX3-integ-windows\""
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax3-integ-windows"
     },
     {
       "acceptance_criteria": [
-        "Run: cargo fmt → exit 0",
-        "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0"
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0"
       ],
       "concurrent_with": [],
       "depends_on": [
@@ -933,21 +928,20 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX3-integ\""
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax3-integ"
     },
-
     {
       "acceptance_criteria": [
         "Set: export FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\"",
         "Set: export ORCH_REF=\"$(git branch --show-current)\"",
         "Set: export SMOKE_SLICE_ID=\"WFGADAX3\"",
         "Set: CORE_BRANCH=\"$(jq -r --arg id \"WFGADAX3-integ-core\" '.tasks[] | select(.id==$id) | .git_branch' \"$FEATURE_DIR/tasks.json\")\"; CHECKOUT_SHA=\"$(git rev-parse \"$CORE_BRANCH\")\"",
-        "Run: scripts/ci-audit/ci_audit.sh --ledger-path \"$FEATURE_DIR/logs/WFGADAX3/ci-audit/ledger.jsonl\" --kind ci-testing --orch-branch \"$ORCH_REF\" → exit 0 (record the RECOMMENDATION line(s) in session_log.md)",
-        "Run: scripts/ci-audit/ci_audit.sh --ledger-path \"$FEATURE_DIR/logs/WFGADAX3/ci-audit/ledger.jsonl\" --kind feature-smoke --orch-branch \"$ORCH_REF\" --feature-dir \"$FEATURE_DIR\" → exit 0 (record the RECOMMENDATION line(s) in session_log.md)",
-        "If ci-audit recommends RUN for ci-testing: Run: make ci-compile-parity CI_WORKFLOW_REF=\"$ORCH_REF\" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF=\"$CHECKOUT_SHA\" → exit 0",
-        "If ci-audit recommends RUN for feature-smoke: Run: make feature-smoke FEATURE_DIR=\"$FEATURE_DIR\" PLATFORM=behavior SMOKE_SLICE_ID=\"$SMOKE_SLICE_ID\" SMOKE_CHECKOUT_REF=\"$CHECKOUT_SHA\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"$ORCH_REF\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=0 → exit 0",
+        "Run: scripts/ci-audit/ci_audit.sh --ledger-path \"$FEATURE_DIR/logs/WFGADAX3/ci-audit/ledger.jsonl\" --kind ci-testing --orch-branch \"$ORCH_REF\" \u2192 exit 0 (record the RECOMMENDATION line(s) in session_log.md)",
+        "Run: scripts/ci-audit/ci_audit.sh --ledger-path \"$FEATURE_DIR/logs/WFGADAX3/ci-audit/ledger.jsonl\" --kind feature-smoke --orch-branch \"$ORCH_REF\" --feature-dir \"$FEATURE_DIR\" \u2192 exit 0 (record the RECOMMENDATION line(s) in session_log.md)",
+        "If ci-audit recommends RUN for ci-testing: Run: make ci-compile-parity CI_WORKFLOW_REF=\"$ORCH_REF\" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF=\"$CHECKOUT_SHA\" \u2192 exit 0",
+        "If ci-audit recommends RUN for feature-smoke: Run: make feature-smoke FEATURE_DIR=\"$FEATURE_DIR\" PLATFORM=behavior SMOKE_SLICE_ID=\"$SMOKE_SLICE_ID\" SMOKE_CHECKOUT_REF=\"$CHECKOUT_SHA\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"$ORCH_REF\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=0 \u2192 exit 0",
         "If feature-smoke concludes failure: Run: make triad-task-start-platform-fixes-from-smoke FEATURE_DIR=\"$FEATURE_DIR\" SLICE_ID=\"$SMOKE_SLICE_ID\" SMOKE_RUN_ID=\"<run-id>\" LAUNCH_CODEX=1",
         "Record: session_log.md includes ORCH_REF, CHECKOUT_SHA, ci-audit output lines, and dispatched run URLs/ids (or explicit SKIP)"
       ],
@@ -973,16 +967,15 @@
         "Read: ci_checkpoint_plan.md and kickoff prompt",
         "Set status to in_progress; add START entry; commit docs"
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "ops",
       "worktree": null
     },
-
     {
       "acceptance_criteria": [
-        "Run: make planning-lint FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" → exit 0",
-        "Run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1 → exit 0",
-        "Run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" REMOVE_WORKTREES=1 PRUNE_LOCAL=1 → exit 0"
+        "Run: make planning-lint FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" \u2192 exit 0",
+        "Run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1 \u2192 exit 0",
+        "Run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX\" REMOVE_WORKTREES=1 PRUNE_LOCAL=1 \u2192 exit 0"
       ],
       "concurrent_with": [],
       "depends_on": [

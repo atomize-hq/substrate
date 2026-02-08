@@ -27,9 +27,9 @@ pub(crate) fn with_test_mode<F: FnOnce()>(f: F) {
 id: shell-tests
 name: Shell Tests
 world_fs:
-  mode: writable
-  isolation: workspace
-  require_world: false
+  host_visible: true
+  fail_closed:
+    routing: false
 net_allowed: []
 cmd_allowed: []
 cmd_denied: []
