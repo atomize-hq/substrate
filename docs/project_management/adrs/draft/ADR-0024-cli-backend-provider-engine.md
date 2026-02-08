@@ -18,6 +18,7 @@
 - Tasks: `docs/project_management/next/llm_cli_backend_engine/tasks.json`
 - Spec manifest: `docs/project_management/next/llm_cli_backend_engine/spec_manifest.md`
 - Specs: `docs/project_management/next/llm_cli_backend_engine/specs/*`
+- Contract (if present): `docs/project_management/next/llm_cli_backend_engine/contract.md`
 - Decision Register: `docs/project_management/next/llm_cli_backend_engine/decision_register.md`
 
 ## Executive Summary (Operator)
@@ -50,6 +51,7 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
 - Extracting or reverse-engineering tokens or proprietary billing details from CLIs (“token scraping”).
 - Replacing the CLIs; Substrate orchestrates them as external tools.
 - Guaranteeing lossless translation for every provider-specific request field; features are capability-gated.
+- Enumerating a canonical “backend registry” list (backends are inventory-defined + allowlisted; Phase 8 circle-back may add a non-normative appendix mapping example ids → contracts).
 
 ## User Contract (Authoritative)
 
@@ -61,23 +63,39 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
   - declared capabilities (stream support, tool-call support).
 
 ### Config
-- Files and locations (precedence): same as ADR-0023, `config.toml` only.
-- Schema constraints (minimum required):
-  - `[llm.backends.cli]`
-    - `enabled = true|false`
-  - `[llm.backends.cli.codex]`
-    - `binary = \"<path>\"` (default: resolve via PATH)
-    - `mode = \"persistent\"|\"per_request\"`
-    - `world_required = true` (default true)
-  - `[llm.backends.cli.claude_code]` (same fields)
-  - `[llm.backends.cli.gemini_cli]` (same fields)
-  - `[llm.routing]`
-    - rules that select `backend_kind=cli` based on request dialect, model patterns, project config, or explicit user override.
+This ADR MUST use the Phase 3 surface defined by ADR-0027 for:
+- config/policy key paths + precedence + defaults, and
+- agent inventory for registering CLI backends (one file per backend).
+
+Sources of truth:
+- `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
+- `docs/project_management/next/llm_and_agent_config_policy_surface/SCHEMA.md`
+
+Config (selection surface; ADR-0027):
+- `llm.enabled: bool`
+- `llm.gateway.enabled: bool`
+- `llm.routing.default_backend: <kind>:<name>` (e.g., `cli:codex`)
+
+Policy (constraints surface; ADR-0027):
+- `llm.allowed_backends: [<kind>:<name>]` (deny-by-default allowlist)
+- `llm.fail_closed.routing: bool`
+- `net_allowed` remains authoritative for outbound egress enforcement inside the world boundary.
+
+CLI backends are registered via agent inventory files (ADR-0027):
+- Global: `$SUBSTRATE_HOME/agents/<agent_id>.yaml` (default `~/.substrate/agents/<agent_id>.yaml`)
+- Workspace: `<workspace_root>/.substrate/agents/<agent_id>.yaml`
+
+Normative mapping for this ADR:
+- A CLI backend id of the form `cli:<agent_id>` MUST resolve to an agent inventory item with `id: <agent_id>` where:
+  - `config.kind: cli`
+  - `config.capabilities.llm: true`
+  - `config.cli.binary: <string>` (optional; default resolve via PATH)
+  - `config.cli.mode: persistent|per_request` (optional; default via `agents.defaults.cli.mode`)
 
 ### Platform guarantees
 - Linux/macOS/Windows:
-  - CLI backends execute inside the world boundary whenever `world_required=true`.
-  - If `world_required=true` and the world is unavailable, routing to that CLI backend fails closed.
+  - CLI backends execute inside the world boundary whenever LLM operations are configured to run in-world.
+  - Fail-closed: if effective policy has `llm.fail_closed.routing=true` and the world is unavailable, routing to CLI backends fails closed (no host fallback).
 
 ## Architecture Shape
 - Components:
@@ -115,7 +133,7 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
 ## Security / Safety Posture
 - Fail-closed rules:
   - If routing selects a CLI backend but the binary is not present, request fails (exit code `4` at CLI boundary; HTTP error at gateway boundary).
-  - If `world_required=true` and world is unavailable, request fails (policy exit code `5` semantics).
+  - If effective policy has `llm.fail_closed.routing=true` and the world is unavailable, request fails (policy exit code `5` semantics).
 - Protected paths/invariants:
   - Do not copy/emit CLI credentials; Substrate does not persist subscription tokens.
   - Do not log request/response bodies by default; redact before persisting if body logging enabled.
@@ -149,4 +167,3 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
     - DR-0001 (CLI session strategy: persistent vs per-request)
     - DR-0002 (Streaming behavior when CLI lacks streaming: buffer+rechunk vs non-stream)
     - DR-0003 (CLI prompt contract format: JSON envelope vs plain text template)
-

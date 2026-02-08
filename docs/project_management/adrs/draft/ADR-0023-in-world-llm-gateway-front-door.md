@@ -56,6 +56,7 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
 - Implementing advanced optimization/observability stacks (e.g. ClickHouse pipelines) in v1.
 - Providing a public remote/multi-tenant gateway (v1 is local/in-world only).
 - Guaranteeing perfect cross-dialect feature parity for every provider-specific field (compatibility is capability-gated).
+- Enumerating a canonical “backend registry” list in this ADR (defer to ADR-0024/ADR-0025; add references during Phase 8 circle-back once those contracts are accepted).
 
 ## User Contract (Authoritative)
 
@@ -84,32 +85,35 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
   - `5`: policy/guardrail failure (fail-closed: world required; enforcement cannot be guaranteed)
 
 ### Config
-- Files and locations (precedence):
-  1. Project: `<project_root>/.substrate/config.toml`
-  2. Global: `~/.substrate/config.toml`
-  3. Environment variables
-  4. CLI flags (highest precedence)
-- Schema constraints (minimum required):
-  - `[llm.gateway]`
-    - `enabled = true|false` (default true when worlds enabled)
-    - `bind_openai = \"http://127.0.0.1:<port>\"` (inside world)
-    - `bind_anthropic = \"http://127.0.0.1:<port>\"` (inside world)
-    - `log_dir = \"~/.substrate/llm/logs\"` (inside world)
-    - `log_body = false` (default)
-    - `redaction = true` (default)
-    - `metrics_enabled = false` (default)
-  - The gateway must not introduce any `settings.toml`; only `config.toml` is used.
+This ADR does not define new config file families or bespoke gateway config files. It MUST use the Phase 3 surface defined by ADR-0027.
+
+- Source of truth (config/policy key paths + precedence + defaults):
+  - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
+  - `docs/project_management/next/llm_and_agent_config_policy_surface/SCHEMA.md`
+
+Files and locations (existing YAML layering model):
+- Global config patch: `$SUBSTRATE_HOME/config.yaml` (default: `~/.substrate/config.yaml`)
+- Workspace config patch: `<workspace_root>/.substrate/workspace.yaml`
+
+Minimum required config keys (from ADR-0027):
+- `llm.enabled: bool` (default: `false`)
+- `llm.gateway.enabled: bool` (default: `false`)
+- `llm.gateway.mode: in_world|host_only` (default: `in_world`; `host_only` permitted only when policy allows host fallback)
+- `llm.routing.default_backend: <kind>:<name>` (default: empty; no implicit backend selection)
+
+Operational parameters (bind endpoints, logging destinations, metrics) are intentionally NOT part of the ADR-0027 config surface in v1.
+- `substrate llm env` is the authoritative “client wiring” output (base URLs / exports) and may change implementation details (ports/transports) without reshaping config.
 
 ### Platform guarantees
 - Linux:
   - Gateway runs inside the world network namespace; outbound egress is subject to world-level enforcement.
-  - Fail-closed: do not fall back to a host-level gateway when `SUBSTRATE_WORLD=enabled`.
+  - Fail-closed: when effective policy has `llm.fail_closed.routing=true`, do not fall back to a host-level gateway when `SUBSTRATE_WORLD=enabled`.
 - macOS:
   - Gateway runs inside the Lima guest world. Host talks to it via the existing Substrate transport to world-agent.
-  - Fail-closed: if the guest is not available, `substrate llm start` fails with exit code `5` when world required.
+  - Fail-closed: if the guest is not available, `substrate llm start` fails with exit code `5` when `llm.fail_closed.routing=true`.
 - Windows:
   - Gateway runs inside the WSL world distribution. Host talks to it via the existing Substrate transport to world-agent.
-  - Fail-closed: same as macOS.
+  - Fail-closed: same as macOS (when `llm.fail_closed.routing=true`).
 
 ## Architecture Shape
 - Components:
@@ -179,4 +183,3 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
     - DR-0001 (Gateway bind strategy: UDS vs loopback TCP inside world)
     - DR-0002 (Default logging policy: metadata-only vs body logging)
     - DR-0003 (Policy integration point: broker vs gateway-native checks)
-

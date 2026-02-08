@@ -1,0 +1,45 @@
+# contract — llm_gateway_in_world
+
+This document is the operator-facing contract summary for ADR-0023.
+
+Authoritative inputs:
+- ADR: `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md`
+- Config/policy surface: `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
+- Output/event routing contract: `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+
+## Non-negotiable invariants
+- **In-world by default.** When `SUBSTRATE_WORLD=enabled`, the gateway runs inside the world boundary.
+- **Fail-closed routing.** If effective policy has `llm.fail_closed.routing=true` and no world boundary is available, gateway start/use fails (no host fallback).
+- **Deny-by-default allowlist.** If `llm.allowed_backends=[]`, requests fail closed (no implicit backend selection).
+- **No secrets persisted.** Substrate config/policy files must not store API keys/tokens; request/response bodies are not logged by default.
+
+## Config + policy keys (source of truth: ADR-0027)
+- Config (`$SUBSTRATE_HOME/config.yaml`, `<workspace_root>/.substrate/workspace.yaml`):
+  - `llm.enabled`
+  - `llm.gateway.enabled`
+  - `llm.gateway.mode`
+  - `llm.routing.default_backend`
+- Policy (`$SUBSTRATE_HOME/policy.yaml`, `<workspace_root>/.substrate/policy.yaml`):
+  - `llm.allowed_backends`
+  - `llm.fail_closed.routing`
+  - `llm.require_approval`
+  - `net_allowed` (egress allowlist; still authoritative)
+
+## Client wiring
+- `substrate llm env` is the authoritative client wiring surface and prints the required exports (base URLs) to route OpenAI/Anthropic-compatible clients through Substrate.
+- This contract intentionally does not freeze the underlying transport mechanics (ports vs proxying), only the client-facing env outputs and behavior guarantees.
+
+## HTTP surfaces (subset; capability-gated)
+The gateway exposes a minimal subset of:
+- OpenAI-compatible endpoints (e.g., `/v1/chat/completions`).
+- Anthropic-compatible endpoints (e.g., `/v1/messages`).
+
+Unsupported endpoints MUST fail clearly (e.g., `404`/`501`) and MUST emit a structured trace/event indicating “unsupported endpoint” (no silent partial success).
+
+## Attribution + tracing (high-level)
+Each request MUST emit a structured record with stable correlation fields consistent with ADR-0017 and Phase 8 trace circle-back:
+- join/correlation: `orchestration_session_id`, `run_id`, `thread_id` (when applicable), `agent_id` (when applicable)
+- isolation: `world_id` when routed in-world
+- routing: selected `backend_id` (`<kind>:<name>`), backend kind, and allowlist check result
+- policy: allow/deny/require-approval outcome
+
