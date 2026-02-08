@@ -19,6 +19,11 @@
   - `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md`
   - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
   - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+- Phase 3 planning pack outputs:
+  - Contract: `docs/project_management/next/llm_and_agent_config_policy_surface/contract.md`
+  - Schema: `docs/project_management/next/llm_and_agent_config_policy_surface/SCHEMA.md`
+  - Decision Register: `docs/project_management/next/llm_and_agent_config_policy_surface/decision_register.md`
+  - Manual playbook: `docs/project_management/next/llm_and_agent_config_policy_surface/manual_testing_playbook.md`
 - Profiles (future; must remain compatible):
   - `docs/project_management/next/ADR-0020-profiles-config-policy-snapshots.md`
 - LLM + agents feature ADRs (draft; must defer to this ADR for config/policy shape):
@@ -124,41 +129,44 @@ All keys below are part of the config schema and MUST be strict (unknown keys re
 - `llm.gateway.mode: in_world|host_only`
   - Meaning:
     - `in_world`: gateway must run inside the world boundary when world is enabled.
-    - `host_only`: gateway runs on host (for host-only environments); permitted only when policy does not require world for LLM.
+    - `host_only`: gateway runs on host (for host-only environments); permitted only when effective policy has `llm.fail_closed.routing=false`.
   - Default: `in_world`.
 
 - `llm.routing.default_backend: string`
   - Meaning: identifier of the default backend used by the gateway/router when no explicit override is provided.
   - Format: `<kind>:<name>` (e.g., `cli:codex`, `cli:claude_code`, `api:openai`).
 
-- `llm.backends.cli.codex.enabled: bool`
-- `llm.backends.cli.codex.binary: string`
-- `llm.backends.cli.codex.mode: persistent|per_request`
-- `llm.backends.cli.codex.world_required: bool`
-
-- `llm.backends.cli.claude_code.enabled: bool` (same fields)
-- `llm.backends.cli.gemini_cli.enabled: bool` (same fields)
-
 Constraints:
 - Config files MUST NOT contain secrets. Backend authentication must rely on:
   - the CLI backend’s own subscription/login state, and/or
   - environment variables for API backends (names defined by the backend contract, not by this ADR).
 
-##### `agents` (agent hub selection and role mapping)
+##### `agents` (agent subsystem defaults; agent inventory lives in `agents/`)
 - `agents.enabled: bool`
   - Meaning: whether the agent hub registry/routing layer is enabled for the effective config.
   - Default: `false` (explicit enable required).
 
-- `agents.orchestrator_backend: string`
-  - Meaning: the backend id used for the orchestrator role when an orchestrator is required.
-  - Format: `<kind>:<name>` (e.g., `cli:codex`, `cli:claude_code`, `api:some_endpoint`).
+- `agents.defaults.execution.scope: host|world`
+  - Meaning: default execution scope for agents when an agent file omits an explicit scope.
+  - Default: `world`.
 
-- `agents.executor_backend: string`
-  - Meaning: default backend id used for executor role sessions when an executor is required.
-  - Format: `<kind>:<name>`.
+- `agents.defaults.cli.mode: persistent|per_request`
+  - Meaning: default CLI session strategy for CLI-based agents when an agent file omits it.
+  - Default: `persistent`.
 
 Notes:
-- Detailed agent backend registration (e.g., per-backend endpoints/capabilities) is defined by the Agent Hub ADRs. This ADR defines the config *selection* surface that other ADRs can depend on.
+- Detailed agent runtime behavior (roles, tool gating, steering) is defined by the Agent Hub ADRs. This ADR defines the config/policy storage surface and the inventory directory pattern that those ADRs depend on.
+
+#### Agent inventory (new; file-based)
+Agent definitions are stored as inventory items, one file per agent, mirroring the deps inventory model (ADR-0011):
+- Global agent defs: `$SUBSTRATE_HOME/agents/<agent_id>.yaml` (default `~/.substrate/agents/<agent_id>.yaml`)
+- Workspace agent defs: `<workspace_root>/.substrate/agents/<agent_id>.yaml`
+
+Safety and strictness requirements:
+- The filename-derived `<agent_id>` MUST match the `id:` field inside the YAML exactly.
+- Agent files MUST be strict (unknown keys rejected).
+- Agent files MUST NOT contain secrets.
+- Agent files MAY include an embedded `policy_overlay`, but it MUST be restriction-only (it can only tighten effective policy; never broaden).
 
 ### Policy
 
@@ -170,12 +178,8 @@ Notes:
 All keys below are part of the policy schema and MUST be strict (unknown keys rejected).
 
 ##### `llm` (LLM operation gating; enforced in gateway/manager)
-- `llm.enabled: bool`
-  - Meaning: whether LLM operations are allowed at all.
-  - Default: `false`.
-
-- `llm.require_world: bool`
-  - Meaning: when `true`, any LLM operation MUST fail closed if it cannot be executed inside a world boundary.
+- `llm.fail_closed.routing: bool`
+  - Meaning: when `true`, any LLM operation MUST fail closed if it cannot be executed inside a world boundary (no host fallback).
   - Default: `true`.
 
 - `llm.require_approval: bool`
@@ -187,13 +191,13 @@ All keys below are part of the policy schema and MUST be strict (unknown keys re
   - Elements format: `<kind>:<name>`.
 
 ##### `agents` (agent backend gating; enforced in agent hub)
-- `agents.enabled: bool`
-  - Meaning: whether agent operations (agent hub routing, role assignment) are allowed at all.
-  - Default: `false`.
-
 - `agents.allowed_backends: [string]`
   - Meaning: allowlist of backend ids eligible for assignment/routing (empty means “no backends allowed”).
   - Elements format: `<kind>:<name>`.
+
+- `agents.fail_closed.routing: bool`
+  - Meaning: when `true`, agent executions configured/routed to run in-world MUST fail closed if a world boundary is not available (no host fallback).
+  - Default: `true`.
 
 #### Interaction with existing policy keys
 - Network egress control remains policy-owned via `net_allowed`:
@@ -203,7 +207,7 @@ All keys below are part of the policy schema and MUST be strict (unknown keys re
 ### Platform guarantees
 - Linux/macOS/Windows:
   - The config/policy file shapes and key paths are identical.
-  - The default posture for LLM and agent operations is fail-closed (disabled unless enabled by config and policy).
+  - The default posture for LLM and agent operations is fail-closed (disabled unless enabled by config and allowed by policy allowlists/requirements).
 
 ## Architecture Shape
 - Components impacted (high level):
@@ -239,8 +243,10 @@ All keys below are part of the policy schema and MUST be strict (unknown keys re
 
 ## Security / Safety Posture
 - Fail-closed rules:
-  - LLM and agent operations are disabled by default (config + policy must both enable).
-  - If `llm.require_world=true` and a world boundary is not available, LLM operations MUST fail closed (no host fallback).
+  - LLM and agent operations are disabled by default:
+    - config defaults to disabled (`llm.enabled=false`, `agents.enabled=false`), and
+    - policy defaults to deny-by-default allowlists (`llm.allowed_backends=[]`, `agents.allowed_backends=[]`).
+  - If `llm.fail_closed.routing=true` and a world boundary is not available, LLM operations MUST fail closed (no host fallback).
   - If `llm.allowed_backends` / `agents.allowed_backends` are empty, routing MUST fail closed (no implicit backend selection).
 - Protected paths/invariants:
   - Config files must not store secrets; secrets must be provided via backend-owned mechanisms (subscription state) or environment variables.
@@ -255,7 +261,7 @@ All keys below are part of the policy schema and MUST be strict (unknown keys re
 - Integration tests:
   - `substrate config show --explain` includes the new keys and provenance
   - `substrate policy current show --explain` includes the new keys and provenance
-  - fail-closed behavior: with defaults (no enables), LLM/agent entrypoints refuse to run (exact behavior defined in the feature ADRs)
+  - fail-closed behavior: with defaults (config disabled + allowlists empty), LLM/agent entrypoints refuse to run (exact behavior defined in the feature ADRs)
 
 ### Manual validation
 - Manual playbook: `docs/project_management/next/llm_and_agent_config_policy_surface/manual_testing_playbook.md`
@@ -273,4 +279,3 @@ All keys below are part of the policy schema and MUST be strict (unknown keys re
 - This ADR has non-trivial decisions (where the config/policy lives; default enable posture; backend allowlisting shape). Create:
   - `docs/project_management/next/llm_and_agent_config_policy_surface/decision_register.md`
   and record A/B choices there (ADR remains the authoritative end-to-end contract).
-

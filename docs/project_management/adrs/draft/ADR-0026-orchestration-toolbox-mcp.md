@@ -47,6 +47,10 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
   - agent registry queries
   - policy introspection
   - trace/graph queries
+- Review / decision hook (agent hub alignment):
+  - Decide and specify how tool execution inherits the agent’s execution boundary, including `world_id` reuse:
+    - tools invoked by an in-world agent MUST execute against (or be attributed to) the same session world (`world_id`) unless the hub explicitly restarts the world, and
+    - tools MUST NOT silently create/attach to a different `world_id` outside hub-controlled session lifecycle rules.
 
 ## Non-Goals
 - Full external MCP marketplace/registry UX in v1 (this ADR focuses on internal toolbox exposure).
@@ -136,4 +140,3 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
   - `docs/project_management/next/orchestration_mcp_toolbox/decision_register.md`:
     - DR-0001 (Bind transport: UDS vs loopback TCP)
     - DR-0002 (Tool namespace + versioning strategy)
-

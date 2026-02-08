@@ -44,6 +44,10 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
   - session lifecycle tracking,
   - event bus for structured events,
   - stable attribution (`orchestration_session_id`, `thread_id`, `run_id`, `agent_id`, `role`).
+- Decide and specify world-session reuse semantics for multi-agent operation:
+  - when multiple agents are executing “in world” under a single `orchestration_session_id`, whether they share a single session world (`world_id`) by default,
+  - when/why the hub must restart into a new `world_id` (spec drift, policy drift, workspace/snapshot drift),
+  - and how those restarts are surfaced (events + trace) for auditability.
 - Ensure orchestration toolbelt access is restricted to agents operating in orchestrator role (via MCP/tool gating).
 
 ## Non-Goals
@@ -138,4 +142,3 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
   - `docs/project_management/next/agent_hub_core/decision_register.md`:
     - DR-0001 (Registry persistence: in-memory vs file-backed)
     - DR-0002 (Backend interface: pull vs push streaming)
-

@@ -71,9 +71,15 @@ This document is a lightweight tracking plan for finalizing ADRs and their corre
   - ADR-0017 (output routing contract):
     - align “structured agent events” attribution requirements to the final correlation set (`orchestration_session_id`, `run_id`, `thread_id`, `agent_id`, `role`, and join keys like `cmd_id`/`span_id` when applicable),
     - confirm buffering/backpressure rules remain compatible with any later session-log persistence strategy (do not conflate rendering with persistence).
+    - discussion point (agent hub circle-back): confirm the structured-event envelope can optionally carry an event-plane routing hint (e.g., `channel` / `topic`), so future “subscribe/filter” behavior can be expressed without PTY injection or attribution ambiguity; ensure any “dropped buffered lines” summaries preserve the same routing metadata so suppressed output remains explainable.
+    - discussion point (agent hub circle-back): decide and specify world session reuse + attribution—when multiple agents run “in world” under one `orchestration_session_id`, do they share a single `world_id` for the entire session by default, and should structured events carry `world_id` (and any “world restart” reason) so operators can verify that agents did or did not share the same filesystem/isolation boundary.
   - ADR-0027 (LLM + agent config/policy surface):
     - align backend id formats and role/tool gating keys with the final agent hub + MCP toolbox specs,
     - ensure any newly-discovered policy gates remain fail-closed by default and do not introduce secret storage.
+    - discussion point: keep ADR-0027 limited to backend **id format + allowlist/selection surfaces** (no canonical “backend registry” list here); once ADR-0023/ADR-0024 (LLM gateway + engines) and ADR-0025 (agent backends) are accepted, circle back to add references (and, if helpful, a non-normative appendix mapping ids → their authoritative backend contracts).
+  - ADR-0025 (agent hub core):
+    - discussion point: explicitly separate **control plane** (orchestrator → executor steering RPCs; cancel; task assignment) from the **event plane** (executor → hub structured events), so “who can steer whom” is policy-gated and auditable while output streaming/rendering remains a pure event-plane concern (aligns with ADR-0017 and avoids conflating rendering with routing).
+    - discussion point: define an event-plane **subscription/channel** model (pub/sub-style) for concurrent multi-agent operation, where agent configuration can declare which channels it emits to and which channels it may receive steering from; this is required to support a host-scoped orchestration agent (control-plane only) while keeping all LLM egress and world-bound capabilities in-world and subject to effective policy.
   - ADR-0029 (host event bus/router daemon):
     - align the v1 trigger allowlist to the final event families and correlation fields emitted by LLM gateway, agent hub, and workflow engine,
     - ensure request/derived-event schemas reference stable join keys (cause/trigger refs) consistent with the final trace/span contract.
