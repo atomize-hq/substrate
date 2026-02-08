@@ -1,5 +1,7 @@
 RECOMMENDATION: ACCEPT
 
+NOTE: This Planning Pack includes a prior self-review and a third-party reviewer addendum. The **final** recommendation is the top-line sentinel above.
+
 # Planning Quality Gate Report — world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment
 
 ## Metadata
@@ -122,3 +124,42 @@ Smoke script syntax checks (required for cross-platform packs):
 ## Decision: ACCEPT
 - Summary: Planning Pack is complete, contract-grounded, cross-platform-wired (schema v4 boundary-only platform-fix), and mechanically validated (`planning-validate` + `planning-lint`).
 - Next step: Execution triads may begin (starting with `F0-exec-preflight`).
+
+---
+
+## Third-Party Reviewer Addendum — 2026-02-08 (superseding)
+
+### Metadata
+- Reviewed commit: `237b1df50a1f84db51e63d2c261a3edeb6f9745a`
+- Reviewer: `third-party reviewer (Codex)`
+- Recommendation: `ACCEPT`
+
+### Evidence: Commands Run (verbatim)
+- `make planning-lint FEATURE_DIR=docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment` → exit `0`
+- `rg -n "Core slice is green|linux smoke is green|macos CI parity is green" docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/tasks.json` → exit `1` (no matches; remediated)
+
+### Findings (exhaustive)
+
+#### Finding A01 — Add-on Decision Register is explicitly “no new decisions”
+- Status: `VERIFIED`
+- Evidence:
+  - Required template and requirements: `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md` (Decision Register Standard; see §4)
+  - This add-on introduces no implementation-ambiguous decisions; it points to the base Appendix pack’s A/B decisions:
+    - `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/decision_register.md`
+    - `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/decision_register.md`
+- Impact: keeps decision quality requirements satisfied by the base Appendix Planning Pack, while avoiding duplicative “pseudo-decisions” in the add-on.
+- Fix: none
+
+#### Finding A02 — Acceptance criteria are runnable commands with exit codes
+- Status: `VERIFIED`
+- Evidence:
+  - `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/tasks.json` task ids:
+    - `WFGADAXA2-integ-core` acceptance criteria are explicit commands (`cargo fmt`, `cargo clippy`, `make integ-checks`).
+    - `WFGADAXA2-integ-linux` acceptance criteria is an explicit `make feature-smoke ...` command.
+    - `WFGADAXA2-integ-macos` acceptance criteria is an explicit `make ci-compile-parity ...` command.
+  - Testability rule: `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md` (§8.4).
+- Impact: makes the platform-fix boundary tasks auditable and runnable from `tasks.json` alone.
+- Fix: none
+
+### Decision
+RECOMMENDATION: ACCEPT
