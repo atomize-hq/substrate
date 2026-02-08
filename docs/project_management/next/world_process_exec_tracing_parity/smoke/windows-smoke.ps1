@@ -6,6 +6,7 @@ $ErrorActionPreference = "Stop"
 # - 1: smoke assertion failed / unexpected script error
 # - 2: invalid inputs (e.g., unknown SUBSTRATE_SMOKE_SLICE_ID)
 # - 3: required dependency unavailable (e.g., substrate not found)
+# - 4: missing prerequisites / world backend unavailable
 
 $substrate = $env:SUBSTRATE_BIN
 if ([string]::IsNullOrWhiteSpace($substrate)) { $substrate = "substrate" }
@@ -34,6 +35,10 @@ try {
 
   Write-Host "== Preflight: world doctor =="
   & $substrate world doctor | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    Write-Error "world_process_exec_tracing_parity: world doctor failed (exit=$LASTEXITCODE)"
+    exit 4
+  }
 
   $slice = $env:SUBSTRATE_SMOKE_SLICE_ID
   if ([string]::IsNullOrWhiteSpace($slice)) { $slice = "WPEP3" }

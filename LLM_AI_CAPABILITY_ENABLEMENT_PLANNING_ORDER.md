@@ -66,3 +66,22 @@ This document is a lightweight tracking plan for finalizing ADRs and their corre
     - special redaction/caps notes for LLM/agent-specific subprocesses
     - documentation pointers/updates (`docs/TRACE.md` as needed)
   - Non-negotiable: do not reopen the core capture mechanism choice, base event types, or span-parent correctness—only extensions.
+
+- Circle back to other foundation ADRs / decision registers (additive-only):
+  - ADR-0017 (output routing contract):
+    - align “structured agent events” attribution requirements to the final correlation set (`orchestration_session_id`, `run_id`, `thread_id`, `agent_id`, `role`, and join keys like `cmd_id`/`span_id` when applicable),
+    - confirm buffering/backpressure rules remain compatible with any later session-log persistence strategy (do not conflate rendering with persistence).
+  - ADR-0027 (LLM + agent config/policy surface):
+    - align backend id formats and role/tool gating keys with the final agent hub + MCP toolbox specs,
+    - ensure any newly-discovered policy gates remain fail-closed by default and do not introduce secret storage.
+  - ADR-0029 (host event bus/router daemon):
+    - align the v1 trigger allowlist to the final event families and correlation fields emitted by LLM gateway, agent hub, and workflow engine,
+    - ensure request/derived-event schemas reference stable join keys (cause/trigger refs) consistent with the final trace/span contract.
+  - Decision registers that define correlation/attribution surfaces (verify naming + required/optional classification, additive-only):
+    - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md`
+    - `docs/project_management/next/agent_hub_core/decision_register.md`
+    - `docs/project_management/next/llm_gateway_in_world/decision_register.md`
+    - `docs/project_management/next/llm_cli_backend_engine/decision_register.md`
+    - `docs/project_management/next/orchestration_mcp_toolbox/decision_register.md`
+    - `docs/project_management/next/workflow-engine/decision_register.md`
+    - `docs/project_management/next/forge/decision_register.md`

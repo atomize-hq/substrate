@@ -29,7 +29,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: f9e9e22657b2e9c68fc485684d410a78ef4acb5430900f1a7ab43a33bcbca42d
+ADR_BODY_SHA256: c30b42297686c16fc01adc33b154a860a65665bb8a97e9ad40c1b852979a411a
 ### Changes (operator-facing)
 - World executions gain subprocess-level visibility (exec/exit telemetry) comparable to host shim tracing
   - Existing: host execution is richly observable via shims, but world execution is observable primarily at “one command per world execute/stream” granularity (no structured visibility into spawned subprocess trees).
@@ -103,22 +103,21 @@ This ADR extends the world-agent responses to optionally include process events.
 - `/v1/execute` response:
   - MUST include `span_id` generated before execution.
   - MUST set `ExecRequest.span_id = Some(span_id)` before calling into the world backend.
-  - MUST include `process_events: Option<Vec<WorldProcessEvent>>` (when tracing is supported and succeeds).
+  - MUST include `process_events` (array; MAY be empty).
   - MUST include `process_events_status`: `"ok" | "truncated" | "unavailable" | "error"` (string).
-  - When tracing is unavailable or fails:
-    - `process_events` MUST be omitted (`null`),
-    - and the response MUST include a deterministic indicator that tracing was unavailable.
-  - Deterministic diagnostic fields (required when `process_events` is omitted):
-    - `process_events_reason`: one of:
-      - `"unsupported_backend"`
-      - `"ptrace_unavailable"`
-      - `"ptrace_permission_denied"`
-      - `"internal_error"`
+  - MUST include `process_events_reason` when `process_events_status != "ok"`.
+  - `process_events` MUST be omitted only if `process_events_status="error"` and the system cannot safely emit any records.
+  - Deterministic reason codes (stable strings; non-exhaustive):
+    - `"not_supported_platform"`
+    - `"backend_disabled"`
+    - `"ptrace_not_permitted"`
+    - `"capture_overflow"`
+    - `"internal_error"`
 
 - `/v1/stream` Exit frame:
-  - MUST include `process_events: Option<Vec<WorldProcessEvent>>` using the same semantics as `/v1/execute`.
+  - MUST include `process_events` using the same semantics as `/v1/execute`.
   - MUST include `process_events_status` using the same semantics as `/v1/execute`.
-  - When `process_events` is omitted, MUST include the same diagnostic fields (`process_events_status`, `process_events_reason`).
+  - MUST include `process_events_reason` when `process_events_status != "ok"`.
 
 ### Trace output (Host)
 - The shell MUST append each `WorldProcessEvent` into `~/.substrate/trace.jsonl` using the existing trace append mechanism, and MUST do so before writing the root command `command_complete` span/event so correlations are stable for downstream analysis.
@@ -152,7 +151,9 @@ World process events are structured trace events aligned with `crates/common/src
   - `world_id`
   - `pid`, `ppid`
   - `cwd`
-  - `argv` (redacted array)
+  - One of:
+    - `argv` (redacted array)
+    - `argv_omitted: true`
   - On exit:
     - `exit_code` (or signal termination; see optional fields)
     - `duration_ms`
@@ -266,7 +267,7 @@ To bound volume:
 ## Decision Summary
 - Decision Register entries:
   - `docs/project_management/next/world_process_exec_tracing_parity/decision_register.md`:
-    - DR-0001 (In-world tracing mechanism: ptrace vs in-world shims vs strace parsing)
+    - DR-0001 (In-world tracing mechanism: ptrace vs in-world shims)
     - DR-0002 (Env data minimization policy: allowlist-only vs full redacted map)
     - DR-0003 (Failure behavior: degrade (omit events) vs fail execution)
     - DR-0004 (Span parent linkage fix: capture at start + env stack discipline)

@@ -77,12 +77,50 @@ ADR_BODY_SHA256: d20d6f66be403daeafeea8a53e33dc7bf0b25451e1480827952366e2dd4e5e6
 
 - Rendering rules (interactive REPL):
   - During PTY passthrough (TUIs/interactive commands), Substrate MUST NOT inject structured agent events into the PTY byte stream.
-    - Structured events SHOULD be buffered and flushed after passthrough ends (guidance; not a completion fallback).
+    - Structured events MUST be handled via a bounded buffer and MUST NOT backpressure execution.
+      - If the buffer overflows, Substrate MUST drop additional structured lines for the duration of the passthrough and MUST emit an explicit dropped-count summary after passthrough ends.
+        - Source of truth: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0006)
   - While the line editor is active (`Idle`), PTY bytes MAY arrive (out-of-band) and Substrate MUST render them without corrupting the current input buffer.
+    - PTY bytes MUST be rendered as raw bytes with prompt/input redraw semantics (byte fidelity preserved).
 
 - Attribution:
   - PTY bytes are not attributed to a specific agent/task by default (session-level stream).
-  - Structured agent events MUST include an attribution surface (at minimum: agent/provider identity and a stable task/run id).
+  - Structured agent events MUST include stable attribution fields suitable for deterministic joins across the LLM/agent/workflow/router tracks.
+    - Required (minimum):
+      - `orchestration_session_id`
+      - `run_id`
+      - `agent_id`
+    - Required when applicable:
+      - `thread_id` (LLM/conversation grouping)
+      - `role` (agent hub role: orchestrator vs executor)
+    - Join keys (required when the event is tied to execution/trace):
+      - `cmd_id` and/or `span_id`
+    - Source of truth: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003)
+    - Placement: attribution fields are top-level keys on the serialized event envelope.
+      - Source of truth: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0008)
+
+### Config (buffer tuning)
+- Files and locations (existing layering model):
+  - Global config patch: `$SUBSTRATE_HOME/config.yaml`
+  - Workspace config patch: `<workspace_root>/.substrate/workspace.yaml`
+- Key:
+  - `repl.max_pty_buffered_lines: <int>`
+    - Meaning: maximum number of **structured event lines** buffered during PTY passthrough before dropping begins (does not affect PTY bytes).
+    - Default: `2048`.
+    - Precedence: workspace overrides global (consistent with the existing config layering model).
+    - Source of truth: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0004)
+    - Bounds: `min=0`, `max=16384`.
+    - Invalid/out-of-range handling:
+      - Invalid type/parse: hard error (exit code `2` at config/CLI boundary).
+      - Out-of-range integer: clamp and emit a structured warning (no PTY injection).
+      - Source of truth: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0007)
+    - Scope: applies to any PTY passthrough session (explicit `:pty` and implicit PTY-required runs).
+      - Source of truth: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0010)
+    - Example:
+      ```yaml
+      repl:
+        max_pty_buffered_lines: 2048
+      ```
 
 ## Architecture Shape
 - `crates/shell`:
@@ -93,7 +131,11 @@ ADR_BODY_SHA256: d20d6f66be403daeafeea8a53e33dc7bf0b25451e1480827952366e2dd4e5e6
 - `crates/world-agent`:
   - Continues to treat `stdout` as a raw PTY byte stream.
 - `crates/common` / `crates/trace`:
-  - Structured events should be traceable with stable correlation identifiers.
+  - Structured agent events MUST be traceable with stable correlation identifiers (persisted to canonical `trace.jsonl`).
+    - This ADR defines the minimum required attribution fields; trace/span schema alignment remains additive-only and is finalized in the “circle-back” pass.
+  - Trace persistence (authoritative):
+    - Each structured agent event MUST be persisted as its own JSONL record in canonical trace.
+    - Source of truth: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0009)
 
 ## Sequencing / Dependencies
 - Depends on ADR-0016’s PTY passthrough and out-of-band PTY output rules for the REPL.

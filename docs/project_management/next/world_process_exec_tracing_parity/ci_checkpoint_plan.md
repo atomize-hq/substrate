@@ -60,6 +60,10 @@ Standard:
 
 ## Human-readable rationale
 
+Bounds override justification (explicit; required by `docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md`):
+- Defaults are set to `min_triads_per_checkpoint=1` and `max_triads_per_checkpoint=3` to permit a one-slice CP1 checkpoint at the WPEP0 seam and a three-slice CP2 checkpoint for the remaining slices.
+- CP1 isolates WPEP0 because it is a high-risk contract seam (span parent linkage correctness and joinability) and subsequent slices add high-volume process telemetry that must not land on top of broken trace trees.
+
 CP1:
 - Prevents shipping additional trace volume on top of span hierarchy corruption and missing join keys.
 

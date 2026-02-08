@@ -33,3 +33,23 @@
     - WPEP3: redaction hardening + `argv`/allowlisted `env` capture
   - Updated tasks graph, ci checkpoint plan, sequencing spine, smoke expectations, and manual playbook.
   - Ran: `make planning-lint FEATURE_DIR="docs/project_management/next/world_process_exec_tracing_parity"` → exit 0
+
+## START — 2026-02-07T15:18:17Z — remediation — fix quality gate DEFECT findings
+- Goal: Resolve DEFECT findings in `quality_gate_report.md` so the Planning Pack is implementation-ready for re-review.
+- Findings addressed: 003, 004, 005, 006, 007, 008
+
+## END — 2026-02-07T15:18:17Z — remediation — fix quality gate DEFECT findings
+- Files changed:
+  - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
+  - `docs/project_management/next/world_process_exec_tracing_parity/spec_manifest.md`
+  - `docs/project_management/next/world_process_exec_tracing_parity/ci_checkpoint_plan.md`
+  - `docs/project_management/next/world_process_exec_tracing_parity/tasks.json`
+  - `docs/project_management/next/world_process_exec_tracing_parity/smoke/windows-smoke.ps1`
+- Commands run (verbatim) + exit codes:
+  - `make adr-fix ADR=docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md` → exit 0
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world_process_exec_tracing_parity"` → exit 2 (FAIL: spec_manifest required-doc scan misread backticked env var names as paths)
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world_process_exec_tracing_parity"` → exit 2 (FAIL: ci_checkpoint_plan bounds validation)
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world_process_exec_tracing_parity"` → exit 0
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/world_process_exec_tracing_parity"` → exit 0
+  - `jq -e . "docs/project_management/next/world_process_exec_tracing_parity/tasks.json" >/dev/null` → exit 0
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → exit 0

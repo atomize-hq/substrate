@@ -33,6 +33,7 @@ Authoring standard:
   - `docs/project_management/next/world_process_exec_tracing_parity/SECURITY.md` — security posture, redaction, fail/degrade rules
   - `docs/project_management/next/world_process_exec_tracing_parity/decision_register.md` — A/B decisions with explicit selection
   - `docs/project_management/next/world_process_exec_tracing_parity/manual_testing_playbook.md` — manual validation cases (authoritative)
+  - `docs/internals/env/inventory.md` — env var inventory entries (SUBSTRATE_ENABLE_PREEXEC, SUBSTRATE_PREEXEC_RAW_LOG)
 
 - Smoke scripts:
   - `docs/project_management/next/world_process_exec_tracing_parity/smoke/linux-smoke.sh`
@@ -47,6 +48,8 @@ Authoring standard:
 | Trace schema (spans + events) | `docs/project_management/next/world_process_exec_tracing_parity/SCHEMA.md` | event types, required/optional fields, join keys, caps/truncation |
 | World-agent API contract | `docs/project_management/next/world_process_exec_tracing_parity/PROTOCOL.md` | request/response/frames, error model, diagnostics, ordering |
 | Security posture | `docs/project_management/next/world_process_exec_tracing_parity/SECURITY.md` | redaction requirements, omit/raw rules, degrade vs fail-closed |
+| Env var semantics (preexec) | `docs/project_management/next/world_process_exec_tracing_parity/SECURITY.md` | SUBSTRATE_ENABLE_PREEXEC, SUBSTRATE_PREEXEC_RAW_LOG, defaults, safety constraints |
+| Env var inventory entries | `docs/internals/env/inventory.md` | inventory rows updated for env vars introduced/modified by this feature |
 | Decision points | `docs/project_management/next/world_process_exec_tracing_parity/decision_register.md` | A/B options, explicit selection, rationale, follow-ups |
 | Slice definitions | `docs/project_management/next/world_process_exec_tracing_parity/WPEP*-spec.md` | exact behaviors and acceptance criteria per slice |
 | Manual validation | `docs/project_management/next/world_process_exec_tracing_parity/manual_testing_playbook.md` | deterministic commands + expected outcomes |

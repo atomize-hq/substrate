@@ -819,7 +819,7 @@
       "worktree": null,
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/world_process_exec_tracing_parity/kickoff_prompts/FZ-feature-cleanup.md",
-      "depends_on": ["WPEP3-integ"],
+      "depends_on": ["WPEP3-integ", "CP2-ci-checkpoint"],
       "concurrent_with": []
     }
   ]
