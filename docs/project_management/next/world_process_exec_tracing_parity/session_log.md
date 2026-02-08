@@ -1,0 +1,55 @@
+# world_process_exec_tracing_parity — session log
+
+## START — 2026-02-07T00:00:00Z — planning — initial pack draft
+- Feature: `docs/project_management/next/world_process_exec_tracing_parity`
+- Branch: `feat/world-process-exec-tracing-parity` (planned)
+- Goal: Draft the Planning Pack skeleton for ADR-0028 (spec manifest, plan, tasks graph, slice specs, smoke/playbook scaffolding).
+- Inputs:
+  - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
+  - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
+  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+
+## END — 2026-02-07T00:00:00Z — planning — initial pack draft
+- Result: Drafted Planning Pack artifacts (not quality-gated).
+- Next: Run planning lint and fill remaining docs where needed:
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world_process_exec_tracing_parity"`
+
+## START — 2026-02-07T12:29:59Z — planning — complete pack + lint
+- Goal: Fill remaining Planning Pack artifacts and pass mechanical planning lint.
+
+## END — 2026-02-07T12:29:59Z — planning — complete pack + lint
+- Result:
+  - Added tasks graph, slice specs, kickoff prompts, smoke scripts, protocol/security docs.
+  - Added sequencing spine entry for the feature.
+  - Ran: `make planning-lint FEATURE_DIR="docs/project_management/next/world_process_exec_tracing_parity"` → exit 0
+
+## START — 2026-02-07T14:26:04Z — planning — decompose capture vs redaction (WPEP3)
+- Goal: Further decompose the Linux capture work so ptrace/provisioning lands before argv/env redaction hardening.
+
+## END — 2026-02-07T14:26:04Z — planning — decompose capture vs redaction (WPEP3)
+- Result:
+  - Split the original WPEP2 scope into:
+    - WPEP2: ptrace capture + provisioning/caps/truncation with explicit `argv_omitted: true`
+    - WPEP3: redaction hardening + `argv`/allowlisted `env` capture
+  - Updated tasks graph, ci checkpoint plan, sequencing spine, smoke expectations, and manual playbook.
+  - Ran: `make planning-lint FEATURE_DIR="docs/project_management/next/world_process_exec_tracing_parity"` → exit 0
+
+## START — 2026-02-07T15:18:17Z — remediation — fix quality gate DEFECT findings
+- Goal: Resolve DEFECT findings in `quality_gate_report.md` so the Planning Pack is implementation-ready for re-review.
+- Findings addressed: 003, 004, 005, 006, 007, 008
+
+## END — 2026-02-07T15:18:17Z — remediation — fix quality gate DEFECT findings
+- Files changed:
+  - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
+  - `docs/project_management/next/world_process_exec_tracing_parity/spec_manifest.md`
+  - `docs/project_management/next/world_process_exec_tracing_parity/ci_checkpoint_plan.md`
+  - `docs/project_management/next/world_process_exec_tracing_parity/tasks.json`
+  - `docs/project_management/next/world_process_exec_tracing_parity/smoke/windows-smoke.ps1`
+- Commands run (verbatim) + exit codes:
+  - `make adr-fix ADR=docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md` → exit 0
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world_process_exec_tracing_parity"` → exit 2 (FAIL: spec_manifest required-doc scan misread backticked env var names as paths)
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world_process_exec_tracing_parity"` → exit 2 (FAIL: ci_checkpoint_plan bounds validation)
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world_process_exec_tracing_parity"` → exit 0
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/world_process_exec_tracing_parity"` → exit 0
+  - `jq -e . "docs/project_management/next/world_process_exec_tracing_parity/tasks.json" >/dev/null` → exit 0
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → exit 0

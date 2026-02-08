@@ -16,6 +16,8 @@ use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
 use substrate_common::log_schema;
+use substrate_common::{WorldFsStrategy, WorldFsStrategyFallbackReason};
+use substrate_trace::create_span_builder;
 use uuid::Uuid;
 
 fn preflight_caging_required(config: &ShellConfig) -> Result<()> {
@@ -172,7 +174,26 @@ pub(crate) fn run_script_mode(config: &ShellConfig, script_path: &Path) -> Resul
 
     // Log script execution start
     let script_cmd = format!("{} {}", config.shell_path, script_path.display());
-    log_command_event(config, "command_start", &script_cmd, &cmd_id, None)?;
+    let mut span = if let Ok(mut builder) = create_span_builder() {
+        let cwd = std::env::current_dir()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|_| ".".to_string());
+        builder = builder.with_command(&script_cmd).with_cwd(&cwd);
+        builder.start().ok()
+    } else {
+        None
+    };
+    let span_id_for_cmd_events = span.as_ref().map(|s| s.get_span_id().to_string());
+
+    cmd.env("SHIM_PARENT_CMD_ID", &cmd_id);
+    if let Some(span_id) = span_id_for_cmd_events.as_ref() {
+        cmd.env("SHIM_PARENT_SPAN", span_id);
+    }
+
+    let start_extra = span_id_for_cmd_events
+        .as_ref()
+        .map(|span_id| json!({ "span_id": span_id }));
+    log_command_event(config, "command_start", &script_cmd, &cmd_id, start_extra)?;
     let start_time = std::time::Instant::now();
 
     // Execute script as single process
@@ -211,6 +232,14 @@ pub(crate) fn run_script_mode(config: &ShellConfig, script_path: &Path) -> Resul
         }
     }
 
+    extra["world_fs_strategy_primary"] = json!(WorldFsStrategy::Overlay.as_str());
+    extra["world_fs_strategy_final"] = json!(WorldFsStrategy::Host.as_str());
+    extra["world_fs_strategy_fallback_reason"] =
+        json!(WorldFsStrategyFallbackReason::None.as_str());
+    if let Some(span_id) = span_id_for_cmd_events.as_ref() {
+        extra["span_id"] = json!(span_id);
+    }
+
     log_command_event(
         config,
         "command_complete",
@@ -218,6 +247,10 @@ pub(crate) fn run_script_mode(config: &ShellConfig, script_path: &Path) -> Resul
         &cmd_id,
         Some(extra),
     )?;
+
+    if let Some(active_span) = span.take() {
+        let _ = active_span.finish(exit_code(status), vec![], None);
+    }
 
     Ok(exit_code(status))
 }

@@ -9,8 +9,9 @@ Keep concise, actionable, and security-focused.
   - Problem: host execution is richly observable via the shim (per-process exec logging), but world execution is primarily observable at the “one command per world execute” level. This creates blind spots for world-deps installs and wrapper-based tools (e.g. `nvm` wrappers invoking `bash -lc ...`), where internal subprocesses are not recorded as structured events.
   - Goal: in-world activity is traceable at the same granularity as the host: every spawned process (argv/env redaction/exit code/timing) is captured and attached to spans, so debugging and policy auditing do not depend on stdout/stderr inference.
   - Work:
-    - Define an in-world execution event schema (align with `crates/common/src/log_schema.rs`) for per-process spawn/exit telemetry emitted by world-agent.
+    - Define an in-world execution event schema (align with `crates/common/src/lib.rs` `log_schema`) for per-process spawn/exit telemetry emitted by world-agent.
     - Extend `world-agent` execution paths (`/v1/execute`, `/v1/stream`) to capture process tree events for the executed command (including wrapper-invoked shells like `bash -lc`) and return them to the host.
+    - Follow-on optimization: stream per-process events incrementally over `/v1/stream` (v1 batches on Exit).
     - Plumb the returned process events into `crates/trace` spans so they are persisted alongside existing world fs diffs and policy decisions.
     - Ensure redaction rules apply consistently (no secrets in argv/env); reuse shared redaction helpers.
     - Add integration tests that demonstrate parity:
@@ -200,6 +201,13 @@ Keep concise, actionable, and security-focused.
 ## Hardening / Quality
 - Document backend divergence
   - Clarify why shell uses world-agent and replay uses LinuxLocalBackend; outline future convergence plan.
+- Redaction hardening for “command body” tracing (preexec + future trace surfaces)
+  - Problem: some debug-grade event families (e.g., bash preexec `builtin_command`) can include raw command bodies that may contain tokens/headers/secrets. Today we omit bodies from canonical trace for safety; to safely include bodies we need hardened, shared redaction across the codebase.
+  - Work:
+    - Define a shared redaction module usable by shell/shim/world-agent/preexec (flag consumes next arg, `--flag=value`, URL credentials, headers, exports, common token env patterns).
+    - Add tests that prove representative leaks are redacted (tokens, Authorization headers, proxy URLs, `export FOO_TOKEN=...`, etc.).
+    - Add an explicit opt-in mode to include redacted command bodies in canonical trace for debug profiles (and ensure it is non-triggerable by default for ADR-0029 routing).
+  - Acceptance: command-body logging is safe-by-default, can be enabled explicitly for debug with strong redaction + tests, and is clearly labeled/filtered.
 - Heavy isolation wiring (optional)
   - Provide a mode to invoke `LinuxIsolation::apply()` for non-PTY when capabilities allow; keep current lightweight/PTy approach as default.
   - Acceptance: gated by capability checks; clear degrade messages.

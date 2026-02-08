@@ -11,6 +11,8 @@ fn new_trace_context() -> TraceContext {
     TraceContext::new()
 }
 
+static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[test]
 fn test_span_creation() {
     let span_id = new_span(None);
@@ -353,4 +355,98 @@ fn command_complete_includes_policy_snapshot_meta_when_set() {
             .and_then(|v| v.as_str()),
         Some("deadbeef")
     );
+}
+
+#[test]
+fn command_complete_parent_span_is_not_self_when_env_mutated() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    let previous = std::env::var_os("SHIM_PARENT_SPAN");
+    std::env::remove_var("SHIM_PARENT_SPAN");
+
+    let tmp_dir = TempDir::new().unwrap();
+    let trace_path = tmp_dir.path().join("trace.jsonl");
+    let ctx = new_trace_context();
+    ctx.init_trace(Some(trace_path.clone())).unwrap();
+
+    let span = ctx
+        .create_span_builder()
+        .with_command("echo parent-span")
+        .with_cwd("/tmp")
+        .start()
+        .unwrap();
+    let span_id = span.get_span_id().to_string();
+
+    std::env::set_var("SHIM_PARENT_SPAN", &span_id);
+    span.finish(0, vec![], None).unwrap();
+
+    let records: Vec<Value> = std::fs::read_to_string(&trace_path)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .collect();
+
+    let completion = records
+        .iter()
+        .find(|value| {
+            value.get("span_id").and_then(|v| v.as_str()) == Some(span_id.as_str())
+                && value.get("event_type").and_then(|v| v.as_str()) == Some("command_complete")
+        })
+        .expect("expected a command_complete record");
+
+    assert!(
+        completion.get("parent_span").is_none() || completion.get("parent_span").unwrap().is_null(),
+        "expected command_complete parent_span to be omitted/null, not self"
+    );
+
+    match previous {
+        Some(value) => std::env::set_var("SHIM_PARENT_SPAN", value),
+        None => std::env::remove_var("SHIM_PARENT_SPAN"),
+    }
+}
+
+#[test]
+fn command_complete_parent_span_is_captured_at_start() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    let previous = std::env::var_os("SHIM_PARENT_SPAN");
+    std::env::set_var("SHIM_PARENT_SPAN", "spn_parent_test");
+
+    let tmp_dir = TempDir::new().unwrap();
+    let trace_path = tmp_dir.path().join("trace.jsonl");
+    let ctx = new_trace_context();
+    ctx.init_trace(Some(trace_path.clone())).unwrap();
+
+    let span = ctx
+        .create_span_builder()
+        .with_command("echo capture-parent")
+        .with_cwd("/tmp")
+        .start()
+        .unwrap();
+    let span_id = span.get_span_id().to_string();
+
+    std::env::set_var("SHIM_PARENT_SPAN", &span_id);
+    span.finish(0, vec![], None).unwrap();
+
+    let records: Vec<Value> = std::fs::read_to_string(&trace_path)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .collect();
+
+    let completion = records
+        .iter()
+        .find(|value| {
+            value.get("span_id").and_then(|v| v.as_str()) == Some(span_id.as_str())
+                && value.get("event_type").and_then(|v| v.as_str()) == Some("command_complete")
+        })
+        .expect("expected a command_complete record");
+
+    assert_eq!(
+        completion.get("parent_span").and_then(|v| v.as_str()),
+        Some("spn_parent_test")
+    );
+
+    match previous {
+        Some(value) => std::env::set_var("SHIM_PARENT_SPAN", value),
+        None => std::env::remove_var("SHIM_PARENT_SPAN"),
+    }
 }

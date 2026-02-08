@@ -27,10 +27,20 @@ __substrate_preexec() {
     [[ -z "$SHIM_TRACE_LOG" ]] && return 0
     [[ "$BASH_COMMAND" == __substrate_preexec* ]] && return 0
     [[ -n "$COMP_LINE" ]] && return 0
-    printf '{"ts":"%s","event_type":"builtin_command","command":"%s","session_id":"%s","component":"shell","pty":true}\n' \
+    # Canonical trace MUST omit the raw command body; it can contain secrets.
+    printf '{"ts":"%s","event_type":"builtin_command","session_id":"%s","component":"shell","pty":true,"preexec":true,"command_omitted":true,"parent_cmd_id":"%s"}\n' \
         "$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)" \
-        "$(__substrate_json_escape "$BASH_COMMAND")" \
-        "$(__substrate_json_escape "${SHIM_SESSION_ID:-unknown}")" >> "$SHIM_TRACE_LOG" 2>/dev/null || true
+        "$(__substrate_json_escape "${SHIM_SESSION_ID:-unknown}")" \
+        "$(__substrate_json_escape "${SHIM_PARENT_CMD_ID:-}")" >> "$SHIM_TRACE_LOG" 2>/dev/null || true
+
+    # Optional debug-only raw log (explicit opt-in). This may contain secrets.
+    if [[ -n "${SUBSTRATE_PREEXEC_RAW_LOG:-}" ]]; then
+        printf '{"ts":"%s","event_type":"builtin_command_raw","command":"%s","session_id":"%s","component":"shell","pty":true,"preexec":true,"may_contain_secrets":true,"parent_cmd_id":"%s"}\n' \
+            "$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)" \
+            "$(__substrate_json_escape "$BASH_COMMAND")" \
+            "$(__substrate_json_escape "${SHIM_SESSION_ID:-unknown}")" \
+            "$(__substrate_json_escape "${SHIM_PARENT_CMD_ID:-}")" >> "$SUBSTRATE_PREEXEC_RAW_LOG" 2>/dev/null || true
+    fi
 }
 trap '__substrate_preexec' DEBUG
 fi

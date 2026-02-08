@@ -39,6 +39,8 @@ pub struct Span {
     pub session_id: String,
     pub span_id: String,
     pub parent_span: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_cmd_id: Option<String>,
     pub component: String,
     pub world_id: Option<String>,
     pub policy_id: String,
@@ -76,6 +78,10 @@ pub struct Span {
     pub world_fs_strategy_final: Option<WorldFsStrategy>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub world_fs_strategy_fallback_reason: Option<WorldFsStrategyFallbackReason>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub outcome: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -178,6 +184,7 @@ impl SpanBuilder {
                 session_id,
                 span_id: new_span(None),
                 parent_span: env::var("SHIM_PARENT_SPAN").ok(),
+                parent_cmd_id: env::var("SHIM_PARENT_CMD_ID").ok(),
                 component: component.to_string(),
                 world_id: env::var("SUBSTRATE_WORLD_ID").ok(),
                 policy_id: context.policy_id(),
@@ -200,6 +207,8 @@ impl SpanBuilder {
                 world_fs_strategy_primary: None,
                 world_fs_strategy_final: None,
                 world_fs_strategy_fallback_reason: None,
+                duration_ms: None,
+                outcome: None,
             },
         }
     }
@@ -244,6 +253,13 @@ impl SpanBuilder {
 
         Ok(ActiveSpan {
             span_id,
+            session_id: self.span.session_id,
+            component: self.span.component,
+            world_id: self.span.world_id,
+            agent_id: self.span.agent_id,
+            parent_span: self.span.parent_span,
+            parent_cmd_id: self.span.parent_cmd_id,
+            policy_decision: self.span.policy_decision,
             command: self.span.cmd,
             cwd: self.span.cwd,
             transport: None,
@@ -255,12 +271,21 @@ impl SpanBuilder {
             world_fs_strategy_primary: None,
             world_fs_strategy_final: None,
             world_fs_strategy_fallback_reason: None,
+            started_at: std::time::Instant::now(),
+            outcome: None,
         })
     }
 }
 
 pub struct ActiveSpan {
     pub span_id: String,
+    session_id: String,
+    component: String,
+    world_id: Option<String>,
+    agent_id: String,
+    parent_span: Option<String>,
+    parent_cmd_id: Option<String>,
+    policy_decision: Option<PolicyDecision>,
     command: String,
     cwd: String,
     transport: Option<TransportMeta>,
@@ -272,6 +297,8 @@ pub struct ActiveSpan {
     world_fs_strategy_primary: Option<WorldFsStrategy>,
     world_fs_strategy_final: Option<WorldFsStrategy>,
     world_fs_strategy_fallback_reason: Option<WorldFsStrategyFallbackReason>,
+    started_at: std::time::Instant,
+    outcome: Option<String>,
 }
 
 impl ActiveSpan {
@@ -302,6 +329,10 @@ impl ActiveSpan {
         self.world_fs_strategy_primary = Some(primary);
         self.world_fs_strategy_final = Some(final_strategy);
         self.world_fs_strategy_fallback_reason = Some(fallback_reason);
+    }
+
+    pub fn set_outcome(&mut self, outcome: &'static str) {
+        self.outcome = Some(outcome.to_string());
     }
 
     pub fn execution_origin(&self) -> ExecutionOrigin {
@@ -339,22 +370,24 @@ impl ActiveSpan {
                 .unwrap_or(WorldFsStrategyFallbackReason::None),
         );
 
+        let duration_ms = self
+            .started_at
+            .elapsed()
+            .as_millis()
+            .try_into()
+            .unwrap_or(u64::MAX);
+
         let span = Span {
             ts: Utc::now(),
             event_type: "command_complete".to_string(),
-            session_id: env::var("SHIM_SESSION_ID")
-                .unwrap_or_else(|_| format!("ses_{}", Uuid::now_v7())),
+            session_id: self.session_id,
             span_id: self.span_id.clone(),
-            parent_span: env::var("SHIM_PARENT_SPAN").ok(),
-            component: if env::var("SUBSTRATE_SHELL").is_ok() {
-                "shell"
-            } else {
-                "shim"
-            }
-            .to_string(),
-            world_id: env::var("SUBSTRATE_WORLD_ID").ok(),
+            parent_span: self.parent_span,
+            parent_cmd_id: self.parent_cmd_id,
+            component: self.component,
+            world_id: self.world_id,
             policy_id: self.context.policy_id(),
-            agent_id: env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string()),
+            agent_id: self.agent_id,
             cwd: self.cwd,
             cmd: self.command,
             exit: Some(exit_code),
@@ -364,13 +397,15 @@ impl ActiveSpan {
             transport: self.transport,
             execution_origin: Some(origin),
             graph_edges: None,
-            policy_decision: None,
+            policy_decision: self.policy_decision,
             policy_resolution_mode,
             policy_snapshot_schema: self.policy_snapshot_schema,
             policy_snapshot_hash: self.policy_snapshot_hash,
             world_fs_strategy_primary,
             world_fs_strategy_final,
             world_fs_strategy_fallback_reason,
+            duration_ms: Some(duration_ms),
+            outcome: self.outcome,
         };
 
         if let Some(ref mut output) = *self.context.output_write() {

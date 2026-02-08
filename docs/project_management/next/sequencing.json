@@ -437,6 +437,36 @@
       ]
     },
     {
+      "order": 32.5,
+      "id": "world_process_exec_tracing_parity",
+      "title": "World process exec/exit tracing parity",
+      "branch": "feat/world-process-exec-tracing-parity",
+      "directory": "docs/project_management/next/world_process_exec_tracing_parity",
+      "plan": "docs/project_management/next/world_process_exec_tracing_parity/plan.md",
+      "status": "not_started",
+      "sequence": [
+        {
+          "id": "WPEP0",
+          "spec": "docs/project_management/next/world_process_exec_tracing_parity/WPEP0-spec.md"
+        },
+        {
+          "id": "WPEP1",
+          "spec": "docs/project_management/next/world_process_exec_tracing_parity/WPEP1-spec.md"
+        },
+        {
+          "id": "WPEP2",
+          "spec": "docs/project_management/next/world_process_exec_tracing_parity/WPEP2-spec.md"
+        },
+        {
+          "id": "WPEP3",
+          "spec": "docs/project_management/next/world_process_exec_tracing_parity/WPEP3-spec.md"
+        }
+      ],
+      "notes": [
+        "Implements ADR-0028: in-world per-process exec/exit telemetry plus trace correctness/joinability foundation before higher-volume event families land."
+      ]
+    },
+    {
       "order": 33,
       "id": "world_fs_granular_allow_deny",
       "title": "World FS granular allow/deny + strict deny",
