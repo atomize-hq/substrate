@@ -38,8 +38,8 @@ ADR_BODY_SHA256: d20d6f66be403daeafeea8a53e33dc7bf0b25451e1480827952366e2dd4e5e6
   - Why: Agent hub orchestration will run multiple agent CLIs concurrently (via bindings/SDK wrappers). Without an output contract, concurrent outputs can corrupt terminal state or be mis-attributed, undermining usability and auditability.
   - Links:
     - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md#user-contract-authoritative`
-    - `docs/project_management/next/world-first-repl-persistent-pty/STATE_MACHINE.md`
-    - `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`
+    - `docs/project_management/_archived/world-first-repl-persistent-pty/STATE_MACHINE.md`
+    - `docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md`
 
 ## Problem / Context
 - Substrate’s future direction includes an “agent hub” that runs multiple concurrent agent CLIs (Codex / Claude Code / Gemini CLI and others) via wrappers/bindings.

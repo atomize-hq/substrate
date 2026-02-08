@@ -5,7 +5,7 @@ protocol (v1) to execute interactive commands while persisting a small amount of
 commands (not a long-lived login shell).
 
 This doc is intentionally implementation-focused. For the authoritative project plan/specs, see
-`docs/project_management/next/world-first-repl-persistent-pty/`.
+`docs/project_management/_archived/world-first-repl-persistent-pty/`.
 
 ## Mental Model
 

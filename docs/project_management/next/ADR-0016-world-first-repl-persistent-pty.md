@@ -6,7 +6,7 @@
 - Owner(s): Substrate maintainers
 
 ## Scope
-- Feature directory: `docs/project_management/next/world-first-repl-persistent-pty/`
+- Feature directory: `docs/project_management/_archived/world-first-repl-persistent-pty/`
 - Sequencing spine: `docs/project_management/next/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
@@ -14,13 +14,13 @@
   - `docs/project_management/standards/EXECUTIVE_SUMMARY_STANDARD.md`
 
 ## Related Docs
-- Plan: `docs/project_management/next/world-first-repl-persistent-pty/plan.md`
-- Decision Register: `docs/project_management/next/world-first-repl-persistent-pty/decision_register.md`
-- Protocol (authoritative): `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`
-- State machine (authoritative): `docs/project_management/next/world-first-repl-persistent-pty/STATE_MACHINE.md`
-- Research (historical context): `docs/project_management/next/world-first-repl-persistent-pty/RESEARCH.md`
-- Driver design (implementation sketch): `docs/project_management/next/world-first-repl-persistent-pty/driver_loop_design.md`
-- Drain/ordering design: `docs/project_management/next/world-first-repl-persistent-pty/drain_design.md`
+- Plan: `docs/project_management/_archived/world-first-repl-persistent-pty/plan.md`
+- Decision Register: `docs/project_management/_archived/world-first-repl-persistent-pty/decision_register.md`
+- Protocol (authoritative): `docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md`
+- State machine (authoritative): `docs/project_management/_archived/world-first-repl-persistent-pty/STATE_MACHINE.md`
+- Research (historical context): `docs/project_management/_archived/world-first-repl-persistent-pty/RESEARCH.md`
+- Driver design (implementation sketch): `docs/project_management/_archived/world-first-repl-persistent-pty/driver_loop_design.md`
+- Drain/ordering design: `docs/project_management/_archived/world-first-repl-persistent-pty/drain_design.md`
 - Context (previous REPL + world routing behavior):
   - `crates/shell/src/execution/invocation/runtime.rs`
   - `crates/shell/src/execution/routing/dispatch/exec.rs`
@@ -91,27 +91,27 @@ ADR_BODY_SHA256: 2428c1041dae3e1d64c313106fbfe6f1d2298a6c0ae7f00c784908a58c597e1
 ### CLI
 - Interactive REPL (`substrate` with no `--command`/`-c`):
   - Default: Substrate starts and maintains a persistent in-world world session (WebSocket) + Session PTY (PTY stream) when world execution is enabled and available.
-    - Terms: see `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md` (World session vs Session PTY).
+    - Terms: see `docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md` (World session vs Session PTY).
   - All unprefixed input submissions are executed inside the world session.
-  - Auto-PTY is preserved: interactive/TUI commands run in PTY passthrough mode automatically, using the existing “needs PTY” heuristic; `:pty` forces PTY passthrough for a line when heuristics are wrong (see `docs/project_management/next/world-first-repl-persistent-pty/STATE_MACHINE.md`).
+  - Auto-PTY is preserved: interactive/TUI commands run in PTY passthrough mode automatically, using the existing “needs PTY” heuristic; `:pty` forces PTY passthrough for a line when heuristics are wrong (see `docs/project_management/_archived/world-first-repl-persistent-pty/STATE_MACHINE.md`).
     - If a command is misclassified into line mode but reads from the controlling TTY (e.g., via `/dev/tty`), it may block; `Ctrl+C` is the supported escape, then rerun with `:pty <cmd>`.
     - Operator recovery contract (no fallback): if a line-mode command appears “hung” due to needing a TTY, abort with `Ctrl+C` and rerun with `:pty <cmd>`. Implementations MAY print a non-fatal hint after a short delay (guidance only; not a completion fallback).
-  - The prompt is line-editor driven (no interactive PS2 continuation prompts), but a single submission MAY contain embedded newlines (e.g., pastes/multiline input). Submissions are sent to world-agent via explicit `exec` messages (not as raw PTY stdin bytes), and completion is reported via `command_complete`. Job control/backgrounding remains out of scope (see `docs/project_management/next/world-first-repl-persistent-pty/STATE_MACHINE.md` and decision register DR-13).
+  - The prompt is line-editor driven (no interactive PS2 continuation prompts), but a single submission MAY contain embedded newlines (e.g., pastes/multiline input). Submissions are sent to world-agent via explicit `exec` messages (not as raw PTY stdin bytes), and completion is reported via `command_complete`. Job control/backgrounding remains out of scope (see `docs/project_management/_archived/world-first-repl-persistent-pty/STATE_MACHINE.md` and decision register DR-13).
     - Output note: PTY `stdout` bytes MAY still arrive while the REPL is idle (e.g., from background writers); Substrate forwards/renders them, but they are **unattributed** to a specific command by default.
-    - Output ordering note (MUST): for a given `exec`, `command_complete` MUST NOT be emitted until all foreground Session PTY output bytes for that command have been forwarded to the host. v1 uses a watermark-based post-exit drain barrier (Linux: `ioctl(FIONREAD)`); if the platform cannot support the watermark query, v1 persistent sessions MUST fail closed (see `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`).
-    - Concurrent output note (MUST): Session PTY `stdout` frames are raw PTY bytes only (stdout+stderr combined). Substrate-managed concurrent output (e.g., `:demo-agent`, future AgentHub events) MUST NOT be injected into PTY bytes; during PTY passthrough, such structured events SHOULD be buffered and rendered only after the foreground PTY command completes to avoid corrupting TUIs (see `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`).
+    - Output ordering note (MUST): for a given `exec`, `command_complete` MUST NOT be emitted until all foreground Session PTY output bytes for that command have been forwarded to the host. v1 uses a watermark-based post-exit drain barrier (Linux: `ioctl(FIONREAD)`); if the platform cannot support the watermark query, v1 persistent sessions MUST fail closed (see `docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md`).
+    - Concurrent output note (MUST): Session PTY `stdout` frames are raw PTY bytes only (stdout+stderr combined). Substrate-managed concurrent output (e.g., `:demo-agent`, future AgentHub events) MUST NOT be injected into PTY bytes; during PTY passthrough, such structured events SHOULD be buffered and rendered only after the foreground PTY command completes to avoid corrupting TUIs (see `docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md`).
     - Rendering note (MUST): PTY output is a byte stream and may be non-UTF8. While waiting for input (Reedline active), Substrate MUST use a byte-capable output path to render PTY bytes without corrupting the input buffer; it MUST NOT route PTY bytes through string-only printers.
   - Persistence guarantees (within a single world session):
-    - MUST persist: physical in-world working directory (`cd`/`pwd -P` / `getcwd()` semantics) and exported environment mutations (`export`/`unset`) across subsequent submissions (see `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md` cwd semantics).
+    - MUST persist: physical in-world working directory (`cd`/`pwd -P` / `getcwd()` semantics) and exported environment mutations (`export`/`unset`) across subsequent submissions (see `docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md` cwd semantics).
     - MAY persist / not guaranteed: shell-local variables (non-exported), functions, aliases, traps, `set -o` / `shopt` options, and other session-internal shell state.
     - Implementation note: v1 does not require a single long-lived bash interpreter process; persistence may be implemented by a trusted driver component that applies `cwd` + exported env to per-submission evaluator shells.
-  - Snapshot-driven restart note: Substrate MUST restart the world session when the effective policy snapshot hash (or workspace root) changes, before executing the next submission (see decision register DR-09 and `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md` “Policy Snapshot Drift”). It attempts best-effort cwd continuity, but other in-session state (exported env mutations, history, shell-local state) may be lost (see decision register DR-17).
-  - Hardened protocol invariant (DR-22): user-submitted programs MUST NOT be able to access session infrastructure or control-plane endpoints/handles (e.g., inherited `/v1/stream` WebSocket FDs or other session control endpoints). Close-on-exec alone is necessary but not sufficient; the evaluator execution context must not have access in the first place. See decision register DR-22 and `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`.
+  - Snapshot-driven restart note: Substrate MUST restart the world session when the effective policy snapshot hash (or workspace root) changes, before executing the next submission (see decision register DR-09 and `docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md` “Policy Snapshot Drift”). It attempts best-effort cwd continuity, but other in-session state (exported env mutations, history, shell-local state) may be lost (see decision register DR-17).
+  - Hardened protocol invariant (DR-22): user-submitted programs MUST NOT be able to access session infrastructure or control-plane endpoints/handles (e.g., inherited `/v1/stream` WebSocket FDs or other session control endpoints). Close-on-exec alone is necessary but not sufficient; the evaluator execution context must not have access in the first place. See decision register DR-22 and `docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md`.
   - `exit` / `quit`: exits the REPL; Substrate shuts down the world session as part of cleanup.
     - `exit` may include an optional numeric argument (e.g., `exit 2`), but this is treated as an operator request to end the REPL (it is not sent into the world session as a command). The REPL process exit code remains `0` on normal user exit (see `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`).
   - Protocol and state machine are authoritative:
-    - `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`
-    - `docs/project_management/next/world-first-repl-persistent-pty/STATE_MACHINE.md`
+    - `docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md`
+    - `docs/project_management/_archived/world-first-repl-persistent-pty/STATE_MACHINE.md`
 
 - Non-interactive single-command mode (`substrate -c <CMD>` / `substrate --command <CMD>`):
   - When world is enabled and available, `<CMD>` MUST execute inside the world (non-PTY by default) and must observe the in-world filesystem view.
@@ -173,7 +173,7 @@ ADR_BODY_SHA256: 2428c1041dae3e1d64c313106fbfe6f1d2298a6c0ae7f00c784908a58c597e1
 
 - World backend requirements (Linux/macOS):
   - The world backend must support a long-lived interactive session (PTY stream) with:
-    - a per-session identifier (`ready.session_nonce`, `hex32`) that is freshly generated per `start_session` and changes on restart (observability/correlation only; not a capability/credential; see `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md` `ready` semantics),
+    - a per-session identifier (`ready.session_nonce`, `hex32`) that is freshly generated per `start_session` and changes on restart (observability/correlation only; not a capability/credential; see `docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md` `ready` semantics),
     - reliable stream framing,
     - and explicit per-command completion messages (e.g., `command_complete`) so the host can obtain an exit code + cwd per submission without parsing stdout markers.
 
@@ -185,7 +185,7 @@ ADR_BODY_SHA256: 2428c1041dae3e1d64c313106fbfe6f1d2298a6c0ae7f00c784908a58c597e1
 - This ADR depends on the existing world-agent streaming (`/v1/stream`) and REPL routing layers but introduces a new “persistent session” requirement.
 - No explicit triad dependencies are declared in this Draft; once scheduled, this work must be integrated into:
   - `docs/project_management/next/sequencing.json`
-  - `docs/project_management/next/world-first-repl-persistent-pty/tasks.json`
+  - `docs/project_management/_archived/world-first-repl-persistent-pty/tasks.json`
 
 ## Security / Safety Posture
 - Default behavior is world-first to avoid accidental host execution while the UI appears “world-like”.
@@ -225,5 +225,5 @@ ADR_BODY_SHA256: 2428c1041dae3e1d64c313106fbfe6f1d2298a6c0ae7f00c784908a58c597e1
 - Any operator need for host execution must use the explicitly gated `:host` escape hatch described in this ADR.
 
 ## Decision Summary
-- Decision register: `docs/project_management/next/world-first-repl-persistent-pty/decision_register.md`
+- Decision register: `docs/project_management/_archived/world-first-repl-persistent-pty/decision_register.md`
 - This ADR’s decisions are captured there and referenced during implementation reviews to prevent drift.
