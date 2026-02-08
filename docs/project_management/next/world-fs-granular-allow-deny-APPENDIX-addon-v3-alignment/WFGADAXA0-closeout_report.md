@@ -33,11 +33,14 @@ Slice spec:
 
 ## Cross-Platform Smoke (if applicable)
 
-Record run ids/URLs for required platforms:
+Record run ids/URLs for required behavior-platform smoke:
+- Linux:
+
+Record CI parity evidence (compile parity / CI Testing) when dispatched at checkpoint(s):
 - Linux:
 - macOS:
-- Windows:
-- WSL:
+- Windows: `N/A` (not in CI parity platforms scope)
+- WSL: `N/A` (WSL not required)
 
 If smoke/CI was intentionally skipped:
 - Reason (e.g., `ci-audit: DIFF_CLASS=docs_only`):

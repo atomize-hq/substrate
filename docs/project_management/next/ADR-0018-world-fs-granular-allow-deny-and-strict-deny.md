@@ -27,6 +27,12 @@
   - Spec manifest: `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/spec_manifest.md`
   - Schema (authoritative): `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/SCHEMA.md`
   - Contract: `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/contract.md`
+- Appendix add-on Planning Pack (post-Appendix contract drift closures):
+  - Plan: `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/plan.md`
+  - Spec manifest: `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/spec_manifest.md`
+  - Impact map: `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/impact_map.md`
+  - Tasks: `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/tasks.json`
+  - Manual playbook: `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/manual_testing_playbook.md`
 - Related ADRs / grounding:
   - Policy snapshot direction and threat model: `docs/project_management/next/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
   - Full isolation mount/exec chokepoint: `crates/world/src/exec.rs`
@@ -36,7 +42,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 59d67a4085e1e02ed66eebb8210884bf47b49558ba104a6541a6ffa5e2be0bbe
+ADR_BODY_SHA256: 38c03ab2bdf855c3536dbffa23a87edeea6e2b15825571442c9632f07c1889eb
 ### Changes (operator-facing)
 - Add granular `allow_list` + `deny_list` for world filesystem reads/writes (and optional directory visibility)
   - Existing: `world_fs.read_allowlist` / `world_fs.write_allowlist` are allowlist-only; invalid patterns (e.g., `..`) can be accepted but ignored; there is no deny list; “allow all except secrets” cannot be expressed.

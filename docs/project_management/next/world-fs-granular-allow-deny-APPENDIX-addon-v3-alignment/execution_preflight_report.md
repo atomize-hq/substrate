@@ -29,10 +29,10 @@ RECOMMENDATION: **ACCEPT** | **REVISE**
 ## 1) Cross-Platform Coverage (explicit and correct)
 
 From `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/tasks.json` meta:
-- Declared behavior platforms (smoke required): `[...]`
-- Declared CI parity platforms (parity required): `[...]` (legacy alias: `platforms_required`)
-- WSL required: `true|false`
-- WSL task mode: `bundled|separate` (when WSL required)
+- Declared behavior platforms (smoke required): `["linux"]`
+- Declared CI parity platforms (parity required): `["linux","macos"]` (legacy alias: `platforms_required`)
+- WSL required: `false`
+- WSL task mode: `N/A` (WSL not required)
 
 Notes:
 - If WSL coverage is required, confirm `meta.wsl_required=true` and `meta.wsl_task_mode` is set correctly.
@@ -80,8 +80,8 @@ Run ids/URLs (if executed during preflight):
 - CI compile parity:
 - Linux smoke:
 - macOS smoke:
-- Windows smoke:
-- WSL smoke:
+- Windows smoke: `N/A` (Windows not in behavior platforms scope)
+- WSL smoke: `N/A` (WSL not required)
 
 ## 4) Required Fixes Before Starting The First Slice (if any)
 
