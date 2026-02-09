@@ -163,3 +163,19 @@
   - `NONE`
 - Next steps:
   - Start `WFGADAXA0` via the standard triad wrapper prompt/workflow.
+
+## START — 2026-02-09T23:31:07Z — ops — F0-exec-preflight (rerun on corrected orchestration branch)
+- Context: Orchestration branch for this feature is `feat/world-fs-granular-allow-deny-appendix-addon-v3-alignment` (created from `testing`).
+- Commands run:
+  - `make triad-orch-ensure FEATURE_DIR="docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment"` → exit `0`
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment"` → exit `0`
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment"` → exit `0`
+  - `bash -n docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/smoke/_core.sh` → exit `0`
+  - `bash -n docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/smoke/linux-smoke.sh` → exit `0`
+  - `bash -n docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/smoke/macos-smoke.sh` → exit `0`
+
+## END — 2026-02-09T23:31:07Z — ops — F0-exec-preflight (rerun on corrected orchestration branch)
+- Outcome: `ACCEPT` (triads may begin).
+- Reviewed commit: `854ca28b5fa7d60c816fd1c84e6ffb88556b49f8`
+- Blockers:
+  - `NONE`
