@@ -28,6 +28,23 @@ Authoritative inputs:
 - The world-agent spawns the gateway/engine process inside the session world with those env vars set in the process environment.
 - Secrets are in-memory only from Substrate’s perspective: Substrate does not write them to disk.
 
+## Env var naming (contract)
+- Client wiring env vars (non-secret; may be printed by `substrate world status gateway`):
+  - `SUBSTRATE_LLM_OPENAI_BASE_URL`
+  - `SUBSTRATE_LLM_ANTHROPIC_BASE_URL`
+- Injected backend auth env vars (secret-bearing; MUST never be printed; MUST always be redacted/capped):
+  - `SUBSTRATE_LLM_BACKEND_AUTH_<KIND>_<NAME>_<FIELD>`
+  - v1 (`cli:codex`):
+    - `SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID`
+    - `SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN`
+  - `api:*` backends:
+    - each `api:*` agent inventory item declares required host env var *names* in `config.api.auth.env`.
+    - the gateway sync/restart path collects those host env var values and injects them into the in-world gateway/engine spawn environment (values never printed/persisted).
+    - injection is permitted only when effective policy allowlists the env var names via `llm.secrets.env_allowed` (deny-by-default).
+    - in-world injection uses Substrate-owned injected env var names of the form:
+      - `SUBSTRATE_LLM_BACKEND_AUTH_API_<NAME>_<FIELD>`
+      - Example: `api:openai` reading host `OPENAI_API_KEY` injects `SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY`.
+
 ## Rotation / updates
 - If a secret value changes, operators restart the gateway session (or re-run `substrate world sync gateway` if it is defined as idempotent with “replace env” semantics).
 - The exact idempotency/replace semantics are implementation-defined but MUST remain fail-closed and must not leak secrets in logs.

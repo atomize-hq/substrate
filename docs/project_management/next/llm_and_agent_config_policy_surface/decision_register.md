@@ -252,6 +252,39 @@ Scope:
 - **Selected:** Option A — Allow `agents.host_credentials.read.allowed_backends` in `policy_overlay` (subset-only)
 - **Rationale (crisp):** Host credential reads are security-sensitive and per-backend tightening is exactly what `policy_overlay` is for; subset-only semantics keep it restriction-only.
 
+---
+
+### DR-0010 — Per-agent `policy_overlay` eligibility for secret env injection allowlist
+
+**Decision owner(s):** Broker + Gateway + Security  
+**Date:** 2026-02-09  
+**Status:** Accepted  
+**Related docs:** ADR-0027, `docs/project_management/next/llm_and_agent_config_policy_surface/SCHEMA.md`, `docs/project_management/next/llm_gateway_in_world/decision_register.md` (DR-0014)
+
+**Problem / Context**
+- We introduced `llm.secrets.env_allowed` as a policy allowlist of secret env var *names* that Substrate may read on the host and inject into in-world gateway/engine processes.
+- Agent files may include a `policy_overlay`, but it must be restriction-only. We need to decide whether this key is eligible for per-agent tightening.
+
+**Option A — Allow `llm.secrets.env_allowed` in `policy_overlay` (subset-only)**
+- **Pros:** Allows per-backend least privilege: an individual agent/backend can narrow which secret env var names are injectable for that backend even if the workspace/global policy is broader; matches the established “overlays only tighten” posture.
+- **Cons:** Requires subset-only validation for list keys (overlay list must be a subset of the effective policy list).
+- **Cascading implications:** Add `llm.secrets.env_allowed` to the overlay allowlist and implement subset checks that fail closed on attempted broadening.
+- **Risks:** A bug in subset validation could become a broadening path; must be tested; must fail closed.
+- **Unlocks:** Safe multi-backend environments where only some backends may receive certain secrets.
+- **Quick wins / low-hanging fruit:** `api:openai` can tighten to only `OPENAI_API_KEY`, while other backends receive none by default.
+
+**Option B — Disallow this key in `policy_overlay` (policy.yaml only)**
+- **Pros:** Simpler; fewer overlay interactions; avoids subset validation for this key.
+- **Cons:** Coarser control; cannot tighten per-backend without editing workspace/global policy.
+- **Cascading implications:** Document that secret env injection allowlists are global/workspace only.
+- **Risks:** Over-permission at the workspace/global layer becomes harder to contain.
+- **Unlocks:** Less schema/validation work now.
+- **Quick wins / low-hanging fruit:** None beyond keeping scope smaller.
+
+**Recommendation**
+- **Selected:** Option A — Allow `llm.secrets.env_allowed` in `policy_overlay` (subset-only)
+- **Rationale (crisp):** This gate is security-sensitive; per-backend tightening is exactly what overlays are for, and subset-only semantics preserve restriction-only guarantees.
+
 **Follow-up tasks (explicit)**
 - Update ADR-0027, `SCHEMA.md`, and `contract.md` to remove `policy.llm.enabled` / `policy.agents.enabled` and to document deny-by-default allowlists.
 - Update Phase 4/5 ADR drafts to stop referencing policy enable booleans.

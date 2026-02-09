@@ -248,3 +248,325 @@ Scope:
 **Recommendation**
 - **Selected:** Option A — Substrate-owned wiring keys only
 - **Rationale (crisp):** Keep the wiring contract tight and under Substrate control, avoid env-collision footguns, and let wrappers (starting with `cli:codex`) consume a stable JSON contract.
+
+---
+
+### DR-0009 — Standard env var names for client wiring + injected backend auth
+
+**Decision owner(s):** Shell + Gateway + Engine maintainers; Security  
+**Date:** 2026-02-09  
+**Status:** Accepted  
+**Related docs:** ADR-0023, ADR-0024, ADR-0027, DR-0007, DR-0008, `docs/project_management/next/llm_gateway_in_world/specs/env_injection.md`
+
+**Problem / Context**
+- We need stable env var names for:
+  1) client wiring (base URLs) so OpenAI/Anthropic-compatible clients can route to the Substrate gateway, and
+  2) injected backend auth fields used by in-world gateway/engine processes (never printed, never persisted).
+- We must avoid:
+  - leaking secrets in output/logs/spans,
+  - coupling the contract to provider/CLI-specific env var naming conventions,
+  - and “dual meaning” where a base URL points sometimes to Substrate and sometimes to providers.
+
+**Option A — Substrate-owned env var names + Substrate-owned injected auth naming scheme (recommended)**
+- **Pros:**
+  - Stable contract we control; consistent redaction rules; backend-generic for future `cli:*` and `api:*` adapters.
+  - Base URL semantics remain unambiguous: these always point to Substrate’s gateway front door (never to upstream providers).
+  - Keeps provider endpoints and secret material out of “operator visible” wiring output.
+- **Cons:**
+  - Some wrappers/clients need a mapping layer (read Substrate vars and set their internal config).
+  - Slightly longer env var names, but the secret-bearing ones are internal-only.
+- **Cascading implications:**
+  - Client wiring env vars printed by `substrate world status gateway` (human + `--json`):
+    - `SUBSTRATE_LLM_OPENAI_BASE_URL` (value: Substrate gateway OpenAI-dialect base URL)
+    - `SUBSTRATE_LLM_ANTHROPIC_BASE_URL` (value: Substrate gateway Anthropic-dialect base URL)
+  - Injected backend auth env var naming scheme (values never printed):
+    - `SUBSTRATE_LLM_BACKEND_AUTH_<KIND>_<NAME>_<FIELD>` (UPPER_SNAKE_CASE)
+    - v1 (`cli:codex`) injected fields:
+      - `SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID`
+      - `SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN`
+  - Any env var with prefix `SUBSTRATE_LLM_BACKEND_AUTH_` MUST be treated as secret-bearing and MUST be redacted/capped everywhere (trace spans/events, structured errors, stdout/stderr).
+- **Risks:**
+  - If mapping glue is sloppy, clients may still leak provider endpoints or secrets in their own logs; mitigate with wrapper hardening + explicit “do not print” guidance.
+- **Unlocks:**
+  - Future backends can add injected fields without reshaping the operator-facing “client wiring” contract.
+  - Uniform secret-handling posture across both CLI and API backends.
+- **Quick wins / low-hanging fruit:**
+  - Implement v1 using codex-wrapper: consume `SUBSTRATE_LLM_*_BASE_URL` for routing; use injected `SUBSTRATE_LLM_BACKEND_AUTH_*` only inside in-world engine processes.
+
+**Option B — Use provider/CLI-native env vars as the primary contract**
+- **Pros:**
+  - Potentially “drop-in” for some tools that already honor provider env vars.
+- **Cons:**
+  - Freezes ambiguous third-party naming (`OPENAI_BASE_URL` vs `OPENAI_API_BASE`, etc.).
+  - Higher collision risk with user environments; harder to maintain; mixes wiring with secrets more easily.
+- **Cascading implications:**
+  - Substrate must commit to a compatibility matrix of third-party env var names and semantics.
+  - Increased risk that “wiring output” accidentally includes secret-bearing vars.
+- **Risks:**
+  - Footguns (overriding user provider config); long-term support burden; higher probability of secret leakage.
+- **Unlocks:**
+  - Faster onboarding for a narrow slice of tooling (at the cost of contract bloat).
+- **Quick wins / low-hanging fruit:**
+  - Minimal up-front mapping logic, but costs accrue quickly as more tools are supported.
+
+**Recommendation**
+- **Selected:** Option A — Substrate-owned env var names + Substrate-owned injected auth naming scheme
+- **Rationale (crisp):** Keeps wiring semantics unambiguous (always Substrate), keeps secrets out of operator-visible output, and provides a backend-generic scheme we can extend for future `cli:*` and `api:*` adapters with uniform redaction rules.
+
+---
+
+### DR-0010 — Visibility of client wiring in `substrate world status gateway`
+
+**Decision owner(s):** Shell + Gateway maintainers  
+**Date:** 2026-02-09  
+**Status:** Accepted  
+**Related docs:** ADR-0023, DR-0008, DR-0009
+
+**Problem / Context**
+- Substrate is the front door; client wiring base URLs always point to Substrate, not upstream providers.
+- Printing wiring exports by default is noisy and can mislead operators into thinking manual wiring is a required step for normal usage.
+- We still need a stable machine-readable contract for wrappers/tests and an operator/debug surface.
+
+**Option A — Show client wiring by default (human + `--json`)**
+- **Pros:** Always visible; copy/paste friendly; fewer “where is it bound?” questions.
+- **Cons:** Noisy for normal use; encourages treating wiring as a “required step”; expands the default output contract.
+- **Cascading implications:** `substrate world status gateway` becomes partly a wiring command rather than purely status/health.
+- **Risks:** Confusion about whether users must manually wire clients; increased contract stability burden.
+- **Unlocks:** Immediate manual interoperability with arbitrary clients.
+- **Quick wins / low-hanging fruit:** None; this is essentially “keep current default”.
+
+**Option B — Hide wiring by default; show only under `--debug`, and always include in `--json` (recommended)**
+- **Pros:** Default output stays “status + health + routing summary”; wiring remains available for debugging and automation.
+- **Cons:** Slightly more discovery friction (operators must know `--debug` exists).
+- **Cascading implications:** Define:
+  - default human output: status/health + configured/allowed/selected backends + last error (no wiring exports),
+  - `--debug`: includes wiring exports + bind details,
+  - `--json`: always includes non-secret `client_wiring.*` fields.
+- **Risks:** Wrappers that depend on human output must switch to `--json`.
+- **Unlocks:** Cleaner UX aligned with “Substrate is always the front door,” while preserving an automation/debug contract.
+- **Quick wins / low-hanging fruit:** Minimal doc + output change; wrappers consume `--json` and ignore human formatting.
+
+**Recommendation**
+- **Selected:** Option B — Hide wiring by default; show only under `--debug`, and always include in `--json`
+- **Rationale (crisp):** Keeps the default command meaning “status/health” while retaining a stable, non-secret wiring contract for tooling and debugging.
+
+---
+
+### DR-0011 — Upstream provider endpoint configuration for `api:*` backends: inventory value vs env reference
+
+**Decision owner(s):** Gateway + Engine + Security  
+**Date:** 2026-02-09  
+**Status:** Accepted  
+**Related docs:** ADR-0027 (agent inventory + “no secrets in YAML”), DR-0006, DR-0007
+
+**Problem / Context**
+- `api:*` backends require an upstream provider endpoint/base URL (non-secret) plus auth material (secret, handled separately).
+- We need a strict, deterministic way to configure the upstream base URL without turning it into a secret-storage channel or introducing yet another env indirection knob.
+
+**Option A — Store upstream base URLs directly in agent inventory YAML (recommended)**
+- **Pros:** Simple and explicit; stable and inspectable; avoids additional env indirection; keeps routing/allowlisting identity (`api:<name>`) co-located with its endpoint; works well with sparse YAML layering via inventory precedence.
+- **Cons:** Requires schema and validation work (URL parsing, normalization); operators must edit agent inventory files to change endpoints.
+- **Cascading implications:**
+  - Extend agent file schema (ADR-0027) for `config.kind=api` to include `config.api.base_url: string` (non-secret).
+  - Add safety validation:
+    - reject credential-bearing URLs (userinfo `user:pass@`),
+    - reject query parameters that look like secrets,
+    - and normalize/truncate for logging (never log full URL if it contains suspicious components).
+  - Enforce that actual egress is still governed by `net_allowed` at the world boundary.
+- **Risks:** Misconfigured endpoint could point to unexpected upstreams; mitigated by `net_allowed` and by requiring explicit policy allowlisting (`llm.allowed_backends`).
+- **Unlocks:** Clean BYOK-style `api:*` story without inventing a new config map family; easier later to add per-backend endpoint overrides in workspace inventory.
+- **Quick wins / low-hanging fruit:** Start with `api:openai` as the first concrete example and keep the schema minimal (`base_url` only).
+
+**Option B — Reference env var names for upstream base URLs**
+- **Pros:** Easy runtime overrides; avoids editing inventory files; aligns with “env injection” mental model.
+- **Cons:** Adds indirection and footguns; increases reliance on process environments; makes behavior less inspectable and harder to `--explain`.
+- **Cascading implications:**
+  - Add `config.api.base_url_env: string` to inventory schema and define precedence between value vs env.
+  - Must ensure base URL env vars are treated as non-secret but still validated to avoid credential-bearing URLs.
+- **Risks:** Inconsistent behavior across shells/CI; harder debugging (“which env was set?”).
+- **Unlocks:** Fast local experimentation with alternate endpoints.
+- **Quick wins / low-hanging fruit:** Quick to ship but increases long-term drift risk.
+
+**Recommendation**
+- **Selected:** Option A — Store upstream base URLs directly in agent inventory YAML
+- **Rationale (crisp):** Base URLs are non-secret; keeping them explicit in strict inventory YAML avoids needless env indirection while preserving a clean, auditable backend contract gated by policy allowlists and `net_allowed`.
+
+---
+
+### DR-0012 — Client wiring base URL reachability: in-world-only vs host-reachable bridge
+
+**Decision owner(s):** Shell + World-agent + Gateway maintainers  
+**Date:** 2026-02-09  
+**Status:** Accepted  
+**Related docs:** ADR-0023, DR-0001, DR-0010
+
+**Problem / Context**
+- We expose OpenAI/Anthropic-compatible HTTP surfaces in the in-world gateway.
+- We selected DR-0001 Option A (world-agent proxy transport) to avoid a persistent host listener that could be mistaken for a host-level egress gateway.
+- We must decide whether the “base URLs” we expose via `substrate world status gateway --json` are intended to be reachable from the host, or only from inside the world boundary.
+
+**Option A — In-world-only base URLs (recommended)**
+- **Pros:** Fully consistent with “in-world gateway” posture and DR-0001 Option A; no host listener needed; simplest threat model.
+- **Cons:** Host tools cannot directly point at the gateway; they must run in-world or go through Substrate orchestration paths that execute the client/backend in-world.
+- **Cascading implications:** Client wiring output MUST clearly label these base URLs as “reachable from inside the world boundary” so operators do not attempt to use them directly from the host.
+- **Risks:** Confusion if someone tries to use the URL from the host; mitigated by labeling and docs (`--debug` output should say “in-world only”).
+- **Unlocks:** Cleanest enforcement story; avoids “localhost tunnel” confusion entirely.
+- **Quick wins / low-hanging fruit:** No additional host proxy/forwarder required.
+
+**Option B — Host-reachable base URLs via an explicit transport bridge**
+- **Pros:** Easier manual debugging and compatibility with arbitrary host tools.
+- **Cons:** Reintroduces a host listener/bridge surface (even if transport-only) that can be misunderstood as host egress; more moving parts.
+- **Cascading implications:** Define the bridge lifecycle + binding + port selection + security story; ensure it cannot become a policy bypass.
+- **Risks:** Footguns + broader attack surface; higher documentation/support burden.
+- **Unlocks:** “Point any host client at Substrate” workflows.
+- **Quick wins / low-hanging fruit:** Faster ad-hoc interoperability for some tools.
+
+**Recommendation**
+- **Selected:** Option A — In-world-only base URLs
+- **Rationale (crisp):** Matches the chosen transport posture and the “Substrate as front door + in-world egress” story without adding a host bridge that can be misinterpreted.
+
+---
+
+### DR-0013 — `api:*` auth env var references: explicit per-backend list vs backend-contract inference
+
+**Decision owner(s):** Gateway + Engine + Security  
+**Date:** 2026-02-09  
+**Status:** Accepted  
+**Related docs:** ADR-0027 (strict agent inventory schema), DR-0007, `docs/project_management/next/llm_gateway_in_world/specs/env_injection.md`
+
+**Problem / Context**
+- `api:*` backends require auth material but Substrate YAML must not store secret values.
+- The world sync/gateway spawn path still needs to know which env vars must be present so it can fail closed and inject them into the in-world gateway/engine process environment.
+
+**Option A — Explicit list of required env var names in agent inventory (recommended)**
+- **Pros:** Backend-generic for any provider; explicit and auditable; works with strict schema; supports multiple vars; no provider-specific code paths needed to know what to request.
+- **Cons:** Slightly more config per `api:*` backend; env var names must be typed correctly.
+- **Cascading implications:**
+  - Extend the `config.kind=api` agent schema to include `config.api.auth.env: [string]` (env var names only).
+  - `substrate world sync gateway` MUST fail closed with actionable errors that list missing env var *names* (never values).
+  - Any env var values injected MUST be treated as secret-bearing and must be redacted/capped everywhere.
+- **Risks:** Mis-typed env var name leads to startup failure; mitigated by clear errors and optional doctor output.
+- **Unlocks:** Multi-provider `api:*` without code changes; clean BYOK path.
+- **Quick wins / low-hanging fruit:** Start with `api:openai` and `config.api.auth.env: [\"OPENAI_API_KEY\"]`.
+
+**Option B — Backend-contract inference (no per-backend env list)**
+- **Pros:** Less config in agent inventory files.
+- **Cons:** Requires provider-specific inference code and a maintained mapping; harder to support custom providers or nonstandard auth; less explainable.
+- **Cascading implications:** Gateway/engine must hardcode required env var names per provider/backend id.
+- **Risks:** Drift as providers change; higher long-term maintenance.
+- **Unlocks:** Minimal initial YAML for a single provider.
+- **Quick wins / low-hanging fruit:** Fastest for OpenAI-only prototypes, but expensive later.
+
+**Recommendation**
+- **Selected:** Option A — Explicit list of required env var names in agent inventory
+- **Rationale (crisp):** Keeps the system backend-generic and auditable while preserving strict schema and fail-closed behavior.
+
+---
+
+### DR-0014 — Policy gate for injected secret env var names: explicit allowlist vs backend-contract-only
+
+**Decision owner(s):** Broker + Gateway + Security  
+**Date:** 2026-02-09  
+**Status:** Accepted  
+**Related docs:** ADR-0027 (policy surface ownership), DR-0007, DR-0013, `docs/project_management/next/llm_gateway_in_world/specs/env_injection.md`
+
+**Problem / Context**
+- Inventory can declare required secret env var *names* (e.g., `config.api.auth.env`) and the world sync path injects their values into an in-world process environment.
+- Even though secret values are never stored in YAML, the ability to read arbitrary host env vars and inject them into in-world processes is powerful and must be policy-governed.
+
+**Option A — Add explicit policy allowlist for injectable env var names (recommended)**
+- **Pros:** Auditable and explicit; prevents inventory from “asking for” arbitrary host env vars; supports least-privilege security posture and clearer `--explain` provenance.
+- **Cons:** Adds a policy knob and setup friction (policy must include required names).
+- **Cascading implications:**
+  - Add strict policy key: `llm.secrets.env_allowed: [string]` (deny-by-default).
+  - The sync/restart path MUST fail closed if any requested injection name is not in `llm.secrets.env_allowed`.
+  - Applies to all secret env injection into in-world gateway/engine spawn env (both `api:*` and any `cli:*` injected auth fields).
+- **Risks:** Misconfiguration blocks backends until policy is updated; mitigated by actionable errors and `--explain` output.
+- **Unlocks:** Safe expansion to additional providers/backends; prevents accidental overreach into unrelated host secrets.
+- **Quick wins / low-hanging fruit:** Start with a minimal list (e.g., `OPENAI_API_KEY`) and expand explicitly as new backends land.
+
+**Option B — No extra policy key; treat requested names as part of backend contract**
+- **Pros:** Fewer knobs; faster onboarding; less policy churn.
+- **Cons:** Inventory could request unrelated host env vars; harder to audit/deny without disabling the backend entirely.
+- **Cascading implications:** Security posture relies on code review + strict schema only; `--explain` can’t point to a dedicated injection allowlist gate.
+- **Risks:** Capability creep and hidden exfil vectors via env injection.
+- **Unlocks:** Minimal config for early prototypes.
+- **Quick wins / low-hanging fruit:** None; strict redaction/caps still required.
+
+**Recommendation**
+- **Selected:** Option A — Add explicit policy allowlist for injectable env var names
+- **Rationale (crisp):** The power to read host secrets and inject them into in-world processes should never be implicitly granted by inventory; an explicit allowlist keeps injection least-privilege and explainable.
+
+---
+
+### DR-0015 — Scope of `llm.secrets.env_allowed`: host env reads only vs all injected secret env names
+
+**Decision owner(s):** Broker + Gateway + Security  
+**Date:** 2026-02-09  
+**Status:** Accepted  
+**Related docs:** DR-0014, DR-0013, ADR-0027, `docs/project_management/next/llm_cli_backend_engine/decision_register.md` (host credential read gates)
+
+**Problem / Context**
+- We introduced `llm.secrets.env_allowed` to prevent arbitrary host env var reads/injection.
+- We also inject secret-bearing auth material for `cli:codex`, but that material is sourced from host credential files (gated by `agents.host_credentials.read.allowed_backends`) rather than host env.
+- We need to define whether `llm.secrets.env_allowed` is:
+  - narrowly scoped to host env reads, or
+  - a universal gate for all secret env vars injected into in-world processes.
+
+**Option A — Gate host env reads only (recommended)**
+- **Pros:** Clear separation of concerns; keeps `llm.secrets.env_allowed` aligned to “which host env vars can we read”; avoids requiring policy to list internal injected var names; simpler operator UX.
+- **Cons:** Secret-bearing injected vars derived from host credential files (e.g., `cli:codex`) are not additionally gated by `llm.secrets.env_allowed` (they remain governed by the host-credential-read gate + strict redaction).
+- **Cascading implications:** Define:
+  - `llm.secrets.env_allowed` gates only reads from host process environment for injection (primarily `api:*` via `config.api.auth.env`).
+  - Secret injection derived from host credential reads remains gated by `agents.host_credentials.read.allowed_backends` and related CLI-engine decisions.
+- **Risks:** Two gates to understand (host env reads vs host credential file reads); mitigated by `--explain` clarity and docs.
+- **Unlocks:** Keeps policy minimal while still preventing “inventory asks for arbitrary host env vars”.
+- **Quick wins / low-hanging fruit:** Easy enable recipe: add `OPENAI_API_KEY` to `llm.secrets.env_allowed` when enabling `api:openai`.
+
+**Option B — Gate all secret env injection names (strictest)**
+- **Pros:** Single universal gate for all secret env var names injected into in-world processes.
+- **Cons:** Forces policy to enumerate internal injected var names (e.g., `SUBSTRATE_LLM_BACKEND_AUTH_*`), increasing surface area and operator friction; mixes “source=host env” and “source=host credential file” concerns.
+- **Cascading implications:** `llm.secrets.env_allowed` must include every secret env var name injected for any backend; missing names fail closed even when secrets are sourced from files.
+- **Risks:** Higher breakage risk when internal injected var names evolve; more policy churn.
+- **Unlocks:** A single conceptual gate at the cost of more complexity.
+- **Quick wins / low-hanging fruit:** None; increases setup steps.
+
+**Recommendation**
+- **Selected:** Option A — Gate host env reads only
+- **Rationale (crisp):** Keeps `llm.secrets.env_allowed` focused on controlling which host env vars may be read, while `cli:*` secret material sourced from host credential files is controlled by a separate, explicit gate; avoids forcing operators to enumerate internal injected var names.
+
+---
+
+### DR-0016 — `api:*` secret injection name in-world: preserve upstream name vs map to Substrate-owned name
+
+**Decision owner(s):** Gateway + Engine + Security  
+**Date:** 2026-02-09  
+**Status:** Accepted  
+**Related docs:** DR-0009, DR-0013, DR-0014, `docs/project_management/next/llm_gateway_in_world/specs/env_injection.md`
+
+**Problem / Context**
+- For `api:*` backends we read host env vars named in `config.api.auth.env` (names-only) and inject values into the in-world gateway/engine spawn environment.
+- We must decide whether the in-world process receives the secret under the upstream/provider env var name (e.g., `OPENAI_API_KEY`) or a Substrate-owned injected name.
+
+**Option A — Inject using the upstream/provider env var name**
+- **Pros:** Simplest; compatible with existing provider SDK expectations; fewer mapping rules.
+- **Cons:** Normalizes provider-native secret env vars inside the world; less uniform with existing `SUBSTRATE_LLM_BACKEND_AUTH_*` conventions.
+- **Cascading implications:** The in-world API engine reads provider-native env var names directly.
+- **Risks:** More “ambient secret naming” inside world; harder to keep secret naming consistent across providers.
+- **Unlocks:** Quick integration with off-the-shelf SDKs.
+- **Quick wins / low-hanging fruit:** Fastest to implement for `api:openai`.
+
+**Option B — Map host env reads to Substrate-owned injected env var names (recommended)**
+- **Pros:** Uniform secret naming scheme; reduces reliance on provider conventions; keeps provider-native secret env vars out of the in-world environment; aligns with `SUBSTRATE_LLM_BACKEND_AUTH_<KIND>_<NAME>_<FIELD>`.
+- **Cons:** Requires a mapping rule and the API engine must read Substrate-owned names (not provider-native).
+- **Cascading implications:**
+  - Host reads the names in `config.api.auth.env` (still gated by `llm.secrets.env_allowed`).
+  - In-world injection uses `SUBSTRATE_LLM_BACKEND_AUTH_API_<NAME>_<FIELD>` (e.g., `SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY`).
+  - The in-world API engine reads Substrate-owned injected names only.
+- **Risks:** Slightly more adapter logic; must ensure strict redaction/caps and never print values.
+- **Unlocks:** Cleaner multi-provider future without env var naming collisions; consistent redaction rules (“anything `SUBSTRATE_LLM_BACKEND_AUTH_*` is secret”).
+- **Quick wins / low-hanging fruit:** Reuse the same redaction/caps handling already planned for `SUBSTRATE_LLM_BACKEND_AUTH_*`.
+
+**Recommendation**
+- **Selected:** Option B — Map to Substrate-owned injected env var names
+- **Rationale (crisp):** Keeps secret naming uniform and Substrate-controlled, avoids ambient provider-native secret env vars in-world, and aligns with our existing injected-auth naming scheme.

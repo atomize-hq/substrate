@@ -12,6 +12,9 @@ Authoritative ADR: `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gat
   - `llm.allowed_backends` contains the selected backend id (policy)
   - `llm.fail_closed.routing` honored (policy)
   - `net_allowed` enforced at the world boundary for actual outbound egress
+- Client wiring note:
+  - Base URLs exposed via `substrate world status gateway --json` are intended for in-world reachability (clients/backends executing inside the world boundary).
+  - Host tooling should not assume a host-reachable gateway listener exists in v1.
 
 ## OpenAI-compatible (subset)
 Supported:
@@ -33,4 +36,3 @@ Supported:
 ## Health
 Supported:
 - `GET /healthz` (or equivalent) for readiness checks (no policy evaluation beyond basic “running”).
-

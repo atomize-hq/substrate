@@ -39,7 +39,10 @@ Authoritative inputs:
   - `net_allowed` (egress allowlist; still authoritative)
 
 ## Client wiring
-- `substrate world status gateway` is the authoritative client wiring surface and prints the required exports (base URLs) to route OpenAI/Anthropic-compatible clients through Substrate.
+- `substrate world status gateway` is the authoritative client wiring surface.
+  - Default output: status/health (no wiring exports).
+  - `--debug`: prints the required exports (base URLs) to route OpenAI/Anthropic-compatible clients through Substrate.
+  - `--json`: always includes non-secret `client_wiring.*` fields.
 - This contract intentionally does not freeze the underlying transport mechanics (ports vs proxying), only the client-facing env outputs and behavior guarantees.
 
 ## HTTP surfaces (subset; capability-gated)

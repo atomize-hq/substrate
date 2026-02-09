@@ -66,12 +66,19 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
     - v1 requirement: the “ensure gateway running” path MUST pass any required secret env vars to the in-world gateway/engine spawn request over the existing world-agent transport (see `docs/project_management/next/llm_gateway_in_world/specs/env_injection.md`).
   - `substrate world status gateway`:
     - Behavior: prints per-world-session gateway state (running/not), bind endpoints inside the world, active backend kind, and policy mode.
-    - Client wiring: MUST include a stable “client wiring” section that shows how to route OpenAI/Anthropic-compatible clients through the in-world gateway (base URLs / exports).
-    - `--json`: prints structured JSON with the same values (including client wiring values).
+    - Default output: status + health only (no client wiring exports by default).
+    - `--debug`: includes a stable “client wiring” section that shows how to route OpenAI/Anthropic-compatible clients through the in-world gateway (base URLs / exports).
+      - v1 env var names (values point to Substrate gateway, not upstream providers):
+        - `SUBSTRATE_LLM_OPENAI_BASE_URL`
+        - `SUBSTRATE_LLM_ANTHROPIC_BASE_URL`
+      - Reachability: these base URLs are intended to be reachable from inside the world boundary (in-world clients/backends), not directly from the host.
+    - `--json`: prints structured JSON including client wiring fields (non-secret).
     - Exit codes: `0` success; `4` gateway not available; `5` world required but not available (fail-closed).
   - `substrate world sync gateway`:
     - Behavior: idempotently ensure the in-world gateway is running for the current world session; performs secret env injection as needed.
-    - Output: on success, prints the same client wiring values as `substrate world status gateway` (so operators can “sync then wire” in one step).
+    - Output: on success, prints a status/health summary by default.
+      - `--debug`: prints the same client wiring section as `substrate world status gateway --debug`.
+      - `--json`: includes the same `client_wiring.*` fields as `substrate world status gateway --json`.
     - Exit codes: same taxonomy as `substrate world status gateway` with `3` reserved for transient start failures.
   - `substrate world sync gateway --restart`:
     - Behavior: restart the gateway for the current world session; used for secret rotation.
@@ -102,7 +109,7 @@ Minimum required config keys (from ADR-0027):
 - `llm.routing.default_backend: <kind>:<name>` (default: empty; no implicit backend selection)
 
 Operational parameters (bind endpoints, logging destinations, metrics) are intentionally NOT part of the ADR-0027 config surface in v1.
-- `substrate world status gateway` is the authoritative “client wiring” output (base URLs / exports) and may change implementation details (ports/transports) without reshaping config.
+- `substrate world status gateway --json` (and `--debug` for human output) is the authoritative “client wiring” output (base URLs / exports) and may change implementation details (ports/transports) without reshaping config.
 
 ### Platform guarantees
 - Linux:

@@ -95,6 +95,10 @@ Merge strategy:
   - Default (effective): `false`.
 - `llm.allowed_backends: [string]`
   - Default (effective): `[]` (deny-by-default).
+- `llm.secrets.env_allowed: [string]`
+  - Meaning: allowlist of secret env var *names* that Substrate is permitted to read from the host process environment and inject into the in-world gateway/engine spawn environment.
+  - Default (effective): `[]` (deny-by-default; no secret env injection allowed).
+  - Constraints: names only; values must never be stored in Substrate YAML; missing names fail closed with actionable errors.
 
 ### `agents`
 - `agents.allowed_backends: [string]`
@@ -135,6 +139,15 @@ CLI agents:
 - `config.cli.binary: string` (default: empty meaning “resolve via PATH”)
 - `config.cli.mode: persistent|per_request` (default: inherit `agents.defaults.cli.mode`)
 
+API agents:
+- `config.api.base_url: string` (required for `config.kind=api`)
+  - Meaning: upstream provider base URL used by this `api:*` backend (non-secret; auth is handled separately).
+  - Constraints: MUST be an `https://` URL; MUST NOT include userinfo (`user:pass@`); SHOULD NOT include query params.
+- `config.api.auth.env: [string]` (required for `config.kind=api`)
+  - Meaning: required secret env var *names* that must be present on the host so Substrate can inject their values into the in-world gateway/engine process environment.
+  - Default: `[]` (but for `config.kind=api` it MUST be non-empty).
+  - Constraints: names only; values must never be stored in Substrate YAML; missing names fail closed with actionable errors.
+
 Capabilities:
 - `config.capabilities.llm: bool` (default: `false`)
 - `config.capabilities.mcp_client: bool` (default: `false`)
@@ -145,6 +158,7 @@ The overlay may include only these keys (all optional):
 - `agents.fail_closed.routing`
 - `agents.host_credentials.read.allowed_backends`
 - `llm.fail_closed.routing`
+- `llm.secrets.env_allowed`
 - `net_allowed`
 - `cmd_allowed`
 - `cmd_denied`

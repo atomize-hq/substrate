@@ -190,6 +190,11 @@ All keys below are part of the policy schema and MUST be strict (unknown keys re
   - Meaning: allowlist of backend ids permitted for LLM operations (empty means “no backends allowed”).
   - Elements format: `<kind>:<name>`.
 
+- `llm.secrets.env_allowed: [string]`
+  - Meaning: allowlist of secret env var *names* that Substrate is permitted to read from the host process environment and inject into the in-world gateway/engine spawn environment.
+  - Default: `[]` (deny-by-default; no secret env injection allowed).
+  - Note: env var names only; values must never be stored in Substrate YAML; missing names fail closed with actionable errors.
+
 ##### `agents` (agent backend gating; enforced in agent hub)
 - `agents.allowed_backends: [string]`
   - Meaning: allowlist of backend ids eligible for assignment/routing (empty means “no backends allowed”).
