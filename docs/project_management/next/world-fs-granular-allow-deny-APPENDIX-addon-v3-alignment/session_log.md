@@ -2,7 +2,7 @@
 
 ## START — 2026-02-08T01:25:43Z — planning — init
 - Feature: `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment`
-- Branch: `feat/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment`
+- Branch: `feat/world-fs-granular-allow-deny-appendix-addon-v3-alignment`
 - Goal: Establish Planning Pack scaffolding
 - Inputs to read end-to-end:
   - `docs/project_management/standards/PLANNING_README.md`
@@ -143,3 +143,23 @@
   - `NONE`
 - Next steps:
   - Execute `F0-exec-preflight`; then start WFGADAXA0 triad.
+
+## START — 2026-02-09T23:15:48Z — ops — F0-exec-preflight
+- Feature: `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment`
+- Goal: Run the execution preflight gate (mechanical validation + smoke syntax gate) and produce an explicit ACCEPT/REVISE recommendation.
+- Commands run:
+  - `make triad-orch-ensure FEATURE_DIR="docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment"` → exit `0`
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment"` → exit `0`
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment"` → exit `0`
+  - `bash -n docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/smoke/_core.sh` → exit `0`
+  - `bash -n docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/smoke/linux-smoke.sh` → exit `0`
+  - `bash -n docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/smoke/macos-smoke.sh` → exit `0`
+
+## END — 2026-02-09T23:15:48Z — ops — F0-exec-preflight
+- Outcome: `ACCEPT` (triads may begin).
+- Report:
+  - `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/execution_preflight_report.md`
+- Blockers:
+  - `NONE`
+- Next steps:
+  - Start `WFGADAXA0` via the standard triad wrapper prompt/workflow.

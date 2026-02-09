@@ -78,12 +78,12 @@ Expected:
 CI parity platforms: `linux,macos`.
 
 Recommended gate:
-- `make ci-compile-parity CI_WORKFLOW_REF="feat/world-fs-granular-allow-deny-appendix" CI_REMOTE=origin CI_CLEANUP=1`
+- `make ci-compile-parity CI_WORKFLOW_REF="feat/world-fs-granular-allow-deny-appendix-addon-v3-alignment" CI_REMOTE=origin CI_CLEANUP=1`
 
 ## CI audit + evidence ledger (recommended)
 Audit before dispatch:
-- `scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch "feat/world-fs-granular-allow-deny-appendix" --ledger-path "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/logs/WFGADAXA2/ci-audit/ledger.jsonl"`
-- `scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch "feat/world-fs-granular-allow-deny-appendix" --feature-dir "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment" --ledger-path "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/logs/WFGADAXA2/ci-audit/ledger.jsonl"`
+- `scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch "feat/world-fs-granular-allow-deny-appendix-addon-v3-alignment" --ledger-path "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/logs/WFGADAXA2/ci-audit/ledger.jsonl"`
+- `scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch "feat/world-fs-granular-allow-deny-appendix-addon-v3-alignment" --feature-dir "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment" --ledger-path "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/logs/WFGADAXA2/ci-audit/ledger.jsonl"`
 
 Record after dispatch:
-- `scripts/ci-audit/ci_audit_record.sh --ledger-path "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/logs/WFGADAXA2/ci-audit/ledger.jsonl" --kind <ci-testing|feature-smoke> --orch-branch "feat/world-fs-granular-allow-deny-appendix" --run-id "<id>" --tested-sha "<sha>" --feature-dir "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment"`
+- `scripts/ci-audit/ci_audit_record.sh --ledger-path "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/logs/WFGADAXA2/ci-audit/ledger.jsonl" --kind <ci-testing|feature-smoke> --orch-branch "feat/world-fs-granular-allow-deny-appendix-addon-v3-alignment" --run-id "<id>" --tested-sha "<sha>" --feature-dir "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment"`

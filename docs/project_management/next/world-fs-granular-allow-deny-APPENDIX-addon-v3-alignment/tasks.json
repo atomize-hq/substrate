@@ -6,7 +6,7 @@
     "execution_gates": true,
     "automation": {
       "enabled": true,
-      "orchestration_branch": "feat/world-fs-granular-allow-deny-appendix"
+      "orchestration_branch": "feat/world-fs-granular-allow-deny-appendix-addon-v3-alignment"
     },
     "checkpoint_boundaries": ["WFGADAXA2"],
     "behavior_platforms_required": ["linux"],
@@ -18,7 +18,7 @@
       "name": "Execution preflight gate (feature start)",
       "type": "ops",
       "phase": "F0",
-      "status": "pending",
+      "status": "completed",
       "description": "Execution-time preflight gate: validate the add-on Planning Pack and smoke/playbook scaffolding before starting WFGADAXA0.",
       "references": [
         "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/plan.md",

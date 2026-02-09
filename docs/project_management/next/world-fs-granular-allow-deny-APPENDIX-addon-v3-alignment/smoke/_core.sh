@@ -71,11 +71,11 @@ echo "== Case 2: `substrate policy show` output is V3-shaped (Appendix A.6) =="
   >/dev/null
 
 policy_json="$("$SUBSTRATE_BIN" policy show --json)"
-python3 - <<'PY'
+POLICY_JSON="$policy_json" python3 - <<'PY'
 import json
-import sys
+import os
 
-data = json.loads(sys.stdin.read())
+data = json.loads(os.environ["POLICY_JSON"])
 world_fs = data.get("world_fs")
 if not isinstance(world_fs, dict):
     raise SystemExit("FAIL: policy JSON missing object: world_fs")
@@ -108,7 +108,7 @@ assert_dimension("discover", require_enabled=False)
 assert_dimension("read", require_enabled=False)
 assert_dimension("write", require_enabled=True)
 print("OK: policy show --json is V3-shaped and includes explicit empty deny_list arrays")
-PY <<<"$policy_json"
+PY
 
 policy_yaml="$("$SUBSTRATE_BIN" policy show)"
 if ! grep -Eq '^[[:space:]]*world_fs:[[:space:]]*$' <<<"$policy_yaml"; then
@@ -149,4 +149,3 @@ for dim in discover read write; do
 done
 
 echo "OK: wfgad-appendix-addon-v3-alignment smoke passed"
-
