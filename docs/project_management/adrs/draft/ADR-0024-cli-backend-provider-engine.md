@@ -26,23 +26,24 @@
 ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
 
 ### Changes (operator-facing)
-- Treat Codex/Claude/Gemini CLIs as LLM “provider backends”
+- Treat subscription-authenticated CLIs (starting with Codex) as LLM “provider backends”
   - Existing: Cross-provider routing typically requires API keys or external proxies; subscription-authenticated CLIs cannot be used as provider backends in a controlled way.
-  - New: Substrate LLM manager can satisfy OpenAI/Anthropic dialect requests by routing to a configured CLI backend session (Codex/Claude Code/Gemini CLI), preserving subscription-first usage.
+  - New: Substrate LLM manager can satisfy OpenAI/Anthropic dialect requests by routing to a configured CLI backend session (`cli:codex` in v1), preserving subscription-first usage.
   - Why: Enable cross-provider routing without forcing API keys, while keeping enforcement/audit inside the world boundary.
   - Links:
     - `docs/project_management/adrs/draft/ADR-0024-cli-backend-provider-engine.md#L1`
 
 ## Problem / Context
-- Substrate’s product strategy explicitly supports users leveraging their existing Codex/Claude/Gemini subscriptions via CLIs.
+- Substrate’s product strategy explicitly supports users leveraging their existing subscription-authenticated CLIs.
 - A Substrate-owned LLM gateway must support cross-provider routing without requiring API keys. The practical method is to treat authenticated CLIs as provider backends: the gateway receives a request in one dialect and fulfills it via a CLI session from another provider.
 - This cannot depend on “token scraping.” Usage metadata is best-effort unless the CLI provides it.
 
 ## Goals
-- Implement a `cli` backend kind for `llm-manager` that can fulfill canonical LLM requests via CLI sessions (Codex, Claude Code, Gemini CLI).
-- Support cross-routing:
-  - OpenAI-style request → fulfill via Claude Code CLI backend.
-  - Anthropic-style request → fulfill via Codex CLI backend.
+- Implement a `cli` backend kind for `llm-manager` that can fulfill canonical LLM requests via CLI sessions.
+- Support dialect decoupling (v1):
+  - OpenAI-style request → fulfill via `cli:codex`.
+  - Anthropic-style request → fulfill via `cli:codex`.
+- Future (planned): cross-provider routing by adding additional `cli:*` adapters (e.g., Claude Code, Gemini CLI) behind the same canonical adapter contract.
 - Preserve streaming semantics where supported; otherwise emit a bounded, explicit “buffered stream” behavior.
 - Keep authentication subscription-first: the CLI’s own authentication is used; Substrate does not require API keys for this backend.
 - Emit stable attribution for every routed request: `run_id`, `backend_kind=cli`, `backend_agent_id`, `provider_hint`, `policy_decision`.
@@ -52,12 +53,13 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
 - Replacing the CLIs; Substrate orchestrates them as external tools.
 - Guaranteeing lossless translation for every provider-specific request field; features are capability-gated.
 - Enumerating a canonical “backend registry” list (backends are inventory-defined + allowlisted; Phase 8 circle-back may add a non-normative appendix mapping example ids → contracts).
+- Shipping multiple CLI backend adapters in v1 (initial implementation only requires `cli:codex`; other `cli:*` backends are a planned extension once the adapter contract is proven).
 
 ## User Contract (Authoritative)
 
 ### CLI
 - This ADR adds no new top-level CLI commands beyond those defined by ADR-0023.
-- When `substrate llm status` is invoked and a CLI backend is enabled, status output includes:
+- When `substrate world status gateway` is invoked and a CLI backend is enabled, status output includes:
   - backend availability (binary found / authenticated status unknown / last invocation success),
   - session mode (per-request vs persistent),
   - declared capabilities (stream support, tool-call support).
@@ -100,7 +102,7 @@ Normative mapping for this ADR:
 ## Architecture Shape
 - Components:
   - `crates/llm-manager` (new/existing from ADR-0023): adds `CliBackendEngine`.
-  - `crates/cli-agents` (existing/new): minimal runner wrappers for Codex/Claude/Gemini CLIs with consistent spawn/session semantics.
+  - `crates/cli-agents` (existing/new): minimal runner wrappers for CLI backends (v1: Codex) with consistent spawn/session semantics.
   - `crates/trace`: logs a structured span per request including backend agent identity and routing decision.
 
 - End-to-end flow:
@@ -108,7 +110,7 @@ Normative mapping for this ADR:
     - canonical request from `llm-gateway` front door (dialect normalized)
     - routing decision from config/policy
   - Derived state:
-    - chosen CLI backend (`codex|claude_code|gemini_cli`)
+    - chosen CLI backend (`codex` in v1; future: other `cli:*` adapters)
     - `backend_session_id` (Substrate-managed identifier)
   - Actions:
     - prepare CLI invocation:
@@ -136,6 +138,7 @@ Normative mapping for this ADR:
   - If effective policy has `llm.fail_closed.routing=true` and the world is unavailable, request fails (policy exit code `5` semantics).
 - Protected paths/invariants:
   - Do not copy/emit CLI credentials; Substrate does not persist subscription tokens.
+    - v1 (Codex): required auth fields are extracted from host login state and injected into the in-world process environment (no auth files are present in-world). This MUST be explicit, policy-gated (`agents.host_credentials.read.allowed_backends`), and MUST NOT log secret values (see `docs/project_management/next/llm_cli_backend_engine/decision_register.md` DR-0006 and DR-0008).
   - Do not log request/response bodies by default; redact before persisting if body logging enabled.
 
 ## Validation Plan (Authoritative)
@@ -146,7 +149,7 @@ Normative mapping for this ADR:
   - CLI output parsing → canonical response mapping.
 - Integration tests:
   - Use a stub CLI backend (test binary) that implements deterministic echo/stream behavior.
-  - Validate cross-routing: OpenAI endpoint → stub “Claude backend” → OpenAI response.
+  - Validate routing: OpenAI endpoint → stub “Codex backend” → OpenAI response.
   - Validate fail-closed when world required but unavailable.
 
 ### Manual validation

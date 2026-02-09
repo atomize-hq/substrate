@@ -8,6 +8,7 @@ Scope:
 - Streaming behavior and fallback semantics when CLIs lack streaming
 - Prompt/response translation boundaries (canonical request/response; adapter model)
 - Policy gates: `llm.allowed_backends`, `llm.fail_closed.routing`, and `net_allowed`
+- v1 implementation target: support `cli:codex` first, while keeping the adapter interface generic for future `cli:*` backends.
 
 Out of scope:
 - Enumerating a canonical backend registry list (Phase 8 circle-back once ADR-0023/0024/0025 land)
@@ -18,4 +19,3 @@ Steps:
 3. Define adapter interface and failure modes.
 4. Define trace attribution requirements and error mapping.
 5. Draft manual testing playbook + stub backend expectations (later; once code exists).
-

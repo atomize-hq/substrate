@@ -67,20 +67,18 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
     - Exit codes: `0` success; `4` hub unavailable.
 
 ### Config
-- Files and locations (precedence): project `.substrate/config.toml` then global `~/.substrate/config.toml`, env, CLI flags.
-- Schema constraints (minimum required):
-  - `[agents]`
-    - `orchestrator_backend = \"<agent_id>\"` (default from global if not set)
-  - `[agents.backends.<id>]`
-    - `kind = \"cli\"|\"api\"`
-    - `binary = \"<path>\"` (if kind=cli)
-    - `endpoint = \"<url>\"` (if kind=api)
-    - `enabled = true|false`
-  - `[agents.roles]`
-    - optional per-session override via CLI flags; default role assignment comes from config.
+- This ADR does not define new config file families. It MUST use the Phase 3 config/policy surface defined by ADR-0027.
+- Source of truth (key paths + precedence + defaults):
+  - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
+  - `docs/project_management/next/llm_and_agent_config_policy_surface/SCHEMA.md`
+- Agent backends are registered via the agent inventory directory (one file per backend), per ADR-0027:
+  - Global: `$SUBSTRATE_HOME/agents/<agent_id>.yaml` (default `~/.substrate/agents/<agent_id>.yaml`)
+  - Workspace: `<workspace_root>/.substrate/agents/<agent_id>.yaml`
+- Role assignment keys (orchestrator vs executor) are owned by the Agent Hub contract and MUST be introduced as additive extensions to ADR-0027 (strict schema) before implementation.
 
 ### Platform guarantees
-- Any agent backend declared `world_required=true` must run inside world; fail closed otherwise.
+- Agent backends configured to execute in-world MUST execute inside a world boundary.
+- If effective policy has `agents.fail_closed.routing=true`, agent executions configured/routed to run in-world MUST fail closed when a world boundary is unavailable (no host fallback).
 
 ## Architecture Shape
 - Components:

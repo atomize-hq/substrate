@@ -48,6 +48,14 @@ Keep concise, actionable, and security-focused.
   - Work: when a workspace is active for the current directory, have `substrate config global show` print a note that workspace config overrides global config here and point users at the effective view (`substrate config show`).
   - Acceptance: parity with `policy global show` UX; message is shown only when a workspace override applies; docs/help updated if needed.
 
+- **P1 – Policy-configured allowlist for host credential read paths (future enhancement)**
+  - Problem: some environments will not store CLI login state in the backend’s default credential file location. Today the CLI adapter posture is “fixed backend-contract credential paths + env override,” which is safe but can be inflexible for enterprise/custom setups.
+  - Work:
+    - Add a strict policy surface to allowlist exact host paths (and later, tightly-scoped patterns) that are permitted for host credential reads, in addition to the backend-id allowlist gate (`agents.host_credentials.read.allowed_backends`).
+    - Ensure `--explain` provenance attributes both gates (backend-id allowlist + path allowlist) and error messages are actionable without leaking secret values.
+    - Document canonicalization rules, symlink handling, and “deny-by-default” posture.
+  - Acceptance: operators can support non-standard credential locations without code changes while keeping least-privilege guarantees; misconfiguration cannot broaden to arbitrary host file reads.
+
 - **P1 – Policy-driven world fs mode**
   - Problem: write permissions inside worlds currently depend on systemd hardening + overlay success, not on broker policy. Sensitive repos need a policy bit to force read-only worlds while other projects remain writable, without editing unit files manually.
   - Work: extend broker schema to accept `world.fs_mode = read_only|writable` (global + per-project), plumb into shell/world-agent so PTY + non-PTY sessions honor it, and update docs/doctor to surface the active mode. Systemd units must allow `/home` writes so policy can enforce RO vs writable deterministically.

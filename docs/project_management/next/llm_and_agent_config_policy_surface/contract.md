@@ -40,6 +40,7 @@ Authoritative inputs:
   - Agent files MAY include a `policy_overlay`, but it MUST be restriction-only (cannot broaden beyond base policy).
 - **No secrets in config/policy files.**
   - API keys/tokens must not be stored in Substrate YAML patches. Backends must use their own login state or environment variables defined by the backend contract.
+  - If a backend adapter needs to read host credential material (e.g., a CLI’s existing login state) in order to inject required auth fields into an in-world process environment, that host credential read MUST be explicitly policy-gated (`agents.host_credentials.read.allowed_backends`).
 
 ## Precedence (summary)
 - Config effective precedence is unchanged and applies per-key:

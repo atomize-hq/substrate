@@ -199,6 +199,12 @@ All keys below are part of the policy schema and MUST be strict (unknown keys re
   - Meaning: when `true`, agent executions configured/routed to run in-world MUST fail closed if a world boundary is not available (no host fallback).
   - Default: `true`.
 
+- `agents.host_credentials.read.allowed_backends: [string]`
+  - Meaning: allowlist of backend ids permitted to read host credential material as part of a backend adapter’s host-side preparation step (e.g., reading an existing CLI login state so required auth fields can be injected into an in-world process environment).
+  - Elements format: `<kind>:<name>`.
+  - Default: `[]` (deny-by-default).
+  - Note: This gates host credential reads only; network egress remains governed by `net_allowed` at the world boundary.
+
 #### Interaction with existing policy keys
 - Network egress control remains policy-owned via `net_allowed`:
   - LLM gateways/backends that make outbound requests MUST have those requests governed by the effective policy `net_allowed` allowlist.

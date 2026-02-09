@@ -68,17 +68,15 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
     - `--json`: structured output.
 
 ### Config
-- Files and locations: project `.substrate/config.toml` then global `~/.substrate/config.toml`.
-- Schema constraints (minimum required):
-  - `[mcp.internal]`
-    - `enabled = true|false` (default true when orchestrator role is active)
-    - `bind = \"unix://~/.substrate/sock/mcp.sock\"` or `http://127.0.0.1:<port>` (inside world)
-    - `allowed_tools = [\"substrate.list_agents\", \"substrate.get_session_history\", ...]`
-  - `[mcp.external]` (future-compatible placeholder)
-    - external server registry is handled in a separate ADR if needed.
+- This ADR does not define new config file families. It MUST use the Phase 3 config/policy surface defined by ADR-0027.
+- Source of truth (key paths + precedence + defaults):
+  - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
+  - `docs/project_management/next/llm_and_agent_config_policy_surface/SCHEMA.md`
+- This ADR will introduce an `mcp.*` key family as an additive extension to ADR-0027 strict schema before implementation (exact key paths TBD in the Phase 5 planning pack and decision register).
 
 ### Platform guarantees
-- Internal MCP server runs inside world when worlds enabled; fail closed if world required.
+- When worlds are enabled, the internal MCP server runs inside the world boundary.
+- If the effective posture requires in-world execution (fail-closed routing), the MCP toolbox MUST fail closed when a world boundary is unavailable (no host fallback).
 
 ## Architecture Shape
 - Components:

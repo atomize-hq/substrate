@@ -102,6 +102,13 @@ Merge strategy:
 - `agents.fail_closed.routing: bool`
   - Meaning: when `true`, agent executions that are configured/routed to run in-world MUST fail closed if a world boundary is not available (no host fallback).
   - Default (effective): `true`.
+- `agents.host_credentials.read.allowed_backends: [string]`
+  - Meaning: allowlist of backend ids permitted to read *host* credential material as part of a backend adapter’s host-side preparation step (e.g., reading a CLI’s existing login state so required auth fields can be injected into an in-world process environment).
+  - Elements format: `<kind>:<name>`.
+  - Default (effective): `[]` (deny-by-default).
+  - Notes:
+    - This key gates **host credential reads**, not network egress. Egress remains governed by `net_allowed` at the world boundary.
+    - This key is intentionally backend-generic (not Codex-specific) so additional `cli:*` adapters can be added later without reshaping the policy surface.
 
 ## Interaction with existing policy keys
 - Network egress remains governed by `net_allowed`.
@@ -136,6 +143,7 @@ Capabilities:
 The overlay may include only these keys (all optional):
 - `world_fs.*` (ADR-0018 keys; may only tighten)
 - `agents.fail_closed.routing`
+- `agents.host_credentials.read.allowed_backends`
 - `llm.fail_closed.routing`
 - `net_allowed`
 - `cmd_allowed`

@@ -62,19 +62,19 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
 
 ### CLI
 - Commands:
-  - `substrate llm status`:
-    - Behavior: prints gateway state (running/not), bind endpoints inside world, active backend kind, and policy mode.
-    - Exit codes: `0` success; `4` gateway not available; `5` required-in-world but world not available.
-  - `substrate llm env`:
-    - Behavior: prints shell exports to route OpenAI/Anthropic-compatible clients through the in-world gateway (intended for `eval \"$(substrate llm env)\"`).
-    - `--json`: prints structured JSON with the same values.
-    - Exit codes: `0` success; `5` world required but not available.
-  - `substrate llm start`:
-    - Behavior: idempotently ensure the in-world gateway is running for the current world session.
-    - Exit codes: `0` started/already running; `5` world required but not available.
-  - `substrate llm stop`:
-    - Behavior: stop gateway process for the current world session (if running).
-    - Exit codes: `0` stopped/already stopped; `4` stop unsupported for platform/backend.
+  - Gateway lifecycle is owned by the world subsystem (session world management + deps provisioning).
+    - v1 requirement: the “ensure gateway running” path MUST pass any required secret env vars to the in-world gateway/engine spawn request over the existing world-agent transport (see `docs/project_management/next/llm_gateway_in_world/specs/env_injection.md`).
+  - `substrate world status gateway`:
+    - Behavior: prints per-world-session gateway state (running/not), bind endpoints inside the world, active backend kind, and policy mode.
+    - Client wiring: MUST include a stable “client wiring” section that shows how to route OpenAI/Anthropic-compatible clients through the in-world gateway (base URLs / exports).
+    - `--json`: prints structured JSON with the same values (including client wiring values).
+    - Exit codes: `0` success; `4` gateway not available; `5` world required but not available (fail-closed).
+  - `substrate world sync gateway`:
+    - Behavior: idempotently ensure the in-world gateway is running for the current world session; performs secret env injection as needed.
+    - Output: on success, prints the same client wiring values as `substrate world status gateway` (so operators can “sync then wire” in one step).
+    - Exit codes: same taxonomy as `substrate world status gateway` with `3` reserved for transient start failures.
+  - `substrate world sync gateway --restart`:
+    - Behavior: restart the gateway for the current world session; used for secret rotation.
 
 - Exit codes:
   - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
@@ -102,7 +102,7 @@ Minimum required config keys (from ADR-0027):
 - `llm.routing.default_backend: <kind>:<name>` (default: empty; no implicit backend selection)
 
 Operational parameters (bind endpoints, logging destinations, metrics) are intentionally NOT part of the ADR-0027 config surface in v1.
-- `substrate llm env` is the authoritative “client wiring” output (base URLs / exports) and may change implementation details (ports/transports) without reshaping config.
+- `substrate world status gateway` is the authoritative “client wiring” output (base URLs / exports) and may change implementation details (ports/transports) without reshaping config.
 
 ### Platform guarantees
 - Linux:
@@ -110,7 +110,7 @@ Operational parameters (bind endpoints, logging destinations, metrics) are inten
   - Fail-closed: when effective policy has `llm.fail_closed.routing=true`, do not fall back to a host-level gateway when `SUBSTRATE_WORLD=enabled`.
 - macOS:
   - Gateway runs inside the Lima guest world. Host talks to it via the existing Substrate transport to world-agent.
-  - Fail-closed: if the guest is not available, `substrate llm start` fails with exit code `5` when `llm.fail_closed.routing=true`.
+  - Fail-closed: if the guest is not available, gateway use fails with exit code `5` when `llm.fail_closed.routing=true`.
 - Windows:
   - Gateway runs inside the WSL world distribution. Host talks to it via the existing Substrate transport to world-agent.
   - Fail-closed: same as macOS (when `llm.fail_closed.routing=true`).

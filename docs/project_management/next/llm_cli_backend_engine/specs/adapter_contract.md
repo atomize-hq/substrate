@@ -11,6 +11,10 @@ Authoritative ADR: `docs/project_management/adrs/draft/ADR-0024-cli-backend-prov
   - `config.kind=cli`
   - `config.capabilities.llm=true`
 
+## v1 conformance target
+- v1 implementations MUST support `cli:codex` (Codex wrapper/adapter).
+- Other `cli:*` backends are expected to be added later; the adapter interface MUST remain generic (no Codex-only fields in the canonical request/response shape).
+
 ## Input (canonical request)
 The gateway normalizes provider-dialect requests into a canonical request object. The exact canonical schema is defined by the implementation, but MUST support (at minimum):
 - a list of role-tagged messages (`system|user|assistant`) or equivalent
@@ -34,4 +38,3 @@ Adapters MUST fail clearly with a structured error containing:
 - backend id
 - failure class: `binary_missing|unsupported_feature|backend_error|policy_denied|world_unavailable`
 - user-safe message (no secrets)
-

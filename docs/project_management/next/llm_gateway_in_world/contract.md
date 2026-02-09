@@ -12,6 +12,19 @@ Authoritative inputs:
 - **Fail-closed routing.** If effective policy has `llm.fail_closed.routing=true` and no world boundary is available, gateway start/use fails (no host fallback).
 - **Deny-by-default allowlist.** If `llm.allowed_backends=[]`, requests fail closed (no implicit backend selection).
 - **No secrets persisted.** Substrate config/policy files must not store API keys/tokens; request/response bodies are not logged by default.
+  - Exception (still redacted + policy-gated): backend adapters MAY emit backend-native structured events (e.g., `cli:codex` JSONL ingestion) into session logs after applying Substrate redaction/caps.
+
+## Secret delivery for `api:*` backends (v1)
+- Secrets are provided via environment-variable injection (see `docs/project_management/next/llm_gateway_in_world/decision_register.md` DR-0007).
+- Inventory/config MAY reference env var *names* only (e.g., `OPENAI_API_KEY`), never values.
+- Delivery mechanism:
+  - The gateway lifecycle is owned by the world subsystem. v1 command surface:
+    - `substrate world sync gateway`
+    - `substrate world sync gateway --restart`
+  - The sync/restart path gathers the required env var values from the host process environment and passes them to the world-agent as part of the in-world spawn request for the gateway/engine.
+  - The in-world gateway/engine receives those values as process environment variables.
+  - Values MUST NOT be written to disk by Substrate.
+- Missing secrets MUST fail closed with actionable errors that name the missing env var(s) (but never print values).
 
 ## Config + policy keys (source of truth: ADR-0027)
 - Config (`$SUBSTRATE_HOME/config.yaml`, `<workspace_root>/.substrate/workspace.yaml`):
@@ -26,7 +39,7 @@ Authoritative inputs:
   - `net_allowed` (egress allowlist; still authoritative)
 
 ## Client wiring
-- `substrate llm env` is the authoritative client wiring surface and prints the required exports (base URLs) to route OpenAI/Anthropic-compatible clients through Substrate.
+- `substrate world status gateway` is the authoritative client wiring surface and prints the required exports (base URLs) to route OpenAI/Anthropic-compatible clients through Substrate.
 - This contract intentionally does not freeze the underlying transport mechanics (ports vs proxying), only the client-facing env outputs and behavior guarantees.
 
 ## HTTP surfaces (subset; capability-gated)
@@ -42,4 +55,3 @@ Each request MUST emit a structured record with stable correlation fields consis
 - isolation: `world_id` when routed in-world
 - routing: selected `backend_id` (`<kind>:<name>`), backend kind, and allowlist check result
 - policy: allow/deny/require-approval outcome
-

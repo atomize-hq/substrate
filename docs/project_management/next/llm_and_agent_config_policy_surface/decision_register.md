@@ -219,6 +219,39 @@ Scope:
 - **Selected:** Option B — Policy has requirements/constraints only; config enables/disables.
 - **Rationale (crisp):** It matches the repo’s established model (policy expresses requirements, config selects) and keeps fail-closed behavior driven by deny-by-default allowlists rather than duplicated enable flags.
 
+---
+
+### DR-0009 — Per-agent `policy_overlay` eligibility for host credential read gate
+
+**Decision owner(s):** Broker + Engine + Security  
+**Date:** 2026-02-09  
+**Status:** Accepted  
+**Related docs:** ADR-0027, `docs/project_management/next/llm_and_agent_config_policy_surface/SCHEMA.md`, `docs/project_management/next/llm_cli_backend_engine/decision_register.md` (DR-0008)
+
+**Problem / Context**
+- We introduced `agents.host_credentials.read.allowed_backends` as an explicit policy gate for host credential reads by backend adapters.
+- Agent files may include a `policy_overlay`, but it must be restriction-only. We need to decide whether this new gate is eligible for per-agent tightening.
+
+**Option A — Allow `agents.host_credentials.read.allowed_backends` in `policy_overlay` (subset-only)**
+- **Pros:** Lets an individual backend tighten the host-credential-read permission even if globally allowed; aligns with “policy overlays only tighten” posture; supports least-privilege per backend.
+- **Cons:** Requires defining and enforcing “tighten-only” semantics for list keys (overlay list must be a subset of effective policy list).
+- **Cascading implications:** Update the overlay allowlist and implement subset validation (fail closed if overlay attempts to broaden).
+- **Risks:** A buggy subset check could become a broadening path; must be tested and must fail closed.
+- **Unlocks:** Per-backend hardening without forcing workspace/global policy edits.
+- **Quick wins / low-hanging fruit:** `cli:codex` can ship with an overlay that defaults this permission off unless explicitly enabled for that backend.
+
+**Option B — Disallow this key in `policy_overlay` (policy.yaml only)**
+- **Pros:** Simpler; fewer overlay interactions; avoids subset validation for this key.
+- **Cons:** Coarser control; cannot tighten per backend without editing workspace/global policy.
+- **Cascading implications:** Document that host credential read gating is global/workspace only.
+- **Risks:** Over-permission at the workspace/global layer becomes harder to contain.
+- **Unlocks:** Less schema/validation work now.
+- **Quick wins / low-hanging fruit:** None beyond keeping scope smaller.
+
+**Recommendation**
+- **Selected:** Option A — Allow `agents.host_credentials.read.allowed_backends` in `policy_overlay` (subset-only)
+- **Rationale (crisp):** Host credential reads are security-sensitive and per-backend tightening is exactly what `policy_overlay` is for; subset-only semantics keep it restriction-only.
+
 **Follow-up tasks (explicit)**
 - Update ADR-0027, `SCHEMA.md`, and `contract.md` to remove `policy.llm.enabled` / `policy.agents.enabled` and to document deny-by-default allowlists.
 - Update Phase 4/5 ADR drafts to stop referencing policy enable booleans.
