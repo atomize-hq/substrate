@@ -203,3 +203,11 @@
 ## END — 2026-02-10T00:14:18Z — integration — WFGADAXA0-integ
 - HEAD: `fe22304b9a0d90ff683691a103492abe53cb122a`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/logs/WFGADAXA0/integ/last_message.md`
+
+## START — 2026-02-10T00:33:41Z — code — WFGADAXA1-code
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment" SLICE_ID="WFGADAXA1"`
+
+## START — 2026-02-10T00:33:41Z — test — WFGADAXA1-test
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment" SLICE_ID="WFGADAXA1"`
