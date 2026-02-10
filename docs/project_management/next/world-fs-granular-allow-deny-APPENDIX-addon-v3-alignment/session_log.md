@@ -267,3 +267,21 @@
 - Trigger: CP1 compile-parity run `21849515435` failed on `windows-2022` (`cargo check --workspace --all-targets`).
 - Dispatch:
   - `make triad-task-start-platform-fixes FEATURE_DIR="docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment" SLICE_ID="WFGADAXA2" PLATFORMS="windows" LAUNCH_CODEX=1`
+
+## END — 2026-02-10T02:38:00Z — integration — WFGADAXA2-integ-macos
+- HEAD: `b68890a3fcd793a623415860dd2e992e7b01b269`
+- Final message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/logs/WFGADAXA2/integ-macos/last_message.md`
+
+## END — 2026-02-10T02:48:23Z — integration — WFGADAXA2-integ-windows
+- HEAD: `2dd9a852697e2b855f0b3e987a4f2535008a1764`
+- Final message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/logs/WFGADAXA2/integ-windows/last_message.md`
+
+## END — 2026-02-10T02:56:04Z — ops — CP1-ci-checkpoint
+- ci-audit (ci-testing): `RECOMMEND=run` (no last-green run found; required `linux,macos,windows`)
+- ci-audit (feature-smoke): `RECOMMEND=run` (no last-green run found; required `linux`)
+- CI compile parity runs (ci-testing.yml / compile-parity):
+  - `21849323328` → `failure` (macos failed; linux/windows cancelled)
+  - `21849515435` → `failure` (windows failed; linux+macos passed)
+  - `21849734352` → `success` (linux+macos+windows passed)
+- Feature smoke run (feature-smoke.yml / behavior): `21849786194` → `success` (`linux`)
+- Final validated CHECKOUT_SHA: `5b849240398324cfff421f0d4f38b4b0e7d874ec`
