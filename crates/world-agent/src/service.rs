@@ -37,6 +37,7 @@ use crate::enforcement_plan;
 
 pub(crate) const ANCHOR_MODE_ENV: &str = "SUBSTRATE_ANCHOR_MODE";
 pub(crate) const ANCHOR_PATH_ENV: &str = "SUBSTRATE_ANCHOR_PATH";
+#[cfg(target_os = "linux")]
 pub(crate) const WORLD_FS_MODE_ENV: &str = "SUBSTRATE_WORLD_FS_MODE";
 pub(crate) const WORLD_FS_ISOLATION_ENV: &str = "SUBSTRATE_WORLD_FS_ISOLATION";
 pub(crate) const WORLD_FS_WRITE_ALLOWLIST_ENV: &str = "SUBSTRATE_WORLD_FS_WRITE_ALLOWLIST";
@@ -780,6 +781,7 @@ pub(crate) fn resolve_project_dir(
     Ok(base_dir)
 }
 
+#[cfg(target_os = "linux")]
 pub(crate) fn is_full_isolation(env: Option<&HashMap<String, String>>) -> bool {
     if let Some(env) = env {
         if let Some(raw) = env.get(WORLD_FS_ISOLATION_ENV) {
