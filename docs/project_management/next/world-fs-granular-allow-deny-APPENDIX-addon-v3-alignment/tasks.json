@@ -506,8 +506,7 @@
       ],
       "concurrent_with": [],
       "depends_on": [
-        "WFGADAXA2-integ-core",
-        "CP1-ci-checkpoint"
+        "WFGADAXA2-integ-core"
       ],
       "description": "Linux platform-fix integration task (behavior smoke required for this pack).",
       "end_checklist": [
@@ -547,8 +546,7 @@
       ],
       "concurrent_with": [],
       "depends_on": [
-        "WFGADAXA2-integ-core",
-        "CP1-ci-checkpoint"
+        "WFGADAXA2-integ-core"
       ],
       "description": "macOS CI parity integration task (compile parity / CI testing only; no behavior smoke required).",
       "end_checklist": [
