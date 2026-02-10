@@ -48,6 +48,37 @@ Keep concise, actionable, and security-focused.
   - Work: when a workspace is active for the current directory, have `substrate config global show` print a note that workspace config overrides global config here and point users at the effective view (`substrate config show`).
   - Acceptance: parity with `policy global show` UX; message is shown only when a workspace override applies; docs/help updated if needed.
 
+- **P1 – Structured anchor-guard events for caged `cd` (dedupe warnings; avoid heuristics)**
+  - Problem: In persistent world sessions, the in-world anchor guard prints user-facing “caged root guard” warnings, but the host async REPL also performs host-side `cd` prediction/caging to keep `world_cwd` consistent when the world reports an unchanged cwd. This can produce duplicate warnings (guard + prediction) and forces brittle host-side suppression heuristics.
+  - Goal: Make “anchor guard bounced `cd` back into the cage” a first-class structured signal from world-agent so the host prints exactly once, consistently formatted, without stderr parsing or cwd-heuristic dedupe.
+  - Proposed design (backwards-compatible; no protocol_version bump):
+    - Add a per-command sentinel env var set by the in-world guard *only when it bounces* (example):
+      - `__SUBSTRATE_GUARD_EVENT_B64=<base64 json>`
+      - JSON payload fields:
+        - `type: "caged_cd_blocked"`
+        - `requested: <abs path>`
+        - `anchor_root: <abs path>`
+        - `returned_to: <abs path>`
+        - `display_scope: "host"|"world"` (optional; controls `([Substrate Host])` vs `([Substrate World])`)
+    - On persistent session completion, world-agent already captures the child shell’s env; extract + decode this sentinel and:
+      - include it as an optional field on `command_complete` (e.g., `guard_event` / `guard_events`),
+      - strip the sentinel key(s) from the persisted env before storing (so it never leaks into later commands).
+    - Host shell prints from the structured field (once) and stops printing prediction-layer warnings for world sessions (prediction remains state-only).
+  - Work (concrete):
+    - `crates/world/src/guard.rs`: set `__SUBSTRATE_GUARD_EVENT_B64` when bouncing a `cd` (and optionally stop printing the user-facing warning directly once the structured path is plumbed end-to-end).
+    - `crates/world-agent/src/pty.rs`:
+      - plumb sentinel extraction from `PersistentChildEvent::Finished { env, .. }`,
+      - extend `PersistentServerMessage::CommandComplete { .. }` with an optional `guard_event(s)` field (serde should ignore unknown fields for older clients),
+      - strip sentinel keys from the session env before persisting.
+    - `crates/shell/src/execution/repl_persistent_session.rs` and/or `crates/shell/src/execution/routing/dispatch/world_persistent_session.rs`: parse optional `guard_event(s)` and surface as a single user-facing warning line.
+    - `crates/shell/src/repl/async_repl.rs`: delete any remaining prediction-layer warning emission for world sessions (keep only the cwd correction).
+    - Optional: record `guard_event(s)` into `trace.jsonl` (span extra) so guard bounces are auditable without stdout/stderr inference.
+  - Tests:
+    - `world-agent` persistent session test: run `cd ..` outside anchor and assert `command_complete.guard_event(s)` present; assert sentinel key stripped from persisted env.
+    - `shell` client tests: unknown/missing `guard_event(s)` remains compatible; when present, message prints once.
+    - End-to-end (Linux): `substrate` async REPL `cd ../` outside anchor prints exactly one caged warning line (no duplicates).
+  - Acceptance: no duplicate caged warnings; no stderr parsing; persisted env does not retain sentinel; old/new clients interoperate via optional fields.
+
 - **P1 – Policy-configured allowlist for host credential read paths (future enhancement)**
   - Problem: some environments will not store CLI login state in the backend’s default credential file location. Today the CLI adapter posture is “fixed backend-contract credential paths + env override,” which is safe but can be inflexible for enterprise/custom setups.
   - Work:
