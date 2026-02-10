@@ -62,7 +62,7 @@ expect_exit 2 "$SUBSTRATE_BIN" policy set 'world_fs.mode=read_only'
 expect_exit 2 "$SUBSTRATE_BIN" policy set 'world_fs.isolation=full'
 expect_exit 2 "$SUBSTRATE_BIN" policy set 'world_fs.require_world=true'
 
-echo "== Case 2: `substrate policy show` output is V3-shaped (Appendix A.6) =="
+echo "== Case 2: substrate policy show output is V3-shaped (Appendix A.6) =="
 "$SUBSTRATE_BIN" policy set \
   'world_fs.host_visible=false' \
   'world_fs.fail_closed.routing=false' \
@@ -71,11 +71,11 @@ echo "== Case 2: `substrate policy show` output is V3-shaped (Appendix A.6) =="
   >/dev/null
 
 policy_json="$("$SUBSTRATE_BIN" policy show --json)"
-python3 - <<'PY'
+POLICY_JSON="$policy_json" python3 - <<'PY'
 import json
-import sys
+import os
 
-data = json.loads(sys.stdin.read())
+data = json.loads(os.environ["POLICY_JSON"])
 world_fs = data.get("world_fs")
 if not isinstance(world_fs, dict):
     raise SystemExit("FAIL: policy JSON missing object: world_fs")
@@ -108,7 +108,7 @@ assert_dimension("discover", require_enabled=False)
 assert_dimension("read", require_enabled=False)
 assert_dimension("write", require_enabled=True)
 print("OK: policy show --json is V3-shaped and includes explicit empty deny_list arrays")
-PY <<<"$policy_json"
+PY
 
 policy_yaml="$("$SUBSTRATE_BIN" policy show)"
 if ! grep -Eq '^[[:space:]]*world_fs:[[:space:]]*$' <<<"$policy_yaml"; then
@@ -122,7 +122,7 @@ if ! grep -Eq '^[[:space:]]{2}host_visible:[[:space:]]*false[[:space:]]*$' <<<"$
   exit 1
 fi
 
-deny_count="$(grep -E '^[[:space:]]{4}deny_list:[[:space:]]*\\[\\][[:space:]]*$' <<<"$policy_yaml" | wc -l | tr -d ' ')"
+deny_count="$(grep -cF 'deny_list: []' <<<"$policy_yaml" || true)"
 if [[ "${deny_count}" -lt 3 ]]; then
   echo "FAIL: expected explicit empty deny_list: [] for discover/read/write (>=3), got: ${deny_count}" >&2
   echo "$policy_yaml" >&2
@@ -149,4 +149,3 @@ for dim in discover read write; do
 done
 
 echo "OK: wfgad-appendix-addon-v3-alignment smoke passed"
-

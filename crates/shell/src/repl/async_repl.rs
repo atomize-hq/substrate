@@ -901,6 +901,32 @@ fn apply_caged_predicted_cwd_from_config(
     apply_caged_predicted_cwd(&world_root, current_cwd, predicted)
 }
 
+fn suppress_redundant_caged_prediction_warning(
+    prev_cwd: &str,
+    predicted_cwd: &str,
+    warning: Option<String>,
+) -> Option<String> {
+    let Some(message) = warning else {
+        return None;
+    };
+
+    let prev_path = Path::new(prev_cwd);
+    let predicted_path = Path::new(predicted_cwd);
+
+    if prev_path.is_absolute()
+        && predicted_path.is_absolute()
+        && canonicalize_or(prev_path) == canonicalize_or(predicted_path)
+    {
+        // The in-world anchor guard already prints a caged warning when it blocks `cd`.
+        // When the world session reports an unchanged cwd, our cd prediction layer can
+        // redundantly re-emit the same warning. Suppress the duplicate when the net
+        // cwd is unchanged.
+        return None;
+    }
+
+    Some(message)
+}
+
 async fn exec_world_line(
     session: &mut WorldSession,
     program: &str,
@@ -943,6 +969,8 @@ async fn exec_world_line(
             if next_cwd == prev_cwd {
                 let (predicted, warning) =
                     apply_caged_predicted_cwd_from_config(&prev_cwd, predicted);
+                let warning =
+                    suppress_redundant_caged_prediction_warning(&prev_cwd, &predicted, warning);
                 if let Some(message) = warning {
                     let _ = io.agent_printer.print(message);
                 }
@@ -1031,6 +1059,8 @@ async fn exec_world_pty(
             if next_cwd == prev_cwd {
                 let (predicted, warning) =
                     apply_caged_predicted_cwd_from_config(&prev_cwd, predicted);
+                let warning =
+                    suppress_redundant_caged_prediction_warning(&prev_cwd, &predicted, warning);
                 if let Some(message) = warning {
                     let _ = io.agent_printer.print(message);
                 }
@@ -1091,6 +1121,19 @@ mod caged_prediction_tests {
         let (out, warning) = apply_caged_predicted_cwd(&settings, &current_s, predicted_s.clone());
         assert_eq!(out, predicted_s);
         assert!(warning.is_none());
+    }
+
+    #[test]
+    fn suppress_redundant_caged_prediction_warning_drops_when_cwd_unchanged() {
+        let temp = tempdir().unwrap();
+        let root = temp.path().join("root");
+        std::fs::create_dir_all(&root).unwrap();
+        let prev = format!("{}/.", root.display());
+        let predicted = root.to_string_lossy().to_string();
+        let warning = Some("substrate: info: caged root guard: blocked cd to /tmp/outside (outside /tmp/root); returning to /tmp/root".to_string());
+
+        let out = suppress_redundant_caged_prediction_warning(&prev, &predicted, warning);
+        assert!(out.is_none());
     }
 }
 

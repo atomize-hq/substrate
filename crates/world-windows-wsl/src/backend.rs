@@ -2,7 +2,11 @@ use crate::paths::{normalize_diff, to_wsl_path};
 use crate::transport::{detect_tcp_forwarder, DEFAULT_AGENT_PIPE, DEFAULT_DISTRO};
 use crate::warm::WarmCmd;
 use agent_api_client::{AgentClient, Transport};
-use agent_api_types::{ExecuteRequest, ExecuteResponse, WorldFsMode};
+use agent_api_types::{
+    ExecuteRequest, ExecuteResponse, PolicySnapshotV3, PolicySnapshotWorldFsDimensionV3,
+    PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
+    WorldFsMode,
+};
 use anyhow::{anyhow, Context, Result};
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine as _;
@@ -297,6 +301,31 @@ impl WindowsWslBackend {
             Some(req.env.clone())
         };
 
+        let fs_mode = self.resolve_fs_mode();
+        let write_enabled = matches!(fs_mode, WorldFsMode::Writable);
+        let policy_snapshot = PolicySnapshotV3 {
+            schema_version: 3,
+            world_fs: PolicySnapshotWorldFsV3 {
+                host_visible: true,
+                fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: false },
+                deny_enforcement: None,
+                caged_required: false,
+                discover: Some(PolicySnapshotWorldFsDimensionV3 {
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                }),
+                read: Some(PolicySnapshotWorldFsDimensionV3 {
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                }),
+                write: PolicySnapshotWorldFsWriteV3 {
+                    enabled: write_enabled,
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                },
+            },
+        };
+
         Ok(ExecuteRequest {
             profile: None,
             cmd: req.cmd.clone(),
@@ -305,8 +334,8 @@ impl WindowsWslBackend {
             pty: req.pty,
             agent_id: self.agent_id.clone(),
             budget: None,
-            policy_snapshot: None,
-            world_fs_mode: Some(self.resolve_fs_mode()),
+            policy_snapshot,
+            world_fs_mode: Some(fs_mode),
         })
     }
 

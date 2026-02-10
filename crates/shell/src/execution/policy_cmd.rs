@@ -7,10 +7,13 @@ use crate::execution::config_model;
 use crate::execution::policy_model::PolicyPatch;
 use crate::execution::{policy_model, workspace};
 use anyhow::{anyhow, Context, Result};
+use serde::ser::SerializeMap;
+use serde::Serialize;
+use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use substrate_broker::{Policy, PolicyExplainV1};
+use substrate_broker::{Policy, PolicyExplainV1, WorldFsDenyEnforcement};
 use tempfile::NamedTempFile;
 
 const DEFAULT_GLOBAL_POLICY_PATCH_HEADER: &str = r#"# Substrate policy patch (sparse overrides; scope=global).
@@ -386,25 +389,165 @@ fn require_workspace(cwd: &Path) -> Result<PathBuf> {
     })
 }
 
-fn print_policy(policy: &Policy, json: bool) -> Result<()> {
-    if json {
-        let mut value = serde_json::to_value(policy).context("failed to serialize JSON")?;
-        if let Some(require_world) = value
-            .get("world_fs")
-            .and_then(|fs| fs.get("require_world"))
-            .and_then(|v| v.as_bool())
-        {
-            value["world_fs_require_world"] = serde_json::Value::Bool(require_world);
+#[derive(Debug, Clone)]
+struct SortedMetadata<'a>(&'a HashMap<String, String>);
+
+impl Serialize for SortedMetadata<'_> {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut entries: Vec<_> = self.0.iter().collect();
+        entries.sort_by(|(a_key, _), (b_key, _)| a_key.cmp(b_key));
+
+        let mut map = serializer.serialize_map(Some(entries.len()))?;
+        for (key, value) in entries {
+            map.serialize_entry(key, value)?;
         }
+        map.end()
+    }
+}
+
+#[derive(Debug)]
+struct EffectivePolicyDisplayV3<'a> {
+    policy: &'a Policy,
+    world_fs: WorldFsEffectiveDisplayV3,
+    metadata: SortedMetadata<'a>,
+}
+
+impl Serialize for EffectivePolicyDisplayV3<'_> {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let policy = self.policy;
+        let mut map = serializer.serialize_map(Some(11))?;
+        map.serialize_entry("id", &policy.id)?;
+        map.serialize_entry("name", &policy.name)?;
+        map.serialize_entry("world_fs", &self.world_fs)?;
+        map.serialize_entry("net_allowed", &policy.net_allowed)?;
+        map.serialize_entry("cmd_allowed", &policy.cmd_allowed)?;
+        map.serialize_entry("cmd_denied", &policy.cmd_denied)?;
+        map.serialize_entry("cmd_isolated", &policy.cmd_isolated)?;
+        map.serialize_entry("require_approval", &policy.require_approval)?;
+        map.serialize_entry("allow_shell_operators", &policy.allow_shell_operators)?;
+        map.serialize_entry("limits", &policy.limits)?;
+        map.serialize_entry("metadata", &self.metadata)?;
+        map.end()
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(deny_unknown_fields)]
+struct WorldFsEffectiveDisplayV3 {
+    host_visible: bool,
+    fail_closed: WorldFsFailClosedEffectiveDisplayV3,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    deny_enforcement: Option<WorldFsDenyEnforcement>,
+    caged_required: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    discover: Option<WorldFsDimensionEffectiveDisplayV3>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    read: Option<WorldFsDimensionEffectiveDisplayV3>,
+    write: WorldFsWriteEffectiveDisplayV3,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(deny_unknown_fields)]
+struct WorldFsFailClosedEffectiveDisplayV3 {
+    routing: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(deny_unknown_fields)]
+struct WorldFsDimensionEffectiveDisplayV3 {
+    allow_list: Vec<String>,
+    deny_list: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(deny_unknown_fields)]
+struct WorldFsWriteEffectiveDisplayV3 {
+    enabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    allow_list: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    deny_list: Option<Vec<String>>,
+}
+
+fn display_policy_v3(policy: &Policy) -> Result<EffectivePolicyDisplayV3<'_>> {
+    let (discover, read, write_allow_list, write_deny_list) = if policy.world_fs_host_visible {
+        (None, None, None, None)
+    } else {
+        let read = policy
+            .world_fs_read
+            .as_ref()
+            .context("effective policy was missing world_fs.read in full isolation")?;
+        let discover = policy
+            .world_fs_discover
+            .as_ref()
+            .or(policy.world_fs_read.as_ref())
+            .context("effective policy was missing world_fs.discover in full isolation")?;
+
+        let read = Some(WorldFsDimensionEffectiveDisplayV3 {
+            allow_list: read.allow_list.clone(),
+            deny_list: read.deny_list.clone(),
+        });
+        let discover = Some(WorldFsDimensionEffectiveDisplayV3 {
+            allow_list: discover.allow_list.clone(),
+            deny_list: discover.deny_list.clone(),
+        });
+
+        if policy.world_fs_write_enabled {
+            let write = policy
+                .world_fs_write
+                .as_ref()
+                .context("effective policy was missing world_fs.write in full isolation")?;
+            (
+                discover,
+                read,
+                Some(write.allow_list.clone()),
+                Some(write.deny_list.clone()),
+            )
+        } else {
+            // When writes are disabled, keep the V3 shape stable by rendering empty lists.
+            (discover, read, Some(Vec::new()), Some(Vec::new()))
+        }
+    };
+
+    Ok(EffectivePolicyDisplayV3 {
+        policy,
+        world_fs: WorldFsEffectiveDisplayV3 {
+            host_visible: policy.world_fs_host_visible,
+            fail_closed: WorldFsFailClosedEffectiveDisplayV3 {
+                routing: policy.world_fs_fail_closed_routing,
+            },
+            deny_enforcement: policy.world_fs_deny_enforcement,
+            caged_required: policy.world_fs_caged_required,
+            discover,
+            read,
+            write: WorldFsWriteEffectiveDisplayV3 {
+                enabled: policy.world_fs_write_enabled,
+                allow_list: write_allow_list,
+                deny_list: write_deny_list,
+            },
+        },
+        metadata: SortedMetadata(&policy.metadata),
+    })
+}
+
+fn print_policy(policy: &Policy, json: bool) -> Result<()> {
+    let display = display_policy_v3(policy)?;
+    if json {
         println!(
             "{}",
-            serde_json::to_string(&value).context("failed to serialize JSON")?
+            serde_json::to_string(&display).context("failed to serialize JSON")?
         );
         return Ok(());
     }
     println!(
         "{}",
-        serde_yaml::to_string(policy).context("failed to serialize YAML")?
+        serde_yaml::to_string(&display).context("failed to serialize YAML")?
     );
     Ok(())
 }

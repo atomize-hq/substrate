@@ -5,7 +5,7 @@
 - Existing (base) Planning Pack:
   - `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/`
 - Orchestration branch (shared with base pack):
-  - `feat/world-fs-granular-allow-deny-appendix`
+  - `feat/world-fs-granular-allow-deny-appendix-addon-v3-alignment`
 - Add-on purpose: close remaining contract gaps discovered after the base pack was marked “completed”.
 
 ## What happened (facts + evidence)
