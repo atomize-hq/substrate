@@ -220,7 +220,7 @@ pub(crate) fn run_script_mode(config: &ShellConfig, script_path: &Path) -> Resul
     });
 
     #[cfg(not(unix))]
-    let extra = json!({
+    let mut extra = json!({
         log_schema::EXIT_CODE: status.code().unwrap_or(-1),
         log_schema::DURATION_MS: duration.as_millis()
     });
