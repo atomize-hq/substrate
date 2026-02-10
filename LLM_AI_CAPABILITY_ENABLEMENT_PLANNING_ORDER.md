@@ -67,6 +67,12 @@ This document is a lightweight tracking plan for finalizing ADRs and their corre
     - documentation pointers/updates (`docs/TRACE.md` as needed)
   - Non-negotiable: do not reopen the core capture mechanism choice, base event types, or span-parent correctness—only extensions.
 
+- Circle back (cross-track standard): secrets delivery channel rubric (FD/pipe vs env vars)
+  - Goal: establish a concrete, reusable decision rubric for when Substrate should use:
+    - inherited one-time FD/pipe secret channels (preferred for Substrate-spawned, Substrate-owned components), vs
+    - environment-variable injection (interop-required cases; third-party tools/SDKs; world-boundary transport constraints).
+  - Output: update the relevant Decision Registers/ADRs to reference the rubric so current and future secret-handling decisions stay consistent (and avoid ad-hoc env var proliferation).
+
 - Circle back to other foundation ADRs / decision registers (additive-only):
   - ADR-0017 (output routing contract):
     - align “structured agent events” attribution requirements to the final correlation set (`orchestration_session_id`, `run_id`, `thread_id`, `agent_id`, `role`, and join keys like `cmd_id`/`span_id` when applicable),

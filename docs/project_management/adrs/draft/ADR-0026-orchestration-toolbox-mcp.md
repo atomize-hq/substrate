@@ -20,7 +20,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: ae5cae3f081c203fd9406c5755024eda7a5e149bcfbacb94b7f595b728b05c42
+ADR_BODY_SHA256: c696655a541720a4503a526fbcc7e564141bb9261eb4af39c8805658dfd4ad99
 ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
 
 ### Changes (operator-facing)
@@ -112,6 +112,21 @@ Constraints:
 - The toolbox endpoint is internal-only:
   - UDS endpoints are created with user-only filesystem permissions by default.
   - TCP endpoints (when used) MUST bind to `127.0.0.1` only by default.
+- UDS endpoint placement + permissions (Decision Register DR-0007):
+  - Deterministic per-session paths:
+    - Host-scoped toolbox: `$SUBSTRATE_HOME/run/agent-toolbox/<orchestration_session_id>.sock`
+    - World-scoped toolbox: `/run/substrate/agent-toolbox/<orchestration_session_id>.sock`
+  - Default permissions:
+    - parent directory: `0700`
+    - socket file: `0600`
+  - Stale socket handling:
+    - On startup, if the target socket path already exists, the toolbox server MUST attempt to detect staleness and MUST unlink stale sockets before binding.
+- Caller identity + authentication (Decision Registers DR-0008, DR-0009):
+  - The Agent Hub MUST mint a per-orchestration-session toolbox auth token at session start.
+  - The toolbox server MUST require the token for all connections/requests and MUST deny requests with missing/invalid tokens.
+  - Token injection mechanism (default):
+    - For Substrate-spawned orchestrator backends, the token MUST be injected via an inherited one-time pipe/FD (not via env) by default.
+    - `substrate agent toolbox env --include-token` exists as a debug-only escape hatch for manual wiring and MUST NOT be required for normal operation.
 - Boundary inheritance (Decision Register DR-0005):
   - Tools inherit the orchestrator’s execution boundary (`execution.scope=host|world`) and MUST NOT silently change it.
 - If the effective posture requires in-world execution (fail-closed routing), the toolbox MUST fail closed when a world boundary is unavailable (no host fallback).
@@ -147,6 +162,9 @@ Constraints:
   - Role gate (Decision Register DR-0004): if caller is not in orchestrator role, orchestration tools return a deny error.
   - Policy allowlist: orchestrator backend id MUST be allowlisted by `agents.allowed_backends[*]` or the toolbox is disabled.
   - Tools that expose sensitive data apply redaction per policy (reuse ADR-0028 redaction/caps rules).
+  - Toolbox auth token (Decision Registers DR-0008, DR-0009):
+    - Toolbox requests MUST be denied if the token is missing/invalid.
+    - The token MUST NOT be written to trace logs or printed to stdout by default.
 - Protected paths/invariants:
   - Internal toolbox bind endpoint is not exposed publicly by default.
   - Tool schemas are stable and versioned (Decision Register DR-0003).
@@ -180,3 +198,7 @@ Constraints:
     - DR-0003 (Tool namespace + versioning: server-level version vs tool-name version)
     - DR-0004 (Authorization enforcement: central role gate vs per-tool ad-hoc checks)
     - DR-0005 (Tool execution boundary inheritance: inherit orchestrator scope vs always in-world)
+    - DR-0006 (CLI namespace: `agent toolbox` vs `mcp`)
+    - DR-0007 (UDS endpoint placement + permissions: deterministic vs temp/random)
+    - DR-0008 (Caller auth: per-session token vs implicit trust)
+    - DR-0009 (Token injection: inherited one-time FD vs env var)

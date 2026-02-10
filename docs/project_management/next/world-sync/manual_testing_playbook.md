@@ -1,236 +1,188 @@
-# World Sync (C0–C9) — Manual Testing Playbook
+# World Sync — Manual Testing Playbook (WS0–WS7)
 
-This playbook validates the world-sync workspace model (`substrate init`) and the core sync workflow (`substrate sync`) end-to-end.
+This playbook is runnable by a human and is aligned to:
+- `docs/project_management/next/world-sync/contract.md`
+- `docs/project_management/next/world-sync/filesystem-semantics-spec.md`
+- `docs/project_management/next/world-sync/internal-git-spec.md`
+- `docs/project_management/next/world-sync/platform-parity-spec.md`
 
-Authoritative docs:
-- Plan: `docs/project_management/next/world-sync/plan.md`
-- Specs: `docs/project_management/next/world-sync/C0-spec.md` through `docs/project_management/next/world-sync/C9-spec.md`
-- Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+Exit codes:
+- Taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 
-## Automated smoke scripts
+## Smoke scripts (behavior platforms)
 
-Run the platform smoke script first:
-- Linux: `bash docs/project_management/next/world-sync/smoke/linux-smoke.sh`
-- macOS: `bash docs/project_management/next/world-sync/smoke/macos-smoke.sh`
-- Windows: `pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1`
+Run your platform smoke script first:
+- Linux: `bash smoke/linux-smoke.sh` (expected exit: `0`)
+- macOS: `bash smoke/macos-smoke.sh` (expected exit: `0`)
+- Windows: `pwsh -File smoke/windows-smoke.ps1` (expected exit: `0`)
 
-## 0) Preconditions
+CI smoke dispatch (preferred; self-hosted):
+- Choose the exact commit to test:
+  - `export SMOKE_CHECKOUT_REF="$(git rev-parse HEAD)"`
+- Dispatch the smoke for a checkpoint slice:
+  - WS2: `make feature-smoke FEATURE_DIR="docs/project_management/next/world-sync" PLATFORM=behavior WORKFLOW_REF="feat/world-sync" SMOKE_CHECKOUT_REF="$SMOKE_CHECKOUT_REF" SMOKE_SLICE_ID="WS2"`
+  - WS5: `make feature-smoke FEATURE_DIR="docs/project_management/next/world-sync" PLATFORM=behavior WORKFLOW_REF="feat/world-sync" SMOKE_CHECKOUT_REF="$SMOKE_CHECKOUT_REF" SMOKE_SLICE_ID="WS5"`
+  - WS7: `make feature-smoke FEATURE_DIR="docs/project_management/next/world-sync" PLATFORM=behavior WORKFLOW_REF="feat/world-sync" SMOKE_CHECKOUT_REF="$SMOKE_CHECKOUT_REF" SMOKE_SLICE_ID="WS7"`
 
-1) Verify tools:
+Notes:
+- Smoke scripts must branch on `SUBSTRATE_SMOKE_SLICE_ID` (exported by the workflow from `SMOKE_SLICE_ID`) so earlier checkpoints do not require later-slice functionality.
+
+## 0) Preconditions (all platforms)
+
+1) Verify `substrate` is on PATH:
 ```bash
 substrate --version
 which substrate
-git --version
-jq --version
 ```
+Expected:
+- Exit `0`.
 
-2) Create a clean test workspace:
+2) Verify `git` is available (required for checkpoint/rollback):
+```bash
+git --version
+```
+Expected:
+- Exit `0`.
+
+3) Create a clean test workspace:
 ```bash
 export WS_TEST_WS="$(mktemp -d)"
 cd "$WS_TEST_WS"
 git init -q
 echo "WS_TEST_WS=$WS_TEST_WS"
 ```
-
-## 1) C0: init creates workspace directories and `.gitignore` entries
-
-1) Run:
-```bash
-substrate init
-echo "exit=$?"
-```
-
-Expected:
-- Exit `0`.
-- Directories exist:
-  - `.substrate/`
-  - `.substrate-git/`
-  - `.substrate-git/repo.git/`
-
-2) Verify paths:
-```bash
-test -d .substrate
-echo "exit=$?"
-test -d .substrate-git
-echo "exit=$?"
-test -d .substrate-git/repo.git
-echo "exit=$?"
-```
-
-Expected:
-- All commands exit `0`.
-
-3) Verify `.gitignore` contains the workspace entries:
-```bash
-grep -q '^\\.substrate/$' .gitignore
-echo "exit=$?"
-grep -q '^\\.substrate-git/$' .gitignore
-echo "exit=$?"
-```
-
-Expected:
-- Both commands exit `0`.
-
-4) Re-run init (idempotent):
-```bash
-substrate init
-echo "exit=$?"
-```
-
 Expected:
 - Exit `0`.
 
-## 2) C0 gating: sync commands require init
-
-1) Create a second directory without init:
+4) Initialize workspace:
 ```bash
-export WS_TEST_NO_INIT="$(mktemp -d)"
-cd "$WS_TEST_NO_INIT"
-```
-
-2) Run:
-```bash
-substrate sync
-echo "exit=$?"
-substrate checkpoint
-echo "exit=$?"
-substrate rollback last
+substrate workspace init .
 echo "exit=$?"
 ```
-
 Expected:
-- Each command exits `2`.
-- Each error message points to `substrate init`.
+- Exit `0`.
+- `.substrate/workspace.yaml` exists.
+- `.substrate/policy.yaml` exists.
+- `.substrate/git/repo.git/` exists (directory).
 
-3) Return to the initialized workspace:
+## 1) WS0 — Gating + dry-run baseline
+
+1) `workspace sync` must refuse outside a workspace (exit `2`):
+```bash
+export WS_NO_WS="$(mktemp -d)"
+cd "$WS_NO_WS"
+substrate workspace sync --dry-run
+echo "exit=$?"
+```
+Expected:
+- Exit `2`.
+- Stderr contains: `not in a workspace` and `substrate workspace init`.
+
+2) Return to workspace:
 ```bash
 cd "$WS_TEST_WS"
 ```
 
-## 3) C1: `substrate sync --dry-run` prints effective settings and makes no changes
+## 2) WS2 — Non-PTY from_world apply seam (checkpoint CP1)
 
+This section assumes you can run at least one command in the world backend that produces pending diffs for the session.
+
+1) Run a world command that writes inside the workspace (example; adjust as needed):
 ```bash
-substrate sync --dry-run
+substrate --world -c "sh -lc 'echo hello > hello-from-world.txt'"
 echo "exit=$?"
 ```
-
-Expected:
-- Exit `0`.
-- Output includes the effective settings values for:
-  - `sync.direction`
-  - `sync.conflict_policy`
-  - `sync.exclude`
-
-## 4) C2: non-PTY world→host sync applies overlay changes
-
-Preconditions:
-- A world backend is available:
-```bash
-SUBSTRATE_WORLD=enabled substrate world doctor --json | jq . >/dev/null
-echo "exit=$?"
-```
-
 Expected:
 - Exit `0`.
 
-1) Create a change inside the world (non-PTY):
+2) Preview pending diffs:
 ```bash
-SUBSTRATE_WORLD=enabled substrate -c 'sh -c "echo from-world > ws_world_file.txt"'
+substrate workspace sync --dry-run --direction from_world --verbose
 echo "exit=$?"
 ```
+Expected:
+- Exit `0`.
+- Output includes a deterministic summary and mentions `hello-from-world.txt` as pending.
 
+3) Apply pending diffs:
+```bash
+substrate workspace sync --direction from_world --verbose
+echo "exit=$?"
+```
+Expected:
+- Exit `0`.
+- File exists on host:
+```bash
+test -f hello-from-world.txt
+```
 Expected:
 - Exit `0`.
 
-2) Apply world→host:
+4) Re-run sync (no-op):
 ```bash
-substrate sync --direction from_world --conflict-policy prefer_world
+substrate workspace sync --direction from_world
 echo "exit=$?"
 ```
-
 Expected:
 - Exit `0`.
-- File exists and matches content:
+- Output indicates no pending diffs (no-op).
+
+## 3) WS5 — Direction expansion seam (checkpoint CP2)
+
+This section validates that `from_host` and `both` are accepted and that unsupported backends/platforms are explicit.
+
+1) Create/modify a host file:
 ```bash
-test -f ws_world_file.txt
-echo "exit=$?"
-grep -q '^from-world$' ws_world_file.txt
-echo "exit=$?"
+echo "host" > host-only.txt
 ```
 
+2) Run host→world pre-sync (does not mutate host; exit `0` on supported backends):
+```bash
+substrate workspace sync --dry-run --direction from_host --verbose
+echo "exit=$?"
+```
 Expected:
-- Both commands exit `0`.
+- Exit `0` on supported backends, else exit `4` with an explicit unsupported message.
 
-## 5) Protected paths are never applied by sync
-
-1) Attempt to create a protected-path change inside the world:
+3) Run both-direction dry-run:
 ```bash
-SUBSTRATE_WORLD=enabled substrate -c 'sh -c "echo blocked > .substrate/ws-protected.txt"'
+substrate workspace sync --dry-run --direction both --verbose
 echo "exit=$?"
 ```
-
 Expected:
-- Exit `0`.
+- Exit `0` on supported backends, else exit `4` with an explicit unsupported message.
 
-2) Apply world→host:
+## 4) WS6/WS7 — Internal checkpoint + rollback seam (checkpoint CP3)
+
+1) Create a checkpoint:
 ```bash
-substrate sync --direction from_world --conflict-policy prefer_world
+substrate workspace checkpoint --message "cp1"
 echo "exit=$?"
 ```
-
-Expected:
-- Exit `5`.
-- `.substrate/ws-protected.txt` does not exist on the host:
-```bash
-test ! -e .substrate/ws-protected.txt
-echo "exit=$?"
-```
-
 Expected:
 - Exit `0`.
 
-## 6) C6/C7: internal git commits, checkpoint, and rollback
-
-1) Record a checkpoint:
+2) Mutate the workspace:
 ```bash
-substrate checkpoint
-echo "exit=$?"
+echo "mutated" > mutation.txt
 ```
 
+3) Roll back to last checkpoint:
+```bash
+substrate workspace rollback last
+echo "exit=$?"
+```
+Expected:
+- Exit `0`.
+- `mutation.txt` does not exist:
+```bash
+test ! -f mutation.txt
+```
 Expected:
 - Exit `0`.
 
-2) Verify internal git has at least one commit:
-```bash
-git --git-dir .substrate-git/repo.git log -1 --oneline >/dev/null
-echo "exit=$?"
-```
-
-Expected:
-- Exit `0`.
-
-3) Mutate a file and roll back:
-```bash
-printf 'local-change\n' > ws_world_file.txt
-grep -q '^local-change$' ws_world_file.txt
-echo "exit=$?"
-
-substrate rollback last
-echo "exit=$?"
-
-grep -q '^from-world$' ws_world_file.txt
-echo "exit=$?"
-```
-
-Expected:
-- First grep exits `0`.
-- `substrate rollback last` exits `0`.
-- Final grep exits `0`.
-
-## 7) Cleanup
+## 5) Cleanup
 
 ```bash
-cd /
-rm -rf "$WS_TEST_WS" "$WS_TEST_NO_INIT"
-unset WS_TEST_WS WS_TEST_NO_INIT
+rm -rf "$WS_TEST_WS" "$WS_NO_WS"
 ```

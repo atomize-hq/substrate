@@ -24,7 +24,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 8309c36c2114249058470978a5c13c0569d1024336d35cf71f264520a80330a4
+ADR_BODY_SHA256: 26e58c0b2d64a9f9fb9ba0f8ea553c4b73a84056e4154306c98ce75deb8dd0a2
 ### Changes (operator-facing)
 - World overlay directory enumeration reliability (Linux)
   - Existing: On some Linux hosts, a world overlay mount can succeed but directory enumeration in the merged view is broken (e.g., `ls` shows empty even though `stat` works), making worlds unsafe/confusing.

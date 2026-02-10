@@ -11,30 +11,46 @@ if ! command -v substrate >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! substrate --help 2>/dev/null | grep -q "sync"; then
-  echo "SKIP: world-sync smoke (substrate sync not available in this build)"
-  exit 0
-fi
+SLICE_ID="${SUBSTRATE_SMOKE_SLICE_ID:-WS7}"
 
-WS_TEST_WS="$(mktemp -d)"
-WS_TEST_NO_INIT="$(mktemp -d)"
-cleanup() { rm -rf "$WS_TEST_WS" "$WS_TEST_NO_INIT"; }
+WS_DIR="$(mktemp -d)"
+cleanup() { rm -rf "$WS_DIR"; }
 trap cleanup EXIT
 
-cd "$WS_TEST_WS"
-git init -q
-substrate init >/dev/null
-test -d .substrate
-test -d .substrate-git
-test -d .substrate-git/repo.git
+cd "$WS_DIR"
+substrate workspace init . >/dev/null
 
-substrate sync --dry-run >/dev/null
-
-cd "$WS_TEST_NO_INIT"
-set +e
-substrate sync >/dev/null 2>&1; test $? -eq 2
-substrate checkpoint >/dev/null 2>&1; test $? -eq 2
-substrate rollback last >/dev/null 2>&1; test $? -eq 2
-set -e
-
-echo "OK: world-sync linux smoke (core gating)"
+case "$SLICE_ID" in
+  WS2)
+    substrate --world -c "sh -lc 'echo hello > hello-from-world.txt'"
+    substrate workspace sync --direction from_world --verbose >/dev/null
+    test -f hello-from-world.txt
+    substrate workspace sync --direction from_world >/dev/null
+    echo "OK: world-sync linux smoke ($SLICE_ID)"
+    ;;
+  WS5)
+    echo "host" > host-only.txt
+    substrate workspace sync --dry-run --direction from_host --verbose >/dev/null
+    substrate workspace sync --direction from_host --verbose >/dev/null
+    substrate --world -c "sh -lc 'echo w > hello-both.txt'"
+    substrate workspace sync --direction both --verbose >/dev/null
+    test -f hello-both.txt
+    echo "OK: world-sync linux smoke ($SLICE_ID)"
+    ;;
+  WS7)
+    substrate workspace checkpoint --message "smoke" >/dev/null
+    echo "mutated" > mutation.txt
+    set +e
+    substrate workspace rollback last >/dev/null 2>&1
+    code=$?
+    set -e
+    test "$code" -eq 5
+    substrate workspace rollback last --force >/dev/null
+    test ! -f mutation.txt
+    echo "OK: world-sync linux smoke ($SLICE_ID)"
+    ;;
+  *)
+    echo "FAIL: unsupported SUBSTRATE_SMOKE_SLICE_ID=$SLICE_ID" >&2
+    exit 1
+    ;;
+esac

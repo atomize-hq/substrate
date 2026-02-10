@@ -107,7 +107,9 @@ derive_slice_prefix() {
         return 0
     fi
 
-    local last="${words[-1]}"
+    # NOTE: macOS ships bash 3.2 which does not support negative array indices.
+    local last_index=$(( ${#words[@]} - 1 ))
+    local last="${words[${last_index}]}"
     case "$last" in
         simplification|refactor|cleanup|hardening|migration|parity|stability|integration|reliability|improvement|improvements|fix|fixes|update|updates)
             if [[ "${#words[@]}" -ge 3 ]]; then
@@ -118,7 +120,7 @@ derive_slice_prefix() {
     esac
 
     if [[ "${#words[@]}" -ge 3 ]]; then
-        printf "%s%s%s" "${words[0]:0:1}" "${words[1]:0:1}" "${words[-1]:0:1}" | tr '[:lower:]' '[:upper:]'
+        printf "%s%s%s" "${words[0]:0:1}" "${words[1]:0:1}" "${words[${last_index}]:0:1}" | tr '[:lower:]' '[:upper:]'
         return 0
     fi
 

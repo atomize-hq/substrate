@@ -1,58 +1,60 @@
-# World Sync & Internal Git Plan
+# world-sync — plan (v4)
 
-## Context
-- Goal: deliver deterministic host ↔ world filesystem sync with clear directionality, conflict policy, and protected-path rules, then layer in `.substrate-git` as the internal history/rollback store.
-- Execution model: triads (code/test/integration) per slice. Code and test run in parallel on separate task branches/worktrees; integration merges and runs full verification.
-- Per-triad spec files (`C*-spec.md`) are the single source of truth for scope/acceptance. Code/Test/Integration must align to the spec; integration is responsible for reconciling any drift.
+Legacy reference (non-authoritative; do not execute from it):
+- `docs/project_management/_archived/world-sync-legacy-2026-02-10/`
 
-## Global Guardrails
-- Orchestration branch: `feat/world-sync`. Docs/tasks/session log live only here; never edit them in worktrees.
-- Work happens in dedicated task branches + worktrees per task (names in tasks.json).
-- Code agent: writes production code only. No tests. Not required to run unit/integration suites—must run fmt/clippy and validate functionality per spec.
-- Test agent: writes tests/fixtures/mocks/harnesses only (and tiny test-only helpers). No production code changes. Runs relevant tests they add/touch.
-- Integration agent: merges code+test branches, resolves mismatches, ensures functionality matches the spec, and runs full verification ending with `make integ-checks` (after fmt/clippy/tests). They own the final green state even if code/test drifted.
-- Protected paths: `.git`, `.substrate-git`, `.substrate`, sockets, device files must never be mutated by sync.
-- Each task must fit comfortably < 40–50% of 272k context (~110–140k tokens). Keep changes scoped and testable.
+## Scope
+- Feature directory: `docs/project_management/next/world-sync`
+- Orchestration branch: `feat/world-sync`
+- Authoritative spec ownership map: `docs/project_management/next/world-sync/spec_manifest.md`
+- Authoritative impact map: `docs/project_management/next/world-sync/impact_map.md`
+- Authoritative CI cadence: `docs/project_management/next/world-sync/ci_checkpoint_plan.md`
 
-## Exit codes (stable taxonomy)
+## Goal (operator-facing)
+Provide a deterministic, auditable “workspace ↔ world” sync workflow plus an internal checkpoint/rollback store:
+- `substrate workspace sync` applies pending world-session filesystem changes to the host workspace (directional; policy-driven; guarded).
+- `substrate workspace checkpoint` records a host-only snapshot in Substrate’s internal git store.
+- `substrate workspace rollback` restores the host workspace to a recorded internal checkpoint.
 
-Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+## Global guardrails (non-negotiable)
+- Specs are the single source of truth.
+- Planning Pack docs (anything under `docs/project_management/next/world-sync/`) are edited only on `feat/world-sync` (never inside task worktrees).
+- Every slice (code/test/integ) MUST fit within the per-task context budget (≤ 108,800 tokens).
+- Greenfield by default: no migrations/back-compat for legacy `.substrate-git/` or legacy world-sync CLI (`substrate sync|checkpoint|rollback`). If legacy artifacts exist, world-sync ignores them and uses only `.substrate/`.
 
-World-sync commands use these exit codes:
-- `0`: success, including intentional no-op (no diffs, auto-sync disabled)
-- `2`: configuration or usage error (including “workspace not initialized; run substrate init”)
-- `3`: world backend unavailable when the command requires it (sync operations only)
-- `4`: operation not supported on this platform or not implemented yet
-- `5`: safety-rail refusal (protected paths, size guard, clean-tree guard)
+## Invariants (must hold in every slice)
+- Protected paths are never mutated by sync/checkpoint/rollback:
+  - `crates/shell/src/execution/config_model.rs`: `PROTECTED_EXCLUDES = [".git/**", ".substrate/**"]`
+- Workspace discovery is authoritative:
+  - Workspace root is defined by `.substrate/workspace.yaml` (see `substrate workspace init`).
+  - If not in a workspace, workspace-scoped commands exit `2` with actionable guidance to run `substrate workspace init`.
+- Exit codes follow taxonomy:
+  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 
-## Common Start Checklist (all tasks)
-1. `git checkout feat/world-sync && git pull --ff-only`
-2. Read this plan, `tasks.json`, `session_log.md`, your task’s kickoff prompt, and the relevant `C*-spec.md`.
-3. Update `tasks.json` status → `in_progress`; append START entry to `session_log.md`; commit doc-only change on `feat/world-sync` (`docs: start <task-id>`).
-4. Create task branch (see tasks.json) and worktree (from repo root, e.g., `git worktree add wt/<worktree> <branch>`).
-5. Do not edit docs/tasks/logs inside worktrees.
+## Cross-platform execution model (v4; platform-fix at checkpoints only)
+- Behavior platforms (feature smoke required): `linux, macos, windows`
+- CI parity platforms (compile parity required): `linux, macos, windows`
+- Cross-platform CI dispatch MUST occur only at the bounded checkpoints in `ci_checkpoint_plan.md`.
 
-## Common End Checklist
-- Code/Test tasks:
-  1. Run required checks per kickoff (code: fmt/clippy only; test: fmt + relevant tests). Capture outputs for END log.
-  2. Commit worktree changes.
-  3. Merge/cherry-pick into task branch if needed; from repo root merge back into `feat/world-sync` (ff-only).
-  4. Update `tasks.json` status, append END entry to `session_log.md` (commands, results, blockers), create required kickoff prompts for downstream tasks, commit docs (`docs: finish <task-id>`).
-  5. Remove worktree if done.
-- Integration tasks:
-  1. Merge code+test branches into integration worktree; resolve conflicts/mismatches to spec.
-  2. Run fmt/clippy + required test suites; finish with `make integ-checks`. Record outputs.
-  3. Merge integration branch back to `feat/world-sync` (ff-only), update `tasks.json`/`session_log.md`, commit docs, remove worktree.
+## Execution gates (enabled)
+- Planning quality gate must exist and be `ACCEPT` before any triad starts:
+  - `docs/project_management/next/world-sync/quality_gate_report.md`
+- Execution preflight task must be completed before any code/test triad starts:
+  - Task: `F0-exec-preflight`
+  - Report: `docs/project_management/next/world-sync/execution_preflight_report.md`
 
-## Triads Overview
-- C0: Init + gating (require `substrate init`, create `.substrate/` and `.substrate-git/`, host/world readiness guards).
-- C1: Config/CLI surface (no behavior change).
-- WDL0–WDL2: World-deps selection layer (executes between C1 and C2; see `docs/project_management/_archived/world_deps_selection_layer/plan.md`).
-- C2: Manual world→host sync (non-PTY) with conflict/filter controls.
-- C3: Auto-sync (non-PTY) on session close + safety rails.
-- C4: PTY overlay diff + manual/auto world→host sync.
-- C5: Host→world pre-sync and directional semantics.
-- C6: `.substrate-git` integration (host path) for sync commits/checkpoints.
-- C7: Rollback CLI via `.substrate-git`.
-- C8: World-side `.substrate-git` bootstrap/bridge (ensure world repo exists/aligns, agent-side ops).
-- C9: Init UX & migration (interactive defaults, existing workspace migration, improved gating UX).
+## Triads (authoritative slice list)
+- Checkpoint group CP1 (boundary slice: `WS2`):
+  - `WS0` — CLI + gating + dry-run (no mutations)
+  - `WS1` — Non-PTY pending-diff discovery + reporting (no mutations)
+  - `WS2` — Non-PTY world→host apply (direction=`from_world`) + safety rails
+- Checkpoint group CP2 (boundary slice: `WS5`):
+  - `WS3` — Auto-sync trigger + policy (non-PTY)
+  - `WS4` — PTY pending-diff discovery + reporting
+  - `WS5` — Host→world pre-sync + direction expansion (`from_host` / `both`)
+- Checkpoint group CP3 (boundary slice: `WS7`):
+  - `WS6` — Internal git checkpoint (`substrate workspace checkpoint`)
+  - `WS7` — Internal git rollback (`substrate workspace rollback`)
+
+Authoritative task graph:
+- `docs/project_management/next/world-sync/tasks.json`

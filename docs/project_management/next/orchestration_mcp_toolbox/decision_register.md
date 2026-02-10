@@ -320,3 +320,169 @@ Scope:
 **Follow-up tasks (explicit)**
 - Rename CLI docs from `substrate mcp …` to `substrate agent toolbox …`.
 - Use `SUBSTRATE_AGENT_TOOLBOX_*` env output keys for internal toolbox wiring.
+
+---
+
+### DR-0007 — Toolbox UDS endpoint placement + permissions (deterministic per-session path vs temp/random)
+
+**Decision owner(s):** Agent toolbox + Shell maintainers  
+**Date:** 2026-02-10  
+**Status:** Accepted  
+**Related docs:** `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`
+
+**Problem / Context**
+- We chose UDS-first transport, but we must lock where the UDS socket lives, what permissions it uses, and how stale sockets are handled.
+- This impacts determinism (“where do I find it”), cleanup guarantees, and cross-platform parity.
+
+**Option A — Deterministic per-session socket path with user-only permissions (recommended)**
+- **Pros:**
+  - Predictable and debuggable; easy to report in `substrate agent toolbox status`.
+  - Clear permissions story (user-only by default).
+  - Cleanup can be deterministic (unlink stale sockets at startup).
+- **Cons:**
+  - Requires explicit cleanup behavior on crash/restart.
+- **Cascading implications:**
+  - Default UDS permissions:
+    - parent dir: `0700`
+    - socket file: `0600`
+  - Stale-socket handling:
+    - On startup, if the target socket path exists, the toolbox server MUST attempt to detect staleness and MUST unlink stale sockets before binding.
+- **Risks:**
+  - If cleanup logic is buggy, stale sockets could block startup; mitigated by “detect + unlink stale” and clear errors.
+- **Unlocks:**
+  - Stable operational semantics and reproducible diagnostics.
+- **Quick wins / low-hanging fruit:**
+  - Implement “ensure dir + unlink stale + bind” logic for all platforms.
+
+**Option B — Temp directory + randomized socket path**
+- **Pros:**
+  - Lower chance of collisions; fewer long-lived artifacts.
+- **Cons:**
+  - Less discoverable; temp-dir behavior varies across OSes.
+  - Harder to reason about lifecycle and cleanup across sessions.
+- **Cascading implications:**
+  - Operators must always consult `env/status` to discover the endpoint.
+- **Risks:**
+  - Debuggability regressions and inconsistent behavior.
+- **Unlocks:**
+  - Slightly simpler collision avoidance, at the cost of determinism.
+- **Quick wins / low-hanging fruit:**
+  - Prototype quickly, but likely needs redesign later.
+
+**Recommendation**
+- **Selected:** Option A — Deterministic per-session socket path with user-only permissions.
+- **Rationale (crisp):** Determinism + debuggability are worth the small amount of explicit cleanup logic; this also enables a clear permissions posture.
+
+**Follow-up tasks (explicit)**
+- Document the canonical per-session UDS socket paths (host-scoped vs world-scoped) in ADR-0026.
+- Ensure `substrate agent toolbox status/env` report the exact endpoint string.
+
+---
+
+### DR-0008 — Toolbox caller identity + auth (per-session token vs implicit trust)
+
+**Decision owner(s):** Agent toolbox + Agent Hub maintainers  
+**Date:** 2026-02-10  
+**Status:** Accepted  
+**Related docs:** `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`, `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`
+
+**Problem / Context**
+- The toolbox server must enforce `role=orchestrator` gating and attribute tool calls to the correct `(agent_id, role, orchestration_session_id)`.
+- UDS permissions reduce exposure, but do not fully bind calls to the intended orchestrator identity (any process with socket access could connect).
+- The auth mechanism must not require a manual operator step in normal operation.
+
+**Option A — Per-orchestration-session auth token minted by Agent Hub (recommended)**
+- **Pros:**
+  - Binds toolbox access to the orchestrator session deterministically.
+  - Keeps role-gated tools from being callable by unrelated local processes that can reach the socket.
+  - Clear auditability: the hub mints identity + token; the toolbox enforces.
+- **Cons:**
+  - Requires secure token distribution and careful redaction (never log/print by default).
+- **Cascading implications:**
+  - The Agent Hub MUST mint a token at orchestration session start.
+  - The toolbox server MUST deny requests with missing/invalid tokens.
+  - Debug/manual wiring may exist, but MUST be explicit and MUST NOT print secrets by default.
+- **Risks:**
+  - Token leakage via operator workflows if printed; mitigated by “not printed by default” and redaction rules.
+- **Unlocks:**
+  - A legitimate security posture for internal privileged tools that can coexist with untrusted/unknown processes in the same user/world context.
+- **Quick wins / low-hanging fruit:**
+  - Implement a simple handshake/metadata token check and treat the token as a secret (redaction/caps apply).
+
+**Option B — No auth token; rely on UDS permissions + implicit trust**
+- **Pros:**
+  - Simplest to implement.
+- **Cons:**
+  - Any process with socket access can call privileged tools; weak identity story.
+  - Harder to defend against accidental or malicious invocation from unrelated processes.
+- **Cascading implications:**
+  - The toolbox becomes effectively a privileged local API with no caller binding.
+- **Risks:**
+  - Privilege escalation within the same user/world context.
+- **Unlocks:**
+  - Short-term convenience only.
+- **Quick wins / low-hanging fruit:**
+  - None worth the security tradeoff.
+
+**Recommendation**
+- **Selected:** Option A — Per-orchestration-session auth token minted by Agent Hub.
+- **Rationale (crisp):** UDS permissions are necessary but not sufficient; token binding provides deterministic, auditable access control without requiring manual operator steps.
+
+**Follow-up tasks (explicit)**
+- Define the token injection mechanism for orchestrator sessions and ensure it is not printed/logged by default.
+
+---
+
+### DR-0009 — Toolbox token injection mechanism (env var vs inherited one-time FD)
+
+**Decision owner(s):** Agent toolbox + Shell maintainers  
+**Date:** 2026-02-10  
+**Status:** Accepted  
+**Related docs:** `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`
+
+**Problem / Context**
+- DR-0008 requires a per-session token, but we must decide how the Agent Hub injects it into the orchestrator session.
+- The mechanism must not require manual operator steps in normal operation and should minimize accidental disclosure in logs/diagnostics.
+
+**Option A — Inject token via environment variable**
+- **Pros:**
+  - Simple to implement for any spawned process.
+  - Easy to debug with `env` output.
+- **Cons:**
+  - Higher accidental exposure risk (debug logs, crash dumps, operator workflows).
+  - Encourages secret env var proliferation.
+- **Cascading implications:**
+  - Requires a canonical env var name and strict redaction rules everywhere.
+- **Risks:**
+  - Secret leakage via diagnostics or operator workflows.
+- **Unlocks:**
+  - Fastest path to ship, with weaker posture.
+- **Quick wins / low-hanging fruit:**
+  - Straightforward for v1, but likely needs hardening later.
+
+**Option B — Inject token via inherited one-time pipe/FD (recommended)**
+- **Pros:**
+  - No secret in env; no on-disk secret artifact.
+  - Only the orchestrator process that inherits the FD can read the token.
+  - Stronger default posture against accidental disclosure.
+- **Cons:**
+  - More plumbing: requires a small “secret channel” abstraction for spawning and for orchestrator adapters.
+  - Not universally applicable for non-spawned/remote orchestrators (those require a different auth story).
+- **Cascading implications:**
+  - Define a standard “toolbox token FD” contract for orchestrator backends spawned by the Agent Hub.
+  - Ensure the FD is read-once and not forwarded to child processes unless explicitly intended.
+  - `substrate agent toolbox env --include-token` is debug-only and exists for manual wiring; it MUST NOT be required for normal operation.
+- **Risks:**
+  - Platform abstraction complexity if/when Windows handle passing is required.
+- **Unlocks:**
+  - A reusable secure channel pattern for other internal secrets between Substrate-managed processes.
+- **Quick wins / low-hanging fruit:**
+  - Implement for Unix first (Linux/macOS/WSL), with explicit “not supported” behavior elsewhere.
+
+**Recommendation**
+- **Selected:** Option B — Inject token via inherited one-time pipe/FD.
+- **Rationale (crisp):** Provides a stronger default security posture without adding file artifacts or requiring manual operator steps.
+
+**Follow-up tasks (explicit)**
+- Introduce a shared helper (crate/module) for “secret via FD” injection for Substrate-managed child processes.
+- Define `substrate agent toolbox env --include-token` as a debug-only escape hatch for manual wiring.
