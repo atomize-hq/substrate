@@ -483,7 +483,7 @@
         "Record evidence in session_log.md",
         "Set status to completed; add END entry; commit docs"
       ],
-  "id": "CP1-ci-checkpoint",
+      "id": "CP1-ci-checkpoint",
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/kickoff_prompts/CP1-ci-checkpoint.md",
       "name": "CI checkpoint CP1",
@@ -496,7 +496,7 @@
         "Read: ci_checkpoint_plan.md and kickoff prompt",
         "Set status to in_progress; add START entry; commit docs"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "ops",
       "worktree": null
     },
@@ -581,6 +581,45 @@
     },
     {
       "acceptance_criteria": [
+        "Run: make ci-compile-parity CI_WORKFLOW_REF=\"$ORCH_REF\" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF=\"$CHECKOUT_SHA\" \u2192 exit 0"
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "WFGADAXA2-integ-core"
+      ],
+      "description": "Windows CI parity integration task (compile parity / CI testing only; no behavior smoke required).",
+      "end_checklist": [
+        "If needed: fix + fmt/clippy + targeted tests",
+        "Ensure CI parity is green; record run id/URL in session_log.md",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGADAXA2-integ-windows\""
+      ],
+      "git_branch": "world-fs-granular-allow-deny-appendix-addon-v3-wfgadaxa2-integ-windows",
+      "id": "WFGADAXA2-integ-windows",
+      "integration_task": "WFGADAXA2-integ-windows",
+      "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/kickoff_prompts/WFGADAXA2-integ-windows.md",
+      "merge_to_orchestration": false,
+      "name": "WFGADAXA2 slice (integration Windows)",
+      "phase": "WFGADAXA2",
+      "platform": "windows",
+      "references": [
+        "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/ci_checkpoint_plan.md"
+      ],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "runner": "github-actions",
+      "start_checklist": [
+        "Run on windows host if possible",
+        "Read kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment\" TASK_ID=\"WFGADAXA2-integ-windows\""
+      ],
+      "status": "pending",
+      "type": "integration",
+      "worktree": "wt/world-fs-granular-allow-deny-appendix-addon-v3-wfgadaxa2-integ-windows"
+    },
+    {
+      "acceptance_criteria": [
         "Run: cargo fmt \u2192 exit 0",
         "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
         "Run: make integ-checks \u2192 exit 0",
@@ -591,7 +630,8 @@
         "WFGADAXA2-integ-core",
         "CP1-ci-checkpoint",
         "WFGADAXA2-integ-linux",
-        "WFGADAXA2-integ-macos"
+        "WFGADAXA2-integ-macos",
+        "WFGADAXA2-integ-windows"
       ],
       "description": "Final integration: merge any platform fixes, complete slice closeout, and confirm checkpoint evidence is recorded.",
       "end_checklist": [
@@ -658,9 +698,9 @@
         "Confirm all tasks are completed and merged as intended",
         "Set status to in_progress; add START entry; commit docs"
       ],
-  "status": "in_progress",
-  "type": "ops",
-  "worktree": null
-}
+      "status": "pending",
+      "type": "ops",
+      "worktree": null
+    }
   ]
 }
