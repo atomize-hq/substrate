@@ -290,3 +290,10 @@
 - Dispatch:
   - `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment" SLICE_ID="WFGADAXA2" LAUNCH_CODEX=1`
 - Worktree: `wt/world-fs-granular-allow-deny-appendix-addon-v3-wfgadaxa2-integ`
+
+## END — 2026-02-10T03:09:35Z — integration — WFGADAXA2-integ
+- HEAD: `500e40e738690861dfffa060e6a5f989b085682e`
+- Checks:
+  - `make integ-checks` → pass
+  - `cargo test -p shell -p substrate-trace --tests -- --nocapture` → pass
+- Final message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/logs/WFGADAXA2/integ/last_message.md`
