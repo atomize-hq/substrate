@@ -1,4 +1,4 @@
-use agent_api_types::{PolicySnapshotV2, WorldFsEnforcementV2};
+use agent_api_types::{PolicySnapshotV3, WorldFsDenyEnforcementV3};
 use anyhow::{anyhow, Context, Result};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
@@ -14,11 +14,13 @@ pub(crate) enum EnforcementPlanModeV1 {
     BestEffort,
 }
 
-impl From<WorldFsEnforcementV2> for EnforcementPlanModeV1 {
-    fn from(value: WorldFsEnforcementV2) -> Self {
+impl From<WorldFsDenyEnforcementV3> for EnforcementPlanModeV1 {
+    fn from(value: WorldFsDenyEnforcementV3) -> Self {
         match value {
-            WorldFsEnforcementV2::Strict => Self::Strict,
-            WorldFsEnforcementV2::BestEffort => Self::BestEffort,
+            WorldFsDenyEnforcementV3::Strict => Self::Strict,
+            WorldFsDenyEnforcementV3::PreferStrict | WorldFsDenyEnforcementV3::Weak => {
+                Self::BestEffort
+            }
         }
     }
 }
@@ -33,35 +35,34 @@ pub(crate) struct EnforcementPlanV1 {
     pub(crate) write_deny: Vec<String>,
 }
 
-pub(crate) fn maybe_encode_from_snapshot(snapshot: &PolicySnapshotV2) -> Result<Option<String>> {
-    let read_deny = snapshot
+pub(crate) fn maybe_encode_from_snapshot(snapshot: &PolicySnapshotV3) -> Result<Option<String>> {
+    let canonical = snapshot
+        .canonicalize()
+        .map_err(|err| anyhow!("invalid PolicySnapshotV3: {err}"))?;
+
+    let read_deny = canonical
         .world_fs
         .read
         .as_ref()
         .map(|d| d.deny_list.clone())
         .unwrap_or_default();
-    let discover_deny = snapshot
+    let discover_deny = canonical
         .world_fs
         .discover
         .as_ref()
         .map(|d| d.deny_list.clone())
         .unwrap_or_else(|| read_deny.clone());
-    let write_deny = snapshot
-        .world_fs
-        .write
-        .as_ref()
-        .map(|d| d.deny_list.clone())
-        .unwrap_or_default();
+    let write_deny = canonical.world_fs.write.deny_list.clone();
 
     let any_deny = !read_deny.is_empty() || !discover_deny.is_empty() || !write_deny.is_empty();
     if !any_deny {
         return Ok(None);
     }
 
-    let enforcement = snapshot
+    let enforcement = canonical
         .world_fs
-        .enforcement
-        .ok_or_else(|| anyhow!("world_fs.enforcement missing for deny_list configuration"))?;
+        .deny_enforcement
+        .ok_or_else(|| anyhow!("world_fs.deny_enforcement missing for deny_list configuration"))?;
 
     let plan = EnforcementPlanV1 {
         version: 1,
@@ -180,34 +181,31 @@ fn validate_deny_wildcards(pattern: &str) -> Result<()> {
 mod tests {
     use super::*;
     use agent_api_types::{
-        PolicySnapshotLimitsV2, PolicySnapshotV2, PolicySnapshotWorldFsDimensionV2,
-        PolicySnapshotWorldFsIsolationV2, PolicySnapshotWorldFsV2, WorldFsEnforcementV2,
+        PolicySnapshotV3, PolicySnapshotWorldFsDimensionV3, PolicySnapshotWorldFsFailClosedV3,
+        PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3, WorldFsDenyEnforcementV3,
     };
     use std::sync::{Mutex, OnceLock};
 
     static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
-    fn minimal_snapshot_full_read_only() -> PolicySnapshotV2 {
-        PolicySnapshotV2 {
-            schema_version: 2,
-            world_fs: PolicySnapshotWorldFsV2 {
-                mode: substrate_common::WorldFsMode::ReadOnly,
-                isolation: PolicySnapshotWorldFsIsolationV2::Full,
-                require_world: true,
-                enforcement: None,
+    fn minimal_snapshot_full_read_only() -> PolicySnapshotV3 {
+        PolicySnapshotV3 {
+            schema_version: 3,
+            world_fs: PolicySnapshotWorldFsV3 {
+                host_visible: false,
+                fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: true },
+                deny_enforcement: None,
+                caged_required: false,
                 discover: None,
-                read: Some(PolicySnapshotWorldFsDimensionV2 {
+                read: Some(PolicySnapshotWorldFsDimensionV3 {
                     allow_list: vec!["src".to_string()],
-                    deny_list: vec![],
+                    deny_list: Vec::new(),
                 }),
-                write: None,
-            },
-            net_allowed: vec![],
-            limits: PolicySnapshotLimitsV2 {
-                max_memory_mb: 0,
-                max_cpu_percent: 0,
-                max_runtime_ms: 0,
-                max_egress_bytes: 0,
+                write: PolicySnapshotWorldFsWriteV3 {
+                    enabled: false,
+                    allow_list: vec!["src".to_string()],
+                    deny_list: Vec::new(),
+                },
             },
         }
     }
@@ -223,7 +221,7 @@ mod tests {
     #[test]
     fn encode_defaults_discover_deny_to_read_deny() {
         let mut snapshot = minimal_snapshot_full_read_only();
-        snapshot.world_fs.enforcement = Some(WorldFsEnforcementV2::Strict);
+        snapshot.world_fs.deny_enforcement = Some(WorldFsDenyEnforcementV3::Strict);
         snapshot
             .world_fs
             .read
@@ -249,14 +247,14 @@ mod tests {
     #[test]
     fn encode_does_not_default_discover_deny_when_discover_present() {
         let mut snapshot = minimal_snapshot_full_read_only();
-        snapshot.world_fs.enforcement = Some(WorldFsEnforcementV2::Strict);
+        snapshot.world_fs.deny_enforcement = Some(WorldFsDenyEnforcementV3::Strict);
         snapshot
             .world_fs
             .read
             .as_mut()
             .expect("read present")
             .deny_list = vec!["secrets/secret.txt".to_string()];
-        snapshot.world_fs.discover = Some(PolicySnapshotWorldFsDimensionV2 {
+        snapshot.world_fs.discover = Some(PolicySnapshotWorldFsDimensionV3 {
             allow_list: vec![".".to_string()],
             deny_list: vec![],
         });

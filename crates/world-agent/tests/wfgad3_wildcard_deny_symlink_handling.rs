@@ -1,8 +1,9 @@
 #![cfg(all(unix, target_os = "linux"))]
 
 use agent_api_types::{
-    ExecuteRequest, PolicySnapshotLimitsV2, PolicySnapshotV2, PolicySnapshotWorldFsDimensionV2,
-    PolicySnapshotWorldFsIsolationV2, PolicySnapshotWorldFsV2, WorldFsEnforcementV2, WorldFsMode,
+    ExecuteRequest, PolicySnapshotV3, PolicySnapshotWorldFsDimensionV3,
+    PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
+    WorldFsDenyEnforcementV3,
 };
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
@@ -37,55 +38,46 @@ fn overlay_available() -> bool {
             .unwrap_or(false)
 }
 
-fn snapshot_read_only_with_read_deny(deny_list: Vec<String>) -> PolicySnapshotV2 {
-    PolicySnapshotV2 {
-        schema_version: 2,
-        world_fs: PolicySnapshotWorldFsV2 {
-            mode: WorldFsMode::ReadOnly,
-            isolation: PolicySnapshotWorldFsIsolationV2::Full,
-            require_world: true,
-            enforcement: Some(WorldFsEnforcementV2::BestEffort),
+fn snapshot_read_only_with_read_deny(deny_list: Vec<String>) -> PolicySnapshotV3 {
+    PolicySnapshotV3 {
+        schema_version: 3,
+        world_fs: PolicySnapshotWorldFsV3 {
+            host_visible: false,
+            fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: true },
+            deny_enforcement: Some(WorldFsDenyEnforcementV3::Weak),
+            caged_required: false,
             discover: None,
-            read: Some(PolicySnapshotWorldFsDimensionV2 {
+            read: Some(PolicySnapshotWorldFsDimensionV3 {
                 allow_list: vec![".".to_string()],
                 deny_list,
             }),
-            write: None,
-        },
-        net_allowed: Vec::new(),
-        limits: PolicySnapshotLimitsV2 {
-            max_memory_mb: 0,
-            max_cpu_percent: 0,
-            max_runtime_ms: 0,
-            max_egress_bytes: 0,
+            write: PolicySnapshotWorldFsWriteV3 {
+                enabled: false,
+                allow_list: vec![".".to_string()],
+                deny_list: Vec::new(),
+            },
         },
     }
 }
 
-fn snapshot_writable_with_write_deny(deny_list: Vec<String>) -> PolicySnapshotV2 {
-    PolicySnapshotV2 {
-        schema_version: 2,
-        world_fs: PolicySnapshotWorldFsV2 {
-            mode: WorldFsMode::Writable,
-            isolation: PolicySnapshotWorldFsIsolationV2::Full,
-            require_world: true,
-            enforcement: Some(WorldFsEnforcementV2::BestEffort),
+fn snapshot_writable_with_write_deny(deny_list: Vec<String>) -> PolicySnapshotV3 {
+    PolicySnapshotV3 {
+        schema_version: 3,
+        world_fs: PolicySnapshotWorldFsV3 {
+            host_visible: false,
+            fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: false },
+            deny_enforcement: Some(WorldFsDenyEnforcementV3::Weak),
+            caged_required: false,
             discover: None,
-            read: Some(PolicySnapshotWorldFsDimensionV2 {
+            read: Some(PolicySnapshotWorldFsDimensionV3 {
                 allow_list: vec![".".to_string()],
                 deny_list: Vec::new(),
             }),
-            write: Some(PolicySnapshotWorldFsDimensionV2 {
+            write: PolicySnapshotWorldFsWriteV3 {
+                enabled: true,
                 allow_list: vec![".".to_string()],
                 deny_list,
-            }),
-        },
-        net_allowed: Vec::new(),
-        limits: PolicySnapshotLimitsV2 {
-            max_memory_mb: 0,
-            max_cpu_percent: 0,
-            max_runtime_ms: 0,
-            max_egress_bytes: 0,
+            },
         },
     }
 }
@@ -95,7 +87,7 @@ fn execute_non_pty(
     cwd: &Path,
     cmd: &str,
     env: HashMap<String, String>,
-    policy_snapshot: PolicySnapshotV2,
+    policy_snapshot: PolicySnapshotV3,
 ) -> Option<agent_api_types::ExecuteResponse> {
     let req = ExecuteRequest {
         profile: None,
@@ -105,7 +97,7 @@ fn execute_non_pty(
         pty: false,
         agent_id: "wfgad3-test".to_string(),
         budget: None,
-        policy_snapshot: Some(policy_snapshot),
+        policy_snapshot,
         world_fs_mode: None,
     };
 

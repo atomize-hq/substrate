@@ -19,20 +19,12 @@ type Ws =
 
 fn minimal_policy_snapshot_v2_full_isolation() -> Value {
     json!({
-        "schema_version": 2,
+        "schema_version": 3,
         "world_fs": {
-            "mode": "writable",
-            "isolation": "full",
-            "require_world": true,
+            "host_visible": false,
+            "fail_closed": { "routing": false },
             "read": { "allow_list": ["."], "deny_list": [] },
-            "write": { "allow_list": ["."], "deny_list": [] }
-        },
-        "net_allowed": [],
-        "limits": {
-            "max_memory_mb": 0,
-            "max_cpu_percent": 0,
-            "max_runtime_ms": 0,
-            "max_egress_bytes": 0
+            "write": { "enabled": true, "allow_list": ["."], "deny_list": [] }
         }
     })
 }
@@ -108,17 +100,22 @@ async fn http_execute_rejects_policy_snapshot_v1_schema_version() {
         }
     };
 
-    let mut snapshot = minimal_policy_snapshot_v2_full_isolation();
-    snapshot["schema_version"] = json!(1);
+    for legacy in [1u32, 2u32] {
+        let mut snapshot = minimal_policy_snapshot_v2_full_isolation();
+        snapshot["schema_version"] = json!(legacy);
 
-    let (status, body) =
-        post_execute_json(service, minimal_execute_request_with_snapshot(snapshot)).await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    let error = assert_http_400_error_shape(&body);
-    assert!(
-        error.to_ascii_lowercase().contains("schema_version"),
-        "expected schema_version diagnostic, got: {error}"
-    );
+        let (status, body) = post_execute_json(
+            service.clone(),
+            minimal_execute_request_with_snapshot(snapshot),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        let error = assert_http_400_error_shape(&body);
+        assert!(
+            error.to_ascii_lowercase().contains("schema_version"),
+            "expected schema_version diagnostic for schema_version={legacy}, got: {error}"
+        );
+    }
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -158,15 +155,16 @@ async fn http_execute_rejects_policy_snapshot_invalid_key_combination() {
     };
 
     let mut snapshot = minimal_policy_snapshot_v2_full_isolation();
-    snapshot["world_fs"]["mode"] = json!("read_only");
-    // In V2, `write` MUST be omitted when mode=read_only.
+    snapshot["world_fs"]["write"]["enabled"] = json!(false);
+    // In V3, write.enabled=false requires fail_closed.routing=true.
 
     let (status, body) =
         post_execute_json(service, minimal_execute_request_with_snapshot(snapshot)).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     let error = assert_http_400_error_shape(&body);
     assert!(
-        error.to_ascii_lowercase().contains("write"),
+        error.to_ascii_lowercase().contains("write")
+            || error.to_ascii_lowercase().contains("routing"),
         "expected write/mode diagnostic, got: {error}"
     );
 }
@@ -183,7 +181,7 @@ async fn http_execute_rejects_policy_snapshot_invalid_patterns() {
 
     let mut snapshot = minimal_policy_snapshot_v2_full_isolation();
     snapshot["world_fs"]["read"]["allow_list"] = json!(["src/**"]);
-    // In V2, wildcards are forbidden in allow_list.
+    // In V3, wildcards are forbidden in allow_list.
 
     let (status, body) =
         post_execute_json(service, minimal_execute_request_with_snapshot(snapshot)).await;
@@ -291,31 +289,33 @@ async fn ws_start_session_rejects_policy_snapshot_v1_schema_version_and_closes()
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
-    let mut snapshot = minimal_policy_snapshot_v2_full_isolation();
-    snapshot["schema_version"] = json!(1);
+    for legacy in [1u32, 2u32] {
+        let mut snapshot = minimal_policy_snapshot_v2_full_isolation();
+        snapshot["schema_version"] = json!(legacy);
 
-    let mut ws = ws_connect(addr).await;
-    ws.send(Message::Text(
-        json!({
-            "type": "start_session",
-            "cwd": cwd.display().to_string(),
-            "env": { "HOME": "/root", "TERM": "xterm-256color" },
-            "policy_snapshot": snapshot,
-            "cols": 80,
-            "rows": 24,
-        })
-        .to_string(),
-    ))
-    .await
-    .expect("send start_session");
+        let mut ws = ws_connect(addr).await;
+        ws.send(Message::Text(
+            json!({
+                "type": "start_session",
+                "cwd": cwd.display().to_string(),
+                "env": { "HOME": "/root", "TERM": "xterm-256color" },
+                "policy_snapshot": snapshot,
+                "cols": 80,
+                "rows": 24,
+            })
+            .to_string(),
+        ))
+        .await
+        .expect("send start_session");
 
-    let frame = recv_json(&mut ws).await;
-    let message = assert_ws_fatal_start_session_error(&frame);
-    assert!(
-        message.to_ascii_lowercase().contains("schema_version"),
-        "expected schema_version diagnostic, got: {message}"
-    );
-    assert_ws_closes_after_fatal(&mut ws).await;
+        let frame = recv_json(&mut ws).await;
+        let message = assert_ws_fatal_start_session_error(&frame);
+        assert!(
+            message.to_ascii_lowercase().contains("schema_version"),
+            "expected schema_version diagnostic for schema_version={legacy}, got: {message}"
+        );
+        assert_ws_closes_after_fatal(&mut ws).await;
+    }
 
     server.abort();
 }
@@ -381,8 +381,8 @@ async fn ws_start_session_rejects_policy_snapshot_invalid_key_combination_and_cl
     let cwd = tmp.path().to_path_buf();
 
     let mut snapshot = minimal_policy_snapshot_v2_full_isolation();
-    snapshot["world_fs"]["mode"] = json!("read_only");
-    // In V2, `write` MUST be omitted when mode=read_only.
+    snapshot["world_fs"]["write"]["enabled"] = json!(false);
+    // In V3, write.enabled=false requires fail_closed.routing=true.
 
     let mut ws = ws_connect(addr).await;
     ws.send(Message::Text(
@@ -402,7 +402,8 @@ async fn ws_start_session_rejects_policy_snapshot_invalid_key_combination_and_cl
     let frame = recv_json(&mut ws).await;
     let message = assert_ws_fatal_start_session_error(&frame);
     assert!(
-        message.to_ascii_lowercase().contains("write"),
+        message.to_ascii_lowercase().contains("write")
+            || message.to_ascii_lowercase().contains("routing"),
         "expected write/mode diagnostic, got: {message}"
     );
     assert_ws_closes_after_fatal(&mut ws).await;
@@ -426,7 +427,7 @@ async fn ws_start_session_rejects_policy_snapshot_invalid_patterns_and_closes() 
 
     let mut snapshot = minimal_policy_snapshot_v2_full_isolation();
     snapshot["world_fs"]["read"]["allow_list"] = json!(["src/**"]);
-    // In V2, wildcards are forbidden in allow_list.
+    // In V3, wildcards are forbidden in allow_list.
 
     let mut ws = ws_connect(addr).await;
     ws.send(Message::Text(

@@ -176,20 +176,20 @@ fn waps_0008_policy_patch_edits_visible_to_next_command() {
         2,
         "expected exactly two world-agent execute requests"
     );
-    let mode_1 = records[0]
-        .pointer("/policy_snapshot/world_fs/mode")
-        .and_then(|v| v.as_str())
-        .unwrap_or("<missing>");
-    let mode_2 = records[1]
-        .pointer("/policy_snapshot/world_fs/mode")
-        .and_then(|v| v.as_str())
-        .unwrap_or("<missing>");
+    let write_enabled_1 = records[0]
+        .pointer("/policy_snapshot/world_fs/write/enabled")
+        .and_then(|v| v.as_bool());
+    let write_enabled_2 = records[1]
+        .pointer("/policy_snapshot/world_fs/write/enabled")
+        .and_then(|v| v.as_bool());
     assert_eq!(
-        mode_1, "writable",
-        "first command should use writable snapshot"
+        write_enabled_1,
+        Some(true),
+        "first command should use write.enabled=true snapshot"
     );
     assert_eq!(
-        mode_2, "read_only",
+        write_enabled_2,
+        Some(false),
         "second command should reflect edited policy patch"
     );
 }

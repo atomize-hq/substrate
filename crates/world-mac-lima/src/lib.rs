@@ -5,7 +5,11 @@
 //! by running a Linux VM via Lima and delegating to the world-agent inside.
 
 use agent_api_client::AgentClient;
-use agent_api_types::{ExecuteRequest, ExecuteResponse, WorldFsMode};
+use agent_api_types::{
+    ExecuteRequest, ExecuteResponse, PolicySnapshotV3, PolicySnapshotWorldFsDimensionV3,
+    PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
+    WorldFsMode,
+};
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::path::PathBuf;
@@ -264,6 +268,30 @@ impl MacLimaBackend {
 
     /// Convert world_api::ExecRequest to agent_api_types::ExecuteRequest.
     fn convert_exec_request(&self, req: &ExecRequest, fs_mode: WorldFsMode) -> ExecuteRequest {
+        let write_enabled = matches!(fs_mode, WorldFsMode::Writable);
+        let policy_snapshot = PolicySnapshotV3 {
+            schema_version: 3,
+            world_fs: PolicySnapshotWorldFsV3 {
+                host_visible: true,
+                fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: false },
+                deny_enforcement: None,
+                caged_required: false,
+                discover: Some(PolicySnapshotWorldFsDimensionV3 {
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                }),
+                read: Some(PolicySnapshotWorldFsDimensionV3 {
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                }),
+                write: PolicySnapshotWorldFsWriteV3 {
+                    enabled: write_enabled,
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                },
+            },
+        };
+
         ExecuteRequest {
             profile: None,
             cmd: req.cmd.clone(),
@@ -272,7 +300,7 @@ impl MacLimaBackend {
             pty: req.pty,
             agent_id: "world-mac-lima".to_string(),
             budget: None,
-            policy_snapshot: None,
+            policy_snapshot,
             world_fs_mode: Some(fs_mode),
         }
     }

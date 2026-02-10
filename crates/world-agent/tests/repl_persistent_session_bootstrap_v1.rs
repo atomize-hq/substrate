@@ -21,18 +21,11 @@ type Ws =
 
 fn minimal_policy_snapshot() -> Value {
     json!({
-        "schema_version": 2,
+        "schema_version": 3,
         "world_fs": {
-            "mode": "writable",
-            "isolation": "workspace",
-            "require_world": true
-        },
-        "net_allowed": [],
-        "limits": {
-            "max_memory_mb": 0,
-            "max_cpu_percent": 0,
-            "max_runtime_ms": 0,
-            "max_egress_bytes": 0
+            "host_visible": true,
+            "fail_closed": { "routing": false },
+            "write": { "enabled": true }
         }
     })
 }
