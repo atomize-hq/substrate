@@ -18,11 +18,10 @@ Do not edit planning docs inside the worktree.
 - Run:
   - `cargo fmt`
   - `cargo clippy --workspace --all-targets -- -D warnings`
-  - relevant tests
+  - `cargo test -p shell --tests -- --nocapture` (note: crate is `shell`, not `substrate-shell`)
   - `make integ-checks`
 - Fill out `WFGADAXA0-closeout_report.md` per `docs/project_management/standards/SLICE_CLOSEOUT_GATE_STANDARD.md`.
 
 ## End checklist
 1. Ensure gates are green and closeout report is updated.
 2. `make triad-task-finish TASK_ID="WFGADAXA0-integ"`
-
