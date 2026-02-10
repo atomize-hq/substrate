@@ -28,7 +28,7 @@ Scope:
 - **Cons:**
   - Requires defining a fallback for environments that cannot use UDS for the orchestrator scope.
 - **Cascading implications:**
-  - `substrate agents tools env` must emit an endpoint string that can represent both `unix://` and `tcp://`.
+  - `substrate agent toolbox env` must emit an endpoint string that can represent both `unix://` and `tcp://`.
   - When falling back to TCP, bind MUST be loopback-only and randomized port by default.
 - **Risks:**
   - TCP fallback can be misconfigured; mitigated by strict defaults and explicit `--explain`/status output.
@@ -57,7 +57,7 @@ Scope:
 - **Rationale (crisp):** Keeps the default exposure surface minimal and aligns with “internal-only” semantics while still allowing a controlled fallback path.
 
 **Follow-up tasks (explicit)**
-- Define the endpoint formats emitted by `substrate agents tools env` for UDS and TCP.
+- Define the endpoint formats emitted by `substrate agent toolbox env` for UDS and TCP.
 - Define the default filesystem permissions for the UDS socket and the default bind rules for TCP.
 
 ---
@@ -81,7 +81,7 @@ Scope:
 - **Cons:**
   - More server lifecycles to manage (start/stop).
 - **Cascading implications:**
-  - `substrate agents tools status` must report per-session instances.
+  - `substrate agent toolbox status` must report per-session instances.
   - The hub must define cleanup rules when sessions end or crash.
 - **Risks:**
   - Endpoint churn; mitigated by stable env emission per session and good diagnostics.
@@ -131,7 +131,7 @@ Scope:
 - **Cons:**
   - Requires clients to surface/record toolbox version for debugging.
 - **Cascading implications:**
-  - `substrate agents tools status --json` must expose `toolbox_version`.
+  - `substrate agent toolbox status --json` must expose `toolbox_version`.
   - Trace events for tool calls must record the toolbox version.
 - **Risks:**
   - Schema evolution must be disciplined; mitigated by additive-only policy until a major bump.
@@ -160,7 +160,7 @@ Scope:
 - **Rationale (crisp):** Keeps client configuration simple and makes the toolbox a cohesive, versioned unit.
 
 **Follow-up tasks (explicit)**
-- Define the `toolbox_version` field in `substrate agents tools status --json`.
+- Define the `toolbox_version` field in `substrate agent toolbox status --json`.
 - Record `toolbox_version` on every tool-call trace event.
 
 ---
@@ -268,7 +268,7 @@ Scope:
 
 ---
 
-### DR-0006 — CLI namespace for internal orchestration tools (`mcp` vs `agents tools`)
+### DR-0006 — CLI namespace for internal orchestration tools (`mcp` vs `agent toolbox`)
 
 **Decision owner(s):** Shell + Agent Hub maintainers  
 **Date:** 2026-02-10  
@@ -279,7 +279,7 @@ Scope:
 - Substrate will likely support external MCP servers in the future, where `substrate mcp …` is the natural namespace.
 - This ADR focuses on an *internal* orchestration toolbox used by the agent hub’s orchestrator; reusing `mcp` risks confusing “external server management” with “internal privileged tool surface”.
 
-**Option A — Use `substrate agents tools …` for the internal toolbox (recommended)**
+**Option A — Use `substrate agent toolbox …` for the internal toolbox (recommended)**
 - **Pros:**
   - Keeps `mcp` reserved for external MCP server management and discovery.
   - Places internal tools under the agent hub subsystem, which owns role gating and attribution.
@@ -288,15 +288,15 @@ Scope:
   - Slightly less obvious that the underlying protocol is MCP.
 - **Cascading implications:**
   - Canonical commands become:
-    - `substrate agents tools status [--json]`
-    - `substrate agents tools env [--json]`
+    - `substrate agent toolbox status [--json]`
+    - `substrate agent toolbox env [--json]`
   - Env exports should avoid `SUBSTRATE_MCP_*` naming to prevent collisions with external MCP wiring.
 - **Risks:**
   - If an operator searches for “mcp” they may not find this; mitigated by docs references and `help` text.
 - **Unlocks:**
   - Clear conceptual separation between internal privileged toolbox and future external MCP management.
 - **Quick wins / low-hanging fruit:**
-  - Add `help` text that explicitly states “protocol is MCP; CLI namespace is `agents tools`”.
+  - Add `help` text that explicitly states “protocol is MCP; CLI namespace is `agent toolbox`”.
 
 **Option B — Use `substrate mcp …` for the internal toolbox**
 - **Pros:**
@@ -314,9 +314,9 @@ Scope:
   - None worth the eventual rename.
 
 **Recommendation**
-- **Selected:** Option A — Use `substrate agents tools …` for the internal toolbox.
+- **Selected:** Option A — Use `substrate agent toolbox …` for the internal toolbox.
 - **Rationale (crisp):** Reserves `mcp` for external server management and keeps internal privileged tools anchored to the agent hub mental model.
 
 **Follow-up tasks (explicit)**
-- Rename CLI docs from `substrate mcp …` to `substrate agents tools …`.
+- Rename CLI docs from `substrate mcp …` to `substrate agent toolbox …`.
 - Use `SUBSTRATE_AGENT_TOOLBOX_*` env output keys for internal toolbox wiring.

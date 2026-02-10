@@ -19,7 +19,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 558413a0cce0850180d23e39ebb27d95e2b19d0c8cf54c8a696940d3a1a26c73
+ADR_BODY_SHA256: 6f6cac0ebe4586a82093aabc977f68a47dcc65496c6daac383fa27eaabaefc8c
 ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
 
 ### Changes (operator-facing)
@@ -61,7 +61,7 @@ Clarification (v1; non-negotiable):
 
 ### CLI
 - Commands:
-  - `substrate agents list [--json] [--scope <host|world|any>] [--role <ROLE>]`
+  - `substrate agent list [--json] [--scope <host|world|any>] [--role <ROLE>]`
     - Behavior: list agent inventory items visible in the effective scope (workspace overrides global), including:
       - `agent_id`
       - `backend_id` (derived; see Config)
@@ -77,7 +77,7 @@ Clarification (v1; non-negotiable):
       - `0`: success (including “agents disabled” with empty list and an explicit `disabled=true` flag in `--json`)
       - `2`: config/schema error in agent inventory or effective config (strict parsing)
       - `4`: feature unavailable on this platform/build
-  - `substrate agents status [--json] [--scope <host|world|any>] [--role <ROLE>]`
+  - `substrate agent status [--json] [--scope <host|world|any>] [--role <ROLE>]`
     - Behavior: show live hub status for the current process, including:
       - effective orchestrator selection (the `agent_id` assigned `role=orchestrator`; configured by `agents.hub.orchestrator_agent_id`)
       - active sessions keyed by `(orchestration_session_id, agent_id)`
@@ -92,7 +92,7 @@ Clarification (v1; non-negotiable):
       - `0`: success (including “agents disabled”)
       - `2`: config/schema error (strict parsing) or invalid orchestrator selection
       - `4`: feature unavailable on this platform/build
-  - `substrate agents doctor [--json]`
+  - `substrate agent doctor [--json]`
     - Behavior: validate that the Agent Hub can start deterministically and fail-closed where required:
       - inventory scan succeeds (strict schema)
       - orchestrator agent exists, is enabled, and is eligible
@@ -217,4 +217,4 @@ Clarification (v1; non-negotiable):
     - DR-0003 (Role assignment: explicit config selection vs implicit heuristics)
     - DR-0004 (World session reuse: shared per orchestration session vs per-agent worlds)
     - DR-0005 (Backend event streaming model: push vs pull)
-    - DR-0006 (CLI command placement: top-level `substrate agents` vs `substrate host|world agents`)
+    - DR-0006 (CLI command placement: top-level `substrate agent` vs `substrate host|world agent`)

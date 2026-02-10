@@ -20,7 +20,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 62347ce104ca9c24ef79f03353ac0b9c50caf477871b6ac6c77e361c2332b2c3
+ADR_BODY_SHA256: ae5cae3f081c203fd9406c5755024eda7a5e149bcfbacb94b7f595b728b05c42
 ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
 
 ### Changes (operator-facing)
@@ -59,9 +59,9 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
 
 ### CLI
 - Commands:
-  - `substrate agents tools status [--json]`
+  - `substrate agent toolbox status [--json]`
     - Behavior: report whether the internal orchestration toolbox is enabled and (when enabled) how to reach it for the current orchestration session.
-      - Naming note: the `mcp` subcommand namespace is reserved for external MCP servers; internal orchestration tools live under `agents tools`.
+      - Naming note: the `mcp` subcommand namespace is reserved for external MCP servers; internal orchestration tools live under `agent toolbox`.
       - `toolbox_enabled` (effective config)
       - `toolbox_version` (Decision Register DR-0003; v1 starts at `1`)
       - bind transport:
@@ -74,7 +74,7 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
       - `2`: config/schema error (strict parsing)
       - `3`: required dependency unavailable (e.g., world boundary required but unavailable)
       - `4`: unsupported / missing prerequisites for required posture
-  - `substrate agents tools env [--json]`
+  - `substrate agent toolbox env [--json]`
     - Behavior: emit environment/config hints for orchestrator agents to connect to the toolbox endpoint.
       - Default output is shell-compatible exports.
       - `--json` outputs a structured object.

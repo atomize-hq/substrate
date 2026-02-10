@@ -83,7 +83,7 @@ Scope:
 - **Cons:**
   - A process restart loses “live session” state (but historical state is still in trace).
 - **Cascading implications:**
-  - `substrate agents status` must present “current process view” and can optionally reference trace for historical lookback (future).
+  - `substrate agent status` must present “current process view” and can optionally reference trace for historical lookback (future).
 - **Risks:**
   - Operators may want “last known live state” across restarts; defer to router daemon/workflow engine persistence tracks.
 - **Unlocks:**
@@ -111,7 +111,7 @@ Scope:
 - **Rationale (crisp):** Avoids stale runtime state and keeps persistence in the canonical trace/event sinks.
 
 **Follow-up tasks (explicit)**
-- Define the exact “live status” fields for `substrate agents status` and ensure they are derivable without new on-disk state.
+- Define the exact “live status” fields for `substrate agent status` and ensure they are derivable without new on-disk state.
 
 ---
 
@@ -136,11 +136,11 @@ Scope:
 - **Cascading implications:**
   - Agent Hub MUST fail closed (exit code `2` / config error) if `agents.hub.orchestrator_agent_id` refers to a missing/disabled agent.
 - **Risks:**
-  - Minor setup friction; mitigated by good `agents doctor` output.
+  - Minor setup friction; mitigated by good `substrate agent doctor` output.
 - **Unlocks:**
   - Safe tool gating and consistent operator expectations.
 - **Quick wins / low-hanging fruit:**
-  - Add `substrate agents doctor --json` to explain orchestrator selection and eligibility.
+  - Add `substrate agent doctor --json` to explain orchestrator selection and eligibility.
 
 **Option B — Implicit orchestrator selection (heuristics)**
 - **Pros:**
@@ -272,7 +272,7 @@ Scope:
 
 ---
 
-### DR-0006 — CLI command placement for Agent Hub (top-level `substrate agents` vs `substrate host|world agents`)
+### DR-0006 — CLI command placement for Agent Hub (top-level `substrate agent` vs `substrate host|world agent`)
 
 **Decision owner(s):** Shell + Agent Hub maintainers  
 **Date:** 2026-02-10  
@@ -284,7 +284,7 @@ Scope:
 - Agent Hub operations are primarily control-plane (inventory, routing, role assignment) and can span both host-scoped and world-scoped agent executions.
 - We need a discoverable command surface that does not conflate “host vs world operational plane” with “filtering agents by their configured execution scope”.
 
-**Option A — Top-level `substrate agents …` (recommended), with filters**
+**Option A — Top-level `substrate agent …` (recommended), with filters**
 - **Pros:**
   - Matches existing CLI structure: Agent Hub is a subsystem similar to `config`/`policy`.
   - Avoids expanding `host` and `world` into general “command namespaces” beyond their current operational scopes.
@@ -292,7 +292,7 @@ Scope:
 - **Cons:**
   - Requires adding filter flags for convenience if operators want “world-only” or “host-only” views.
 - **Cascading implications:**
-  - `substrate agents list/status/doctor` become the canonical entrypoints.
+  - `substrate agent list/status/doctor` become the canonical entrypoints.
   - `--scope` filtering MUST be defined as a view filter only; it MUST NOT change global `--world/--no-world` execution toggles.
 - **Risks:**
   - Operators may initially expect `substrate world agents …` to exist; mitigated via help text and documentation.
@@ -301,7 +301,7 @@ Scope:
 - **Quick wins / low-hanging fruit:**
   - Implement `--scope` filter for `agents list` and `agents status`.
 
-**Option B — Nested under planes: `substrate host agents …` and `substrate world agents …`**
+**Option B — Nested under planes: `substrate host agent …` and `substrate world agent …`**
 - **Pros:**
   - “Reads” cleanly if interpreted as plane-scoped commands.
   - Could provide short defaults (world-only list vs host-only list).
@@ -309,7 +309,7 @@ Scope:
   - Expands `host/world` from “operational plane” into a general namespace, unlike the current CLI shape.
   - Risks conflating plane selection with agent filtering (an agent’s `execution.scope` may differ from the command prefix semantics).
 - **Cascading implications:**
-  - Requires defining duplication/precedence if both `substrate agents list` and `substrate world agents list` exist.
+  - Requires defining duplication/precedence if both `substrate agent list` and `substrate world agent list` exist.
   - Requires careful docs to prevent “world prefix means this command runs in-world” confusion (many Agent Hub operations are host control-plane).
 - **Risks:**
   - Mental model drift: `host/world` no longer primarily mean “doctor + world lifecycle”.
@@ -319,9 +319,9 @@ Scope:
   - None without adding new nested subcommand trees in clap.
 
 **Recommendation**
-- **Selected:** Option A — Top-level `substrate agents …` with filters.
+- **Selected:** Option A — Top-level `substrate agent …` with filters.
 - **Rationale (crisp):** Agent Hub is a subsystem; keeping it top-level preserves the existing CLI mental model and avoids conflating plane selection with agent execution-scope filtering.
 
 **Follow-up tasks (explicit)**
-- Add `--scope host|world|any` to `substrate agents list` and `substrate agents status` as view-only filters.
+- Add `--scope host|world|any` to `substrate agent list` and `substrate agent status` as view-only filters.
 - Ensure help text explicitly distinguishes global `--world/--no-world` toggles (execution isolation) from `--scope` (agent inventory filter).
