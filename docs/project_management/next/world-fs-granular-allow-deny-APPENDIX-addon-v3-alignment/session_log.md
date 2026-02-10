@@ -257,3 +257,13 @@
 - CHECKOUT_SHA (candidate): `0c3c306668bce926aef49970492d022dcacd5497` (includes smoke script fix; wrapper integration head was `fe38f9aff5d207a8212d68a72712c66a3040e3ce`)
 - Preflight (Linux host): `bash docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/smoke/linux-smoke.sh` → exit `0`
 - Planning-pack wiring fix: allow platform-fix tasks to start while CP1 is `in_progress` (remove `CP1-ci-checkpoint` from `depends_on` for `WFGADAXA2-integ-linux`/`WFGADAXA2-integ-macos`)
+
+## START — 2026-02-10T02:34:21Z — integration — WFGADAXA2-integ-macos
+- Trigger: CP1 compile-parity run `21849323328` failed on `macos-14` (clippy `-D warnings` dead-code in `world-agent`).
+- Dispatch:
+  - `make triad-task-start-platform-fixes FEATURE_DIR="docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment" SLICE_ID="WFGADAXA2" PLATFORMS="macos" LAUNCH_CODEX=1`
+
+## START — 2026-02-10T02:47:28Z — integration — WFGADAXA2-integ-windows
+- Trigger: CP1 compile-parity run `21849515435` failed on `windows-2022` (`cargo check --workspace --all-targets`).
+- Dispatch:
+  - `make triad-task-start-platform-fixes FEATURE_DIR="docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment" SLICE_ID="WFGADAXA2" PLATFORMS="windows" LAUNCH_CODEX=1`

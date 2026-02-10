@@ -575,7 +575,7 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment\" TASK_ID=\"WFGADAXA2-integ-macos\""
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "integration",
       "worktree": "wt/world-fs-granular-allow-deny-appendix-addon-v3-wfgadaxa2-integ-macos"
     },
@@ -614,7 +614,7 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment\" TASK_ID=\"WFGADAXA2-integ-windows\""
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "integration",
       "worktree": "wt/world-fs-granular-allow-deny-appendix-addon-v3-wfgadaxa2-integ-windows"
     },
