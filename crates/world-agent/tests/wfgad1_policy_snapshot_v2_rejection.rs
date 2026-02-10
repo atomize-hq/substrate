@@ -19,20 +19,14 @@ type Ws =
 
 fn minimal_policy_snapshot_v2_full_isolation() -> Value {
     json!({
-        "schema_version": 2,
+        "schema_version": 3,
         "world_fs": {
-            "mode": "writable",
-            "isolation": "full",
-            "require_world": true,
+            "host_visible": false,
+            "fail_closed": { "routing": false },
+            "caged_required": false,
+            "discover": { "allow_list": ["."], "deny_list": [] },
             "read": { "allow_list": ["."], "deny_list": [] },
-            "write": { "allow_list": ["."], "deny_list": [] }
-        },
-        "net_allowed": [],
-        "limits": {
-            "max_memory_mb": 0,
-            "max_cpu_percent": 0,
-            "max_runtime_ms": 0,
-            "max_egress_bytes": 0
+            "write": { "enabled": true, "allow_list": ["."], "deny_list": [] }
         }
     })
 }
@@ -99,7 +93,7 @@ fn assert_http_400_error_shape(body: &Value) -> &str {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn http_execute_rejects_policy_snapshot_v1_schema_version() {
+async fn http_execute_rejects_policy_snapshot_schema_version_1() {
     let service = match WorldAgentService::new() {
         Ok(svc) => svc,
         Err(err) => {
@@ -110,6 +104,29 @@ async fn http_execute_rejects_policy_snapshot_v1_schema_version() {
 
     let mut snapshot = minimal_policy_snapshot_v2_full_isolation();
     snapshot["schema_version"] = json!(1);
+
+    let (status, body) =
+        post_execute_json(service, minimal_execute_request_with_snapshot(snapshot)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let error = assert_http_400_error_shape(&body);
+    assert!(
+        error.to_ascii_lowercase().contains("schema_version"),
+        "expected schema_version diagnostic, got: {error}"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn http_execute_rejects_policy_snapshot_schema_version_2() {
+    let service = match WorldAgentService::new() {
+        Ok(svc) => svc,
+        Err(err) => {
+            eprintln!("skipping /v1/execute rejection test: service init failed: {err}");
+            return;
+        }
+    };
+
+    let mut snapshot = minimal_policy_snapshot_v2_full_isolation();
+    snapshot["schema_version"] = json!(2);
 
     let (status, body) =
         post_execute_json(service, minimal_execute_request_with_snapshot(snapshot)).await;
@@ -148,52 +165,31 @@ async fn http_execute_rejects_policy_snapshot_unknown_fields() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn http_execute_rejects_policy_snapshot_invalid_key_combination() {
+async fn http_execute_rejects_missing_policy_snapshot() {
     let service = match WorldAgentService::new() {
         Ok(svc) => svc,
         Err(err) => {
-            eprintln!("skipping /v1/execute invalid-key-combo test: service init failed: {err}");
+            eprintln!(
+                "skipping /v1/execute missing-policy_snapshot test: service init failed: {err}"
+            );
             return;
         }
     };
 
-    let mut snapshot = minimal_policy_snapshot_v2_full_isolation();
-    snapshot["world_fs"]["mode"] = json!("read_only");
-    // In V2, `write` MUST be omitted when mode=read_only.
+    let payload = json!({
+        "cmd": "echo ok",
+        "cwd": "/tmp",
+        "env": { "HOME": "/root" },
+        "pty": false,
+        "agent_id": "wfgad1-test",
+    });
 
-    let (status, body) =
-        post_execute_json(service, minimal_execute_request_with_snapshot(snapshot)).await;
+    let (status, body) = post_execute_json(service, payload).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     let error = assert_http_400_error_shape(&body);
     assert!(
-        error.to_ascii_lowercase().contains("write"),
-        "expected write/mode diagnostic, got: {error}"
-    );
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn http_execute_rejects_policy_snapshot_invalid_patterns() {
-    let service = match WorldAgentService::new() {
-        Ok(svc) => svc,
-        Err(err) => {
-            eprintln!("skipping /v1/execute invalid-pattern test: service init failed: {err}");
-            return;
-        }
-    };
-
-    let mut snapshot = minimal_policy_snapshot_v2_full_isolation();
-    snapshot["world_fs"]["read"]["allow_list"] = json!(["src/**"]);
-    // In V2, wildcards are forbidden in allow_list.
-
-    let (status, body) =
-        post_execute_json(service, minimal_execute_request_with_snapshot(snapshot)).await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    let error = assert_http_400_error_shape(&body);
-    assert!(
-        error.to_ascii_lowercase().contains("allow_list")
-            || error.to_ascii_lowercase().contains("wildcard")
-            || error.contains('*'),
-        "expected allow_list/wildcard diagnostic, got: {error}"
+        error.to_ascii_lowercase().contains("policy_snapshot"),
+        "expected policy_snapshot diagnostic, got: {error}"
     );
 }
 
@@ -242,10 +238,10 @@ async fn recv_json(ws: &mut Ws) -> Value {
 
 fn assert_ws_fatal_start_session_error(frame: &Value) -> &str {
     assert_eq!(frame.get("type").and_then(Value::as_str), Some("error"));
-    assert_eq!(
-        frame.get("code").and_then(Value::as_str),
-        Some("bad_request"),
-        "expected code=bad_request for start_session schema violations: {frame}"
+    let code = frame.get("code").and_then(Value::as_str);
+    assert!(
+        matches!(code, Some("bad_request" | "unsupported_protocol_version")),
+        "expected code=bad_request or code=unsupported_protocol_version for start_session schema violations: {frame}"
     );
     assert_eq!(frame.get("fatal").and_then(Value::as_bool), Some(true));
     assert!(
@@ -278,7 +274,7 @@ async fn assert_ws_closes_after_fatal(ws: &mut Ws) {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn ws_start_session_rejects_policy_snapshot_v1_schema_version_and_closes() {
+async fn ws_start_session_rejects_policy_snapshot_schema_version_1_and_closes() {
     let service = match WorldAgentService::new() {
         Ok(svc) => svc,
         Err(err) => {
@@ -293,6 +289,49 @@ async fn ws_start_session_rejects_policy_snapshot_v1_schema_version_and_closes()
 
     let mut snapshot = minimal_policy_snapshot_v2_full_isolation();
     snapshot["schema_version"] = json!(1);
+
+    let mut ws = ws_connect(addr).await;
+    ws.send(Message::Text(
+        json!({
+            "type": "start_session",
+            "cwd": cwd.display().to_string(),
+            "env": { "HOME": "/root", "TERM": "xterm-256color" },
+            "policy_snapshot": snapshot,
+            "cols": 80,
+            "rows": 24,
+        })
+        .to_string(),
+    ))
+    .await
+    .expect("send start_session");
+
+    let frame = recv_json(&mut ws).await;
+    let message = assert_ws_fatal_start_session_error(&frame);
+    assert!(
+        message.to_ascii_lowercase().contains("schema_version"),
+        "expected schema_version diagnostic, got: {message}"
+    );
+    assert_ws_closes_after_fatal(&mut ws).await;
+
+    server.abort();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn ws_start_session_rejects_policy_snapshot_schema_version_2_and_closes() {
+    let service = match WorldAgentService::new() {
+        Ok(svc) => svc,
+        Err(err) => {
+            eprintln!("skipping ws start_session rejection test: service init failed: {err}");
+            return;
+        }
+    };
+
+    let (addr, server) = spawn_world_agent_ws(service).await;
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let cwd = tmp.path().to_path_buf();
+
+    let mut snapshot = minimal_policy_snapshot_v2_full_isolation();
+    snapshot["schema_version"] = json!(2);
 
     let mut ws = ws_connect(addr).await;
     ws.send(Message::Text(
@@ -367,11 +406,11 @@ async fn ws_start_session_rejects_policy_snapshot_unknown_fields_and_closes() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn ws_start_session_rejects_policy_snapshot_invalid_key_combination_and_closes() {
+async fn ws_start_session_rejects_missing_policy_snapshot_and_closes() {
     let service = match WorldAgentService::new() {
         Ok(svc) => svc,
         Err(err) => {
-            eprintln!("skipping ws invalid-key-combo test: service init failed: {err}");
+            eprintln!("skipping ws missing-policy_snapshot test: service init failed: {err}");
             return;
         }
     };
@@ -380,17 +419,12 @@ async fn ws_start_session_rejects_policy_snapshot_invalid_key_combination_and_cl
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
-    let mut snapshot = minimal_policy_snapshot_v2_full_isolation();
-    snapshot["world_fs"]["mode"] = json!("read_only");
-    // In V2, `write` MUST be omitted when mode=read_only.
-
     let mut ws = ws_connect(addr).await;
     ws.send(Message::Text(
         json!({
             "type": "start_session",
             "cwd": cwd.display().to_string(),
             "env": { "HOME": "/root", "TERM": "xterm-256color" },
-            "policy_snapshot": snapshot,
             "cols": 80,
             "rows": 24,
         })
@@ -402,54 +436,8 @@ async fn ws_start_session_rejects_policy_snapshot_invalid_key_combination_and_cl
     let frame = recv_json(&mut ws).await;
     let message = assert_ws_fatal_start_session_error(&frame);
     assert!(
-        message.to_ascii_lowercase().contains("write"),
-        "expected write/mode diagnostic, got: {message}"
-    );
-    assert_ws_closes_after_fatal(&mut ws).await;
-
-    server.abort();
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn ws_start_session_rejects_policy_snapshot_invalid_patterns_and_closes() {
-    let service = match WorldAgentService::new() {
-        Ok(svc) => svc,
-        Err(err) => {
-            eprintln!("skipping ws invalid-pattern test: service init failed: {err}");
-            return;
-        }
-    };
-
-    let (addr, server) = spawn_world_agent_ws(service).await;
-    let tmp = tempfile::tempdir().expect("tempdir");
-    let cwd = tmp.path().to_path_buf();
-
-    let mut snapshot = minimal_policy_snapshot_v2_full_isolation();
-    snapshot["world_fs"]["read"]["allow_list"] = json!(["src/**"]);
-    // In V2, wildcards are forbidden in allow_list.
-
-    let mut ws = ws_connect(addr).await;
-    ws.send(Message::Text(
-        json!({
-            "type": "start_session",
-            "cwd": cwd.display().to_string(),
-            "env": { "HOME": "/root", "TERM": "xterm-256color" },
-            "policy_snapshot": snapshot,
-            "cols": 80,
-            "rows": 24,
-        })
-        .to_string(),
-    ))
-    .await
-    .expect("send start_session");
-
-    let frame = recv_json(&mut ws).await;
-    let message = assert_ws_fatal_start_session_error(&frame);
-    assert!(
-        message.to_ascii_lowercase().contains("allow_list")
-            || message.to_ascii_lowercase().contains("wildcard")
-            || message.contains('*'),
-        "expected allow_list/wildcard diagnostic, got: {message}"
+        message.to_ascii_lowercase().contains("policy_snapshot"),
+        "expected policy_snapshot diagnostic, got: {message}"
     );
     assert_ws_closes_after_fatal(&mut ws).await;
 
