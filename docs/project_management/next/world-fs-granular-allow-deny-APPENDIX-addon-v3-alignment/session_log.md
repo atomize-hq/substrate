@@ -285,3 +285,8 @@
   - `21849734352` → `success` (linux+macos+windows passed)
 - Feature smoke run (feature-smoke.yml / behavior): `21849786194` → `success` (`linux`)
 - Final validated CHECKOUT_SHA: `5b849240398324cfff421f0d4f38b4b0e7d874ec`
+
+## START — 2026-02-10T02:58:26Z — integration — WFGADAXA2-integ
+- Dispatch:
+  - `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment" SLICE_ID="WFGADAXA2" LAUNCH_CODEX=1`
+- Worktree: `wt/world-fs-granular-allow-deny-appendix-addon-v3-wfgadaxa2-integ`
