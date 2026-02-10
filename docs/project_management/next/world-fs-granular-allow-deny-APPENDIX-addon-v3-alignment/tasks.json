@@ -483,7 +483,7 @@
         "Record evidence in session_log.md",
         "Set status to completed; add END entry; commit docs"
       ],
-      "id": "CP1-ci-checkpoint",
+  "id": "CP1-ci-checkpoint",
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/kickoff_prompts/CP1-ci-checkpoint.md",
       "name": "CI checkpoint CP1",
@@ -660,9 +660,9 @@
         "Confirm all tasks are completed and merged as intended",
         "Set status to in_progress; add START entry; commit docs"
       ],
-      "status": "pending",
-      "type": "ops",
-      "worktree": null
-    }
+  "status": "in_progress",
+  "type": "ops",
+  "worktree": null
+}
   ]
 }

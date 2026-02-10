@@ -251,3 +251,8 @@
 ## END — 2026-02-10T02:14:24Z — integration — WFGADAXA2-integ-core
 - HEAD: `fe38f9aff5d207a8212d68a72712c66a3040e3ce`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/logs/WFGADAXA2/integ-core/last_message.md`
+
+## START — 2026-02-10T02:28:22Z — ops — CP1-ci-checkpoint
+- ORCH_REF: `feat/world-fs-granular-allow-deny-appendix-addon-v3-alignment`
+- CHECKOUT_SHA (candidate): `0c3c30669fc623d61b2c26d5e83b0b3a3f0d3dbd` (includes smoke script fix; wrapper integration head was `fe38f9aff5d207a8212d68a72712c66a3040e3ce`)
+- Preflight (Linux host): `bash docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/smoke/linux-smoke.sh` → exit `0`
