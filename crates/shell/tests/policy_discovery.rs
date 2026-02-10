@@ -172,7 +172,7 @@ fn require_yaml_mapping<'a>(value: &'a YamlValue, label: &str) -> &'a serde_yaml
 }
 
 fn require_yaml_key<'a>(map: &'a serde_yaml::Mapping, key: &str) -> &'a YamlValue {
-    map.get(&YamlValue::String(key.to_string()))
+    map.get(YamlValue::String(key.to_string()))
         .unwrap_or_else(|| panic!("missing YAML key: {key}"))
 }
 
@@ -300,7 +300,7 @@ fn policy_show_yaml_is_v3_shaped_and_renders_empty_deny_lists_for_full_isolation
 
     assert_eq!(
         world_fs
-            .get(&YamlValue::String("host_visible".to_string()))
+            .get(YamlValue::String("host_visible".to_string()))
             .and_then(|v| v.as_bool()),
         Some(false),
         "expected world_fs.host_visible=false in effective output"
@@ -308,18 +308,18 @@ fn policy_show_yaml_is_v3_shaped_and_renders_empty_deny_lists_for_full_isolation
 
     for legacy_key in ["mode", "isolation", "require_world", "enforcement"] {
         assert!(
-            !world_fs.contains_key(&YamlValue::String(legacy_key.to_string())),
+            !world_fs.contains_key(YamlValue::String(legacy_key.to_string())),
             "V2 key must not be rendered in operator-facing output: world_fs.{legacy_key}"
         );
     }
     for legacy_key in ["read_allowlist", "write_allowlist"] {
         assert!(
-            !world_fs.contains_key(&YamlValue::String(legacy_key.to_string())),
+            !world_fs.contains_key(YamlValue::String(legacy_key.to_string())),
             "V2 key must not be rendered in operator-facing output: world_fs.{legacy_key}"
         );
     }
     assert!(
-        !root.contains_key(&YamlValue::String("world_fs_require_world".to_string())),
+        !root.contains_key(YamlValue::String("world_fs_require_world".to_string())),
         "V2-shaped top-level key must not be rendered: world_fs_require_world"
     );
 
@@ -404,7 +404,7 @@ fn policy_show_json_is_v3_shaped_and_renders_empty_deny_lists_for_full_isolation
         );
     }
     assert!(
-        !json.get("world_fs_require_world").is_some(),
+        json.get("world_fs_require_world").is_none(),
         "V2-shaped top-level key must not be rendered: world_fs_require_world"
     );
 

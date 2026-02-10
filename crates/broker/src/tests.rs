@@ -3,6 +3,120 @@ use std::sync::{Arc, Barrier, RwLock};
 use substrate_common::WorldFsMode;
 use tempfile::tempdir;
 
+fn effective_policy_display_json_v3(policy: &Policy) -> serde_json::Value {
+    let mut world_fs = serde_json::Map::new();
+    world_fs.insert(
+        "host_visible".to_string(),
+        serde_json::Value::Bool(policy.world_fs_host_visible),
+    );
+    world_fs.insert(
+        "fail_closed".to_string(),
+        serde_json::json!({ "routing": policy.world_fs_fail_closed_routing }),
+    );
+    if let Some(v) = policy.world_fs_deny_enforcement {
+        world_fs.insert(
+            "deny_enforcement".to_string(),
+            serde_json::to_value(v).expect("serialize deny_enforcement"),
+        );
+    }
+    world_fs.insert(
+        "caged_required".to_string(),
+        serde_json::Value::Bool(policy.world_fs_caged_required),
+    );
+
+    let (discover, read, write_allow_list, write_deny_list) = if policy.world_fs_host_visible {
+        (None, None, None, None)
+    } else {
+        let read = policy
+            .world_fs_read
+            .as_ref()
+            .expect("effective policy missing world_fs.read in full isolation");
+        let discover = policy
+            .world_fs_discover
+            .as_ref()
+            .or(policy.world_fs_read.as_ref())
+            .expect("effective policy missing world_fs.discover in full isolation");
+
+        let read = Some(serde_json::json!({
+            "allow_list": &read.allow_list,
+            "deny_list": &read.deny_list,
+        }));
+        let discover = Some(serde_json::json!({
+            "allow_list": &discover.allow_list,
+            "deny_list": &discover.deny_list,
+        }));
+
+        if policy.world_fs_write_enabled {
+            let write = policy
+                .world_fs_write
+                .as_ref()
+                .expect("effective policy missing world_fs.write in full isolation");
+            (
+                discover,
+                read,
+                Some(serde_json::Value::Array(
+                    write
+                        .allow_list
+                        .iter()
+                        .cloned()
+                        .map(serde_json::Value::String)
+                        .collect(),
+                )),
+                Some(serde_json::Value::Array(
+                    write
+                        .deny_list
+                        .iter()
+                        .cloned()
+                        .map(serde_json::Value::String)
+                        .collect(),
+                )),
+            )
+        } else {
+            // When writes are disabled, keep the V3 shape stable by rendering empty lists.
+            (
+                discover,
+                read,
+                Some(serde_json::Value::Array(Vec::new())),
+                Some(serde_json::Value::Array(Vec::new())),
+            )
+        }
+    };
+
+    if let Some(v) = discover {
+        world_fs.insert("discover".to_string(), v);
+    }
+    if let Some(v) = read {
+        world_fs.insert("read".to_string(), v);
+    }
+
+    let mut write = serde_json::Map::new();
+    write.insert(
+        "enabled".to_string(),
+        serde_json::Value::Bool(policy.world_fs_write_enabled),
+    );
+    if let Some(v) = write_allow_list {
+        write.insert("allow_list".to_string(), v);
+    }
+    if let Some(v) = write_deny_list {
+        write.insert("deny_list".to_string(), v);
+    }
+    world_fs.insert("write".to_string(), serde_json::Value::Object(write));
+
+    serde_json::json!({
+        "id": &policy.id,
+        "name": &policy.name,
+        "world_fs": serde_json::Value::Object(world_fs),
+        "net_allowed": &policy.net_allowed,
+        "cmd_allowed": &policy.cmd_allowed,
+        "cmd_denied": &policy.cmd_denied,
+        "cmd_isolated": &policy.cmd_isolated,
+        "require_approval": policy.require_approval,
+        "allow_shell_operators": policy.allow_shell_operators,
+        "limits": &policy.limits,
+        "metadata": &policy.metadata,
+    })
+}
+
 fn poison_rwlock<T: Send + Sync + 'static>(lock: &Arc<RwLock<T>>) {
     let cloned = Arc::clone(lock);
     let _ = std::thread::spawn(move || {
@@ -1064,15 +1178,7 @@ metadata:
         let _env = EnvVarGuard::set("SUBSTRATE_HOME", &fixture.substrate_home);
         let (broker_policy, _source) = crate::effective_policy::load_effective_policy_for_cwd(&cwd)
             .expect("broker should resolve effective policy via patch merge");
-        let mut broker_json =
-            serde_json::to_value(&broker_policy).expect("serialize broker policy");
-        if let Some(require_world) = broker_json
-            .get("world_fs")
-            .and_then(|fs| fs.get("require_world"))
-            .and_then(|v| v.as_bool())
-        {
-            broker_json["world_fs_require_world"] = serde_json::Value::Bool(require_world);
-        }
+        let broker_json = super::effective_policy_display_json_v3(&broker_policy);
 
         let show = fixture.run_substrate(&cwd, &["policy", "current", "show", "--json"]);
         assert!(
