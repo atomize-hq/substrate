@@ -62,7 +62,7 @@ expect_exit 2 "$SUBSTRATE_BIN" policy set 'world_fs.mode=read_only'
 expect_exit 2 "$SUBSTRATE_BIN" policy set 'world_fs.isolation=full'
 expect_exit 2 "$SUBSTRATE_BIN" policy set 'world_fs.require_world=true'
 
-echo "== Case 2: `substrate policy show` output is V3-shaped (Appendix A.6) =="
+echo "== Case 2: substrate policy show output is V3-shaped (Appendix A.6) =="
 "$SUBSTRATE_BIN" policy set \
   'world_fs.host_visible=false' \
   'world_fs.fail_closed.routing=false' \
@@ -122,7 +122,7 @@ if ! grep -Eq '^[[:space:]]{2}host_visible:[[:space:]]*false[[:space:]]*$' <<<"$
   exit 1
 fi
 
-deny_count="$(grep -E '^[[:space:]]{4}deny_list:[[:space:]]*\\[\\][[:space:]]*$' <<<"$policy_yaml" | wc -l | tr -d ' ')"
+deny_count="$(grep -cF 'deny_list: []' <<<"$policy_yaml" || true)"
 if [[ "${deny_count}" -lt 3 ]]; then
   echo "FAIL: expected explicit empty deny_list: [] for discover/read/write (>=3), got: ${deny_count}" >&2
   echo "$policy_yaml" >&2
