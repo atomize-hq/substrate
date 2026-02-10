@@ -1,6 +1,6 @@
 use agent_api_types::{
-    PolicySnapshotLimitsV2, PolicySnapshotV2, PolicySnapshotWorldFsDimensionV2,
-    PolicySnapshotWorldFsIsolationV2, PolicySnapshotWorldFsV2, WorldFsEnforcementV2,
+    PolicySnapshotV3, PolicySnapshotWorldFsDimensionV3, PolicySnapshotWorldFsFailClosedV3,
+    PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3, WorldFsDenyEnforcementV3,
 };
 use anyhow::{anyhow, Context, Result};
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -17,7 +17,7 @@ const WORLD_FS_ENFORCEMENT_PLAN_B64_ENV: &str = "SUBSTRATE_WORLD_FS_ENFORCEMENT_
 
 #[derive(Debug, Clone)]
 pub(crate) struct ResolvedPolicySnapshot {
-    pub(crate) snapshot: PolicySnapshotV2,
+    pub(crate) snapshot: PolicySnapshotV3,
     pub(crate) snapshot_hash: String,
 }
 
@@ -72,7 +72,7 @@ struct CacheEntry {
     workspace_path: Option<PathBuf>,
     global_stat: FileStatKey,
     workspace_stat: Option<FileStatKey>,
-    snapshot: PolicySnapshotV2,
+    snapshot: PolicySnapshotV3,
     snapshot_hash: String,
 }
 
@@ -139,7 +139,7 @@ pub(crate) fn resolve_policy_snapshot_for_cwd(cwd: &Path) -> Result<ResolvedPoli
 }
 
 pub(crate) fn inject_world_fs_enforcement_plan_env(
-    snapshot: &PolicySnapshotV2,
+    snapshot: &PolicySnapshotV3,
     env: &mut std::collections::HashMap<String, String>,
 ) -> Result<()> {
     if env.contains_key(WORLD_FS_ENFORCEMENT_PLAN_B64_ENV) {
@@ -172,40 +172,41 @@ struct EnforcementPlanV1 {
 }
 
 fn maybe_encode_world_fs_enforcement_plan_b64(
-    snapshot: &PolicySnapshotV2,
+    snapshot: &PolicySnapshotV3,
 ) -> Result<Option<String>> {
-    let read_deny = snapshot
+    let canonical = snapshot
+        .canonicalize()
+        .map_err(|err| anyhow!("invalid PolicySnapshotV3: {err}"))?;
+
+    let read_deny = canonical
         .world_fs
         .read
         .as_ref()
         .map(|d| d.deny_list.clone())
         .unwrap_or_default();
-    let discover_deny = snapshot
+    let discover_deny = canonical
         .world_fs
         .discover
         .as_ref()
         .map(|d| d.deny_list.clone())
         .unwrap_or_else(|| read_deny.clone());
-    let write_deny = snapshot
-        .world_fs
-        .write
-        .as_ref()
-        .map(|d| d.deny_list.clone())
-        .unwrap_or_default();
+    let write_deny = canonical.world_fs.write.deny_list.clone();
 
     let any_deny = !read_deny.is_empty() || !discover_deny.is_empty() || !write_deny.is_empty();
     if !any_deny {
         return Ok(None);
     }
 
-    let enforcement = snapshot
+    let deny_enforcement = canonical
         .world_fs
-        .enforcement
-        .ok_or_else(|| anyhow!("world_fs.enforcement missing for deny_list configuration"))?;
+        .deny_enforcement
+        .ok_or_else(|| anyhow!("world_fs.deny_enforcement missing for deny_list configuration"))?;
 
-    let enforcement = match enforcement {
-        WorldFsEnforcementV2::Strict => EnforcementPlanModeV1::Strict,
-        WorldFsEnforcementV2::BestEffort => EnforcementPlanModeV1::BestEffort,
+    let enforcement = match deny_enforcement {
+        WorldFsDenyEnforcementV3::Strict => EnforcementPlanModeV1::Strict,
+        WorldFsDenyEnforcementV3::PreferStrict | WorldFsDenyEnforcementV3::Weak => {
+            EnforcementPlanModeV1::BestEffort
+        }
     };
 
     let plan = EnforcementPlanV1 {
@@ -220,67 +221,73 @@ fn maybe_encode_world_fs_enforcement_plan_b64(
     Ok(Some(BASE64.encode(json_bytes)))
 }
 
-fn snapshot_from_policy(policy: &substrate_broker::Policy) -> Result<PolicySnapshotV2> {
-    let isolation = match policy.world_fs_isolation {
-        substrate_broker::WorldFsIsolation::Workspace => {
-            PolicySnapshotWorldFsIsolationV2::Workspace
-        }
-        substrate_broker::WorldFsIsolation::Full => PolicySnapshotWorldFsIsolationV2::Full,
-    };
-
-    let enforcement = policy.world_fs_enforcement.map(|mode| match mode {
-        substrate_broker::WorldFsEnforcement::Strict => WorldFsEnforcementV2::Strict,
-        substrate_broker::WorldFsEnforcement::BestEffort => WorldFsEnforcementV2::BestEffort,
-    });
-
-    let dim = |dim: &substrate_broker::WorldFsDimensionPolicy| PolicySnapshotWorldFsDimensionV2 {
+fn snapshot_from_policy(policy: &substrate_broker::Policy) -> Result<PolicySnapshotV3> {
+    let dim = |dim: &substrate_broker::WorldFsDimensionPolicy| PolicySnapshotWorldFsDimensionV3 {
         allow_list: dim.allow_list.clone(),
         deny_list: dim.deny_list.clone(),
     };
 
-    let (discover, read, write) = match isolation {
-        PolicySnapshotWorldFsIsolationV2::Workspace => (None, None, None),
-        PolicySnapshotWorldFsIsolationV2::Full => {
-            let read = policy
-                .world_fs_read
-                .as_ref()
-                .map(dim)
-                .ok_or_else(|| anyhow!("missing world_fs.read dimension in resolved policy"))?;
-            let discover = policy.world_fs_discover.as_ref().map(dim);
-            let write = policy.world_fs_write.as_ref().map(dim);
-            (discover, Some(read), write)
+    let read = policy
+        .world_fs_read
+        .as_ref()
+        .map(dim)
+        .unwrap_or(PolicySnapshotWorldFsDimensionV3 {
+            allow_list: vec![".".to_string()],
+            deny_list: Vec::new(),
+        });
+
+    let discover = policy
+        .world_fs_discover
+        .as_ref()
+        .map(dim)
+        .unwrap_or_else(|| read.clone());
+
+    let write_lists =
+        policy
+            .world_fs_write
+            .as_ref()
+            .map(dim)
+            .unwrap_or(PolicySnapshotWorldFsDimensionV3 {
+                allow_list: vec![".".to_string()],
+                deny_list: Vec::new(),
+            });
+
+    let deny_enforcement = policy.world_fs_deny_enforcement.map(|mode| match mode {
+        substrate_broker::WorldFsDenyEnforcement::Strict => WorldFsDenyEnforcementV3::Strict,
+        substrate_broker::WorldFsDenyEnforcement::PreferStrict => {
+            WorldFsDenyEnforcementV3::PreferStrict
         }
+        substrate_broker::WorldFsDenyEnforcement::Weak => WorldFsDenyEnforcementV3::Weak,
+    });
+
+    let snapshot = PolicySnapshotV3 {
+        schema_version: 3,
+        world_fs: PolicySnapshotWorldFsV3 {
+            host_visible: policy.world_fs_host_visible,
+            fail_closed: PolicySnapshotWorldFsFailClosedV3 {
+                routing: policy.world_fs_fail_closed_routing,
+            },
+            deny_enforcement,
+            caged_required: policy.world_fs_caged_required,
+            discover: Some(discover),
+            read: Some(read),
+            write: PolicySnapshotWorldFsWriteV3 {
+                enabled: policy.world_fs_write_enabled,
+                allow_list: write_lists.allow_list,
+                deny_list: write_lists.deny_list,
+            },
+        },
     };
 
-    let snapshot = PolicySnapshotV2 {
-        schema_version: 2,
-        world_fs: PolicySnapshotWorldFsV2 {
-            mode: policy.world_fs_mode,
-            isolation,
-            require_world: policy.world_fs_require_world,
-            enforcement,
-            discover,
-            read,
-            write,
-        },
-        net_allowed: policy.net_allowed.clone(),
-        limits: PolicySnapshotLimitsV2 {
-            max_memory_mb: policy.limits.max_memory_mb.unwrap_or(0),
-            max_cpu_percent: policy.limits.max_cpu_percent.unwrap_or(0),
-            max_runtime_ms: policy.limits.max_runtime_ms.unwrap_or(0),
-            max_egress_bytes: policy.limits.max_egress_bytes.unwrap_or(0),
-        },
-    };
+    let canonical = snapshot
+        .canonicalize()
+        .map_err(|err| anyhow!("invalid PolicySnapshotV3 derived from broker policy: {err}"))?;
 
-    snapshot
-        .validate()
-        .map_err(|err| anyhow!("invalid PolicySnapshotV2 derived from broker policy: {err}"))?;
-
-    Ok(snapshot)
+    Ok(canonical)
 }
 
-fn compute_snapshot_hash(snapshot: &PolicySnapshotV2) -> Result<String> {
-    let bytes = serde_json::to_vec(snapshot).context("serialize PolicySnapshotV2")?;
+fn compute_snapshot_hash(snapshot: &PolicySnapshotV3) -> Result<String> {
+    let bytes = serde_json::to_vec(snapshot).context("serialize PolicySnapshotV3")?;
     let mut hasher = Sha256::new();
     hasher.update(&bytes);
     Ok(format!("{:x}", hasher.finalize()))

@@ -55,7 +55,7 @@ pub async fn capabilities() -> Result<ResponseJson<Value>, ApiErrorResponse> {
         "version": "v1",
         "features": [
             "execute",
-            "policy_snapshot_v2",
+            "policy_snapshot_v3",
             "pty_streaming",
             "trace_retrieval",
             "scope_requests"

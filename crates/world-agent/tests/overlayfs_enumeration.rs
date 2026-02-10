@@ -1,6 +1,10 @@
 #![cfg(all(unix, target_os = "linux"))]
 
-use agent_api_types::{ExecuteRequest, WorldFsMode};
+use agent_api_types::{
+    ExecuteRequest, PolicySnapshotV3, PolicySnapshotWorldFsDimensionV3,
+    PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
+    WorldFsMode,
+};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use std::collections::HashMap;
@@ -34,6 +38,32 @@ fn execute_non_pty(
     env: HashMap<String, String>,
     world_fs_mode: WorldFsMode,
 ) -> Option<agent_api_types::ExecuteResponse> {
+    let write_enabled = matches!(world_fs_mode, WorldFsMode::Writable);
+    let policy_snapshot = PolicySnapshotV3 {
+        schema_version: 3,
+        world_fs: PolicySnapshotWorldFsV3 {
+            host_visible: false,
+            fail_closed: PolicySnapshotWorldFsFailClosedV3 {
+                routing: !write_enabled,
+            },
+            deny_enforcement: None,
+            caged_required: false,
+            discover: Some(PolicySnapshotWorldFsDimensionV3 {
+                allow_list: vec![".".to_string()],
+                deny_list: Vec::new(),
+            }),
+            read: Some(PolicySnapshotWorldFsDimensionV3 {
+                allow_list: vec![".".to_string()],
+                deny_list: Vec::new(),
+            }),
+            write: PolicySnapshotWorldFsWriteV3 {
+                enabled: write_enabled,
+                allow_list: vec![".".to_string()],
+                deny_list: Vec::new(),
+            },
+        },
+    };
+
     let req = ExecuteRequest {
         profile: None,
         cmd: cmd.to_string(),
@@ -42,7 +72,7 @@ fn execute_non_pty(
         pty: false,
         agent_id: "overlayfs-enumeration-test".to_string(),
         budget: None,
-        policy_snapshot: None,
+        policy_snapshot,
         world_fs_mode: Some(world_fs_mode),
     };
 

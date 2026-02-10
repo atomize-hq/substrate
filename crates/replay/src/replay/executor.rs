@@ -19,7 +19,11 @@ use substrate_trace::append_to_trace;
 #[cfg(target_os = "linux")]
 use agent_api_client::AgentClient;
 #[cfg(target_os = "linux")]
-use agent_api_types::{ExecuteRequest, ExecuteResponse};
+use agent_api_types::{
+    ExecuteRequest, ExecuteResponse, PolicySnapshotV3, PolicySnapshotWorldFsDimensionV3,
+    PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
+    WorldFsDenyEnforcementV3,
+};
 #[cfg(target_os = "linux")]
 use base64::engine::general_purpose::STANDARD as BASE64;
 #[cfg(target_os = "linux")]
@@ -33,6 +37,73 @@ use world::{copydiff, overlayfs};
 
 const ANCHOR_MODE_ENV: &str = "SUBSTRATE_ANCHOR_MODE";
 const ANCHOR_PATH_ENV: &str = "SUBSTRATE_ANCHOR_PATH";
+
+#[cfg(target_os = "linux")]
+fn resolve_policy_snapshot_v3_for_cwd(cwd: &Path) -> Result<PolicySnapshotV3> {
+    let (policy, _) = substrate_broker::resolve_effective_policy_with_explain(cwd, false)
+        .map_err(|e| anyhow!("failed to resolve effective policy for snapshot: {e}"))?;
+
+    let dim = |dim: &substrate_broker::WorldFsDimensionPolicy| PolicySnapshotWorldFsDimensionV3 {
+        allow_list: dim.allow_list.clone(),
+        deny_list: dim.deny_list.clone(),
+    };
+
+    let read = policy
+        .world_fs_read
+        .as_ref()
+        .map(dim)
+        .unwrap_or(PolicySnapshotWorldFsDimensionV3 {
+            allow_list: vec![".".to_string()],
+            deny_list: Vec::new(),
+        });
+
+    let discover = policy
+        .world_fs_discover
+        .as_ref()
+        .map(dim)
+        .unwrap_or_else(|| read.clone());
+
+    let write_lists =
+        policy
+            .world_fs_write
+            .as_ref()
+            .map(dim)
+            .unwrap_or(PolicySnapshotWorldFsDimensionV3 {
+                allow_list: vec![".".to_string()],
+                deny_list: Vec::new(),
+            });
+
+    let deny_enforcement = policy.world_fs_deny_enforcement.map(|mode| match mode {
+        substrate_broker::WorldFsDenyEnforcement::Strict => WorldFsDenyEnforcementV3::Strict,
+        substrate_broker::WorldFsDenyEnforcement::PreferStrict => {
+            WorldFsDenyEnforcementV3::PreferStrict
+        }
+        substrate_broker::WorldFsDenyEnforcement::Weak => WorldFsDenyEnforcementV3::Weak,
+    });
+
+    let snapshot = PolicySnapshotV3 {
+        schema_version: 3,
+        world_fs: PolicySnapshotWorldFsV3 {
+            host_visible: policy.world_fs_host_visible,
+            fail_closed: PolicySnapshotWorldFsFailClosedV3 {
+                routing: policy.world_fs_fail_closed_routing,
+            },
+            deny_enforcement,
+            caged_required: policy.world_fs_caged_required,
+            discover: Some(discover),
+            read: Some(read),
+            write: PolicySnapshotWorldFsWriteV3 {
+                enabled: policy.world_fs_write_enabled,
+                allow_list: write_lists.allow_list,
+                deny_list: write_lists.deny_list,
+            },
+        },
+    };
+
+    snapshot
+        .canonicalize()
+        .map_err(|err| anyhow!("invalid PolicySnapshotV3 derived from broker policy: {err}"))
+}
 
 #[cfg(target_os = "linux")]
 #[derive(Clone, Debug)]
@@ -807,7 +878,7 @@ async fn try_agent_backend(
         pty: false,
         agent_id: std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "replay".to_string()),
         budget: None,
-        policy_snapshot: None,
+        policy_snapshot: resolve_policy_snapshot_v3_for_cwd(&state.cwd)?,
         world_fs_mode: Some(substrate_broker::world_fs_mode()),
     };
 

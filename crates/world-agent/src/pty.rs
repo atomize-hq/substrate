@@ -9,9 +9,9 @@ use crate::service::{
     resolve_project_dir, resolve_project_write_allowlist_prefixes, WORLD_FS_MODE_ENV,
     WORLD_FS_WRITE_ALLOWLIST_ENV,
 };
-use agent_api_types::PolicySnapshotV2;
 #[cfg(target_os = "linux")]
-use agent_api_types::{PolicyResolutionModeV1, PolicySnapshotWorldFsIsolationV2};
+use agent_api_types::PolicyResolutionModeV1;
+use agent_api_types::PolicySnapshotV3;
 use axum::extract::ws::{Message, WebSocket};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use futures_util::stream::SplitSink;
@@ -103,7 +103,7 @@ pub enum ClientMessage {
         cwd: PathBuf,
         env: HashMap<String, String>,
         #[serde(default)]
-        policy_snapshot: Box<Option<PolicySnapshotV2>>,
+        policy_snapshot: Box<Option<PolicySnapshotV3>>,
         span_id: Option<String>,
         cols: u16,
         rows: u16,
@@ -153,7 +153,7 @@ enum PersistentClientMessage {
         protocol_version: Option<u32>,
         cwd: PathBuf,
         env: HashMap<String, String>,
-        policy_snapshot: Box<PolicySnapshotV2>,
+        policy_snapshot: Box<PolicySnapshotV3>,
         cols: u16,
         rows: u16,
     },
@@ -1107,7 +1107,7 @@ async fn handle_persistent_session(
 fn resolve_ready_cwd(
     env: &HashMap<String, String>,
     requested_cwd: &std::path::Path,
-    _policy_snapshot: &PolicySnapshotV2,
+    _policy_snapshot: &PolicySnapshotV3,
 ) -> Result<PathBuf, String> {
     let project_dir =
         resolve_project_dir(Some(env), Some(requested_cwd)).map_err(|e| e.to_string())?;
@@ -1145,14 +1145,11 @@ struct PersistentWorldContext {
 fn apply_full_isolation_env_from_snapshot(
     env: &mut HashMap<String, String>,
     project_dir: &std::path::Path,
-    policy_snapshot: &PolicySnapshotV2,
+    policy_snapshot: &PolicySnapshotV3,
 ) -> Result<(), String> {
-    let write_allowlist = policy_snapshot
-        .world_fs
-        .write
-        .as_ref()
-        .map(|d| d.allow_list.as_slice())
-        .unwrap_or(&[]);
+    let canonical = policy_snapshot.canonicalize()?;
+
+    let write_allowlist = canonical.world_fs.write.allow_list.as_slice();
     let write_allowlist_prefixes =
         resolve_project_write_allowlist_prefixes(project_dir, write_allowlist);
     if !write_allowlist_prefixes.is_empty() {
@@ -1162,13 +1159,13 @@ fn apply_full_isolation_env_from_snapshot(
         );
     }
 
-    let read_allowlist = policy_snapshot
+    let read_allowlist = canonical
         .world_fs
         .read
         .as_ref()
         .map(|d| d.allow_list.as_slice())
         .unwrap_or(&[]);
-    let discover_allowlist = policy_snapshot
+    let discover_allowlist = canonical
         .world_fs
         .discover
         .as_ref()
@@ -1179,8 +1176,8 @@ fn apply_full_isolation_env_from_snapshot(
     let landlock_write_paths = resolve_landlock_allowlist_paths(project_dir, write_allowlist);
     let landlock_supported = world::landlock::detect_support().supported;
 
-    let enforcement_plan_b64 = enforcement_plan::maybe_encode_from_snapshot(policy_snapshot)
-        .map_err(|err| err.to_string())?;
+    let enforcement_plan_b64 =
+        enforcement_plan::maybe_encode_from_snapshot(&canonical).map_err(|err| err.to_string())?;
     apply_full_isolation_helper_env(
         env,
         landlock_supported,
@@ -1197,34 +1194,31 @@ fn apply_full_isolation_env_from_snapshot(
 mod wfgad2_tests {
     use super::*;
     use agent_api_types::{
-        PolicySnapshotLimitsV2, PolicySnapshotWorldFsDimensionV2, PolicySnapshotWorldFsIsolationV2,
-        PolicySnapshotWorldFsV2, WorldFsEnforcementV2,
+        PolicySnapshotV3, PolicySnapshotWorldFsDimensionV3, PolicySnapshotWorldFsFailClosedV3,
+        PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3, WorldFsDenyEnforcementV3,
     };
 
     #[test]
     fn pty_full_isolation_env_includes_enforcement_plan_and_helper_src() {
         let tmp = tempfile::tempdir().expect("tempdir");
 
-        let snapshot = PolicySnapshotV2 {
-            schema_version: 2,
-            world_fs: PolicySnapshotWorldFsV2 {
-                mode: world_api::WorldFsMode::ReadOnly,
-                isolation: PolicySnapshotWorldFsIsolationV2::Full,
-                require_world: true,
-                enforcement: Some(WorldFsEnforcementV2::Strict),
+        let snapshot = PolicySnapshotV3 {
+            schema_version: 3,
+            world_fs: PolicySnapshotWorldFsV3 {
+                host_visible: false,
+                fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: true },
+                deny_enforcement: Some(WorldFsDenyEnforcementV3::Strict),
+                caged_required: false,
                 discover: None,
-                read: Some(PolicySnapshotWorldFsDimensionV2 {
+                read: Some(PolicySnapshotWorldFsDimensionV3 {
                     allow_list: vec!["src".to_string()],
                     deny_list: vec!["**/*.pem".to_string()],
                 }),
-                write: None,
-            },
-            net_allowed: vec![],
-            limits: PolicySnapshotLimitsV2 {
-                max_memory_mb: 0,
-                max_cpu_percent: 0,
-                max_runtime_ms: 0,
-                max_egress_bytes: 0,
+                write: PolicySnapshotWorldFsWriteV3 {
+                    enabled: false,
+                    allow_list: vec!["src".to_string()],
+                    deny_list: Vec::new(),
+                },
             },
         };
         snapshot.validate().expect("snapshot validates");
@@ -1255,15 +1249,21 @@ fn prepare_persistent_world_context(
     service: &WorldAgentService,
     session_env: &HashMap<String, String>,
     ready_cwd: &std::path::Path,
-    policy_snapshot: &PolicySnapshotV2,
+    policy_snapshot: &PolicySnapshotV3,
 ) -> Result<PersistentWorldContext, String> {
     use world_api::{ResourceLimits, WorldSpec};
 
     let project_dir =
         resolve_project_dir(Some(session_env), Some(ready_cwd)).map_err(|e| e.to_string())?;
 
-    let allowed_domains = policy_snapshot.net_allowed.clone();
-    let fs_mode = policy_snapshot.world_fs.mode;
+    let canonical = policy_snapshot.canonicalize()?;
+
+    let allowed_domains = substrate_broker::allowed_domains();
+    let fs_mode = if canonical.world_fs.write.enabled {
+        WorldFsMode::Writable
+    } else {
+        WorldFsMode::ReadOnly
+    };
 
     let spec = WorldSpec {
         reuse_session: true,
@@ -1291,16 +1291,13 @@ fn prepare_persistent_world_context(
     let cgroup_path = Some(std::path::PathBuf::from("/sys/fs/cgroup/substrate").join(&world.id));
 
     let mut base_env: HashMap<String, String> = HashMap::new();
-    let isolation_full = matches!(
-        policy_snapshot.world_fs.isolation,
-        PolicySnapshotWorldFsIsolationV2::Full
-    );
+    let isolation_full = !canonical.world_fs.host_visible;
     if isolation_full {
         base_env.insert(
             "SUBSTRATE_WORLD_FS_ISOLATION".to_string(),
             "full".to_string(),
         );
-        apply_full_isolation_env_from_snapshot(&mut base_env, &project_dir, policy_snapshot)?;
+        apply_full_isolation_env_from_snapshot(&mut base_env, &project_dir, &canonical)?;
     } else {
         base_env.insert(
             "SUBSTRATE_WORLD_FS_ISOLATION".to_string(),
@@ -2015,26 +2012,30 @@ async fn handle_legacy_start(
         };
         let (policy_resolution_mode, isolation_full, fs_mode, allowed_domains) =
             if let Some(snapshot) = policy_snapshot.as_ref() {
-                if let Err(err) = snapshot.validate() {
-                    let _ = send_ws_message(
-                        &tx,
-                        &ServerMessage::Error {
-                            message: format!("Invalid policy_snapshot: {err}"),
-                        },
-                    )
-                    .await;
-                    return;
-                }
+                let canonical = match snapshot.canonicalize() {
+                    Ok(v) => v,
+                    Err(err) => {
+                        let _ = send_ws_message(
+                            &tx,
+                            &ServerMessage::Error {
+                                message: format!("Invalid policy_snapshot: {err}"),
+                            },
+                        )
+                        .await;
+                        return;
+                    }
+                };
 
-                let isolation_full = matches!(
-                    snapshot.world_fs.isolation,
-                    PolicySnapshotWorldFsIsolationV2::Full
-                );
+                let isolation_full = !canonical.world_fs.host_visible;
                 (
-                    PolicyResolutionModeV1::SnapshotV2,
+                    PolicyResolutionModeV1::SnapshotV3,
                     isolation_full,
-                    snapshot.world_fs.mode,
-                    snapshot.net_allowed.clone(),
+                    if canonical.world_fs.write.enabled {
+                        WorldFsMode::Writable
+                    } else {
+                        WorldFsMode::ReadOnly
+                    },
+                    substrate_broker::allowed_domains(),
                 )
             } else {
                 let isolation_full = is_full_isolation(Some(&env));

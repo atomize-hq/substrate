@@ -1,6 +1,10 @@
 #![cfg(all(unix, target_os = "linux"))]
 
-use agent_api_types::{ExecuteRequest, WorldFsMode};
+use agent_api_types::{
+    ExecuteRequest, PolicySnapshotV3, PolicySnapshotWorldFsDimensionV3,
+    PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
+    WorldFsMode,
+};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use std::collections::HashMap;
@@ -72,7 +76,34 @@ fn execute_non_pty(
     cmd: &str,
     env: HashMap<String, String>,
     world_fs_mode: WorldFsMode,
+    write_allow_list: Vec<String>,
 ) -> Option<agent_api_types::ExecuteResponse> {
+    let write_enabled = matches!(world_fs_mode, WorldFsMode::Writable);
+    let policy_snapshot = PolicySnapshotV3 {
+        schema_version: 3,
+        world_fs: PolicySnapshotWorldFsV3 {
+            host_visible: false,
+            fail_closed: PolicySnapshotWorldFsFailClosedV3 {
+                routing: !write_enabled,
+            },
+            deny_enforcement: None,
+            caged_required: false,
+            discover: Some(PolicySnapshotWorldFsDimensionV3 {
+                allow_list: vec![".".to_string()],
+                deny_list: Vec::new(),
+            }),
+            read: Some(PolicySnapshotWorldFsDimensionV3 {
+                allow_list: vec![".".to_string()],
+                deny_list: Vec::new(),
+            }),
+            write: PolicySnapshotWorldFsWriteV3 {
+                enabled: write_enabled,
+                allow_list: write_allow_list,
+                deny_list: Vec::new(),
+            },
+        },
+    };
+
     let req = ExecuteRequest {
         profile: None,
         cmd: cmd.to_string(),
@@ -81,7 +112,7 @@ fn execute_non_pty(
         pty: false,
         agent_id: "full-isolation-nonpty-test".to_string(),
         budget: None,
-        policy_snapshot: None,
+        policy_snapshot,
         world_fs_mode: Some(world_fs_mode),
     };
 
@@ -99,46 +130,6 @@ fn base_cage_env() -> HashMap<String, String> {
     let mut env = HashMap::new();
     env.insert("SUBSTRATE_WORLD_REQUIRE_WORLD".to_string(), "1".to_string());
     env
-}
-
-fn write_profile_policy(project_dir: &Path, write_allowlist: &[&str]) {
-    let profile_dir = project_dir.join(".substrate-profile.d");
-    fs::create_dir_all(&profile_dir).expect("create profile directory");
-
-    let allowlist_yaml = if write_allowlist.is_empty() {
-        "  write_allowlist: []\n".to_string()
-    } else {
-        let mut out = String::from("  write_allowlist:\n");
-        for pattern in write_allowlist {
-            out.push_str(&format!("    - {pattern:?}\n"));
-        }
-        out
-    };
-
-    let policy = format!(
-        r#"id: full-isolation-test
-name: Full Cage Test Policy
-world_fs:
-  mode: writable
-  isolation: full
-  require_world: true
-  read_allowlist: ["*"]
-{allowlist_yaml}net_allowed: []
-cmd_allowed: []
-cmd_denied: []
-cmd_isolated: []
-require_approval: false
-allow_shell_operators: true
-limits:
-  max_memory_mb: null
-  max_cpu_percent: null
-  max_runtime_ms: null
-  max_egress_bytes: null
-metadata: {{}}
-"#
-    );
-
-    fs::write(profile_dir.join("policy.yaml"), policy.as_bytes()).expect("write profile policy");
 }
 
 #[test]
@@ -173,6 +164,7 @@ fn non_pty_full_isolation_prevents_host_tmp_writes() {
         r#"sh -lc 'echo cage > "$SUBSTRATE_TEST_HOST_MARKER"'"#,
         env,
         WorldFsMode::Writable,
+        vec![".".to_string()],
     ) {
         Some(resp) => resp,
         None => return,
@@ -230,6 +222,7 @@ fn non_pty_full_isolation_prevents_host_tmp_reads() {
         r#"sh -lc 'cat "$SUBSTRATE_TEST_HOST_SECRET"'"#,
         env,
         WorldFsMode::Writable,
+        vec![".".to_string()],
     ) {
         Some(resp) => resp,
         None => return,
@@ -270,6 +263,7 @@ fn non_pty_full_isolation_runs_from_tmp_rooted_project() {
         "sh -lc 'pwd'",
         base_cage_env(),
         WorldFsMode::Writable,
+        vec![".".to_string()],
     ) {
         Some(resp) => resp,
         None => return,
@@ -305,8 +299,6 @@ fn non_pty_full_isolation_honors_write_allowlist_prefix_globs() {
 
     let tmp = tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
-    write_profile_policy(&cwd, &["./writable/*"]);
-
     let resp = match execute_non_pty(
         &service,
         &cwd,
@@ -362,9 +354,10 @@ else
       ;;
   esac
 fi
-'"#,
+        '"#,
         base_cage_env(),
         WorldFsMode::Writable,
+        vec!["writable".to_string()],
     ) {
         Some(resp) => resp,
         None => return,
@@ -505,9 +498,10 @@ if echo cage > "$SUBSTRATE_TEST_HOST_MARKER" 2>/dev/null; then
 else
   echo WRITE_BLOCKED
 fi
-'"#,
+        '"#,
         env,
         WorldFsMode::Writable,
+        vec![".".to_string()],
     ) {
         Some(resp) => resp,
         None => return,
