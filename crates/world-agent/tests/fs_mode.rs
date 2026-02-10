@@ -1,6 +1,10 @@
 #![cfg(all(unix, target_os = "linux"))]
 
-use agent_api_types::{ExecuteRequest, WorldFsMode};
+use agent_api_types::{
+    ExecuteRequest, PolicySnapshotV3, PolicySnapshotWorldFsDimensionV3,
+    PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
+    WorldFsMode,
+};
 use axum::extract::ws::WebSocketUpgrade;
 use axum::routing::get;
 use axum::{Router, Server};
@@ -31,6 +35,34 @@ fn overlay_available() -> bool {
             .unwrap_or(false)
 }
 
+fn policy_snapshot_for_mode(mode: WorldFsMode) -> PolicySnapshotV3 {
+    let write_enabled = matches!(mode, WorldFsMode::Writable);
+    PolicySnapshotV3 {
+        schema_version: 3,
+        world_fs: PolicySnapshotWorldFsV3 {
+            host_visible: true,
+            fail_closed: PolicySnapshotWorldFsFailClosedV3 {
+                routing: !write_enabled,
+            },
+            deny_enforcement: None,
+            caged_required: false,
+            discover: Some(PolicySnapshotWorldFsDimensionV3 {
+                allow_list: vec![".".to_string()],
+                deny_list: Vec::new(),
+            }),
+            read: Some(PolicySnapshotWorldFsDimensionV3 {
+                allow_list: vec![".".to_string()],
+                deny_list: Vec::new(),
+            }),
+            write: PolicySnapshotWorldFsWriteV3 {
+                enabled: write_enabled,
+                allow_list: vec![".".to_string()],
+                deny_list: Vec::new(),
+            },
+        },
+    }
+}
+
 #[test]
 fn non_pty_read_only_mode_blocks_writes() {
     if !overlay_available() {
@@ -56,7 +88,7 @@ fn non_pty_read_only_mode_blocks_writes() {
         pty: false,
         agent_id: "fs-mode-test".to_string(),
         budget: None,
-        policy_snapshot: None,
+        policy_snapshot: policy_snapshot_for_mode(WorldFsMode::ReadOnly),
         world_fs_mode: Some(WorldFsMode::ReadOnly),
     };
 
@@ -119,7 +151,7 @@ fn non_pty_read_only_mode_blocks_absolute_project_writes() {
         pty: false,
         agent_id: "fs-mode-test".to_string(),
         budget: None,
-        policy_snapshot: None,
+        policy_snapshot: policy_snapshot_for_mode(WorldFsMode::ReadOnly),
         world_fs_mode: Some(WorldFsMode::ReadOnly),
     };
 
@@ -172,7 +204,7 @@ fn non_pty_writable_mode_records_diffs_for_writes() {
         pty: false,
         agent_id: "fs-mode-test".to_string(),
         budget: None,
-        policy_snapshot: None,
+        policy_snapshot: policy_snapshot_for_mode(WorldFsMode::Writable),
         world_fs_mode: Some(WorldFsMode::Writable),
     };
 
@@ -419,7 +451,7 @@ async fn pty_writable_mode_keeps_writes_in_overlay() {
             pty: false,
             agent_id: "fs-mode-test".to_string(),
             budget: None,
-            policy_snapshot: None,
+            policy_snapshot: policy_snapshot_for_mode(WorldFsMode::Writable),
             world_fs_mode: Some(WorldFsMode::Writable),
         };
 
@@ -476,7 +508,7 @@ async fn pty_and_non_pty_share_overlay_state_across_mode_switch() {
         pty: false,
         agent_id: "fs-mode-test".to_string(),
         budget: None,
-        policy_snapshot: None,
+        policy_snapshot: policy_snapshot_for_mode(WorldFsMode::Writable),
         world_fs_mode: Some(WorldFsMode::Writable),
     };
 
@@ -576,7 +608,7 @@ async fn pty_and_non_pty_share_overlay_state_across_mode_switch() {
         pty: false,
         agent_id: "fs-mode-test".to_string(),
         budget: None,
-        policy_snapshot: None,
+        policy_snapshot: policy_snapshot_for_mode(WorldFsMode::ReadOnly),
         world_fs_mode: Some(WorldFsMode::ReadOnly),
     };
 

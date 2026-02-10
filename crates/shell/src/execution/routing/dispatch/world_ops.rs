@@ -858,7 +858,7 @@ fn build_agent_client_and_request_impl(
         pty: false,
         agent_id: agent_id.clone(),
         budget: None,
-        policy_snapshot: Some(policy_snapshot),
+        policy_snapshot,
         world_fs_mode: Some(current_world_fs_mode()),
     };
 
@@ -898,7 +898,7 @@ fn build_agent_client_and_request_impl(
             pty: false,
             agent_id: agent_id.clone(),
             budget: None,
-            policy_snapshot: Some(policy_snapshot),
+            policy_snapshot,
             world_fs_mode: Some(current_world_fs_mode()),
         };
 
@@ -944,7 +944,7 @@ fn build_agent_client_and_request_impl(
         pty: false,
         agent_id: agent_id.clone(),
         budget: None,
-        policy_snapshot: Some(policy_snapshot),
+        policy_snapshot,
         world_fs_mode: Some(current_world_fs_mode()),
     };
 
@@ -1000,7 +1000,7 @@ fn build_agent_client_and_request_impl(
         pty: false,
         agent_id: agent_id.clone(),
         budget: None,
-        policy_snapshot: Some(policy_snapshot),
+        policy_snapshot,
         world_fs_mode: Some(current_world_fs_mode()),
     };
 
