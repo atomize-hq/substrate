@@ -211,7 +211,7 @@ Scope:
 - **Risks:**
   - Operators may forget to populate allowlists; mitigated by actionable errors and `--explain`.
 - **Unlocks:**
-  - Clear separation of concerns across all future ADRs (gateway, engines, agent hub, MCP toolbox).
+  - Clear separation of concerns across all future ADRs (gateway, engines, agent hub, agent toolbox (MCP protocol)).
 - **Quick wins / low-hanging fruit:**
   - Remove redundant policy enable keys from the schema and keep only requirements + allowlists.
 

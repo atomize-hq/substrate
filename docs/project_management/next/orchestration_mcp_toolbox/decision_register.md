@@ -9,7 +9,7 @@ Scope:
 
 ---
 
-### DR-0001 — Bind transport for the internal MCP server (UDS-first vs TCP-only)
+### DR-0001 — Bind transport for the toolbox server endpoint (UDS-first vs TCP-only)
 
 **Decision owner(s):** Shell + Agent Hub + World maintainers  
 **Date:** 2026-02-09  
@@ -17,7 +17,7 @@ Scope:
 **Related docs:** `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`
 
 **Problem / Context**
-- The internal MCP server must be reachable by the orchestrator agent, but must not be exposed publicly by default.
+- The internal toolbox server (MCP protocol) must be reachable by the orchestrator agent, but must not be exposed publicly by default.
 - Transport must work in-world across Linux/macOS/WSL and have a clear “local-only” story.
 
 **Option A — UDS-first (preferred), with loopback TCP fallback only where UDS is not available**
@@ -28,7 +28,7 @@ Scope:
 - **Cons:**
   - Requires defining a fallback for environments that cannot use UDS for the orchestrator scope.
 - **Cascading implications:**
-  - `substrate mcp env` must emit an endpoint string that can represent both `unix://` and `tcp://`.
+  - `substrate agents tools env` must emit an endpoint string that can represent both `unix://` and `tcp://`.
   - When falling back to TCP, bind MUST be loopback-only and randomized port by default.
 - **Risks:**
   - TCP fallback can be misconfigured; mitigated by strict defaults and explicit `--explain`/status output.
@@ -57,12 +57,12 @@ Scope:
 - **Rationale (crisp):** Keeps the default exposure surface minimal and aligns with “internal-only” semantics while still allowing a controlled fallback path.
 
 **Follow-up tasks (explicit)**
-- Define the endpoint formats emitted by `substrate mcp env` for UDS and TCP.
+- Define the endpoint formats emitted by `substrate agents tools env` for UDS and TCP.
 - Define the default filesystem permissions for the UDS socket and the default bind rules for TCP.
 
 ---
 
-### DR-0002 — MCP server lifecycle (per-orchestration-session vs global singleton)
+### DR-0002 — Toolbox server lifecycle (per-orchestration-session vs global singleton)
 
 **Decision owner(s):** Agent Hub maintainers  
 **Date:** 2026-02-09  
@@ -71,9 +71,9 @@ Scope:
 
 **Problem / Context**
 - Tool authorization depends on the orchestrator identity and its session context (`orchestration_session_id`, `world_id`).
-- A global singleton MCP server increases the risk of cross-session confusion and stale authorization context.
+- A global singleton toolbox server increases the risk of cross-session confusion and stale authorization context.
 
-**Option A — Per-orchestration-session MCP server (recommended)**
+**Option A — Per-orchestration-session toolbox server (recommended)**
 - **Pros:**
   - Session context is explicit and naturally bound to authorization and attribution.
   - Simplifies “tools inherit the orchestrator’s boundary” semantics.
@@ -81,7 +81,7 @@ Scope:
 - **Cons:**
   - More server lifecycles to manage (start/stop).
 - **Cascading implications:**
-  - `substrate mcp status` must report per-session instances.
+  - `substrate agents tools status` must report per-session instances.
   - The hub must define cleanup rules when sessions end or crash.
 - **Risks:**
   - Endpoint churn; mitigated by stable env emission per session and good diagnostics.
@@ -90,7 +90,7 @@ Scope:
 - **Quick wins / low-hanging fruit:**
   - Tie server lifecycle to the orchestrator session lifecycle.
 
-**Option B — One global MCP server for all sessions**
+**Option B — One global toolbox server for all sessions**
 - **Pros:**
   - Fewer processes; simpler operationally.
 - **Cons:**
@@ -106,7 +106,7 @@ Scope:
   - Prototype speed only; not a good long-term contract.
 
 **Recommendation**
-- **Selected:** Option A — Per-orchestration-session MCP server.
+- **Selected:** Option A — Per-orchestration-session toolbox server.
 - **Rationale (crisp):** Avoids cross-session authorization confusion and makes attribution deterministic by construction.
 
 **Follow-up tasks (explicit)**
@@ -116,7 +116,7 @@ Scope:
 
 ### DR-0003 — Tool namespace + versioning strategy (server-level version vs tool-name version)
 
-**Decision owner(s):** MCP toolbox maintainers  
+**Decision owner(s):** Agent toolbox maintainers  
 **Date:** 2026-02-09  
 **Status:** Accepted  
 **Related docs:** `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`
@@ -131,7 +131,7 @@ Scope:
 - **Cons:**
   - Requires clients to surface/record toolbox version for debugging.
 - **Cascading implications:**
-  - `substrate mcp status --json` must expose `toolbox_version`.
+  - `substrate agents tools status --json` must expose `toolbox_version`.
   - Trace events for tool calls must record the toolbox version.
 - **Risks:**
   - Schema evolution must be disciplined; mitigated by additive-only policy until a major bump.
@@ -160,14 +160,14 @@ Scope:
 - **Rationale (crisp):** Keeps client configuration simple and makes the toolbox a cohesive, versioned unit.
 
 **Follow-up tasks (explicit)**
-- Define the `toolbox_version` field in `substrate mcp status --json`.
+- Define the `toolbox_version` field in `substrate agents tools status --json`.
 - Record `toolbox_version` on every tool-call trace event.
 
 ---
 
 ### DR-0004 — Authorization enforcement location (agent-hub role gate vs per-tool ad-hoc checks)
 
-**Decision owner(s):** Agent Hub + MCP toolbox maintainers  
+**Decision owner(s):** Agent Hub + Agent toolbox maintainers  
 **Date:** 2026-02-09  
 **Status:** Accepted  
 **Related docs:** `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`, `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`
@@ -176,13 +176,13 @@ Scope:
 - Executor agents must not have access to orchestration-only tools.
 - Authorization must be deterministic and auditable.
 
-**Option A — Central role gate in the MCP server (deny if not orchestrator), plus per-tool policy checks**
+**Option A — Central role gate in the toolbox server (deny if not orchestrator), plus per-tool policy checks**
 - **Pros:**
   - Single, consistent enforcement point for role-based access control.
   - Clear audit trail: one deny reason for “wrong role”.
   - Per-tool checks remain for data sensitivity (redaction, policy overlays).
 - **Cons:**
-  - Requires the MCP server to know the caller identity and role reliably.
+  - Requires the toolbox server to know the caller identity and role reliably.
 - **Cascading implications:**
   - The caller identity and role must be explicit in the connection context (not inferred heuristically).
 - **Risks:**
@@ -207,17 +207,17 @@ Scope:
   - Prototype speed, but not acceptable as a contract.
 
 **Recommendation**
-- **Selected:** Option A — Central role gate in the MCP server, plus per-tool policy checks.
+- **Selected:** Option A — Central role gate in the toolbox server, plus per-tool policy checks.
 - **Rationale (crisp):** Role gating is a security boundary; centralizing it prevents inconsistent enforcement.
 
 **Follow-up tasks (explicit)**
-- Define and test caller identity propagation so the MCP server can enforce role gates deterministically.
+- Define and test caller identity propagation so the toolbox server can enforce role gates deterministically.
 
 ---
 
 ### DR-0005 — Tool execution boundary inheritance (tools run in orchestrator scope vs always in-world)
 
-**Decision owner(s):** MCP toolbox + World maintainers  
+**Decision owner(s):** Agent toolbox + World maintainers  
 **Date:** 2026-02-09  
 **Status:** Accepted  
 **Related docs:** `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`, `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`
@@ -266,3 +266,57 @@ Scope:
 **Follow-up tasks (explicit)**
 - Enumerate which tools are scope-agnostic in v1 and which are explicitly unsupported for in-world orchestrators (with fail-closed errors).
 
+---
+
+### DR-0006 — CLI namespace for internal orchestration tools (`mcp` vs `agents tools`)
+
+**Decision owner(s):** Shell + Agent Hub maintainers  
+**Date:** 2026-02-10  
+**Status:** Accepted  
+**Related docs:** `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`, `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`
+
+**Problem / Context**
+- Substrate will likely support external MCP servers in the future, where `substrate mcp …` is the natural namespace.
+- This ADR focuses on an *internal* orchestration toolbox used by the agent hub’s orchestrator; reusing `mcp` risks confusing “external server management” with “internal privileged tool surface”.
+
+**Option A — Use `substrate agents tools …` for the internal toolbox (recommended)**
+- **Pros:**
+  - Keeps `mcp` reserved for external MCP server management and discovery.
+  - Places internal tools under the agent hub subsystem, which owns role gating and attribution.
+  - Avoids implying that operators should manage this like a standalone server.
+- **Cons:**
+  - Slightly less obvious that the underlying protocol is MCP.
+- **Cascading implications:**
+  - Canonical commands become:
+    - `substrate agents tools status [--json]`
+    - `substrate agents tools env [--json]`
+  - Env exports should avoid `SUBSTRATE_MCP_*` naming to prevent collisions with external MCP wiring.
+- **Risks:**
+  - If an operator searches for “mcp” they may not find this; mitigated by docs references and `help` text.
+- **Unlocks:**
+  - Clear conceptual separation between internal privileged toolbox and future external MCP management.
+- **Quick wins / low-hanging fruit:**
+  - Add `help` text that explicitly states “protocol is MCP; CLI namespace is `agents tools`”.
+
+**Option B — Use `substrate mcp …` for the internal toolbox**
+- **Pros:**
+  - Short, conventional label for MCP.
+- **Cons:**
+  - Collides with future external MCP management semantics.
+  - Encourages treating the internal toolbox as a generic server rather than a privileged agent-hub surface.
+- **Cascading implications:**
+  - Requires later renaming or deconflicting once external MCP support lands.
+- **Risks:**
+  - Long-term UX drift and confusing docs.
+- **Unlocks:**
+  - Short-term naming convenience only.
+- **Quick wins / low-hanging fruit:**
+  - None worth the eventual rename.
+
+**Recommendation**
+- **Selected:** Option A — Use `substrate agents tools …` for the internal toolbox.
+- **Rationale (crisp):** Reserves `mcp` for external server management and keeps internal privileged tools anchored to the agent hub mental model.
+
+**Follow-up tasks (explicit)**
+- Rename CLI docs from `substrate mcp …` to `substrate agents tools …`.
+- Use `SUBSTRATE_AGENT_TOOLBOX_*` env output keys for internal toolbox wiring.

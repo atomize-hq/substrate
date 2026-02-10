@@ -1,4 +1,4 @@
-# ADR-0026 — Orchestration Toolbox via Internal MCP Server
+# ADR-0026 — Orchestration Toolbox (Internal; MCP Protocol)
 
 ## Status
 - Status: Draft
@@ -20,14 +20,14 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: b67a0d37f814f77c05a9555f9918eedc640407ee9dbebc10d779ef5c06ebfbea
+ADR_BODY_SHA256: 62347ce104ca9c24ef79f03353ac0b9c50caf477871b6ac6c77e361c2332b2c3
 ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
 
 ### Changes (operator-facing)
-- Substrate exposes an internal MCP server providing orchestration-only tools
-  - Existing: Orchestration context and levers are primarily internal; CLI agents cannot uniformly access Substrate orchestration functions.
-  - New: Substrate runs an internal MCP server (“substrate tools”) and exposes orchestration tools to whichever agent is assigned orchestrator role.
-  - Why: Make orchestration levers/context available via tool calls, enabling role-swappable orchestrators (CLI or API) without bespoke SDK coupling.
+- Substrate exposes an internal orchestration toolbox providing orchestrator-only tools (speaks MCP)
+  - Existing: Orchestration context and levers are primarily internal; agents cannot uniformly access Substrate orchestration functions.
+  - New: Substrate runs an internal toolbox server (MCP protocol) and exposes orchestration tools to whichever agent is assigned `role=orchestrator`.
+  - Why: Make orchestration levers/context available via tool calls, enabling role-swappable orchestrators (CLI or API) without bespoke SDK coupling while keeping the `mcp` CLI namespace reserved for external MCP servers.
   - Links:
     - `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md#L1`
     - `docs/project_management/next/orchestration_mcp_toolbox/decision_register.md`
@@ -38,7 +38,7 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
 - Access must be restricted by role and policy: non-orchestrator agents must not receive orchestration-only tools.
 
 ## Goals
-- Implement an internal “substrate MCP server” that exposes orchestration tools.
+- Implement an internal toolbox server (MCP protocol) that exposes orchestration tools.
 - Support tool gating by role:
   - orchestrator-role sessions: allowed
   - non-orchestrator sessions: denied
@@ -59,8 +59,9 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
 
 ### CLI
 - Commands:
-  - `substrate mcp status [--json]`
-    - Behavior: report whether the internal MCP toolbox is enabled and (when enabled) how to reach it for the current orchestration session:
+  - `substrate agents tools status [--json]`
+    - Behavior: report whether the internal orchestration toolbox is enabled and (when enabled) how to reach it for the current orchestration session.
+      - Naming note: the `mcp` subcommand namespace is reserved for external MCP servers; internal orchestration tools live under `agents tools`.
       - `toolbox_enabled` (effective config)
       - `toolbox_version` (Decision Register DR-0003; v1 starts at `1`)
       - bind transport:
@@ -73,13 +74,13 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
       - `2`: config/schema error (strict parsing)
       - `3`: required dependency unavailable (e.g., world boundary required but unavailable)
       - `4`: unsupported / missing prerequisites for required posture
-  - `substrate mcp env [--json]`
-    - Behavior: emit environment/config hints for orchestrator agents to connect to the toolbox.
+  - `substrate agents tools env [--json]`
+    - Behavior: emit environment/config hints for orchestrator agents to connect to the toolbox endpoint.
       - Default output is shell-compatible exports.
       - `--json` outputs a structured object.
     - Output keys (authoritative):
-      - `SUBSTRATE_MCP_ENDPOINT`: `unix://...` or `tcp://127.0.0.1:...`
-      - `SUBSTRATE_MCP_TOOLBOX_VERSION`: `1`
+      - `SUBSTRATE_AGENT_TOOLBOX_ENDPOINT`: `unix://...` or `tcp://127.0.0.1:...`
+      - `SUBSTRATE_AGENT_TOOLBOX_VERSION`: `1`
     - Exit codes:
       - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
       - `0`: success
@@ -94,17 +95,17 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
   - `docs/project_management/next/llm_and_agent_config_policy_surface/SCHEMA.md`
 
 - Additive config keys (authoritative):
-  - `mcp.toolbox.enabled: bool`
-    - Meaning: whether the internal MCP toolbox may run at all for the effective config.
+  - `agents.toolbox.enabled: bool`
+    - Meaning: whether the internal orchestration toolbox may run at all for the effective config.
     - Default: `false` (explicit enable required).
-  - `mcp.toolbox.bind.transport: uds|tcp`
-    - Meaning: preferred bind transport for the toolbox endpoint.
+  - `agents.toolbox.bind.transport: uds|tcp`
+    - Meaning: preferred bind transport for the toolbox endpoint (UDS-first; loopback TCP fallback).
     - Default: `uds` (Decision Register DR-0001).
 
 Constraints:
 - Toolbox enable is gated by both config and policy allowlists:
-  - If `mcp.toolbox.enabled=false`, the toolbox MUST be disabled.
-  - If `mcp.toolbox.enabled=true` but `agents.enabled=false`, the toolbox MUST be disabled (agent hub is prerequisite).
+  - If `agents.toolbox.enabled=false`, the toolbox MUST be disabled.
+  - If `agents.toolbox.enabled=true` but `agents.enabled=false`, the toolbox MUST be disabled (agent hub is prerequisite).
   - If the orchestrator backend id is not allowlisted by effective policy (`agents.allowed_backends[*]`), the toolbox MUST be disabled (fail closed with a policy error).
 
 ### Platform guarantees
@@ -113,26 +114,26 @@ Constraints:
   - TCP endpoints (when used) MUST bind to `127.0.0.1` only by default.
 - Boundary inheritance (Decision Register DR-0005):
   - Tools inherit the orchestrator’s execution boundary (`execution.scope=host|world`) and MUST NOT silently change it.
-- If the effective posture requires in-world execution (fail-closed routing), the MCP toolbox MUST fail closed when a world boundary is unavailable (no host fallback).
+- If the effective posture requires in-world execution (fail-closed routing), the toolbox MUST fail closed when a world boundary is unavailable (no host fallback).
 
 ## Architecture Shape
 - Components:
-  - `crates/mcp-internal` (new): internal MCP server implementation (pmcp-based).
-  - `crates/agent-hub` (from ADR-0025): provides agent/session inventory used by MCP tools.
+  - `crates/agent-toolbox` (new): internal toolbox server implementation (MCP protocol; pmcp-based).
+  - `crates/agent-hub` (from ADR-0025): provides agent/session inventory used by toolbox tools.
   - `crates/trace` / `crates/substrate-graph` (existing): query surfaces for trace/graph tools.
   - `crates/broker` (existing): policy view/explain tool.
 
 - End-to-end flow:
   - Inputs:
     - orchestrator role assignment
-    - MCP tool invocation
+    - toolbox tool invocation (MCP protocol)
   - Derived state:
     - role gating decision (allow/deny)
   - Actions:
     - execute tool handler using Substrate internal APIs
     - emit tool call event into trace pipeline
   - Outputs:
-    - MCP tool response payload (JSON)
+    - tool response payload (JSON; MCP protocol)
     - trace event record
 
 ## Sequencing / Dependencies
@@ -147,7 +148,7 @@ Constraints:
   - Policy allowlist: orchestrator backend id MUST be allowlisted by `agents.allowed_backends[*]` or the toolbox is disabled.
   - Tools that expose sensitive data apply redaction per policy (reuse ADR-0028 redaction/caps rules).
 - Protected paths/invariants:
-  - Internal MCP bind endpoint is not exposed publicly by default.
+  - Internal toolbox bind endpoint is not exposed publicly by default.
   - Tool schemas are stable and versioned (Decision Register DR-0003).
 
 ## Validation Plan (Authoritative)
@@ -157,7 +158,7 @@ Constraints:
   - role gating logic for each tool
   - schema validation and deterministic outputs
 - Integration tests:
-  - orchestrator agent calls internal MCP tools; non-orchestrator agent denied
+  - orchestrator agent calls toolbox tools; non-orchestrator agent denied
 
 ### Manual validation
 - Manual playbook: `docs/project_management/next/orchestration_mcp_toolbox/manual_testing_playbook.md`
@@ -175,7 +176,7 @@ Constraints:
 - Decision Register entries:
   - `docs/project_management/next/orchestration_mcp_toolbox/decision_register.md`:
     - DR-0001 (Bind transport: UDS-first vs TCP-only)
-    - DR-0002 (MCP server lifecycle: per-session vs global singleton)
+    - DR-0002 (Toolbox server lifecycle: per-session vs global singleton)
     - DR-0003 (Tool namespace + versioning: server-level version vs tool-name version)
     - DR-0004 (Authorization enforcement: central role gate vs per-tool ad-hoc checks)
     - DR-0005 (Tool execution boundary inheritance: inherit orchestrator scope vs always in-world)
