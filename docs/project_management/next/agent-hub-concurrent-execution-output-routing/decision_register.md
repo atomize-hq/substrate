@@ -236,7 +236,7 @@ Scope:
       - `orchestration_session_id` (string; required)
       - `run_id` (string; required)
       - `thread_id` (string; optional)
-      - `role` (string; optional; `orchestrator|executor`)
+      - `role` (string; optional taxonomy label; v1 reserved values include `orchestrator|member`)
       - `cmd_id` (string; optional)
       - `span_id` (string; optional)
     - Payload:
