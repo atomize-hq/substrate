@@ -6,7 +6,8 @@ use crate::execution::config_model::{CliConfigOverrides, SyncConflictPolicy, Syn
 use crate::execution::settings::{apply_world_root_env, resolve_world_root};
 use crate::execution::workspace;
 use anyhow::{anyhow, Context, Result};
-use std::collections::HashSet;
+use base64::Engine;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::io::{self, Write};
@@ -411,9 +412,31 @@ fn glob_matches_path(pattern: &str, path: &str) -> bool {
     glob_matches(pattern, path)
 }
 
+fn capabilities_has_feature(caps: &serde_json::Value, feature: &str) -> bool {
+    caps.get("features")
+        .and_then(|f| f.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str()).any(|s| s == feature))
+        .unwrap_or(false)
+}
+
+#[cfg(unix)]
+fn apply_execute_bits(path: &Path, source_mode: u32) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let meta = fs::metadata(path)
+        .with_context(|| format!("failed to read permissions for {}", path.display()))?;
+    let mut perms = meta.permissions();
+    let current_mode = perms.mode();
+    let new_mode = (current_mode & !0o111) | (source_mode & 0o111);
+    perms.set_mode(new_mode);
+    fs::set_permissions(path, perms)
+        .with_context(|| format!("failed to set permissions for {}", path.display()))?;
+    Ok(())
+}
+
 fn run_workspace_sync(args: &WorkspaceSyncArgs, cli: &Cli) -> Result<i32> {
     let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let _workspace_root = require_workspace_root(&cwd, "workspace sync")?;
+    let workspace_root = require_workspace_root(&cwd, "workspace sync")?;
 
     let cli_world_enabled = if cli.world {
         Some(true)
@@ -452,31 +475,7 @@ fn run_workspace_sync(args: &WorkspaceSyncArgs, cli: &Cli) -> Result<i32> {
         .map(parse_sync_conflict_policy)
         .unwrap_or(effective.sync.conflict_policy);
 
-    if !args.dry_run {
-        match direction {
-            SyncDirection::FromWorld => {
-                eprintln!("substrate: workspace sync is not implemented until WS2");
-            }
-            SyncDirection::FromHost | SyncDirection::Both => {
-                eprintln!("substrate: workspace sync is not implemented until WS5");
-            }
-        }
-        return Ok(4);
-    }
-
     let excludes = build_effective_sync_excludes(&effective.sync.exclude, &args.exclude)?;
-
-    println!("substrate: workspace sync --dry-run preview (WS1)");
-    println!("  auto_sync: {}", effective.sync.auto_sync);
-    println!("  direction: {}", sync_direction_as_str(direction));
-    println!(
-        "  conflict_policy: {}",
-        sync_conflict_policy_as_str(conflict_policy)
-    );
-    println!("  exclude:");
-    for item in &excludes {
-        println!("    - {item}");
-    }
 
     match direction {
         SyncDirection::FromHost | SyncDirection::Both => {
@@ -487,6 +486,20 @@ fn run_workspace_sync(args: &WorkspaceSyncArgs, cli: &Cli) -> Result<i32> {
             return Ok(4);
         }
         SyncDirection::FromWorld => {}
+    }
+
+    if args.dry_run {
+        println!("substrate: workspace sync --dry-run preview (WS1)");
+        println!("  auto_sync: {}", effective.sync.auto_sync);
+        println!("  direction: {}", sync_direction_as_str(direction));
+        println!(
+            "  conflict_policy: {}",
+            sync_conflict_policy_as_str(conflict_policy)
+        );
+        println!("  exclude:");
+        for item in &excludes {
+            println!("    - {item}");
+        }
     }
 
     if cli.no_world {
@@ -547,7 +560,7 @@ fn run_workspace_sync(args: &WorkspaceSyncArgs, cli: &Cli) -> Result<i32> {
         return Ok(4);
     }
 
-    let record = match rt.block_on(async { client.pending_diff(request).await }) {
+    let record = match rt.block_on(async { client.pending_diff(request.clone()).await }) {
         Ok(r) => r,
         Err(err) => {
             // WS1-spec: when `--direction from_world` is in effect, a reachable world backend is
@@ -593,6 +606,8 @@ fn run_workspace_sync(args: &WorkspaceSyncArgs, cli: &Cli) -> Result<i32> {
             raw_paths.push((bucket, normalized));
         }
     }
+
+    let raw_paths_for_decisions = raw_paths.clone();
 
     offending_protected.sort();
     offending_protected.dedup();
@@ -640,19 +655,375 @@ fn run_workspace_sync(args: &WorkspaceSyncArgs, cli: &Cli) -> Result<i32> {
 
     let total_paths = out_writes.len() + out_mods.len() + out_deletes.len();
 
-    println!("substrate: pending diff summary (non_pty)");
+    if args.dry_run {
+        println!("substrate: pending diff summary (non_pty)");
+        if args.verbose {
+            println!("  session_started_at: {}", record.session_started_at);
+            println!("  diff_id: {}", record.diff_id);
+        }
+        println!("  total_paths: {total_paths}");
+        println!("  writes: {}", out_writes.len());
+        println!("  mods: {}", out_mods.len());
+        println!("  deletes: {}", out_deletes.len());
+        if excluded_count > 0 {
+            println!("  excluded_by_patterns: true ({excluded_count})");
+        } else {
+            println!("  excluded_by_patterns: false");
+        }
+        return Ok(0);
+    }
+
+    // WS2: apply pending diffs (direction=from_world, non-PTY only).
+    if total_paths > 10000 {
+        eprintln!("substrate: workspace sync refused: size guard exceeded");
+        eprintln!("  max_paths: 10000");
+        eprintln!("  observed_paths: {total_paths}");
+        return Ok(5);
+    }
+
+    let has_pending_diff_clear = capabilities_has_feature(&caps, "pending_diff_clear_v1");
+    let has_world_fs_read = capabilities_has_feature(&caps, "world_fs_read_v1");
+    if !has_pending_diff_clear || !has_world_fs_read {
+        eprintln!("substrate: workspace sync apply is unsupported by this backend");
+        if !has_pending_diff_clear {
+            eprintln!("  missing feature: pending_diff_clear_v1");
+        }
+        if !has_world_fs_read {
+            eprintln!("  missing feature: world_fs_read_v1");
+        }
+        return Ok(4);
+    }
+
+    let meta_paths: Vec<String> = out_writes.iter().chain(out_mods.iter()).cloned().collect();
+
+    let base_request = agent_api_types::WorldFsReadRequestV1 {
+        profile: request.profile.clone(),
+        cwd: request.cwd.clone(),
+        env: request.env.clone(),
+        agent_id: request.agent_id.clone(),
+        policy_snapshot: request.policy_snapshot.clone(),
+        path: String::new(),
+        include_contents: false,
+    };
+
+    let world_meta: HashMap<String, agent_api_types::WorldFsReadResponseV1> =
+        match rt.block_on(async {
+            let mut out: HashMap<String, agent_api_types::WorldFsReadResponseV1> = HashMap::new();
+            for path in &meta_paths {
+                let req = agent_api_types::WorldFsReadRequestV1 {
+                    path: path.clone(),
+                    include_contents: false,
+                    ..base_request.clone()
+                };
+                let resp = client.world_fs_read(req).await?;
+                out.insert(path.clone(), resp);
+            }
+            Ok::<_, anyhow::Error>(out)
+        }) {
+            Ok(map) => map,
+            Err(err) => {
+                eprintln!("substrate: workspace sync failed: failed to read world file metadata");
+                eprintln!("{err:#}");
+                return Ok(1);
+            }
+        };
+
+    let mut observed_bytes_to_copy: u64 = 0;
+    for path in &meta_paths {
+        let Some(meta) = world_meta.get(path) else {
+            eprintln!("substrate: workspace sync failed: missing world metadata for {path}");
+            return Ok(1);
+        };
+
+        match meta.entry_type {
+            agent_api_types::WorldFsEntryTypeV1::RegularFile => {
+                let Some(size) = meta.size else {
+                    eprintln!("substrate: workspace sync failed: missing size for {path}");
+                    return Ok(1);
+                };
+                observed_bytes_to_copy = observed_bytes_to_copy.saturating_add(size);
+            }
+            agent_api_types::WorldFsEntryTypeV1::Directory => {}
+            _ => {
+                eprintln!("substrate: workspace sync refused: unsupported file type in apply set");
+                eprintln!("  path: {path}");
+                eprintln!("  file_type: {:?}", meta.entry_type);
+                return Ok(5);
+            }
+        }
+    }
+
+    if observed_bytes_to_copy > 104_857_600 {
+        eprintln!("substrate: workspace sync refused: size guard exceeded");
+        eprintln!("  max_bytes_to_copy: 104857600");
+        eprintln!("  observed_bytes_to_copy: {observed_bytes_to_copy}");
+        return Ok(5);
+    }
+
+    let baseline = match chrono::DateTime::parse_from_rfc3339(&record.session_started_at) {
+        Ok(dt) => dt.with_timezone(&chrono::Utc),
+        Err(err) => {
+            eprintln!("substrate: workspace sync failed: invalid session_started_at timestamp");
+            eprintln!("{err:#}");
+            return Ok(1);
+        }
+    };
+
+    let mut conflicts: Vec<String> = Vec::new();
+    for path in out_writes
+        .iter()
+        .chain(out_mods.iter())
+        .chain(out_deletes.iter())
+    {
+        let host_path = workspace_root.join(path);
+        let meta = match fs::symlink_metadata(&host_path) {
+            Ok(m) => m,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
+            Err(err) => {
+                eprintln!(
+                    "substrate: workspace sync failed: failed to stat {}",
+                    host_path.display()
+                );
+                eprintln!("{err:#}");
+                return Ok(1);
+            }
+        };
+
+        let modified = match meta.modified() {
+            Ok(m) => chrono::DateTime::<chrono::Utc>::from(m),
+            Err(err) => {
+                eprintln!(
+                    "substrate: workspace sync failed: failed to read mtime for {}",
+                    host_path.display()
+                );
+                eprintln!("{err:#}");
+                return Ok(1);
+            }
+        };
+
+        if modified > baseline {
+            conflicts.push(path.clone());
+        }
+    }
+    conflicts.sort();
+    conflicts.dedup();
+
+    if conflict_policy == SyncConflictPolicy::Abort && !conflicts.is_empty() {
+        eprintln!("substrate: workspace sync refused: conflicts detected (policy=abort)");
+        for item in &conflicts {
+            eprintln!("  - {item}");
+        }
+        return Ok(5);
+    }
+
+    let conflicts_set: HashSet<String> = conflicts.iter().cloned().collect();
+    let skipped_by_conflict: usize = if conflict_policy == SyncConflictPolicy::PreferHost {
+        conflicts_set.len()
+    } else {
+        0
+    };
+
+    let mut apply_writes = out_writes;
+    let mut apply_mods = out_mods;
+    let mut apply_deletes = out_deletes;
+
+    if conflict_policy == SyncConflictPolicy::PreferHost && !conflicts_set.is_empty() {
+        apply_writes.retain(|p| !conflicts_set.contains(p));
+        apply_mods.retain(|p| !conflicts_set.contains(p));
+        apply_deletes.retain(|p| !conflicts_set.contains(p));
+    }
+
+    let mut deletes_sorted = apply_deletes.clone();
+    deletes_sorted.sort_by(|a, b| {
+        let depth_a = a.split('/').count();
+        let depth_b = b.split('/').count();
+        depth_b.cmp(&depth_a).then_with(|| b.cmp(a))
+    });
+
+    let mut writes_mods_sorted: Vec<(bool, String)> = Vec::new();
+    for p in &apply_writes {
+        writes_mods_sorted.push((true, p.clone()));
+    }
+    for p in &apply_mods {
+        writes_mods_sorted.push((false, p.clone()));
+    }
+    writes_mods_sorted.sort_by(|a, b| a.1.cmp(&b.1));
+
+    for path in deletes_sorted {
+        let host_path = workspace_root.join(&path);
+        let meta = match fs::symlink_metadata(&host_path) {
+            Ok(m) => m,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
+            Err(err) => {
+                eprintln!(
+                    "substrate: workspace sync failed: failed to stat {}",
+                    host_path.display()
+                );
+                eprintln!("{err:#}");
+                return Ok(1);
+            }
+        };
+        let ft = meta.file_type();
+        let result = if ft.is_dir() && !ft.is_symlink() {
+            fs::remove_dir_all(&host_path)
+        } else {
+            fs::remove_file(&host_path)
+        };
+        if let Err(err) = result {
+            eprintln!(
+                "substrate: workspace sync failed: failed to delete {}",
+                host_path.display()
+            );
+            eprintln!("{err:#}");
+            return Ok(1);
+        }
+    }
+
+    for (_is_write, path) in &writes_mods_sorted {
+        let meta_req = agent_api_types::WorldFsReadRequestV1 {
+            path: path.clone(),
+            include_contents: false,
+            ..base_request.clone()
+        };
+
+        let meta = match rt.block_on(async { client.world_fs_read(meta_req).await }) {
+            Ok(m) => m,
+            Err(err) => {
+                eprintln!(
+                    "substrate: workspace sync failed: failed to read world metadata for {path}"
+                );
+                eprintln!("{err:#}");
+                return Ok(1);
+            }
+        };
+
+        let host_path = workspace_root.join(path);
+        match meta.entry_type {
+            agent_api_types::WorldFsEntryTypeV1::Directory => {
+                if let Err(err) = fs::create_dir_all(&host_path) {
+                    eprintln!(
+                        "substrate: workspace sync failed: failed to create directory {}",
+                        host_path.display()
+                    );
+                    eprintln!("{err:#}");
+                    return Ok(1);
+                }
+                #[cfg(unix)]
+                if let Some(mode) = meta.mode {
+                    if let Err(err) = apply_execute_bits(&host_path, mode) {
+                        eprintln!("{err:#}");
+                        return Ok(1);
+                    }
+                }
+            }
+            agent_api_types::WorldFsEntryTypeV1::RegularFile => {
+                let read_req = agent_api_types::WorldFsReadRequestV1 {
+                    path: path.clone(),
+                    include_contents: true,
+                    ..base_request.clone()
+                };
+                let file = match rt.block_on(async { client.world_fs_read(read_req).await }) {
+                    Ok(f) => f,
+                    Err(err) => {
+                        eprintln!("substrate: workspace sync failed: failed to read world file for {path}");
+                        eprintln!("{err:#}");
+                        return Ok(1);
+                    }
+                };
+                let contents_b64 = file.contents_b64.unwrap_or_default();
+                let bytes = match base64::engine::general_purpose::STANDARD.decode(contents_b64) {
+                    Ok(b) => b,
+                    Err(err) => {
+                        eprintln!("substrate: workspace sync failed: invalid base64 for {path}");
+                        eprintln!("{err:#}");
+                        return Ok(1);
+                    }
+                };
+
+                if let Err(err) = write_atomic_bytes(&host_path, &bytes) {
+                    eprintln!(
+                        "substrate: workspace sync failed: failed to write {}",
+                        host_path.display()
+                    );
+                    eprintln!("{err:#}");
+                    return Ok(1);
+                }
+
+                #[cfg(unix)]
+                if let Some(mode) = file.mode {
+                    if let Err(err) = apply_execute_bits(&host_path, mode) {
+                        eprintln!("{err:#}");
+                        return Ok(1);
+                    }
+                }
+            }
+            _ => {
+                eprintln!("substrate: workspace sync refused: unsupported file type in apply set");
+                eprintln!("  path: {path}");
+                eprintln!("  file_type: {:?}", meta.entry_type);
+                return Ok(5);
+            }
+        }
+    }
+
+    let clear_request = agent_api_types::PendingDiffClearRequestV1 {
+        profile: request.profile.clone(),
+        cwd: request.cwd.clone(),
+        env: request.env.clone(),
+        agent_id: request.agent_id.clone(),
+        policy_snapshot: request.policy_snapshot.clone(),
+        diff_id: record.diff_id.clone(),
+    };
+
+    let cleared = match rt.block_on(async { client.pending_diff_clear(clear_request).await }) {
+        Ok(resp) => resp.cleared,
+        Err(err) => {
+            eprintln!("substrate: workspace sync: applied but pending diffs were not cleared");
+            eprintln!("{err:#}");
+            return Ok(1);
+        }
+    };
+    if !cleared {
+        eprintln!("substrate: workspace sync: applied but pending diffs were not cleared");
+        eprintln!("  reason: diff_id mismatch (concurrent changes detected)");
+        return Ok(1);
+    }
+
+    println!("substrate: workspace sync applied (non_pty)");
     if args.verbose {
         println!("  session_started_at: {}", record.session_started_at);
         println!("  diff_id: {}", record.diff_id);
     }
-    println!("  total_paths: {total_paths}");
-    println!("  writes: {}", out_writes.len());
-    println!("  mods: {}", out_mods.len());
-    println!("  deletes: {}", out_deletes.len());
-    if excluded_count > 0 {
-        println!("  excluded_by_patterns: true ({excluded_count})");
-    } else {
-        println!("  excluded_by_patterns: false");
+    println!("  writes_applied: {}", apply_writes.len());
+    println!("  mods_applied: {}", apply_mods.len());
+    println!("  deletes_applied: {}", apply_deletes.len());
+    println!("  skipped_by_exclude: {excluded_count}");
+    if conflict_policy == SyncConflictPolicy::PreferHost {
+        println!("  skipped_by_conflict: {skipped_by_conflict}");
+    }
+
+    if args.verbose {
+        let mut decisions: Vec<(String, &'static str, &'static str)> = Vec::new();
+        for (bucket, path) in raw_paths_for_decisions {
+            let excluded = excludes_non_protected
+                .iter()
+                .any(|pat| glob_matches_path(pat, &path));
+            let decision = if excluded {
+                "skip_exclude"
+            } else if conflict_policy == SyncConflictPolicy::PreferHost
+                && conflicts_set.contains(&path)
+            {
+                "skip_conflict"
+            } else {
+                "apply"
+            };
+            decisions.push((path, bucket, decision));
+        }
+        decisions.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(b.1)));
+        println!("  decisions:");
+        for (path, bucket, decision) in decisions {
+            println!("    - {bucket} {path} => {decision}");
+        }
     }
 
     Ok(0)
