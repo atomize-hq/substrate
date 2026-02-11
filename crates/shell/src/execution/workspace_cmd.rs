@@ -1,6 +1,12 @@
-use crate::execution::cli::{WorkspaceAction, WorkspaceCmd, WorkspaceInitArgs, WorkspacePathArgs};
+use crate::execution::cli::{
+    SyncConflictPolicyArg, SyncDirectionArg, WorkspaceAction, WorkspaceCheckpointArgs,
+    WorkspaceCmd, WorkspaceInitArgs, WorkspacePathArgs, WorkspaceRollbackArgs, WorkspaceSyncArgs,
+};
+use crate::execution::config_model::{CliConfigOverrides, SyncConflictPolicy, SyncDirection};
 use crate::execution::workspace;
 use anyhow::{anyhow, Context, Result};
+use std::collections::HashSet;
+use std::env;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -21,14 +27,17 @@ const DEFAULT_POLICY_PATCH_YAML: &str = r#"# Substrate policy patch (sparse over
 "#;
 
 pub(crate) fn handle_workspace_command(cmd: &WorkspaceCmd) -> i32 {
-    let result = match &cmd.action {
-        WorkspaceAction::Init(args) => run_workspace_init(args),
-        WorkspaceAction::Disable(args) => run_workspace_disable(args),
-        WorkspaceAction::Enable(args) => run_workspace_enable(args),
+    let result: Result<i32> = match &cmd.action {
+        WorkspaceAction::Init(args) => run_workspace_init(args).map(|_| 0),
+        WorkspaceAction::Disable(args) => run_workspace_disable(args).map(|_| 0),
+        WorkspaceAction::Enable(args) => run_workspace_enable(args).map(|_| 0),
+        WorkspaceAction::Sync(args) => run_workspace_sync(args),
+        WorkspaceAction::Checkpoint(args) => run_workspace_checkpoint(args),
+        WorkspaceAction::Rollback(args) => run_workspace_rollback(args),
     };
 
     match result {
-        Ok(()) => 0,
+        Ok(code) => code,
         Err(err) if err.is::<ActionableError>() => {
             eprintln!("{:#}", err);
             2
@@ -192,6 +201,14 @@ fn require_workspace_root_any(start: &Path, verb: &str) -> Result<PathBuf> {
     })
 }
 
+fn require_workspace_root(start: &Path, verb: &str) -> Result<PathBuf> {
+    workspace::find_workspace_root(start).ok_or_else(|| {
+        actionable(format!(
+            "substrate: not in a workspace for {verb}; run `substrate workspace init`"
+        ))
+    })
+}
+
 fn ensure_not_nested_workspace(target: &Path) -> Result<()> {
     let mut ancestors = target.ancestors();
     let _self_dir = ancestors.next();
@@ -206,6 +223,114 @@ fn ensure_not_nested_workspace(target: &Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn sync_direction_as_str(direction: SyncDirection) -> &'static str {
+    match direction {
+        SyncDirection::FromWorld => "from_world",
+        SyncDirection::FromHost => "from_host",
+        SyncDirection::Both => "both",
+    }
+}
+
+fn sync_conflict_policy_as_str(policy: SyncConflictPolicy) -> &'static str {
+    match policy {
+        SyncConflictPolicy::PreferHost => "prefer_host",
+        SyncConflictPolicy::PreferWorld => "prefer_world",
+        SyncConflictPolicy::Abort => "abort",
+    }
+}
+
+fn parse_sync_direction(arg: SyncDirectionArg) -> SyncDirection {
+    match arg {
+        SyncDirectionArg::FromWorld => SyncDirection::FromWorld,
+        SyncDirectionArg::FromHost => SyncDirection::FromHost,
+        SyncDirectionArg::Both => SyncDirection::Both,
+    }
+}
+
+fn parse_sync_conflict_policy(arg: SyncConflictPolicyArg) -> SyncConflictPolicy {
+    match arg {
+        SyncConflictPolicyArg::PreferHost => SyncConflictPolicy::PreferHost,
+        SyncConflictPolicyArg::PreferWorld => SyncConflictPolicy::PreferWorld,
+        SyncConflictPolicyArg::Abort => SyncConflictPolicy::Abort,
+    }
+}
+
+fn run_workspace_sync(args: &WorkspaceSyncArgs) -> Result<i32> {
+    let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let _workspace_root = require_workspace_root(&cwd, "workspace sync")?;
+
+    if !args.dry_run {
+        eprintln!("substrate: workspace sync is not implemented until WS2");
+        return Ok(4);
+    }
+
+    let effective = crate::execution::config_model::resolve_effective_config(
+        &cwd,
+        &CliConfigOverrides::default(),
+    )?;
+
+    let direction = args
+        .direction
+        .map(parse_sync_direction)
+        .unwrap_or(effective.sync.direction);
+    let conflict_policy = args
+        .conflict_policy
+        .map(parse_sync_conflict_policy)
+        .unwrap_or(effective.sync.conflict_policy);
+
+    let mut excludes: Vec<String> = Vec::new();
+    for item in crate::execution::config_model::PROTECTED_EXCLUDES {
+        excludes.push(item.to_string());
+    }
+
+    for item in &effective.sync.exclude {
+        if crate::execution::config_model::PROTECTED_EXCLUDES.contains(&item.as_str()) {
+            continue;
+        }
+        excludes.push(item.clone());
+    }
+
+    for item in &args.exclude {
+        if crate::execution::config_model::PROTECTED_EXCLUDES.contains(&item.as_str()) {
+            continue;
+        }
+        excludes.push(item.clone());
+    }
+
+    // Stable, order-preserving de-dupe.
+    let mut seen: HashSet<String> = HashSet::new();
+    excludes.retain(|item| seen.insert(item.clone()));
+
+    println!("substrate: workspace sync --dry-run preview (WS0)");
+    println!("  auto_sync: {}", effective.sync.auto_sync);
+    println!("  direction: {}", sync_direction_as_str(direction));
+    println!(
+        "  conflict_policy: {}",
+        sync_conflict_policy_as_str(conflict_policy)
+    );
+    println!("  exclude:");
+    for item in excludes {
+        println!("    - {item}");
+    }
+    println!("substrate: note: pending diff discovery is not implemented until WS1");
+
+    Ok(0)
+}
+
+fn run_workspace_checkpoint(_args: &WorkspaceCheckpointArgs) -> Result<i32> {
+    let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let _workspace_root = require_workspace_root(&cwd, "workspace checkpoint")?;
+    eprintln!("substrate: workspace checkpoint is not implemented until WS6");
+    Ok(4)
+}
+
+fn run_workspace_rollback(_args: &WorkspaceRollbackArgs) -> Result<i32> {
+    let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let _workspace_root = require_workspace_root(&cwd, "workspace rollback")?;
+    eprintln!("substrate: workspace rollback is not implemented until WS7");
+    Ok(4)
 }
 
 fn ensure_gitignore_rules(root: &Path) -> Result<()> {
