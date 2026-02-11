@@ -681,7 +681,15 @@ fn decode_chunked_body(buf: &[u8]) -> Option<Vec<u8>> {
         let size = usize::from_str_radix(size_str, 16).ok()?;
         pos = line_end + 2;
         if size == 0 {
-            // Expect trailing CRLF after the 0-size chunk payload.
+            // Expect trailing CRLF after the 0-size chunk payload (no trailers).
+            // Without this, we can treat a partial `0\r\n` read as completion and respond early,
+            // causing clients to see broken pipes while still streaming the request body.
+            if buf.len() < pos + 2 {
+                return None;
+            }
+            if &buf[pos..pos + 2] != b"\r\n" {
+                return None;
+            }
             return Some(out);
         }
         if buf.len() < pos + size + 2 {
