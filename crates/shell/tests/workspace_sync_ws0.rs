@@ -204,7 +204,7 @@ fn workspace_rollback_requires_workspace_and_is_single_actionable_line() {
 }
 
 #[test]
-fn workspace_sync_dry_run_prints_effective_preview_and_does_not_hit_world_backend() {
+fn workspace_sync_dry_run_requires_world_backend_in_ws1() {
     let fixture = WorkspaceSyncFixture::new();
     fixture.init_workspace();
 
@@ -226,8 +226,8 @@ fn workspace_sync_dry_run_prints_effective_preview_and_does_not_hit_world_backen
 
     assert_eq!(
         output.status.code(),
-        Some(0),
-        "workspace sync --dry-run must exit 0: {}",
+        Some(3),
+        "workspace sync --dry-run must exit 3 when world backend is unavailable: {}",
         combined_output(&output)
     );
     let combined = combined_output(&output);
@@ -246,12 +246,8 @@ fn workspace_sync_dry_run_prints_effective_preview_and_does_not_hit_world_backen
         );
     }
     assert!(
-        combined.contains("pending diff") && combined.contains("WS1"),
-        "preview must state pending diff discovery is not implemented until WS1: {combined}"
-    );
-    assert!(
-        !combined.contains("world backend unavailable"),
-        "dry-run must not attempt world backend access: {combined}"
+        combined.contains("substrate world enable") && combined.contains("substrate world doctor"),
+        "error must mention world enable + world doctor: {combined}"
     );
 
     let after_workspace_yaml =
@@ -301,8 +297,8 @@ fn workspace_sync_dry_run_applies_cli_overrides_in_preview_only() {
 
     assert_eq!(
         output.status.code(),
-        Some(0),
-        "workspace sync --dry-run must exit 0: {}",
+        Some(4),
+        "workspace sync --dry-run with --direction both must exit 4 until WS5: {}",
         combined_output(&output)
     );
     let combined = combined_output(&output);
@@ -318,6 +314,10 @@ fn workspace_sync_dry_run_applies_cli_overrides_in_preview_only() {
             "preview must include protected exclude {exclude}: {combined}"
         );
     }
+    assert!(
+        combined.contains("not implemented") && combined.contains("WS5"),
+        "error must mention WS5: {combined}"
+    );
 
     let after_workspace_yaml =
         fs::read_to_string(fixture.workspace_yaml_path()).expect("read workspace.yaml after");

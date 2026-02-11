@@ -810,6 +810,14 @@ pub(crate) fn build_agent_client_and_request(
     build_agent_client_and_request_impl(cmd)
 }
 
+pub(crate) fn build_agent_client_and_pending_diff_request() -> anyhow::Result<(
+    agent_api_client::AgentClient,
+    agent_api_types::PendingDiffRequestV1,
+    String,
+)> {
+    build_agent_client_and_pending_diff_request_impl()
+}
+
 fn current_world_fs_mode() -> WorldFsMode {
     std::env::var("SUBSTRATE_WORLD_FS_MODE")
         .ok()
@@ -860,6 +868,41 @@ fn build_agent_client_and_request_impl(
         budget: None,
         policy_snapshot,
         world_fs_mode: Some(current_world_fs_mode()),
+    };
+
+    Ok((client, request, agent_id))
+}
+
+#[cfg(target_os = "linux")]
+fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
+    agent_api_client::AgentClient,
+    agent_api_types::PendingDiffRequestV1,
+    String,
+)> {
+    ensure_world_agent_ready()?;
+
+    let socket_path = std::env::var_os("SUBSTRATE_WORLD_SOCKET")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("/run/substrate.sock"));
+
+    let client = AgentClient::unix_socket(&socket_path)?;
+    let cwd_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let cwd = cwd_path.display().to_string();
+    let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
+    let policy_snapshot =
+        crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
+    let mut env_map = build_world_env_map();
+    crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
+        &policy_snapshot,
+        &mut env_map,
+    )?;
+
+    let request = agent_api_types::PendingDiffRequestV1 {
+        profile: current_world_request_profile(),
+        cwd: Some(cwd),
+        env: Some(env_map),
+        agent_id: agent_id.clone(),
+        policy_snapshot,
     };
 
     Ok((client, request, agent_id))
@@ -951,6 +994,80 @@ fn build_agent_client_and_request_impl(
     Ok((client, request, agent_id))
 }
 
+#[cfg(target_os = "macos")]
+fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
+    agent_api_client::AgentClient,
+    agent_api_types::PendingDiffRequestV1,
+    String,
+)> {
+    // Allow explicit socket overrides (used by tests/fixtures and advanced setups).
+    // When set, we bypass Lima detection/startup and connect directly.
+    if let Some(socket_path) = std::env::var_os("SUBSTRATE_WORLD_SOCKET") {
+        let socket_path = std::path::PathBuf::from(socket_path);
+        let client = AgentClient::unix_socket(&socket_path)?;
+        let cwd_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        let cwd = cwd_path.display().to_string();
+        let mut env_map = build_world_env_map();
+        normalize_env_for_linux_guest(&mut env_map);
+        let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
+        let policy_snapshot =
+            crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
+        crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
+            &policy_snapshot,
+            &mut env_map,
+        )?;
+
+        let request = agent_api_types::PendingDiffRequestV1 {
+            profile: current_world_request_profile(),
+            cwd: Some(cwd),
+            env: Some(env_map),
+            agent_id: agent_id.clone(),
+            policy_snapshot,
+        };
+
+        return Ok((client, request, agent_id));
+    }
+
+    let ctx = match pw::get_context() {
+        Some(ctx) => ctx,
+        None => {
+            let detected =
+                pw::detect().map_err(|e| anyhow::anyhow!("platform world detect failed: {e:#}"))?;
+            pw::store_context_globally(detected);
+            pw::get_context().ok_or_else(|| anyhow::anyhow!("no platform world context"))?
+        }
+    };
+    (ctx.ensure_ready.as_ref())()?;
+
+    let client = match &ctx.transport {
+        pw::WorldTransport::Unix(path) => AgentClient::unix_socket(path),
+        pw::WorldTransport::Tcp { host, port } => AgentClient::tcp(host, *port),
+        pw::WorldTransport::Vsock { port } => AgentClient::tcp("127.0.0.1", *port),
+    }?;
+
+    let cwd_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let cwd = cwd_path.display().to_string();
+    let mut env_map = build_world_env_map();
+    normalize_env_for_linux_guest(&mut env_map);
+    let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
+    let policy_snapshot =
+        crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
+    crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
+        &policy_snapshot,
+        &mut env_map,
+    )?;
+
+    let request = agent_api_types::PendingDiffRequestV1 {
+        profile: current_world_request_profile(),
+        cwd: Some(cwd),
+        env: Some(env_map),
+        agent_id: agent_id.clone(),
+        policy_snapshot,
+    };
+
+    Ok((client, request, agent_id))
+}
+
 #[cfg(target_os = "windows")]
 fn build_agent_client_and_request_impl(
     cmd: &str,
@@ -1002,6 +1119,47 @@ fn build_agent_client_and_request_impl(
         budget: None,
         policy_snapshot,
         world_fs_mode: Some(current_world_fs_mode()),
+    };
+
+    Ok((client, request, agent_id))
+}
+
+#[cfg(target_os = "windows")]
+fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
+    agent_api_client::AgentClient,
+    agent_api_types::PendingDiffRequestV1,
+    String,
+)> {
+    use crate::execution::platform_world::windows;
+    let backend = windows::get_backend()?;
+    let handle = backend.ensure_session(&windows::world_spec())?;
+
+    #[cfg(test)]
+    let _env_guard = world_env_guard();
+
+    std::env::set_var("SUBSTRATE_WORLD", "enabled");
+    std::env::set_var("SUBSTRATE_WORLD_ID", &handle.id);
+
+    let client = windows::build_agent_client()?;
+    let cwd = windows::current_dir_wsl()?;
+    let host_cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let profile = current_world_request_profile();
+    let mut env_map = build_world_env_map();
+    normalize_env_for_linux_guest(&mut env_map);
+    let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
+    let policy_snapshot =
+        crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&host_cwd)?.snapshot;
+    crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
+        &policy_snapshot,
+        &mut env_map,
+    )?;
+
+    let request = agent_api_types::PendingDiffRequestV1 {
+        profile,
+        cwd: Some(cwd),
+        env: Some(env_map),
+        agent_id: agent_id.clone(),
+        policy_snapshot,
     };
 
     Ok((client, request, agent_id))

@@ -6,7 +6,10 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use agent_api_types::{ApiError, ExecuteRequest, ExecuteResponse, WorldDoctorReportV1};
+use agent_api_types::{
+    ApiError, ExecuteRequest, ExecuteResponse, PendingDiffRecordV1, PendingDiffRequestV1,
+    WorldDoctorReportV1,
+};
 use anyhow::{anyhow, Context, Result};
 use http_body_util::{BodyExt, Full};
 use hyper::{body::Bytes, Method, Request, Response, StatusCode};
@@ -130,6 +133,16 @@ impl AgentClient {
             .get("/v1/capabilities")
             .await
             .context("Failed to get capabilities")?;
+
+        self.parse_response(response).await
+    }
+
+    /// Retrieve the current session's pending diff record (`POST /v1/pending_diff`).
+    pub async fn pending_diff(&self, request: PendingDiffRequestV1) -> Result<PendingDiffRecordV1> {
+        let response = self
+            .post("/v1/pending_diff", &request)
+            .await
+            .context("Failed to request pending diff")?;
 
         self.parse_response(response).await
     }

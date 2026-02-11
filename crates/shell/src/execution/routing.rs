@@ -38,7 +38,8 @@ pub(crate) use dispatch::world_persistent_session::{
     ReplPersistentSessionClient, ReplSessionStartParams, ReplStdinMode,
 };
 pub(crate) use dispatch::{
-    build_agent_client_and_request, execute_command, needs_pty, stream_non_pty_via_agent,
+    build_agent_client_and_pending_diff_request, build_agent_client_and_request, execute_command,
+    needs_pty, stream_non_pty_via_agent,
 };
 #[cfg(target_os = "linux")]
 use nix::sys::termios::{

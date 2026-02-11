@@ -1,8 +1,9 @@
 use crate::execution::cli::{
-    SyncConflictPolicyArg, SyncDirectionArg, WorkspaceAction, WorkspaceCheckpointArgs,
+    Cli, SyncConflictPolicyArg, SyncDirectionArg, WorkspaceAction, WorkspaceCheckpointArgs,
     WorkspaceCmd, WorkspaceInitArgs, WorkspacePathArgs, WorkspaceRollbackArgs, WorkspaceSyncArgs,
 };
 use crate::execution::config_model::{CliConfigOverrides, SyncConflictPolicy, SyncDirection};
+use crate::execution::settings::{apply_world_root_env, resolve_world_root};
 use crate::execution::workspace;
 use anyhow::{anyhow, Context, Result};
 use std::collections::HashSet;
@@ -10,6 +11,7 @@ use std::env;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use substrate_common::WorldRootMode;
 use tempfile::NamedTempFile;
 
 const DEFAULT_WORKSPACE_PATCH_YAML: &str = r#"# Substrate config patch (sparse overrides; scope=workspace).
@@ -26,12 +28,12 @@ const DEFAULT_POLICY_PATCH_YAML: &str = r#"# Substrate policy patch (sparse over
 {}
 "#;
 
-pub(crate) fn handle_workspace_command(cmd: &WorkspaceCmd) -> i32 {
+pub(crate) fn handle_workspace_command(cmd: &WorkspaceCmd, cli: &Cli) -> i32 {
     let result: Result<i32> = match &cmd.action {
         WorkspaceAction::Init(args) => run_workspace_init(args).map(|_| 0),
         WorkspaceAction::Disable(args) => run_workspace_disable(args).map(|_| 0),
         WorkspaceAction::Enable(args) => run_workspace_enable(args).map(|_| 0),
-        WorkspaceAction::Sync(args) => run_workspace_sync(args),
+        WorkspaceAction::Sync(args) => run_workspace_sync(args, cli),
         WorkspaceAction::Checkpoint(args) => run_workspace_checkpoint(args),
         WorkspaceAction::Rollback(args) => run_workspace_rollback(args),
     };
@@ -257,18 +259,188 @@ fn parse_sync_conflict_policy(arg: SyncConflictPolicyArg) -> SyncConflictPolicy 
     }
 }
 
-fn run_workspace_sync(args: &WorkspaceSyncArgs) -> Result<i32> {
+fn build_effective_sync_excludes(
+    effective_excludes: &[String],
+    cli_excludes: &[String],
+) -> Result<Vec<String>> {
+    let mut excludes: Vec<String> = Vec::new();
+    for item in crate::execution::config_model::PROTECTED_EXCLUDES {
+        excludes.push(item.to_string());
+    }
+
+    for item in effective_excludes {
+        if crate::execution::config_model::PROTECTED_EXCLUDES.contains(&item.as_str()) {
+            continue;
+        }
+        excludes.push(item.clone());
+    }
+
+    for item in cli_excludes {
+        if crate::execution::config_model::PROTECTED_EXCLUDES.contains(&item.as_str()) {
+            continue;
+        }
+        excludes.push(item.clone());
+    }
+
+    // Stable, order-preserving de-dupe.
+    let mut seen: HashSet<String> = HashSet::new();
+    excludes.retain(|item| seen.insert(item.clone()));
+
+    for item in &excludes {
+        let trimmed = item.trim();
+        if trimmed.is_empty() {
+            return Err(actionable("substrate: invalid --exclude pattern: empty"));
+        }
+        if trimmed.starts_with('/') {
+            return Err(actionable(format!(
+                "substrate: invalid --exclude pattern (must not start with '/'): {trimmed}"
+            )));
+        }
+    }
+
+    Ok(excludes)
+}
+
+fn normalize_workspace_rel_path(raw: &str) -> std::result::Result<String, String> {
+    let mut path = raw.trim().replace('\\', "/");
+    while let Some(stripped) = path.strip_prefix("./") {
+        path = stripped.to_string();
+    }
+    if path.is_empty() {
+        return Err("empty path".to_string());
+    }
+    if path.starts_with('/') {
+        return Err(format!("absolute paths are not allowed: {path}"));
+    }
+    if path.len() >= 2 && path.as_bytes()[1] == b':' {
+        return Err(format!("absolute paths are not allowed: {path}"));
+    }
+    if path.split('/').any(|segment| segment == "..") {
+        return Err(format!("path segments must not be '..': {path}"));
+    }
+    Ok(path)
+}
+
+fn glob_matches(pattern: &str, text: &str) -> bool {
+    #[derive(Clone, Copy)]
+    enum Token {
+        Lit(u8),
+        AnyCharNoSlash,
+        StarNoSlash,
+        StarAny,
+    }
+
+    let p = pattern.as_bytes();
+    let t = text.as_bytes();
+
+    let mut tokens: Vec<Token> = Vec::new();
+    let mut i = 0usize;
+    while i < p.len() {
+        match p[i] {
+            b'?' => {
+                tokens.push(Token::AnyCharNoSlash);
+                i += 1;
+            }
+            b'*' => {
+                if i + 1 < p.len() && p[i + 1] == b'*' {
+                    tokens.push(Token::StarAny);
+                    i += 2;
+                } else {
+                    tokens.push(Token::StarNoSlash);
+                    i += 1;
+                }
+            }
+            b => {
+                tokens.push(Token::Lit(b));
+                i += 1;
+            }
+        }
+    }
+
+    fn match_at(
+        tokens: &[Token],
+        text: &[u8],
+        pi: usize,
+        ti: usize,
+        memo: &mut std::collections::HashMap<(usize, usize), bool>,
+    ) -> bool {
+        if let Some(hit) = memo.get(&(pi, ti)) {
+            return *hit;
+        }
+
+        let out = if pi == tokens.len() {
+            ti == text.len()
+        } else {
+            match tokens[pi] {
+                Token::Lit(b) => {
+                    ti < text.len() && text[ti] == b && match_at(tokens, text, pi + 1, ti + 1, memo)
+                }
+                Token::AnyCharNoSlash => {
+                    ti < text.len()
+                        && text[ti] != b'/'
+                        && match_at(tokens, text, pi + 1, ti + 1, memo)
+                }
+                Token::StarNoSlash => {
+                    let mut end = ti;
+                    while end < text.len() && text[end] != b'/' {
+                        end += 1;
+                    }
+                    (ti..=end).any(|k| match_at(tokens, text, pi + 1, k, memo))
+                }
+                Token::StarAny => {
+                    (ti..=text.len()).any(|k| match_at(tokens, text, pi + 1, k, memo))
+                }
+            }
+        };
+
+        memo.insert((pi, ti), out);
+        out
+    }
+
+    let mut memo: std::collections::HashMap<(usize, usize), bool> =
+        std::collections::HashMap::new();
+    match_at(&tokens, t, 0, 0, &mut memo)
+}
+
+fn glob_matches_path(pattern: &str, path: &str) -> bool {
+    if let Some(prefix) = pattern.strip_suffix("/**") {
+        if path == prefix {
+            return true;
+        }
+    }
+    glob_matches(pattern, path)
+}
+
+fn run_workspace_sync(args: &WorkspaceSyncArgs, cli: &Cli) -> Result<i32> {
     let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let _workspace_root = require_workspace_root(&cwd, "workspace sync")?;
 
-    if !args.dry_run {
-        eprintln!("substrate: workspace sync is not implemented until WS2");
-        return Ok(4);
-    }
+    let cli_world_enabled = if cli.world {
+        Some(true)
+    } else if cli.no_world {
+        Some(false)
+    } else {
+        None
+    };
+    let cli_caged = if cli.caged {
+        Some(true)
+    } else if cli.uncaged {
+        Some(false)
+    } else {
+        None
+    };
 
     let effective = crate::execution::config_model::resolve_effective_config(
         &cwd,
-        &CliConfigOverrides::default(),
+        &CliConfigOverrides {
+            world_enabled: cli_world_enabled,
+            anchor_mode: cli.anchor_mode.map(WorldRootMode::from),
+            anchor_path: cli
+                .anchor_path
+                .as_ref()
+                .map(|p| p.to_string_lossy().to_string()),
+            caged: cli_caged,
+        },
     )?;
 
     let direction = args
@@ -280,30 +452,21 @@ fn run_workspace_sync(args: &WorkspaceSyncArgs) -> Result<i32> {
         .map(parse_sync_conflict_policy)
         .unwrap_or(effective.sync.conflict_policy);
 
-    let mut excludes: Vec<String> = Vec::new();
-    for item in crate::execution::config_model::PROTECTED_EXCLUDES {
-        excludes.push(item.to_string());
-    }
-
-    for item in &effective.sync.exclude {
-        if crate::execution::config_model::PROTECTED_EXCLUDES.contains(&item.as_str()) {
-            continue;
+    if !args.dry_run {
+        match direction {
+            SyncDirection::FromWorld => {
+                eprintln!("substrate: workspace sync is not implemented until WS2");
+            }
+            SyncDirection::FromHost | SyncDirection::Both => {
+                eprintln!("substrate: workspace sync is not implemented until WS5");
+            }
         }
-        excludes.push(item.clone());
+        return Ok(4);
     }
 
-    for item in &args.exclude {
-        if crate::execution::config_model::PROTECTED_EXCLUDES.contains(&item.as_str()) {
-            continue;
-        }
-        excludes.push(item.clone());
-    }
+    let excludes = build_effective_sync_excludes(&effective.sync.exclude, &args.exclude)?;
 
-    // Stable, order-preserving de-dupe.
-    let mut seen: HashSet<String> = HashSet::new();
-    excludes.retain(|item| seen.insert(item.clone()));
-
-    println!("substrate: workspace sync --dry-run preview (WS0)");
+    println!("substrate: workspace sync --dry-run preview (WS1)");
     println!("  auto_sync: {}", effective.sync.auto_sync);
     println!("  direction: {}", sync_direction_as_str(direction));
     println!(
@@ -311,10 +474,173 @@ fn run_workspace_sync(args: &WorkspaceSyncArgs) -> Result<i32> {
         sync_conflict_policy_as_str(conflict_policy)
     );
     println!("  exclude:");
-    for item in excludes {
+    for item in &excludes {
         println!("    - {item}");
     }
-    println!("substrate: note: pending diff discovery is not implemented until WS1");
+
+    match direction {
+        SyncDirection::FromHost | SyncDirection::Both => {
+            eprintln!(
+                "substrate: workspace sync direction {} is not implemented until WS5",
+                sync_direction_as_str(direction)
+            );
+            return Ok(4);
+        }
+        SyncDirection::FromWorld => {}
+    }
+
+    if cli.no_world {
+        eprintln!("workspace sync requires world; remove --no-world");
+        return Ok(2);
+    }
+    if !effective.world.enabled {
+        eprintln!(
+            "substrate: workspace sync requires world; run `substrate world enable` then `substrate world doctor`"
+        );
+        return Ok(3);
+    }
+
+    let world_root_settings = resolve_world_root(
+        cli.anchor_mode.map(WorldRootMode::from),
+        cli.anchor_path.clone(),
+        cli_caged,
+        &cwd,
+    )?;
+    apply_world_root_env(&world_root_settings);
+
+    let (client, request, _agent_id) =
+        match crate::execution::routing::build_agent_client_and_pending_diff_request() {
+            Ok(ok) => ok,
+            Err(_err) => {
+                eprintln!(
+                    "substrate: workspace sync requires world; run `substrate world enable` then `substrate world doctor`"
+                );
+                return Ok(3);
+            }
+        };
+
+    let rt = tokio::runtime::Runtime::new().context("failed to initialize tokio runtime")?;
+    let caps = match rt.block_on(async { client.capabilities().await }) {
+        Ok(c) => c,
+        Err(_err) => {
+            eprintln!(
+                "substrate: workspace sync requires world; run `substrate world enable` then `substrate world doctor`"
+            );
+            return Ok(3);
+        }
+    };
+
+    let has_pending_diff = caps
+        .get("features")
+        .and_then(|f| f.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str())
+                .any(|s| s == "pending_diff_v1")
+        })
+        .unwrap_or(false);
+
+    if !has_pending_diff {
+        eprintln!(
+            "substrate: workspace sync pending diff discovery is unsupported by this backend"
+        );
+        return Ok(4);
+    }
+
+    let record = match rt.block_on(async { client.pending_diff(request).await }) {
+        Ok(r) => r,
+        Err(_err) => {
+            eprintln!("substrate: workspace sync failed to retrieve pending diff");
+            return Ok(1);
+        }
+    };
+
+    let mut offending_protected: Vec<String> = Vec::new();
+    let mut raw_paths: Vec<(&'static str, String)> = Vec::new();
+    for (bucket, items) in [
+        ("writes", &record.non_pty.writes),
+        ("mods", &record.non_pty.mods),
+        ("deletes", &record.non_pty.deletes),
+    ] {
+        for raw in items {
+            let normalized = match normalize_workspace_rel_path(raw) {
+                Ok(p) => p,
+                Err(msg) => {
+                    eprintln!("substrate: workspace sync refused: invalid diff path: {msg}");
+                    return Ok(5);
+                }
+            };
+
+            for prot in crate::execution::config_model::PROTECTED_EXCLUDES {
+                if glob_matches_path(prot, &normalized) {
+                    offending_protected.push(normalized.clone());
+                    break;
+                }
+            }
+            raw_paths.push((bucket, normalized));
+        }
+    }
+
+    offending_protected.sort();
+    offending_protected.dedup();
+    if !offending_protected.is_empty() {
+        eprintln!("substrate: workspace sync refused: pending diff contains protected paths");
+        for item in offending_protected {
+            eprintln!("  - {item}");
+        }
+        return Ok(5);
+    }
+
+    let excludes_non_protected: Vec<&str> = excludes
+        .iter()
+        .filter(|p| !crate::execution::config_model::PROTECTED_EXCLUDES.contains(&p.as_str()))
+        .map(|p| p.as_str())
+        .collect();
+
+    let mut out_writes: Vec<String> = Vec::new();
+    let mut out_mods: Vec<String> = Vec::new();
+    let mut out_deletes: Vec<String> = Vec::new();
+    let mut excluded_count: usize = 0;
+
+    for (bucket, path) in raw_paths {
+        let excluded = excludes_non_protected
+            .iter()
+            .any(|pat| glob_matches_path(pat, &path));
+        if excluded {
+            excluded_count += 1;
+            continue;
+        }
+        match bucket {
+            "writes" => out_writes.push(path),
+            "mods" => out_mods.push(path),
+            "deletes" => out_deletes.push(path),
+            _ => {}
+        }
+    }
+
+    out_writes.sort();
+    out_mods.sort();
+    out_deletes.sort();
+    out_writes.dedup();
+    out_mods.dedup();
+    out_deletes.dedup();
+
+    let total_paths = out_writes.len() + out_mods.len() + out_deletes.len();
+
+    println!("substrate: pending diff summary (non_pty)");
+    if args.verbose {
+        println!("  session_started_at: {}", record.session_started_at);
+        println!("  diff_id: {}", record.diff_id);
+    }
+    println!("  total_paths: {total_paths}");
+    println!("  writes: {}", out_writes.len());
+    println!("  mods: {}", out_mods.len());
+    println!("  deletes: {}", out_deletes.len());
+    if excluded_count > 0 {
+        println!("  excluded_by_patterns: true ({excluded_count})");
+    } else {
+        println!("  excluded_by_patterns: false");
+    }
 
     Ok(0)
 }
