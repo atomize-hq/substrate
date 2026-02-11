@@ -333,3 +333,7 @@
 ## START — 2026-02-11T22:33:41Z — platform-fix — WS2-integ-linux
 - Dispatch:
   - `make triad-task-start-platform-fixes FEATURE_DIR="docs/project_management/next/world-sync" SLICE_ID="WS2" PLATFORMS="linux" LAUNCH_CODEX=1`
+
+## END — 2026-02-11T22:38:06Z — platform-fix — WS2-integ-linux
+- HEAD: `87f9bf0191d4b6b7953a7a4f887f918585f6c60c`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS2/integ-linux/last_message.md`
