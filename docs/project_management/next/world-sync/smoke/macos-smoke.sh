@@ -16,7 +16,7 @@ SLICE_ID="${SUBSTRATE_SMOKE_SLICE_ID:-WS7}"
 should_skip_for_output() {
   local out="$1"
   printf '%s' "$out" | grep -Fq "pending diff discovery is unsupported by this backend" && return 0
-  printf '%s' "$out" | grep -Fq "unknown field `caged_required`" && return 0
+  printf '%s' "$out" | grep -Fq 'unknown field `caged_required`' && return 0
   printf '%s' "$out" | grep -Fq "workspace sync requires world" && return 0
   return 1
 }
