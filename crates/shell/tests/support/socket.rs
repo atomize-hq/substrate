@@ -30,6 +30,22 @@ pub enum SocketResponse {
         features: Vec<String>,
         pending_diff: JsonValue,
     },
+    /// Responds to pending diff discovery plus a best-effort "ack/clear" endpoint.
+    ///
+    /// The clear endpoint is intentionally permissive about the exact path so
+    /// the WS2 tests can exercise "clear by diff_id" semantics while the
+    /// production API shape is still evolving.
+    ///
+    /// Supported routes:
+    /// - `POST /v1/pending_diff/ack`
+    /// - `POST /v1/pending_diff/clear`
+    /// - `POST /v1/workspace/pending_diff/ack`
+    /// - `POST /v1/workspace/pending_diff/clear`
+    ///
+    /// Request body must include a string `diff_id` field (or `diffId`).
+    CapabilitiesPendingDiffAndAck {
+        state: Arc<Mutex<PendingDiffAckState>>,
+    },
     /// Responds to `/v1/capabilities` and `/v1/doctor/world`, but returns a
     /// non-2xx response for `/v1/pending_diff`.
     ///
@@ -81,6 +97,24 @@ pub struct AgentSocket {
     connections: Arc<AtomicUsize>,
     execute_requests: Arc<AtomicUsize>,
     handle: Option<thread::JoinHandle<()>>,
+}
+
+/// Mutable state for [`SocketResponse::CapabilitiesPendingDiffAndAck`].
+#[derive(Debug, Clone)]
+pub struct PendingDiffAckState {
+    pub features: Vec<String>,
+    pub current_pending_diff: JsonValue,
+    pub cleared_pending_diff: JsonValue,
+    pub flip_after_first_pending_diff: Option<JsonValue>,
+    pub ack_error: Option<PendingDiffAckError>,
+    pub pending_diff_calls: usize,
+    pub ack_calls: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct PendingDiffAckError {
+    pub status: u16,
+    pub body: String,
 }
 
 impl AgentSocket {
@@ -143,6 +177,80 @@ impl AgentSocket {
                                     || first_line.starts_with("POST /v1/workspace/pending_diff")
                                 {
                                     write_response(&mut stream, &pending_diff.to_string());
+                                } else {
+                                    let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\n\r\n");
+                                }
+                            }
+                            SocketResponse::CapabilitiesPendingDiffAndAck { state } => {
+                                if first_line.starts_with("GET /v1/capabilities") {
+                                    let features = state
+                                        .lock()
+                                        .ok()
+                                        .map(|s| s.features.clone())
+                                        .unwrap_or_else(|| vec!["execute".to_string()]);
+                                    write_capabilities_with_features(&mut stream, &features);
+                                } else if first_line.starts_with("GET /v1/doctor/world") {
+                                    write_world_doctor_report(&mut stream);
+                                } else if first_line.starts_with("GET /v1/pending_diff")
+                                    || first_line.starts_with("POST /v1/pending_diff")
+                                    || first_line.starts_with("GET /v1/workspace/pending_diff")
+                                    || first_line.starts_with("POST /v1/workspace/pending_diff")
+                                {
+                                    let mut guard =
+                                        state.lock().expect("lock pending diff ack state");
+                                    let payload = guard.current_pending_diff.to_string();
+                                    write_response(&mut stream, &payload);
+                                    guard.pending_diff_calls += 1;
+                                    if guard.pending_diff_calls == 1 {
+                                        if let Some(next) =
+                                            guard.flip_after_first_pending_diff.take()
+                                        {
+                                            guard.current_pending_diff = next;
+                                        }
+                                    }
+                                } else if is_pending_diff_ack_route(first_line) {
+                                    let mut guard =
+                                        state.lock().expect("lock pending diff ack state");
+                                    guard.ack_calls += 1;
+                                    if let Some(err) = guard.ack_error.clone() {
+                                        write_status_response(
+                                            &mut stream,
+                                            err.status,
+                                            http_reason_phrase(err.status),
+                                            &err.body,
+                                        );
+                                        continue;
+                                    }
+
+                                    let req_id = match extract_diff_id(&request.body) {
+                                        Some(id) => id,
+                                        None => {
+                                            write_status_response(
+                                                &mut stream,
+                                                400,
+                                                "Bad Request",
+                                                "{\"error\":\"missing diff_id\"}",
+                                            );
+                                            continue;
+                                        }
+                                    };
+                                    let cur_id = guard
+                                        .current_pending_diff
+                                        .get("diff_id")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("");
+                                    if cur_id != req_id {
+                                        write_status_response(
+                                            &mut stream,
+                                            409,
+                                            "Error",
+                                            "{\"error\":\"diff_id_mismatch\"}",
+                                        );
+                                        continue;
+                                    }
+
+                                    guard.current_pending_diff = guard.cleared_pending_diff.clone();
+                                    write_response(&mut stream, "{\"ok\":true}");
                                 } else {
                                     let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\n\r\n");
                                 }
@@ -381,6 +489,27 @@ impl Drop for AgentSocket {
             let _ = handle.join();
         }
     }
+}
+
+fn is_pending_diff_ack_route(first_line: &str) -> bool {
+    first_line.starts_with("POST /v1/pending_diff/ack")
+        || first_line.starts_with("POST /v1/pending_diff/clear")
+        || first_line.starts_with("POST /v1/workspace/pending_diff/ack")
+        || first_line.starts_with("POST /v1/workspace/pending_diff/clear")
+}
+
+fn extract_diff_id(body: &[u8]) -> Option<String> {
+    let value = serde_json::from_slice::<JsonValue>(body).ok()?;
+    value
+        .get("diff_id")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .or_else(|| {
+            value
+                .get("diffId")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+        })
 }
 
 fn write_capabilities(stream: &mut UnixStream) {
