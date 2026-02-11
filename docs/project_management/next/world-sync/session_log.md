@@ -179,3 +179,31 @@
   - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0` → `PASS`
 - Blockers:
   - None recorded in `quality_gate_report.md` Pass 2 (recommendation is `ACCEPT`).
+
+## START — 2026-02-11T00:45:17Z — planning — quality gate remediation (resolve Pass 3 defects 012–013)
+- Feature: `docs/project_management/next/world-sync`
+- Branch (current checkout): `testing`
+- Goal: Resolve blocking defects in `docs/project_management/next/world-sync/quality_gate_report.md` Pass 3 by aligning the manual testing playbook to authoritative platform parity and internal-git safety rail specs.
+- Defects addressed (by Finding ID):
+  - Finding 012 — Manual playbook rollback expectations contradict internal-git spec (`--force` safety rail)
+  - Finding 013 — Manual playbook WS2 expectations contradict Windows platform parity contract (sync unsupported)
+- Files created/modified:
+  - `docs/project_management/next/world-sync/manual_testing_playbook.md`
+  - `docs/project_management/next/world-sync/session_log.md`
+- Commands run (with results):
+  - `export FEATURE_DIR="docs/project_management/next/world-sync"` → (env set)
+  - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` → `0`
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0`
+  - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → `0`
+  - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` → `0`
+
+## END — 2026-02-11T00:46:50Z — planning — quality gate remediation (resolve Pass 3 defects 012–013)
+- Summary of changes (exhaustive):
+  - Updated `manual_testing_playbook.md` WS2/WS5 to include an explicit Windows unsupported contract branch (exit `4` + required message substring).
+  - Updated `manual_testing_playbook.md` WS6/WS7 to enforce the rollback safety rail: rollback without `--force` exits `5` and performs no mutations; rollback with `--force` exits `0` and deletes non-checkpointed paths.
+  - Clarified the WS2 Windows note to proceed through the remaining playbook sections while skipping the supported apply flow.
+- Mechanical checks:
+  - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` → `0` → `PASS`
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0` → `PASS`
+  - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → `0` → `PASS`
+  - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` → `0` → `PASS`
