@@ -141,6 +141,10 @@ impl AgentSocket {
             while !shutdown_flag.load(Ordering::SeqCst) {
                 match listener.accept() {
                     Ok((mut stream, _addr)) => {
+                        // `UnixListener` is configured as non-blocking; on some platforms the
+                        // accepted stream inherits this flag. Switch back to blocking IO so the
+                        // request reader doesn't spuriously drop connections with `WouldBlock`.
+                        let _ = stream.set_nonblocking(false);
                         connections_for_thread.fetch_add(1, Ordering::SeqCst);
                         let request = match read_http_request(&mut stream) {
                             Ok(req) => req,
