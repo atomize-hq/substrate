@@ -308,3 +308,7 @@
 ## END — 2026-02-11T21:41:31Z — test — WS2-test
 - HEAD: `1f591f56c8b9e491c9ab7b29b62d09d684c1c0ad`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS2/test/last_message.md`
+
+## START — 2026-02-11T21:41:31Z — integration — WS2-integ-core
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" TASK_ID="WS2-integ-core" LAUNCH_CODEX=1`
