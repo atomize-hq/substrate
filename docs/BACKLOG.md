@@ -48,6 +48,15 @@ Keep concise, actionable, and security-focused.
   - Work: when a workspace is active for the current directory, have `substrate config global show` print a note that workspace config overrides global config here and point users at the effective view (`substrate config show`).
   - Acceptance: parity with `policy global show` UX; message is shown only when a workspace override applies; docs/help updated if needed.
 
+- **P1 – World-sync continuation (internal git v2: per-command history + compaction)**
+  - Context: `docs/project_management/next/world-sync/` implements host-only `workspace checkpoint`/`workspace rollback` via `.substrate/git/repo.git/` and explicitly does not implement the richer internal history described in `docs/project_management/future/INTERNAL_GIT.md`.
+  - Work:
+    - Record per-command internal git commits for filesystem-mutating commands and persist a mapping (trace span / command id ↔ internal git commit) for review/debug.
+    - Add session/checkpoint tagging semantics and user-facing UX for undo/rollback at multiple resolutions (command / checkpoint / session).
+    - Add retention + compaction (squash older command-level history into checkpoint/session commits) plus maintenance (`git gc`) so the store stays bounded.
+    - Define a concurrency/locking strategy so multiple agents/sessions cannot corrupt the internal store.
+  - Acceptance: recent per-command diffs are inspectable and undoable; older history remains rollbackable at checkpoint/session granularity; internal store size is bounded and operations are deterministic.
+
 - **P1 – Structured anchor-guard events for caged `cd` (dedupe warnings; avoid heuristics)**
   - Problem: In persistent world sessions, the in-world anchor guard prints user-facing “caged root guard” warnings, but the host async REPL also performs host-side `cd` prediction/caging to keep `world_cwd` consistent when the world reports an unchanged cwd. This can produce duplicate warnings (guard + prediction) and forces brittle host-side suppression heuristics.
   - Goal: Make “anchor guard bounced `cd` back into the cage” a first-class structured signal from world-agent so the host prints exactly once, consistently formatted, without stderr parsing or cwd-heuristic dedupe.

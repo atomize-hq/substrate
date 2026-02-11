@@ -192,7 +192,7 @@ These run a curated suite of the above behaviors.
 ```bash
 cargo build --bin substrate --bin substrate-shim
 export PATH="$PWD/target/debug:$PATH"
-SUBSTRATE_SMOKE_SLICE_ID=WFGAD5 bash docs/project_management/next/world-fs-granular-allow-deny/smoke/linux-smoke.sh
+SUBSTRATE_SMOKE_SLICE_ID=WFGAD5 bash docs/project_management/_archived/world-fs-granular-allow-deny/smoke/linux-smoke.sh
 ```
 
 ### macOS (local; Lima-backed Linux world)
@@ -201,7 +201,7 @@ SUBSTRATE_SMOKE_SLICE_ID=WFGAD5 bash docs/project_management/next/world-fs-granu
 scripts/mac/lima-warm.sh "$PWD"
 cargo build --bin substrate --bin substrate-shim
 export PATH="$PWD/target/debug:$PATH"
-SUBSTRATE_SMOKE_SLICE_ID=WFGAD5 bash docs/project_management/next/world-fs-granular-allow-deny/smoke/macos-smoke.sh
+SUBSTRATE_SMOKE_SLICE_ID=WFGAD5 bash docs/project_management/_archived/world-fs-granular-allow-deny/smoke/macos-smoke.sh
 ```
 
 ## 5) CI / runners (Planning Pack Feature Smoke)
@@ -215,7 +215,7 @@ Feature smoke is dispatched via `.github/workflows/feature-smoke.yml`.
 Example:
 
 ```bash
-FEATURE_DIR="docs/project_management/next/world-fs-granular-allow-deny"
+FEATURE_DIR="docs/project_management/_archived/world-fs-granular-allow-deny"
 CHECKOUT_SHA="$(git rev-parse HEAD)"
 
 make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=linux RUNNER_KIND=self-hosted WORKFLOW_REF="$(git branch --show-current)" SMOKE_CHECKOUT_REF="$CHECKOUT_SHA" SMOKE_SLICE_ID=WFGAD5

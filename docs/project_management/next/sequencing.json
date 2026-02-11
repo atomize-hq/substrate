@@ -464,33 +464,33 @@
       "id": "world_fs_granular_allow_deny",
       "title": "World FS granular allow/deny + strict deny",
       "branch": "feat/world-fs-granular-allow-deny",
-      "directory": "docs/project_management/next/world-fs-granular-allow-deny",
-      "plan": "docs/project_management/next/world-fs-granular-allow-deny/plan.md",
+      "directory": "docs/project_management/_archived/world-fs-granular-allow-deny",
+      "plan": "docs/project_management/_archived/world-fs-granular-allow-deny/plan.md",
       "status": "not_started",
       "sequence": [
         {
           "id": "WFGAD0",
-          "spec": "docs/project_management/next/world-fs-granular-allow-deny/WFGAD0-spec.md"
+          "spec": "docs/project_management/_archived/world-fs-granular-allow-deny/WFGAD0-spec.md"
         },
         {
           "id": "WFGAD1",
-          "spec": "docs/project_management/next/world-fs-granular-allow-deny/WFGAD1-spec.md"
+          "spec": "docs/project_management/_archived/world-fs-granular-allow-deny/WFGAD1-spec.md"
         },
         {
           "id": "WFGAD2",
-          "spec": "docs/project_management/next/world-fs-granular-allow-deny/WFGAD2-spec.md"
+          "spec": "docs/project_management/_archived/world-fs-granular-allow-deny/WFGAD2-spec.md"
         },
         {
           "id": "WFGAD3",
-          "spec": "docs/project_management/next/world-fs-granular-allow-deny/WFGAD3-spec.md"
+          "spec": "docs/project_management/_archived/world-fs-granular-allow-deny/WFGAD3-spec.md"
         },
         {
           "id": "WFGAD4",
-          "spec": "docs/project_management/next/world-fs-granular-allow-deny/WFGAD4-spec.md"
+          "spec": "docs/project_management/_archived/world-fs-granular-allow-deny/WFGAD4-spec.md"
         },
         {
           "id": "WFGAD5",
-          "spec": "docs/project_management/next/world-fs-granular-allow-deny/WFGAD5-spec.md"
+          "spec": "docs/project_management/_archived/world-fs-granular-allow-deny/WFGAD5-spec.md"
         }
       ],
       "notes": [
@@ -502,25 +502,25 @@
       "id": "world_fs_granular_allow_deny_appendix",
       "title": "World FS allow/deny appendix (V3 rename + routing + caging)",
       "branch": "feat/world-fs-granular-allow-deny-appendix",
-      "directory": "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX",
-      "plan": "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/plan.md",
+      "directory": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX",
+      "plan": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/plan.md",
       "status": "not_started",
       "sequence": [
         {
           "id": "WFGADAX0",
-          "spec": "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/WFGADAX0-spec.md"
+          "spec": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX0-spec.md"
         },
         {
           "id": "WFGADAX1",
-          "spec": "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/WFGADAX1-spec.md"
+          "spec": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX1-spec.md"
         },
         {
           "id": "WFGADAX2",
-          "spec": "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/WFGADAX2-spec.md"
+          "spec": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX2-spec.md"
         },
         {
           "id": "WFGADAX3",
-          "spec": "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/WFGADAX3-spec.md"
+          "spec": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX3-spec.md"
         }
       ],
       "notes": [
@@ -532,21 +532,21 @@
       "id": "world_fs_granular_allow_deny_appendix_addon_v3_alignment",
       "title": "World FS appendix add-on (V3 alignment + no-backcompat enforcement)",
       "branch": "feat/world-fs-granular-allow-deny-appendix",
-      "directory": "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment",
-      "plan": "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/plan.md",
+      "directory": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment",
+      "plan": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/plan.md",
       "status": "not_started",
       "sequence": [
         {
           "id": "WFGADAXA0",
-          "spec": "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/WFGADAXA0-spec.md"
+          "spec": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/WFGADAXA0-spec.md"
         },
         {
           "id": "WFGADAXA1",
-          "spec": "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/WFGADAXA1-spec.md"
+          "spec": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/WFGADAXA1-spec.md"
         },
         {
           "id": "WFGADAXA2",
-          "spec": "docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/WFGADAXA2-spec.md"
+          "spec": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/WFGADAXA2-spec.md"
         }
       ],
       "notes": [

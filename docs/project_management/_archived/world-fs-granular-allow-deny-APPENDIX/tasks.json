@@ -1,0 +1,1018 @@
+{
+  "meta": {
+    "automation": {
+      "enabled": true,
+      "orchestration_branch": "feat/world-fs-granular-allow-deny-appendix"
+    },
+    "behavior_platforms_required": [
+      "linux"
+    ],
+    "checkpoint_boundaries": [
+      "WFGADAX1",
+      "WFGADAX3"
+    ],
+    "ci_parity_platforms_required": [
+      "linux",
+      "macos",
+      "windows"
+    ],
+    "cross_platform": true,
+    "feature": "world-fs-granular-allow-deny-appendix",
+    "schema_version": 4
+  },
+  "tasks": [
+    {
+      "acceptance_criteria": [
+        "Run: make planning-lint FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\" \u2192 exit 0",
+        "Run: bash -n docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/smoke/linux-smoke.sh \u2192 exit 0",
+        "File updated: docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/execution_preflight_report.md"
+      ],
+      "concurrent_with": [],
+      "depends_on": [],
+      "description": "Execution-time preflight gate: validate the Planning Pack and smoke/playbook scaffolding before starting WFGADAX0.",
+      "end_checklist": [
+        "Run required commands; capture outputs in execution_preflight_report.md",
+        "Set status to completed; add END entry; commit docs"
+      ],
+      "id": "F0-exec-preflight",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/F0-exec-preflight.md",
+      "name": "Execution preflight gate (feature start)",
+      "phase": "F0",
+      "references": [
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/plan.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/tasks.json",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/quality_gate_report.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/manual_testing_playbook.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/execution_preflight_report.md",
+        "docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-fs-granular-allow-deny-appendix && git pull --ff-only",
+        "Read: plan.md, tasks.json, session_log.md, quality_gate_report.md, manual_testing_playbook.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs"
+      ],
+      "status": "completed",
+      "type": "ops",
+      "worktree": null
+    },
+    {
+      "acceptance_criteria": [
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p substrate-broker --tests --no-run \u2192 exit 0"
+      ],
+      "concurrent_with": [
+        "WFGADAX0-test"
+      ],
+      "depends_on": [
+        "F0-exec-preflight"
+      ],
+      "description": "Implement policy patch schema V3 parsing and validation (breaking; hard errors; deterministic defaults).",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGADAX0-code\""
+      ],
+      "git_branch": "world-fs-granular-allow-deny-appendix-wfgadax0-code",
+      "id": "WFGADAX0-code",
+      "integration_task": "WFGADAX0-integ",
+      "kickoff_prompt": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/WFGADAX0-code.md",
+      "name": "WFGADAX0 slice (code)",
+      "phase": "WFGADAX0",
+      "references": [
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/plan.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX0-spec.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/SCHEMA.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/contract.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/decision_register.md (DR-AX-0001)",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/decision_register.md (DR-AX-0003)",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/decision_register.md (DR-AX-0004)",
+        "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
+      ],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGADAX0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\" SLICE_ID=\"WFGADAX0\""
+      ],
+      "status": "completed",
+      "type": "code",
+      "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax0-code"
+    },
+    {
+      "acceptance_criteria": [
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo test -p substrate-broker --tests \u2192 exit 0",
+        "Run: cargo test -p substrate-broker wfgadax0 -- --nocapture \u2192 exit 0"
+      ],
+      "concurrent_with": [
+        "WFGADAX0-code"
+      ],
+      "depends_on": [
+        "F0-exec-preflight"
+      ],
+      "description": "Add tests for policy schema V3 validation and replaced-key hard errors.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo test -p substrate-broker --tests",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGADAX0-test\""
+      ],
+      "git_branch": "world-fs-granular-allow-deny-appendix-wfgadax0-test",
+      "id": "WFGADAX0-test",
+      "integration_task": "WFGADAX0-integ",
+      "kickoff_prompt": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/WFGADAX0-test.md",
+      "name": "WFGADAX0 slice (test)",
+      "phase": "WFGADAX0",
+      "references": [
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX0-spec.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/SCHEMA.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/decision_register.md (DR-AX-0001)",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/decision_register.md (DR-AX-0003)",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/decision_register.md (DR-AX-0004)"
+      ],
+      "required_make_targets": [
+        "triad-test-checks"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGADAX0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX0-test\""
+      ],
+      "status": "completed",
+      "type": "test",
+      "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax0-test"
+    },
+    {
+      "acceptance_criteria": [
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: bash docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/smoke/linux-smoke.sh \u2192 exit 0"
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "WFGADAX0-code",
+        "WFGADAX0-test"
+      ],
+      "description": "Merge WFGADAX0 code+test and validate V3 schema behavior.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run: bash docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/smoke/linux-smoke.sh",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGADAX0-integ\""
+      ],
+      "git_branch": "world-fs-granular-allow-deny-appendix-wfgadax0-integ",
+      "id": "WFGADAX0-integ",
+      "integration_task": "WFGADAX0-integ",
+      "kickoff_prompt": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/WFGADAX0-integ.md",
+      "merge_to_orchestration": true,
+      "name": "WFGADAX0 slice (integration final)",
+      "phase": "WFGADAX0",
+      "references": [
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX0-spec.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/SCHEMA.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/smoke/linux-smoke.sh",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/decision_register.md (DR-AX-0001)",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/decision_register.md (DR-AX-0003)",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/decision_register.md (DR-AX-0004)"
+      ],
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGADAX0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX0-integ\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax0-integ"
+    },
+    {
+      "acceptance_criteria": [
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p shell --tests --no-run \u2192 exit 0"
+      ],
+      "concurrent_with": [
+        "WFGADAX1-test"
+      ],
+      "depends_on": [
+        "WFGADAX0-integ"
+      ],
+      "description": "Implement routing fail-closed semantics and exported state env var rename.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGADAX1-code\""
+      ],
+      "git_branch": "world-fs-granular-allow-deny-appendix-wfgadax1-code",
+      "id": "WFGADAX1-code",
+      "integration_task": "WFGADAX1-integ-core",
+      "kickoff_prompt": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/WFGADAX1-code.md",
+      "name": "WFGADAX1 slice (code)",
+      "phase": "WFGADAX1",
+      "references": [
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX1-spec.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/ENV.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/contract.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/decision_register.md (DR-AX-0002)"
+      ],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGADAX1-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\" SLICE_ID=\"WFGADAX1\""
+      ],
+      "status": "completed",
+      "type": "code",
+      "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax1-code"
+    },
+    {
+      "acceptance_criteria": [
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo test --workspace --tests --no-run \u2192 exit 0",
+        "Run: cargo test -p shell wfgadax1 -- --nocapture \u2192 exit 0"
+      ],
+      "concurrent_with": [
+        "WFGADAX1-code"
+      ],
+      "depends_on": [
+        "WFGADAX0-integ"
+      ],
+      "description": "Add tests for routing fail-closed hard errors and exit code mapping.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo test --workspace --tests --no-run",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGADAX1-test\""
+      ],
+      "git_branch": "world-fs-granular-allow-deny-appendix-wfgadax1-test",
+      "id": "WFGADAX1-test",
+      "integration_task": "WFGADAX1-integ-core",
+      "kickoff_prompt": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/WFGADAX1-test.md",
+      "name": "WFGADAX1 slice (test)",
+      "phase": "WFGADAX1",
+      "references": [
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX1-spec.md",
+        "docs/project_management/standards/EXIT_CODE_TAXONOMY.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/decision_register.md (DR-AX-0002)"
+      ],
+      "required_make_targets": [
+        "triad-test-checks"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGADAX1-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX1-test\""
+      ],
+      "status": "completed",
+      "type": "test",
+      "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax1-test"
+    },
+    {
+      "acceptance_criteria": [
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0"
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "WFGADAX1-code",
+        "WFGADAX1-test"
+      ],
+      "description": "Core integration merge for WFGADAX1 checkpoint boundary slice.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGADAX1-integ-core\""
+      ],
+      "git_branch": "world-fs-granular-allow-deny-appendix-wfgadax1-integ-core",
+      "id": "WFGADAX1-integ-core",
+      "integration_task": "WFGADAX1-integ-core",
+      "kickoff_prompt": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/WFGADAX1-integ-core.md",
+      "merge_to_orchestration": false,
+      "name": "WFGADAX1 slice (integration core)",
+      "phase": "WFGADAX1",
+      "references": [
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX1-spec.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/decision_register.md (DR-AX-0002)"
+      ],
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGADAX1-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX1-integ-core\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax1-integ-core"
+    },
+    {
+      "acceptance_criteria": [
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0"
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "WFGADAX1-integ-core"
+      ],
+      "description": "Linux platform-fix integration task for WFGADAX1 checkpoint boundary slice.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGADAX1-integ-linux\""
+      ],
+      "git_branch": "world-fs-granular-allow-deny-appendix-wfgadax1-integ-linux",
+      "id": "WFGADAX1-integ-linux",
+      "integration_task": "WFGADAX1-integ-linux",
+      "kickoff_prompt": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/WFGADAX1-integ-linux.md",
+      "merge_to_orchestration": false,
+      "name": "WFGADAX1 slice (integration linux)",
+      "phase": "WFGADAX1",
+      "platform": "linux",
+      "references": [
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX1-spec.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/decision_register.md (DR-AX-0002)"
+      ],
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGADAX1-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX1-integ-linux\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax1-integ-linux"
+    },
+    {
+      "acceptance_criteria": [
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0"
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "WFGADAX1-integ-core"
+      ],
+      "description": "macOS platform-fix integration task for WFGADAX1 checkpoint boundary slice.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGADAX1-integ-macos\""
+      ],
+      "git_branch": "world-fs-granular-allow-deny-appendix-wfgadax1-integ-macos",
+      "id": "WFGADAX1-integ-macos",
+      "integration_task": "WFGADAX1-integ-macos",
+      "kickoff_prompt": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/WFGADAX1-integ-macos.md",
+      "merge_to_orchestration": false,
+      "name": "WFGADAX1 slice (integration macos)",
+      "phase": "WFGADAX1",
+      "platform": "macos",
+      "references": [
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX1-spec.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/decision_register.md (DR-AX-0002)"
+      ],
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGADAX1-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX1-integ-macos\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax1-integ-macos"
+    },
+    {
+      "acceptance_criteria": [
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0"
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "WFGADAX1-integ-core"
+      ],
+      "description": "Windows platform-fix integration task for WFGADAX1 checkpoint boundary slice.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGADAX1-integ-windows\""
+      ],
+      "git_branch": "world-fs-granular-allow-deny-appendix-wfgadax1-integ-windows",
+      "id": "WFGADAX1-integ-windows",
+      "integration_task": "WFGADAX1-integ-windows",
+      "kickoff_prompt": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/WFGADAX1-integ-windows.md",
+      "merge_to_orchestration": false,
+      "name": "WFGADAX1 slice (integration windows)",
+      "phase": "WFGADAX1",
+      "platform": "windows",
+      "references": [
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX1-spec.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/decision_register.md (DR-AX-0002)"
+      ],
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGADAX1-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX1-integ-windows\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax1-integ-windows"
+    },
+    {
+      "acceptance_criteria": [
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0"
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "WFGADAX1-integ-core",
+        "CP1-ci-checkpoint",
+        "WFGADAX1-integ-linux",
+        "WFGADAX1-integ-macos",
+        "WFGADAX1-integ-windows"
+      ],
+      "description": "Finalize WFGADAX1 after checkpoint core and platform fixes and merge to orchestration.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGADAX1-integ\""
+      ],
+      "git_branch": "world-fs-granular-allow-deny-appendix-wfgadax1-integ",
+      "id": "WFGADAX1-integ",
+      "integration_task": "WFGADAX1-integ",
+      "kickoff_prompt": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/WFGADAX1-integ.md",
+      "merge_to_orchestration": true,
+      "name": "WFGADAX1 slice (integration final)",
+      "phase": "WFGADAX1",
+      "references": [
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX1-spec.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/ci_checkpoint_plan.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/decision_register.md (DR-AX-0002)"
+      ],
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGADAX1-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX1-integ\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax1-integ"
+    },
+    {
+      "acceptance_criteria": [
+        "Set: export FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\"",
+        "Set: export ORCH_REF=\"$(git branch --show-current)\"",
+        "Set: export SMOKE_SLICE_ID=\"WFGADAX1\"",
+        "Set: CORE_BRANCH=\"$(jq -r --arg id \"WFGADAX1-integ-core\" '.tasks[] | select(.id==$id) | .git_branch' \"$FEATURE_DIR/tasks.json\")\"; CHECKOUT_SHA=\"$(git rev-parse \"$CORE_BRANCH\")\"",
+        "Run: scripts/ci-audit/ci_audit.sh --ledger-path \"$FEATURE_DIR/logs/WFGADAX1/ci-audit/ledger.jsonl\" --kind ci-testing --orch-branch \"$ORCH_REF\" \u2192 exit 0 (record the RECOMMENDATION line(s) in session_log.md)",
+        "Run: scripts/ci-audit/ci_audit.sh --ledger-path \"$FEATURE_DIR/logs/WFGADAX1/ci-audit/ledger.jsonl\" --kind feature-smoke --orch-branch \"$ORCH_REF\" --feature-dir \"$FEATURE_DIR\" \u2192 exit 0 (record the RECOMMENDATION line(s) in session_log.md)",
+        "If ci-audit recommends RUN for ci-testing: Run: make ci-compile-parity CI_WORKFLOW_REF=\"$ORCH_REF\" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF=\"$CHECKOUT_SHA\" \u2192 exit 0",
+        "If ci-audit recommends RUN for feature-smoke: Run: make feature-smoke FEATURE_DIR=\"$FEATURE_DIR\" PLATFORM=behavior SMOKE_SLICE_ID=\"$SMOKE_SLICE_ID\" SMOKE_CHECKOUT_REF=\"$CHECKOUT_SHA\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"$ORCH_REF\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=0 \u2192 exit 0",
+        "If feature-smoke concludes failure: Run: make triad-task-start-platform-fixes-from-smoke FEATURE_DIR=\"$FEATURE_DIR\" SLICE_ID=\"$SMOKE_SLICE_ID\" SMOKE_RUN_ID=\"<run-id>\" LAUNCH_CODEX=1",
+        "Record: session_log.md includes ORCH_REF, CHECKOUT_SHA, ci-audit output lines, and dispatched run URLs/ids (or explicit SKIP)"
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "WFGADAX1-integ-core"
+      ],
+      "description": "Checkpoint gate after WFGADAX0 and WFGADAX1.",
+      "end_checklist": [
+        "Record evidence in session_log.md",
+        "Set status to completed; add END entry; commit docs"
+      ],
+      "id": "CP1-ci-checkpoint",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/CP1-ci-checkpoint.md",
+      "name": "CI checkpoint CP1",
+      "phase": "CP1",
+      "references": [
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/ci_checkpoint_plan.md",
+        "docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md"
+      ],
+      "start_checklist": [
+        "Read: ci_checkpoint_plan.md and kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs"
+      ],
+      "status": "completed",
+      "type": "ops",
+      "worktree": null
+    },
+    {
+      "acceptance_criteria": [
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p shell --tests --no-run \u2192 exit 0"
+      ],
+      "concurrent_with": [
+        "WFGADAX2-test"
+      ],
+      "depends_on": [
+        "CP1-ci-checkpoint",
+        "WFGADAX1-integ"
+      ],
+      "description": "Implement policy-level caging requirement and config compatibility hard errors.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGADAX2-code\""
+      ],
+      "git_branch": "world-fs-granular-allow-deny-appendix-wfgadax2-code",
+      "id": "WFGADAX2-code",
+      "integration_task": "WFGADAX2-integ",
+      "kickoff_prompt": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/WFGADAX2-code.md",
+      "name": "WFGADAX2 slice (code)",
+      "phase": "WFGADAX2",
+      "references": [
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX2-spec.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/contract.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/decision_register.md (DR-AX-0004)"
+      ],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGADAX2-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\" SLICE_ID=\"WFGADAX2\""
+      ],
+      "status": "completed",
+      "type": "code",
+      "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax2-code"
+    },
+    {
+      "acceptance_criteria": [
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo test --workspace --tests --no-run \u2192 exit 0"
+      ],
+      "concurrent_with": [
+        "WFGADAX2-code"
+      ],
+      "depends_on": [
+        "CP1-ci-checkpoint",
+        "WFGADAX1-integ"
+      ],
+      "description": "Add tests for caging-required config compatibility hard errors.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo test --workspace --tests --no-run",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGADAX2-test\""
+      ],
+      "git_branch": "world-fs-granular-allow-deny-appendix-wfgadax2-test",
+      "id": "WFGADAX2-test",
+      "integration_task": "WFGADAX2-integ",
+      "kickoff_prompt": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/WFGADAX2-test.md",
+      "name": "WFGADAX2 slice (test)",
+      "phase": "WFGADAX2",
+      "references": [
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX2-spec.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/decision_register.md (DR-AX-0004)"
+      ],
+      "required_make_targets": [
+        "triad-test-checks"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGADAX2-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX2-test\""
+      ],
+      "status": "completed",
+      "type": "test",
+      "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax2-test"
+    },
+    {
+      "acceptance_criteria": [
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0"
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "WFGADAX2-code",
+        "WFGADAX2-test"
+      ],
+      "description": "Integration merge for WFGADAX2.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGADAX2-integ\""
+      ],
+      "git_branch": "world-fs-granular-allow-deny-appendix-wfgadax2-integ",
+      "id": "WFGADAX2-integ",
+      "integration_task": "WFGADAX2-integ",
+      "kickoff_prompt": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/WFGADAX2-integ.md",
+      "merge_to_orchestration": true,
+      "name": "WFGADAX2 slice (integration final)",
+      "phase": "WFGADAX2",
+      "references": [
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX2-spec.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/decision_register.md (DR-AX-0004)",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/manual_testing_playbook.md"
+      ],
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGADAX2-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX2-integ\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax2-integ"
+    },
+    {
+      "acceptance_criteria": [
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0",
+        "Run: cargo test -p shell --tests --no-run \u2192 exit 0"
+      ],
+      "concurrent_with": [
+        "WFGADAX3-test"
+      ],
+      "depends_on": [
+        "WFGADAX2-integ"
+      ],
+      "description": "Implement REPL exit transparency and repl.exit_cwd behavior.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGADAX3-code\""
+      ],
+      "git_branch": "world-fs-granular-allow-deny-appendix-wfgadax3-code",
+      "id": "WFGADAX3-code",
+      "integration_task": "WFGADAX3-integ-core",
+      "kickoff_prompt": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/WFGADAX3-code.md",
+      "name": "WFGADAX3 slice (code)",
+      "phase": "WFGADAX3",
+      "references": [
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX3-spec.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/contract.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/decision_register.md (DR-AX-0005)"
+      ],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGADAX3-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\" SLICE_ID=\"WFGADAX3\""
+      ],
+      "status": "completed",
+      "type": "code",
+      "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax3-code"
+    },
+    {
+      "acceptance_criteria": [
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo test --workspace --tests --no-run \u2192 exit 0"
+      ],
+      "concurrent_with": [
+        "WFGADAX3-code"
+      ],
+      "depends_on": [
+        "WFGADAX2-integ"
+      ],
+      "description": "Add tests for REPL exit note and repl.exit_cwd hard errors.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo test --workspace --tests --no-run",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGADAX3-test\""
+      ],
+      "git_branch": "world-fs-granular-allow-deny-appendix-wfgadax3-test",
+      "id": "WFGADAX3-test",
+      "integration_task": "WFGADAX3-integ-core",
+      "kickoff_prompt": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/WFGADAX3-test.md",
+      "name": "WFGADAX3 slice (test)",
+      "phase": "WFGADAX3",
+      "references": [
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX3-spec.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/decision_register.md (DR-AX-0005)"
+      ],
+      "required_make_targets": [
+        "triad-test-checks"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGADAX3-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX3-test\""
+      ],
+      "status": "completed",
+      "type": "test",
+      "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax3-test"
+    },
+    {
+      "acceptance_criteria": [
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0"
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "WFGADAX3-code",
+        "WFGADAX3-test"
+      ],
+      "description": "Core integration merge for WFGADAX3 checkpoint boundary slice.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGADAX3-integ-core\""
+      ],
+      "git_branch": "world-fs-granular-allow-deny-appendix-wfgadax3-integ-core",
+      "id": "WFGADAX3-integ-core",
+      "integration_task": "WFGADAX3-integ-core",
+      "kickoff_prompt": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/WFGADAX3-integ-core.md",
+      "merge_to_orchestration": false,
+      "name": "WFGADAX3 slice (integration core)",
+      "phase": "WFGADAX3",
+      "references": [
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX3-spec.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/decision_register.md (DR-AX-0005)"
+      ],
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGADAX3-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX3-integ-core\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax3-integ-core"
+    },
+    {
+      "acceptance_criteria": [
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0"
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "WFGADAX3-integ-core"
+      ],
+      "description": "Linux platform-fix integration task for WFGADAX3 checkpoint boundary slice.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGADAX3-integ-linux\""
+      ],
+      "git_branch": "world-fs-granular-allow-deny-appendix-wfgadax3-integ-linux",
+      "id": "WFGADAX3-integ-linux",
+      "integration_task": "WFGADAX3-integ-linux",
+      "kickoff_prompt": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/WFGADAX3-integ-linux.md",
+      "merge_to_orchestration": false,
+      "name": "WFGADAX3 slice (integration linux)",
+      "phase": "WFGADAX3",
+      "platform": "linux",
+      "references": [
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX3-spec.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/decision_register.md (DR-AX-0005)"
+      ],
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGADAX3-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX3-integ-linux\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax3-integ-linux"
+    },
+    {
+      "acceptance_criteria": [
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0"
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "WFGADAX3-integ-core"
+      ],
+      "description": "macOS platform-fix integration task for WFGADAX3 checkpoint boundary slice.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGADAX3-integ-macos\""
+      ],
+      "git_branch": "world-fs-granular-allow-deny-appendix-wfgadax3-integ-macos",
+      "id": "WFGADAX3-integ-macos",
+      "integration_task": "WFGADAX3-integ-macos",
+      "kickoff_prompt": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/WFGADAX3-integ-macos.md",
+      "merge_to_orchestration": false,
+      "name": "WFGADAX3 slice (integration macos)",
+      "phase": "WFGADAX3",
+      "platform": "macos",
+      "references": [
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX3-spec.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/decision_register.md (DR-AX-0005)"
+      ],
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGADAX3-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX3-integ-macos\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax3-integ-macos"
+    },
+    {
+      "acceptance_criteria": [
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0"
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "WFGADAX3-integ-core"
+      ],
+      "description": "Windows platform-fix integration task for WFGADAX3 checkpoint boundary slice.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGADAX3-integ-windows\""
+      ],
+      "git_branch": "world-fs-granular-allow-deny-appendix-wfgadax3-integ-windows",
+      "id": "WFGADAX3-integ-windows",
+      "integration_task": "WFGADAX3-integ-windows",
+      "kickoff_prompt": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/WFGADAX3-integ-windows.md",
+      "merge_to_orchestration": false,
+      "name": "WFGADAX3 slice (integration windows)",
+      "phase": "WFGADAX3",
+      "platform": "windows",
+      "references": [
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX3-spec.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/decision_register.md (DR-AX-0005)"
+      ],
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGADAX3-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX3-integ-windows\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax3-integ-windows"
+    },
+    {
+      "acceptance_criteria": [
+        "Run: cargo fmt \u2192 exit 0",
+        "Run: cargo clippy --workspace --all-targets -- -D warnings \u2192 exit 0"
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "WFGADAX3-integ-core",
+        "CP2-ci-checkpoint",
+        "WFGADAX3-integ-linux",
+        "WFGADAX3-integ-macos",
+        "WFGADAX3-integ-windows"
+      ],
+      "description": "Finalize WFGADAX3 after checkpoint core and platform fixes and merge to orchestration.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WFGADAX3-integ\""
+      ],
+      "git_branch": "world-fs-granular-allow-deny-appendix-wfgadax3-integ",
+      "id": "WFGADAX3-integ",
+      "integration_task": "WFGADAX3-integ",
+      "kickoff_prompt": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/WFGADAX3-integ.md",
+      "merge_to_orchestration": true,
+      "name": "WFGADAX3 slice (integration final)",
+      "phase": "WFGADAX3",
+      "references": [
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX3-spec.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/ci_checkpoint_plan.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/decision_register.md (DR-AX-0005)"
+      ],
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\"",
+        "Read: plan.md, tasks.json, session_log.md, WFGADAX3-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\" TASK_ID=\"WFGADAX3-integ\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/world-fs-granular-allow-deny-appendix-wfgadax3-integ"
+    },
+    {
+      "acceptance_criteria": [
+        "Set: export FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\"",
+        "Set: export ORCH_REF=\"$(git branch --show-current)\"",
+        "Set: export SMOKE_SLICE_ID=\"WFGADAX3\"",
+        "Set: CORE_BRANCH=\"$(jq -r --arg id \"WFGADAX3-integ-core\" '.tasks[] | select(.id==$id) | .git_branch' \"$FEATURE_DIR/tasks.json\")\"; CHECKOUT_SHA=\"$(git rev-parse \"$CORE_BRANCH\")\"",
+        "Run: scripts/ci-audit/ci_audit.sh --ledger-path \"$FEATURE_DIR/logs/WFGADAX3/ci-audit/ledger.jsonl\" --kind ci-testing --orch-branch \"$ORCH_REF\" \u2192 exit 0 (record the RECOMMENDATION line(s) in session_log.md)",
+        "Run: scripts/ci-audit/ci_audit.sh --ledger-path \"$FEATURE_DIR/logs/WFGADAX3/ci-audit/ledger.jsonl\" --kind feature-smoke --orch-branch \"$ORCH_REF\" --feature-dir \"$FEATURE_DIR\" \u2192 exit 0 (record the RECOMMENDATION line(s) in session_log.md)",
+        "If ci-audit recommends RUN for ci-testing: Run: make ci-compile-parity CI_WORKFLOW_REF=\"$ORCH_REF\" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF=\"$CHECKOUT_SHA\" \u2192 exit 0",
+        "If ci-audit recommends RUN for feature-smoke: Run: make feature-smoke FEATURE_DIR=\"$FEATURE_DIR\" PLATFORM=behavior SMOKE_SLICE_ID=\"$SMOKE_SLICE_ID\" SMOKE_CHECKOUT_REF=\"$CHECKOUT_SHA\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"$ORCH_REF\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=0 \u2192 exit 0",
+        "If feature-smoke concludes failure: Run: make triad-task-start-platform-fixes-from-smoke FEATURE_DIR=\"$FEATURE_DIR\" SLICE_ID=\"$SMOKE_SLICE_ID\" SMOKE_RUN_ID=\"<run-id>\" LAUNCH_CODEX=1",
+        "Record: session_log.md includes ORCH_REF, CHECKOUT_SHA, ci-audit output lines, and dispatched run URLs/ids (or explicit SKIP)"
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "WFGADAX3-integ-core"
+      ],
+      "description": "Checkpoint gate after WFGADAX2 and WFGADAX3.",
+      "end_checklist": [
+        "Record evidence in session_log.md",
+        "Set status to completed; add END entry; commit docs"
+      ],
+      "id": "CP2-ci-checkpoint",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/CP2-ci-checkpoint.md",
+      "name": "CI checkpoint CP2",
+      "phase": "CP2",
+      "references": [
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/ci_checkpoint_plan.md",
+        "docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md"
+      ],
+      "start_checklist": [
+        "Read: ci_checkpoint_plan.md and kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs"
+      ],
+      "status": "completed",
+      "type": "ops",
+      "worktree": null
+    },
+    {
+      "acceptance_criteria": [
+        "Run: make planning-lint FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\" \u2192 exit 0",
+        "Run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1 \u2192 exit 0",
+        "Run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\" REMOVE_WORKTREES=1 PRUNE_LOCAL=1 \u2192 exit 0"
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "CP2-ci-checkpoint",
+        "WFGADAX3-integ"
+      ],
+      "description": "Close out the feature (documentation and cleanup).",
+      "end_checklist": [
+        "Run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1",
+        "Then run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX\" REMOVE_WORKTREES=1 PRUNE_LOCAL=1",
+        "Set status to completed; add END entry; commit docs"
+      ],
+      "id": "FZ-feature-cleanup",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/FZ-feature-cleanup.md",
+      "name": "Feature cleanup (worktrees + branches)",
+      "phase": "FZ",
+      "references": [
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/plan.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/spec_manifest.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX0-spec.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX1-spec.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX2-spec.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX3-spec.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/contract.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/impact_map.md",
+        "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/ci_checkpoint_plan.md",
+        "docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-fs-granular-allow-deny-appendix && git pull --ff-only",
+        "Confirm all tasks are completed and merged as intended",
+        "Set status to in_progress; add START entry; commit docs"
+      ],
+      "status": "pending",
+      "type": "ops",
+      "worktree": null
+    }
+  ]
+}

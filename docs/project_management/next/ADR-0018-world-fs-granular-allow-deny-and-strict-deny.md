@@ -6,7 +6,7 @@
 - Owner(s): spenser, Substrate maintainers
 
 ## Scope
-- Feature directory: `docs/project_management/next/world-fs-granular-allow-deny/`
+- Feature directory: `docs/project_management/_archived/world-fs-granular-allow-deny/`
 - Sequencing spine: `docs/project_management/next/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
@@ -14,25 +14,25 @@
   - `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md`
 
 ## Related Docs
-- Plan: `docs/project_management/next/world-fs-granular-allow-deny/plan.md`
-- Spec manifest: `docs/project_management/next/world-fs-granular-allow-deny/spec_manifest.md`
-- Decision Register: `docs/project_management/next/world-fs-granular-allow-deny/decision_register.md`
-- Schema (authoritative): `docs/project_management/next/world-fs-granular-allow-deny/SCHEMA.md`
-- Protocol (authoritative): `docs/project_management/next/world-fs-granular-allow-deny/PROTOCOL.md`
-- Env var contract (authoritative): `docs/project_management/next/world-fs-granular-allow-deny/ENV.md`
-- Impact map: `docs/project_management/next/world-fs-granular-allow-deny/impact_map.md`
-- Manual playbook: `docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md`
+- Plan: `docs/project_management/_archived/world-fs-granular-allow-deny/plan.md`
+- Spec manifest: `docs/project_management/_archived/world-fs-granular-allow-deny/spec_manifest.md`
+- Decision Register: `docs/project_management/_archived/world-fs-granular-allow-deny/decision_register.md`
+- Schema (authoritative): `docs/project_management/_archived/world-fs-granular-allow-deny/SCHEMA.md`
+- Protocol (authoritative): `docs/project_management/_archived/world-fs-granular-allow-deny/PROTOCOL.md`
+- Env var contract (authoritative): `docs/project_management/_archived/world-fs-granular-allow-deny/ENV.md`
+- Impact map: `docs/project_management/_archived/world-fs-granular-allow-deny/impact_map.md`
+- Manual playbook: `docs/project_management/_archived/world-fs-granular-allow-deny/manual_testing_playbook.md`
 - Appendix implementation Planning Pack (Appendix A + B):
-  - Plan: `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/plan.md`
-  - Spec manifest: `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/spec_manifest.md`
-  - Schema (authoritative): `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/SCHEMA.md`
-  - Contract: `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX/contract.md`
+  - Plan: `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/plan.md`
+  - Spec manifest: `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/spec_manifest.md`
+  - Schema (authoritative): `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/SCHEMA.md`
+  - Contract: `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/contract.md`
 - Appendix add-on Planning Pack (post-Appendix contract drift closures):
-  - Plan: `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/plan.md`
-  - Spec manifest: `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/spec_manifest.md`
-  - Impact map: `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/impact_map.md`
-  - Tasks: `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/tasks.json`
-  - Manual playbook: `docs/project_management/next/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/manual_testing_playbook.md`
+  - Plan: `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/plan.md`
+  - Spec manifest: `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/spec_manifest.md`
+  - Impact map: `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/impact_map.md`
+  - Tasks: `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/tasks.json`
+  - Manual playbook: `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/manual_testing_playbook.md`
 - Related ADRs / grounding:
   - Policy snapshot direction and threat model: `docs/project_management/next/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
   - Full isolation mount/exec chokepoint: `crates/world/src/exec.rs`
@@ -49,24 +49,24 @@ ADR_BODY_SHA256: 38c03ab2bdf855c3536dbffa23a87edeea6e2b15825571442c9632f07c1889e
   - New: `world_fs.read|discover|write.{allow_list,deny_list}` with explicit deny-overrides-allow semantics in `world_fs.isolation=full`.
   - Why: Operators need explicit, enforceable “allow all except X” controls and reliable failure on invalid patterns (no silent ignore).
   - Links:
-    - `docs/project_management/next/world-fs-granular-allow-deny/SCHEMA.md`
-    - `docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md`
+    - `docs/project_management/_archived/world-fs-granular-allow-deny/SCHEMA.md`
+    - `docs/project_management/_archived/world-fs-granular-allow-deny/manual_testing_playbook.md`
 
 - Make deny enforcement a true security boundary in full isolation via `world_fs.enforcement=strict`
   - Existing: Any mount-based masking (if added) would be bypassable if the workload can later `umount`/`mount` in its namespace; Landlock cannot subtract an exception once `.` is allowed.
   - New: In `world_fs.isolation=full`, deny rules are enforced via mount masking plus a strict post-setup lockdown that prevents the workload from undoing denies (cap drop + mount syscall blocking).
   - Why: Deny rules are intended to protect secrets under compromise, not only prevent accidental reads.
   - Links:
-    - `docs/project_management/next/world-fs-granular-allow-deny/ENV.md`
-    - `docs/project_management/next/world-fs-granular-allow-deny/impact_map.md`
+    - `docs/project_management/_archived/world-fs-granular-allow-deny/ENV.md`
+    - `docs/project_management/_archived/world-fs-granular-allow-deny/impact_map.md`
 
 - Break policy snapshot and policy YAML schemas (no backwards compatibility)
   - Existing: World-agent accepts `PolicySnapshotV1` with `read_allowlist`/`write_allowlist`, and YAML/patch formats match that.
   - New: Introduce `PolicySnapshotV2` and a V2 policy YAML schema; old keys and old snapshots become hard errors.
   - Why: This body of work cannot be expressed safely in the V1 shape; “accepted but not enforced” must be structurally impossible.
   - Links:
-    - `docs/project_management/next/world-fs-granular-allow-deny/PROTOCOL.md`
-    - `docs/project_management/next/world-fs-granular-allow-deny/SCHEMA.md`
+    - `docs/project_management/_archived/world-fs-granular-allow-deny/PROTOCOL.md`
+    - `docs/project_management/_archived/world-fs-granular-allow-deny/SCHEMA.md`
 
 ## Problem / Context
 - Operators need “deny overrides allow” (e.g., allow `.` but deny `./secrets/**`) to prevent accidental or malicious access to sensitive project content.
@@ -111,7 +111,7 @@ ADR_BODY_SHA256: 38c03ab2bdf855c3536dbffa23a87edeea6e2b15825571442c9632f07c1889e
   - `4`: world enforcement failure (e.g., strict deny prerequisites not met and `require_world=true`)
 
 ### Config
-- Policy schema is defined in `docs/project_management/next/world-fs-granular-allow-deny/SCHEMA.md`.
+- Policy schema is defined in `docs/project_management/_archived/world-fs-granular-allow-deny/SCHEMA.md`.
 - Hard schema constraints (fail closed; no silent ignore):
   - Patterns MUST be project-relative; absolute paths and `..` segments are invalid.
   - `allow_list` MUST be non-empty for all configured dimensions.
@@ -188,10 +188,10 @@ ADR_BODY_SHA256: 38c03ab2bdf855c3536dbffa23a87edeea6e2b15825571442c9632f07c1889e
   - Wildcard denies (`**/*.pem`) enforced for matching files present at exec start (documented limitation for within-process creation).
 
 ### Manual validation
-- Manual playbook is required and authoritative: `docs/project_management/next/world-fs-granular-allow-deny/manual_testing_playbook.md`
+- Manual playbook is required and authoritative: `docs/project_management/_archived/world-fs-granular-allow-deny/manual_testing_playbook.md`
 
 ### Smoke scripts
-- Linux smoke script(s) MUST live under `docs/project_management/next/world-fs-granular-allow-deny/smoke/` (added during execution triads).
+- Linux smoke script(s) MUST live under `docs/project_management/_archived/world-fs-granular-allow-deny/smoke/` (added during execution triads).
 
 ## Rollout / Backwards Compatibility
 - No backwards compatibility is provided:
@@ -202,7 +202,7 @@ ADR_BODY_SHA256: 38c03ab2bdf855c3536dbffa23a87edeea6e2b15825571442c9632f07c1889e
   - host shell + world-agent together (version lockstep).
 
 ## Decision Summary
-- Decision Register: `docs/project_management/next/world-fs-granular-allow-deny/decision_register.md`
+- Decision Register: `docs/project_management/_archived/world-fs-granular-allow-deny/decision_register.md`
   - DR-0001 through DR-0008
 
 ## Decision Detail (Authoritative) — Deny enforcement posture (`strict` vs `best_effort`)

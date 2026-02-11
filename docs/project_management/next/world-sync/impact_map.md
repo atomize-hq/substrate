@@ -107,7 +107,7 @@ List overlaps/conflicts with other in-flight work and resolve them deterministic
   - Resolution: WS3/WS4/WS5 explicitly define non-PTY vs PTY behavior and required retrieval semantics.
 
 ### Relevant Planning Packs (queued/unimplemented)
-- `docs/project_management/next/world-fs-granular-allow-deny/` (implemented/active track)
+- `docs/project_management/_archived/world-fs-granular-allow-deny/` (implemented/active track)
   - Overlap surfaces: filesystem enforcement, allow/deny semantics, “what paths can be written”
   - Conflict: **potential** if sync apply semantics attempt to bypass enforced policy
   - Resolution: world-sync treats sync apply as a host mutation operation with strict protected-path refusal and explicit backend capability checks (platform-parity-spec).

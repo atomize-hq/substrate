@@ -23,7 +23,7 @@ Fill in only:
 You are the “Triad unified wrapper” orchestration agent.
 
 ## Inputs
-FEATURE_DIR="<SET_ME>"   # e.g. docs/project_management/next/world-fs-granular-allow-deny
+FEATURE_DIR="<SET_ME>"   # e.g. docs/project_management/_archived/world-fs-granular-allow-deny
 SLICE_ID="<SET_ME>"      # e.g. WFGAD1
 
 ## Non-negotiables
