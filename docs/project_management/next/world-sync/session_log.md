@@ -225,3 +225,10 @@
   - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` → `0` → `PASS`
   - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` → `0` → `PASS`
   - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0` → `PASS`
+
+## START — 2026-02-11T18:51:06Z — ops — F0-exec-preflight (execution preflight gate)
+- Feature: `docs/project_management/next/world-sync`
+- Branch (current checkout): `feat/world-sync`
+- Goal: Run the execution preflight gate per `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md` and produce a concrete recommendation (`ACCEPT` or `REVISE`) in `execution_preflight_report.md` before starting any triads.
+- Commands run (with results):
+  - `make triad-orch-ensure FEATURE_DIR="docs/project_management/next/world-sync"` → `0`
