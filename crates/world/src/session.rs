@@ -4,6 +4,7 @@ use crate::overlayfs::OverlayFs;
 use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 use world_api::{ExecResult, FsDiff, WorldFsMode, WorldSpec};
 
 /// A reusable Linux world with proper isolation.
@@ -14,6 +15,7 @@ pub struct SessionWorld {
     pub cgroup_path: PathBuf,
     pub net_namespace: Option<String>,
     pub spec: WorldSpec,
+    pub started_at: SystemTime,
     pub network_filter: Option<crate::netfilter::NetFilter>,
     pub fs_by_span: HashMap<String, FsDiff>,
     /// Persistent overlay mount for this session (writable or read-only).
@@ -40,6 +42,7 @@ impl SessionWorld {
             cgroup_path: PathBuf::from("/sys/fs/cgroup/substrate").join(&world_id),
             net_namespace: None,
             spec,
+            started_at: SystemTime::now(),
             network_filter: None,
             fs_by_span: HashMap::new(),
             overlay: None,
@@ -263,6 +266,14 @@ impl SessionWorld {
         Ok(FsDiff::default())
     }
 
+    /// Compute the current session's pending diff (cumulative overlay state).
+    pub fn compute_pending_diff(&self) -> Result<FsDiff> {
+        match self.overlay.as_ref() {
+            Some(overlay) => overlay.compute_diff(),
+            None => Ok(FsDiff::default()),
+        }
+    }
+
     /// Ensure the overlay is mounted and return the merged root for reuse across entry points.
     pub(crate) fn ensure_overlay_root(&mut self) -> Result<PathBuf> {
         self.ensure_overlay_mounted()
@@ -416,6 +427,7 @@ mod tests {
             cgroup_path: PathBuf::from("/sys/fs/cgroup/substrate/wld_test"),
             net_namespace: None,
             spec: base_spec.clone(),
+            started_at: std::time::SystemTime::UNIX_EPOCH,
             network_filter: None,
             fs_by_span: HashMap::new(),
             overlay: None,

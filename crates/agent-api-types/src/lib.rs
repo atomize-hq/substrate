@@ -531,6 +531,32 @@ pub struct ExecuteResponse {
     pub fs_diff: Option<FsDiff>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendingDiffRequestV1 {
+    pub profile: Option<String>,
+    pub cwd: Option<String>,
+    pub env: Option<HashMap<String, String>>,
+    pub agent_id: String,
+    pub policy_snapshot: PolicySnapshotV3,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PendingDiffBucketV1 {
+    pub writes: Vec<String>,
+    pub mods: Vec<String>,
+    pub deletes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendingDiffRecordV1 {
+    pub schema_version: u32,
+    pub session_started_at: String,
+    pub diff_id: String,
+    pub non_pty: PendingDiffBucketV1,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pty: Option<PendingDiffBucketV1>,
+}
+
 /// Streaming frame describing incremental execution output.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]

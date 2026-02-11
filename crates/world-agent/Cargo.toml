@@ -38,6 +38,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rand = "0.8"
 once_cell = "1"
 libc = "0.2"
+sha2 = { workspace = true }
 substrate-common = { path = "../common" }
 agent-api-core = { path = "../agent-api-core" }
 agent-api-types = { path = "../agent-api-types" }

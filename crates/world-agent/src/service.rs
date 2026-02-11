@@ -2,7 +2,10 @@
 
 #[cfg(target_os = "linux")]
 use agent_api_types::ExecuteStreamFrame;
-use agent_api_types::{Budget, ExecuteRequest, ExecuteResponse};
+use agent_api_types::{
+    Budget, ExecuteRequest, ExecuteResponse, PendingDiffBucketV1, PendingDiffRecordV1,
+    PendingDiffRequestV1,
+};
 #[cfg(target_os = "linux")]
 use anyhow::Context;
 use anyhow::{anyhow, Result};
@@ -15,7 +18,11 @@ use axum::{
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 #[cfg(target_os = "linux")]
+use chrono::SecondsFormat;
+#[cfg(target_os = "linux")]
 use futures_util::StreamExt;
+#[cfg(target_os = "linux")]
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 #[cfg(target_os = "linux")]
 use std::convert::Infallible;
@@ -350,6 +357,119 @@ impl WorldAgentService {
             scopes_used: result.scopes_used,
             fs_diff: result.fs_diff,
         })
+    }
+
+    /// Retrieve the current session's pending diff record.
+    pub async fn pending_diff(&self, req: PendingDiffRequestV1) -> Result<PendingDiffRecordV1> {
+        #[cfg(target_os = "linux")]
+        {
+            if req.agent_id.is_empty() {
+                anyhow::bail!("agent_id is required for API calls");
+            }
+
+            let cwd = req
+                .cwd
+                .clone()
+                .map(PathBuf::from)
+                .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+            let env_ref = req.env.as_ref();
+            let project_dir = resolve_project_dir(env_ref, Some(&cwd))?;
+
+            let snapshot = req
+                .policy_snapshot
+                .canonicalize()
+                .map_err(BadRequestError::new)?;
+            let fs_mode = if snapshot.world_fs.write.enabled {
+                WorldFsMode::Writable
+            } else {
+                WorldFsMode::ReadOnly
+            };
+
+            let always_isolate = !matches!(req.profile.as_deref(), Some("world-deps-provision"));
+
+            let spec = WorldSpec {
+                reuse_session: true,
+                isolate_network: true,
+                limits: world_api::ResourceLimits::default(),
+                enable_preload: false,
+                allowed_domains: substrate_broker::allowed_domains(),
+                project_dir,
+                always_isolate,
+                fs_mode,
+            };
+
+            let world = match self.backend.ensure_session(&spec) {
+                Ok(w) => w,
+                Err(e) => {
+                    tracing::error!(error = %e, error_debug = ?e, "ensure_session failed");
+                    return Err(anyhow::anyhow!("Failed to ensure session world"));
+                }
+            };
+
+            let (started_at, diff) = self
+                .linux_backend
+                .pending_diff(&world)
+                .context("pending_diff failed")?;
+
+            fn normalize(path: &std::path::Path) -> String {
+                path.to_string_lossy().replace('\\', "/")
+            }
+
+            let mut writes: Vec<String> = diff.writes.iter().map(|p| normalize(p)).collect();
+            let mut mods: Vec<String> = diff.mods.iter().map(|p| normalize(p)).collect();
+            let mut deletes: Vec<String> = diff.deletes.iter().map(|p| normalize(p)).collect();
+            writes.sort();
+            mods.sort();
+            deletes.sort();
+            writes.dedup();
+            mods.dedup();
+            deletes.dedup();
+
+            let mut hasher = Sha256::new();
+            hasher.update(b"writes\0");
+            for item in &writes {
+                hasher.update(item.as_bytes());
+                hasher.update(b"\n");
+            }
+            hasher.update(b"mods\0");
+            for item in &mods {
+                hasher.update(item.as_bytes());
+                hasher.update(b"\n");
+            }
+            hasher.update(b"deletes\0");
+            for item in &deletes {
+                hasher.update(item.as_bytes());
+                hasher.update(b"\n");
+            }
+            let digest = hasher.finalize();
+            let mut hex = String::with_capacity(digest.len() * 2);
+            for b in digest {
+                use std::fmt::Write as _;
+                let _ = write!(&mut hex, "{:02x}", b);
+            }
+
+            let started_at: chrono::DateTime<chrono::Utc> = started_at.into();
+            let session_started_at =
+                started_at.to_rfc3339_opts(SecondsFormat::Secs, /* use_z */ true);
+
+            Ok(PendingDiffRecordV1 {
+                schema_version: 1,
+                session_started_at,
+                diff_id: hex,
+                non_pty: PendingDiffBucketV1 {
+                    writes,
+                    mods,
+                    deletes,
+                },
+                pty: None,
+            })
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = req;
+            anyhow::bail!("pending diff discovery is only supported on Linux agents")
+        }
     }
 
     /// Execute a command and stream incremental output frames via NDJSON.

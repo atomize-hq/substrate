@@ -468,7 +468,7 @@ impl SyncConflictPolicyArg {
 
 #[derive(Args, Debug)]
 pub struct WorkspaceSyncArgs {
-    /// Print a config-only preview (no world backend calls; no mutations)
+    /// Print a dry-run preview (no mutations); for `--direction from_world`, includes pending diff summary
     #[arg(long = "dry-run")]
     pub dry_run: bool,
 
@@ -487,7 +487,7 @@ pub struct WorkspaceSyncArgs {
     #[arg(long = "exclude", value_name = "PATTERN", action = ArgAction::Append)]
     pub exclude: Vec<String>,
 
-    /// Print additional per-path decisions (WS0: ignored; reserved for later slices)
+    /// Print additional details (includes session_started_at + diff_id for pending diff discovery)
     #[arg(long = "verbose")]
     pub verbose: bool,
 }

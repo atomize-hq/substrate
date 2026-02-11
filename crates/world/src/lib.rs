@@ -48,6 +48,17 @@ impl LinuxLocalBackend {
         session_world.ensure_overlay_root()
     }
 
+    /// Retrieve the current session's pending diff and session start time.
+    pub fn pending_diff(&self, world: &WorldHandle) -> Result<(std::time::SystemTime, FsDiff)> {
+        let cache = self
+            .session_cache
+            .read()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire session cache read lock: {}", e))?;
+        let session_world = cache.get(&world.id).context("World not found in cache")?;
+        let diff = session_world.compute_pending_diff()?;
+        Ok((session_world.started_at, diff))
+    }
+
     #[cfg(not(target_os = "linux"))]
     fn check_platform(&self) -> Result<()> {
         anyhow::bail!("LinuxLocal backend is only supported on Linux")

@@ -247,6 +247,7 @@ fn build_router(service: WorldAgentService) -> Router {
         .route("/v1/capabilities", get(handlers::capabilities))
         .route("/v1/doctor/world", get(handlers::doctor_world))
         .route("/v1/execute", post(handlers::execute))
+        .route("/v1/pending_diff", post(handlers::pending_diff))
         .route("/v1/execute/stream", post(handlers::execute_stream))
         .route("/v1/stream", get(handlers::stream))
         .route("/v1/trace/:span_id", get(handlers::get_trace))

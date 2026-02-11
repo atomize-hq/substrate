@@ -2,9 +2,10 @@
 
 use crate::service::WorldAgentService;
 use agent_api_types::{
-    ApiError, ExecuteRequest, ExecuteResponse, WorldDoctorLandlockV1, WorldDoctorReportV1,
-    WorldDoctorWorldFsStrategyKindV1, WorldDoctorWorldFsStrategyProbeResultV1,
-    WorldDoctorWorldFsStrategyProbeV1, WorldDoctorWorldFsStrategyV1,
+    ApiError, ExecuteRequest, ExecuteResponse, PendingDiffRecordV1, PendingDiffRequestV1,
+    WorldDoctorLandlockV1, WorldDoctorReportV1, WorldDoctorWorldFsStrategyKindV1,
+    WorldDoctorWorldFsStrategyProbeResultV1, WorldDoctorWorldFsStrategyProbeV1,
+    WorldDoctorWorldFsStrategyV1,
 };
 use axum::{
     body::Bytes,
@@ -57,6 +58,7 @@ pub async fn capabilities() -> Result<ResponseJson<Value>, ApiErrorResponse> {
             "execute",
             "policy_snapshot_v3",
             "pty_streaming",
+            "pending_diff_v1",
             "trace_retrieval",
             "scope_requests"
         ],
@@ -152,6 +154,26 @@ pub async fn execute(
     let req: ExecuteRequest = serde_json::from_value(payload)
         .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
     let response = service.execute(req).await.map_err(|e| {
+        if let Some(bad) = e.downcast_ref::<crate::service::BadRequestError>() {
+            ApiErrorResponse(ApiError::BadRequest(bad.message().to_string()))
+        } else {
+            ApiErrorResponse(ApiError::Internal(e.to_string()))
+        }
+    })?;
+
+    Ok(ResponseJson(response))
+}
+
+/// Retrieve the current session's pending diff record.
+pub async fn pending_diff(
+    State(service): State<WorldAgentService>,
+    body: Bytes,
+) -> Result<ResponseJson<PendingDiffRecordV1>, ApiErrorResponse> {
+    let payload: Value = serde_json::from_slice(&body)
+        .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
+    let req: PendingDiffRequestV1 = serde_json::from_value(payload)
+        .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
+    let response = service.pending_diff(req).await.map_err(|e| {
         if let Some(bad) = e.downcast_ref::<crate::service::BadRequestError>() {
             ApiErrorResponse(ApiError::BadRequest(bad.message().to_string()))
         } else {

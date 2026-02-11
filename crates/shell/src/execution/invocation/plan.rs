@@ -494,7 +494,7 @@ impl ShellConfig {
                     std::process::exit(code);
                 }
                 SubCommands::Workspace(workspace_cmd) => {
-                    let code = handle_workspace_command(workspace_cmd);
+                    let code = handle_workspace_command(workspace_cmd, &cli);
                     std::process::exit(code);
                 }
                 SubCommands::Shim(shim_cmd) => {
