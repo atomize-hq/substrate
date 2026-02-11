@@ -28,7 +28,7 @@
       "name": "Execution preflight gate (ops)",
       "type": "ops",
       "phase": "Ops",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Run the execution preflight gate for this Planning Pack (required before any triads begin).",
       "references": [
         "docs/project_management/next/world-sync/plan.md",

@@ -42,7 +42,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 38c03ab2bdf855c3536dbffa23a87edeea6e2b15825571442c9632f07c1889eb
+ADR_BODY_SHA256: b55446895a09a70a6e931e71926d399e118c019cc8d0009e2d69270393a930fb
 ### Changes (operator-facing)
 - Add granular `allow_list` + `deny_list` for world filesystem reads/writes (and optional directory visibility)
   - Existing: `world_fs.read_allowlist` / `world_fs.write_allowlist` are allowlist-only; invalid patterns (e.g., `..`) can be accepted but ignored; there is no deny list; “allow all except secrets” cannot be expressed.

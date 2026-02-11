@@ -232,3 +232,15 @@
 - Goal: Run the execution preflight gate per `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md` and produce a concrete recommendation (`ACCEPT` or `REVISE`) in `execution_preflight_report.md` before starting any triads.
 - Commands run (with results):
   - `make triad-orch-ensure FEATURE_DIR="docs/project_management/next/world-sync"` → `0`
+
+## END — 2026-02-11T18:55:18Z — ops — F0-exec-preflight (execution preflight gate)
+- Recommendation: `ACCEPT`
+- Summary of changes (exhaustive):
+  - Completed `docs/project_management/next/world-sync/execution_preflight_report.md` with `RECOMMENDATION: ACCEPT`.
+  - Appended an `ACCEPT` verification pass to `docs/project_management/next/world-sync/quality_gate_report.md`.
+  - Fixed ADR executive summary hash drift for `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` via `make adr-fix` so planning lint passes for referenced ADR inputs.
+  - Strengthened `docs/project_management/next/world-sync/smoke/*` to assert that `workspace sync --verbose` output includes the pending path(s) being applied (non-toy observable output check).
+- Mechanical checks:
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world-sync"` → `0` → `PASS`
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/world-sync"` → `0` → `PASS`
+- Required fixes before starting `WS0`: none.

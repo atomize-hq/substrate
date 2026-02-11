@@ -23,7 +23,8 @@ substrate workspace init . >/dev/null
 case "$SLICE_ID" in
   WS2)
     substrate --world -c "sh -lc 'echo hello > hello-from-world.txt'"
-    substrate workspace sync --direction from_world --verbose >/dev/null
+    out="$(substrate workspace sync --direction from_world --verbose 2>&1)"
+    printf '%s' "$out" | grep -Fq "hello-from-world.txt"
     test -f hello-from-world.txt
     substrate workspace sync --direction from_world >/dev/null
     echo "OK: world-sync linux smoke ($SLICE_ID)"
@@ -33,7 +34,8 @@ case "$SLICE_ID" in
     substrate workspace sync --dry-run --direction from_host --verbose >/dev/null
     substrate workspace sync --direction from_host --verbose >/dev/null
     substrate --world -c "sh -lc 'echo w > hello-both.txt'"
-    substrate workspace sync --direction both --verbose >/dev/null
+    out="$(substrate workspace sync --direction both --verbose 2>&1)"
+    printf '%s' "$out" | grep -Fq "hello-both.txt"
     test -f hello-both.txt
     echo "OK: world-sync linux smoke ($SLICE_ID)"
     ;;
