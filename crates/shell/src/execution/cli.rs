@@ -402,6 +402,12 @@ pub enum WorkspaceAction {
     Disable(WorkspacePathArgs),
     /// Enable workspace discovery at PATH (defaults to .)
     Enable(WorkspacePathArgs),
+    /// Apply pending world diffs to the host workspace (WS0: dry-run preview only)
+    Sync(WorkspaceSyncArgs),
+    /// Record an internal checkpoint for the current workspace (WS0: stub only)
+    Checkpoint(WorkspaceCheckpointArgs),
+    /// Restore the workspace to an internal checkpoint (WS0: stub only)
+    Rollback(WorkspaceRollbackArgs),
 }
 
 #[derive(Args, Debug)]
@@ -422,6 +428,94 @@ pub struct WorkspacePathArgs {
     /// Path within the workspace (defaults to .)
     #[arg(value_name = "PATH")]
     pub path: Option<PathBuf>,
+}
+
+#[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq)]
+#[value(rename_all = "snake_case")]
+pub enum SyncDirectionArg {
+    FromWorld,
+    FromHost,
+    Both,
+}
+
+impl SyncDirectionArg {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::FromWorld => "from_world",
+            Self::FromHost => "from_host",
+            Self::Both => "both",
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq)]
+#[value(rename_all = "snake_case")]
+pub enum SyncConflictPolicyArg {
+    PreferHost,
+    PreferWorld,
+    Abort,
+}
+
+impl SyncConflictPolicyArg {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::PreferHost => "prefer_host",
+            Self::PreferWorld => "prefer_world",
+            Self::Abort => "abort",
+        }
+    }
+}
+
+#[derive(Args, Debug)]
+pub struct WorkspaceSyncArgs {
+    /// Print a config-only preview (no world backend calls; no mutations)
+    #[arg(long = "dry-run")]
+    pub dry_run: bool,
+
+    /// Override effective sync direction for this invocation
+    #[arg(long = "direction", value_name = "from_world|from_host|both")]
+    pub direction: Option<SyncDirectionArg>,
+
+    /// Override effective conflict policy for this invocation
+    #[arg(
+        long = "conflict-policy",
+        value_name = "prefer_host|prefer_world|abort"
+    )]
+    pub conflict_policy: Option<SyncConflictPolicyArg>,
+
+    /// Append an exclude pattern for this invocation (repeatable)
+    #[arg(long = "exclude", value_name = "PATTERN", action = ArgAction::Append)]
+    pub exclude: Vec<String>,
+
+    /// Print additional per-path decisions (WS0: ignored; reserved for later slices)
+    #[arg(long = "verbose")]
+    pub verbose: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct WorkspaceCheckpointArgs {
+    /// Optional checkpoint message (WS0: ignored; reserved for later slices)
+    #[arg(long = "message", value_name = "TEXT")]
+    pub message: Option<String>,
+
+    /// Print additional details (WS0: ignored; reserved for later slices)
+    #[arg(long = "verbose")]
+    pub verbose: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct WorkspaceRollbackArgs {
+    /// Rollback target (`last` or a checkpoint id) (WS0: ignored; reserved for later slices)
+    #[arg(value_name = "TARGET")]
+    pub target: Option<String>,
+
+    /// Force rollback in the presence of safety-rail conditions (WS0: ignored; reserved for later slices)
+    #[arg(long = "force")]
+    pub force: bool,
+
+    /// Print additional details (WS0: ignored; reserved for later slices)
+    #[arg(long = "verbose")]
+    pub verbose: bool,
 }
 
 #[derive(Subcommand, Debug)]

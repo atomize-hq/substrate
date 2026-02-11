@@ -906,9 +906,7 @@ fn suppress_redundant_caged_prediction_warning(
     predicted_cwd: &str,
     warning: Option<String>,
 ) -> Option<String> {
-    let Some(message) = warning else {
-        return None;
-    };
+    let message = warning?;
 
     let prev_path = Path::new(prev_cwd);
     let predicted_path = Path::new(predicted_cwd);
