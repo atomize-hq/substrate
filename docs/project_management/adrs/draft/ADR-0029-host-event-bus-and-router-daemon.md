@@ -9,10 +9,12 @@
 - Feature directory: `docs/project_management/next/host_event_bus_router_daemon/`
 - Sequencing spine: `docs/project_management/next/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
-  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Related Docs
+- Decision Register: `docs/project_management/next/host_event_bus_router_daemon/decision_register.md`
 - Trace/event foundations:
   - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
   - `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
@@ -27,21 +29,21 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
-
+ADR_BODY_SHA256: cb3950d2781fb1acbb687285b6f46ae6fdb96e6ed6ac95a5a1cabb0caabebac8
 ### Changes (operator-facing)
 - Substrate gains an always-on host router that can trigger policy-gated actions from trace events (including cross-workspace)
   - Existing: Substrate records trace events (`~/.substrate/trace.jsonl`), but there is no always-on host service that can “listen” for specific events and route them into follow-on work.
-  - New: A host daemon tails the canonical trace stream and (optionally) produces policy-gated requests/actions, including cross-workspace routing using an explicit workspace registry under `SUBSTRATE_HOME`.
+  - New: A host daemon tails the canonical trace stream and produces policy-gated requests/actions when routing rules match, including cross-workspace routing using an explicit workspace registry under `SUBSTRATE_HOME`.
   - Why: Enable reliable “when A completes, trigger B” workflows and selective file-change triggers without introducing an external broker or bypassing workspace policy boundaries.
   - Links:
     - `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md#L1`
+    - `docs/project_management/next/host_event_bus_router_daemon/decision_register.md`
     - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md#L1`
     - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md#L1`
 
 ## Problem / Context
 - Substrate is moving toward multi-agent, multi-workspace orchestration. We need a reliable host-side mechanism to:
-  - listen for specific events (command completion, workflow completion, selected fs diffs),
+  - listen for specific events (command completion, selected fs diffs; later workflow/agent events are additive),
   - route them into follow-on work (often in a different workspace),
   - ensure all follow-on execution is policy-gated under the target workspace’s effective policy/config.
 - We want this without:
@@ -86,7 +88,8 @@ All bus state is stored under `SUBSTRATE_HOME` (default `~/.substrate`):
 
 ### Workspace identity (Authoritative)
 - Each workspace MUST have a stable `workspace_id`.
-- Default algorithm (v1): `workspace_id = sha256(canonical_workspace_root_path)` encoded as lowercase hex.
+- `workspace_id` is a random UUID generated once and persisted in workspace-local metadata:
+  - `<workspace_root>/.substrate/workspace_id` (single-line UTF-8; UUID string)
 - The registry MUST store:
   - `workspace_id`
   - `workspace_root` (canonical absolute path)
@@ -95,22 +98,24 @@ All bus state is stored under `SUBSTRATE_HOME` (default `~/.substrate`):
 
 ### Rule scoping and precedence (Authoritative)
 - Rules exist at:
-  - global scope (loaded from `SUBSTRATE_HOME`), and
-  - workspace scope (loaded from the target workspace root).
+  - global scope (loaded from `SUBSTRATE_HOME/bus/rules.yaml`), and
+  - workspace scope (loaded from `<workspace_root>/.substrate/bus/rules.yaml`).
 - Rule evaluation precedence for a given event:
   1. workspace-scoped rules (for the owning workspace, when applicable)
   2. global rules (fallback)
+- For a given `rule_id`, the workspace-scoped rule overrides a global rule with the same `rule_id`.
 
 ### Trigger taxonomy (Authoritative)
 Only an explicit allowlist of event families is triggerable. v1 supports:
-- Execution completion events (root span completion / command completion)
-- Workflow/agent lifecycle completion events (once available in trace)
+- Execution completion events:
+  - `command_complete` spans in `trace.jsonl`
 - Filesystem diff-derived events:
-  - derived trigger inputs from fs diffs indicating create/modify/delete/rename of workspace-relative paths
+  - `fs_change` derived events emitted by the bus from `command_complete.fs_diff` indicating create/modify/delete/rename of workspace-relative paths
   - path matching MUST reuse the same workspace-relative semantics and matcher behavior as ADR-0018
 
 ### File operation triggers (Authoritative)
 - File triggers MUST be derived from Substrate-produced fs diffs (not OS filesystem watching in v1).
+- The v1 diff source of truth for triggers is `command_complete.fs_diff` (trace span field).
 - Triggers MUST support include/exclude path matching using workspace-relative paths:
   - exact file match
   - subtree match
@@ -129,6 +134,8 @@ Only an explicit allowlist of event families is triggerable. v1 supports:
 
 ### Daemon behavior (Authoritative)
 - The router daemon MUST be host-level and MUST run independently of world-agent availability.
+- It runs as a `substrate` subcommand:
+  - `substrate bus daemon [--foreground]`
 - It MUST degrade gracefully:
   - if it cannot read `trace.jsonl`, it does not lose cursor state and retries,
   - if it cannot resolve a target workspace, it records a failed request and continues.
@@ -144,13 +151,44 @@ Only an explicit allowlist of event families is triggerable. v1 supports:
     - the target workspace identity (`workspace_id`).
   - The bus MUST persist per-subscriber cursors and dedupe state in `bus/state.json` so restarts do not replay unboundedly.
 
+### Config
+- Rule declarations live in config (not policy), but are always gated by policy before executing any resulting actions (see Decision Register DR-0006).
+- Rules are loaded from two locations:
+  - Global: `SUBSTRATE_HOME/bus/rules.yaml`
+  - Workspace: `<workspace_root>/.substrate/bus/rules.yaml`
+- For a given `rule_id`, the workspace-scoped rule overrides a global rule with the same `rule_id`.
+- If multiple rules resolve to the same `rule_id` at the same scope, it is a hard error (fail-closed for that rules file).
+
 ### CLI (minimal; may be extended)
+- `substrate bus daemon [--foreground]`
+  - Behavior: runs the router daemon.
+  - Exit codes:
+    - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+    - `0`: clean shutdown
+    - `4`: daemon cannot start due to platform prerequisites
 - `substrate bus status [--json]`
   - Behavior: reports whether the daemon is running, the current trace cursor, and queue sizes.
   - Exit codes: `0` success; `4` daemon not available.
 - `substrate bus workspaces list [--json]`
   - Behavior: prints registry entries (workspace_id, root, enabled).
   - Exit codes: `0` success; `3` registry read/parse failure.
+- `substrate bus doctor [--json]`
+  - Behavior: validates that the bus can start deterministically and fail-closed where required:
+    - trace follower can load cursor state and validate rotation handling inputs
+    - workspace registry is readable and workspace roots are resolvable
+    - rule files parse strictly (schema) and only use the v1 trigger allowlist families
+  - Exit codes:
+    - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+    - `0`: all checks pass
+    - `2`: config/schema error
+    - `3`: required dependency unavailable (trace path missing/unreadable, registry missing)
+    - `4`: unsupported / missing prerequisites for required posture
+    - `5`: policy/safety violation (explicit deny)
+
+### Platform guarantees
+- Linux: the daemon can run under systemd (user or system instance). Service managers MUST be able to invoke `substrate bus daemon --foreground`.
+- macOS: the daemon can run under launchd (agent or daemon). launchd MUST be able to invoke `substrate bus daemon --foreground`.
+- Windows: the daemon can run as a Windows service or scheduled task. The service wrapper MUST invoke `substrate bus daemon --foreground`.
 
 ## Architecture Shape
 - Host daemon:
@@ -165,7 +203,7 @@ Only an explicit allowlist of event families is triggerable. v1 supports:
   - the daemon is a host service (not in-world) and must remain available in host-only mode.
   - it MAY reuse transport patterns and code organization from world-agent, but must not depend on world-agent being available.
 - Event recursion guard:
-  - bus-emitted events MUST be identifiable (e.g., `component=busd`) and MUST be excluded from re-trigger evaluation by default to avoid infinite loops.
+  - bus-emitted events MUST be identifiable (e.g., `component=bus`) and MUST be excluded from re-trigger evaluation by default to avoid infinite loops.
 - FS trigger derivation:
   - the bus derives file-change trigger inputs from fs diff events already persisted to trace, and applies ADR-0018 matching semantics for include/exclude.
 
@@ -184,122 +222,6 @@ Only an explicit allowlist of event families is triggerable. v1 supports:
 - Protected paths/invariants:
   - All bus state lives under `SUBSTRATE_HOME` with user-only permissions.
   - Requests are durable and auditable; every request produces an observable trace record of allow/deny/approval outcomes.
-
-## Open Questions (Draft-only; resolve before `Accepted`)
-
-This section intentionally captures unresolved decisions and implementation-level constraints discovered during discovery. It must be emptied (migrate A/B items into `decision_register.md`) before the ADR status flips to `Accepted`.
-
-### 1) Daemon packaging + lifecycle (host service)
-- Service manager targets:
-  - Linux: systemd service (optionally socket-activated for the control plane)
-  - macOS: launchd agent/daemon
-  - Windows: service (or scheduled task) with equivalent “always-on” semantics
-- Open questions:
-  - Should the router daemon be a standalone binary (e.g., `substrate-busd`) or a subcommand mode of `substrate` (e.g., `substrate busd --foreground`)?
-  - Should it be socket-activated (wake on CLI/control requests) while still tailing trace, or strictly long-running?
-  - What is the “single-instance” lock strategy under `SUBSTRATE_HOME` (lock file vs OS-level mutex), and what is the operator UX when a stale lock is detected?
-
-### 2) Event source: trace tailing vs direct RPC emits
-- Current decision: `trace.jsonl` is canonical.
-- Open questions:
-  - Does the bus exclusively consume trace by tailing the file, or do core components also publish “bus requests” directly over a local API (UDS), with trace as the audit sink?
-    - Tail-only is simplest and keeps coupling low.
-    - Direct publish reduces latency and avoids “tailer correctness” edge cases, but adds another API surface that must be secured.
-  - If tail-only: what is the required cursor correctness model (byte offset vs line count vs event_id-based cursor)?
-
-### 3) Request queue and “intent” semantics (durability + retries)
-- Current decision: durable queues live under `SUBSTRATE_HOME/bus/`:
-  - `inbox.jsonl` = durable **requests** (intent to act)
-  - `work_queue.jsonl` = durable **actions** derived after routing/policy evaluation
-  - `state.json` = cursors + dedupe + subscriber state
-- Open questions:
-  - Is JSONL sufficient for v1, or do we want sqlite from day 1 to simplify:
-    - dedupe windows,
-    - “claim/lease” semantics,
-    - retries with backoff,
-    - and crash-safe acknowledgements?
-  - Exactly what is the “ack model”?
-    - append-only queue with cursor advancement after success,
-    - vs per-item ack record (more robust for reordering and partial failure).
-  - Should requests/actions be immutable (append-only) with status updates emitted as trace events, or should the queue entries also include status transitions?
-
-### 4) Workspace registry authority + update semantics
-- Current decision: registry is explicit and owned by `substrate workspace init|enable|disable`.
-- Open questions:
-  - Should the router daemon accept “discovered workspaces” (scan for `.substrate/workspace.yaml`) as a fallback, or only trust the explicit registry?
-  - What is the expected behavior if `workspace_root` moves?
-    - If `workspace_id` is hash-of-path, move implies ID changes and requires migration.
-    - If `workspace_id` can be stored inside `workspace.yaml`, move can preserve identity.
-  - How do we handle:
-    - duplicate entries,
-    - stale paths,
-    - and disable/enable propagation (workspace.disabled marker vs registry `enabled=false`)?
-
-### 5) Workspace ID strategy (stability vs simplicity)
-- Current draft default: `workspace_id = sha256(canonical_workspace_root_path)`.
-- Open questions:
-  - Should we add an explicit ID field inside `workspace.yaml` now to avoid later breaking changes?
-  - If explicit ID exists, which source wins when registry and workspace.yaml disagree?
-  - Do we want a “label” or “alias” system for operators (human-friendly names) and how does that intersect with security (spoofing/misdirection risk)?
-
-### 6) Cross-workspace routing semantics (the “A triggers B” model)
-- Current decision: cross-workspace triggers create **requests** that are re-evaluated under the target workspace’s effective config/policy.
-- Open questions:
-  - What is the minimum request schema for a cross-workspace trigger?
-    - required: `source_event_ref` (span_id/event id), `rule_id`, `target.workspace_id`, `action_kind`, `payload`
-  - How do we correlate the resulting execution back to the originating event?
-    - required: a stable `cause_id` or `trigger_event_ref` field appended into new trace records
-  - Do we allow fan-out (one event triggers many targets), and what rate limits apply?
-  - Should cross-workspace triggers be allowed by default, or require explicit policy allowlisting (recommended)?
-
-### 7) Trigger taxonomy: “what is triggerable?”
-- Current direction: explicit allowlist of triggerable event families.
-- Open questions:
-  - What is the v1 minimal trigger set?
-    - `command_complete` / root span completion
-    - `workflow_node_complete` / `agent_run_complete` (once present)
-    - fs diff-derived `fs_change` events (create/modify/delete/rename)
-  - How do we ensure we never accidentally make “sensitive” event families triggerable (e.g., raw stdout chunks, PTY bytes, env dumps)?
-  - How do we handle event recursion:
-    - should bus-emitted events be non-triggerable by default, or triggerable only under an explicit “allow recursion” rule?
-
-### 8) File operation triggers (path-scoped, diff-derived)
-- Current direction: file triggers are derived from Substrate-produced fs diffs and use ADR-0018 path semantics (workspace-relative allow/deny matching).
-- Open questions:
-  - Which diff source is authoritative for triggers:
-    - world-agent returned diffs only,
-    - host diffs (if any),
-    - or both?
-  - How do we represent big diffs (dependency installers) safely?
-    - per-path events vs batched summary event with counts and a truncated path sample
-  - How do we define “modified” in a stable way for triggers?
-    - metadata-only (mtime/size/hash) vs content hash (expensive)
-  - Should triggers support “only when file lands in world overlay” vs “host sync landed” (ties into `world-sync` future work)?
-
-### 9) Where do rules live: config vs policy (and what is the gating model)?
-- Open questions:
-  - Should routing rules be declared in config (behavior selection) but require policy permission to execute?
-  - Or should routing rules themselves live in policy (because they are execution-enabling)?
-  - How do profiles (ADR-0020) interact with bus rules:
-    - can a profile fully pin bus behavior by supplying a complete “rules snapshot”?
-
-### 10) Remote ingress (future) and threat model
-- Current direction: v1 is local-only; remote ingress is future.
-- Open questions:
-  - Should remote ingress write only to `inbox.jsonl` (requests), never directly to `work_queue.jsonl`?
-  - What auth model is acceptable (mTLS vs token-based), and where are secrets stored (do not store in config.yaml)?
-  - What is the policy surface for remote ingress allow/deny and rate limiting?
-
-### 11) Trace “landing items” and classification (circle-back alignment with ADR-0028)
-- We expect the router daemon, LLM gateway, agent hub, and workflow engine to add new event families and correlation fields over time.
-- Open questions:
-  - Should derived trigger events be appended into `trace.jsonl` (single canonical log) or stored in `bus/derived.jsonl` and summarized into trace?
-  - Which correlation fields should be standardized early (likely additive-only):
-    - `cause_id` / `trigger_event_ref`
-    - `workflow_node_id`
-    - `agent_id` / `role`
-    - `tool_call_id`
-  - Which of these belong in shared `log_schema.rs` constants vs feature-local payloads?
 
 ## Validation Plan (Authoritative)
 
@@ -327,10 +249,13 @@ This section intentionally captures unresolved decisions and implementation-leve
 ## Decision Summary
 - Decision Register entries:
   - `docs/project_management/next/host_event_bus_router_daemon/decision_register.md`:
-    - DR-0001 (Derived bus events location: append to `trace.jsonl` vs separate `bus/derived.jsonl`)
-    - DR-0002 (Workspace ID source: hash of canonical path vs explicit ID stored in `workspace.yaml`)
-    - DR-0003 (Rule storage: config vs policy; and global vs workspace file locations)
-    - DR-0004 (Remote ingress: whether/when to accept authenticated inbound requests and how to gate them)
-    - DR-0005 (FS trigger source: fs diffs only vs adding watchers/git-backed feeds and the rollout order)
-    - DR-0006 (Queue format: JSONL-only vs sqlite; and how cursors/dedupe are persisted)
-    - DR-0007 (Idempotency key strategy: derived key recipe and which event families are eligible for deterministic dedupe)
+    - DR-0001 (Daemon packaging: standalone binary vs `substrate` subcommand)
+    - DR-0002 (Event ingestion: tail `trace.jsonl` vs direct publish API)
+    - DR-0003 (Derived bus events location: append to `trace.jsonl` vs separate bus log)
+    - DR-0004 (Durable queue format: JSONL + state vs sqlite)
+    - DR-0005 (Workspace identity: path-hash id vs explicit id stored in workspace metadata)
+    - DR-0006 (Rule declarations: config vs policy)
+    - DR-0007 (Trigger taxonomy: strict allowlist vs general event matching)
+    - DR-0008 (FS triggers source: fs diffs vs external watchers/git feeds)
+    - DR-0009 (Remote ingress: none in v1 vs authenticated inbound requests)
+    - DR-0010 (Idempotency key strategy: deterministic derived key vs random per request)
