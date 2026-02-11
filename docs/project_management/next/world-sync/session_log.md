@@ -268,3 +268,11 @@
 ## END — 2026-02-11T19:26:31Z — integration — WS0-integ
 - HEAD: `21a4db7fca8fcb83d4c7670ab2ee99c62d39a7c9`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS0/integ/last_message.md`
+
+## START — 2026-02-11T19:37:33Z — code — WS1-code
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" SLICE_ID="WS1"`
+
+## START — 2026-02-11T19:37:33Z — test — WS1-test
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" SLICE_ID="WS1"`
