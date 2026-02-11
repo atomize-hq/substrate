@@ -583,7 +583,7 @@ fn workspace_sync_dry_run_exits_3_when_pending_diff_fails_after_capabilities_suc
 }
 
 #[test]
-fn workspace_sync_without_dry_run_is_stubbed_in_ws0() {
+fn workspace_sync_without_dry_run_requires_world_backend_in_ws2() {
     let fixture = WorkspaceSyncFixture::new();
     fixture.init_workspace();
 
@@ -600,18 +600,14 @@ fn workspace_sync_without_dry_run_is_stubbed_in_ws0() {
 
     assert_eq!(
         output.status.code(),
-        Some(4),
-        "workspace sync (no --dry-run) must be stubbed in WS0 (exit 4): {}",
+        Some(3),
+        "workspace sync (no --dry-run) must exit 3 when world backend is unavailable: {}",
         combined_output(&output)
     );
     let combined = combined_output(&output);
     assert!(
-        combined.contains("not implemented") && combined.contains("WS2"),
-        "workspace sync stub must mention WS2: {combined}"
-    );
-    assert!(
-        !combined.contains("world backend unavailable"),
-        "stub must not attempt world backend access: {combined}"
+        combined.contains("substrate world enable") && combined.contains("substrate world doctor"),
+        "stderr must include actionable world enable/doctor guidance: {combined}"
     );
 
     let after_workspace_yaml =
