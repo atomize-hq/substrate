@@ -55,7 +55,20 @@ substrate workspace init . >/dev/null
 case "$SLICE_ID" in
   WS2)
     run_or_skip "world exec" substrate --world -c "sh -lc 'echo hello > hello-from-world.txt'" >/dev/null
-    out="$(run_or_skip "workspace sync --verbose" substrate workspace sync --direction from_world --verbose)"
+    set +e
+    out="$(substrate workspace sync --direction from_world --verbose 2>&1)"
+    rc=$?
+    set -e
+    if [[ $rc -ne 0 ]]; then
+      if should_skip_for_output "$out"; then
+        echo "SKIP: world-sync linux smoke ($SLICE_ID): missing/old world backend prerequisites (workspace sync --verbose)"
+        printf '%s\n' "$out"
+        exit 0
+      fi
+      echo "FAIL: world-sync linux smoke ($SLICE_ID): workspace sync --verbose (exit=$rc)" >&2
+      printf '%s\n' "$out" >&2
+      exit "$rc"
+    fi
     printf '%s' "$out" | grep -Fq "hello-from-world.txt"
     test -f hello-from-world.txt
     run_or_skip "workspace sync apply" substrate workspace sync --direction from_world >/dev/null
@@ -66,7 +79,20 @@ case "$SLICE_ID" in
     substrate workspace sync --dry-run --direction from_host --verbose >/dev/null
     substrate workspace sync --direction from_host --verbose >/dev/null
     run_or_skip "world exec" substrate --world -c "sh -lc 'echo w > hello-both.txt'" >/dev/null
-    out="$(run_or_skip "workspace sync both --verbose" substrate workspace sync --direction both --verbose)"
+    set +e
+    out="$(substrate workspace sync --direction both --verbose 2>&1)"
+    rc=$?
+    set -e
+    if [[ $rc -ne 0 ]]; then
+      if should_skip_for_output "$out"; then
+        echo "SKIP: world-sync linux smoke ($SLICE_ID): missing/old world backend prerequisites (workspace sync both --verbose)"
+        printf '%s\n' "$out"
+        exit 0
+      fi
+      echo "FAIL: world-sync linux smoke ($SLICE_ID): workspace sync both --verbose (exit=$rc)" >&2
+      printf '%s\n' "$out" >&2
+      exit "$rc"
+    fi
     printf '%s' "$out" | grep -Fq "hello-both.txt"
     test -f hello-both.txt
     echo "OK: world-sync linux smoke ($SLICE_ID)"
