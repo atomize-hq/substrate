@@ -325,3 +325,7 @@
 ## START — 2026-02-11T22:18:39Z — platform-fix — WS2-integ-macos
 - Dispatch:
   - `make triad-task-start-platform-fixes FEATURE_DIR="docs/project_management/next/world-sync" SLICE_ID="WS2" PLATFORMS="macos" LAUNCH_CODEX=1`
+
+## END — 2026-02-11T22:19:15Z — platform-fix — WS2-integ-macos
+- HEAD: `73de680c7aca239f9c57285593bf77c8dbf9161d`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS2/integ-macos/last_message.md`
