@@ -321,3 +321,7 @@
 - Dispatch:
   - `make ci-compile-parity CI_WORKFLOW_REF="feat/world-sync" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF="<CHECKOUT_SHA>"`
   - `make feature-smoke FEATURE_DIR="docs/project_management/next/world-sync" PLATFORM=behavior SMOKE_SLICE_ID="WS2" SMOKE_CHECKOUT_REF="<CHECKOUT_SHA>" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/world-sync" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=0`
+
+## START — 2026-02-11T22:18:39Z — platform-fix — WS2-integ-macos
+- Dispatch:
+  - `make triad-task-start-platform-fixes FEATURE_DIR="docs/project_management/next/world-sync" SLICE_ID="WS2" PLATFORMS="macos" LAUNCH_CODEX=1`
