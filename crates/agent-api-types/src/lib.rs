@@ -549,12 +549,17 @@ pub struct PendingDiffBucketV1 {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PendingDiffRecordV1 {
+    #[serde(default = "pending_diff_record_v1_default_schema_version")]
     pub schema_version: u32,
     pub session_started_at: String,
     pub diff_id: String,
     pub non_pty: PendingDiffBucketV1,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pty: Option<PendingDiffBucketV1>,
+}
+
+fn pending_diff_record_v1_default_schema_version() -> u32 {
+    1
 }
 
 /// Streaming frame describing incremental execution output.

@@ -116,7 +116,9 @@ impl AgentSocket {
                                 } else if first_line.starts_with("GET /v1/doctor/world") {
                                     write_world_doctor_report(&mut stream);
                                 } else if first_line.starts_with("GET /v1/pending_diff")
+                                    || first_line.starts_with("POST /v1/pending_diff")
                                     || first_line.starts_with("GET /v1/workspace/pending_diff")
+                                    || first_line.starts_with("POST /v1/workspace/pending_diff")
                                 {
                                     let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\n\r\n");
                                 } else {
@@ -132,7 +134,9 @@ impl AgentSocket {
                                 } else if first_line.starts_with("GET /v1/doctor/world") {
                                     write_world_doctor_report(&mut stream);
                                 } else if first_line.starts_with("GET /v1/pending_diff")
+                                    || first_line.starts_with("POST /v1/pending_diff")
                                     || first_line.starts_with("GET /v1/workspace/pending_diff")
+                                    || first_line.starts_with("POST /v1/workspace/pending_diff")
                                 {
                                     write_response(&mut stream, &pending_diff.to_string());
                                 } else {
