@@ -119,7 +119,8 @@ fn workspace_sync_apply_from_world_applies_deletes_respects_excludes_and_clears_
         features: vec![
             "execute".to_string(),
             "pending_diff_v1".to_string(),
-            "pending_diff_ack_v1".to_string(),
+            "pending_diff_clear_v1".to_string(),
+            "world_fs_read_v1".to_string(),
         ],
         current_pending_diff: pending_diff_record(
             "2100-01-01T00:00:00Z",
@@ -330,7 +331,12 @@ fn workspace_sync_apply_conflict_policy_abort_refuses_and_does_not_clear_pending
     let socket_path = socket_dir.path().join("world-agent.sock");
 
     let state = PendingDiffAckState {
-        features: vec!["execute".to_string(), "pending_diff_v1".to_string()],
+        features: vec![
+            "execute".to_string(),
+            "pending_diff_v1".to_string(),
+            "pending_diff_clear_v1".to_string(),
+            "world_fs_read_v1".to_string(),
+        ],
         current_pending_diff: pending_diff_record(
             "1970-01-01T00:00:00Z",
             "diff_conflict_abort",
@@ -422,7 +428,8 @@ fn workspace_sync_apply_conflict_policy_prefer_host_skips_conflicts_exits_0_and_
         features: vec![
             "execute".to_string(),
             "pending_diff_v1".to_string(),
-            "pending_diff_ack_v1".to_string(),
+            "pending_diff_clear_v1".to_string(),
+            "world_fs_read_v1".to_string(),
         ],
         current_pending_diff: pending_diff_record(
             "1970-01-01T00:00:00Z",
@@ -536,7 +543,8 @@ fn workspace_sync_apply_exits_1_when_applied_but_pending_diffs_not_cleared_and_d
         features: vec![
             "execute".to_string(),
             "pending_diff_v1".to_string(),
-            "pending_diff_ack_v1".to_string(),
+            "pending_diff_clear_v1".to_string(),
+            "world_fs_read_v1".to_string(),
         ],
         current_pending_diff: initial,
         cleared_pending_diff: empty_pending_diff_record("2100-01-01T00:00:00Z", "diff_empty"),

@@ -30,19 +30,18 @@ pub enum SocketResponse {
         features: Vec<String>,
         pending_diff: JsonValue,
     },
-    /// Responds to pending diff discovery plus a best-effort "ack/clear" endpoint.
+    /// Responds to pending diff discovery plus a best-effort clear endpoint.
     ///
-    /// The clear endpoint is intentionally permissive about the exact path so
-    /// the WS2 tests can exercise "clear by diff_id" semantics while the
-    /// production API shape is still evolving.
+    /// The clear endpoint is intentionally permissive about the exact path so the
+    /// WS2 tests can exercise "clear by diff_id" semantics.
     ///
     /// Supported routes:
-    /// - `POST /v1/pending_diff/ack`
     /// - `POST /v1/pending_diff/clear`
-    /// - `POST /v1/workspace/pending_diff/ack`
     /// - `POST /v1/workspace/pending_diff/clear`
     ///
     /// Request body must include a string `diff_id` field (or `diffId`).
+    ///
+    /// Response body matches `PendingDiffClearResponseV1` (`{ schema_version, cleared }`).
     CapabilitiesPendingDiffAndAck {
         state: Arc<Mutex<PendingDiffAckState>>,
     },
@@ -171,11 +170,7 @@ impl AgentSocket {
                                     write_capabilities_with_features(&mut stream, features);
                                 } else if first_line.starts_with("GET /v1/doctor/world") {
                                     write_world_doctor_report(&mut stream);
-                                } else if first_line.starts_with("GET /v1/pending_diff")
-                                    || first_line.starts_with("POST /v1/pending_diff")
-                                    || first_line.starts_with("GET /v1/workspace/pending_diff")
-                                    || first_line.starts_with("POST /v1/workspace/pending_diff")
-                                {
+                                } else if is_pending_diff_discovery_route(first_line) {
                                     write_response(&mut stream, &pending_diff.to_string());
                                 } else {
                                     let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\n\r\n");
@@ -191,23 +186,6 @@ impl AgentSocket {
                                     write_capabilities_with_features(&mut stream, &features);
                                 } else if first_line.starts_with("GET /v1/doctor/world") {
                                     write_world_doctor_report(&mut stream);
-                                } else if first_line.starts_with("GET /v1/pending_diff")
-                                    || first_line.starts_with("POST /v1/pending_diff")
-                                    || first_line.starts_with("GET /v1/workspace/pending_diff")
-                                    || first_line.starts_with("POST /v1/workspace/pending_diff")
-                                {
-                                    let mut guard =
-                                        state.lock().expect("lock pending diff ack state");
-                                    let payload = guard.current_pending_diff.to_string();
-                                    write_response(&mut stream, &payload);
-                                    guard.pending_diff_calls += 1;
-                                    if guard.pending_diff_calls == 1 {
-                                        if let Some(next) =
-                                            guard.flip_after_first_pending_diff.take()
-                                        {
-                                            guard.current_pending_diff = next;
-                                        }
-                                    }
                                 } else if is_pending_diff_ack_route(first_line) {
                                     let mut guard =
                                         state.lock().expect("lock pending diff ack state");
@@ -240,17 +218,31 @@ impl AgentSocket {
                                         .and_then(|v| v.as_str())
                                         .unwrap_or("");
                                     if cur_id != req_id {
-                                        write_status_response(
+                                        write_response(
                                             &mut stream,
-                                            409,
-                                            "Error",
-                                            "{\"error\":\"diff_id_mismatch\"}",
+                                            "{\"schema_version\":1,\"cleared\":false}",
                                         );
                                         continue;
                                     }
 
                                     guard.current_pending_diff = guard.cleared_pending_diff.clone();
-                                    write_response(&mut stream, "{\"ok\":true}");
+                                    write_response(
+                                        &mut stream,
+                                        "{\"schema_version\":1,\"cleared\":true}",
+                                    );
+                                } else if is_pending_diff_discovery_route(first_line) {
+                                    let mut guard =
+                                        state.lock().expect("lock pending diff ack state");
+                                    let payload = guard.current_pending_diff.to_string();
+                                    write_response(&mut stream, &payload);
+                                    guard.pending_diff_calls += 1;
+                                    if guard.pending_diff_calls == 1 {
+                                        if let Some(next) =
+                                            guard.flip_after_first_pending_diff.take()
+                                        {
+                                            guard.current_pending_diff = next;
+                                        }
+                                    }
                                 } else {
                                     let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\n\r\n");
                                 }
@@ -264,11 +256,7 @@ impl AgentSocket {
                                     write_capabilities_with_features(&mut stream, features);
                                 } else if first_line.starts_with("GET /v1/doctor/world") {
                                     write_world_doctor_report(&mut stream);
-                                } else if first_line.starts_with("GET /v1/pending_diff")
-                                    || first_line.starts_with("POST /v1/pending_diff")
-                                    || first_line.starts_with("GET /v1/workspace/pending_diff")
-                                    || first_line.starts_with("POST /v1/workspace/pending_diff")
-                                {
+                                } else if is_pending_diff_discovery_route(first_line) {
                                     write_status_response(
                                         &mut stream,
                                         *status,
@@ -492,10 +480,17 @@ impl Drop for AgentSocket {
 }
 
 fn is_pending_diff_ack_route(first_line: &str) -> bool {
-    first_line.starts_with("POST /v1/pending_diff/ack")
-        || first_line.starts_with("POST /v1/pending_diff/clear")
-        || first_line.starts_with("POST /v1/workspace/pending_diff/ack")
-        || first_line.starts_with("POST /v1/workspace/pending_diff/clear")
+    first_line.starts_with("POST /v1/pending_diff/ack ")
+        || first_line.starts_with("POST /v1/pending_diff/clear ")
+        || first_line.starts_with("POST /v1/workspace/pending_diff/ack ")
+        || first_line.starts_with("POST /v1/workspace/pending_diff/clear ")
+}
+
+fn is_pending_diff_discovery_route(first_line: &str) -> bool {
+    first_line.starts_with("GET /v1/pending_diff ")
+        || first_line.starts_with("POST /v1/pending_diff ")
+        || first_line.starts_with("GET /v1/workspace/pending_diff ")
+        || first_line.starts_with("POST /v1/workspace/pending_diff ")
 }
 
 fn extract_diff_id(body: &[u8]) -> Option<String> {
