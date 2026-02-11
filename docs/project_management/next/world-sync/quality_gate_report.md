@@ -1,4 +1,4 @@
-RECOMMENDATION: ACCEPT
+RECOMMENDATION: FLAG FOR HUMAN REVIEW
 
 # Planning Quality Gate Report — world-sync
 
@@ -205,3 +205,144 @@ rg -n "decision_register\\.md#DR-" "$FEATURE_DIR/tasks.json" | head -n 5
 - Impact: Touch set is exhaustive for the reported omission.
 - Fix required (exact): none
 - If DEFECT: Alternative (one viable): none
+
+---
+
+## Pass 3 — 2026-02-11 — Recommendation: FLAG FOR HUMAN REVIEW
+
+## Metadata
+- Feature directory: `docs/project_management/next/world-sync/`
+- Reviewed commit: `a878a2a6a15646a4d792461f82cfd44e1048a944`
+- Reviewer: `Third-party quality gate reviewer (Codex)`
+- Date (UTC): `2026-02-11`
+- Recommendation: `FLAG FOR HUMAN REVIEW`
+
+## Evidence: Commands Run (verbatim)
+
+```bash
+export FEATURE_DIR="docs/project_management/next/world-sync"
+
+# Planning lint (mechanical)
+make planning-lint FEATURE_DIR="$FEATURE_DIR"
+# exit: 0
+
+# Planning validate (mechanical)
+make planning-validate FEATURE_DIR="$FEATURE_DIR"
+# exit: 0
+
+# JSON validity
+jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
+# exit: 0
+jq -e . docs/project_management/next/sequencing.json >/dev/null
+# exit: 0
+```
+
+## Required Inputs Read End-to-End (checklist)
+
+- ADR(s): `YES`
+  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
+  - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
+  - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+- `spec_manifest.md`: `YES`
+- `plan.md`: `YES`
+- `tasks.json`: `YES`
+- `session_log.md`: `YES`
+- All specs in scope: `YES`
+  - `docs/project_management/next/world-sync/contract.md`
+  - `docs/project_management/next/world-sync/filesystem-semantics-spec.md`
+  - `docs/project_management/next/world-sync/internal-git-spec.md`
+  - `docs/project_management/next/world-sync/platform-parity-spec.md`
+  - `docs/project_management/next/world-sync/WS0-spec.md` .. `WS7-spec.md`
+- `decision_register.md`: `YES`
+- `impact_map.md`: `YES`
+- `manual_testing_playbook.md`: `YES`
+- Feature smoke scripts under `smoke/`: `YES`
+- `docs/project_management/next/sequencing.json`: `YES`
+- Standards: `YES`
+  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md`
+  - `docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md`
+  - `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`
+  - `docs/project_management/standards/TRIAD_WORKFLOW_CROSS_PLATFORM_INTEG.md`
+  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+  - `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
+
+## Gate Results (PASS/FAIL with evidence)
+
+### 1) Zero-ambiguity contracts
+- Result: `PASS`
+- Evidence: `make planning-lint FEATURE_DIR="$FEATURE_DIR"` exits `0` (includes hard-ban + ambiguity scans).
+
+### 2) Decision quality (2 options, explicit tradeoffs, explicit selection)
+- Result: `PASS`
+- Evidence: `docs/project_management/next/world-sync/decision_register.md` (DR-0001..DR-0006).
+
+### 3) Cross-doc consistency (CLI/config/exit codes/paths)
+- Result: `FAIL`
+- Evidence:
+  - `docs/project_management/next/world-sync/platform-parity-spec.md` Windows contract (sync unsupported; exit `4`).
+  - `docs/project_management/next/world-sync/internal-git-spec.md` rollback safety rails (extra paths require `--force`; else exit `5`).
+  - `docs/project_management/next/world-sync/manual_testing_playbook.md` expected exit codes for Windows sync and rollback do not match the authoritative specs.
+
+### 4) Sequencing and dependency alignment
+- Result: `PASS`
+- Evidence: `make planning-lint FEATURE_DIR="$FEATURE_DIR"` includes sequencing alignment checks and exits `0`.
+
+### 5) Testability and validation readiness
+- Result: `FAIL`
+- Evidence: `docs/project_management/next/world-sync/manual_testing_playbook.md` contains steps with expected exit codes that contradict the authoritative specs, so the playbook is not reliably runnable as written.
+
+### 5.1) Cross-platform parity task structure (schema v4)
+- Result: `PASS`
+- Evidence:
+  - `docs/project_management/next/world-sync/tasks.json` meta `schema_version=4` and `checkpoint_boundaries=["WS2","WS5","WS7"]`
+  - `docs/project_management/next/world-sync/ci_checkpoint_plan.md` group endings match boundaries
+  - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` passes checkpoint invariants
+
+### 6) Triad interoperability (execution workflow)
+- Result: `PASS`
+- Evidence: `make planning-lint FEATURE_DIR="$FEATURE_DIR"` kickoff prompt sentinel checks exit `0`.
+
+## Findings (must be exhaustive)
+
+### Finding 011 — Mechanical planning lint passed (required)
+- Status: `VERIFIED`
+- Evidence: `make planning-lint FEATURE_DIR="docs/project_management/next/world-sync"` exits `0` (see Pass 3 Evidence).
+- Impact: Confirms baseline pack completeness/invariants; does not guarantee cross-doc contract consistency.
+- Fix required (exact): none
+- If DEFECT: Alternative (one viable): none
+
+### Finding 012 — Manual playbook rollback expectations contradict internal-git spec (missing `--force` safety rail)
+- Status: `DEFECT`
+- Evidence:
+  - `docs/project_management/next/world-sync/manual_testing_playbook.md` expects `substrate workspace rollback last` to exit `0` after creating `mutation.txt` (lines 165–182).
+  - `docs/project_management/next/world-sync/internal-git-spec.md` requires exit `5` without `--force` when non-checkpointed paths exist (lines 70–77).
+  - Smoke scripts encode the spec behavior (e.g., Windows smoke expects exit `5` then succeeds with `--force`): `docs/project_management/next/world-sync/smoke/windows-smoke.ps1` (lines 42–50).
+- Impact: Testability is broken; the manual playbook directs an operator to expect a success path that the authoritative spec explicitly refuses.
+- Fix required (exact): Update `docs/project_management/next/world-sync/manual_testing_playbook.md` WS6/WS7 section to:
+  - Expect `substrate workspace rollback last` to exit `5` after creating a non-checkpointed path, and
+  - Add a `substrate workspace rollback last --force` step that expects exit `0` and verifies deletion of `mutation.txt`.
+- If DEFECT: Alternative (one viable): Change `internal-git-spec.md` to allow deleting non-checkpointed paths without `--force` (not recommended; would weaken the safety rail and requires updating smoke scripts + contract/specs consistently).
+
+### Finding 013 — Manual playbook WS2 expectations contradict Windows platform parity contract
+- Status: `DEFECT`
+- Evidence:
+  - `docs/project_management/next/world-sync/platform-parity-spec.md` Windows contract: `workspace sync --dry-run` exits `4` with message containing `unsupported on windows` (lines 26–33).
+  - `docs/project_management/next/world-sync/manual_testing_playbook.md` WS2 section expects successful sync preview/apply flows (exit `0`) without a Windows-specific unsupported contract branch (lines 87–129).
+  - Smoke script validates Windows unsupported semantics (exit `4` + message): `docs/project_management/next/world-sync/smoke/windows-smoke.ps1` (lines 24–36).
+- Impact: Cross-doc contract drift; a Windows operator following the manual playbook will observe behavior that contradicts expected results, undermining confidence in the pack.
+- Fix required (exact): Update `docs/project_management/next/world-sync/manual_testing_playbook.md` to add an explicit Windows branch for WS2/WS5 (or an upfront platform note) that:
+  - expects exit `4` for `workspace sync` dry-run/apply paths on Windows, and
+  - requires asserting the `unsupported on windows` substring.
+- If DEFECT: Alternative (one viable): Remove Windows from `tasks.json` `meta.behavior_platforms_required` and treat Windows as CI-parity-only for this feature pack (not recommended; contradicts current cross-platform smoke intent and would require updating `ci_checkpoint_plan.md` and smoke gating assumptions).
+
+## Decision: ACCEPT or FLAG
+
+### If FLAG FOR HUMAN REVIEW
+- Summary: Mechanical lint is green, but the manual testing playbook contradicts authoritative platform parity and internal-git safety-rail specs (rollback and Windows sync), so the pack is not execution-ready as written.
+- Required human decisions (explicit): None (deterministic doc alignment fixes only).
+- Blockers to execution:
+  - Fix Findings 012–013, then re-run this quality gate.
