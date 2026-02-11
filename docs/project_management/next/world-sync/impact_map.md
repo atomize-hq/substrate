@@ -115,6 +115,6 @@ List overlaps/conflicts with other in-flight work and resolve them deterministic
 ## Follow-ups (explicit)
 
 - Decision Register entries required:
-  - `docs/project_management/next/world-sync/decision_register.md` — DR-0001..DR-0006 are required and must remain aligned to tasks and specs.
+  - `docs/project_management/next/world-sync/decision_register.md` — DR-0001..DR-0005 are required and must remain aligned to tasks and specs.
 - Spec updates required (if any):
   - `docs/project_management/next/world-sync/spec_manifest.md` — keep the required spec list in lockstep with created files; do not add “extra” specs without updating ownership.

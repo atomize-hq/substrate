@@ -1,10 +1,10 @@
-# PRD: Substrate Internal Versioning & Rollback via `.substrate-git`
+# PRD: Substrate Internal Versioning & Rollback via `.substrate/git`
 
 ## 1. Overview
 
 Substrate needs a **cross-platform, fine-grained file history and rollback mechanism** for all agent and user commands that mutate the filesystem.
 
-We will introduce an **internal Git repository** (`.substrate-git`) per workspace that:
+We will introduce an **internal Git repository** (git-dir under `.substrate/git/repo.git/`) per workspace that:
 
 * Tracks **per-command file changes**.
 * Supports **command-, checkpoint-, and session-level rollback**.
@@ -66,36 +66,37 @@ We need a **clean, deterministic, cross-platform versioning layer** that preserv
 ### Non-Goals
 
 * Replace user’s own Git workflows.
-* Implement arbitrary multi-branch workflows in `.substrate-git` (we’ll assume a simple linear history for now).
-* Provide remote push/pull or multi-machine synchronization from `.substrate-git` (future maybe).
+* Implement arbitrary multi-branch workflows in the internal git store (we’ll assume a simple linear history for now).
+* Provide remote push/pull or multi-machine synchronization from the internal store (future maybe).
 
 ---
 
 ## 4. Core Concepts
 
-### 4.1 Internal Git Repo: `.substrate-git`
+### 4.1 Internal Git Repo: `.substrate/git/repo.git`
 
 At workspace root:
 
 ```text
 /project-root
   .git/                 # user’s repo (if present)
-  .substrate-git/       # Substrate internal git dir
-    .git/
+  .substrate/           # Substrate workspace state
+    git/
+      repo.git/         # Substrate internal git dir (GIT_DIR)
   ...
 ```
 
-* Substrate’s versioning lives entirely under `.substrate-git/.git`.
+* Substrate’s versioning lives entirely under `.substrate/git/repo.git/`.
 
-* The **work tree** for `.substrate-git` is the **project root** (`.`).
+* The **work tree** for the internal store is the **project root** (`.`).
 
 * Git commands are always invoked with explicit `--git-dir` and `--work-tree`:
 
   ```bash
-  git --git-dir=.substrate-git/.git --work-tree=. <cmd> ...
+  git --git-dir=.substrate/git/repo.git --work-tree=. <cmd> ...
   ```
 
-* `.substrate-git/` is **ignored** by the user’s repo (via `.gitignore` or `.git/info/exclude`).
+* `.substrate/` is **ignored** by the user’s repo (via `.gitignore` or `.git/info/exclude`).
 
 ### 4.2 Units of History
 
@@ -142,11 +143,11 @@ At workspace root:
 On first use in a workspace:
 
 1. Detect workspace root (Substrate’s existing logic).
-2. If `.substrate-git/.git` does not exist:
+2. If `.substrate/git/repo.git/HEAD` does not exist:
 
-   * `mkdir -p .substrate-git`
-   * `git --git-dir=.substrate-git/.git --work-tree=. init`
-3. Ensure `.substrate-git/` is not tracked by the user’s Git:
+   * `mkdir -p .substrate/git/repo.git`
+   * `git --git-dir=.substrate/git/repo.git --work-tree=. init`
+3. Ensure `.substrate/` is not tracked by the user’s Git:
 
    * Prefer adding it to `.git/info/exclude` for non-invasive behavior.
 
@@ -156,7 +157,7 @@ For each executed command:
 
 1. **Pre-check**:
 
-   * Ensure `.substrate-git` initialized.
+   * Ensure internal git initialized.
    * Optionally detect non-Substrate changes (dirty work tree from external tools):
 
      * Either auto-commit as “external changes” or mark in metadata.
@@ -169,7 +170,7 @@ For each executed command:
    * Optionally verify via Git status:
 
      ```bash
-     git --git-dir=.substrate-git/.git --work-tree=. status --porcelain
+     git --git-dir=.substrate/git/repo.git --work-tree=. status --porcelain
      ```
 
 4. **If no changes:**
@@ -181,13 +182,13 @@ For each executed command:
    * Stage changed paths:
 
      ```bash
-     git --git-dir=.substrate-git/.git --work-tree=. add <paths...>
+     git --git-dir=.substrate/git/repo.git --work-tree=. add <paths...>
      ```
 
    * Commit:
 
      ```bash
-     git --git-dir=.substrate-git/.git --work-tree=. commit -m "cmd: <session-id>/<command-id> <summary>"
+     git --git-dir=.substrate/git/repo.git --work-tree=. commit -m "cmd: <session-id>/<command-id> <summary>"
      ```
 
    * Capture resulting commit hash.
@@ -216,7 +217,7 @@ When an agent declares a logical task “done” (e.g. end of a long refactor):
    * Via **tag**:
 
      ```bash
-     git --git-dir=.substrate-git/.git tag cp/task/<session-id>/<seq> <C>
+     git --git-dir=.substrate/git/repo.git tag cp/task/<session-id>/<seq> <C>
      ```
 
    * Commit message convention:
@@ -244,7 +245,7 @@ When a session ends:
 2. Tag:
 
    ```bash
-   git --git-dir=.substrate-git/.git tag cp/session/<session-id>/closed <C_session>
+   git --git-dir=.substrate/git/repo.git tag cp/session/<session-id>/closed <C_session>
    ```
 
 3. Optionally write a small “session closed” note/record.
@@ -262,13 +263,13 @@ Given current session and last command with a `substrate_git_commit = C`:
 2. Restore changed files to their state at `P`:
 
    ```bash
-   git --git-dir=.substrate-git/.git --work-tree=. restore --source=P -- <changed-files...>
+   git --git-dir=.substrate/git/repo.git --work-tree=. restore --source=P -- <changed-files...>
    ```
 
 3. Optionally create a new commit to record rollback:
 
    ```bash
-   git --git-dir=.substrate-git/.git --work-tree=. commit -am "cmd: <session>/<command-id> rollback"
+   git --git-dir=.substrate/git/repo.git --work-tree=. commit -am "cmd: <session>/<command-id> rollback"
    ```
 
 Or leave as uncommitted changes and only record in metadata.
@@ -280,7 +281,7 @@ Given a checkpoint tag `cp/task/<session-id>/<seq>` → commit `C_cp`:
 * **Option A: full tree rollback**
 
   ```bash
-  git --git-dir=.substrate-git/.git --work-tree=. restore --source=C_cp -- .
+  git --git-dir=.substrate/git/repo.git --work-tree=. restore --source=C_cp -- .
   ```
 
 * **Option B: subset rollback**
@@ -292,7 +293,7 @@ Given a checkpoint tag `cp/task/<session-id>/<seq>` → commit `C_cp`:
 Given a session-closed tag `cp/session/<session-id>/closed` → commit `C_session`:
 
 ```bash
-git --git-dir=.substrate-git/.git --work-tree=. restore --source=C_session -- .
+git --git-dir=.substrate/git/repo.git --work-tree=. restore --source=C_session -- .
 ```
 
 This is our coarse-grained “take me back to how things were at the end of that session.”
@@ -301,7 +302,7 @@ This is our coarse-grained “take me back to how things were at the end of that
 
 ## 8. History Compaction / Squashing
 
-We want to prevent `.substrate-git` size from ballooning, while keeping useful rollback ability.
+We want to prevent the internal git store size from ballooning, while keeping useful rollback ability.
 
 ### 8.1 Policy
 
@@ -402,7 +403,7 @@ We should track which ranges have been squashed in a small index so the UI/CLI c
 * Introduce an internal ignore mechanism (`.substrateignore` or config) to avoid:
 
   * `node_modules/`, `dist/`, build artifacts, binaries, etc.
-* Ensure `.substrate-git` itself, `.git`, and other special dirs are excluded.
+* Ensure `.substrate/` itself, `.git`, and other special dirs are excluded.
 
 ### 9.3 Cleanup / GC
 
@@ -412,7 +413,7 @@ We should track which ranges have been squashed in a small index so the UI/CLI c
   * Run `git gc` to pack objects and prune unreachable commits.
 * Expose metrics:
 
-  * `.substrate-git` size.
+  * Internal git store size.
   * Number of commits/sessions.
   * When compaction last ran.
 
@@ -473,7 +474,7 @@ interface SubstrateGitStore {
 }
 ```
 
-All of these wrap the `git --git-dir=.substrate-git/.git --work-tree=.` calls and Git plumbing necessary.
+All of these wrap the `git --git-dir=.substrate/git/repo.git --work-tree=.` calls and Git plumbing necessary.
 
 ---
 
@@ -492,20 +493,20 @@ All of these wrap the `git --git-dir=.substrate-git/.git --work-tree=.` calls an
    * How much of this should be visible?
 
      * Commands like `substrate undo`, `substrate diff`, `substrate checkpoint list`?
-   * Do we expose `.substrate-git` to power users, or treat it as internal only?
+   * Do we expose the internal git store to power users, or treat it as internal only?
 
 3. **Concurrency**
 
    * How do we handle multiple agents / sessions writing in the same workspace concurrently?
-   * Likely include session/branch separation, or serialize writes to `.substrate-git`.
+   * Likely include session/branch separation, or serialize writes to the internal git store.
 
 4. **Error handling**
 
-   * If `.substrate-git` gets corrupted, what’s the recovery story?
+   * If the internal git store gets corrupted, what’s the recovery story?
    * Do we allow “reset history” for the internal repo?
 
 5. **Linux overlay integration**
 
-   * Exact behavior when both OverlayFS (coarse isolation) and `.substrate-git` (fine history) are active:
+   * Exact behavior when both OverlayFS (coarse isolation) and internal git (fine history) are active:
 
      * There’s no conflict conceptually, but we should document the order-of-operations and expected behavior when tearing down overlays.

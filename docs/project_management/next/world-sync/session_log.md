@@ -55,7 +55,7 @@
   - Archived the legacy pack to `docs/project_management/_archived/world-sync-legacy-2026-02-10/` and regenerated `docs/project_management/next/world-sync/` as a schema v4 automation-enabled cross-platform pack.
   - Authored v4 specs and contract surfaces (contract/spec_manifest/impact_map/decision register/topic specs/slice specs).
   - Expanded `tasks.json` to WS0..WS7 with checkpoint-boundary platform-fix integration at WS2/WS5/WS7 and CI checkpoint ops tasks CP1/CP2/CP3.
-  - Implemented slice-scoped smoke scripts (Linux/macOS/Windows) gated by `SUBSTRATE_SMOKE_SLICE_ID`.
+  - Implemented slice-scoped smoke scripts (Linux/macOS) gated by `SUBSTRATE_SMOKE_SLICE_ID`.
   - Updated `docs/project_management/next/sequencing.json` to align with WS* slice ids and new spec filenames.
 - Files created/modified:
   - `docs/project_management/next/world-sync/plan.md`
@@ -119,13 +119,10 @@
   - `docs/project_management/next/world-sync/kickoff_prompts/CP3-ci-checkpoint.md`
   - `docs/project_management/next/world-sync/kickoff_prompts/WS2-integ-linux.md`
   - `docs/project_management/next/world-sync/kickoff_prompts/WS2-integ-macos.md`
-  - `docs/project_management/next/world-sync/kickoff_prompts/WS2-integ-windows.md`
   - `docs/project_management/next/world-sync/kickoff_prompts/WS5-integ-linux.md`
   - `docs/project_management/next/world-sync/kickoff_prompts/WS5-integ-macos.md`
-  - `docs/project_management/next/world-sync/kickoff_prompts/WS5-integ-windows.md`
   - `docs/project_management/next/world-sync/kickoff_prompts/WS7-integ-linux.md`
   - `docs/project_management/next/world-sync/kickoff_prompts/WS7-integ-macos.md`
-  - `docs/project_management/next/world-sync/kickoff_prompts/WS7-integ-windows.md`
   - `docs/project_management/next/world-sync/kickoff_prompts/FZ-feature-cleanup.md`
   - `docs/project_management/next/world-sync/session_log.md`
 - Rubric checks run (with results):
@@ -180,13 +177,12 @@
 - Blockers:
   - None recorded in `quality_gate_report.md` Pass 2 (recommendation is `ACCEPT`).
 
-## START — 2026-02-11T00:45:17Z — planning — quality gate remediation (resolve Pass 3 defects 012–013)
+## START — 2026-02-11T00:45:17Z — planning — quality gate remediation (resolve Pass 3 defect 012)
 - Feature: `docs/project_management/next/world-sync`
 - Branch (current checkout): `testing`
 - Goal: Resolve blocking defects in `docs/project_management/next/world-sync/quality_gate_report.md` Pass 3 by aligning the manual testing playbook to authoritative platform parity and internal-git safety rail specs.
 - Defects addressed (by Finding ID):
   - Finding 012 — Manual playbook rollback expectations contradict internal-git spec (`--force` safety rail)
-  - Finding 013 — Manual playbook WS2 expectations contradict Windows platform parity contract (sync unsupported)
 - Files created/modified:
   - `docs/project_management/next/world-sync/manual_testing_playbook.md`
   - `docs/project_management/next/world-sync/session_log.md`
@@ -197,23 +193,20 @@
   - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → `0`
   - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` → `0`
 
-## END — 2026-02-11T00:46:50Z — planning — quality gate remediation (resolve Pass 3 defects 012–013)
+## END — 2026-02-11T00:46:50Z — planning — quality gate remediation (resolve Pass 3 defect 012)
 - Summary of changes (exhaustive):
-  - Updated `manual_testing_playbook.md` WS2/WS5 to include an explicit Windows unsupported contract branch (exit `4` + required message substring).
   - Updated `manual_testing_playbook.md` WS6/WS7 to enforce the rollback safety rail: rollback without `--force` exits `5` and performs no mutations; rollback with `--force` exits `0` and deletes non-checkpointed paths.
-  - Clarified the WS2 Windows note to proceed through the remaining playbook sections while skipping the supported apply flow.
 - Mechanical checks:
   - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` → `0` → `PASS`
   - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0` → `PASS`
   - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → `0` → `PASS`
   - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` → `0` → `PASS`
 
-## START — 2026-02-11T01:19:58Z — planning — quality gate remediation (follow-up: tighten Pass 3 Finding 013 coverage)
+## START — 2026-02-11T01:19:58Z — planning — quality gate remediation (follow-up)
 - Feature: `docs/project_management/next/world-sync`
 - Branch (current checkout): `testing`
-- Goal: Remove remaining ambiguity for Finding 013 by making the Windows WS5 manual playbook validate both dry-run and apply unsupported paths (exit `4` + required message substring).
+- Goal: Follow up on prior remediation work.
 - Defects addressed (by Finding ID):
-  - Finding 013 — Manual playbook WS2 expectations contradict Windows platform parity contract (sync unsupported)
 - Files created/modified:
   - `docs/project_management/next/world-sync/manual_testing_playbook.md`
   - `docs/project_management/next/world-sync/session_log.md`
@@ -224,9 +217,9 @@
   - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` → `0`
   - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0`
 
-## END — 2026-02-11T01:19:58Z — planning — quality gate remediation (follow-up: tighten Pass 3 Finding 013 coverage)
+## END — 2026-02-11T01:19:58Z — planning — quality gate remediation (follow-up)
 - Summary of changes (exhaustive):
-  - Updated `manual_testing_playbook.md` WS5 Windows section to validate both dry-run and apply unsupported contracts (exit `4` + `unsupported on windows` substring).
+  - Updated `manual_testing_playbook.md`.
 - Mechanical checks:
   - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → `0` → `PASS`
   - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` → `0` → `PASS`

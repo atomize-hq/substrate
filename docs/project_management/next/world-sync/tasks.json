@@ -15,13 +15,11 @@
     ],
     "behavior_platforms_required": [
       "linux",
-      "macos",
-      "windows"
+      "macos"
     ],
     "ci_parity_platforms_required": [
       "linux",
-      "macos",
-      "windows"
+      "macos"
     ]
   },
   "tasks": [
@@ -187,8 +185,7 @@
         "docs/project_management/next/world-sync/WS0-closeout_report.md",
         "docs/project_management/next/world-sync/manual_testing_playbook.md",
         "docs/project_management/next/world-sync/smoke/linux-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/macos-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/windows-smoke.ps1"
+        "docs/project_management/next/world-sync/smoke/macos-smoke.sh"
       ],
       "acceptance_criteria": [
         "Slice is green under make integ-checks and matches the spec",
@@ -346,8 +343,7 @@
         "docs/project_management/next/world-sync/WS1-closeout_report.md",
         "docs/project_management/next/world-sync/manual_testing_playbook.md",
         "docs/project_management/next/world-sync/smoke/linux-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/macos-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/windows-smoke.ps1"
+        "docs/project_management/next/world-sync/smoke/macos-smoke.sh"
       ],
       "acceptance_criteria": [
         "Slice is green under make integ-checks and matches the spec",
@@ -400,7 +396,6 @@
         "docs/project_management/next/world-sync/decision_register.md#DR-0002",
         "docs/project_management/next/world-sync/decision_register.md#DR-0003",
         "docs/project_management/next/world-sync/decision_register.md#DR-0004",
-        "docs/project_management/next/world-sync/decision_register.md#DR-0006",
         "docs/project_management/next/world-sync/filesystem-semantics-spec.md",
         "docs/project_management/next/world-sync/platform-parity-spec.md",
         "docs/project_management/next/world-sync/internal-git-spec.md",
@@ -453,7 +448,6 @@
         "docs/project_management/next/world-sync/decision_register.md#DR-0002",
         "docs/project_management/next/world-sync/decision_register.md#DR-0003",
         "docs/project_management/next/world-sync/decision_register.md#DR-0004",
-        "docs/project_management/next/world-sync/decision_register.md#DR-0006",
         "docs/project_management/next/world-sync/filesystem-semantics-spec.md",
         "docs/project_management/next/world-sync/platform-parity-spec.md",
         "docs/project_management/next/world-sync/internal-git-spec.md",
@@ -506,7 +500,6 @@
         "docs/project_management/next/world-sync/decision_register.md#DR-0002",
         "docs/project_management/next/world-sync/decision_register.md#DR-0003",
         "docs/project_management/next/world-sync/decision_register.md#DR-0004",
-        "docs/project_management/next/world-sync/decision_register.md#DR-0006",
         "docs/project_management/next/world-sync/filesystem-semantics-spec.md",
         "docs/project_management/next/world-sync/platform-parity-spec.md",
         "docs/project_management/next/world-sync/internal-git-spec.md",
@@ -660,61 +653,6 @@
       "merge_to_orchestration": false
     },
     {
-      "id": "WS2-integ-windows",
-      "name": "WS2 slice (integration windows)",
-      "type": "integration",
-      "phase": "WS2",
-      "status": "pending",
-      "description": "windows platform-fix integration task (may be a no-op if already green).",
-      "references": [
-        "docs/project_management/next/world-sync/plan.md",
-        "docs/project_management/next/world-sync/spec_manifest.md",
-        "docs/project_management/next/world-sync/impact_map.md",
-        "docs/project_management/next/world-sync/ci_checkpoint_plan.md",
-        "docs/project_management/next/world-sync/contract.md",
-        "docs/project_management/next/world-sync/decision_register.md",
-        "docs/project_management/next/world-sync/decision_register.md#DR-0006",
-        "docs/project_management/next/world-sync/filesystem-semantics-spec.md",
-        "docs/project_management/next/world-sync/platform-parity-spec.md",
-        "docs/project_management/next/world-sync/internal-git-spec.md",
-        "docs/project_management/next/world-sync/WS2-spec.md",
-        "docs/project_management/next/world-sync/smoke/windows-smoke.ps1"
-      ],
-      "acceptance_criteria": [
-        "windows smoke is green for this slice"
-      ],
-      "start_checklist": [
-        "Run on windows host if possible",
-        "git checkout feat/world-sync && git pull --ff-only",
-        "Read plan.md, tasks.json, session_log.md, WS2-spec.md, kickoff prompt",
-        "Set status to in_progress; add START entry; commit docs",
-        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-sync\" TASK_ID=\"WS2-integ-windows\""
-      ],
-      "end_checklist": [
-        "Dispatch the required gate for this platform per the kickoff prompt (use ci-audit; record run id/URL)",
-        "If needed: fix + fmt/clippy + targeted tests",
-        "Ensure smoke is green; record run id/URL",
-        "From inside the worktree: make triad-task-finish TASK_ID=\"WS2-integ-windows\"",
-        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
-      ],
-      "worktree": "wt/world-sync-ws2-integ-windows",
-      "integration_task": "WS2-integ-windows",
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/WS2-integ-windows.md",
-      "depends_on": [
-        "WS2-integ-core",
-        "CP1-ci-checkpoint"
-      ],
-      "concurrent_with": [],
-      "platform": "windows",
-      "runner": "github-actions",
-      "workflow": ".github/workflows/feature-smoke.yml",
-      "git_branch": "world-sync-ws2-integ-windows",
-      "required_make_targets": [
-        "triad-code-checks"
-      ],
-      "merge_to_orchestration": false
-    },
-    {
       "id": "WS2-integ",
       "name": "WS2 slice (integration final)",
       "type": "integration",
@@ -731,7 +669,6 @@
         "docs/project_management/next/world-sync/decision_register.md#DR-0002",
         "docs/project_management/next/world-sync/decision_register.md#DR-0003",
         "docs/project_management/next/world-sync/decision_register.md#DR-0004",
-        "docs/project_management/next/world-sync/decision_register.md#DR-0006",
         "docs/project_management/next/world-sync/filesystem-semantics-spec.md",
         "docs/project_management/next/world-sync/platform-parity-spec.md",
         "docs/project_management/next/world-sync/internal-git-spec.md",
@@ -739,7 +676,6 @@
         "docs/project_management/next/world-sync/manual_testing_playbook.md",
         "docs/project_management/next/world-sync/smoke/linux-smoke.sh",
         "docs/project_management/next/world-sync/smoke/macos-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
         "docs/project_management/next/world-sync/WS2-closeout_report.md"
       ],
       "acceptance_criteria": [
@@ -769,8 +705,7 @@
         "WS2-integ-core",
         "CP1-ci-checkpoint",
         "WS2-integ-linux",
-        "WS2-integ-macos",
-        "WS2-integ-windows"
+        "WS2-integ-macos"
       ],
       "concurrent_with": [],
       "git_branch": "world-sync-ws2-integ",
@@ -903,8 +838,7 @@
         "docs/project_management/next/world-sync/WS3-closeout_report.md",
         "docs/project_management/next/world-sync/manual_testing_playbook.md",
         "docs/project_management/next/world-sync/smoke/linux-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/macos-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/windows-smoke.ps1"
+        "docs/project_management/next/world-sync/smoke/macos-smoke.sh"
       ],
       "acceptance_criteria": [
         "Slice is green under make integ-checks and matches the spec",
@@ -1064,8 +998,7 @@
         "docs/project_management/next/world-sync/WS4-closeout_report.md",
         "docs/project_management/next/world-sync/manual_testing_playbook.md",
         "docs/project_management/next/world-sync/smoke/linux-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/macos-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/windows-smoke.ps1"
+        "docs/project_management/next/world-sync/smoke/macos-smoke.sh"
       ],
       "acceptance_criteria": [
         "Slice is green under make integ-checks and matches the spec",
@@ -1117,7 +1050,6 @@
         "docs/project_management/next/world-sync/decision_register.md",
         "docs/project_management/next/world-sync/decision_register.md#DR-0002",
         "docs/project_management/next/world-sync/decision_register.md#DR-0004",
-        "docs/project_management/next/world-sync/decision_register.md#DR-0006",
         "docs/project_management/next/world-sync/filesystem-semantics-spec.md",
         "docs/project_management/next/world-sync/platform-parity-spec.md",
         "docs/project_management/next/world-sync/internal-git-spec.md",
@@ -1170,7 +1102,6 @@
         "docs/project_management/next/world-sync/decision_register.md",
         "docs/project_management/next/world-sync/decision_register.md#DR-0002",
         "docs/project_management/next/world-sync/decision_register.md#DR-0004",
-        "docs/project_management/next/world-sync/decision_register.md#DR-0006",
         "docs/project_management/next/world-sync/filesystem-semantics-spec.md",
         "docs/project_management/next/world-sync/platform-parity-spec.md",
         "docs/project_management/next/world-sync/internal-git-spec.md",
@@ -1223,7 +1154,6 @@
         "docs/project_management/next/world-sync/decision_register.md",
         "docs/project_management/next/world-sync/decision_register.md#DR-0002",
         "docs/project_management/next/world-sync/decision_register.md#DR-0004",
-        "docs/project_management/next/world-sync/decision_register.md#DR-0006",
         "docs/project_management/next/world-sync/filesystem-semantics-spec.md",
         "docs/project_management/next/world-sync/platform-parity-spec.md",
         "docs/project_management/next/world-sync/internal-git-spec.md",
@@ -1375,61 +1305,6 @@
       "merge_to_orchestration": false
     },
     {
-      "id": "WS5-integ-windows",
-      "name": "WS5 slice (integration windows)",
-      "type": "integration",
-      "phase": "WS5",
-      "status": "pending",
-      "description": "windows platform-fix integration task (may be a no-op if already green).",
-      "references": [
-        "docs/project_management/next/world-sync/plan.md",
-        "docs/project_management/next/world-sync/spec_manifest.md",
-        "docs/project_management/next/world-sync/impact_map.md",
-        "docs/project_management/next/world-sync/ci_checkpoint_plan.md",
-        "docs/project_management/next/world-sync/contract.md",
-        "docs/project_management/next/world-sync/decision_register.md",
-        "docs/project_management/next/world-sync/decision_register.md#DR-0006",
-        "docs/project_management/next/world-sync/filesystem-semantics-spec.md",
-        "docs/project_management/next/world-sync/platform-parity-spec.md",
-        "docs/project_management/next/world-sync/internal-git-spec.md",
-        "docs/project_management/next/world-sync/WS5-spec.md",
-        "docs/project_management/next/world-sync/smoke/windows-smoke.ps1"
-      ],
-      "acceptance_criteria": [
-        "windows smoke is green for this slice"
-      ],
-      "start_checklist": [
-        "Run on windows host if possible",
-        "git checkout feat/world-sync && git pull --ff-only",
-        "Read plan.md, tasks.json, session_log.md, WS5-spec.md, kickoff prompt",
-        "Set status to in_progress; add START entry; commit docs",
-        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-sync\" TASK_ID=\"WS5-integ-windows\""
-      ],
-      "end_checklist": [
-        "Dispatch the required gate for this platform per the kickoff prompt (use ci-audit; record run id/URL)",
-        "If needed: fix + fmt/clippy + targeted tests",
-        "Ensure smoke is green; record run id/URL",
-        "From inside the worktree: make triad-task-finish TASK_ID=\"WS5-integ-windows\"",
-        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
-      ],
-      "worktree": "wt/world-sync-ws5-integ-windows",
-      "integration_task": "WS5-integ-windows",
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/WS5-integ-windows.md",
-      "depends_on": [
-        "WS5-integ-core",
-        "CP2-ci-checkpoint"
-      ],
-      "concurrent_with": [],
-      "platform": "windows",
-      "runner": "github-actions",
-      "workflow": ".github/workflows/feature-smoke.yml",
-      "git_branch": "world-sync-ws5-integ-windows",
-      "required_make_targets": [
-        "triad-code-checks"
-      ],
-      "merge_to_orchestration": false
-    },
-    {
       "id": "WS5-integ",
       "name": "WS5 slice (integration final)",
       "type": "integration",
@@ -1445,7 +1320,6 @@
         "docs/project_management/next/world-sync/decision_register.md",
         "docs/project_management/next/world-sync/decision_register.md#DR-0002",
         "docs/project_management/next/world-sync/decision_register.md#DR-0004",
-        "docs/project_management/next/world-sync/decision_register.md#DR-0006",
         "docs/project_management/next/world-sync/filesystem-semantics-spec.md",
         "docs/project_management/next/world-sync/platform-parity-spec.md",
         "docs/project_management/next/world-sync/internal-git-spec.md",
@@ -1453,7 +1327,6 @@
         "docs/project_management/next/world-sync/manual_testing_playbook.md",
         "docs/project_management/next/world-sync/smoke/linux-smoke.sh",
         "docs/project_management/next/world-sync/smoke/macos-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
         "docs/project_management/next/world-sync/WS5-closeout_report.md"
       ],
       "acceptance_criteria": [
@@ -1483,8 +1356,7 @@
         "WS5-integ-core",
         "CP2-ci-checkpoint",
         "WS5-integ-linux",
-        "WS5-integ-macos",
-        "WS5-integ-windows"
+        "WS5-integ-macos"
       ],
       "concurrent_with": [],
       "git_branch": "world-sync-ws5-integ",
@@ -1620,8 +1492,7 @@
         "docs/project_management/next/world-sync/WS6-closeout_report.md",
         "docs/project_management/next/world-sync/manual_testing_playbook.md",
         "docs/project_management/next/world-sync/smoke/linux-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/macos-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/windows-smoke.ps1"
+        "docs/project_management/next/world-sync/smoke/macos-smoke.sh"
       ],
       "acceptance_criteria": [
         "Slice is green under make integ-checks and matches the spec",
@@ -1928,62 +1799,6 @@
       "merge_to_orchestration": false
     },
     {
-      "id": "WS7-integ-windows",
-      "name": "WS7 slice (integration windows)",
-      "type": "integration",
-      "phase": "WS7",
-      "status": "pending",
-      "description": "windows platform-fix integration task (may be a no-op if already green).",
-      "references": [
-        "docs/project_management/next/world-sync/plan.md",
-        "docs/project_management/next/world-sync/spec_manifest.md",
-        "docs/project_management/next/world-sync/impact_map.md",
-        "docs/project_management/next/world-sync/ci_checkpoint_plan.md",
-        "docs/project_management/next/world-sync/contract.md",
-        "docs/project_management/next/world-sync/decision_register.md",
-        "docs/project_management/next/world-sync/decision_register.md#DR-0003",
-        "docs/project_management/next/world-sync/decision_register.md#DR-0005",
-        "docs/project_management/next/world-sync/filesystem-semantics-spec.md",
-        "docs/project_management/next/world-sync/platform-parity-spec.md",
-        "docs/project_management/next/world-sync/internal-git-spec.md",
-        "docs/project_management/next/world-sync/WS7-spec.md",
-        "docs/project_management/next/world-sync/smoke/windows-smoke.ps1"
-      ],
-      "acceptance_criteria": [
-        "windows smoke is green for this slice"
-      ],
-      "start_checklist": [
-        "Run on windows host if possible",
-        "git checkout feat/world-sync && git pull --ff-only",
-        "Read plan.md, tasks.json, session_log.md, WS7-spec.md, kickoff prompt",
-        "Set status to in_progress; add START entry; commit docs",
-        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-sync\" TASK_ID=\"WS7-integ-windows\""
-      ],
-      "end_checklist": [
-        "Dispatch the required gate for this platform per the kickoff prompt (use ci-audit; record run id/URL)",
-        "If needed: fix + fmt/clippy + targeted tests",
-        "Ensure smoke is green; record run id/URL",
-        "From inside the worktree: make triad-task-finish TASK_ID=\"WS7-integ-windows\"",
-        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
-      ],
-      "worktree": "wt/world-sync-ws7-integ-windows",
-      "integration_task": "WS7-integ-windows",
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/WS7-integ-windows.md",
-      "depends_on": [
-        "WS7-integ-core",
-        "CP3-ci-checkpoint"
-      ],
-      "concurrent_with": [],
-      "platform": "windows",
-      "runner": "github-actions",
-      "workflow": ".github/workflows/feature-smoke.yml",
-      "git_branch": "world-sync-ws7-integ-windows",
-      "required_make_targets": [
-        "triad-code-checks"
-      ],
-      "merge_to_orchestration": false
-    },
-    {
       "id": "WS7-integ",
       "name": "WS7 slice (integration final)",
       "type": "integration",
@@ -2006,7 +1821,6 @@
         "docs/project_management/next/world-sync/manual_testing_playbook.md",
         "docs/project_management/next/world-sync/smoke/linux-smoke.sh",
         "docs/project_management/next/world-sync/smoke/macos-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
         "docs/project_management/next/world-sync/WS7-closeout_report.md"
       ],
       "acceptance_criteria": [
@@ -2036,8 +1850,7 @@
         "WS7-integ-core",
         "CP3-ci-checkpoint",
         "WS7-integ-linux",
-        "WS7-integ-macos",
-        "WS7-integ-windows"
+        "WS7-integ-macos"
       ],
       "concurrent_with": [],
       "git_branch": "world-sync-ws7-integ",

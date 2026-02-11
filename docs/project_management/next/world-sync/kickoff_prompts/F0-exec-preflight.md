@@ -22,7 +22,7 @@ Fill `docs/project_management/next/world-sync/execution_preflight_report.md` wit
 - **REVISE**: do not start triads until the listed issues are fixed and the preflight is re-run.
 
 At minimum, verify:
-- The cross-platform plan is explicit and matches the spec/contract (platforms + WSL mode if needed).
+- The cross-platform plan is explicit and matches the spec/contract (platforms).
 - Smoke scripts are not “toy” checks; they mimic the manual testing playbook by running real commands/workflows and validating exit codes + key output.
 - Any CI dispatch commands embedded in integration tasks are runnable with the expected runners.
 - The advisory CI audit + evidence ledger tooling exists and is referenced by integration prompts:

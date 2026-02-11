@@ -10,6 +10,9 @@ Standard:
 - `docs/project_management/next/world-sync/impact_map.md`
 - `docs/project_management/next/world-sync/spec_manifest.md`
 - Slice specs: `docs/project_management/next/world-sync/*-spec*.md`
+- Required platforms (authoritative):
+  - Behavior smoke platforms: `tasks.json` → `meta.behavior_platforms_required` (`linux`, `macos`)
+  - CI parity platforms: `tasks.json` → `meta.ci_parity_platforms_required` (`linux`, `macos`)
 
 ## Operator rules
 - This plan is authoritative for **CI cadence**.

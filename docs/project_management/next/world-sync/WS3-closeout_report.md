@@ -36,8 +36,6 @@ Slice spec:
 Record run ids/URLs for required platforms:
 - Linux:
 - macOS:
-- Windows:
-- WSL:
 
 If smoke/CI was intentionally skipped:
 - Reason (e.g., `ci-audit: DIFF_CLASS=docs_only`):
@@ -56,4 +54,3 @@ If any platform-fix work was required:
 
 Notes:
 - 
-

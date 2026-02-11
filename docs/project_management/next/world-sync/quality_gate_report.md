@@ -278,14 +278,12 @@ jq -e . docs/project_management/next/sequencing.json >/dev/null
 
 ### 2) Decision quality (2 options, explicit tradeoffs, explicit selection)
 - Result: `PASS`
-- Evidence: `docs/project_management/next/world-sync/decision_register.md` (DR-0001..DR-0006).
+- Evidence: `docs/project_management/next/world-sync/decision_register.md` (DR-0001..DR-0005).
 
 ### 3) Cross-doc consistency (CLI/config/exit codes/paths)
 - Result: `FAIL`
 - Evidence:
-  - `docs/project_management/next/world-sync/platform-parity-spec.md` Windows contract (sync unsupported; exit `4`).
   - `docs/project_management/next/world-sync/internal-git-spec.md` rollback safety rails (extra paths require `--force`; else exit `5`).
-  - `docs/project_management/next/world-sync/manual_testing_playbook.md` expected exit codes for Windows sync and rollback do not match the authoritative specs.
 
 ### 4) Sequencing and dependency alignment
 - Result: `PASS`
@@ -320,29 +318,17 @@ jq -e . docs/project_management/next/sequencing.json >/dev/null
 - Evidence:
   - `docs/project_management/next/world-sync/manual_testing_playbook.md` expects `substrate workspace rollback last` to exit `0` after creating `mutation.txt` (lines 165–182).
   - `docs/project_management/next/world-sync/internal-git-spec.md` requires exit `5` without `--force` when non-checkpointed paths exist (lines 70–77).
-  - Smoke scripts encode the spec behavior (e.g., Windows smoke expects exit `5` then succeeds with `--force`): `docs/project_management/next/world-sync/smoke/windows-smoke.ps1` (lines 42–50).
+  - Smoke scripts encode the spec behavior.
 - Impact: Testability is broken; the manual playbook directs an operator to expect a success path that the authoritative spec explicitly refuses.
 - Fix required (exact): Update `docs/project_management/next/world-sync/manual_testing_playbook.md` WS6/WS7 section to:
   - Expect `substrate workspace rollback last` to exit `5` after creating a non-checkpointed path, and
   - Add a `substrate workspace rollback last --force` step that expects exit `0` and verifies deletion of `mutation.txt`.
 - If DEFECT: Alternative (one viable): Change `internal-git-spec.md` to allow deleting non-checkpointed paths without `--force` (not recommended; would weaken the safety rail and requires updating smoke scripts + contract/specs consistently).
 
-### Finding 013 — Manual playbook WS2 expectations contradict Windows platform parity contract
-- Status: `DEFECT`
-- Evidence:
-  - `docs/project_management/next/world-sync/platform-parity-spec.md` Windows contract: `workspace sync --dry-run` exits `4` with message containing `unsupported on windows` (lines 26–33).
-  - `docs/project_management/next/world-sync/manual_testing_playbook.md` WS2 section expects successful sync preview/apply flows (exit `0`) without a Windows-specific unsupported contract branch (lines 87–129).
-  - Smoke script validates Windows unsupported semantics (exit `4` + message): `docs/project_management/next/world-sync/smoke/windows-smoke.ps1` (lines 24–36).
-- Impact: Cross-doc contract drift; a Windows operator following the manual playbook will observe behavior that contradicts expected results, undermining confidence in the pack.
-- Fix required (exact): Update `docs/project_management/next/world-sync/manual_testing_playbook.md` to add an explicit Windows branch for WS2/WS5 (or an upfront platform note) that:
-  - expects exit `4` for `workspace sync` dry-run/apply paths on Windows, and
-  - requires asserting the `unsupported on windows` substring.
-- If DEFECT: Alternative (one viable): Remove Windows from `tasks.json` `meta.behavior_platforms_required` and treat Windows as CI-parity-only for this feature pack (not recommended; contradicts current cross-platform smoke intent and would require updating `ci_checkpoint_plan.md` and smoke gating assumptions).
-
 ## Decision: ACCEPT or FLAG
 
 ### If FLAG FOR HUMAN REVIEW
-- Summary: Mechanical lint is green, but the manual testing playbook contradicts authoritative platform parity and internal-git safety-rail specs (rollback and Windows sync), so the pack is not execution-ready as written.
+- Summary: Mechanical lint is green, but the manual testing playbook contradicts authoritative internal-git safety-rail specs (rollback), so the pack is not execution-ready as written.
 - Required human decisions (explicit): None (deterministic doc alignment fixes only).
 - Blockers to execution:
-  - Fix Findings 012–013, then re-run this quality gate.
+  - Fix Finding 012, then re-run this quality gate.

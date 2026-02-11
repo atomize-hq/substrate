@@ -23,17 +23,6 @@ This spec defines the authoritative supported/unsupported contract for world-syn
 - `workspace checkpoint` / `workspace rollback`:
   - Supported by WS6/WS7 (host-only; does not require the world backend).
 
-### Windows (WSL-backed world)
-- `workspace sync`:
-  - This feature pack is explicit: sync apply is unsupported on Windows (DR-0006).
-  - Behavior:
-    - `workspace sync --dry-run` exits `4` with an explicit unsupported message.
-    - `workspace sync` (apply) exits `4`.
-  - Required message substring (case-insensitive) for all unsupported Windows sync paths:
-    - `unsupported on windows`
-- `workspace checkpoint` / `workspace rollback`:
-  - Supported by WS6/WS7 (host-only; requires `git`).
-
 ## Validation evidence requirements (authoritative)
 - Smoke scripts under `docs/project_management/next/world-sync/smoke/` MUST encode these platform guarantees.
 - For checkpoint-boundary slices (WS2, WS5, WS7), the smoke workflow MUST set:

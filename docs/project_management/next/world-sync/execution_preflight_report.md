@@ -22,7 +22,7 @@ Reason:
 - [ ] Planning Pack complete (`plan.md`, `tasks.json`, `session_log.md`, specs, kickoff prompts)
 - [ ] Triad sizing is appropriate (each slice is one behavior delta; no “grab bag” slices)
 - [ ] Required planning artifacts exist (when required by planning standards): `impact_map.md`, `manual_testing_playbook.md`
-- [ ] Cross-platform plan is explicit (tasks.json meta: behavior + CI parity platforms, plus WSL mode if needed)
+- [ ] Cross-platform plan is explicit (tasks.json meta: behavior + CI parity platforms)
 
 ## 0) Slice Sizing (one behavior delta each)
 
@@ -32,16 +32,13 @@ Reason:
 ## 1) Cross-Platform Coverage (explicit and correct)
 
 From `docs/project_management/next/world-sync/tasks.json` meta:
-- Declared behavior platforms (smoke required): `["linux", "macos", "windows"]`
-- Declared CI parity platforms (parity required): `["linux", "macos", "windows"]` (legacy alias: `platforms_required`)
-- WSL required: `false`
-- WSL task mode: `N/A`
+- Declared behavior platforms (smoke required): `["linux", "macos"]`
+- Declared CI parity platforms (parity required): `["linux", "macos"]` (legacy alias: `platforms_required`)
 
 Notes:
-- If WSL coverage is required, confirm `meta.wsl_required=true` and `meta.wsl_task_mode` is set correctly.
 - Schema v4+ platform-fix model (boundary-only):
   - Normal slices have only `X-integ` (single merge task).
-  - Checkpoint-boundary slices (`WS2`, `WS5`, `WS7`) have `X-integ-core`, `X-integ-linux` / `X-integ-macos` / `X-integ-windows`, and `X-integ` final.
+  - Checkpoint-boundary slices (`WS2`, `WS5`, `WS7`) have `X-integ-core`, `X-integ-linux` / `X-integ-macos`, and `X-integ` final.
 
 ## 2) Smoke Scripts Are Not “Toy” Checks
 
@@ -53,7 +50,6 @@ Manual playbook (when required):
 Smoke scripts to validate (only required for behavior platforms; parity-only platforms may be explicit no-ops):
 - Linux smoke: `docs/project_management/next/world-sync/smoke/linux-smoke.sh`
 - macOS smoke: `docs/project_management/next/world-sync/smoke/macos-smoke.sh`
-- Windows smoke: `docs/project_management/next/world-sync/smoke/windows-smoke.ps1`
 
 Parity notes (map smoke ↔ manual; include concrete assertions):
 - Manual step(s):
@@ -89,8 +85,6 @@ Run ids/URLs (if executed during preflight):
 - CI compile parity:
 - Linux smoke:
 - macOS smoke:
-- Windows smoke:
-- WSL smoke:
 
 ## 4) Required Fixes Before Starting The First Slice (if any)
 

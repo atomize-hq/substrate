@@ -45,7 +45,7 @@ Policy:
 
 Notes:
 - `SMOKE_SLICE_ID` is optional but recommended; the workflow exports `SUBSTRATE_SMOKE_SLICE_ID` for slice-scoped smoke scripts.
-- If WSL coverage is required for this feature, add `RUN_WSL=1` to the Linux behavior dispatch (or use `PLATFORM=wsl` when `wsl_task_mode="separate"`).
+- `PLATFORM=behavior` runs only the platforms listed in `tasks.json` `meta.behavior_platforms_required`.
 
 ## If smoke fails
 
@@ -54,7 +54,7 @@ Start only failing platform-fix tasks (from orchestration checkout):
   - Set `SMOKE_RUN_ID` to the numeric id in the Actions run URL (example: `.../actions/runs/123456789`).
   - `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="docs/project_management/next/world-sync" SLICE_ID="WS2" SMOKE_RUN_ID="$SMOKE_RUN_ID" LAUNCH_CODEX=1`
 - Per-platform smoke runs:
-  - `make triad-task-start-platform-fixes FEATURE_DIR="docs/project_management/next/world-sync" SLICE_ID="WS2" PLATFORMS="linux,macos,windows" LAUNCH_CODEX=1`
+  - `make triad-task-start-platform-fixes FEATURE_DIR="docs/project_management/next/world-sync" SLICE_ID="WS2" PLATFORMS="linux,macos" LAUNCH_CODEX=1`
 
 ## End Checklist
 

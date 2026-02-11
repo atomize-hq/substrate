@@ -58,14 +58,6 @@ export PATH="$PWD/target/debug:$PATH"
 bash "docs/project_management/next/world-sync/smoke/macos-smoke.sh"
 ```
 
-Windows (PowerShell):
-```powershell
-$ErrorActionPreference = "Stop"
-cargo build --bin substrate
-$env:Path = "$pwd\\target\\debug;$env:Path"
-pwsh -File "docs/project_management/next/world-sync\\smoke\\windows-smoke.ps1"
-```
-
 Expected:
 - Exit `0`.
 

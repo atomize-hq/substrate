@@ -11,6 +11,10 @@ Owned surfaces:
 - What is included/excluded in snapshots
 - Rollback safety rails and exact restore semantics
 
+Clarification (non-negotiable):
+- Substrate leverages the standard `git` executable as an implementation tool, but it does **not** reuse or modify the user’s `.git/`.
+- The internal store is a separate git directory under `.substrate/` (see “Internal git directory”), so there is no collision with user repos.
+
 Non-owned surfaces:
 - CLI flag names/defaults (owned by `contract.md`)
 - Sync diff semantics (owned by `filesystem-semantics-spec.md`)
@@ -85,4 +89,3 @@ Exit code:
 - `2` on invalid target.
 - `3` if `git` is unavailable.
 - `5` on safety-rail refusal.
-

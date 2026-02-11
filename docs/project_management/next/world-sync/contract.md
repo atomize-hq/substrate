@@ -101,6 +101,3 @@ Precedence for effective config (high → low):
   - macOS:
     - `workspace sync`: supported when the backend advertises required capabilities; otherwise exits `4` (explicit unsupported).
     - `checkpoint` / `rollback`: supported.
-  - Windows:
-    - `workspace sync`: explicit unsupported in this feature pack (exit `4`) until Windows/WSL backend exposes pending diff discovery/apply.
-    - `checkpoint` / `rollback`: supported.

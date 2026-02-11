@@ -16,6 +16,12 @@ Provide a deterministic, auditable “workspace ↔ world” sync workflow plus 
 - `substrate workspace checkpoint` records a host-only snapshot in Substrate’s internal git store.
 - `substrate workspace rollback` restores the host workspace to a recorded internal checkpoint.
 
+## Implementation model (high-level; non-git)
+- `workspace sync` is **not** implemented as `git push/pull` or by configuring the world as a git remote.
+  - Instead, it consumes the world backend’s per-session **pending diff** model (DR-0002) and applies a planned set of filesystem mutations to the host workspace (WS1/WS2/WS4/WS5).
+- `workspace checkpoint` / `workspace rollback` use a **host-only** internal git store under `.substrate/git/` (DR-0005; `internal-git-spec.md`) and never touch `.git/`.
+  - This uses the standard `git` executable with `--git-dir` pointing into `.substrate/` and `--work-tree` set to the workspace root (no git remotes; no push/pull).
+
 ## Global guardrails (non-negotiable)
 - Specs are the single source of truth.
 - Planning Pack docs (anything under `docs/project_management/next/world-sync/`) are edited only on `feat/world-sync` (never inside task worktrees).
@@ -32,8 +38,8 @@ Provide a deterministic, auditable “workspace ↔ world” sync workflow plus 
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 
 ## Cross-platform execution model (v4; platform-fix at checkpoints only)
-- Behavior platforms (feature smoke required): `linux, macos, windows`
-- CI parity platforms (compile parity required): `linux, macos, windows`
+- Behavior platforms (feature smoke required): `linux, macos`
+- CI parity platforms (compile parity required): `linux, macos`
 - Cross-platform CI dispatch MUST occur only at the bounded checkpoints in `ci_checkpoint_plan.md`.
 
 ## Execution gates (enabled)

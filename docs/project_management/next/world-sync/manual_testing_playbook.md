@@ -14,7 +14,6 @@ Exit codes:
 Run your platform smoke script first:
 - Linux: `bash smoke/linux-smoke.sh` (expected exit: `0`)
 - macOS: `bash smoke/macos-smoke.sh` (expected exit: `0`)
-- Windows: `pwsh -File smoke/windows-smoke.ps1` (expected exit: `0`)
 
 CI smoke dispatch (preferred; self-hosted):
 - Choose the exact commit to test:
@@ -87,30 +86,6 @@ cd "$WS_TEST_WS"
 
 This section assumes you can run at least one command in the world backend that produces pending diffs for the session.
 
-Windows note (WSL-backed world):
-- `workspace sync` is unsupported on Windows for this feature pack (see `platform-parity-spec.md`).
-- On Windows, validate the explicit unsupported contract and continue to WS5/WS6/WS7, skipping the non-Windows apply flow below.
-
-### WS2 — Windows (unsupported contract)
-
-1) Preview pending diffs (unsupported on Windows):
-```bash
-substrate workspace sync --dry-run --direction from_world --verbose
-echo "exit=$?"
-```
-Expected:
-- Exit `4`.
-- Output contains (case-insensitive): `unsupported on windows`.
-
-2) Apply pending diffs (unsupported on Windows):
-```bash
-substrate workspace sync --direction from_world --verbose
-echo "exit=$?"
-```
-Expected:
-- Exit `4`.
-- Output contains (case-insensitive): `unsupported on windows`.
-
 ### WS2 — Linux/macOS (supported contract)
 
 1) Run a world command that writes inside the workspace (example; adjust as needed):
@@ -156,29 +131,6 @@ Expected:
 ## 3) WS5 — Direction expansion seam (checkpoint CP2)
 
 This section validates that `from_host` and `both` are accepted and that unsupported backends/platforms are explicit.
-
-Windows note:
-- `workspace sync` remains unsupported on Windows for WS5; validate exit `4` and the required message substring.
-
-### WS5 — Windows (unsupported contract)
-
-1) Run both-direction dry-run (unsupported on Windows):
-```bash
-substrate workspace sync --dry-run --direction both --verbose
-echo "exit=$?"
-```
-Expected:
-- Exit `4`.
-- Output contains (case-insensitive): `unsupported on windows`.
-
-2) Run both-direction apply (unsupported on Windows):
-```bash
-substrate workspace sync --direction both --verbose
-echo "exit=$?"
-```
-Expected:
-- Exit `4`.
-- Output contains (case-insensitive): `unsupported on windows`.
 
 ### WS5 — Linux/macOS (supported contract)
 

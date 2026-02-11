@@ -16,7 +16,7 @@ Do not edit planning docs inside the worktree.
 
 ## Requirements
 - Merge the relevant integration branches for this slice:
-  - The core integration branch (e.g., `*-integ-core`) and any platform-fix integration branches (`*-integ-linux|macos|windows|wsl`) that produced commits.
+  - The core integration branch (e.g., `*-integ-core`) and any platform-fix integration branches (`*-integ-linux|macos`) that produced commits.
 - Do not merge the orchestration branch into this worktree to “pick up task status/docs updates”; the finisher merges back while preserving the orchestration branch’s Planning Pack files.
 - If the integration state has grown too large/unstable (many conflicts, large refactors, multiple unrelated changes), stop and ask the operator to split follow-up triads rather than forcing everything through a single final merge.
 - Run:
