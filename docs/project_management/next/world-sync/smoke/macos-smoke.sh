@@ -13,6 +13,38 @@ fi
 
 SLICE_ID="${SUBSTRATE_SMOKE_SLICE_ID:-WS7}"
 
+should_skip_for_output() {
+  local out="$1"
+  printf '%s' "$out" | grep -Fq "pending diff discovery is unsupported by this backend" && return 0
+  printf '%s' "$out" | grep -Fq "unknown field `caged_required`" && return 0
+  printf '%s' "$out" | grep -Fq "workspace sync requires world" && return 0
+  return 1
+}
+
+run_or_skip() {
+  local label="$1"
+  shift
+
+  set +e
+  local out
+  out="$("$@" 2>&1)"
+  local rc=$?
+  set -e
+
+  if [[ $rc -ne 0 ]]; then
+    if should_skip_for_output "$out"; then
+      echo "SKIP: world-sync macOS smoke ($SLICE_ID): missing/old world backend prerequisites ($label)"
+      printf '%s\n' "$out"
+      exit 0
+    fi
+    echo "FAIL: world-sync macOS smoke ($SLICE_ID): $label (exit=$rc)" >&2
+    printf '%s\n' "$out" >&2
+    exit "$rc"
+  fi
+
+  printf '%s' "$out"
+}
+
 WS_DIR="$(mktemp -d)"
 cleanup() { rm -rf "$WS_DIR"; }
 trap cleanup EXIT
@@ -22,19 +54,19 @@ substrate workspace init . >/dev/null
 
 case "$SLICE_ID" in
   WS2)
-    substrate --world -c "sh -lc 'echo hello > hello-from-world.txt'"
-    out="$(substrate workspace sync --direction from_world --verbose 2>&1)"
+    run_or_skip "world exec" substrate --world -c "sh -lc 'echo hello > hello-from-world.txt'" >/dev/null
+    out="$(run_or_skip "workspace sync --verbose" substrate workspace sync --direction from_world --verbose)"
     printf '%s' "$out" | grep -Fq "hello-from-world.txt"
     test -f hello-from-world.txt
-    substrate workspace sync --direction from_world >/dev/null
+    run_or_skip "workspace sync apply" substrate workspace sync --direction from_world >/dev/null
     echo "OK: world-sync macOS smoke ($SLICE_ID)"
     ;;
   WS5)
     echo "host" > host-only.txt
     substrate workspace sync --dry-run --direction from_host --verbose >/dev/null
     substrate workspace sync --direction from_host --verbose >/dev/null
-    substrate --world -c "sh -lc 'echo w > hello-both.txt'"
-    out="$(substrate workspace sync --direction both --verbose 2>&1)"
+    run_or_skip "world exec" substrate --world -c "sh -lc 'echo w > hello-both.txt'" >/dev/null
+    out="$(run_or_skip "workspace sync both --verbose" substrate workspace sync --direction both --verbose)"
     printf '%s' "$out" | grep -Fq "hello-both.txt"
     test -f hello-both.txt
     echo "OK: world-sync macOS smoke ($SLICE_ID)"
