@@ -3,10 +3,11 @@
 #[cfg(target_os = "linux")]
 use agent_api_types::ExecuteStreamFrame;
 use agent_api_types::{
-    Budget, ExecuteRequest, ExecuteResponse, PendingDiffBucketV1, PendingDiffClearRequestV1,
-    PendingDiffClearResponseV1, PendingDiffRecordV1, PendingDiffRequestV1, WorldFsEntryTypeV1,
-    WorldFsReadRequestV1, WorldFsReadResponseV1,
+    Budget, ExecuteRequest, ExecuteResponse, PendingDiffClearRequestV1, PendingDiffClearResponseV1,
+    PendingDiffRecordV1, PendingDiffRequestV1, WorldFsReadRequestV1, WorldFsReadResponseV1,
 };
+#[cfg(target_os = "linux")]
+use agent_api_types::{PendingDiffBucketV1, WorldFsEntryTypeV1};
 #[cfg(target_os = "linux")]
 use anyhow::Context;
 use anyhow::{anyhow, Result};
