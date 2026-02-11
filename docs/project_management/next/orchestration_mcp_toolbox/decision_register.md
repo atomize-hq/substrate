@@ -264,7 +264,7 @@ Scope:
 - **Rationale (crisp):** Prevents silent boundary changes and keeps the security posture aligned with the orchestrator’s configured scope.
 
 **Follow-up tasks (explicit)**
-- Enumerate which tools are scope-agnostic in v1 and which are explicitly unsupported for in-world orchestrators (with fail-closed errors).
+- Align ADR-0026 to the v1 posture where the orchestrator is host-scoped (ADR-0025 Decision Register DR-0007) and tools inherit that boundary.
 
 ---
 
@@ -374,7 +374,7 @@ Scope:
 - **Rationale (crisp):** Determinism + debuggability are worth the small amount of explicit cleanup logic; this also enables a clear permissions posture.
 
 **Follow-up tasks (explicit)**
-- Document the canonical per-session UDS socket paths (host-scoped vs world-scoped) in ADR-0026.
+- Document the canonical per-session UDS socket path for the v1 host-scoped orchestrator in ADR-0026 (and reserve any additional paths for future work explicitly).
 - Ensure `substrate agent toolbox status/env` report the exact endpoint string.
 
 ---
@@ -486,3 +486,112 @@ Scope:
 **Follow-up tasks (explicit)**
 - Introduce a shared helper (crate/module) for “secret via FD” injection for Substrate-managed child processes.
 - Define `substrate agent toolbox env --include-token` as a debug-only escape hatch for manual wiring.
+
+---
+
+### DR-0010 — Toolbox v1 tool surface (introspection-only vs includes orchestration actions)
+
+**Decision owner(s):** Agent toolbox + Agent Hub maintainers  
+**Date:** 2026-02-11  
+**Status:** Accepted  
+**Related docs:** `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`
+
+**Problem / Context**
+- ADR-0026 promises a stable tool namespace and schemas, but v1 must enumerate the concrete tool set to avoid drift.
+- The toolbox is a privileged surface (orchestrator-only). Introducing mutating tools early increases the risk of bypassing policy/approval/trace expectations.
+
+**Option A — Introspection-only v1 toolbox (recommended)**
+- **Pros:**
+  - Lower privilege surface; read-only tools are easier to secure and audit.
+  - Avoids creating a second “command execution plane” that could bypass established routing/policy expectations.
+  - Easier to make stable across platforms.
+- **Cons:**
+  - Orchestrators cannot trigger run/cancel/restart operations via toolbox calls in v1.
+- **Cascading implications:**
+  - ADR-0026 MUST enumerate the exact v1 tool list and stable tool names (under `substrate.*`, versioned by `toolbox_version=1` per DR-0003).
+  - v1 MUST NOT include mutating tools such as `substrate.run_agent`, `substrate.cancel_run`, `substrate.restart_world`, or config/policy mutation tools.
+- **Risks:**
+  - Pressure to add mutating tools ad-hoc; mitigated by requiring a follow-on ADR/DR for any new mutating tool surface.
+- **Unlocks:**
+  - A safe baseline toolbox contract that is immediately useful for visibility and debugging.
+- **Quick wins / low-hanging fruit:**
+  - Define schemas + golden fixtures for a small read-only set and wire them to existing query surfaces.
+
+**Option B — Introspection + orchestration action tools in v1**
+- **Pros:**
+  - Enables tool-driven orchestration flows (start/cancel/restart) without bespoke SDK coupling.
+- **Cons:**
+  - Higher security and correctness burden: tool calls become a privileged action plane.
+  - Requires more policy gating and test matrix work in v1.
+- **Cascading implications:**
+  - Must define per-tool policy gates, exit-code/error taxonomy, and cross-platform behavior for mutating actions.
+- **Risks:**
+  - Footguns (world restarts, unintended run starts) if tooling is misused or misattributed.
+- **Unlocks:**
+  - Fully tool-driven orchestration as a first-class workflow.
+- **Quick wins / low-hanging fruit:**
+  - Prototype quickly, but unlikely to be contract-grade without expanded scope.
+
+**Recommendation**
+- **Selected:** Option A — Introspection-only v1 toolbox.
+- **Rationale (crisp):** Establish a safe, stable baseline tool contract first; defer mutating action tools until tool-triggered policy/approval/trace semantics are explicitly specified.
+
+**Follow-up tasks (explicit)**
+- Update ADR-0026 to enumerate the exact v1 tool list + stable tool names and to explicitly exclude mutating tools from v1.
+- Add validation tests ensuring all tools are denied for non-orchestrator sessions and require valid auth tokens (DR-0004, DR-0008, DR-0009).
+
+---
+
+### DR-0011 — Toolbox token FD discovery contract (fixed FD vs advertised FD)
+
+**Decision owner(s):** Agent toolbox + Agent Hub maintainers  
+**Date:** 2026-02-11  
+**Status:** Accepted  
+**Related docs:** `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`
+
+**Problem / Context**
+- DR-0008 requires a per-session toolbox auth token; DR-0009 selects delivery via inherited one-time pipe/FD for Substrate-spawned orchestrators.
+- We must define an unambiguous contract for *which FD* the orchestrator/backend adapter should read to obtain the token.
+
+**Option A — Fixed FD number (e.g., always FD `3`)**
+- **Pros:**
+  - Simplest contract; no extra metadata channel required.
+- **Cons:**
+  - FD collision risk if the orchestrator process/wrapper already uses the fixed FD.
+  - Harder to evolve if multiple secret channels are introduced later.
+- **Cascading implications:**
+  - Substrate spawn logic MUST reserve the fixed FD for the toolbox token and fail closed if it cannot.
+  - Orchestrator adapters MUST always read the fixed FD and treat it as read-once.
+- **Risks:**
+  - Backend-specific breakage due to unexpected FD usage.
+- **Unlocks:**
+  - Fastest implementation path (Unix-first).
+- **Quick wins / low-hanging fruit:**
+  - Implement once in spawn logic and adapters.
+
+**Option B — Advertise the token FD number via a non-secret channel (recommended)**
+- **Pros:**
+  - Avoids FD collisions by allowing dynamic FD allocation per spawn.
+  - Scales to additional secret channels later.
+  - Keeps the token itself out of env/disk; the FD number is not a secret.
+- **Cons:**
+  - Requires one additional contract element (how the FD number is communicated).
+- **Cascading implications:**
+  - Define one standard non-secret carrier:
+    - `SUBSTRATE_AGENT_TOOLBOX_TOKEN_FD: int` (env var containing only the FD number).
+  - The token FD MUST be read-once and MUST NOT be forwarded to child processes unless explicitly intended.
+  - Security note (contract): the FD number is process-local; other processes cannot read the token merely by knowing the number without process-inspection capabilities.
+- **Risks:**
+  - Slightly more plumbing per backend adapter.
+- **Unlocks:**
+  - Robustness across heterogeneous orchestrator backends and future secret channels.
+- **Quick wins / low-hanging fruit:**
+  - Implement once in the spawn helper + orchestrator adapters; reuse everywhere.
+
+**Recommendation**
+- **Selected:** Option B — Advertise the token FD number via a non-secret channel.
+- **Rationale (crisp):** Prevents backend-specific FD collision bugs and provides a scalable pattern for future secret channels while keeping the token itself out of env and off disk.
+
+**Follow-up tasks (explicit)**
+- Update ADR-0026 to specify `SUBSTRATE_AGENT_TOOLBOX_TOKEN_FD: int` and the read-once / non-forwarding semantics.
+- Add validation tests ensuring the token value is never present in env/argv/logs, and that the token FD is not inherited by unintended child processes.

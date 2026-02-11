@@ -19,7 +19,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 6f6cac0ebe4586a82093aabc977f68a47dcc65496c6daac383fa27eaabaefc8c
+ADR_BODY_SHA256: e360b1396abccdf01d7a90dc8240a56120860733c3f629b4c1097a5601d95d23
 ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
 
 ### Changes (operator-facing)
@@ -97,7 +97,7 @@ Clarification (v1; non-negotiable):
       - inventory scan succeeds (strict schema)
       - orchestrator agent exists, is enabled, and is eligible
       - policy allowlist contains the orchestrator backend id
-      - if orchestrator/members are configured `execution.scope=world` and `agents.fail_closed.routing=true`, the world boundary is available
+      - if any member agents are configured `execution.scope=world` and `agents.fail_closed.routing=true`, the world boundary is available
     - Exit codes:
       - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
       - `0`: all checks pass
@@ -137,6 +137,10 @@ Clarification (v1; non-negotiable):
   - New additive config key:
     - `agents.hub.orchestrator_agent_id: <agent_id>`
   - If `agents.enabled=true` and this key is missing or points to an ineligible agent, Agent Hub MUST fail closed with a config error (exit code `2`).
+  - Orchestrator execution scope posture (authoritative; see Decision Register DR-0007):
+    - The orchestrator agent selected by `agents.hub.orchestrator_agent_id` MUST have `config.execution.scope=host`.
+    - If the selected orchestrator has `config.execution.scope=world`, Agent Hub MUST fail closed with an actionable config error (exit code `2`).
+    - In-world execution is driven indirectly by dispatching world-scoped member agents with their own toolsets/policy overlays (the orchestrator does not need to run in-world).
   - Default role assignment:
     - Every other *eligible* agent is assigned `member` (v1 default taxonomy label).
     - Non-eligible agents are `unassigned` and MUST NOT receive orchestration tools.
@@ -218,3 +222,4 @@ Clarification (v1; non-negotiable):
     - DR-0004 (World session reuse: shared per orchestration session vs per-agent worlds)
     - DR-0005 (Backend event streaming model: push vs pull)
     - DR-0006 (CLI command placement: top-level `substrate agent` vs `substrate host|world agent`)
+    - DR-0007 (Orchestrator execution scope: host-scoped orchestrator vs allow in-world orchestrator)

@@ -325,3 +325,59 @@ Scope:
 **Follow-up tasks (explicit)**
 - Add `--scope host|world|any` to `substrate agent list` and `substrate agent status` as view-only filters.
 - Ensure help text explicitly distinguishes global `--world/--no-world` toggles (execution isolation) from `--scope` (agent inventory filter).
+
+---
+
+### DR-0007 — Orchestrator execution scope posture (host-scoped orchestrator vs allow in-world orchestrator)
+
+**Decision owner(s):** Shell + Agent Hub maintainers  
+**Date:** 2026-02-11  
+**Status:** Accepted  
+**Related docs:** `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`, `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`, `docs/project_management/next/orchestration_mcp_toolbox/decision_register.md`
+
+**Problem / Context**
+- The orchestrator is a privileged control-plane role (toolbox access, policy/trace introspection, routing decisions).
+- Separately, task execution is intended to happen inside a world boundary via world-scoped member agents.
+- The ADRs currently imply `orchestrator.execution.scope` could be `host|world`, which creates ambiguity about where orchestration runs and how it “executes in world”.
+
+**Option A — Require the orchestrator to be host-scoped in v1 (recommended)**
+- **Pros:**
+  - Clean separation: host control-plane (orchestrator) vs world data-plane (member agents).
+  - Avoids cross-boundary complexity for toolbox/policy/trace introspection in v1.
+  - Matches the intended shape: orchestrator executes in-world *indirectly* by dispatching world-scoped agents.
+- **Cons:**
+  - Operators must ensure the orchestrator agent inventory sets `config.execution.scope=host`.
+- **Cascading implications:**
+  - The agent selected by `agents.hub.orchestrator_agent_id` MUST have `config.execution.scope=host` in its agent inventory file.
+  - If the selected orchestrator has `config.execution.scope=world`, Agent Hub MUST fail closed with an actionable config error (exit code `2`).
+  - “Orchestrator executes in world” is achieved by routing/dispatching tasks to world-scoped member agents with their own toolsets/policy overlays (not by moving the orchestrator process into the world).
+- **Risks:**
+  - Confusion if operators assume “everything must be in-world”; mitigated by `substrate agent doctor` output and docs that explicitly describe host-control-plane + world-data-plane.
+- **Unlocks:**
+  - A stable v1 posture that keeps orchestration privileged surfaces simpler and easier to secure.
+- **Quick wins / low-hanging fruit:**
+  - Enforce the orchestrator scope check at selection time and surface it in `substrate agent doctor --json`.
+
+**Option B — Allow the orchestrator to be host-scoped or in-world**
+- **Pros:**
+  - More flexible for environments that prefer everything to run in-world.
+- **Cons:**
+  - Ambiguity and complexity: toolbox endpoint placement, host-only state access, and diagnostics become cross-boundary problems.
+  - Increased risk of subtle drift and “works on one platform, fails on another” behavior.
+- **Cascading implications:**
+  - Must define an explicit cross-boundary contract for toolbox/policy/trace access when orchestrator is in-world.
+  - Requires per-tool “supported in-world vs not supported” matrices (v1 overhead).
+- **Risks:**
+  - Security/correctness footguns if any host-only state leaks or is inconsistently proxied.
+- **Unlocks:**
+  - In-world-first orchestration posture.
+- **Quick wins / low-hanging fruit:**
+  - None without a larger proxying story.
+
+**Recommendation**
+- **Selected:** Option A — Require the orchestrator to be host-scoped in v1.
+- **Rationale (crisp):** Preserves the intended control-plane/data-plane split and avoids cross-boundary complexity while still allowing orchestrators to drive in-world execution by dispatching world-scoped member agents.
+
+**Follow-up tasks (explicit)**
+- Update ADR-0025 `doctor` checks and config semantics to reflect “host orchestrator + world members” posture.
+- Update ADR-0026 toolbox endpoint semantics to be host-scoped in v1 and remove/mark any in-world orchestrator implications as future work.
