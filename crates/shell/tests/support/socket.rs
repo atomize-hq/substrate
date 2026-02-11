@@ -22,6 +22,14 @@ pub enum SocketResponse {
     /// Responds to `/v1/capabilities` requests with a JSON payload that
     /// advertises socket activation mode.
     Capabilities,
+    /// Responds to `/v1/capabilities`, `/v1/doctor/world`, and `/v1/pending_diff`
+    /// with a JSON payload describing the session's pending diff record.
+    ///
+    /// This is a test stub for `workspace sync --dry-run` flows (WS1+).
+    CapabilitiesAndPendingDiff {
+        features: Vec<String>,
+        pending_diff: JsonValue,
+    },
     /// Handles capabilities and execute calls with canned payloads.
     CapabilitiesAndExecute {
         stdout: String,
@@ -107,6 +115,26 @@ impl AgentSocket {
                                     write_capabilities(&mut stream);
                                 } else if first_line.starts_with("GET /v1/doctor/world") {
                                     write_world_doctor_report(&mut stream);
+                                } else if first_line.starts_with("GET /v1/pending_diff")
+                                    || first_line.starts_with("GET /v1/workspace/pending_diff")
+                                {
+                                    let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\n\r\n");
+                                } else {
+                                    let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\n\r\n");
+                                }
+                            }
+                            SocketResponse::CapabilitiesAndPendingDiff {
+                                features,
+                                pending_diff,
+                            } => {
+                                if first_line.starts_with("GET /v1/capabilities") {
+                                    write_capabilities_with_features(&mut stream, features);
+                                } else if first_line.starts_with("GET /v1/doctor/world") {
+                                    write_world_doctor_report(&mut stream);
+                                } else if first_line.starts_with("GET /v1/pending_diff")
+                                    || first_line.starts_with("GET /v1/workspace/pending_diff")
+                                {
+                                    write_response(&mut stream, &pending_diff.to_string());
                                 } else {
                                     let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\n\r\n");
                                 }
@@ -324,9 +352,13 @@ impl Drop for AgentSocket {
 }
 
 fn write_capabilities(stream: &mut UnixStream) {
+    write_capabilities_with_features(stream, &vec!["execute".to_string()]);
+}
+
+fn write_capabilities_with_features(stream: &mut UnixStream, features: &[String]) {
     let body = json!({
         "version": "v1",
-        "features": ["execute"],
+        "features": features,
         "backend": "world-agent",
         "platform": "linux",
         "listener_mode": "socket_activation"

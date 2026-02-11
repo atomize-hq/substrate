@@ -1,11 +1,14 @@
 #![cfg(unix)]
 
 mod common;
+mod support;
 
 use common::{substrate_shell_driver, temp_dir};
+use serde_json::json;
 use std::fs;
 use std::path::{Path, PathBuf};
-use tempfile::TempDir;
+use support::{AgentSocket, SocketResponse};
+use tempfile::{Builder, TempDir};
 
 struct WorkspaceSyncFixture {
     _temp: TempDir,
@@ -204,24 +207,52 @@ fn workspace_rollback_requires_workspace_and_is_single_actionable_line() {
 }
 
 #[test]
-fn workspace_sync_dry_run_prints_effective_preview_and_does_not_hit_world_backend() {
+fn workspace_sync_dry_run_from_world_prints_pending_diff_summary_and_preview() {
     let fixture = WorkspaceSyncFixture::new();
     fixture.init_workspace();
 
     fixture.write_workspace_yaml_patch(
-        "sync:\n  auto_sync: false\n  direction: from_world\n  conflict_policy: prefer_host\n  exclude: [\"workspace-only\"]\n",
+        "sync:\n  auto_sync: false\n  direction: from_world\n  conflict_policy: prefer_host\n  exclude: [\"workspace-only\", \"excluded/**\"]\n",
     );
 
     let before_workspace_yaml =
         fs::read_to_string(fixture.workspace_yaml_path()).expect("read workspace.yaml");
     let before_gitignore = fs::read_to_string(fixture.gitignore_path()).expect("read .gitignore");
 
-    let missing_socket = fixture.workspace_root.join("missing.substrate.sock");
+    let socket_dir = Builder::new()
+        .prefix("substrate-ws1-sock-")
+        .tempdir_in("/tmp")
+        .expect("create ws1 socket tempdir");
+    let socket_path = socket_dir.path().join("world-agent.sock");
+    let pending = json!({
+        "session_started_at": "2026-02-10T18:38:23Z",
+        "diff_id": "diff_test_01",
+        "non_pty": {
+            "writes": ["added.txt", "excluded/skip.txt"],
+            "mods": ["changed.txt"],
+            "deletes": ["deleted.txt"]
+        }
+    });
+    let _socket = AgentSocket::start(
+        &socket_path,
+        SocketResponse::CapabilitiesAndPendingDiff {
+            features: vec!["execute".to_string(), "pending_diff_v1".to_string()],
+            pending_diff: pending,
+        },
+    );
+
     let mut cmd = fixture.command();
     cmd.current_dir(&fixture.workspace_root)
         .env("SUBSTRATE_OVERRIDE_WORLD", "enabled")
-        .env("SUBSTRATE_WORLD_SOCKET", &missing_socket)
-        .args(["workspace", "sync", "--dry-run"]);
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+        .args([
+            "workspace",
+            "sync",
+            "--dry-run",
+            "--direction",
+            "from_world",
+            "--verbose",
+        ]);
     let output = cmd.output().expect("run workspace sync --dry-run");
 
     assert_eq!(
@@ -239,19 +270,40 @@ fn workspace_sync_dry_run_prints_effective_preview_and_does_not_hit_world_backen
         combined.contains("prefer_host"),
         "preview must include effective conflict_policy: {combined}"
     );
-    for exclude in [".git/**", ".substrate/**", "workspace-only"] {
+    for exclude in [".git/**", ".substrate/**", "workspace-only", "excluded/**"] {
         assert!(
             combined.contains(exclude),
             "preview must include exclude {exclude}: {combined}"
         );
     }
     assert!(
-        combined.contains("pending diff") && combined.contains("WS1"),
-        "preview must state pending diff discovery is not implemented until WS1: {combined}"
+        combined.contains("pending") && combined.contains("diff"),
+        "dry-run must print a pending diff summary section: {combined}"
     );
+    for needle in ["total", "3", "writes", "1", "mods", "1", "deletes", "1"] {
+        assert!(
+            combined.contains(needle),
+            "pending diff summary must include {needle}: {combined}"
+        );
+    }
+    assert!(
+        combined.contains("excluded"),
+        "pending diff summary must indicate whether any paths were excluded: {combined}"
+    );
+    for needle in [
+        "session_started_at",
+        "2026-02-10T18:38:23Z",
+        "diff_id",
+        "diff_test_01",
+    ] {
+        assert!(
+            combined.contains(needle),
+            "verbose output must include {needle}: {combined}"
+        );
+    }
     assert!(
         !combined.contains("world backend unavailable"),
-        "dry-run must not attempt world backend access: {combined}"
+        "dry-run must not report the world backend as unavailable on supported backends: {combined}"
     );
 
     let after_workspace_yaml =
@@ -269,11 +321,115 @@ fn workspace_sync_dry_run_prints_effective_preview_and_does_not_hit_world_backen
 }
 
 #[test]
-fn workspace_sync_dry_run_applies_cli_overrides_in_preview_only() {
+fn workspace_sync_dry_run_rejects_from_host_and_both_directions_in_ws1() {
     let fixture = WorkspaceSyncFixture::new();
     fixture.init_workspace();
     fixture.write_workspace_yaml_patch(
         "sync:\n  auto_sync: false\n  direction: from_world\n  conflict_policy: prefer_host\n  exclude: [\"workspace-only\"]\n",
+    );
+
+    let before_workspace_yaml =
+        fs::read_to_string(fixture.workspace_yaml_path()).expect("read workspace.yaml");
+
+    let missing_socket = fixture.workspace_root.join("missing.substrate.sock");
+    for direction in ["from_host", "both"] {
+        let mut cmd = fixture.command();
+        cmd.current_dir(&fixture.workspace_root)
+            .env("SUBSTRATE_OVERRIDE_WORLD", "enabled")
+            .env("SUBSTRATE_WORLD_SOCKET", &missing_socket)
+            .args([
+                "workspace",
+                "sync",
+                "--dry-run",
+                "--direction",
+                direction,
+                "--conflict-policy",
+                "abort",
+                "--exclude",
+                "cli-extra",
+            ]);
+        let output = cmd
+            .output()
+            .expect("run workspace sync --dry-run with unsupported direction");
+
+        assert_eq!(
+            output.status.code(),
+            Some(4),
+            "workspace sync --dry-run --direction {direction} must exit 4: {}",
+            combined_output(&output)
+        );
+        let combined = combined_output(&output);
+        assert!(
+            combined.contains("not implemented until WS5"),
+            "unsupported direction must mention WS5: {combined}"
+        );
+        assert!(
+            !combined.contains("world backend unavailable"),
+            "unsupported direction must not require world backend access: {combined}"
+        );
+    }
+
+    let after_workspace_yaml =
+        fs::read_to_string(fixture.workspace_yaml_path()).expect("read workspace.yaml after");
+    assert_eq!(
+        before_workspace_yaml, after_workspace_yaml,
+        "dry-run overrides must not mutate workspace.yaml"
+    );
+}
+
+#[test]
+fn workspace_sync_dry_run_requires_world_and_rejects_no_world_flag() {
+    let fixture = WorkspaceSyncFixture::new();
+    fixture.init_workspace();
+    fixture.write_workspace_yaml_patch(
+        "sync:\n  auto_sync: false\n  direction: from_world\n  conflict_policy: prefer_host\n  exclude: []\n",
+    );
+
+    let before_workspace_yaml =
+        fs::read_to_string(fixture.workspace_yaml_path()).expect("read workspace.yaml");
+
+    let mut cmd = fixture.command();
+    cmd.current_dir(&fixture.workspace_root)
+        .env("SUBSTRATE_OVERRIDE_WORLD", "enabled")
+        .arg("--no-world")
+        .args([
+            "workspace",
+            "sync",
+            "--dry-run",
+            "--direction",
+            "from_world",
+        ]);
+    let output = cmd
+        .output()
+        .expect("run workspace sync --dry-run with --no-world");
+
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "workspace sync --dry-run with --no-world must exit 2: {}",
+        combined_output(&output)
+    );
+    let combined = combined_output(&output);
+    assert!(
+        combined.contains("workspace sync requires world")
+            && combined.contains("remove --no-world"),
+        "stderr must include actionable no-world guidance: {combined}"
+    );
+
+    let after_workspace_yaml =
+        fs::read_to_string(fixture.workspace_yaml_path()).expect("read workspace.yaml after");
+    assert_eq!(
+        before_workspace_yaml, after_workspace_yaml,
+        "workspace sync --dry-run must not mutate workspace.yaml on flag errors"
+    );
+}
+
+#[test]
+fn workspace_sync_dry_run_exits_3_when_world_backend_unavailable() {
+    let fixture = WorkspaceSyncFixture::new();
+    fixture.init_workspace();
+    fixture.write_workspace_yaml_patch(
+        "sync:\n  auto_sync: false\n  direction: from_world\n  conflict_policy: prefer_host\n  exclude: []\n",
     );
 
     let before_workspace_yaml =
@@ -289,41 +445,82 @@ fn workspace_sync_dry_run_applies_cli_overrides_in_preview_only() {
             "sync",
             "--dry-run",
             "--direction",
-            "both",
-            "--conflict-policy",
-            "abort",
-            "--exclude",
-            "cli-extra",
+            "from_world",
         ]);
     let output = cmd
         .output()
-        .expect("run workspace sync --dry-run with overrides");
+        .expect("run workspace sync --dry-run with missing backend");
 
     assert_eq!(
         output.status.code(),
-        Some(0),
-        "workspace sync --dry-run must exit 0: {}",
+        Some(3),
+        "world backend unavailable must exit 3: {}",
         combined_output(&output)
     );
     let combined = combined_output(&output);
-    for needle in ["both", "abort", "workspace-only", "cli-extra"] {
-        assert!(
-            combined.contains(needle),
-            "preview must include {needle}: {combined}"
-        );
-    }
-    for exclude in [".git/**", ".substrate/**"] {
-        assert!(
-            combined.contains(exclude),
-            "preview must include protected exclude {exclude}: {combined}"
-        );
-    }
+    assert!(
+        combined.contains("substrate world enable") && combined.contains("substrate world doctor"),
+        "stderr must include actionable world enable/doctor guidance: {combined}"
+    );
 
     let after_workspace_yaml =
         fs::read_to_string(fixture.workspace_yaml_path()).expect("read workspace.yaml after");
     assert_eq!(
         before_workspace_yaml, after_workspace_yaml,
-        "dry-run overrides must not mutate workspace.yaml"
+        "workspace sync --dry-run must not mutate workspace.yaml when world is unavailable"
+    );
+}
+
+#[test]
+fn workspace_sync_dry_run_exits_4_when_backend_lacks_pending_diff_discovery() {
+    let fixture = WorkspaceSyncFixture::new();
+    fixture.init_workspace();
+    fixture.write_workspace_yaml_patch(
+        "sync:\n  auto_sync: false\n  direction: from_world\n  conflict_policy: prefer_host\n  exclude: []\n",
+    );
+
+    let before_workspace_yaml =
+        fs::read_to_string(fixture.workspace_yaml_path()).expect("read workspace.yaml");
+
+    let socket_dir = Builder::new()
+        .prefix("substrate-ws1-sock-")
+        .tempdir_in("/tmp")
+        .expect("create ws1 socket tempdir");
+    let socket_path = socket_dir.path().join("world-agent.sock");
+    let _socket = AgentSocket::start(&socket_path, SocketResponse::Capabilities);
+
+    let mut cmd = fixture.command();
+    cmd.current_dir(&fixture.workspace_root)
+        .env("SUBSTRATE_OVERRIDE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+        .args([
+            "workspace",
+            "sync",
+            "--dry-run",
+            "--direction",
+            "from_world",
+        ]);
+    let output = cmd
+        .output()
+        .expect("run workspace sync --dry-run against stub backend");
+
+    assert_eq!(
+        output.status.code(),
+        Some(4),
+        "backend without pending diff discovery must exit 4: {}",
+        combined_output(&output)
+    );
+    let combined = combined_output(&output);
+    assert!(
+        combined.contains("pending diff") && combined.contains("unsupported"),
+        "stderr must include explicit pending-diff unsupported message: {combined}"
+    );
+
+    let after_workspace_yaml =
+        fs::read_to_string(fixture.workspace_yaml_path()).expect("read workspace.yaml after");
+    assert_eq!(
+        before_workspace_yaml, after_workspace_yaml,
+        "workspace sync --dry-run must not mutate workspace.yaml when unsupported"
     );
 }
 
