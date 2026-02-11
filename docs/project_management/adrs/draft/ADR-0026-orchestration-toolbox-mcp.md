@@ -20,9 +20,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 9b2a3bdc90f66b8dc866ef213f562b6cf428220ba5778b20e095396107f269c4
-ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
-
+ADR_BODY_SHA256: 81e2e9f1afc4381179e79fe5ed34056fd76e410c5389ee51d83ed275b5176c6d
 ### Changes (operator-facing)
 - Substrate exposes an internal orchestration toolbox providing orchestrator-only tools (speaks MCP)
   - Existing: Orchestration context and levers are primarily internal; agents cannot uniformly access Substrate orchestration functions.
@@ -129,8 +127,8 @@ Constraints:
       - The orchestrator process MUST be told which FD contains the token via `SUBSTRATE_AGENT_TOOLBOX_TOKEN_FD: int` (Decision Register DR-0011). This env var carries only the FD number, not the token.
     - `substrate agent toolbox env --include-token` exists as a debug-only escape hatch for manual wiring and MUST NOT be required for normal operation.
 - Boundary inheritance (Decision Register DR-0005):
-  - Tools inherit the orchestrator’s execution boundary (`execution.scope=host`) and MUST NOT silently change it.
-- If the effective posture requires in-world execution (fail-closed routing), the toolbox MUST fail closed when a world boundary is unavailable (no host fallback).
+  - Tools inherit the orchestrator’s execution boundary (`execution.scope=host` in v1) and MUST NOT silently change it.
+  - Any world-only actions MUST be performed by dispatching world-scoped member agents; the toolbox server remains host-scoped in v1.
 
 ### v1 tool surface (authoritative; introspection-only; Decision Register DR-0010)
 - All v1 tools are introspection-only (read-only) and MUST NOT directly mutate host/world state.

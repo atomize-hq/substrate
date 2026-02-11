@@ -36,7 +36,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
+ADR_BODY_SHA256: 09b441dc416b9764c14a08dd4a14b170193d821c95135a442edbb970f88db2e5
 
 ### Changes (operator-facing)
 - LLM + agent behavior is configured and governed via the existing config/policy files (new keys only)
@@ -153,6 +153,23 @@ Constraints:
 - `agents.defaults.cli.mode: persistent|per_request`
   - Meaning: default CLI session strategy for CLI-based agents when an agent file omits it.
   - Default: `persistent`.
+
+##### `agents.hub` (additive; Phase 5 Agent Hub)
+- `agents.hub.orchestrator_agent_id: string`
+  - Meaning: selects the agent inventory item id assigned `role=orchestrator` for the current process/session (ADR-0025).
+  - Default: empty string.
+  - Constraint: if `agents.enabled=true`, this key MUST be set and MUST refer to an eligible allowlisted agent inventory item (enforced by Agent Hub; ADR-0025).
+- `agents.hub.world_restart.on_drift: auto_restart|fail_closed`
+  - Meaning: how Agent Hub handles “world-relevant drift” during a long-running orchestration session (ADR-0025).
+  - Default: `auto_restart`.
+
+##### `agents.toolbox` (additive; Phase 5 internal toolbox; MCP protocol)
+- `agents.toolbox.enabled: bool`
+  - Meaning: whether the internal orchestration toolbox may run at all for the effective config (ADR-0026).
+  - Default: `false`.
+- `agents.toolbox.bind.transport: uds|tcp`
+  - Meaning: preferred bind transport for the toolbox endpoint (ADR-0026).
+  - Default: `uds`.
 
 Notes:
 - Detailed agent runtime behavior (roles, tool gating, steering) is defined by the Agent Hub ADRs. This ADR defines the config/policy storage surface and the inventory directory pattern that those ADRs depend on.

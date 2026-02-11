@@ -381,3 +381,212 @@ Scope:
 **Follow-up tasks (explicit)**
 - Update ADR-0025 `doctor` checks and config semantics to reflect “host orchestrator + world members” posture.
 - Update ADR-0026 toolbox endpoint semantics to be host-scoped in v1 and remove/mark any in-world orchestrator implications as future work.
+
+---
+
+### DR-0008 — World drift handling (always auto-restart vs config lever to fail-closed)
+
+**Decision owner(s):** Shell + World + Agent Hub maintainers  
+**Date:** 2026-02-11  
+**Status:** Accepted  
+**Related docs:** `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`
+
+**Problem / Context**
+- Agent Hub v1 uses a shared `world_id` per `orchestration_session_id` for world-scoped member agents (DR-0004).
+- During long-running sessions, effective “world-relevant” inputs can drift (policy snapshot, workspace root, world-fs policy, net policy, execution scope).
+- We need deterministic, auditable behavior that supports both:
+  - “availability-first” (auto-restart on drift), and
+  - “strict” (no implicit restart; require explicit operator action).
+
+**Option A — Always auto-restart the world on world-relevant drift**
+- **Pros:**
+  - Smooth UX: sessions remain usable across policy/config changes.
+  - Ensures the world boundary matches current effective policy/config quickly.
+  - Easy to reason about if surfaced as an explicit event.
+- **Cons:**
+  - Restart is a disruptive action and can surprise operators if not clearly surfaced.
+- **Cascading implications:**
+  - Hub MUST increment `world_generation` and emit `world_restarted` with a non-empty `reason`.
+- **Risks:**
+  - Unexpected restarts; mitigated by always emitting a visible structured event and surfacing it in `substrate agent status`.
+- **Unlocks:**
+  - Durable orchestration sessions.
+- **Quick wins / low-hanging fruit:**
+  - Fingerprint the world-relevant input set at session start and compare per session operation.
+
+**Option B — Add a config lever for drift handling (recommended)**
+- **Pros:**
+  - Supports both postures without ambiguous “sometimes restart, sometimes error” behavior.
+  - Allows strict environments to require fail-closed on drift while defaulting to a usable UX.
+- **Cons:**
+  - Adds one more config key to the strict schema.
+- **Cascading implications:**
+  - New strict config key:
+    - `agents.hub.world_restart.on_drift: auto_restart|fail_closed`
+    - Default: `auto_restart`
+  - Required behavior:
+    - If `auto_restart`: hub MUST restart the world, increment `world_generation`, and emit `world_restarted` with non-empty `reason`.
+    - If `fail_closed`: hub MUST NOT restart automatically; it MUST fail closed with an actionable error AND MUST emit a structured alert event indicating restart is required.
+  - Minimum required `reason` taxonomy (v1; strings):
+    - `policy_snapshot_changed`
+    - `workspace_root_changed`
+    - `world_fs_policy_changed`
+    - `net_policy_changed`
+    - `execution_scope_changed`
+- **Risks:**
+  - Misconfiguration confusion; mitigated by `substrate agent doctor` output and `--explain` where applicable.
+- **Unlocks:**
+  - A consistent story for operators who demand “no implicit lifecycle actions”.
+- **Quick wins / low-hanging fruit:**
+  - Default to `auto_restart` and treat `fail_closed` as an opt-in strict posture.
+
+**Recommendation**
+- **Selected:** Option B — Add a config lever for drift handling.
+- **Rationale (crisp):** Keeps v1 usable by default while supporting strict environments that require fail-closed behavior; avoids hardcoding one posture.
+
+**Follow-up tasks (explicit)**
+- Add `agents.hub.world_restart.on_drift` to ADR-0027 + `SCHEMA.md` strict config schema.
+- Update ADR-0025 to list the required reason taxonomy and event semantics (`world_restarted` vs “restart required” alert).
+
+---
+
+### DR-0009 — “Restart required” alert event schema for `agents.hub.world_restart.on_drift=fail_closed` (dedicated kind vs `alert` with code)
+
+**Decision owner(s):** Shell + World + Agent Hub maintainers  
+**Date:** 2026-02-11  
+**Status:** Accepted  
+**Related docs:** `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`, `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`, `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003, DR-0008)
+
+**Problem / Context**
+- DR-0008 requires that when drift is detected and `agents.hub.world_restart.on_drift=fail_closed`, the hub must:
+  - fail closed with an actionable error (no auto-restart), and
+  - emit a structured “restart required” alert event.
+- We must lock a stable, machine-detectable schema for that alert so UIs/automation can key off it deterministically.
+
+**Option A — Emit a structured agent event with `kind=alert` and a required `data.code` (recommended)**
+- **Pros:**
+  - Aligns with ADR-0017’s structured agent event envelope which already includes `kind=alert`.
+  - Avoids expanding the `kind` enum (lower coordination cost across emitters/consumers).
+  - Keeps typing via a stable machine key (`data.code`) while allowing additive fields.
+- **Cons:**
+  - Consumers must branch on `data.code` rather than a dedicated `kind`.
+- **Cascading implications:**
+  - When drift is detected and `on_drift=fail_closed`, Agent Hub MUST emit a structured event with:
+    - Envelope:
+      - `kind: "alert"`
+      - `orchestration_session_id` (required)
+      - `run_id` (required)
+      - `agent_id` (the orchestrator’s agent id; required)
+      - `role: "orchestrator"` (required)
+    - `data` (required fields):
+      - `code: "world_restart_required"`
+      - `reason: <one of DR-0008 taxonomy strings>`
+      - `required_action: "restart_world"`
+      - `on_drift: "fail_closed"`
+      - `world_id: <string>` (current world id)
+      - `world_generation: <int>` (current generation)
+      - `message: <human readable string>`
+  - Exit-code behavior (tooling/CLI boundaries):
+    - The operation that detects drift under `fail_closed` MUST return an actionable fail-closed error (do not restart).
+    - Exit code MUST be `3` when drift is detected under `fail_closed` (restart required; consistent with existing “dependency unavailable” taxonomy used elsewhere).
+- **Risks:**
+  - Missing required fields if emitters drift; mitigated by schema fixtures + tests.
+- **Unlocks:**
+  - Deterministic automation hooks (“watch for `kind=alert` + `data.code=world_restart_required`”).
+- **Quick wins / low-hanging fruit:**
+  - Implement as one alert emission + one actionable error path; reuse DR-0008 reason taxonomy.
+
+**Option B — Add a dedicated event kind `kind=world_restart_required` (extend the `kind` enum)**
+- **Pros:**
+  - Consumers can switch on `kind` alone (simpler decoding).
+  - More “type-safe” at the envelope level.
+- **Cons:**
+  - Requires expanding the shared `kind` enum (ADR-0017) and coordinating across all emitters/consumers.
+  - Higher drift risk if any component lags and treats it as unknown.
+- **Cascading implications:**
+  - Update ADR-0017 + its decision register to add the new `kind`.
+  - Add compatibility rules for older consumers.
+- **Risks:**
+  - Contract churn and interop breakage if any component assumes the smaller enum.
+- **Unlocks:**
+  - Cleaner kind-switch semantics long-term, at higher upfront cost.
+- **Quick wins / low-hanging fruit:**
+  - None without cross-track coordination.
+
+**Recommendation**
+- **Selected:** Option A — Emit `kind=alert` with required `data.code="world_restart_required"`.
+- **Rationale (crisp):** Fits the existing structured event envelope contract (ADR-0017) while providing a stable machine key and strict required-field schema without cross-track enum churn.
+
+**Follow-up tasks (explicit)**
+- Update ADR-0025 to name and specify this alert event (including required `data` fields).
+- Add a small schema/test fixture for this alert event to prevent emitter drift.
+
+---
+
+### DR-0010 — `world_restarted` structured event schema for `agents.hub.world_restart.on_drift=auto_restart` (use `kind=alert` + `data.code` vs `kind=status`)
+
+**Decision owner(s):** Shell + World + Agent Hub maintainers  
+**Date:** 2026-02-11  
+**Status:** Accepted  
+**Related docs:** `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`, `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`, `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003, DR-0008)
+
+**Problem / Context**
+- DR-0008 requires that when drift is detected and `agents.hub.world_restart.on_drift=auto_restart`, the hub MUST:
+  - restart the world,
+  - increment `world_generation`, and
+  - emit a structured `world_restarted` event with non-empty `reason`.
+- We must lock a stable, machine-detectable schema for that event so UIs/automation can reliably detect restarts and reason about `world_id/world_generation`.
+
+**Option A — Emit a structured agent event with `kind=alert` and required `data.code="world_restarted"` (recommended)**
+- **Pros:**
+  - Matches the pattern used for drift fail-closed alerts (DR-0009): `kind=alert` + `data.code`.
+  - Avoids expanding the shared `kind` enum beyond ADR-0017’s contract.
+  - Easy for consumers to key off (`kind=alert` + `data.code=world_restarted`).
+- **Cons:**
+  - Slightly noisy: “alert” is used even when auto-restart is expected behavior.
+- **Cascading implications:**
+  - On auto-restart, Agent Hub MUST emit a structured agent event with:
+    - Envelope:
+      - `kind: "alert"`
+      - `orchestration_session_id` (required)
+      - `run_id` (required)
+      - `agent_id` (the orchestrator’s agent id; required)
+      - `role: "orchestrator"` (required)
+    - `data` (required fields):
+      - `code: "world_restarted"`
+      - `reason: <one of DR-0008 taxonomy strings>`
+      - `on_drift: "auto_restart"`
+      - `previous_world_id: <string>`
+      - `new_world_id: <string>`
+      - `previous_world_generation: <int>`
+      - `new_world_generation: <int>` (MUST equal `previous_world_generation + 1`)
+      - `message: <human readable string>`
+- **Risks:**
+  - Missing required fields if emitters drift; mitigated by fixtures + tests.
+- **Unlocks:**
+  - Deterministic observability of world lifecycle within long sessions.
+- **Quick wins / low-hanging fruit:**
+  - Emit this event alongside updating hub session state (`world_id`, `world_generation`).
+
+**Option B — Emit `kind=status` with `data.status="world_restarted"` (no alert)**
+- **Pros:**
+  - Less noisy; treats restarts as routine lifecycle status.
+- **Cons:**
+  - Adds a second “typed-ness” convention (`data.status`) alongside `data.code` used by other alerts.
+  - Easier to miss in operator UX if it looks like a regular status update.
+- **Cascading implications:**
+  - Must define a stable `data.status` key and require the same world-id/generation fields.
+- **Risks:**
+  - Restarts get overlooked in operator UX and downstream automation.
+- **Unlocks:**
+  - Cleaner log streams if restarts happen frequently.
+- **Quick wins / low-hanging fruit:**
+  - None beyond swapping the `kind`.
+
+**Recommendation**
+- **Selected:** Option A — Emit `kind=alert` with required `data.code="world_restarted"`.
+- **Rationale (crisp):** Reuses the existing `alert` + `data.code` pattern for machine detectability without introducing new enum kinds or parallel status-typing conventions.
+
+**Follow-up tasks (explicit)**
+- Update ADR-0025 to specify this `world_restarted` alert event schema and required fields.
+- Add a schema/test fixture for this event to prevent emitter drift.

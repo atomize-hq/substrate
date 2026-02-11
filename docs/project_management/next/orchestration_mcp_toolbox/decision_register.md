@@ -230,15 +230,13 @@ Scope:
 - **Pros:**
   - Matches operator expectations: “orchestrator scope governs its tools”.
   - Avoids silent boundary changes (no unexpected host execution).
-  - Cleanly supports both host-only and in-world orchestrators (where policy allows).
+  - Aligns with the v1 posture where the orchestrator is host-scoped (ADR-0025 Decision Register DR-0007).
 - **Cons:**
-  - Some tools may require extra plumbing when orchestrator is in-world (e.g., access to host-only state).
+  - Some tools may depend on world availability (e.g., session/world linkage) and must define fail-closed behavior when the world boundary is required but unavailable.
 - **Cascading implications:**
-  - If a tool requires host-only access and the orchestrator is in-world, the tool must:
-    - either be explicitly unsupported in that posture (fail closed with exit code `4` / not supported), or
-    - be implemented via an auditable brokered call path (future).
+  - Tools MUST declare required dependencies and fail closed with actionable errors when those dependencies are unavailable (e.g., world boundary required but missing).
 - **Risks:**
-  - Feature gaps for in-world orchestrators in v1; acceptable if clearly documented and fail-closed.
+  - Dependency confusion (“why did this fail?”); mitigated by `substrate agent toolbox status` and `--explain` surfaces.
 - **Unlocks:**
   - Deterministic security posture with clear failure modes.
 - **Quick wins / low-hanging fruit:**

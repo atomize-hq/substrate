@@ -78,6 +78,23 @@ Merge strategy:
 - `agents.defaults.cli.mode: persistent|per_request`
   - Default (effective): `persistent`.
 
+#### `agents.hub` (additive; Phase 5)
+- `agents.hub.orchestrator_agent_id: string`
+  - Meaning: selects which agent inventory item id is assigned `role=orchestrator` for the current process/session.
+  - Default (effective): empty string.
+  - Constraint: if `agents.enabled=true`, this key MUST be non-empty and MUST refer to an eligible, allowlisted agent inventory item (enforced by the Agent Hub; ADR-0025).
+- `agents.hub.world_restart.on_drift: auto_restart|fail_closed`
+  - Meaning: how Agent Hub handles “world-relevant drift” during a long-running orchestration session.
+  - Default (effective): `auto_restart`.
+
+#### `agents.toolbox` (additive; Phase 5)
+- `agents.toolbox.enabled: bool`
+  - Meaning: whether the internal orchestration toolbox may run at all for the effective config.
+  - Default (effective): `false`.
+- `agents.toolbox.bind.transport: uds|tcp`
+  - Meaning: preferred bind transport for the toolbox endpoint.
+  - Default (effective): `uds`.
+
 ## Policy schema additions
 
 Files:

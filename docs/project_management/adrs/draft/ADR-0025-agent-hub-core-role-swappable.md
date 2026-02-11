@@ -19,9 +19,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: e360b1396abccdf01d7a90dc8240a56120860733c3f629b4c1097a5601d95d23
-ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
-
+ADR_BODY_SHA256: ddeebd7151afa7012493e62c447cc1928d3ab6328fbce0d2c3fadf0e8fed5552
 ### Changes (operator-facing)
 - Agent Hub provides a stable registry + session router for CLI and API agents
   - Existing: Substrate can run worlds, trace commands, and call a world-agent API, but “agents” are not uniformly registered/routed as role-swappable backends.
@@ -136,11 +134,62 @@ Clarification (v1; non-negotiable):
 
   - New additive config key:
     - `agents.hub.orchestrator_agent_id: <agent_id>`
+      - Meaning: selects the agent inventory item with `id=<agent_id>` (resolved via the agent inventory directory precedence above).
   - If `agents.enabled=true` and this key is missing or points to an ineligible agent, Agent Hub MUST fail closed with a config error (exit code `2`).
   - Orchestrator execution scope posture (authoritative; see Decision Register DR-0007):
     - The orchestrator agent selected by `agents.hub.orchestrator_agent_id` MUST have `config.execution.scope=host`.
     - If the selected orchestrator has `config.execution.scope=world`, Agent Hub MUST fail closed with an actionable config error (exit code `2`).
     - In-world execution is driven indirectly by dispatching world-scoped member agents with their own toolsets/policy overlays (the orchestrator does not need to run in-world).
+
+  - World drift handling (authoritative; see Decision Register DR-0008):
+    - New additive config key:
+      - `agents.hub.world_restart.on_drift: auto_restart|fail_closed`
+        - Meaning: how the Agent Hub handles “world-relevant drift” during a long-running orchestration session.
+        - Default: `auto_restart`.
+    - Minimum required `reason` taxonomy (v1; strings):
+      - `policy_snapshot_changed`
+      - `workspace_root_changed`
+      - `world_fs_policy_changed`
+      - `net_policy_changed`
+      - `execution_scope_changed`
+    - Required behavior:
+      - If `auto_restart`: hub MUST restart the world, increment `world_generation`, and emit a structured `world_restarted` event (Decision Register DR-0010) with a non-empty `reason`.
+      - If `fail_closed`: hub MUST NOT restart automatically; it MUST fail closed with an actionable error (exit code `3`) AND MUST emit a structured “restart required” alert event (Decision Register DR-0009).
+
+  - `world_restarted` alert event (authoritative; see Decision Register DR-0010):
+    - When drift is detected under `agents.hub.world_restart.on_drift=auto_restart` and the hub restarts the world, the hub MUST emit a structured agent event with:
+      - Envelope:
+        - `kind: "alert"`
+        - `orchestration_session_id` (required)
+        - `run_id` (required)
+        - `agent_id` (the orchestrator’s agent id; required)
+        - `role: "orchestrator"` (required)
+      - `data` (required fields):
+        - `code: "world_restarted"`
+        - `reason: <one of the DR-0008 taxonomy strings>`
+        - `on_drift: "auto_restart"`
+        - `previous_world_id: <string>`
+        - `new_world_id: <string>`
+        - `previous_world_generation: <int>`
+        - `new_world_generation: <int>` (MUST equal `previous_world_generation + 1`)
+        - `message: <human readable string>`
+
+  - Drift “restart required” alert event (authoritative; see Decision Register DR-0009):
+    - When drift is detected under `agents.hub.world_restart.on_drift=fail_closed`, the hub MUST emit a structured agent event with:
+      - Envelope:
+        - `kind: "alert"`
+        - `orchestration_session_id` (required)
+        - `run_id` (required)
+        - `agent_id` (the orchestrator’s agent id; required)
+        - `role: "orchestrator"` (required)
+      - `data` (required fields):
+        - `code: "world_restart_required"`
+        - `reason: <one of the DR-0008 taxonomy strings>`
+        - `required_action: "restart_world"`
+        - `on_drift: "fail_closed"`
+        - `world_id: <string>`
+        - `world_generation: <int>`
+        - `message: <human readable string>`
   - Default role assignment:
     - Every other *eligible* agent is assigned `member` (v1 default taxonomy label).
     - Non-eligible agents are `unassigned` and MUST NOT receive orchestration tools.
@@ -223,3 +272,6 @@ Clarification (v1; non-negotiable):
     - DR-0005 (Backend event streaming model: push vs pull)
     - DR-0006 (CLI command placement: top-level `substrate agent` vs `substrate host|world agent`)
     - DR-0007 (Orchestrator execution scope: host-scoped orchestrator vs allow in-world orchestrator)
+    - DR-0008 (World drift handling: config lever `auto_restart` vs `fail_closed`)
+    - DR-0009 (“Restart required” alert event schema: `kind=alert` + `data.code` vs new enum kind)
+    - DR-0010 (`world_restarted` alert event schema: `kind=alert` + `data.code` vs `kind=status`)
