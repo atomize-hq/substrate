@@ -549,9 +549,22 @@ fn run_workspace_sync(args: &WorkspaceSyncArgs, cli: &Cli) -> Result<i32> {
 
     let record = match rt.block_on(async { client.pending_diff(request).await }) {
         Ok(r) => r,
-        Err(_err) => {
-            eprintln!("substrate: workspace sync failed to retrieve pending diff");
-            return Ok(1);
+        Err(err) => {
+            // WS1-spec: when `--direction from_world` is in effect, a reachable world backend is
+            // required. If pending diff retrieval fails after capabilities succeeded, prefer
+            // treating it as a backend availability issue (exit 3) unless we can confidently
+            // classify it as a non-transport/internal payload failure.
+            let looks_like_payload_failure =
+                err.chain().any(|cause| cause.is::<serde_json::Error>());
+            if looks_like_payload_failure {
+                eprintln!("substrate: workspace sync failed to retrieve pending diff");
+                return Ok(1);
+            }
+
+            eprintln!(
+                "substrate: workspace sync requires world; run `substrate world enable` then `substrate world doctor`"
+            );
+            return Ok(3);
         }
     };
 

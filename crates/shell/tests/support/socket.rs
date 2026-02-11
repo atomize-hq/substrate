@@ -30,6 +30,16 @@ pub enum SocketResponse {
         features: Vec<String>,
         pending_diff: JsonValue,
     },
+    /// Responds to `/v1/capabilities` and `/v1/doctor/world`, but returns a
+    /// non-2xx response for `/v1/pending_diff`.
+    ///
+    /// Used to simulate a backend that is reachable for capabilities but fails
+    /// on pending diff retrieval.
+    CapabilitiesAndPendingDiffHttpError {
+        features: Vec<String>,
+        status: u16,
+        body: String,
+    },
     /// Handles capabilities and execute calls with canned payloads.
     CapabilitiesAndExecute {
         stdout: String,
@@ -133,6 +143,30 @@ impl AgentSocket {
                                     || first_line.starts_with("POST /v1/workspace/pending_diff")
                                 {
                                     write_response(&mut stream, &pending_diff.to_string());
+                                } else {
+                                    let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\n\r\n");
+                                }
+                            }
+                            SocketResponse::CapabilitiesAndPendingDiffHttpError {
+                                features,
+                                status,
+                                body,
+                            } => {
+                                if first_line.starts_with("GET /v1/capabilities") {
+                                    write_capabilities_with_features(&mut stream, features);
+                                } else if first_line.starts_with("GET /v1/doctor/world") {
+                                    write_world_doctor_report(&mut stream);
+                                } else if first_line.starts_with("GET /v1/pending_diff")
+                                    || first_line.starts_with("POST /v1/pending_diff")
+                                    || first_line.starts_with("GET /v1/workspace/pending_diff")
+                                    || first_line.starts_with("POST /v1/workspace/pending_diff")
+                                {
+                                    write_status_response(
+                                        &mut stream,
+                                        *status,
+                                        http_reason_phrase(*status),
+                                        body,
+                                    );
                                 } else {
                                     let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\n\r\n");
                                 }
@@ -395,6 +429,27 @@ fn write_world_doctor_report(stream: &mut UnixStream) {
 fn write_response(stream: &mut UnixStream, body: &str) {
     let reply = format!(
         "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        body.len(),
+        body
+    );
+    let _ = stream.write_all(reply.as_bytes());
+}
+
+fn http_reason_phrase(status: u16) -> &'static str {
+    match status {
+        400 => "Bad Request",
+        404 => "Not Found",
+        500 => "Internal Server Error",
+        503 => "Service Unavailable",
+        _ => "Error",
+    }
+}
+
+fn write_status_response(stream: &mut UnixStream, status: u16, reason: &str, body: &str) {
+    let reply = format!(
+        "HTTP/1.1 {} {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        status,
+        reason,
         body.len(),
         body
     );

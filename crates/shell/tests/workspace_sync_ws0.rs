@@ -523,6 +523,66 @@ fn workspace_sync_dry_run_exits_4_when_backend_lacks_pending_diff_discovery() {
 }
 
 #[test]
+fn workspace_sync_dry_run_exits_3_when_pending_diff_fails_after_capabilities_succeeds() {
+    let fixture = WorkspaceSyncFixture::new();
+    fixture.init_workspace();
+    fixture.write_workspace_yaml_patch(
+        "sync:\n  auto_sync: false\n  direction: from_world\n  conflict_policy: prefer_host\n  exclude: []\n",
+    );
+
+    let before_workspace_yaml =
+        fs::read_to_string(fixture.workspace_yaml_path()).expect("read workspace.yaml");
+
+    let socket_dir = Builder::new()
+        .prefix("substrate-ws1-sock-")
+        .tempdir_in("/tmp")
+        .expect("create ws1 socket tempdir");
+    let socket_path = socket_dir.path().join("world-agent.sock");
+    let _socket = AgentSocket::start(
+        &socket_path,
+        SocketResponse::CapabilitiesAndPendingDiffHttpError {
+            features: vec!["execute".to_string(), "pending_diff_v1".to_string()],
+            status: 500,
+            body: "{\"error\":\"internal\",\"message\":\"boom\"}".to_string(),
+        },
+    );
+
+    let mut cmd = fixture.command();
+    cmd.current_dir(&fixture.workspace_root)
+        .env("SUBSTRATE_OVERRIDE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+        .args([
+            "workspace",
+            "sync",
+            "--dry-run",
+            "--direction",
+            "from_world",
+        ]);
+    let output = cmd
+        .output()
+        .expect("run workspace sync --dry-run against failing pending-diff backend");
+
+    assert_eq!(
+        output.status.code(),
+        Some(3),
+        "pending diff failure after capabilities must exit 3: {}",
+        combined_output(&output)
+    );
+    let combined = combined_output(&output);
+    assert!(
+        combined.contains("substrate world enable") && combined.contains("substrate world doctor"),
+        "stderr must include actionable world enable/doctor guidance: {combined}"
+    );
+
+    let after_workspace_yaml =
+        fs::read_to_string(fixture.workspace_yaml_path()).expect("read workspace.yaml after");
+    assert_eq!(
+        before_workspace_yaml, after_workspace_yaml,
+        "workspace sync --dry-run must not mutate workspace.yaml on pending diff failure"
+    );
+}
+
+#[test]
 fn workspace_sync_without_dry_run_is_stubbed_in_ws0() {
     let fixture = WorkspaceSyncFixture::new();
     fixture.init_workspace();
