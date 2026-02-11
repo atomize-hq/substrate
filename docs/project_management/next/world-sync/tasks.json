@@ -589,7 +589,7 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-sync\" TASK_ID=\"WS2-integ-linux\""
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "integration",
       "workflow": ".github/workflows/feature-smoke.yml",
       "worktree": "wt/world-sync-ws2-integ-linux"
