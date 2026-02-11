@@ -47,16 +47,51 @@ Matching rule:
 - A diff path is excluded if it matches **any** exclude pattern.
 
 ## Pending diff semantics (authoritative)
-Pending diffs are represented as three disjoint path sets:
+### Pending diff record (authoritative; implementation contract)
+Pending diff discovery returns a single “pending diff record” for the current world session that includes:
+- `session_started_at`: UTC timestamp of session start (RFC3339, e.g., `2026-02-10T18:38:23Z`)
+  - Used as the conflict baseline (see Conflict detection).
+- `diff_id`: opaque identifier for the returned pending diff snapshot
+  - MUST change whenever the underlying pending diff set changes.
+  - Used to safely acknowledge/clear diffs after apply (see Clear/ack semantics).
+- One or two buckets of disjoint path sets:
+  - `non_pty`: pending changes from non-PTY world executions
+  - `pty` (optional): pending changes from PTY world executions
+
+Each bucket contains three disjoint path sets (lists of normalized workspace-relative paths):
 - `writes`: paths created by the world session
 - `mods`: paths modified by the world session
 - `deletes`: paths removed by the world session
+
+Backend capability contract (authoritative)
+- The world backend MUST provide the following capabilities for world-sync to be supported:
+  - Discover the pending diff record (including `session_started_at` and `diff_id`).
+  - Read the current file type/bytes for any path in `writes|mods` at apply time.
+  - Acknowledge/clear a pending diff snapshot by `diff_id` (conditional clear).
 
 Rules:
 - Paths MUST be treated as files unless the filesystem indicates a directory at apply time.
 - Deletions:
   - When applying a delete entry, Substrate removes the target path.
   - If the target is a directory, Substrate deletes it recursively.
+
+### Content source + permissions (authoritative)
+For any path in `writes` or `mods` that is selected for apply (after filtering/conflict policy):
+- Substrate MUST read the current content from the world session filesystem at apply time.
+- Substrate MUST ensure parent directories exist on the host before writing a file (create missing parents as directories).
+- If the source path does not exist at apply time, Substrate MUST exit `1` (unexpected internal error) and stop applying further paths.
+- Substrate MUST preserve the source type and permissions:
+  - Directories: create as directories (never as files) and preserve execute bits (`0o111`) at minimum.
+  - Regular files: write bytes exactly and preserve execute bits (`0o111`) at minimum.
+
+### Coalescing rules (authoritative)
+When multiple events affect the same path within a session (or within a single pending bucket), the pending diff MUST be coalesced so each path appears in exactly one of `writes|mods|deletes`.
+
+Coalescing rule (last-op-wins):
+- If a path is deleted at any point after it was written/modified, it ends in `deletes`.
+- If a path is created (not present at session start) and later modified, it ends in `writes`.
+- If a path is deleted and later recreated, it ends in `writes`.
+- If a path existed at session start and is modified (and not later deleted), it ends in `mods`.
 
 ## Size guards (authoritative; fail-closed)
 Before any apply, Substrate validates the pending diff against these hard limits:
@@ -101,7 +136,7 @@ Behavior:
 
 ## Apply ordering (authoritative)
 When applying a diff (after validation passes), Substrate applies in deterministic order:
-1) Deletes: sort paths descending by string order (deepest paths are deleted first in typical lexical hierarchies).
+1) Deletes: sort by path depth descending, then lexicographically descending.
 2) Writes + mods: sort paths ascending by string order.
 
 ## Atomicity / failure model (authoritative)
@@ -111,5 +146,13 @@ When applying a diff (after validation passes), Substrate applies in determinist
   - size guards
   - conflict detection (when policy=`abort`)
 - After validation passes, apply is best-effort:
-  - If any filesystem operation fails mid-apply, Substrate exits `1` and does not attempt to revert already-applied mutations.
+  - Substrate stops at the first filesystem operation failure, exits `1`, and does not attempt to revert already-applied mutations.
 
+## Clear/ack semantics (authoritative)
+After a successful apply (exit `0`), Substrate MUST acknowledge/clear the applied pending diff so subsequent `workspace sync` is a no-op for the applied bucket(s).
+
+Rules:
+- `--dry-run` MUST NOT clear diffs.
+- Clearing MUST be conditional on the `diff_id` that was applied:
+  - If the backend reports a different `diff_id` by the time Substrate attempts to clear, Substrate MUST treat the clear as failed (do not clear “whatever is current”).
+  - This prevents dropping new pending changes that arrived concurrently.

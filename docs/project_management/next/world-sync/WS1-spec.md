@@ -23,12 +23,15 @@ Inside a workspace, `workspace sync --dry-run` requires the world backend when d
 ### Pending diff discovery
 When the world backend is available:
 - `workspace sync --dry-run --direction from_world` MUST:
-  - retrieve the current session’s pending non-PTY diff (DR-0002),
+  - retrieve the current session’s pending non-PTY diff record (DR-0002; `filesystem-semantics-spec.md`),
   - apply exclude filtering rules from `filesystem-semantics-spec.md`,
   - print a deterministic summary:
     - total pending paths (writes/mods/deletes),
     - counts per bucket,
     - whether any paths were excluded by patterns.
+  - When `--verbose` is set, output MUST include:
+    - `session_started_at`, and
+    - `diff_id`.
 - If the backend does not support pending diff discovery:
   - Exit `4` with an explicit unsupported message.
 

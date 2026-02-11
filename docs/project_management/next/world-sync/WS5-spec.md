@@ -15,14 +15,22 @@
 
 ### `from_host` reconciliation
 Behavior:
-- Compute the set of “overlay-shadowed” paths: paths that exist in the world overlay upper layer (pending writes/mods/deletes).
+- Compute the set of “overlay-shadowed” paths from the pending diff record:
+  - the union of `writes|mods|deletes` across the `non_pty` bucket and (if present) the `pty` bucket.
 - For each such path:
   - If the host path is newer than `session_started_at`, it is a conflict (DR-0004).
   - Conflict policy determines whether the host version replaces the upper version (`prefer_host`), the upper version is kept (`prefer_world`), or the operation aborts (`abort`).
 
 Mutations:
 - `from_host` MUST NOT mutate the host workspace.
-- `from_host` MAY mutate world overlay state (upper layer) to reflect conflict policy decisions.
+- `from_host` MUST update the world session writable layer (backend-specific) so subsequent world reads reflect the selected policy:
+  - `prefer_host`: discard the world’s pending change for the path so the world session observes the host version.
+  - `prefer_world`: keep the world’s pending change for the path.
+  - `abort`: perform no mutations and exit `5` if any conflict exists.
+
+Output:
+- `--dry-run` MUST print a deterministic reconciliation plan summary (counts, and whether conflicts exist).
+- `--verbose` MUST print deterministic per-path decisions (keep/discard/conflict).
 
 ### PTY apply
 When applying `from_world`:

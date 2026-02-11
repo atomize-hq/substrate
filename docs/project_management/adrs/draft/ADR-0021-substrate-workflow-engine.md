@@ -9,7 +9,9 @@
 - Feature directory: `docs/project_management/next/workflow-engine/`
 - Sequencing spine: `docs/project_management/next/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
+  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
   - `docs/project_management/standards/CONTRACT_SURFACE_STANDARD.md`
 
@@ -18,22 +20,27 @@
 - Tasks: `docs/project_management/next/workflow-engine/tasks.json` (not created; ADR draft phase)
 - Spec manifest: `docs/project_management/next/workflow-engine/spec_manifest.md` (not created; ADR draft phase)
 - Contract (if present): `docs/project_management/next/workflow-engine/contract.md` (not created; ADR draft phase)
-- Decision Register: `docs/project_management/next/workflow-engine/decision_register.md` (required before Accepted; not created; ADR draft phase)
+- Decision Register: `docs/project_management/next/workflow-engine/decision_register.md` (required before Accepted)
 - Impact Map: `docs/project_management/next/workflow-engine/impact_map.md` (not created; ADR draft phase)
 - Manual Playbook: `docs/project_management/next/workflow-engine/manual_testing_playbook.md` (not created; ADR draft phase)
+- Dependency foundations (must remain compatible):
+  - Trace + event foundations: `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
+  - Output routing + attribution: `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+  - Router daemon (workflow triggers, queues, cross-workspace): `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md`
+  - Config/policy surface (no new roots): `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: f3b261e6d6b0b1463b43542e6a524e8d79567d812c32d35224f8f5256aecbe2e
+ADR_BODY_SHA256: dec05669efbf05ffb0909f9761691d27b30f9c40a324e32fc94bb0e9123e3cb1
 ### Changes (operator-facing)
 - Add a first-class “workflow run” capability to Substrate
   - Existing: Substrate executes single commands (interactive or non-interactive) and records spans for replay/audit; operators orchestrate multi-step flows outside of Substrate (scripts, makefiles, ad-hoc tooling).
-  - New: Substrate can run a user-defined DAG workflow made of heterogeneous nodes (agent calls, tool/script exec, HTTP calls, sub-workflows) while emitting a single traceable workflow run with per-node spans and replay hooks.
+  - New: Substrate can run a user-defined DAG workflow (YAML/JSON) made of heterogeneous nodes (command execution, sub-workflows, composite nodes like Forge) while emitting a single traceable workflow run with per-node spans and replay hooks.
   - Why: make multi-step automation observable/replayable under the same policy+trace model, and provide a stable substrate for “agentic workflows” without coupling to any specific agent framework.
   - Links:
-    - `crates/trace/src/span.rs`
-    - `crates/agent-api-types/src/lib.rs`
-    - `crates/common/src/agent_events.rs`
+    - `docs/project_management/adrs/draft/ADR-0021-substrate-workflow-engine.md#L1`
+    - `docs/project_management/next/workflow-engine/decision_register.md`
+    - `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md#L1`
 
 ## Problem / Context
 - Substrate already provides secure execution, policy enforcement, and trace/replay, but it does not provide a native workflow graph runner.
@@ -53,24 +60,30 @@ ADR_BODY_SHA256: f3b261e6d6b0b1463b43542e6a524e8d79567d812c32d35224f8f5256aecbe2
 
 ## Non-Goals
 - Do not introduce distributed execution or cross-host scheduling in the initial version.
-- Do not standardize the final “agent event payload schema” in this ADR (only require span nesting + correlation fields).
-- Do not require a durable workflow database for the MVP; “resume after process restart” is out of scope for the initial cut.
-- Do not embed a third-party workflow framework as the canonical runtime (see Decision Summary).
+- Do not introduce workflow durability/resume after process restart in v1.
+- Do not introduce conditional branching/loops in the workflow spec in v1 (DAG only).
+- Do not embed a third-party workflow framework as the canonical runtime.
 
 ## User Contract (Authoritative)
 
 ### CLI
 - Commands:
   - `substrate workflow validate <workflow_spec_path>`:
-    - validates schema + DAG invariants (acyclic, known node ids, resolvable references).
+    - validates schema + DAG invariants:
+      - required keys present,
+      - node ids unique,
+      - edges refer to known nodes,
+      - graph is acyclic,
+      - graph is connected (no disconnected nodes),
+      - node kinds are known and schema-valid.
     - exit codes:
       - `0`: valid
       - `2`: invalid spec / failed validation
       - `5`: unexpected internal error
-  - `substrate workflow run <workflow_spec_path> [--input <k=v>...] [--concurrency <n>]`:
-    - runs the workflow DAG and streams node-level progress.
+  - `substrate workflow run <workflow_spec_path> [--input <k=v>...] [--concurrency <n>] [--output-json <path>]`:
+    - runs the workflow DAG and streams node-level progress (one line per node start/end by default).
     - defaults:
-      - concurrency defaults to a safe value (e.g., `min(4, num_cpus)`), but must be bounded.
+      - `--concurrency`: `min(4, available_parallelism)` (must be `>= 1`).
     - exit codes:
       - `0`: workflow completed successfully (all required nodes succeeded)
       - `3`: workflow failed (one or more nodes failed and the workflow terminated)
@@ -81,16 +94,20 @@ ADR_BODY_SHA256: f3b261e6d6b0b1463b43542e6a524e8d79567d812c32d35224f8f5256aecbe2
 
 ### Config
 - Workflow spec file:
-  - file format: YAML or JSON (YAML recommended), loaded from `<workflow_spec_path>`.
-  - schema requirements (MVP):
+  - file format: YAML or JSON, loaded from `<workflow_spec_path>` (see Decision Register DR-0001).
+  - strict schema (v1; unknown keys rejected):
     - `schema_version: 1`
-    - `workflow_id: <string>`
+    - `workflow_id: <string>` (stable identifier; used for trace correlation)
     - `nodes: [{ id, kind, inputs?, config? }, ...]`
-    - `edges: [{ from, to }, ...]` (acyclic; defines dependencies)
-    - `outputs?: { <name>: <ref> }` (optional; references node outputs)
-    - `defaults?: { budget?, policy_profile?, world_fs_mode? }` (optional)
+    - `edges: [{ from, to }, ...]` (authoritative dependency graph; see DR-0002)
+    - `defaults?: { concurrency?, fail_fast?, timeout_ms? }`
+    - `outputs?: { <name>: <ref> }` (optional; see DR-0004)
+  - Node kinds (v1 allowlist; unknown kinds are invalid):
+    - `command.exec` (built-in)
+    - `workflow.call` (built-in)
+    - `forge.run` (optional; provided by ADR-0022 / Forge)
 - Precedence:
-  - CLI flags override spec defaults for runtime knobs (e.g., concurrency, inputs).
+  - CLI flags override spec defaults for runtime knobs (e.g., concurrency, inputs, output path).
   - Policy/profile selection follows Substrate’s existing policy/config precedence rules; the workflow runner may pass an explicit profile into node executors, but does not redefine policy resolution.
 
 ### Platform guarantees
@@ -100,13 +117,14 @@ ADR_BODY_SHA256: f3b261e6d6b0b1463b43542e6a524e8d79567d812c32d35224f8f5256aecbe2
   - Unsupported node kinds on a platform must fail deterministically with an explicit error result and a node span describing the reason.
 
 ## Architecture Shape
-- Components (new crates; names are proposals):
+- Components (new crates):
+  - `crates/shell`:
+    - CLI plumbing (`substrate workflow …`) and UX rendering.
   - `crates/workflow-types`:
     - versioned spec structs + result/event structs (serde-only; no IO).
   - `crates/workflow-core`:
     - DAG validation and scheduling semantics (acyclic enforcement, topo order, concurrency gates, retry policy).
     - node executor trait(s) (e.g., `NodeExecutor` per `NodeKind`).
-    - internal graph representation uses `petgraph` as a library detail.
   - `crates/workflow-runtime`:
     - concrete executors that integrate with existing Substrate capabilities (Agent API, trace spans, policy profile selection).
   - `crates/trace`:
@@ -125,9 +143,8 @@ ADR_BODY_SHA256: f3b261e6d6b0b1463b43542e6a524e8d79567d812c32d35224f8f5256aecbe2
     - trace spans written to `~/.substrate/trace.jsonl` (default path) with graph linkage.
 
 ## Sequencing / Dependencies
-- Sequencing entry: `docs/project_management/next/sequencing.json` → TBD
-- Prerequisite integration task IDs:
-  - TBD (to be created in the Planning Pack task set)
+- Sequencing entry: this ADR must add a `workflow-engine` entry to `docs/project_management/next/sequencing.json` before it can be marked `Accepted`.
+- Prerequisite integration task IDs: none yet (this ADR is Draft). Before `Accepted`, this section must be updated to reference the Planning Pack task IDs for workflow-engine.
 - Dependencies:
   - Reuse existing Agent API request/response + streaming frame model (`crates/agent-api-*`) for tool/script execution nodes.
   - Reuse `substrate-trace` for span persistence and replay association.
@@ -173,8 +190,9 @@ ADR_BODY_SHA256: f3b261e6d6b0b1463b43542e6a524e8d79567d812c32d35224f8f5256aecbe2
   - fail with a clear “unsupported schema version” error and exit `2`.
 
 ## Decision Summary
-- This ADR intentionally avoids adopting a third-party workflow framework (e.g., durable workflow engines or opinionated agent-graph runtimes) as the canonical Substrate workflow runtime.
-  - Rationale: Substrate requires tight coupling to its trace/replay/policy model; framework-imposed eventing/persistence models would either be bypassed or force Substrate to contort/duplicate its observability surface.
-- Before this ADR is moved to Accepted, a decision register will be created at:
-  - `docs/project_management/next/workflow-engine/decision_register.md`
-  - to record A/B decisions (e.g., spec format YAML-only vs YAML+JSON, fail-closed defaults, durability scope).
+- Decision Register: `docs/project_management/next/workflow-engine/decision_register.md`
+  - DR-0001: Workflow spec file format + strictness
+  - DR-0002: DAG dependency representation in the spec
+  - DR-0003: Failure semantics (fail-fast vs allow_failure)
+  - DR-0004: Output wiring + reference model
+  - DR-0005: Trace representation (workflow spans + linkage)

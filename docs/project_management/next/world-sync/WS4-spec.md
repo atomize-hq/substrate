@@ -9,8 +9,8 @@
 ### PTY pending diff discovery
 When a PTY session has executed commands that mutate the workspace in the world overlay:
 - `workspace sync --dry-run --direction from_world` MUST report:
-  - pending non-PTY diff summary (if any), and
-  - pending PTY diff summary (if any),
+  - pending non-PTY diff summary (from the `non_pty` bucket, if any), and
+  - pending PTY diff summary (from the `pty` bucket, if any),
   - plus a combined total.
 
 ### Unsupported behavior

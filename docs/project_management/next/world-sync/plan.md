@@ -21,6 +21,7 @@ Provide a deterministic, auditable “workspace ↔ world” sync workflow plus 
   - Instead, it consumes the world backend’s per-session **pending diff** model (DR-0002) and applies a planned set of filesystem mutations to the host workspace (WS1/WS2/WS4/WS5).
 - `workspace checkpoint` / `workspace rollback` use a **host-only** internal git store under `.substrate/git/` (DR-0005; `internal-git-spec.md`) and never touch `.git/`.
   - This uses the standard `git` executable with `--git-dir` pointing into `.substrate/` and `--work-tree` set to the workspace root (no git remotes; no push/pull).
+  - This Planning Pack implements checkpoint/rollback only (WS6/WS7), not the broader per-command internal history described in `docs/project_management/future/INTERNAL_GIT.md`.
 
 ## Global guardrails (non-negotiable)
 - Specs are the single source of truth.

@@ -31,7 +31,11 @@ When preflight passes:
 
 ### Clearing pending diffs
 After a successful apply (exit `0`):
-- The pending non-PTY diff for the session MUST be cleared so the next `workspace sync` is a no-op (diff empty).
+- The applied pending diff MUST be acknowledged/cleared using the `diff_id` returned by discovery (see `filesystem-semantics-spec.md` Clear/ack semantics).
+- If the clear/ack step fails (e.g., diff_id mismatch or backend error):
+  - Substrate MUST exit `1` and print an actionable message whose output contains (case-insensitive):
+    - `applied but pending diffs were not cleared`
+  - Substrate MUST NOT attempt to “clear whatever is current”.
 
 ### Output contract
 - Non-verbose: print a deterministic summary including:

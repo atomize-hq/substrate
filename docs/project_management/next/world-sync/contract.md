@@ -8,6 +8,9 @@ This file is the single place to consolidate the user-facing contract for this f
 Command:
 - `substrate workspace sync`
 
+Notes:
+- Applies the current world session’s pending filesystem diffs to the host workspace; it is not implemented via git remotes or `git push/pull`.
+
 Flags:
 - `--dry-run` (default: false)
   - When true: print what would be applied and exit without mutating the workspace.
@@ -31,6 +34,9 @@ Exit codes:
 Command:
 - `substrate workspace checkpoint`
 
+Notes:
+- Uses Substrate’s internal git store under `.substrate/git/repo.git/` (see `internal-git-spec.md`), and never reads/modifies the user’s `.git/`.
+
 Flags:
 - `--message <TEXT>` (optional; default is deterministic; see `internal-git-spec.md`)
 - `--verbose` (default: false)
@@ -45,6 +51,9 @@ Exit codes:
 
 Command:
 - `substrate workspace rollback <target>`
+
+Notes:
+- Uses Substrate’s internal git store under `.substrate/git/repo.git/` (see `internal-git-spec.md`), and never reads/modifies the user’s `.git/`.
 
 Targets:
 - `last` (restore to the most recent checkpoint)

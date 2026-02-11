@@ -9,7 +9,9 @@
 - Feature directory: `docs/project_management/next/forge/`
 - Sequencing spine: `docs/project_management/next/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
+  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 
 ## Related Docs
@@ -17,27 +19,33 @@
 - Tasks: `docs/project_management/next/forge/tasks.json` (not created; ADR draft phase)
 - Spec manifest: `docs/project_management/next/forge/spec_manifest.md` (not created; ADR draft phase)
 - Contract (if present): `docs/project_management/next/forge/contract.md` (not created; ADR draft phase)
-- Decision Register: `docs/project_management/next/forge/decision_register.md` (required before Accepted; not created; ADR draft phase)
+- Decision Register: `docs/project_management/next/forge/decision_register.md` (required before Accepted)
 - Impact Map: `docs/project_management/next/forge/impact_map.md` (not created; ADR draft phase)
 - Manual Playbook: `docs/project_management/next/forge/manual_testing_playbook.md` (not created; ADR draft phase)
+- Dependency foundations (must remain compatible):
+  - Workflow engine (node executor hook): `docs/project_management/adrs/draft/ADR-0021-substrate-workflow-engine.md`
+  - LLM gateway front door: `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md`
+  - Backend/provider engines: `docs/project_management/adrs/draft/ADR-0024-cli-backend-provider-engine.md`
+  - Trace/event foundations: `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
+  - Config/policy surface (no new roots): `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 4b06590a244058a7f96eb3b0130afb88ddd693f18501f50c6391dfbabb1ee14f
+ADR_BODY_SHA256: ebc465112d409c333a645c9a8e5c6a3218c267dd57f42c76c1e3da3360d6487b
 ### Changes (operator-facing)
 - Introduce Forge as a first-class “agent loop” node kind usable inside Substrate workflows
   - Existing: Substrate does not provide a native “LLM-driven critique/refine/review loop” runner; operators wire together agent loops externally.
   - New: A workflow can include a `forge.run` node that performs bounded iterative refinement (execute → critique → refine → review with retries) under explicit budgets, emitting nested spans/events for observability.
   - Why: keep the general workflow engine simple (DAG scheduling) while enabling advanced looping/leadership behavior as a reusable composite node.
   - Links:
-    - `docs/project_management/adrs/draft/ADR-0021-substrate-workflow-engine.md`
-    - `crates/common/src/agent_events.rs`
-    - `crates/trace/src/span.rs`
+    - `docs/project_management/adrs/draft/ADR-0022-forge-agent-loop-as-workflow-node.md#L1`
+    - `docs/project_management/adrs/draft/ADR-0021-substrate-workflow-engine.md#L1`
+    - `docs/project_management/next/forge/decision_register.md`
 
 ## Problem / Context
 - Forge (as implemented in the current Python repo) is a specialized orchestration loop with role-based prompts/config, retries, and “leadership” adjustments.
 - Substrate is expected to gain a general workflow engine for DAG execution. Forge should not become the workflow engine; it should be a reusable node type within it.
-- The LLM gateway/proxy and the final agent-event payload shapes are still being finalized; Forge must be able to integrate without hard-coding to unstable external schemas.
+- Forge must integrate via Substrate’s stable LLM gateway and trace/event contracts, without embedding provider SDKs or inventing a new event schema.
 
 ## Goals
 - Provide a Rust Forge implementation that:
@@ -49,7 +57,7 @@ ADR_BODY_SHA256: 4b06590a244058a7f96eb3b0130afb88ddd693f18501f50c6391dfbabb1ee14
 
 ## Non-Goals
 - Do not implement a full provider/model catalog inside Forge; model/provider definition belongs in a separate crate/service.
-- Do not require finalization of the “agent event payload schema” to build Forge; only require correlation + nesting.
+- Do not invent a new “agent event schema” for Forge; Forge emits spans/events using Substrate’s trace/event foundations.
 - Do not implement tool execution inside Forge in the MVP (tool calls should remain explicit workflow nodes unless/until a dedicated tool-call interface is standardized).
 - Do not implement reinforcement learning training pipelines in the initial Rust Forge.
 
@@ -57,18 +65,37 @@ ADR_BODY_SHA256: 4b06590a244058a7f96eb3b0130afb88ddd693f18501f50c6391dfbabb1ee14
 
 ### CLI
 - No new top-level CLI commands are introduced in the initial Forge MVP.
-- Forge is exposed as a workflow node kind (`forge.run`) and/or as a library API for internal callers.
+- Forge is exposed as a workflow node kind (`forge.run`).
+- `crates/forge-core` is a library crate and is not a stable public API in v1.
 
 ### Config
-- Forge configuration surface is split intentionally:
-  - Workflow-level: `forge.run` node config references a forge “profile” and provides budgets.
-  - Provider/model-level: resolved by an external gateway/catalog (out of scope for Forge).
-- Minimum `forge.run` node config (schema is part of `workflow-types` spec):
-  - `profile: <string>` (e.g., `default`, `planning`, `coding`)
-  - `max_attempts: <u32>`
-  - `budgets: { max_runtime_ms?, max_tokens?, max_cost_usd? }`
-  - `roles: { execute, critique, refine, review, reflect }`:
-    - each role may specify output constraints (max chars/tokens) and validation mode.
+- `forge.run` node config is part of the workflow spec file defined by `ADR-0021`.
+- Strict config schema (v1; unknown keys rejected):
+  - Node inputs (in the workflow spec node `inputs`):
+    - `task: <string>` (required)
+    - `context?: <string>` (optional; default empty)
+  - Node config (in the workflow spec node `config`):
+    - `schema_version: 1`
+    - `max_attempts: <u32>` (required; must be `>= 1`)
+    - `budgets?: { max_runtime_ms?: <u64>, max_tokens?: <u64> }`
+      - If `max_tokens` is set but the gateway does not return token usage metadata, Forge MUST fail closed with an explicit error.
+    - `roles: { execute, critique, refine, review }` (required)
+      - Each role value is a strict object:
+        - `template: <string>` (required; supports placeholders described below)
+  - Template placeholders (v1):
+    - `${task}`, `${context}`, `${attempt}`
+    - `${execute}`, `${critique}`, `${refine}`, `${review}` (the prior step outputs within the same attempt)
+  - Step output contract (v1; deterministic):
+    - Each role output MUST contain a `FINAL:` marker.
+    - Forge extracts the role output as:
+      1) remove any `<think>…</think>` blocks,
+      2) take the content starting at the last `FINAL:` marker (inclusive of any following lines),
+      3) trim leading whitespace on the first extracted line and trim trailing whitespace at the end.
+    - Missing `FINAL:` is a step failure and causes the attempt to be marked FAIL.
+    - Review PASS/FAIL contract (v1; deterministic):
+      - The extracted `review` block’s first line MUST be exactly `FINAL: PASS` or `FINAL: FAIL` (case-sensitive).
+      - PASS ends the loop. Forge `result` is the extracted content after the PASS line (may be empty).
+      - FAIL marks the attempt FAIL (and triggers retry if attempts remain).
 
 ### Platform guarantees
 - Forge must behave consistently across Linux/macOS/Windows because:
@@ -77,7 +104,7 @@ ADR_BODY_SHA256: 4b06590a244058a7f96eb3b0130afb88ddd693f18501f50c6391dfbabb1ee14
 - If the gateway is unavailable, Forge must fail deterministically with an explicit error result and a recorded span chain.
 
 ## Architecture Shape
-- Components (new crates; names are proposals):
+- Components (new crates):
   - `crates/forge-types`:
     - role enums, request/response structs, event envelopes (serde-only).
   - `crates/forge-core`:
@@ -88,35 +115,34 @@ ADR_BODY_SHA256: 4b06590a244058a7f96eb3b0130afb88ddd693f18501f50c6391dfbabb1ee14
   - `crates/forge-substrate`:
     - adapter layer that:
       - implements `ForgeEventSink` by writing spans/events via `substrate-trace` and/or `substrate_common::agent_events::AgentEvent`,
-      - implements `LlmGateway` by calling the Substrate LLM gateway/proxy client (to be defined elsewhere).
+      - implements `LlmGateway` by calling the Substrate LLM gateway/proxy client (Phase 4; see ADR-0023/ADR-0024).
   - `crates/workflow-runtime`:
     - provides a `NodeExecutor` implementation for node kind `forge.run` that:
       - creates a node span,
       - invokes `forge-core`,
       - maps forge step spans as children (or uses `graph_edges` when appropriate).
 - End-to-end flow:
-  - Inputs: a `forge.run` node invocation (task + profile + budgets) and a parent node span id.
-  - Derived state: selected role prompts/config (from profile), resolved gateway routing info (via adapter), per-attempt budget state.
+  - Inputs: a `forge.run` node invocation (task + budgets + role templates) and a parent node span id.
+  - Derived state: resolved role templates, resolved gateway routing info (via adapter), per-attempt budget state.
   - Actions:
     - run `execute → critique → refine → review`,
-    - if FAIL and attempts remain: emit `monitor/reflect` step (optional) and retry under budgets,
+    - if FAIL and attempts remain: retry the full 4-step loop under budgets,
     - stop when PASS or budgets/attempts exhausted.
   - Outputs:
-    - final “result” string (or structured output when configured),
-    - per-role artifacts (optional) and step summaries,
+    - final `result` string (on PASS: extracted content after the `FINAL: PASS` review line; on FAIL: empty),
+    - per-step extracted outputs + attempt counters,
     - nested spans/events suitable for replay/inspection.
 
 ## Sequencing / Dependencies
-- Sequencing entry: `docs/project_management/next/sequencing.json` → TBD
-- Prerequisite integration task IDs:
-  - TBD (to be created in the Planning Pack task set)
+- Sequencing entry: this ADR must add a `forge` entry to `docs/project_management/next/sequencing.json` before it can be marked `Accepted`.
+- Prerequisite integration task IDs: none yet (this ADR is Draft). Before `Accepted`, this section must be updated to reference the Planning Pack task IDs for forge.
 - Dependencies:
   - Workflow engine (`ADR-0021`) provides the host DAG runtime and the `forge.run` node hook point.
-  - LLM gateway/proxy contract is external; Forge depends only on the `LlmGateway` trait and the adapter crate, not on the final gateway schema.
+  - Forge depends on the Substrate LLM gateway client surface, but does not embed provider SDKs (ADR-0023/ADR-0024).
 
 ## Security / Safety Posture
 - Fail-closed rules:
-  - If budgets are exceeded (runtime/tokens/cost), Forge MUST abort the loop and return a failed node result.
+  - If budgets are exceeded (runtime/tokens), Forge MUST abort the loop and return a failed node result.
   - If the gateway call fails, Forge MUST:
     - record the error in the relevant step span/event (redacting sensitive data),
     - either retry (if allowed by retry policy) or fail deterministically.
@@ -124,14 +150,14 @@ ADR_BODY_SHA256: 4b06590a244058a7f96eb3b0130afb88ddd693f18501f50c6391dfbabb1ee14
   - Forge core must not read/write arbitrary filesystem paths by default.
   - Any artifact persistence must be delegated to a store interface and constrained to Substrate-owned directories (to be specified in the Planning Pack).
 - Observability requirements:
-  - Emit stable step names (`execute`, `critique`, `refine`, `review`, `reflect`, `monitor`, `finalize`) and attempt counters.
+  - Emit stable step names (`execute`, `critique`, `refine`, `review`) and attempt counters.
   - Every gateway call must be attributable to a step span with correlation to the parent workflow node span.
 
 ## Validation Plan (Authoritative)
 
 ### Tests
 - Unit tests:
-  - budget enforcement (attempt count, runtime budget, token/cost accounting when provided by gateway),
+  - budget enforcement (attempt count, runtime budget, token accounting when provided by gateway),
   - stop conditions (PASS ends loop; FAIL retries until max).
 - Integration tests:
   - mock `LlmGateway` with scripted responses to drive deterministic loop behavior.
@@ -149,11 +175,12 @@ ADR_BODY_SHA256: 4b06590a244058a7f96eb3b0130afb88ddd693f18501f50c6391dfbabb1ee14
 - Forge config schemas must be versioned and validated; unknown schema versions fail with exit `2` (invalid config/spec).
 
 ## Decision Summary
-- Forge is explicitly modeled as a composite node inside the workflow engine rather than a general workflow runtime.
-- Forge depends on a minimal gateway trait and an adapter crate instead of embedding provider SDKs directly.
-- Before this ADR is moved to Accepted, a decision register will be created at:
-  - `docs/project_management/next/forge/decision_register.md`
-  - to record A/B decisions (e.g., artifact storage policy, streaming event surface, role config schema).
+- Decision Register: `docs/project_management/next/forge/decision_register.md`
+  - DR-0001: Loop shape + step semantics
+  - DR-0002: Budget enforcement + fail-closed rules
+  - DR-0003: Output extraction contract (`FINAL:` marker) vs JSON-only
+  - DR-0004: Artifact persistence posture (trace-only vs file store)
+  - DR-0005: Event/streaming surface (workflow-runtime sink vs direct emitter)
 
 ## Appendix — Python Forge parity checklist (triage A/B/C)
 
@@ -163,32 +190,32 @@ Each line item below needs triage into one bucket:
 - **B**: deferred (explicitly not in v1; tracked for later)
 - **C**: belongs outside Forge (Workflow Engine / Gateway / Config / Trace / Store crates)
 
-Triage is intentionally left as **TBD** for now.
+Triage below is authoritative for Forge v1.
 
 | Area | Capability | Observed in Python Forge | Proposed home in Substrate | Notes | Triage (A/B/C) |
 |---|---|---|---|---|---|
-| Core loop | `execute → critique → refine → review` with retries | Yes | `forge-core` | Primary loop semantics; deterministic stop conditions | TBD |
-| Core loop | `monitor` adjustments + `reflect` step | Yes | `forge-core` | Optional but present in current graph; may be simplified | TBD |
-| Budgets | `max_attempts` retry ceiling | Yes | `forge-core` | Must be enforced inside Forge loop | TBD |
-| Budgets | runtime caps (per-run / per-role timeouts) | Partial (CLI heartbeat, env vars, max attempts) | `forge-core` + `workflow-core` | Decide which caps are enforced by workflow runner vs forge loop | TBD |
-| Budgets | token/cost caps | Partial (estimation + reporting) | `forge-core` + `forge-substrate` | Forge core can track counters; gateway provides usage/cost metadata | TBD |
-| Output hygiene | `FINAL:` extraction and `<think>` stripping | Yes | `forge-core` (utilities) | Should be explicit contract for downstream determinism | TBD |
-| Provider selection | role-based provider selection (execute/critique/…) | Yes | **C**: `gateway`/catalog + workflow node config | Substrate-wide: provider/model definitions should live outside Forge | TBD |
-| Config resolution | hierarchical config (defaults → role → model/role wildcard → runtime overrides) | Yes | **C**: `forge-config` + provider/model catalog | Forge should consume resolved config; not own provider catalogs | TBD |
-| Lazy initialization | true lazy provider init + optional prewarm | Yes (module exists) | **C**: gateway / provider catalog | For Rust: belongs to gateway client/pool; not forge core | TBD |
-| Checkpointing | memory/sqlite checkpointing of graph execution | Yes (LangGraph checkpointers) | **C**: `workflow-core` / `workflow-runtime` | For workflow DAG: checkpointing/resume is workflow-engine concern | TBD |
-| Streaming | stream “node start/end” progress events | Yes | **C**: `workflow-runtime` + `forge-substrate` | Forge emits step events; workflow owns streaming transport surface | TBD |
-| Streaming | verbose callback/event stream filtering | Yes (CLI filter) | **C**: workflow CLI layer | UI/CLI policy; not forge core | TBD |
-| Run identity | stable run id / thread id | Yes | `workflow-runtime` + `forge-core` | Forge run id should correlate to parent workflow node run | TBD |
-| Telemetry | per-step timings | Yes | `forge-core` + `forge-substrate` | Store timings in forge result; emit spans for timings | TBD |
-| Telemetry | provider/model breakdown per role | Yes (CLI summary) | **C**: gateway + workflow CLI | Forge can surface “what it was told”; gateway provides ground truth | TBD |
-| Telemetry | token usage extraction (provider/library responses) | Yes | **C**: gateway | Gateway should normalize usage across providers; Forge consumes usage | TBD |
-| Telemetry | cost estimation table by model | Yes (best-effort) | **C**: gateway/catalog | Pricing is volatile; should be centralized | TBD |
-| Persistence | persistence manager storing perf/leadership stats across runs | Yes | **C**: Substrate runtime/telemetry | Substrate already has trace persistence; extra stats may be workflow-level | TBD |
-| Leadership | separate “leadership orchestrator” (provider selection + parameter tuning decisions) | Yes | Split: `forge-core` loop policy + **C** gateway/catalog | Keep the “loop policy” in Forge; selection policy likely central | TBD |
-| Parameter tuning | dynamic per-role kwargs adjustments across retries | Yes | `forge-core` + **C** gateway | Forge can request adjustments; gateway enforces/validates | TBD |
-| RL hooks | meta-learning reward computation and policy update placeholder | Yes (placeholder) | **B** or **C** (separate crate) | Likely deferred; if kept, isolate in optional crate/feature | TBD |
-| CLI | `anvil run` command and rich summary output | Yes | **C**: Substrate CLI / workflow CLI | Forge as library/node; Substrate owns CLI UX | TBD |
-| CLI | `list`, `test`, `hotswap-demo` | Yes | **C**: Substrate CLI / gateway tooling | These map better to gateway diagnostics | TBD |
-| Artifacts | structured per-run artifacts (plan, deltas, ledgers) | Partial (logs/state only) | `forge-core` + **C** store | Forge should define artifact types; store is separate crate | TBD |
-| Run Store | durable run store database (vNext roadmap) | No (in Python baseline) | **C**: workflow/store | This is future vNext; not parity-required | TBD |
+| Core loop | `execute → critique → refine → review` with retries | Yes | `forge-core` | Primary loop semantics; deterministic stop conditions | A |
+| Core loop | `monitor` adjustments + `reflect` step | Yes | `forge-core` | Deferred from v1 (no monitor/reflect steps in v1) | B |
+| Budgets | `max_attempts` retry ceiling | Yes | `forge-core` | Enforced in core; retry boundary is per attempt | A |
+| Budgets | runtime caps (per-run / per-role timeouts) | Partial (CLI heartbeat, env vars, max attempts) | `forge-core` + `workflow-core` | v1 supports per-node runtime budget only (per-role timeouts deferred) | A |
+| Budgets | token/cost caps | Partial (estimation + reporting) | `forge-core` + `forge-substrate` | v1 supports token caps; cost caps are deferred | A |
+| Output hygiene | `FINAL:` extraction and `<think>` stripping | Yes | `forge-core` (utilities) | Required for deterministic extraction | A |
+| Provider selection | role-based provider selection (execute/critique/…) | Yes | **C**: `gateway`/catalog + workflow node config | Provider/model routing is a gateway/catalog concern | C |
+| Config resolution | hierarchical config (defaults → role → model/role wildcard → runtime overrides) | Yes | **C**: `forge-config` + provider/model catalog | Substrate-wide config layering belongs outside Forge | C |
+| Lazy initialization | true lazy provider init + optional prewarm | Yes (module exists) | **C**: gateway / provider catalog | Gateway client/pool concern | C |
+| Checkpointing | memory/sqlite checkpointing of graph execution | Yes (LangGraph checkpointers) | **C**: `workflow-core` / `workflow-runtime` | Workflow-engine concern | C |
+| Streaming | stream “node start/end” progress events | Yes | **C**: `workflow-runtime` + `forge-substrate` | Workflow runtime owns streaming transport | C |
+| Streaming | verbose callback/event stream filtering | Yes (CLI filter) | **C**: workflow CLI layer | CLI concern | C |
+| Run identity | stable run id / thread id | Yes | `workflow-runtime` + `forge-core` | Correlates to parent workflow node run | A |
+| Telemetry | per-step timings | Yes | `forge-core` + `forge-substrate` | Required for observability | A |
+| Telemetry | provider/model breakdown per role | Yes (CLI summary) | **C**: gateway + workflow CLI | Gateway provides ground truth | C |
+| Telemetry | token usage extraction (provider/library responses) | Yes | **C**: gateway | Gateway normalizes usage across providers | C |
+| Telemetry | cost estimation table by model | Yes (best-effort) | **C**: gateway/catalog | Centralize volatile pricing | C |
+| Persistence | persistence manager storing perf/leadership stats across runs | Yes | **C**: Substrate runtime/telemetry | v1 relies on trace only | C |
+| Leadership | separate “leadership orchestrator” (provider selection + parameter tuning decisions) | Yes | Split: `forge-core` loop policy + **C** gateway/catalog | Deferred from v1 | B |
+| Parameter tuning | dynamic per-role kwargs adjustments across retries | Yes | `forge-core` + **C** gateway | Deferred from v1 | B |
+| RL hooks | meta-learning reward computation and policy update placeholder | Yes (placeholder) | **B** or **C** (separate crate) | Deferred from v1 | B |
+| CLI | `anvil run` command and rich summary output | Yes | **C**: Substrate CLI / workflow CLI | CLI concern | C |
+| CLI | `list`, `test`, `hotswap-demo` | Yes | **C**: Substrate CLI / gateway tooling | Tooling concern | C |
+| Artifacts | structured per-run artifacts (plan, deltas, ledgers) | Partial (logs/state only) | `forge-core` + **C** store | Deferred from v1 | B |
+| Run Store | durable run store database (vNext roadmap) | No (in Python baseline) | **C**: workflow/store | Workflow/store concern | C |
