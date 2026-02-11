@@ -346,3 +346,9 @@
 ## END — 2026-02-11T23:00:16Z — platform-fix — WS2-integ-macos (restart)
 - HEAD: `ff054f0c00ff6c1dae2a842f686cf95db2324568`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS2/integ-macos/last_message.md`
+
+## END — 2026-02-11T23:57:30Z — ops — CP1-ci-checkpoint
+- CHECKOUT_SHA: `136d6814a650066c58e09c43a1d849da1cdbbb8f`
+- `ci-compile-parity`: `21927720591` (success) — https://github.com/atomize-hq/substrate/actions/runs/21927720591
+- `feature-smoke` (behavior, WS2): `21927790446` (success) — https://github.com/atomize-hq/substrate/actions/runs/21927790446
+- `ci-testing` (quick): `21927501473` (success) — https://github.com/atomize-hq/substrate/actions/runs/21927501473
