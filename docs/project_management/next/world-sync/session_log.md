@@ -342,3 +342,7 @@
 - Reason: CP1 `ci-testing` (quick) failed on `macos-14` (run `21925971428`) due to `wfgadax2_control_caged_required_allows_caged_workspace_execution`.
 - Dispatch:
   - `make triad-task-start FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" TASK_ID="WS2-integ-macos" LAUNCH_CODEX=1`
+
+## END — 2026-02-11T23:00:16Z — platform-fix — WS2-integ-macos (restart)
+- HEAD: `ff054f0c00ff6c1dae2a842f686cf95db2324568`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS2/integ-macos/last_message.md`
