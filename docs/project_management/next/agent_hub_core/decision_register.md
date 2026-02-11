@@ -337,7 +337,7 @@ Scope:
 
 **Problem / Context**
 - The orchestrator is a privileged control-plane role (toolbox access, policy/trace introspection, routing decisions).
-- Separately, task execution is intended to happen inside a world boundary via world-scoped member agents.
+- Separately, task execution can happen either on the host or inside a world boundary via member agents; world-scoped execution is the intended isolation posture when enabled.
 - The ADRs currently imply `orchestrator.execution.scope` could be `host|world`, which creates ambiguity about where orchestration runs and how it “executes in world”.
 
 **Option A — Require the orchestrator to be host-scoped in v1 (recommended)**

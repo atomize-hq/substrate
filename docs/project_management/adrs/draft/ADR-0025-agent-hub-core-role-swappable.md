@@ -19,7 +19,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: ddeebd7151afa7012493e62c447cc1928d3ab6328fbce0d2c3fadf0e8fed5552
+ADR_BODY_SHA256: 9a50f6fbd0fbe3a52890ab491979fa738721185a9e63434ecaa2ec9f132ac314
 ### Changes (operator-facing)
 - Agent Hub provides a stable registry + session router for CLI and API agents
   - Existing: Substrate can run worlds, trace commands, and call a world-agent API, but “agents” are not uniformly registered/routed as role-swappable backends.
@@ -198,6 +198,8 @@ Clarification (v1; non-negotiable):
     - A future ADR may introduce explicit role taxonomy assignment (e.g., `agents.hub.role_overrides.<agent_id>=<role>`) and/or role→toolset policy mapping.
 
 ### Platform guarantees
+- Host-only operation is supported:
+  - Agents configured with `execution.scope=host` MUST execute on the host (even when world isolation is disabled via effective config/env/flags).
 - Agent backends configured to execute in-world MUST execute inside a world boundary.
 - If effective policy has `agents.fail_closed.routing=true`, agent executions configured/routed to run in-world MUST fail closed when a world boundary is unavailable (no host fallback).
 - World session reuse (authoritative; see Decision Register DR-0004):
