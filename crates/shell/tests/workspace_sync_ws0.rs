@@ -1,13 +1,11 @@
 #![cfg(unix)]
 
-mod common;
 mod support;
 
-use common::{substrate_shell_driver, temp_dir};
 use serde_json::json;
 use std::fs;
 use std::path::{Path, PathBuf};
-use support::{AgentSocket, SocketResponse};
+use support::{substrate_shell_driver, temp_dir, AgentSocket, SocketResponse};
 use tempfile::{Builder, TempDir};
 
 struct WorkspaceSyncFixture {
