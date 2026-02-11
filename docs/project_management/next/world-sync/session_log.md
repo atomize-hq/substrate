@@ -207,3 +207,28 @@
   - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0` → `PASS`
   - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → `0` → `PASS`
   - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` → `0` → `PASS`
+
+## START — 2026-02-11T01:19:58Z — planning — quality gate remediation (follow-up: tighten Pass 3 Finding 013 coverage)
+- Feature: `docs/project_management/next/world-sync`
+- Branch (current checkout): `testing`
+- Goal: Remove remaining ambiguity for Finding 013 by making the Windows WS5 manual playbook validate both dry-run and apply unsupported paths (exit `4` + required message substring).
+- Defects addressed (by Finding ID):
+  - Finding 013 — Manual playbook WS2 expectations contradict Windows platform parity contract (sync unsupported)
+- Files created/modified:
+  - `docs/project_management/next/world-sync/manual_testing_playbook.md`
+  - `docs/project_management/next/world-sync/session_log.md`
+- Commands run (with results):
+  - `export FEATURE_DIR="docs/project_management/next/world-sync"` → (env set)
+  - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → `0`
+  - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` → `0`
+  - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` → `0`
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0`
+
+## END — 2026-02-11T01:19:58Z — planning — quality gate remediation (follow-up: tighten Pass 3 Finding 013 coverage)
+- Summary of changes (exhaustive):
+  - Updated `manual_testing_playbook.md` WS5 Windows section to validate both dry-run and apply unsupported contracts (exit `4` + `unsupported on windows` substring).
+- Mechanical checks:
+  - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → `0` → `PASS`
+  - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` → `0` → `PASS`
+  - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` → `0` → `PASS`
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0` → `PASS`

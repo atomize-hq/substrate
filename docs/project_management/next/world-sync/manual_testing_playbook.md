@@ -171,6 +171,15 @@ Expected:
 - Exit `4`.
 - Output contains (case-insensitive): `unsupported on windows`.
 
+2) Run both-direction apply (unsupported on Windows):
+```bash
+substrate workspace sync --direction both --verbose
+echo "exit=$?"
+```
+Expected:
+- Exit `4`.
+- Output contains (case-insensitive): `unsupported on windows`.
+
 ### WS5 — Linux/macOS (supported contract)
 
 1) Create/modify a host file:
