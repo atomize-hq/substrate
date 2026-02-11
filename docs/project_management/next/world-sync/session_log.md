@@ -244,3 +244,11 @@
   - `make planning-lint FEATURE_DIR="docs/project_management/next/world-sync"` → `0` → `PASS`
   - `make planning-validate FEATURE_DIR="docs/project_management/next/world-sync"` → `0` → `PASS`
 - Required fixes before starting `WS0`: none.
+
+## START — 2026-02-11T19:05:17Z — code — WS0-code
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" SLICE_ID="WS0"`
+
+## START — 2026-02-11T19:05:17Z — test — WS0-test
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" SLICE_ID="WS0"`
