@@ -43,6 +43,7 @@ After a successful apply (exit `0`):
 ### Exit codes
 - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 - 0: apply succeeded (including partial skip under `prefer_host`)
+- 1: unexpected internal error (e.g., filesystem operation failure mid-apply)
 - 3: world backend required but unavailable
 - 4: unsupported direction or backend capability
 - 5: safety refusal (protected path present, size guard, or abort-on-conflict)

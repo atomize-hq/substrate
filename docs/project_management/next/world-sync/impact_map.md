@@ -25,6 +25,7 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
 - `docs/project_management/next/world-sync/platform-parity-spec.md` — authoritative per-platform support contract
 - `docs/project_management/next/world-sync/internal-git-spec.md` — authoritative internal git contract
 - `docs/project_management/next/world-sync/WS1-spec.md` .. `WS7-spec.md` — per-slice specs
+- `docs/project_management/next/world-sync/WS0-closeout_report.md` — per-slice closeout gate report (WS0)
 - `docs/project_management/next/world-sync/WS1-closeout_report.md` .. `WS7-closeout_report.md` — per-slice closeout gate reports
 - `docs/project_management/next/world-sync/kickoff_prompts/*` — kickoff prompts for all tasks in `tasks.json`
 - `docs/project_management/next/world-sync/quality_gate_report.md` — planning quality gate evidence (required before execution)

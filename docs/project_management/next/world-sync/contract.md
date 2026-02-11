@@ -20,6 +20,7 @@ Flags:
 
 Exit codes:
 - `0`: success (including no-op: no pending diffs)
+- `1`: unexpected internal error (e.g., filesystem operation failure mid-apply)
 - `2`: not in a workspace, invalid flag value, or invalid exclude pattern
 - `3`: world backend required but unavailable (direction requires world, or no world session exists)
 - `4`: backend/platform does not support the required sync capability (explicit unsupported)
@@ -82,6 +83,7 @@ Protected excludes (always injected, always first, cannot be removed):
 
 Precedence for effective config (high → low):
 - CLI flags (only where defined by this feature; see CLI above)
+- `SUBSTRATE_OVERRIDE_*` override inputs (operator-provided; see ADR-0008)
 - Workspace patch (`.substrate/workspace.yaml`)
 - Global patch (`$SUBSTRATE_HOME/config.yaml`)
 - Built-in defaults

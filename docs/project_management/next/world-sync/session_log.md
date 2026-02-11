@@ -141,3 +141,41 @@
 - Next steps:
   - Human reviewer: complete `docs/project_management/next/world-sync/quality_gate_report.md` and set to `ACCEPT` or `REVISE` with concrete changes.
   - Operator: run `F0-exec-preflight` and update `docs/project_management/next/world-sync/execution_preflight_report.md` to `ACCEPT` before starting any triads.
+
+## START — 2026-02-10T23:16:51Z — planning — quality gate remediation (resolve Pass 1 defects)
+- Feature: `docs/project_management/next/world-sync`
+- Branch (current checkout): `testing`
+- Goal: Resolve the blocking defects recorded in `docs/project_management/next/world-sync/quality_gate_report.md` Pass 1 so the pack can be re-reviewed to `RECOMMENDATION: ACCEPT`.
+- Defects addressed (by Finding ID):
+  - Finding 002 — Decision→task traceability missing (auditability)
+  - Finding 003 — Exit code 1 drift (WS2 + contract)
+  - Finding 004 — Config precedence drift vs ADR-0008 (override env layer)
+  - Finding 005 — Impact map touch set omission (WS0 closeout)
+- Files created/modified:
+  - `docs/project_management/next/world-sync/tasks.json`
+  - `docs/project_management/next/world-sync/WS2-spec.md`
+  - `docs/project_management/next/world-sync/contract.md`
+  - `docs/project_management/next/world-sync/impact_map.md`
+  - `docs/project_management/next/world-sync/quality_gate_report.md`
+  - `docs/project_management/next/world-sync/session_log.md`
+- Commands run (with results):
+  - `export FEATURE_DIR="docs/project_management/next/world-sync"` → (env set)
+  - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → `0`
+  - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` → `0`
+  - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` → `0`
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0`
+
+## END — 2026-02-10T23:16:54Z — planning — quality gate remediation (resolve Pass 1 defects)
+- Summary of changes (exhaustive):
+  - Added DR anchor references to `tasks.json` task `references` so Decision→Task traceability is explicit.
+  - Added exit code `1` (“unexpected internal error”) to `contract.md` for `workspace sync` and to `WS2-spec.md` Exit codes list.
+  - Updated `contract.md` effective config precedence to include `SUBSTRATE_OVERRIDE_*` override inputs (ADR-0008 alignment).
+  - Updated `impact_map.md` touch set to include `WS0-closeout_report.md`.
+  - Replaced the placeholder `quality_gate_report.md` with a multi-pass report that preserves Pass 1 findings and appends a post-remediation verification pass.
+- Mechanical checks:
+  - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → `0` → `PASS`
+  - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` → `0` → `PASS`
+  - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` → `0` → `PASS`
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0` → `PASS`
+- Blockers:
+  - None recorded in `quality_gate_report.md` Pass 2 (recommendation is `ACCEPT`).
