@@ -316,3 +316,8 @@
 ## END — 2026-02-11T21:55:00Z — integration — WS2-integ-core
 - HEAD: `2a3547c11213f960775c8af425bd5b63c5643248`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS2/integ-core/last_message.md`
+
+## START — 2026-02-11T22:04:02Z — ops — CP1-ci-checkpoint
+- Dispatch:
+  - `make ci-compile-parity CI_WORKFLOW_REF="feat/world-sync" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF="<CHECKOUT_SHA>"`
+  - `make feature-smoke FEATURE_DIR="docs/project_management/next/world-sync" PLATFORM=behavior SMOKE_SLICE_ID="WS2" SMOKE_CHECKOUT_REF="<CHECKOUT_SHA>" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/world-sync" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=0`
