@@ -672,7 +672,9 @@ fn workspace_checkpoint_does_not_require_world_backend() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let checkpoint_id = stdout.trim();
     assert!(
-        checkpoint_id.starts_with("cp/") && checkpoint_id.contains('T') && checkpoint_id.ends_with('Z'),
+        checkpoint_id.starts_with("cp/")
+            && checkpoint_id.contains('T')
+            && checkpoint_id.ends_with('Z'),
         "workspace checkpoint must print a checkpoint id to stdout: {stdout}"
     );
 
