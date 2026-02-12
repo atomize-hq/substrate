@@ -573,6 +573,29 @@ pub struct PendingDiffClearRequestV1 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendingDiffReconcileRequestV1 {
+    pub profile: Option<String>,
+    pub cwd: Option<String>,
+    pub env: Option<HashMap<String, String>>,
+    pub agent_id: String,
+    pub policy_snapshot: PolicySnapshotV3,
+    pub diff_id: String,
+    pub discard_paths: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendingDiffReconcileResponseV1 {
+    #[serde(default = "pending_diff_reconcile_response_v1_default_schema_version")]
+    pub schema_version: u32,
+    pub reconciled: bool,
+    pub discarded: u32,
+}
+
+fn pending_diff_reconcile_response_v1_default_schema_version() -> u32 {
+    1
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PendingDiffClearResponseV1 {
     #[serde(default = "pending_diff_clear_response_v1_default_schema_version")]
     pub schema_version: u32,
