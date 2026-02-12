@@ -9,6 +9,7 @@
 )]
 
 use crate::guard::{should_guard_anchor, wrap_with_anchor_guard};
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Child;
 
@@ -375,6 +376,106 @@ impl OverlayFs {
         self.lower_dir = Some(lower_dir.to_path_buf());
         self.is_mounted = true;
         Ok(self.merged_dir.clone())
+    }
+
+    /// Discard (revert) the pending overlay upper entry for each provided workspace-relative path.
+    ///
+    /// This removes any materialized file/directory at `<upperdir>/<path>` as well as any whiteout
+    /// file named `.wh.<basename>` in the same parent directory. Missing paths are ignored.
+    ///
+    /// Returns the number of filesystem entries removed.
+    pub fn discard_paths(&mut self, rel_paths: &[PathBuf]) -> Result<u32> {
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = rel_paths;
+            anyhow::bail!("overlayfs path discard is only supported on Linux");
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            let mut removed: u32 = 0;
+            for rel in rel_paths {
+                if rel.is_absolute() {
+                    anyhow::bail!(
+                        "discard_paths: absolute paths are not allowed: {}",
+                        rel.display()
+                    );
+                }
+                if rel
+                    .components()
+                    .any(|c| matches!(c, std::path::Component::ParentDir))
+                {
+                    anyhow::bail!(
+                        "discard_paths: path segments must not be '..': {}",
+                        rel.display()
+                    );
+                }
+
+                let upper_entry = self.upper_dir.join(rel);
+                match fs::symlink_metadata(&upper_entry) {
+                    Ok(meta) => {
+                        let ft = meta.file_type();
+                        if ft.is_dir() && !ft.is_symlink() {
+                            fs::remove_dir_all(&upper_entry).with_context(|| {
+                                format!(
+                                    "failed to remove overlay upper directory {}",
+                                    upper_entry.display()
+                                )
+                            })?;
+                        } else {
+                            fs::remove_file(&upper_entry).with_context(|| {
+                                format!(
+                                    "failed to remove overlay upper file {}",
+                                    upper_entry.display()
+                                )
+                            })?;
+                        }
+                        removed = removed.saturating_add(1);
+                    }
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(err) => {
+                        return Err(anyhow::anyhow!(
+                            "failed to stat overlay upper entry {}: {err}",
+                            upper_entry.display()
+                        ));
+                    }
+                }
+
+                let Some(file_name) = rel.file_name().and_then(|s| s.to_str()) else {
+                    continue;
+                };
+                let parent = rel.parent().unwrap_or_else(|| Path::new(""));
+                let whiteout = self.upper_dir.join(parent).join(format!(".wh.{file_name}"));
+                match fs::symlink_metadata(&whiteout) {
+                    Ok(meta) => {
+                        if meta.file_type().is_dir() {
+                            fs::remove_dir_all(&whiteout).with_context(|| {
+                                format!(
+                                    "failed to remove overlay upper whiteout directory {}",
+                                    whiteout.display()
+                                )
+                            })?;
+                        } else {
+                            fs::remove_file(&whiteout).with_context(|| {
+                                format!(
+                                    "failed to remove overlay upper whiteout file {}",
+                                    whiteout.display()
+                                )
+                            })?;
+                        }
+                        removed = removed.saturating_add(1);
+                    }
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(err) => {
+                        return Err(anyhow::anyhow!(
+                            "failed to stat overlay upper whiteout {}: {err}",
+                            whiteout.display()
+                        ));
+                    }
+                }
+            }
+            Ok(removed)
+        }
     }
 }
 

@@ -3,8 +3,9 @@
 use crate::service::WorldAgentService;
 use agent_api_types::{
     ApiError, ExecuteRequest, ExecuteResponse, PendingDiffClearRequestV1,
-    PendingDiffClearResponseV1, PendingDiffRecordV1, PendingDiffRequestV1, WorldDoctorLandlockV1,
-    WorldDoctorReportV1, WorldDoctorWorldFsStrategyKindV1, WorldDoctorWorldFsStrategyProbeResultV1,
+    PendingDiffClearResponseV1, PendingDiffReconcileRequestV1, PendingDiffReconcileResponseV1,
+    PendingDiffRecordV1, PendingDiffRequestV1, WorldDoctorLandlockV1, WorldDoctorReportV1,
+    WorldDoctorWorldFsStrategyKindV1, WorldDoctorWorldFsStrategyProbeResultV1,
     WorldDoctorWorldFsStrategyProbeV1, WorldDoctorWorldFsStrategyV1, WorldFsReadRequestV1,
     WorldFsReadResponseV1,
 };
@@ -61,6 +62,7 @@ pub async fn capabilities() -> Result<ResponseJson<Value>, ApiErrorResponse> {
             "pty_streaming",
             "pending_diff_v1",
             "pending_diff_clear_v1",
+            "pending_diff_reconcile_v1",
             "world_fs_read_v1",
             "trace_retrieval",
             "scope_requests"
@@ -197,6 +199,26 @@ pub async fn pending_diff_clear(
     let req: PendingDiffClearRequestV1 = serde_json::from_value(payload)
         .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
     let response = service.pending_diff_clear(req).await.map_err(|e| {
+        if let Some(bad) = e.downcast_ref::<crate::service::BadRequestError>() {
+            ApiErrorResponse(ApiError::BadRequest(bad.message().to_string()))
+        } else {
+            ApiErrorResponse(ApiError::Internal(e.to_string()))
+        }
+    })?;
+
+    Ok(ResponseJson(response))
+}
+
+/// Conditionally reconcile pending diff paths by discarding upper/work entries.
+pub async fn pending_diff_reconcile(
+    State(service): State<WorldAgentService>,
+    body: Bytes,
+) -> Result<ResponseJson<PendingDiffReconcileResponseV1>, ApiErrorResponse> {
+    let payload: Value = serde_json::from_slice(&body)
+        .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
+    let req: PendingDiffReconcileRequestV1 = serde_json::from_value(payload)
+        .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
+    let response = service.pending_diff_reconcile(req).await.map_err(|e| {
         if let Some(bad) = e.downcast_ref::<crate::service::BadRequestError>() {
             ApiErrorResponse(ApiError::BadRequest(bad.message().to_string()))
         } else {

@@ -319,7 +319,7 @@ fn workspace_sync_dry_run_from_world_prints_pending_diff_summary_and_preview() {
 }
 
 #[test]
-fn workspace_sync_dry_run_rejects_from_host_and_both_directions_in_ws1() {
+fn workspace_sync_dry_run_requires_world_backend_for_from_host_and_both_directions() {
     let fixture = WorkspaceSyncFixture::new();
     fixture.init_workspace();
     fixture.write_workspace_yaml_patch(
@@ -348,22 +348,18 @@ fn workspace_sync_dry_run_rejects_from_host_and_both_directions_in_ws1() {
             ]);
         let output = cmd
             .output()
-            .expect("run workspace sync --dry-run with unsupported direction");
+            .expect("run workspace sync --dry-run with missing world backend");
 
         assert_eq!(
             output.status.code(),
-            Some(4),
-            "workspace sync --dry-run --direction {direction} must exit 4: {}",
+            Some(3),
+            "workspace sync --dry-run --direction {direction} must exit 3: {}",
             combined_output(&output)
         );
         let combined = combined_output(&output);
         assert!(
-            combined.contains("not implemented until WS5"),
-            "unsupported direction must mention WS5: {combined}"
-        );
-        assert!(
-            !combined.contains("world backend unavailable"),
-            "unsupported direction must not require world backend access: {combined}"
+            combined.contains("workspace sync requires world"),
+            "missing world backend must be actionable: {combined}"
         );
     }
 
