@@ -352,3 +352,7 @@
 - `ci-compile-parity`: `21927720591` (success) — https://github.com/atomize-hq/substrate/actions/runs/21927720591
 - `feature-smoke` (behavior, WS2): `21927790446` (success) — https://github.com/atomize-hq/substrate/actions/runs/21927790446
 - `ci-testing` (quick): `21927501473` (success) — https://github.com/atomize-hq/substrate/actions/runs/21927501473
+
+## START — 2026-02-11T23:59:42Z — integration — WS2-integ
+- Dispatch:
+  - `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/next/world-sync" SLICE_ID="WS2" LAUNCH_CODEX=1` (Codex headless launch terminated; worktree created)
