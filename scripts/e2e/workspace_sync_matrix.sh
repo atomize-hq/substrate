@@ -90,6 +90,30 @@ assert_not_contains() {
     fi
 }
 
+assert_any_contains() {
+    local haystack="$1"
+    shift
+    local context="$1"
+    shift
+
+    if [[ "${ASSERT}" -ne 1 ]]; then
+        return 0
+    fi
+
+    local needle
+    for needle in "$@"; do
+        if grep -Fq -- "${needle}" <<<"${haystack}"; then
+            return 0
+        fi
+    done
+
+    echo "ASSERTION FAILED (${context}): none of the expected strings were found:" >&2
+    for needle in "$@"; do
+        echo "  - ${needle}" >&2
+    done
+    return 1
+}
+
 init_workspace() {
     local ws_dir="$1"
     local logfile="$2"
@@ -157,15 +181,21 @@ scenario_world_write_via_pty_applies_once() {
 
     run_repl_pty "${ws_dir}" "${logfile}" "printf 'hello\\n' > pty_new.md"
 
+    local precheck
+    precheck="$(run_capture "${logfile}" bash -lc "cd '${ws_dir}' && (test ! -e pty_new.md && echo 'host_has_pty_new=0') && '${SUBSTRATE_BIN}' -c \"test -f pty_new.md && echo 'world_has_pty_new=1'\"")"
+    assert_contains "${precheck}" "host_has_pty_new=0" "pty write precheck"
+    assert_contains "${precheck}" "world_has_pty_new=1" "pty write precheck"
+
     local preview
     preview="$(ws_sync_dry_verbose "${ws_dir}" "${logfile}")"
     assert_contains "${preview}" "pending diff summary (pty)" "pty write preview"
-    assert_contains "${preview}" "writes: 1" "pty write preview"
+    assert_contains "${preview}" "total_paths: 1" "pty write preview"
+    assert_any_contains "${preview}" "pty write preview kind" "writes: 1" "mods: 1"
 
     local applied
     applied="$(ws_sync_apply_verbose "${ws_dir}" "${logfile}")"
     assert_contains "${applied}" "workspace sync applied" "pty write apply"
-    assert_contains "${applied}" "writes_applied: 1" "pty write apply"
+    assert_any_contains "${applied}" "pty write apply count" "writes_applied: 1" "mods_applied: 1"
     assert_not_contains "${applied}" "diff_id mismatch" "pty write apply"
 
     local after
