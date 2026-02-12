@@ -41,14 +41,18 @@ pub(crate) fn handle_workspace_command(cmd: &WorkspaceCmd, cli: &Cli) -> i32 {
 
     match result {
         Ok(code) => code,
-        Err(err) if err.is::<ActionableError>() => {
-            eprintln!("{:#}", err);
-            2
-        }
         Err(err) => {
             eprintln!("{:#}", err);
-            1
+            workspace_cmd_exit_code_for_error(&err)
         }
+    }
+}
+
+pub(crate) fn workspace_cmd_exit_code_for_error(err: &anyhow::Error) -> i32 {
+    if err.is::<ActionableError>() {
+        2
+    } else {
+        1
     }
 }
 
@@ -434,7 +438,35 @@ fn apply_execute_bits(path: &Path, source_mode: u32) -> Result<()> {
     Ok(())
 }
 
+pub(crate) fn run_workspace_sync_for_auto_sync(
+    args: &WorkspaceSyncArgs,
+    cli: &Cli,
+) -> Result<(i32, Option<String>)> {
+    let mut failure_reason: Option<String> = None;
+    let exit_code = run_workspace_sync_impl(args, cli, &mut failure_reason)?;
+    Ok((exit_code, failure_reason))
+}
+
 fn run_workspace_sync(args: &WorkspaceSyncArgs, cli: &Cli) -> Result<i32> {
+    let mut ignored_reason: Option<String> = None;
+    run_workspace_sync_impl(args, cli, &mut ignored_reason)
+}
+
+fn run_workspace_sync_impl(
+    args: &WorkspaceSyncArgs,
+    cli: &Cli,
+    failure_reason: &mut Option<String>,
+) -> Result<i32> {
+    macro_rules! errln {
+        ($($arg:tt)*) => {{
+            let line = format!($($arg)*);
+            if failure_reason.is_none() && !line.trim().is_empty() {
+                *failure_reason = Some(line.clone());
+            }
+            eprintln!("{line}");
+        }};
+    }
+
     let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let workspace_root = require_workspace_root(&cwd, "workspace sync")?;
 
@@ -479,7 +511,7 @@ fn run_workspace_sync(args: &WorkspaceSyncArgs, cli: &Cli) -> Result<i32> {
 
     match direction {
         SyncDirection::FromHost | SyncDirection::Both => {
-            eprintln!(
+            errln!(
                 "substrate: workspace sync direction {} is not implemented until WS5",
                 sync_direction_as_str(direction)
             );
@@ -503,11 +535,11 @@ fn run_workspace_sync(args: &WorkspaceSyncArgs, cli: &Cli) -> Result<i32> {
     }
 
     if cli.no_world {
-        eprintln!("workspace sync requires world; remove --no-world");
+        errln!("workspace sync requires world; remove --no-world");
         return Ok(2);
     }
     if !effective.world.enabled {
-        eprintln!(
+        errln!(
             "substrate: workspace sync requires world; run `substrate world enable` then `substrate world doctor`"
         );
         return Ok(3);
@@ -525,7 +557,7 @@ fn run_workspace_sync(args: &WorkspaceSyncArgs, cli: &Cli) -> Result<i32> {
         match crate::execution::routing::build_agent_client_and_pending_diff_request() {
             Ok(ok) => ok,
             Err(_err) => {
-                eprintln!(
+                errln!(
                     "substrate: workspace sync requires world; run `substrate world enable` then `substrate world doctor`"
                 );
                 return Ok(3);
@@ -536,7 +568,7 @@ fn run_workspace_sync(args: &WorkspaceSyncArgs, cli: &Cli) -> Result<i32> {
     let caps = match rt.block_on(async { client.capabilities().await }) {
         Ok(c) => c,
         Err(_err) => {
-            eprintln!(
+            errln!(
                 "substrate: workspace sync requires world; run `substrate world enable` then `substrate world doctor`"
             );
             return Ok(3);
@@ -554,9 +586,7 @@ fn run_workspace_sync(args: &WorkspaceSyncArgs, cli: &Cli) -> Result<i32> {
         .unwrap_or(false);
 
     if !has_pending_diff {
-        eprintln!(
-            "substrate: workspace sync pending diff discovery is unsupported by this backend"
-        );
+        errln!("substrate: workspace sync pending diff discovery is unsupported by this backend");
         return Ok(4);
     }
 
@@ -570,11 +600,11 @@ fn run_workspace_sync(args: &WorkspaceSyncArgs, cli: &Cli) -> Result<i32> {
             let looks_like_payload_failure =
                 err.chain().any(|cause| cause.is::<serde_json::Error>());
             if looks_like_payload_failure {
-                eprintln!("substrate: workspace sync failed to retrieve pending diff");
+                errln!("substrate: workspace sync failed to retrieve pending diff");
                 return Ok(1);
             }
 
-            eprintln!(
+            errln!(
                 "substrate: workspace sync requires world; run `substrate world enable` then `substrate world doctor`"
             );
             return Ok(3);
@@ -592,7 +622,7 @@ fn run_workspace_sync(args: &WorkspaceSyncArgs, cli: &Cli) -> Result<i32> {
             let normalized = match normalize_workspace_rel_path(raw) {
                 Ok(p) => p,
                 Err(msg) => {
-                    eprintln!("substrate: workspace sync refused: invalid diff path: {msg}");
+                    errln!("substrate: workspace sync refused: invalid diff path: {msg}");
                     return Ok(5);
                 }
             };
@@ -612,9 +642,9 @@ fn run_workspace_sync(args: &WorkspaceSyncArgs, cli: &Cli) -> Result<i32> {
     offending_protected.sort();
     offending_protected.dedup();
     if !offending_protected.is_empty() {
-        eprintln!("substrate: workspace sync refused: pending diff contains protected paths");
+        errln!("substrate: workspace sync refused: pending diff contains protected paths");
         for item in offending_protected {
-            eprintln!("  - {item}");
+            errln!("  - {item}");
         }
         return Ok(5);
     }
@@ -675,21 +705,21 @@ fn run_workspace_sync(args: &WorkspaceSyncArgs, cli: &Cli) -> Result<i32> {
 
     // WS2: apply pending diffs (direction=from_world, non-PTY only).
     if total_paths > 10000 {
-        eprintln!("substrate: workspace sync refused: size guard exceeded");
-        eprintln!("  max_paths: 10000");
-        eprintln!("  observed_paths: {total_paths}");
+        errln!("substrate: workspace sync refused: size guard exceeded");
+        errln!("  max_paths: 10000");
+        errln!("  observed_paths: {total_paths}");
         return Ok(5);
     }
 
     let has_pending_diff_clear = capabilities_has_feature(&caps, "pending_diff_clear_v1");
     let has_world_fs_read = capabilities_has_feature(&caps, "world_fs_read_v1");
     if !has_pending_diff_clear || !has_world_fs_read {
-        eprintln!("substrate: workspace sync apply is unsupported by this backend");
+        errln!("substrate: workspace sync apply is unsupported by this backend");
         if !has_pending_diff_clear {
-            eprintln!("  missing feature: pending_diff_clear_v1");
+            errln!("  missing feature: pending_diff_clear_v1");
         }
         if !has_world_fs_read {
-            eprintln!("  missing feature: world_fs_read_v1");
+            errln!("  missing feature: world_fs_read_v1");
         }
         return Ok(4);
     }
@@ -722,8 +752,8 @@ fn run_workspace_sync(args: &WorkspaceSyncArgs, cli: &Cli) -> Result<i32> {
         }) {
             Ok(map) => map,
             Err(err) => {
-                eprintln!("substrate: workspace sync failed: failed to read world file metadata");
-                eprintln!("{err:#}");
+                errln!("substrate: workspace sync failed: failed to read world file metadata");
+                errln!("{err:#}");
                 return Ok(1);
             }
         };
@@ -731,40 +761,40 @@ fn run_workspace_sync(args: &WorkspaceSyncArgs, cli: &Cli) -> Result<i32> {
     let mut observed_bytes_to_copy: u64 = 0;
     for path in &meta_paths {
         let Some(meta) = world_meta.get(path) else {
-            eprintln!("substrate: workspace sync failed: missing world metadata for {path}");
+            errln!("substrate: workspace sync failed: missing world metadata for {path}");
             return Ok(1);
         };
 
         match meta.entry_type {
             agent_api_types::WorldFsEntryTypeV1::RegularFile => {
                 let Some(size) = meta.size else {
-                    eprintln!("substrate: workspace sync failed: missing size for {path}");
+                    errln!("substrate: workspace sync failed: missing size for {path}");
                     return Ok(1);
                 };
                 observed_bytes_to_copy = observed_bytes_to_copy.saturating_add(size);
             }
             agent_api_types::WorldFsEntryTypeV1::Directory => {}
             _ => {
-                eprintln!("substrate: workspace sync refused: unsupported file type in apply set");
-                eprintln!("  path: {path}");
-                eprintln!("  file_type: {:?}", meta.entry_type);
+                errln!("substrate: workspace sync refused: unsupported file type in apply set");
+                errln!("  path: {path}");
+                errln!("  file_type: {:?}", meta.entry_type);
                 return Ok(5);
             }
         }
     }
 
     if observed_bytes_to_copy > 104_857_600 {
-        eprintln!("substrate: workspace sync refused: size guard exceeded");
-        eprintln!("  max_bytes_to_copy: 104857600");
-        eprintln!("  observed_bytes_to_copy: {observed_bytes_to_copy}");
+        errln!("substrate: workspace sync refused: size guard exceeded");
+        errln!("  max_bytes_to_copy: 104857600");
+        errln!("  observed_bytes_to_copy: {observed_bytes_to_copy}");
         return Ok(5);
     }
 
     let baseline = match chrono::DateTime::parse_from_rfc3339(&record.session_started_at) {
         Ok(dt) => dt.with_timezone(&chrono::Utc),
         Err(err) => {
-            eprintln!("substrate: workspace sync failed: invalid session_started_at timestamp");
-            eprintln!("{err:#}");
+            errln!("substrate: workspace sync failed: invalid session_started_at timestamp");
+            errln!("{err:#}");
             return Ok(1);
         }
     };
@@ -780,11 +810,11 @@ fn run_workspace_sync(args: &WorkspaceSyncArgs, cli: &Cli) -> Result<i32> {
             Ok(m) => m,
             Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
             Err(err) => {
-                eprintln!(
+                errln!(
                     "substrate: workspace sync failed: failed to stat {}",
                     host_path.display()
                 );
-                eprintln!("{err:#}");
+                errln!("{err:#}");
                 return Ok(1);
             }
         };
@@ -792,11 +822,11 @@ fn run_workspace_sync(args: &WorkspaceSyncArgs, cli: &Cli) -> Result<i32> {
         let modified = match meta.modified() {
             Ok(m) => chrono::DateTime::<chrono::Utc>::from(m),
             Err(err) => {
-                eprintln!(
+                errln!(
                     "substrate: workspace sync failed: failed to read mtime for {}",
                     host_path.display()
                 );
-                eprintln!("{err:#}");
+                errln!("{err:#}");
                 return Ok(1);
             }
         };
@@ -809,9 +839,9 @@ fn run_workspace_sync(args: &WorkspaceSyncArgs, cli: &Cli) -> Result<i32> {
     conflicts.dedup();
 
     if conflict_policy == SyncConflictPolicy::Abort && !conflicts.is_empty() {
-        eprintln!("substrate: workspace sync refused: conflicts detected (policy=abort)");
+        errln!("substrate: workspace sync refused: conflicts detected (policy=abort)");
         for item in &conflicts {
-            eprintln!("  - {item}");
+            errln!("  - {item}");
         }
         return Ok(5);
     }
@@ -855,11 +885,11 @@ fn run_workspace_sync(args: &WorkspaceSyncArgs, cli: &Cli) -> Result<i32> {
             Ok(m) => m,
             Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
             Err(err) => {
-                eprintln!(
+                errln!(
                     "substrate: workspace sync failed: failed to stat {}",
                     host_path.display()
                 );
-                eprintln!("{err:#}");
+                errln!("{err:#}");
                 return Ok(1);
             }
         };
@@ -870,11 +900,11 @@ fn run_workspace_sync(args: &WorkspaceSyncArgs, cli: &Cli) -> Result<i32> {
             fs::remove_file(&host_path)
         };
         if let Err(err) = result {
-            eprintln!(
+            errln!(
                 "substrate: workspace sync failed: failed to delete {}",
                 host_path.display()
             );
-            eprintln!("{err:#}");
+            errln!("{err:#}");
             return Ok(1);
         }
     }
@@ -889,10 +919,10 @@ fn run_workspace_sync(args: &WorkspaceSyncArgs, cli: &Cli) -> Result<i32> {
         let meta = match rt.block_on(async { client.world_fs_read(meta_req).await }) {
             Ok(m) => m,
             Err(err) => {
-                eprintln!(
+                errln!(
                     "substrate: workspace sync failed: failed to read world metadata for {path}"
                 );
-                eprintln!("{err:#}");
+                errln!("{err:#}");
                 return Ok(1);
             }
         };
@@ -901,17 +931,17 @@ fn run_workspace_sync(args: &WorkspaceSyncArgs, cli: &Cli) -> Result<i32> {
         match meta.entry_type {
             agent_api_types::WorldFsEntryTypeV1::Directory => {
                 if let Err(err) = fs::create_dir_all(&host_path) {
-                    eprintln!(
+                    errln!(
                         "substrate: workspace sync failed: failed to create directory {}",
                         host_path.display()
                     );
-                    eprintln!("{err:#}");
+                    errln!("{err:#}");
                     return Ok(1);
                 }
                 #[cfg(unix)]
                 if let Some(mode) = meta.mode {
                     if let Err(err) = apply_execute_bits(&host_path, mode) {
-                        eprintln!("{err:#}");
+                        errln!("{err:#}");
                         return Ok(1);
                     }
                 }
@@ -925,8 +955,10 @@ fn run_workspace_sync(args: &WorkspaceSyncArgs, cli: &Cli) -> Result<i32> {
                 let file = match rt.block_on(async { client.world_fs_read(read_req).await }) {
                     Ok(f) => f,
                     Err(err) => {
-                        eprintln!("substrate: workspace sync failed: failed to read world file for {path}");
-                        eprintln!("{err:#}");
+                        errln!(
+                            "substrate: workspace sync failed: failed to read world file for {path}"
+                        );
+                        errln!("{err:#}");
                         return Ok(1);
                     }
                 };
@@ -934,33 +966,33 @@ fn run_workspace_sync(args: &WorkspaceSyncArgs, cli: &Cli) -> Result<i32> {
                 let bytes = match base64::engine::general_purpose::STANDARD.decode(contents_b64) {
                     Ok(b) => b,
                     Err(err) => {
-                        eprintln!("substrate: workspace sync failed: invalid base64 for {path}");
-                        eprintln!("{err:#}");
+                        errln!("substrate: workspace sync failed: invalid base64 for {path}");
+                        errln!("{err:#}");
                         return Ok(1);
                     }
                 };
 
                 if let Err(err) = write_atomic_bytes(&host_path, &bytes) {
-                    eprintln!(
+                    errln!(
                         "substrate: workspace sync failed: failed to write {}",
                         host_path.display()
                     );
-                    eprintln!("{err:#}");
+                    errln!("{err:#}");
                     return Ok(1);
                 }
 
                 #[cfg(unix)]
                 if let Some(mode) = file.mode {
                     if let Err(err) = apply_execute_bits(&host_path, mode) {
-                        eprintln!("{err:#}");
+                        errln!("{err:#}");
                         return Ok(1);
                     }
                 }
             }
             _ => {
-                eprintln!("substrate: workspace sync refused: unsupported file type in apply set");
-                eprintln!("  path: {path}");
-                eprintln!("  file_type: {:?}", meta.entry_type);
+                errln!("substrate: workspace sync refused: unsupported file type in apply set");
+                errln!("  path: {path}");
+                errln!("  file_type: {:?}", meta.entry_type);
                 return Ok(5);
             }
         }
@@ -978,14 +1010,14 @@ fn run_workspace_sync(args: &WorkspaceSyncArgs, cli: &Cli) -> Result<i32> {
     let cleared = match rt.block_on(async { client.pending_diff_clear(clear_request).await }) {
         Ok(resp) => resp.cleared,
         Err(err) => {
-            eprintln!("substrate: workspace sync: applied but pending diffs were not cleared");
-            eprintln!("{err:#}");
+            errln!("substrate: workspace sync: applied but pending diffs were not cleared");
+            errln!("{err:#}");
             return Ok(1);
         }
     };
     if !cleared {
-        eprintln!("substrate: workspace sync: applied but pending diffs were not cleared");
-        eprintln!("  reason: diff_id mismatch (concurrent changes detected)");
+        errln!("substrate: workspace sync: applied but pending diffs were not cleared");
+        errln!("  reason: diff_id mismatch (concurrent changes detected)");
         return Ok(1);
     }
 
