@@ -319,7 +319,7 @@ fn workspace_sync_dry_run_from_world_prints_pending_diff_summary_and_preview() {
 }
 
 #[test]
-fn workspace_sync_dry_run_requires_world_backend_for_from_host_and_both_directions() {
+fn workspace_sync_dry_run_supports_from_host_and_both_directions_in_ws5() {
     let fixture = WorkspaceSyncFixture::new();
     fixture.init_workspace();
     fixture.write_workspace_yaml_patch(
@@ -329,12 +329,34 @@ fn workspace_sync_dry_run_requires_world_backend_for_from_host_and_both_directio
     let before_workspace_yaml =
         fs::read_to_string(fixture.workspace_yaml_path()).expect("read workspace.yaml");
 
-    let missing_socket = fixture.workspace_root.join("missing.substrate.sock");
+    let socket_dir = Builder::new()
+        .prefix("substrate-ws0-sock-")
+        .tempdir_in("/tmp")
+        .expect("create ws0 socket tempdir");
+    let socket_path = socket_dir.path().join("world-agent.sock");
+    let pending = json!({
+        "schema_version": 1,
+        "session_started_at": "2100-01-01T00:00:00Z",
+        "diff_id": "diff_ws0_directions_01",
+        "non_pty": {
+            "writes": [],
+            "mods": [],
+            "deletes": ["example.txt"]
+        }
+    });
+    let _socket = AgentSocket::start(
+        &socket_path,
+        SocketResponse::CapabilitiesAndPendingDiff {
+            features: vec!["execute".to_string(), "pending_diff_v1".to_string()],
+            pending_diff: pending,
+        },
+    );
+
     for direction in ["from_host", "both"] {
         let mut cmd = fixture.command();
         cmd.current_dir(&fixture.workspace_root)
             .env("SUBSTRATE_OVERRIDE_WORLD", "enabled")
-            .env("SUBSTRATE_WORLD_SOCKET", &missing_socket)
+            .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
             .args([
                 "workspace",
                 "sync",
@@ -348,18 +370,18 @@ fn workspace_sync_dry_run_requires_world_backend_for_from_host_and_both_directio
             ]);
         let output = cmd
             .output()
-            .expect("run workspace sync --dry-run with missing world backend");
+            .expect("run workspace sync --dry-run with WS5 direction");
 
         assert_eq!(
             output.status.code(),
-            Some(3),
-            "workspace sync --dry-run --direction {direction} must exit 3: {}",
+            Some(0),
+            "workspace sync --dry-run --direction {direction} must exit 0: {}",
             combined_output(&output)
         );
         let combined = combined_output(&output);
         assert!(
-            combined.contains("workspace sync requires world"),
-            "missing world backend must be actionable: {combined}"
+            !combined.contains("not implemented until WS5"),
+            "WS5 directions must not report as unsupported: {combined}"
         );
     }
 
