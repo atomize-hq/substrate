@@ -27,6 +27,8 @@ use futures_util::StreamExt;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 #[cfg(target_os = "linux")]
+use std::collections::HashSet;
+#[cfg(target_os = "linux")]
 use std::convert::Infallible;
 #[cfg(target_os = "linux")]
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
@@ -147,10 +149,26 @@ pub struct WorldAgentService {
     backend: Arc<dyn WorldBackend>,
     #[cfg(target_os = "linux")]
     linux_backend: Arc<world::LinuxLocalBackend>,
+    #[cfg(target_os = "linux")]
+    pending_diff_origin: Arc<RwLock<HashMap<String, PendingDiffOriginTracker>>>,
     #[allow(dead_code)]
     worlds: Arc<RwLock<HashMap<String, WorldHandle>>>,
     budgets: Arc<RwLock<HashMap<String, AgentBudgetTracker>>>,
     last_policy_resolution_mode: Arc<AtomicU8>,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PendingDiffOrigin {
+    NonPty,
+    Pty,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Debug, Default)]
+struct PendingDiffOriginTracker {
+    last_seen_paths: HashSet<String>,
+    origin_by_path: HashMap<String, PendingDiffOrigin>,
 }
 
 pub struct AgentBudgetTracker {
@@ -198,6 +216,7 @@ impl WorldAgentService {
             Ok(Self {
                 backend,
                 linux_backend,
+                pending_diff_origin: Arc::new(RwLock::new(HashMap::new())),
                 worlds: Arc::new(RwLock::new(HashMap::new())),
                 budgets: Arc::new(RwLock::new(HashMap::new())),
                 last_policy_resolution_mode: Arc::new(AtomicU8::new(0)),
@@ -229,6 +248,80 @@ impl WorldAgentService {
         let world = self.linux_backend.ensure_session(spec)?;
         let merged = self.linux_backend.ensure_overlay_root(&world)?;
         Ok((world, merged))
+    }
+
+    #[cfg(target_os = "linux")]
+    fn normalize_pending_diff_bucket(diff: &substrate_common::FsDiff) -> PendingDiffBucketV1 {
+        fn normalize(path: &std::path::Path) -> String {
+            path.to_string_lossy().replace('\\', "/")
+        }
+
+        let mut writes: Vec<String> = diff.writes.iter().map(|p| normalize(p)).collect();
+        let mut mods: Vec<String> = diff.mods.iter().map(|p| normalize(p)).collect();
+        let mut deletes: Vec<String> = diff.deletes.iter().map(|p| normalize(p)).collect();
+        writes.sort();
+        mods.sort();
+        deletes.sort();
+        writes.dedup();
+        mods.dedup();
+        deletes.dedup();
+
+        PendingDiffBucketV1 {
+            writes,
+            mods,
+            deletes,
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn note_pending_diff_origin_for_world(
+        &self,
+        world_id: &str,
+        origin: PendingDiffOrigin,
+        snapshot: &PendingDiffBucketV1,
+    ) {
+        let mut current_paths: HashSet<String> = HashSet::new();
+        current_paths.extend(snapshot.writes.iter().cloned());
+        current_paths.extend(snapshot.mods.iter().cloned());
+        current_paths.extend(snapshot.deletes.iter().cloned());
+
+        let mut guard = self
+            .pending_diff_origin
+            .write()
+            .expect("pending diff origin tracker lock poisoned");
+
+        if current_paths.is_empty() {
+            guard.remove(world_id);
+            return;
+        }
+
+        let tracker = guard.entry(world_id.to_string()).or_default();
+
+        for removed in tracker.last_seen_paths.difference(&current_paths) {
+            tracker.origin_by_path.remove(removed);
+        }
+        for added in current_paths.difference(&tracker.last_seen_paths) {
+            tracker.origin_by_path.insert(added.clone(), origin);
+        }
+
+        tracker.last_seen_paths = current_paths;
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn note_pty_pending_diff(&self, world_id: &str) {
+        let world = WorldHandle {
+            id: world_id.to_string(),
+        };
+        let (_started_at, diff) = match self.linux_backend.pending_diff(&world) {
+            Ok(v) => v,
+            Err(err) => {
+                tracing::warn!(error = %err, world_id = world_id, "failed to snapshot pending diff after PTY command");
+                return;
+            }
+        };
+
+        let snapshot = Self::normalize_pending_diff_bucket(&diff);
+        self.note_pending_diff_origin_for_world(world_id, PendingDiffOrigin::Pty, &snapshot);
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -350,6 +443,18 @@ impl WorldAgentService {
             }
         };
 
+        #[cfg(target_os = "linux")]
+        {
+            if let Some(ref diff) = result.fs_diff {
+                let snapshot = Self::normalize_pending_diff_bucket(diff);
+                self.note_pending_diff_origin_for_world(
+                    &world.id,
+                    PendingDiffOrigin::NonPty,
+                    &snapshot,
+                );
+            }
+        }
+
         // Generate span ID
         let span_id = format!("spn_{}", uuid::Uuid::now_v7());
 
@@ -415,33 +520,21 @@ impl WorldAgentService {
                 .pending_diff(&world)
                 .context("pending_diff failed")?;
 
-            fn normalize(path: &std::path::Path) -> String {
-                path.to_string_lossy().replace('\\', "/")
-            }
-
-            let mut writes: Vec<String> = diff.writes.iter().map(|p| normalize(p)).collect();
-            let mut mods: Vec<String> = diff.mods.iter().map(|p| normalize(p)).collect();
-            let mut deletes: Vec<String> = diff.deletes.iter().map(|p| normalize(p)).collect();
-            writes.sort();
-            mods.sort();
-            deletes.sort();
-            writes.dedup();
-            mods.dedup();
-            deletes.dedup();
+            let snapshot = Self::normalize_pending_diff_bucket(&diff);
 
             let mut hasher = Sha256::new();
             hasher.update(b"writes\0");
-            for item in &writes {
+            for item in &snapshot.writes {
                 hasher.update(item.as_bytes());
                 hasher.update(b"\n");
             }
             hasher.update(b"mods\0");
-            for item in &mods {
+            for item in &snapshot.mods {
                 hasher.update(item.as_bytes());
                 hasher.update(b"\n");
             }
             hasher.update(b"deletes\0");
-            for item in &deletes {
+            for item in &snapshot.deletes {
                 hasher.update(item.as_bytes());
                 hasher.update(b"\n");
             }
@@ -456,16 +549,47 @@ impl WorldAgentService {
             let session_started_at =
                 started_at.to_rfc3339_opts(SecondsFormat::Secs, /* use_z */ true);
 
+            let mut non_pty = PendingDiffBucketV1::default();
+            let mut pty = PendingDiffBucketV1::default();
+
+            let origin_map: Option<HashMap<String, PendingDiffOrigin>> = self
+                .pending_diff_origin
+                .read()
+                .ok()
+                .and_then(|guard| guard.get(&world.id).map(|t| t.origin_by_path.clone()));
+
+            let classify = |path: &str| -> PendingDiffOrigin {
+                origin_map
+                    .as_ref()
+                    .and_then(|m| m.get(path).copied())
+                    .unwrap_or(PendingDiffOrigin::NonPty)
+            };
+
+            for item in &snapshot.writes {
+                match classify(item) {
+                    PendingDiffOrigin::NonPty => non_pty.writes.push(item.clone()),
+                    PendingDiffOrigin::Pty => pty.writes.push(item.clone()),
+                }
+            }
+            for item in &snapshot.mods {
+                match classify(item) {
+                    PendingDiffOrigin::NonPty => non_pty.mods.push(item.clone()),
+                    PendingDiffOrigin::Pty => pty.mods.push(item.clone()),
+                }
+            }
+            for item in &snapshot.deletes {
+                match classify(item) {
+                    PendingDiffOrigin::NonPty => non_pty.deletes.push(item.clone()),
+                    PendingDiffOrigin::Pty => pty.deletes.push(item.clone()),
+                }
+            }
+
             Ok(PendingDiffRecordV1 {
                 schema_version: 1,
                 session_started_at,
                 diff_id: hex,
-                non_pty: PendingDiffBucketV1 {
-                    writes,
-                    mods,
-                    deletes,
-                },
-                pty: None,
+                non_pty,
+                pty: Some(pty),
             })
         }
 
@@ -578,6 +702,10 @@ impl WorldAgentService {
             self.linux_backend
                 .clear_pending_diff(&world)
                 .context("clear_pending_diff failed")?;
+
+            if let Ok(mut guard) = self.pending_diff_origin.write() {
+                guard.remove(&world.id);
+            }
 
             Ok(PendingDiffClearResponseV1 {
                 schema_version: 1,
