@@ -432,7 +432,8 @@ jobs:
 
       - name: Warm Lima world (macOS self-hosted; WAPS)
         if: startsWith(inputs.feature_dir, 'docs/project_management/next/world-sync') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/world-agent-policy-snapshot') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/full-isolation-landlock-overlayfs-compat')
-        run: bash scripts/mac/lima-warm.sh "$GITHUB_WORKSPACE"
+        working-directory: ${{ steps.checkout_dir.outputs.dir }}
+        run: bash scripts/mac/lima-warm.sh "$PWD"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
