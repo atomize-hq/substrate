@@ -356,3 +356,8 @@
 ## START — 2026-02-11T23:59:42Z — integration — WS2-integ
 - Dispatch:
   - `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/next/world-sync" SLICE_ID="WS2" LAUNCH_CODEX=1` (Codex headless launch terminated; worktree created)
+
+## END — 2026-02-12T00:05:39Z — integration — WS2-integ
+- HEAD: `962d7e3117c07313466d25de3d3e2454de7570f8`
+- Merged to orchestration: `e5fdeb57f3a6a7f8f8a3fdf62fa4f5b0ed08f571`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS2/integ/last_message.md`
