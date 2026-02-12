@@ -509,17 +509,6 @@ fn run_workspace_sync_impl(
 
     let excludes = build_effective_sync_excludes(&effective.sync.exclude, &args.exclude)?;
 
-    match direction {
-        SyncDirection::FromHost | SyncDirection::Both => {
-            errln!(
-                "substrate: workspace sync direction {} is not implemented until WS5",
-                sync_direction_as_str(direction)
-            );
-            return Ok(4);
-        }
-        SyncDirection::FromWorld => {}
-    }
-
     if args.dry_run {
         println!("substrate: workspace sync --dry-run preview (WS1)");
         println!("  auto_sync: {}", effective.sync.auto_sync);
@@ -575,78 +564,11 @@ fn run_workspace_sync_impl(
         }
     };
 
-    let has_pending_diff = caps
-        .get("features")
-        .and_then(|f| f.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|v| v.as_str())
-                .any(|s| s == "pending_diff_v1")
-        })
-        .unwrap_or(false);
+    let has_pending_diff = capabilities_has_feature(&caps, "pending_diff_v1");
 
     if !has_pending_diff {
         errln!("substrate: workspace sync pending diff discovery is unsupported by this backend");
         return Ok(4);
-    }
-
-    let record = match rt.block_on(async { client.pending_diff(request.clone()).await }) {
-        Ok(r) => r,
-        Err(err) => {
-            // WS1-spec: when `--direction from_world` is in effect, a reachable world backend is
-            // required. If pending diff retrieval fails after capabilities succeeded, prefer
-            // treating it as a backend availability issue (exit 3) unless we can confidently
-            // classify it as a non-transport/internal payload failure.
-            let looks_like_payload_failure =
-                err.chain().any(|cause| cause.is::<serde_json::Error>());
-            if looks_like_payload_failure {
-                errln!("substrate: workspace sync failed to retrieve pending diff");
-                return Ok(1);
-            }
-
-            errln!(
-                "substrate: workspace sync requires world; run `substrate world enable` then `substrate world doctor`"
-            );
-            return Ok(3);
-        }
-    };
-
-    let mut offending_protected: Vec<String> = Vec::new();
-    let mut raw_paths: Vec<(&'static str, String)> = Vec::new();
-    for (bucket, items) in [
-        ("writes", &record.non_pty.writes),
-        ("mods", &record.non_pty.mods),
-        ("deletes", &record.non_pty.deletes),
-    ] {
-        for raw in items {
-            let normalized = match normalize_workspace_rel_path(raw) {
-                Ok(p) => p,
-                Err(msg) => {
-                    errln!("substrate: workspace sync refused: invalid diff path: {msg}");
-                    return Ok(5);
-                }
-            };
-
-            for prot in crate::execution::config_model::PROTECTED_EXCLUDES {
-                if glob_matches_path(prot, &normalized) {
-                    offending_protected.push(normalized.clone());
-                    break;
-                }
-            }
-            raw_paths.push((bucket, normalized));
-        }
-    }
-
-    let raw_paths_for_decisions = raw_paths.clone();
-
-    offending_protected.sort();
-    offending_protected.dedup();
-    if !offending_protected.is_empty() {
-        errln!("substrate: workspace sync refused: pending diff contains protected paths");
-        for item in offending_protected {
-            errln!("  - {item}");
-        }
-        return Ok(5);
     }
 
     let excludes_non_protected: Vec<&str> = excludes
@@ -655,104 +577,350 @@ fn run_workspace_sync_impl(
         .map(|p| p.as_str())
         .collect();
 
-    let mut out_writes: Vec<String> = Vec::new();
-    let mut out_mods: Vec<String> = Vec::new();
-    let mut out_deletes: Vec<String> = Vec::new();
-    let mut excluded_count: usize = 0;
+    let has_pending_diff_reconcile = capabilities_has_feature(&caps, "pending_diff_reconcile_v1");
+    if matches!(direction, SyncDirection::FromHost | SyncDirection::Both)
+        && !has_pending_diff_reconcile
+    {
+        errln!(
+            "substrate: workspace sync direction {} is unsupported by this backend",
+            sync_direction_as_str(direction)
+        );
+        errln!("  missing feature: pending_diff_reconcile_v1");
+        return Ok(4);
+    }
 
-    for (bucket, path) in raw_paths {
-        let excluded = excludes_non_protected
-            .iter()
-            .any(|pat| glob_matches_path(pat, &path));
-        if excluded {
-            excluded_count += 1;
-            continue;
-        }
-        match bucket {
-            "writes" => out_writes.push(path),
-            "mods" => out_mods.push(path),
-            "deletes" => out_deletes.push(path),
-            _ => {}
+    macro_rules! fetch_record {
+        () => {{
+            match rt.block_on(async { client.pending_diff(request.clone()).await }) {
+                Ok(r) => Ok(r),
+                Err(err) => {
+                    // WS1-spec: when a direction that consults the pending diff record is in effect,
+                    // a reachable world backend is required. If pending diff retrieval fails after
+                    // capabilities succeeded, prefer treating it as a backend availability issue
+                    // (exit 3) unless we can confidently classify it as a non-transport/internal
+                    // payload failure.
+                    let looks_like_payload_failure =
+                        err.chain().any(|cause| cause.is::<serde_json::Error>());
+                    if looks_like_payload_failure {
+                        errln!("substrate: workspace sync failed to retrieve pending diff");
+                        Err(1)
+                    } else {
+                        errln!(
+                            "substrate: workspace sync requires world; run `substrate world enable` then `substrate world doctor`"
+                        );
+                        Err(3)
+                    }
+                }
+            }
+        }};
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum PendingDiffOrigin {
+        NonPty,
+        Pty,
+    }
+
+    impl PendingDiffOrigin {
+        fn as_str(self) -> &'static str {
+            match self {
+                Self::NonPty => "non_pty",
+                Self::Pty => "pty",
+            }
         }
     }
 
-    out_writes.sort();
-    out_mods.sort();
-    out_deletes.sort();
-    out_writes.dedup();
-    out_mods.dedup();
-    out_deletes.dedup();
+    #[derive(Clone, Debug)]
+    struct RawPendingPath {
+        origin: PendingDiffOrigin,
+        bucket: &'static str,
+        path: String,
+    }
 
-    let total_paths = out_writes.len() + out_mods.len() + out_deletes.len();
+    #[derive(Clone, Debug, Default)]
+    struct FilteredBucketPaths {
+        writes: Vec<String>,
+        mods: Vec<String>,
+        deletes: Vec<String>,
+        excluded_count: usize,
+    }
 
-    if args.dry_run {
-        println!("substrate: pending diff summary (non_pty)");
-        if args.verbose {
-            println!("  session_started_at: {}", record.session_started_at);
-            println!("  diff_id: {}", record.diff_id);
+    impl FilteredBucketPaths {
+        fn total_paths(&self) -> usize {
+            self.writes.len() + self.mods.len() + self.deletes.len()
         }
-        println!("  total_paths: {total_paths}");
-        println!("  writes: {}", out_writes.len());
-        println!("  mods: {}", out_mods.len());
-        println!("  deletes: {}", out_deletes.len());
-        if excluded_count > 0 {
-            println!("  excluded_by_patterns: true ({excluded_count})");
-        } else {
-            println!("  excluded_by_patterns: false");
-        }
+    }
 
-        let mut pty_out_writes: Vec<String> = Vec::new();
-        let mut pty_out_mods: Vec<String> = Vec::new();
-        let mut pty_out_deletes: Vec<String> = Vec::new();
-        let mut pty_excluded_count: usize = 0;
+    #[derive(Clone, Debug)]
+    struct PendingDiffState {
+        raw_for_decisions: Vec<RawPendingPath>,
+        shadowed_paths: Vec<String>,
+        non_pty: FilteredBucketPaths,
+        pty: Option<FilteredBucketPaths>,
+        combined: FilteredBucketPaths,
+    }
 
-        if let Some(ref pty) = record.pty {
-            for (bucket, items) in [
-                ("writes", &pty.writes),
-                ("mods", &pty.mods),
-                ("deletes", &pty.deletes),
-            ] {
-                for raw in items {
+    macro_rules! build_pending_diff_state {
+        ($record:expr) => {{
+            (|| -> std::result::Result<PendingDiffState, i32> {
+                let record: &agent_api_types::PendingDiffRecordV1 = $record;
+                let mut offending_protected: Vec<String> = Vec::new();
+                let mut raw_for_decisions: Vec<RawPendingPath> = Vec::new();
+
+                let mut non_pty = FilteredBucketPaths::default();
+                let mut pty = record.pty.as_ref().map(|_| FilteredBucketPaths::default());
+                let mut combined = FilteredBucketPaths::default();
+
+                let push_filtered =
+                    |out: &mut FilteredBucketPaths, bucket: &'static str, path: String| {
+                        match bucket {
+                            "writes" => out.writes.push(path),
+                            "mods" => out.mods.push(path),
+                            "deletes" => out.deletes.push(path),
+                            _ => {}
+                        }
+                    };
+
+                let mut ingest_bucket = |origin: PendingDiffOrigin,
+                                         bucket: &'static str,
+                                         raw: &str,
+                                         origin_out: &mut FilteredBucketPaths|
+                 -> std::result::Result<(), i32> {
                     let normalized = match normalize_workspace_rel_path(raw) {
                         Ok(p) => p,
                         Err(msg) => {
                             errln!("substrate: workspace sync refused: invalid diff path: {msg}");
-                            return Ok(5);
+                            return Err(5);
                         }
                     };
+
+                    for prot in crate::execution::config_model::PROTECTED_EXCLUDES {
+                        if glob_matches_path(prot, &normalized) {
+                            offending_protected.push(normalized.clone());
+                            break;
+                        }
+                    }
+
+                    raw_for_decisions.push(RawPendingPath {
+                        origin,
+                        bucket,
+                        path: normalized.clone(),
+                    });
 
                     let excluded = excludes_non_protected
                         .iter()
                         .any(|pat| glob_matches_path(pat, &normalized));
                     if excluded {
-                        pty_excluded_count += 1;
-                        continue;
+                        origin_out.excluded_count += 1;
+                        combined.excluded_count += 1;
+                        return Ok(());
                     }
 
-                    match bucket {
-                        "writes" => pty_out_writes.push(normalized),
-                        "mods" => pty_out_mods.push(normalized),
-                        "deletes" => pty_out_deletes.push(normalized),
-                        _ => {}
+                    push_filtered(origin_out, bucket, normalized.clone());
+                    push_filtered(&mut combined, bucket, normalized);
+                    Ok(())
+                };
+
+                for (bucket, items) in [
+                    ("writes", &record.non_pty.writes),
+                    ("mods", &record.non_pty.mods),
+                    ("deletes", &record.non_pty.deletes),
+                ] {
+                    for raw in items {
+                        ingest_bucket(PendingDiffOrigin::NonPty, bucket, raw, &mut non_pty)?;
                     }
                 }
+
+                if let Some(ref pty_bucket) = record.pty {
+                    if let Some(ref mut out) = pty {
+                        for (bucket, items) in [
+                            ("writes", &pty_bucket.writes),
+                            ("mods", &pty_bucket.mods),
+                            ("deletes", &pty_bucket.deletes),
+                        ] {
+                            for raw in items {
+                                ingest_bucket(PendingDiffOrigin::Pty, bucket, raw, out)?;
+                            }
+                        }
+                    }
+                }
+
+                offending_protected.sort();
+                offending_protected.dedup();
+                if !offending_protected.is_empty() {
+                    errln!("substrate: workspace sync refused: pending diff contains protected paths");
+                    for item in offending_protected {
+                        errln!("  - {item}");
+                    }
+                    return Err(5);
+                }
+
+                for out in [&mut non_pty, &mut combined] {
+                    out.writes.sort();
+                    out.mods.sort();
+                    out.deletes.sort();
+                    out.writes.dedup();
+                    out.mods.dedup();
+                    out.deletes.dedup();
+                }
+                if let Some(ref mut out) = pty {
+                    out.writes.sort();
+                    out.mods.sort();
+                    out.deletes.sort();
+                    out.writes.dedup();
+                    out.mods.dedup();
+                    out.deletes.dedup();
+                }
+
+                let mut shadowed_paths: Vec<String> =
+                    raw_for_decisions.iter().map(|item| item.path.clone()).collect();
+                shadowed_paths.sort();
+                shadowed_paths.dedup();
+
+                Ok(PendingDiffState {
+                    raw_for_decisions,
+                    shadowed_paths,
+                    non_pty,
+                    pty,
+                    combined,
+                })
+            })()
+        }};
+    }
+
+    let mut record = match fetch_record!() {
+        Ok(r) => r,
+        Err(code) => return Ok(code),
+    };
+    let mut state = match build_pending_diff_state!(&record) {
+        Ok(s) => s,
+        Err(code) => return Ok(code),
+    };
+
+    let mut from_host_conflicts: Vec<String> = Vec::new();
+    let baseline_for_conflicts: Option<chrono::DateTime<chrono::Utc>> =
+        if matches!(direction, SyncDirection::FromHost | SyncDirection::Both) || !args.dry_run {
+            match chrono::DateTime::parse_from_rfc3339(&record.session_started_at) {
+                Ok(dt) => Some(dt.with_timezone(&chrono::Utc)),
+                Err(err) => {
+                    errln!(
+                        "substrate: workspace sync failed: invalid session_started_at timestamp"
+                    );
+                    errln!("{err:#}");
+                    return Ok(1);
+                }
             }
+        } else {
+            None
+        };
 
-            pty_out_writes.sort();
-            pty_out_mods.sort();
-            pty_out_deletes.sort();
-            pty_out_writes.dedup();
-            pty_out_mods.dedup();
-            pty_out_deletes.dedup();
+    if matches!(direction, SyncDirection::FromHost | SyncDirection::Both) {
+        let baseline = baseline_for_conflicts.expect("baseline computed for from_host");
+        from_host_conflicts = {
+            let mut conflicts: Vec<String> = Vec::new();
+            for path in &state.shadowed_paths {
+                let host_path = workspace_root.join(path);
+                let meta = match fs::symlink_metadata(&host_path) {
+                    Ok(m) => m,
+                    Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
+                    Err(err) => {
+                        errln!(
+                            "substrate: workspace sync failed: failed to stat {}",
+                            host_path.display()
+                        );
+                        errln!("{err:#}");
+                        return Ok(1);
+                    }
+                };
 
-            let pty_total_paths = pty_out_writes.len() + pty_out_mods.len() + pty_out_deletes.len();
+                let modified = match meta.modified() {
+                    Ok(m) => chrono::DateTime::<chrono::Utc>::from(m),
+                    Err(err) => {
+                        errln!(
+                            "substrate: workspace sync failed: failed to read mtime for {}",
+                            host_path.display()
+                        );
+                        errln!("{err:#}");
+                        return Ok(1);
+                    }
+                };
+
+                if modified > baseline {
+                    conflicts.push(path.clone());
+                }
+            }
+            conflicts.sort();
+            conflicts.dedup();
+            conflicts
+        };
+
+        if args.dry_run {
+            println!("substrate: from_host reconciliation plan");
+        } else {
+            println!("substrate: from_host reconciliation");
+        }
+        println!("  total_shadowed_paths: {}", state.shadowed_paths.len());
+        println!(
+            "  conflicts_detected: {} ({})",
+            !from_host_conflicts.is_empty(),
+            from_host_conflicts.len()
+        );
+        println!(
+            "  conflict_policy: {}",
+            sync_conflict_policy_as_str(conflict_policy)
+        );
+
+        if args.verbose {
+            println!("  decisions:");
+            for path in &state.shadowed_paths {
+                let is_conflict = from_host_conflicts.binary_search(path).is_ok();
+                let decision = if !is_conflict {
+                    "keep"
+                } else {
+                    match conflict_policy {
+                        SyncConflictPolicy::PreferHost => "discard",
+                        SyncConflictPolicy::PreferWorld => "keep",
+                        SyncConflictPolicy::Abort => "conflict",
+                    }
+                };
+                println!("    - {path} => {decision}");
+            }
+        }
+    }
+
+    if args.dry_run {
+        if direction == SyncDirection::FromHost {
+            return Ok(0);
+        }
+
+        let non_pty_total_paths = state.non_pty.total_paths();
+        println!("substrate: pending diff summary (non_pty)");
+        if args.verbose {
+            println!("  session_started_at: {}", record.session_started_at);
+            println!("  diff_id: {}", record.diff_id);
+        }
+        println!("  total_paths: {non_pty_total_paths}");
+        println!("  writes: {}", state.non_pty.writes.len());
+        println!("  mods: {}", state.non_pty.mods.len());
+        println!("  deletes: {}", state.non_pty.deletes.len());
+        if state.non_pty.excluded_count > 0 {
+            println!(
+                "  excluded_by_patterns: true ({})",
+                state.non_pty.excluded_count
+            );
+        } else {
+            println!("  excluded_by_patterns: false");
+        }
+
+        if let Some(ref pty) = state.pty {
+            let pty_total_paths = pty.total_paths();
             println!("substrate: pending diff summary (pty)");
             println!("  total_paths: {pty_total_paths}");
-            println!("  writes: {}", pty_out_writes.len());
-            println!("  mods: {}", pty_out_mods.len());
-            println!("  deletes: {}", pty_out_deletes.len());
-            if pty_excluded_count > 0 {
-                println!("  excluded_by_patterns: true ({pty_excluded_count})");
+            println!("  writes: {}", pty.writes.len());
+            println!("  mods: {}", pty.mods.len());
+            println!("  deletes: {}", pty.deletes.len());
+            if pty.excluded_count > 0 {
+                println!("  excluded_by_patterns: true ({})", pty.excluded_count);
             } else {
                 println!("  excluded_by_patterns: false");
             }
@@ -760,31 +928,90 @@ fn run_workspace_sync_impl(
             println!("substrate: PTY pending diffs unsupported by this backend");
         }
 
-        let pty_total_paths = pty_out_writes.len() + pty_out_mods.len() + pty_out_deletes.len();
         let combined_total_paths = {
             let mut set: HashSet<&str> = HashSet::new();
-            for item in out_writes
+            for item in state
+                .combined
+                .writes
                 .iter()
-                .chain(out_mods.iter())
-                .chain(out_deletes.iter())
-                .chain(pty_out_writes.iter())
-                .chain(pty_out_mods.iter())
-                .chain(pty_out_deletes.iter())
+                .chain(state.combined.mods.iter())
+                .chain(state.combined.deletes.iter())
             {
                 set.insert(item.as_str());
             }
             set.len()
         };
-
+        let pty_total_paths = state.pty.as_ref().map(|p| p.total_paths()).unwrap_or(0);
         println!("substrate: pending diff summary (combined)");
         println!("  total_paths: {combined_total_paths}");
-        println!("  non_pty_total_paths: {total_paths}");
+        println!("  non_pty_total_paths: {non_pty_total_paths}");
         println!("  pty_total_paths: {pty_total_paths}");
 
         return Ok(0);
     }
 
-    // WS2: apply pending diffs (direction=from_world, non-PTY only).
+    if matches!(direction, SyncDirection::FromHost | SyncDirection::Both) {
+        if conflict_policy == SyncConflictPolicy::Abort && !from_host_conflicts.is_empty() {
+            errln!("substrate: workspace sync refused: conflicts detected (policy=abort)");
+            for item in &from_host_conflicts {
+                errln!("  - {item}");
+            }
+            return Ok(5);
+        }
+
+        if conflict_policy == SyncConflictPolicy::PreferHost && !from_host_conflicts.is_empty() {
+            let reconcile_request = agent_api_types::PendingDiffReconcileRequestV1 {
+                profile: request.profile.clone(),
+                cwd: request.cwd.clone(),
+                env: request.env.clone(),
+                agent_id: request.agent_id.clone(),
+                policy_snapshot: request.policy_snapshot.clone(),
+                diff_id: record.diff_id.clone(),
+                discard_paths: from_host_conflicts.clone(),
+            };
+
+            let resp = match rt
+                .block_on(async { client.pending_diff_reconcile(reconcile_request).await })
+            {
+                Ok(r) => r,
+                Err(err) => {
+                    errln!("substrate: workspace sync failed: from_host reconciliation failed");
+                    errln!("{err:#}");
+                    return Ok(1);
+                }
+            };
+
+            if !resp.reconciled {
+                errln!("substrate: workspace sync failed: from_host reconciliation did not apply");
+                errln!("  reason: diff_id mismatch (concurrent changes detected)");
+                return Ok(1);
+            }
+        }
+
+        if direction == SyncDirection::FromHost {
+            return Ok(0);
+        }
+
+        // direction=both: re-fetch pending diff after reconciliation to apply the updated snapshot.
+        record = match fetch_record!() {
+            Ok(r) => r,
+            Err(code) => return Ok(code),
+        };
+        state = match build_pending_diff_state!(&record) {
+            Ok(s) => s,
+            Err(code) => return Ok(code),
+        };
+    }
+
+    let raw_paths_for_decisions = state.raw_for_decisions.clone();
+    let out_writes = state.combined.writes;
+    let out_mods = state.combined.mods;
+    let out_deletes = state.combined.deletes;
+    let excluded_count = state.combined.excluded_count;
+
+    let total_paths = out_writes.len() + out_mods.len() + out_deletes.len();
+
+    // WS5: apply pending diffs (direction=from_world, including non-PTY + PTY when present).
     if total_paths > 10000 {
         errln!("substrate: workspace sync refused: size guard exceeded");
         errln!("  max_paths: 10000");
@@ -1102,7 +1329,7 @@ fn run_workspace_sync_impl(
         return Ok(1);
     }
 
-    println!("substrate: workspace sync applied (non_pty)");
+    println!("substrate: workspace sync applied");
     if args.verbose {
         println!("  session_started_at: {}", record.session_started_at);
         println!("  diff_id: {}", record.diff_id);
@@ -1116,8 +1343,11 @@ fn run_workspace_sync_impl(
     }
 
     if args.verbose {
-        let mut decisions: Vec<(String, &'static str, &'static str)> = Vec::new();
-        for (bucket, path) in raw_paths_for_decisions {
+        let mut decisions: Vec<(String, &'static str, &'static str, &'static str)> = Vec::new();
+        for item in raw_paths_for_decisions {
+            let origin = item.origin.as_str();
+            let bucket = item.bucket;
+            let path = item.path;
             let excluded = excludes_non_protected
                 .iter()
                 .any(|pat| glob_matches_path(pat, &path));
@@ -1130,12 +1360,16 @@ fn run_workspace_sync_impl(
             } else {
                 "apply"
             };
-            decisions.push((path, bucket, decision));
+            decisions.push((path, origin, bucket, decision));
         }
-        decisions.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(b.1)));
+        decisions.sort_by(|a, b| {
+            a.0.cmp(&b.0)
+                .then_with(|| a.1.cmp(b.1))
+                .then_with(|| a.2.cmp(b.2))
+        });
         println!("  decisions:");
-        for (path, bucket, decision) in decisions {
-            println!("    - {bucket} {path} => {decision}");
+        for (path, origin, bucket, decision) in decisions {
+            println!("    - {origin}:{bucket} {path} => {decision}");
         }
     }
 

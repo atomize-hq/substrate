@@ -283,6 +283,17 @@ impl SessionWorld {
         Ok(())
     }
 
+    /// Discard the overlay upper entry for a set of workspace-relative paths.
+    ///
+    /// Missing paths are ignored. Returns the number of filesystem entries removed from the
+    /// backing upper/work layer.
+    pub fn discard_pending_paths(&mut self, paths: &[PathBuf]) -> Result<u32> {
+        let Some(ref mut overlay) = self.overlay else {
+            return Ok(0);
+        };
+        overlay.discard_paths(paths)
+    }
+
     /// Ensure the overlay is mounted and return the merged root for reuse across entry points.
     pub(crate) fn ensure_overlay_root(&mut self) -> Result<PathBuf> {
         self.ensure_overlay_mounted()

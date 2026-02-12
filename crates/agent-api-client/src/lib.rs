@@ -8,8 +8,9 @@ use std::sync::Arc;
 
 use agent_api_types::{
     ApiError, ExecuteRequest, ExecuteResponse, PendingDiffClearRequestV1,
-    PendingDiffClearResponseV1, PendingDiffRecordV1, PendingDiffRequestV1, WorldDoctorReportV1,
-    WorldFsReadRequestV1, WorldFsReadResponseV1,
+    PendingDiffClearResponseV1, PendingDiffReconcileRequestV1, PendingDiffReconcileResponseV1,
+    PendingDiffRecordV1, PendingDiffRequestV1, WorldDoctorReportV1, WorldFsReadRequestV1,
+    WorldFsReadResponseV1,
 };
 use anyhow::{anyhow, Context, Result};
 use http_body_util::{BodyExt, Full};
@@ -157,6 +158,19 @@ impl AgentClient {
             .post("/v1/pending_diff/clear", &request)
             .await
             .context("Failed to clear pending diff")?;
+
+        self.parse_response(response).await
+    }
+
+    /// Reconcile pending diff paths (host-prefer policy) by discarding overlay upper entries (`POST /v1/pending_diff/reconcile`).
+    pub async fn pending_diff_reconcile(
+        &self,
+        request: PendingDiffReconcileRequestV1,
+    ) -> Result<PendingDiffReconcileResponseV1> {
+        let response = self
+            .post("/v1/pending_diff/reconcile", &request)
+            .await
+            .context("Failed to reconcile pending diff")?;
 
         self.parse_response(response).await
     }

@@ -107,6 +107,8 @@ pub struct AgentSocket {
     shutdown: Arc<AtomicBool>,
     connections: Arc<AtomicUsize>,
     execute_requests: Arc<AtomicUsize>,
+    reconcile_requests: Arc<AtomicUsize>,
+    last_reconcile_discard_paths: Arc<Mutex<Vec<String>>>,
     handle: Option<thread::JoinHandle<()>>,
 }
 
@@ -148,6 +150,11 @@ impl AgentSocket {
         let connections_for_thread = connections.clone();
         let execute_requests = Arc::new(AtomicUsize::new(0));
         let execute_requests_for_thread = execute_requests.clone();
+        let reconcile_requests = Arc::new(AtomicUsize::new(0));
+        let reconcile_requests_for_thread = reconcile_requests.clone();
+        let last_reconcile_discard_paths: Arc<Mutex<Vec<String>>> =
+            Arc::new(Mutex::new(Vec::new()));
+        let last_reconcile_discard_paths_for_thread = last_reconcile_discard_paths.clone();
 
         let handle = thread::spawn(move || {
             while !shutdown_flag.load(Ordering::SeqCst) {
@@ -167,6 +174,12 @@ impl AgentSocket {
                             || first_line.starts_with("POST /v1/execute/stream")
                         {
                             execute_requests_for_thread.fetch_add(1, Ordering::SeqCst);
+                        } else if is_pending_diff_reconcile_route(first_line) {
+                            reconcile_requests_for_thread.fetch_add(1, Ordering::SeqCst);
+                            let discard_paths = extract_discard_paths(&request.body);
+                            if let Ok(mut guard) = last_reconcile_discard_paths_for_thread.lock() {
+                                *guard = discard_paths;
+                            }
                         }
                         match &response {
                             SocketResponse::Capabilities => {
@@ -202,6 +215,50 @@ impl AgentSocket {
                                     write_capabilities_with_features(&mut stream, &features);
                                 } else if first_line.starts_with("GET /v1/doctor/world") {
                                     write_world_doctor_report(&mut stream);
+                                } else if is_pending_diff_reconcile_route(first_line) {
+                                    let mut guard =
+                                        state.lock().expect("lock pending diff ack state");
+                                    let req_id = match extract_diff_id(&request.body) {
+                                        Some(id) => id,
+                                        None => {
+                                            write_status_response(
+                                                &mut stream,
+                                                400,
+                                                "Bad Request",
+                                                "{\"error\":\"missing diff_id\"}",
+                                            );
+                                            continue;
+                                        }
+                                    };
+                                    let cur_id = guard
+                                        .current_pending_diff
+                                        .get("diff_id")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("");
+                                    if cur_id != req_id {
+                                        write_response(
+                                            &mut stream,
+                                            "{\"schema_version\":1,\"reconciled\":false,\"discarded\":0}",
+                                        );
+                                        continue;
+                                    }
+
+                                    let discard_paths = extract_discard_paths(&request.body);
+                                    let discarded = discard_paths
+                                        .iter()
+                                        .map(|p| {
+                                            discard_from_pending_diff(
+                                                &mut guard.current_pending_diff,
+                                                p,
+                                            )
+                                        })
+                                        .sum::<u32>();
+                                    write_response(
+                                        &mut stream,
+                                        &format!(
+                                            "{{\"schema_version\":1,\"reconciled\":true,\"discarded\":{discarded}}}"
+                                        ),
+                                    );
                                 } else if is_pending_diff_ack_route(first_line) {
                                     let mut guard =
                                         state.lock().expect("lock pending diff ack state");
@@ -477,6 +534,50 @@ impl AgentSocket {
                                     })
                                     .to_string();
                                     write_response(&mut stream, &payload);
+                                } else if is_pending_diff_reconcile_route(first_line) {
+                                    let mut guard =
+                                        state.lock().expect("lock pending diff ack state");
+                                    let req_id = match extract_diff_id(&request.body) {
+                                        Some(id) => id,
+                                        None => {
+                                            write_status_response(
+                                                &mut stream,
+                                                400,
+                                                "Bad Request",
+                                                "{\"error\":\"missing diff_id\"}",
+                                            );
+                                            continue;
+                                        }
+                                    };
+                                    let cur_id = guard
+                                        .current_pending_diff
+                                        .get("diff_id")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("");
+                                    if cur_id != req_id {
+                                        write_response(
+                                            &mut stream,
+                                            "{\"schema_version\":1,\"reconciled\":false,\"discarded\":0}",
+                                        );
+                                        continue;
+                                    }
+
+                                    let discard_paths = extract_discard_paths(&request.body);
+                                    let discarded = discard_paths
+                                        .iter()
+                                        .map(|p| {
+                                            discard_from_pending_diff(
+                                                &mut guard.current_pending_diff,
+                                                p,
+                                            )
+                                        })
+                                        .sum::<u32>();
+                                    write_response(
+                                        &mut stream,
+                                        &format!(
+                                            "{{\"schema_version\":1,\"reconciled\":true,\"discarded\":{discarded}}}"
+                                        ),
+                                    );
                                 } else if is_pending_diff_ack_route(first_line) {
                                     let mut guard =
                                         state.lock().expect("lock pending diff ack state");
@@ -557,6 +658,8 @@ impl AgentSocket {
             shutdown,
             connections,
             execute_requests,
+            reconcile_requests,
+            last_reconcile_discard_paths,
             handle: Some(handle),
         }
     }
@@ -574,6 +677,19 @@ impl AgentSocket {
     /// Return the number of accepted `/v1/execute*` requests.
     pub fn execute_request_count(&self) -> usize {
         self.execute_requests.load(Ordering::SeqCst)
+    }
+
+    /// Return the number of accepted `/v1/pending_diff/reconcile` requests.
+    pub fn reconcile_request_count(&self) -> usize {
+        self.reconcile_requests.load(Ordering::SeqCst)
+    }
+
+    /// Return the last observed `discard_paths` payload from a reconcile request.
+    pub fn last_reconcile_discard_paths(&self) -> Vec<String> {
+        self.last_reconcile_discard_paths
+            .lock()
+            .map(|v| v.clone())
+            .unwrap_or_default()
     }
 }
 
@@ -594,11 +710,56 @@ fn is_pending_diff_ack_route(first_line: &str) -> bool {
         || first_line.starts_with("POST /v1/workspace/pending_diff/clear ")
 }
 
+fn is_pending_diff_reconcile_route(first_line: &str) -> bool {
+    first_line.starts_with("POST /v1/pending_diff/reconcile ")
+        || first_line.starts_with("POST /v1/workspace/pending_diff/reconcile ")
+}
+
 fn is_pending_diff_discovery_route(first_line: &str) -> bool {
     first_line.starts_with("GET /v1/pending_diff ")
         || first_line.starts_with("POST /v1/pending_diff ")
         || first_line.starts_with("GET /v1/workspace/pending_diff ")
         || first_line.starts_with("POST /v1/workspace/pending_diff ")
+}
+
+fn extract_discard_paths(body: &[u8]) -> Vec<String> {
+    let value = serde_json::from_slice::<JsonValue>(body).ok();
+    let Some(value) = value else {
+        return Vec::new();
+    };
+    value
+        .get("discard_paths")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|item| item.as_str().map(|s| s.to_string()))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+}
+
+fn discard_from_pending_diff(pending_diff: &mut JsonValue, path: &str) -> u32 {
+    fn remove_from_bucket(bucket: &mut JsonValue, key: &str, path: &str) -> u32 {
+        let Some(arr) = bucket.get_mut(key).and_then(|v| v.as_array_mut()) else {
+            return 0;
+        };
+        let before = arr.len();
+        arr.retain(|v| v.as_str() != Some(path));
+        (before.saturating_sub(arr.len())) as u32
+    }
+
+    let mut removed = 0u32;
+    if let Some(non_pty) = pending_diff.get_mut("non_pty") {
+        removed = removed.saturating_add(remove_from_bucket(non_pty, "writes", path));
+        removed = removed.saturating_add(remove_from_bucket(non_pty, "mods", path));
+        removed = removed.saturating_add(remove_from_bucket(non_pty, "deletes", path));
+    }
+    if let Some(pty) = pending_diff.get_mut("pty") {
+        removed = removed.saturating_add(remove_from_bucket(pty, "writes", path));
+        removed = removed.saturating_add(remove_from_bucket(pty, "mods", path));
+        removed = removed.saturating_add(remove_from_bucket(pty, "deletes", path));
+    }
+    removed
 }
 
 fn extract_diff_id(body: &[u8]) -> Option<String> {
