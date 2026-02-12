@@ -540,3 +540,7 @@
   - Feature Smoke: `RECOMMEND=run` (changes since last green: `21933919268` → `https://github.com/atomize-hq/substrate/actions/runs/21933919268`)
 - Compile parity: `21935933784` → `success` → `https://github.com/atomize-hq/substrate/actions/runs/21935933784`
 - Feature Smoke (behavior; passed `linux,macos`): `21935948219` → `success` → `https://github.com/atomize-hq/substrate/actions/runs/21935948219`
+
+## START — 2026-02-12T06:28:58Z — integration — WS7-integ
+- Dispatch:
+  - `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/next/world-sync" SLICE_ID="WS7" LAUNCH_CODEX=1`
