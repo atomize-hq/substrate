@@ -6,3 +6,5 @@ Existing related docs (top-level):
 - `docs/WORLD.md`
 - `docs/cross-platform/transport_parity_design.md`
 
+Additional internal docs:
+- `docs/internals/world/workspace_sync_filesystem_model.md`

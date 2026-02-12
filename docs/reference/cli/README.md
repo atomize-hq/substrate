@@ -11,3 +11,5 @@ Existing related docs (top-level):
 - `docs/COMMANDS.md`
 - `docs/USAGE.md`
 
+Additional reference docs:
+- `docs/reference/cli/workspace_sync.md`

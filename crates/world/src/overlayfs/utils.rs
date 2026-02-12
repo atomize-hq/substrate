@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 
 #[cfg(target_os = "linux")]
 use anyhow::Context;
+#[cfg(target_os = "linux")]
+use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use anyhow::Result;
 use sha2::{Digest, Sha256};
 use substrate_common::FsDiff;
@@ -39,6 +41,21 @@ pub(crate) fn compute_diff(
                         .map(|p| p.join(deleted_name))
                         .unwrap_or_else(|| PathBuf::from(deleted_name));
                     diff.deletes.push(deleted_path);
+                    continue;
+                }
+            }
+        }
+
+        // Kernel overlayfs represents deletions as whiteouts: character devices with rdev=0/0 at
+        // the deleted path in the upper directory (not `.wh.<name>` files). If we ignore these,
+        // deleting a host-created file in-world will not appear in the pending diff, and `workspace
+        // sync` will not propagate the delete to the host.
+        #[cfg(target_os = "linux")]
+        {
+            if let Ok(meta) = entry.metadata() {
+                let ft = meta.file_type();
+                if ft.is_char_device() && meta.rdev() == 0 {
+                    diff.deletes.push(rel_pathbuf.clone());
                     continue;
                 }
             }
@@ -210,6 +227,48 @@ mod tests {
         assert!(
             diff.summary.as_ref().is_some(),
             "truncation should include a summary"
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn compute_diff_detects_kernel_overlayfs_char_device_whiteouts() {
+        use nix::sys::stat::{mknod, makedev, Mode, SFlag};
+        use nix::unistd::Uid;
+
+        if !Uid::effective().is_root() {
+            // Creating device nodes requires CAP_MKNOD (typically root). Skip when unavailable.
+            return;
+        }
+
+        let temp = tempdir().unwrap();
+        let upper = temp.path().join("upper");
+        let lower = temp.path().join("lower");
+        std::fs::create_dir_all(&upper).unwrap();
+        std::fs::create_dir_all(&lower).unwrap();
+
+        // Simulate a host-created file (exists in lower) deleted in overlayfs upper via kernel
+        // whiteout: char device with rdev=0/0 at the deleted path.
+        std::fs::write(lower.join("host.md"), "seed").unwrap();
+
+        let whiteout_path = upper.join("host.md");
+        let dev = makedev(0, 0);
+        let result = mknod(
+            &whiteout_path,
+            SFlag::S_IFCHR,
+            Mode::from_bits_truncate(0o600),
+            dev,
+        );
+        if let Err(err) = result {
+            // Some environments may restrict mknod even as root; skip rather than failing.
+            eprintln!("skipping kernel whiteout test (mknod failed): {err}");
+            return;
+        }
+
+        let diff = compute_diff(&upper, Some(&lower), 10, 10, 10 * 1024 * 1024).unwrap();
+        assert!(
+            diff.deletes.contains(&PathBuf::from("host.md")),
+            "deletes should include kernel overlayfs whiteout entries"
         );
     }
 }
