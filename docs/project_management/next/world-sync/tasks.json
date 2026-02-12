@@ -868,7 +868,7 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-sync\" TASK_ID=\"WS3-integ\""
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "integration",
       "worktree": "wt/world-sync-ws3-integ"
     },

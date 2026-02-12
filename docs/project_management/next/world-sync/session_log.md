@@ -377,3 +377,7 @@
 ## END — 2026-02-12T01:10:08Z — test — WS3-test
 - HEAD: `c2a2fb2ef338027615cb5f675b8448c86ad365a8`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS3/test/last_message.md`
+
+## START — 2026-02-12T01:10:08Z — integration — WS3-integ
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" TASK_ID="WS3-integ" LAUNCH_CODEX=1`
