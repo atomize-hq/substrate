@@ -214,7 +214,11 @@ fn workspace_sync_dry_run_from_host_reports_conflicts_and_per_path_decisions() {
     let _socket = AgentSocket::start(
         &socket_path,
         SocketResponse::CapabilitiesAndPendingDiff {
-            features: vec!["execute".to_string(), "pending_diff_v1".to_string()],
+            features: vec![
+                "execute".to_string(),
+                "pending_diff_v1".to_string(),
+                "pending_diff_reconcile_v1".to_string(),
+            ],
             pending_diff: pending,
         },
     );
@@ -253,7 +257,7 @@ fn workspace_sync_dry_run_from_host_reports_conflicts_and_per_path_decisions() {
     );
 
     assert_line_contains(&combined, "keep.txt", &["keep"]);
-    assert_line_contains(&combined, "discard.txt", &["conflict", "discard"]);
+    assert_line_contains(&combined, "discard.txt", &["discard"]);
     assert!(
         combined.contains("pty_discard.txt"),
         "verbose output must include PTY bucket paths: {combined}"
@@ -282,6 +286,7 @@ fn workspace_sync_from_host_mutates_world_but_not_host() {
         features: vec![
             "execute".to_string(),
             "pending_diff_v1".to_string(),
+            "pending_diff_reconcile_v1".to_string(),
             "pending_diff_clear_v1".to_string(),
             "world_fs_read_v1".to_string(),
         ],
@@ -353,8 +358,14 @@ fn workspace_sync_from_host_mutates_world_but_not_host() {
     );
 
     assert!(
-        socket.execute_request_count() > 0,
-        "direction=from_host must mutate world overlay state (expected at least one world execute request)"
+        socket.reconcile_request_count() > 0,
+        "direction=from_host must reconcile pending diff state in world (expected at least one reconcile request)"
+    );
+    assert!(
+        socket
+            .last_reconcile_discard_paths()
+            .contains(&"shadowed.txt".to_string()),
+        "direction=from_host must request discard for the conflicting path"
     );
 }
 
@@ -384,6 +395,7 @@ fn workspace_sync_direction_both_applies_non_pty_and_pty_deletes() {
         features: vec![
             "execute".to_string(),
             "pending_diff_v1".to_string(),
+            "pending_diff_reconcile_v1".to_string(),
             "pending_diff_clear_v1".to_string(),
             "world_fs_read_v1".to_string(),
         ],

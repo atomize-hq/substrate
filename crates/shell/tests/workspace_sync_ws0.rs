@@ -234,7 +234,11 @@ fn workspace_sync_dry_run_from_world_prints_pending_diff_summary_and_preview() {
     let _socket = AgentSocket::start(
         &socket_path,
         SocketResponse::CapabilitiesAndPendingDiff {
-            features: vec!["execute".to_string(), "pending_diff_v1".to_string()],
+            features: vec![
+                "execute".to_string(),
+                "pending_diff_v1".to_string(),
+                "pending_diff_reconcile_v1".to_string(),
+            ],
             pending_diff: pending,
         },
     );
@@ -347,7 +351,11 @@ fn workspace_sync_dry_run_supports_from_host_and_both_directions_in_ws5() {
     let _socket = AgentSocket::start(
         &socket_path,
         SocketResponse::CapabilitiesAndPendingDiff {
-            features: vec!["execute".to_string(), "pending_diff_v1".to_string()],
+            features: vec![
+                "execute".to_string(),
+                "pending_diff_v1".to_string(),
+                "pending_diff_reconcile_v1".to_string(),
+            ],
             pending_diff: pending,
         },
     );
