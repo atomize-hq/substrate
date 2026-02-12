@@ -526,3 +526,9 @@
 ## END — 2026-02-12T06:19:51Z — integration — WS7-integ-core
 - HEAD: `cbe63e34ce3c1cb135976dd2d1532f48093c48d2`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS7/integ-core/last_message.md`
+
+## START — 2026-02-12T06:21:12Z — ops — CP3-ci-checkpoint
+- Candidate SHA (WS7-integ-core): `cbe63e34ce3c1cb135976dd2d1532f48093c48d2`
+- Dispatch (if audit recommends run):
+  - `make ci-compile-parity CI_WORKFLOW_REF="feat/world-sync" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF="cbe63e34ce3c1cb135976dd2d1532f48093c48d2"`
+  - `make feature-smoke FEATURE_DIR="docs/project_management/next/world-sync" PLATFORM=behavior SMOKE_SLICE_ID="WS7" SMOKE_CHECKOUT_REF="cbe63e34ce3c1cb135976dd2d1532f48093c48d2" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/world-sync" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=0`
