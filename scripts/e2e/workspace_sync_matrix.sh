@@ -38,6 +38,16 @@ require_cmd() {
     fi
 }
 
+touch_future() {
+    local path="$1"
+
+    # GNU coreutils touch supports -d; BSD touch (macOS) supports -t.
+    if touch -d '2099-01-01' "${path}" >/dev/null 2>&1; then
+        return 0
+    fi
+    touch -t 209901010000 "${path}"
+}
+
 utc_now_compact() {
     date -u +%Y%m%dT%H%M%SZ
 }
@@ -112,6 +122,20 @@ assert_any_contains() {
         echo "  - ${needle}" >&2
     done
     return 1
+}
+
+assert_status_eq() {
+    local got="$1"
+    local want="$2"
+    local context="$3"
+
+    if [[ "${ASSERT}" -ne 1 ]]; then
+        return 0
+    fi
+    if [[ "${got}" -ne "${want}" ]]; then
+        echo "ASSERTION FAILED (${context}): exit status ${got} != ${want}" >&2
+        return 1
+    fi
 }
 
 init_workspace() {
@@ -235,10 +259,10 @@ scenario_host_create_visible_in_world_no_sync_needed() {
     assert_contains "${preview}" "total_paths: 0" "host create preview"
 }
 
-scenario_direction_from_host_discards_world_only_changes() {
+scenario_direction_from_host_keeps_non_conflict_world_only_shadow() {
     local ws_dir="$1"
     local logfile="$2"
-    log "Scenario: direction=from_host => world-only changes are discarded (not applied to host)"
+    log "Scenario: direction=from_host => world-only shadow is kept (and never applied to host)"
 
     run_repl_pty "${ws_dir}" "${logfile}" "printf 'world\\n' > world_only.md"
 
@@ -256,8 +280,72 @@ scenario_direction_from_host_discards_world_only_changes() {
     assert_contains "${host_check}" "host_did_not_receive_world_only=1" "from_host discard host check"
 
     local world_check
-    world_check="$(run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' -c \"test ! -e world_only.md && echo 'world_discarded_upper=1'\"")"
-    assert_contains "${world_check}" "world_discarded_upper=1" "from_host discard world check"
+    world_check="$(run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' -c \"test -f world_only.md && echo 'world_kept_shadow=1'\"")"
+    assert_contains "${world_check}" "world_kept_shadow=1" "from_host keep world check"
+}
+
+scenario_from_host_conflict_prefer_host_discards_shadowed_path() {
+    local ws_dir="$1"
+    local logfile="$2"
+    log "Scenario: direction=from_host + prefer_host => conflicting shadowed path is discarded (world sees host)"
+
+    run_capture "${logfile}" bash -lc "cd '${ws_dir}' && printf 'host\\n' > shadow.md" >/dev/null
+    run_capture "${logfile}" touch_future "${ws_dir}/shadow.md" >/dev/null
+    run_repl_pty "${ws_dir}" "${logfile}" "printf 'world\\n' > shadow.md"
+
+    local preview
+    preview="$(ws_sync_dry_verbose "${ws_dir}" "${logfile}")"
+    assert_contains "${preview}" "from_host reconciliation plan" "from_host prefer_host preview"
+    assert_contains "${preview}" "conflicts_detected: true (1)" "from_host prefer_host preview"
+    assert_contains "${preview}" "shadow.md => discard" "from_host prefer_host preview"
+
+    local applied
+    applied="$(ws_sync_apply_verbose "${ws_dir}" "${logfile}")"
+    assert_contains "${applied}" "from_host reconciliation" "from_host prefer_host apply"
+    assert_contains "${applied}" "workspace sync applied" "from_host prefer_host apply"
+
+    local world_cat
+    world_cat="$(run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' -c \"cat shadow.md\"")"
+    assert_contains "${world_cat}" "host" "from_host prefer_host world sees host"
+
+    local host_cat
+    host_cat="$(run_capture "${logfile}" bash -lc "cd '${ws_dir}' && cat shadow.md")"
+    assert_contains "${host_cat}" "host" "from_host prefer_host host unchanged"
+
+    # Confirm the shadow was actually cleared (no pending diffs once we switch to from_world preview).
+    run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' config set sync.direction='from_world'" >/dev/null
+    local after
+    after="$(ws_sync_dry_verbose "${ws_dir}" "${logfile}")"
+    assert_contains "${after}" "total_paths: 0" "from_host prefer_host cleared shadow"
+}
+
+scenario_from_host_conflict_prefer_world_keeps_shadowed_path() {
+    local ws_dir="$1"
+    local logfile="$2"
+    log "Scenario: direction=from_host + prefer_world => conflicting shadowed path is kept (world continues to shadow host)"
+
+    run_capture "${logfile}" bash -lc "cd '${ws_dir}' && printf 'host\\n' > shadow.md" >/dev/null
+    run_capture "${logfile}" touch_future "${ws_dir}/shadow.md" >/dev/null
+    run_repl_pty "${ws_dir}" "${logfile}" "printf 'world\\n' > shadow.md"
+
+    local preview
+    preview="$(ws_sync_dry_verbose "${ws_dir}" "${logfile}")"
+    assert_contains "${preview}" "from_host reconciliation plan" "from_host prefer_world preview"
+    assert_contains "${preview}" "conflicts_detected: true (1)" "from_host prefer_world preview"
+    assert_contains "${preview}" "shadow.md => keep" "from_host prefer_world preview"
+
+    local applied
+    applied="$(ws_sync_apply_verbose "${ws_dir}" "${logfile}")"
+    assert_contains "${applied}" "from_host reconciliation" "from_host prefer_world apply"
+    assert_contains "${applied}" "workspace sync applied" "from_host prefer_world apply"
+
+    local world_cat
+    world_cat="$(run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' -c \"cat shadow.md\"")"
+    assert_contains "${world_cat}" "world" "from_host prefer_world world still shadows"
+
+    local host_cat
+    host_cat="$(run_capture "${logfile}" bash -lc "cd '${ws_dir}' && cat shadow.md")"
+    assert_contains "${host_cat}" "host" "from_host prefer_world host unchanged"
 }
 
 scenario_delete_host_file_in_world_prefer_world_applies_delete() {
@@ -326,6 +414,159 @@ scenario_delete_host_file_in_world_direction_from_world_deletes_host_even_prefer
     local host_check
     host_check="$(run_capture "${logfile}" bash -lc "cd '${ws_dir}' && (test ! -e from_world_delete.md && echo 'host_deleted=1')")"
     assert_contains "${host_check}" "host_deleted=1" "from_world delete host check"
+}
+
+scenario_world_create_then_delete_noop() {
+    local ws_dir="$1"
+    local logfile="$2"
+    log "Scenario: world creates then deletes before sync => no pending diffs"
+
+    run_repl_pty "${ws_dir}" "${logfile}" "printf 'tmp\\n' > noop.md\nrm -f noop.md"
+
+    local preview
+    preview="$(ws_sync_dry_verbose "${ws_dir}" "${logfile}")"
+    assert_contains "${preview}" "pending diff summary (combined)" "create+delete noop preview"
+    assert_contains "${preview}" "total_paths: 0" "create+delete noop preview"
+
+    local applied
+    applied="$(ws_sync_apply_verbose "${ws_dir}" "${logfile}")"
+    assert_contains "${applied}" "workspace sync applied" "create+delete noop apply"
+    assert_contains "${applied}" "writes_applied: 0" "create+delete noop apply"
+    assert_contains "${applied}" "mods_applied: 0" "create+delete noop apply"
+    assert_contains "${applied}" "deletes_applied: 0" "create+delete noop apply"
+}
+
+scenario_world_rename_mv_results_in_delete_plus_write() {
+    local ws_dir="$1"
+    local logfile="$2"
+    log "Scenario: world rename (mv) => sync applies delete+write"
+
+    run_repl_pty "${ws_dir}" "${logfile}" "printf 'a\\n' > rename_src.md"
+    local first_apply
+    first_apply="$(ws_sync_apply_verbose "${ws_dir}" "${logfile}")"
+    assert_contains "${first_apply}" "workspace sync applied" "rename first apply"
+    assert_any_contains "${first_apply}" "rename first apply count" "writes_applied: 1" "mods_applied: 1"
+
+    run_repl_pty "${ws_dir}" "${logfile}" "mv rename_src.md rename_dst.md"
+
+    local preview
+    preview="$(ws_sync_dry_verbose "${ws_dir}" "${logfile}")"
+    assert_contains "${preview}" "pending diff summary (combined)" "rename preview"
+    assert_contains "${preview}" "total_paths: 2" "rename preview"
+    assert_contains "${preview}" "deletes: 1" "rename preview"
+    assert_any_contains "${preview}" "rename preview kind" "writes: 1" "mods: 1"
+
+    local applied
+    applied="$(ws_sync_apply_verbose "${ws_dir}" "${logfile}")"
+    assert_contains "${applied}" "workspace sync applied" "rename apply"
+    assert_contains "${applied}" "deletes_applied: 1" "rename apply"
+    assert_any_contains "${applied}" "rename apply kind" "writes_applied: 1" "mods_applied: 1"
+
+    local host_check
+    host_check="$(run_capture "${logfile}" bash -lc "cd '${ws_dir}' && (test ! -e rename_src.md && test -f rename_dst.md && echo 'rename_ok=1')")"
+    assert_contains "${host_check}" "rename_ok=1" "rename host check"
+}
+
+scenario_world_modifies_host_file_prefer_world_applies_mod() {
+    local ws_dir="$1"
+    local logfile="$2"
+    log "Scenario: world edits host file; prefer_world => host updated on sync"
+
+    run_capture "${logfile}" bash -lc "cd '${ws_dir}' && printf 'host\\n' > edit.md" >/dev/null
+    run_repl_pty "${ws_dir}" "${logfile}" "printf 'world\\n' > edit.md"
+
+    local applied
+    applied="$(ws_sync_apply_verbose "${ws_dir}" "${logfile}")"
+    assert_contains "${applied}" "workspace sync applied" "world edit apply"
+    assert_any_contains "${applied}" "world edit apply count" "mods_applied: 1" "writes_applied: 1"
+
+    local host_cat
+    host_cat="$(run_capture "${logfile}" bash -lc "cd '${ws_dir}' && cat edit.md")"
+    assert_contains "${host_cat}" "world" "world edit host content"
+}
+
+scenario_combined_pty_and_nonpty_shows_combined_counts() {
+    local ws_dir="$1"
+    local logfile="$2"
+    log "Scenario: PTY + non-PTY diffs => combined summary includes both"
+
+    run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' -c \"printf 'n\\n' > nonpty.md\"" >/dev/null
+    run_repl_pty "${ws_dir}" "${logfile}" "printf 'p\\n' > pty.md"
+
+    local preview
+    preview="$(ws_sync_dry_verbose "${ws_dir}" "${logfile}")"
+    assert_contains "${preview}" "pending diff summary (non_pty)" "combined preview"
+    assert_contains "${preview}" "pending diff summary (pty)" "combined preview"
+    assert_contains "${preview}" "substrate: pending diff summary (combined)" "combined preview"
+    assert_contains "${preview}" "non_pty_total_paths: 1" "combined preview"
+    assert_contains "${preview}" "pty_total_paths: 1" "combined preview"
+    assert_contains "${preview}" "total_paths: 2" "combined preview"
+}
+
+scenario_excluded_paths_not_synced() {
+    local ws_dir="$1"
+    local logfile="$2"
+    log "Scenario: excluded paths (.substrate/**, .git/**) => never applied to host"
+
+    run_repl_pty "${ws_dir}" "${logfile}" "mkdir -p .git\nprintf 'x\\n' > .git/excluded.md\nprintf 'y\\n' > .substrate/excluded.md"
+
+    local preview
+    preview="$(ws_sync_dry_verbose "${ws_dir}" "${logfile}")"
+    assert_contains "${preview}" "pending diff summary (combined)" "exclude preview"
+    assert_contains "${preview}" "total_paths: 0" "exclude preview"
+    assert_contains "${preview}" "excluded_by_patterns: true" "exclude preview"
+
+    local applied
+    applied="$(ws_sync_apply_verbose "${ws_dir}" "${logfile}")"
+    assert_contains "${applied}" "workspace sync applied" "exclude apply"
+
+    local host_check
+    host_check="$(run_capture "${logfile}" bash -lc "cd '${ws_dir}' && (test ! -e .git/excluded.md && test ! -e .substrate/excluded.md && echo 'excluded_not_on_host=1')")"
+    assert_contains "${host_check}" "excluded_not_on_host=1" "exclude host check"
+
+    local world_check
+    world_check="$(run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' -c \"test -f .git/excluded.md && test -f .substrate/excluded.md && echo 'excluded_in_world=1'\"")"
+    assert_contains "${world_check}" "excluded_in_world=1" "exclude world check"
+}
+
+scenario_delete_directory_tree_applies() {
+    local ws_dir="$1"
+    local logfile="$2"
+    log "Scenario: world deletes directory tree => sync deletes on host"
+
+    run_capture "${logfile}" bash -lc "cd '${ws_dir}' && mkdir -p tree/a && printf 'host\\n' > tree/a/file.md" >/dev/null
+    run_repl_pty "${ws_dir}" "${logfile}" "rm -rf tree"
+
+    local applied
+    applied="$(ws_sync_apply_verbose "${ws_dir}" "${logfile}")"
+    assert_contains "${applied}" "workspace sync applied" "tree delete apply"
+    assert_any_contains "${applied}" "tree delete apply count" "deletes_applied: 1" "deletes_applied: 2"
+
+    local host_check
+    host_check="$(run_capture "${logfile}" bash -lc "cd '${ws_dir}' && (test ! -e tree && echo 'tree_deleted=1')")"
+    assert_contains "${host_check}" "tree_deleted=1" "tree delete host check"
+}
+
+scenario_conflict_policy_abort_refuses_on_from_host_conflict() {
+    local ws_dir="$1"
+    local logfile="$2"
+    log "Scenario: conflict_policy=abort + direction=both => sync refuses with exit 5 on conflict"
+
+    # Ensure a baseline exists (and is earlier than our host change) by starting a world session first.
+    run_repl_pty "${ws_dir}" "${logfile}" "true"
+
+    run_capture "${logfile}" bash -lc "cd '${ws_dir}' && printf 'host\\n' > abort.md" >/dev/null
+    run_capture "${logfile}" touch_future "${ws_dir}/abort.md" >/dev/null
+    run_repl_pty "${ws_dir}" "${logfile}" "printf 'world\\n' > abort.md"
+
+    local out status
+    set +e
+    out="$(ws_sync_apply_verbose "${ws_dir}" "${logfile}")"
+    status=$?
+    set -e
+    assert_status_eq "${status}" 5 "abort policy status"
+    assert_contains "${out}" "workspace sync refused: conflicts detected (policy=abort)" "abort policy message"
+    assert_contains "${out}" "  - abort.md" "abort policy lists path"
 }
 
 scenario_concurrent_mod_conflict_prefer_host_skips_apply() {
@@ -473,14 +714,32 @@ main() {
     set_sync_config "${ws3}" "${logfile}" "both" "prefer_host"
     scenario_host_create_visible_in_world_no_sync_needed "${ws3}" "${logfile}"
 
-    # Scenario 3b: direction=from_host discards world-only writes
+    # Scenario 3b: direction=from_host keeps world-only shadow (never applied to host)
     local ws3b
     ws3b="$(mktemp -d /tmp/substrate-ws-sync-matrix.XXXXXX)"
     TMP_DIRS+=("${ws3b}")
-    logfile="${LOG_DIR}/scenario_03b_from_host_discards_world_only.log"
+    logfile="${LOG_DIR}/scenario_03b_from_host_keeps_world_only_shadow.log"
     init_workspace "${ws3b}" "${logfile}"
     set_sync_config "${ws3b}" "${logfile}" "from_host" "prefer_host"
-    scenario_direction_from_host_discards_world_only_changes "${ws3b}" "${logfile}"
+    scenario_direction_from_host_keeps_non_conflict_world_only_shadow "${ws3b}" "${logfile}"
+
+    # Scenario 3c: direction=from_host, prefer_host discards conflicting shadowed host path
+    local ws3c
+    ws3c="$(mktemp -d /tmp/substrate-ws-sync-matrix.XXXXXX)"
+    TMP_DIRS+=("${ws3c}")
+    logfile="${LOG_DIR}/scenario_03c_from_host_conflict_prefer_host_discards.log"
+    init_workspace "${ws3c}" "${logfile}"
+    set_sync_config "${ws3c}" "${logfile}" "from_host" "prefer_host"
+    scenario_from_host_conflict_prefer_host_discards_shadowed_path "${ws3c}" "${logfile}"
+
+    # Scenario 3d: direction=from_host, prefer_world keeps conflicting shadowed host path
+    local ws3d
+    ws3d="$(mktemp -d /tmp/substrate-ws-sync-matrix.XXXXXX)"
+    TMP_DIRS+=("${ws3d}")
+    logfile="${LOG_DIR}/scenario_03d_from_host_conflict_prefer_world_keeps.log"
+    init_workspace "${ws3d}" "${logfile}"
+    set_sync_config "${ws3d}" "${logfile}" "from_host" "prefer_world"
+    scenario_from_host_conflict_prefer_world_keeps_shadowed_path "${ws3d}" "${logfile}"
 
     # Scenario 4: host create, world delete, prefer_world => host delete applied
     local ws4
@@ -508,6 +767,69 @@ main() {
     init_workspace "${ws5b}" "${logfile}"
     set_sync_config "${ws5b}" "${logfile}" "from_world" "prefer_host"
     scenario_delete_host_file_in_world_direction_from_world_deletes_host_even_prefer_host "${ws5b}" "${logfile}"
+
+    # Scenario 5c: create+delete before sync => noop
+    local ws5c
+    ws5c="$(mktemp -d /tmp/substrate-ws-sync-matrix.XXXXXX)"
+    TMP_DIRS+=("${ws5c}")
+    logfile="${LOG_DIR}/scenario_05c_world_create_then_delete_noop.log"
+    init_workspace "${ws5c}" "${logfile}"
+    set_sync_config "${ws5c}" "${logfile}" "from_world" "prefer_host"
+    scenario_world_create_then_delete_noop "${ws5c}" "${logfile}"
+
+    # Scenario 5d: rename in world => delete+write applied
+    local ws5d
+    ws5d="$(mktemp -d /tmp/substrate-ws-sync-matrix.XXXXXX)"
+    TMP_DIRS+=("${ws5d}")
+    logfile="${LOG_DIR}/scenario_05d_world_rename_mv.log"
+    init_workspace "${ws5d}" "${logfile}"
+    set_sync_config "${ws5d}" "${logfile}" "from_world" "prefer_world"
+    scenario_world_rename_mv_results_in_delete_plus_write "${ws5d}" "${logfile}"
+
+    # Scenario 5e: world edits host file => mod applied (prefer_world)
+    local ws5e
+    ws5e="$(mktemp -d /tmp/substrate-ws-sync-matrix.XXXXXX)"
+    TMP_DIRS+=("${ws5e}")
+    logfile="${LOG_DIR}/scenario_05e_world_edits_host_file_prefer_world.log"
+    init_workspace "${ws5e}" "${logfile}"
+    set_sync_config "${ws5e}" "${logfile}" "from_world" "prefer_world"
+    scenario_world_modifies_host_file_prefer_world_applies_mod "${ws5e}" "${logfile}"
+
+    # Scenario 5f: PTY + non-PTY combined preview counts
+    local ws5f
+    ws5f="$(mktemp -d /tmp/substrate-ws-sync-matrix.XXXXXX)"
+    TMP_DIRS+=("${ws5f}")
+    logfile="${LOG_DIR}/scenario_05f_combined_pty_nonpty_counts.log"
+    init_workspace "${ws5f}" "${logfile}"
+    set_sync_config "${ws5f}" "${logfile}" "from_world" "prefer_host"
+    scenario_combined_pty_and_nonpty_shows_combined_counts "${ws5f}" "${logfile}"
+
+    # Scenario 5g: excluded paths never sync to host
+    local ws5g
+    ws5g="$(mktemp -d /tmp/substrate-ws-sync-matrix.XXXXXX)"
+    TMP_DIRS+=("${ws5g}")
+    logfile="${LOG_DIR}/scenario_05g_excluded_paths.log"
+    init_workspace "${ws5g}" "${logfile}"
+    set_sync_config "${ws5g}" "${logfile}" "from_world" "prefer_host"
+    scenario_excluded_paths_not_synced "${ws5g}" "${logfile}"
+
+    # Scenario 5h: delete directory tree in world => deletes applied to host
+    local ws5h
+    ws5h="$(mktemp -d /tmp/substrate-ws-sync-matrix.XXXXXX)"
+    TMP_DIRS+=("${ws5h}")
+    logfile="${LOG_DIR}/scenario_05h_delete_directory_tree.log"
+    init_workspace "${ws5h}" "${logfile}"
+    set_sync_config "${ws5h}" "${logfile}" "from_world" "prefer_world"
+    scenario_delete_directory_tree_applies "${ws5h}" "${logfile}"
+
+    # Scenario 5i: conflict_policy=abort refuses on from_host conflict
+    local ws5i
+    ws5i="$(mktemp -d /tmp/substrate-ws-sync-matrix.XXXXXX)"
+    TMP_DIRS+=("${ws5i}")
+    logfile="${LOG_DIR}/scenario_05i_abort_policy_refuses.log"
+    init_workspace "${ws5i}" "${logfile}"
+    set_sync_config "${ws5i}" "${logfile}" "both" "abort"
+    scenario_conflict_policy_abort_refuses_on_from_host_conflict "${ws5i}" "${logfile}"
 
     # Scenario 6: concurrent mods, prefer_host => host wins
     local ws6
