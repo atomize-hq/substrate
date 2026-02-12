@@ -402,11 +402,11 @@ pub enum WorkspaceAction {
     Disable(WorkspacePathArgs),
     /// Enable workspace discovery at PATH (defaults to .)
     Enable(WorkspacePathArgs),
-    /// Apply pending world diffs to the host workspace (WS0: dry-run preview only)
+    /// Apply pending world diffs to the host workspace
     Sync(WorkspaceSyncArgs),
-    /// Record an internal checkpoint for the current workspace (WS0: stub only)
+    /// Record an internal checkpoint for the current workspace
     Checkpoint(WorkspaceCheckpointArgs),
-    /// Restore the workspace to an internal checkpoint (WS0: stub only)
+    /// Restore the workspace to an internal checkpoint
     Rollback(WorkspaceRollbackArgs),
 }
 
@@ -494,26 +494,26 @@ pub struct WorkspaceSyncArgs {
 
 #[derive(Args, Debug)]
 pub struct WorkspaceCheckpointArgs {
-    /// Optional checkpoint message (WS0: ignored; reserved for later slices)
+    /// Optional checkpoint message
     #[arg(long = "message", value_name = "TEXT")]
     pub message: Option<String>,
 
-    /// Print additional details (WS0: ignored; reserved for later slices)
+    /// Print additional details
     #[arg(long = "verbose")]
     pub verbose: bool,
 }
 
 #[derive(Args, Debug)]
 pub struct WorkspaceRollbackArgs {
-    /// Rollback target (`last` or a checkpoint id) (WS0: ignored; reserved for later slices)
+    /// Rollback target (`last` or a checkpoint id)
     #[arg(value_name = "TARGET")]
     pub target: Option<String>,
 
-    /// Force rollback in the presence of safety-rail conditions (WS0: ignored; reserved for later slices)
+    /// Force rollback in the presence of safety-rail conditions
     #[arg(long = "force")]
     pub force: bool,
 
-    /// Print additional details (WS0: ignored; reserved for later slices)
+    /// Print additional details
     #[arg(long = "verbose")]
     pub verbose: bool,
 }
