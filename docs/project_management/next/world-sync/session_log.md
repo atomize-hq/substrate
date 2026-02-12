@@ -429,3 +429,7 @@
 ## START — 2026-02-12T03:40:21Z — integration — WS5-integ-core
 - Dispatch:
   - `make triad-task-start FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" TASK_ID="WS5-integ-core" LAUNCH_CODEX=1`
+
+## END — 2026-02-12T04:09:37Z — integration — WS5-integ-core
+- HEAD: `3c31d2b768feb368316cc02f139242e45b2171c2`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS5/integ-core/last_message.md`
