@@ -127,6 +127,23 @@ Also expected.
 Host-only files are already visible in world via the baseline. `from_host` exists for the case
 where the world has a pending upper entry that is hiding the host’s current version.
 
+## Auto-sync (`sync.auto_sync=true`) — current reality
+
+When `sync.auto_sync=true`, the shell will opportunistically run a workspace sync automatically
+after successful commands, using the same engine as `substrate workspace sync`:
+
+- One-shot execution path (`substrate -c "..."`):
+  - Hook lives in `crates/shell/src/execution/routing/dispatch/exec.rs` (post-success hook).
+- Async REPL path (`substrate` interactive session):
+  - Hook runs on REPL exit and lives in `crates/shell/src/repl/async_repl.rs`.
+
+Implementation details:
+- Auto-sync is wired through `crates/shell/src/execution/auto_sync.rs`.
+- Effective direction handling:
+  - `sync.direction=from_host` → no-op (auto-sync does not run).
+  - `sync.direction=from_world|both` → calls the `workspace sync` engine with that direction.
+- Failures are surfaced as `auto-sync failed: ...` and propagate a non-zero exit code.
+
 ## Debugging workflows
 
 ### Inspect what sync would do
@@ -151,4 +168,3 @@ cannot be the live host workspace. That would require introducing a snapshot bas
 (e.g., a materialized snapshot dir) and explicit host→world apply semantics. Internal git
 (`workspace checkpoint`/`rollback`) is a plausible building block for snapshot materialization, but
 it is not currently wired into world mounts.
-

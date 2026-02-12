@@ -92,6 +92,17 @@ If a file was created in world, synced to host, and then the pending world chang
 - `substrate workspace sync --dry-run --verbose`
   - shows how many pending changes exist and what would be applied/skipped.
 
+## Auto-sync (`sync.auto_sync=true`)
+
+If `sync.auto_sync=true`, Substrate will attempt to run `workspace sync` automatically:
+
+- After a successful one-shot world command (for example `substrate -c "..."`).
+- When exiting the interactive REPL (`substrate` → `exit` / Ctrl+D).
+
+Auto-sync respects your effective `sync.direction` (`from_world` or `both`) and
+`sync.conflict_policy`. If auto-sync fails, Substrate prints an `auto-sync failed: ...` message and
+returns a non-zero exit code.
+
 ## Safety rails
 
 Some paths are protected and will not be synced/mutated:
@@ -99,4 +110,3 @@ Some paths are protected and will not be synced/mutated:
 - `.substrate/**`
 
 If the world’s pending changes include protected paths, sync refuses.
-

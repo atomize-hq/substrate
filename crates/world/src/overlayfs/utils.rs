@@ -3,10 +3,10 @@ use std::path::{Path, PathBuf};
 
 #[cfg(target_os = "linux")]
 use anyhow::Context;
-#[cfg(target_os = "linux")]
-use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use anyhow::Result;
 use sha2::{Digest, Sha256};
+#[cfg(target_os = "linux")]
+use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use substrate_common::FsDiff;
 use walkdir::WalkDir;
 
@@ -233,7 +233,7 @@ mod tests {
     #[test]
     #[cfg(target_os = "linux")]
     fn compute_diff_detects_kernel_overlayfs_char_device_whiteouts() {
-        use nix::sys::stat::{mknod, makedev, Mode, SFlag};
+        use nix::sys::stat::{makedev, mknod, Mode, SFlag};
         use nix::unistd::Uid;
 
         if !Uid::effective().is_root() {

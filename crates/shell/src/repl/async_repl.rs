@@ -59,7 +59,7 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
     let entered_cwd = preflight.entered_cwd.clone();
     let repl_exit_cwd = preflight.exit_cwd;
 
-    rt.block_on(async move {
+    let exit_code = rt.block_on(async move {
         let mut telemetry = ReplSessionTelemetry::new(shared_config.clone(), "async");
         let mut prompt_worker = PromptWorker::spawn(shared_config.clone())
             .context("failed to start Reedline worker")?;
@@ -375,6 +375,40 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
         prompt_worker.shutdown();
         clear_agent_event_sender();
 
+        let auto_sync_exit_code: i32 = {
+            let cwd_for_profile = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            let cli_world_enabled = if shared_config.cli_world {
+                Some(true)
+            } else if shared_config.cli_no_world {
+                Some(false)
+            } else {
+                None
+            };
+
+            let effective_config = crate::execution::config_model::resolve_effective_config(
+                &cwd_for_profile,
+                &crate::execution::config_model::CliConfigOverrides {
+                    world_enabled: cli_world_enabled,
+                    anchor_mode: shared_config.cli_anchor_mode,
+                    anchor_path: shared_config
+                        .cli_anchor_path
+                        .as_ref()
+                        .map(|p| p.to_string_lossy().to_string()),
+                    caged: shared_config.cli_caged,
+                },
+            )?;
+
+            if shared_config.no_world || !effective_config.world.enabled {
+                0
+            } else {
+                let cfg = (*shared_config).clone();
+                let effective = effective_config.clone();
+                task::spawn_blocking(move || crate::execution::run_auto_sync_if_enabled(&cfg, &effective))
+                    .await
+                    .map_err(|e| anyhow!(e))??
+            }
+        };
+
         if let Some(lines) = note_lines {
             for line in lines {
                 println!("{line}");
@@ -387,10 +421,10 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
             let _ = session.client.close().await;
         }
 
-        Ok::<_, anyhow::Error>(())
+        Ok::<_, anyhow::Error>(auto_sync_exit_code)
     })?;
 
-    Ok(0)
+    Ok(exit_code)
 }
 
 struct PromptWorker {
