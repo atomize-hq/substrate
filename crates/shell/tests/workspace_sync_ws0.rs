@@ -685,39 +685,3 @@ fn workspace_checkpoint_does_not_require_world_backend() {
         "workspace checkpoint must not mutate workspace.yaml"
     );
 }
-
-#[test]
-fn workspace_rollback_is_stubbed_in_ws0() {
-    let fixture = WorkspaceSyncFixture::new();
-    fixture.init_workspace();
-
-    let before_workspace_yaml =
-        fs::read_to_string(fixture.workspace_yaml_path()).expect("read workspace.yaml");
-
-    let missing_socket = fixture.workspace_root.join("missing.substrate.sock");
-    let mut cmd = fixture.command();
-    cmd.current_dir(&fixture.workspace_root)
-        .env("SUBSTRATE_OVERRIDE_WORLD", "enabled")
-        .env("SUBSTRATE_WORLD_SOCKET", &missing_socket)
-        .args(["workspace", "rollback"]);
-    let output = cmd.output().expect("run workspace rollback");
-
-    assert_eq!(
-        output.status.code(),
-        Some(4),
-        "workspace rollback must be stubbed in WS0 (exit 4): {}",
-        combined_output(&output)
-    );
-    let combined = combined_output(&output);
-    assert!(
-        combined.contains("not implemented") && combined.contains("WS7"),
-        "workspace rollback stub must mention WS7: {combined}"
-    );
-
-    let after_workspace_yaml =
-        fs::read_to_string(fixture.workspace_yaml_path()).expect("read workspace.yaml after");
-    assert_eq!(
-        before_workspace_yaml, after_workspace_yaml,
-        "workspace rollback stub must not mutate workspace.yaml"
-    );
-}
