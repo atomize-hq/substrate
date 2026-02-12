@@ -588,7 +588,11 @@ struct ReplIo<'a> {
 }
 
 fn has_embedded_newlines(s: &str) -> bool {
-    s.contains('\n') || s.contains('\r')
+    // Reedline input should not include trailing line terminators, but PTY harnesses (and some
+    // terminals) can surface a trailing `\r`/`\n`. We only want to treat *embedded* newlines as
+    // multi-line commands that disable certain REPL directives like `:pty`/`:host`.
+    let trimmed = s.trim_end_matches(['\r', '\n']);
+    trimmed.contains('\n') || trimmed.contains('\r')
 }
 
 fn is_exit_directive(trimmed: &str) -> bool {
