@@ -75,7 +75,7 @@ Template standard:
 ### DR-0003 — Failure semantics (fail-fast vs allow_failure)
 
 **Decision owner(s):** Shell / World maintainers  
-**Date:** 2026-02-11  
+**Date:** 2026-02-12  
 **Status:** Accepted  
 **Related docs:** `docs/project_management/adrs/draft/ADR-0021-substrate-workflow-engine.md`
 
@@ -96,6 +96,8 @@ Template standard:
 - **Cascading implications:**
   - `defaults.fail_fast` default is `true`.
   - Nodes can set `allow_failure: true` to avoid failing the workflow on node failure.
+  - Dependency edges are always “required dependencies”:
+    - if a dependency is not `success`, dependent nodes are `skipped` (even if the dependency had `allow_failure=true`).
   - If `fail_fast=false`, the scheduler continues running nodes that are not transitively blocked by a failed required dependency.
 - **Risks:** operators misunderstand why a node did not run; mitigated by explicit node status (`skipped` with a reason).
 - **Unlocks:** richer workflows without external scripting.
@@ -109,6 +111,7 @@ Template standard:
 - Define node status enum: `success|failed|denied|skipped`.
 - Implement deterministic skip propagation: if any required dependency fails/denies, dependent nodes are `skipped`.
 - Document that policy deny is always workflow-fatal (exit `4`) regardless of `allow_failure`.
+- Update the workflow spec schema to include `nodes[*].allow_failure?: bool` (default `false`) and define how it affects the workflow exit code.
 
 ### DR-0004 — Output wiring + reference model
 
@@ -181,3 +184,56 @@ Template standard:
 - Add `workflow_run` root span and `workflow_node` child spans in `crates/trace`.
 - Ensure node spans link to underlying execution spans via parent/`graph_edges` without duplicating sensitive arguments.
 - Add a Phase 8 additive-only update to the trace ADR/docs for the new workflow correlation fields.
+
+### DR-0006 — `workflow.call` (sub-workflow invocation) in v1
+
+**Decision owner(s):** Shell maintainers  
+**Date:** 2026-02-12  
+**Status:** Accepted  
+**Related docs:** `docs/project_management/adrs/draft/ADR-0021-substrate-workflow-engine.md`
+
+**Problem / Context**
+- We need workflow composition/reuse. Without a sub-workflow node, operators will copy/paste node blocks or orchestrate multiple runs outside Substrate.
+- If `workflow.call` is part of the v1 contract, we must lock down resolution/recursion/output semantics now (before the ADR is `Accepted`) to avoid later contract reshapes.
+
+**Option A — Ship `workflow.call` in v1 (strict semantics)**
+- **Pros:** enables reuse/composition; keeps orchestration inside Substrate’s policy+trace model; reduces duplication.
+- **Cons:** adds surface area (resolution rules, recursion limits, cycle detection, output bridging).
+- **Cascading implications (authoritative contract):**
+  - Node kind: `workflow.call`
+  - Callee spec loading:
+    - callee path supports YAML/JSON and must be strict (unknown keys rejected),
+    - relative paths are resolved relative to the *caller spec file directory* (not CWD),
+    - the resolved path is canonicalized for cycle detection when possible.
+  - Recursion/cycle protection:
+    - maximum call depth is `8` (inclusive of the root),
+    - cycles (direct or indirect) are validation errors.
+  - Policy boundary:
+    - the callee run executes under the same effective policy/config/world posture as the caller run,
+    - the callee must not widen privileges (future overlays may only tighten).
+  - Outputs:
+    - the `workflow.call` node exports the callee workflow’s declared top-level `outputs` mapping as its node outputs,
+    - if the callee has no `outputs`, the `workflow.call` node produces no outputs.
+  - Failure/deny propagation:
+    - if the callee is invalid → caller validation fails (exit `2`),
+    - if the callee run denies by policy → workflow run exits `4` (deny is workflow-fatal),
+    - if the callee run fails (required node failure) → the `workflow.call` node fails (then caller follows fail-fast/allow-failure rules).
+- **Risks:** corner cases around path canonicalization/symlinks; mitigated by deterministic “best effort canonicalize” + explicit error messages.
+- **Unlocks:** sub-workflows as a stable reuse primitive for long-running orchestration.
+- **Quick wins / low-hanging fruit:** implement by recursively invoking the same validator/runner with a depth counter.
+
+**Option B — Defer `workflow.call` from v1**
+- **Pros:** smaller contract; fewer edge cases; faster to ship core scheduler.
+- **Cons:** forces duplication/external orchestration; makes “workflow as a single traceable run” harder when composition is needed.
+- **Cascading implications:** remove `workflow.call` from v1 node-kind allowlist and treat it as a vNext addition requiring a new DR.
+- **Risks:** users build ad-hoc include systems outside Substrate.
+- **Unlocks:** minimal v1.
+- **Quick wins / low-hanging fruit:** simplest.
+
+**Recommendation**
+- **Selected:** Option A — Ship `workflow.call` in v1 (strict semantics)
+- **Rationale (crisp):** workflow composition is inevitable; specifying it now prevents later contract rewrites and improves end-to-end alignment before execution triads begin.
+
+**Follow-up tasks (explicit)**
+- Extend workflow validation to recursively validate callees (depth/cycle checks).
+- Define node-result JSON shape for `workflow.call` to include the callee’s per-node statuses (nested) deterministically.

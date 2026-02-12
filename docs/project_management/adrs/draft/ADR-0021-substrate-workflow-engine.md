@@ -31,7 +31,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: dec05669efbf05ffb0909f9761691d27b30f9c40a324e32fc94bb0e9123e3cb1
+ADR_BODY_SHA256: e2fa215bd1d1e6522efecf40c911fda4c06716f73a67c1acab9c7873cfd3da7d
 ### Changes (operator-facing)
 - Add a first-class “workflow run” capability to Substrate
   - Existing: Substrate executes single commands (interactive or non-interactive) and records spans for replay/audit; operators orchestrate multi-step flows outside of Substrate (scripts, makefiles, ad-hoc tooling).
@@ -85,8 +85,8 @@ ADR_BODY_SHA256: dec05669efbf05ffb0909f9761691d27b30f9c40a324e32fc94bb0e9123e3cb
     - defaults:
       - `--concurrency`: `min(4, available_parallelism)` (must be `>= 1`).
     - exit codes:
-      - `0`: workflow completed successfully (all required nodes succeeded)
-      - `3`: workflow failed (one or more nodes failed and the workflow terminated)
+      - `0`: workflow completed successfully (all nodes with `allow_failure=false` succeeded)
+      - `3`: workflow failed (one or more nodes with `allow_failure=false` failed or was skipped due to a failed dependency)
       - `4`: workflow denied by policy (a node requested execution that was denied and the workflow is fail-closed)
       - `5`: unexpected internal error
 - Exit codes:
@@ -98,14 +98,37 @@ ADR_BODY_SHA256: dec05669efbf05ffb0909f9761691d27b30f9c40a324e32fc94bb0e9123e3cb
   - strict schema (v1; unknown keys rejected):
     - `schema_version: 1`
     - `workflow_id: <string>` (stable identifier; used for trace correlation)
-    - `nodes: [{ id, kind, inputs?, config? }, ...]`
+    - `inputs?: { <name>: <string> }` (optional defaults; CLI `--input` overrides)
+    - `nodes: [{ id, kind, allow_failure?, inputs?, config? }, ...]`
     - `edges: [{ from, to }, ...]` (authoritative dependency graph; see DR-0002)
     - `defaults?: { concurrency?, fail_fast?, timeout_ms? }`
     - `outputs?: { <name>: <ref> }` (optional; see DR-0004)
   - Node kinds (v1 allowlist; unknown kinds are invalid):
     - `command.exec` (built-in)
-    - `workflow.call` (built-in)
+    - `workflow.call` (built-in; see DR-0006)
     - `forge.run` (optional; provided by ADR-0022 / Forge)
+  - Failure semantics (v1; authoritative):
+    - `nodes[*].allow_failure?: bool` (default `false`):
+      - When `true`, the workflow run continues and the workflow can still exit `0` even if this node fails or is skipped.
+      - Policy deny is always workflow-fatal (exit `4`), regardless of `allow_failure`.
+    - Dependency edges are required:
+      - if a dependency is not `success`, dependent nodes are `skipped`.
+    - `defaults.fail_fast?: bool` (default `true`):
+      - When `true`, the workflow terminates on the first node failure/skipped/deny where `allow_failure=false` (deny is always fatal).
+      - When `false`, the workflow continues running nodes that are not blocked by failed dependencies.
+  - `workflow.call` contract (v1; authoritative):
+    - Purpose: invoke a sub-workflow spec as a node inside the parent workflow.
+    - Node inputs:
+      - `workflow_spec_path: <string>` (required; relative paths resolve relative to the caller spec directory)
+      - `inputs?: { <name>: <string> }` (optional; passed to the callee run as its effective inputs)
+    - Node outputs:
+      - The node exports the callee workflow’s declared top-level `outputs` mapping as its node outputs.
+    - Recursion/cycle rules:
+      - Maximum call depth: `8` (inclusive of the root).
+      - Cycles (direct or indirect) are validation errors (exit `2`).
+    - Policy boundary:
+      - The callee executes under the same effective policy/config/world posture as the caller run.
+      - Policy deny inside the callee is workflow-fatal (exit `4`).
 - Precedence:
   - CLI flags override spec defaults for runtime knobs (e.g., concurrency, inputs, output path).
   - Policy/profile selection follows Substrate’s existing policy/config precedence rules; the workflow runner may pass an explicit profile into node executors, but does not redefine policy resolution.
@@ -196,3 +219,4 @@ ADR_BODY_SHA256: dec05669efbf05ffb0909f9761691d27b30f9c40a324e32fc94bb0e9123e3cb
   - DR-0003: Failure semantics (fail-fast vs allow_failure)
   - DR-0004: Output wiring + reference model
   - DR-0005: Trace representation (workflow spans + linkage)
+  - DR-0006: `workflow.call` (sub-workflow invocation) in v1
