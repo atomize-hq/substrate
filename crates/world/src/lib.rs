@@ -59,6 +59,18 @@ impl LinuxLocalBackend {
         Ok((session_world.started_at, diff))
     }
 
+    /// Clear the current session's pending diff state (discard overlay upper/work layers).
+    pub fn clear_pending_diff(&self, world: &WorldHandle) -> Result<()> {
+        let mut cache = self
+            .session_cache
+            .write()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire session cache write lock: {}", e))?;
+        let session_world = cache
+            .get_mut(&world.id)
+            .context("World not found in cache")?;
+        session_world.clear_pending_diff()
+    }
+
     #[cfg(not(target_os = "linux"))]
     fn check_platform(&self) -> Result<()> {
         anyhow::bail!("LinuxLocal backend is only supported on Linux")
