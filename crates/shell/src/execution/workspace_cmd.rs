@@ -1448,11 +1448,352 @@ fn run_workspace_checkpoint(args: &WorkspaceCheckpointArgs) -> Result<i32> {
     Ok(0)
 }
 
-fn run_workspace_rollback(_args: &WorkspaceRollbackArgs) -> Result<i32> {
+fn run_workspace_rollback(args: &WorkspaceRollbackArgs) -> Result<i32> {
     let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let _workspace_root = require_workspace_root(&cwd, "workspace rollback")?;
-    eprintln!("substrate: workspace rollback is not implemented until WS7");
-    Ok(4)
+    let workspace_root = require_workspace_root(&cwd, "workspace rollback")?;
+
+    let raw_target = match args.target.as_deref() {
+        Some(t) => t.trim(),
+        None => {
+            eprintln!(
+                "substrate: workspace rollback requires a target (`last` or cp/<YYYYMMDDTHHMMSSZ>)"
+            );
+            return Ok(2);
+        }
+    };
+    if raw_target.is_empty() {
+        eprintln!(
+            "substrate: workspace rollback requires a target (`last` or cp/<YYYYMMDDTHHMMSSZ>)"
+        );
+        return Ok(2);
+    }
+    if raw_target.chars().any(|c| c.is_whitespace()) {
+        eprintln!("substrate: invalid rollback target (must not contain whitespace): {raw_target}");
+        return Ok(2);
+    }
+
+    // Per internal-git-spec.md, the directory is created by `workspace init` only.
+    let internal_git_dir = workspace::internal_git_dir(&workspace_root);
+    if !internal_git_dir.is_dir() {
+        eprintln!(
+            "substrate: workspace rollback requires internal git dir; run `substrate workspace init --force`"
+        );
+        return Ok(2);
+    }
+
+    match Command::new("git").arg("--version").output() {
+        Ok(output) if output.status.success() => {}
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {
+            eprintln!("substrate: workspace rollback requires git; install git and retry");
+            return Ok(3);
+        }
+        Ok(_) | Err(_) => {
+            return Err(anyhow!(
+                "failed to validate git dependency for workspace rollback"
+            ));
+        }
+    }
+
+    let user_git_marker = workspace_root.join(".git");
+    if user_git_marker.exists() {
+        let mut cmd = Command::new("git");
+        cmd.current_dir(&workspace_root);
+        cmd.arg("status").arg("--porcelain");
+        let rendered = format!("{cmd:?}");
+        let output = cmd
+            .output()
+            .with_context(|| format!("failed to run git command: {rendered}"))?;
+        if !output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(anyhow!(
+                "git status failed (exit={}): stdout={} stderr={}",
+                output.status,
+                stdout.trim(),
+                stderr.trim()
+            ));
+        }
+        let dirty = !String::from_utf8_lossy(&output.stdout).trim().is_empty();
+        if dirty && !args.force {
+            eprintln!(
+                "substrate: workspace rollback refused: workspace is dirty; re-run with --force"
+            );
+            return Ok(5);
+        }
+    }
+
+    ensure_internal_git_initialized(&workspace_root, &internal_git_dir)
+        .context("failed to initialize internal git repo")?;
+
+    let checkpoint_id = if raw_target == "last" {
+        match internal_git_last_checkpoint_id(&workspace_root, &internal_git_dir)
+            .context("failed to resolve rollback target `last`")?
+        {
+            Some(id) => id,
+            None => {
+                eprintln!("substrate: workspace rollback failed: no checkpoints exist");
+                return Ok(2);
+            }
+        }
+    } else {
+        if !checkpoint_id_looks_valid(raw_target) {
+            eprintln!("substrate: invalid rollback target checkpoint id: {raw_target}");
+            return Ok(2);
+        }
+        raw_target.to_string()
+    };
+
+    let target_commit = match internal_git_rev_parse_tag_commit(
+        &workspace_root,
+        &internal_git_dir,
+        &checkpoint_id,
+    )
+    .context("failed to resolve rollback target commit")?
+    {
+        Some(commit) => commit,
+        None => {
+            eprintln!("substrate: workspace rollback failed: invalid target checkpoint id: {checkpoint_id}");
+            return Ok(2);
+        }
+    };
+
+    let snapshot_files =
+        internal_git_ls_tree_files(&workspace_root, &internal_git_dir, &target_commit)
+            .context("failed to enumerate snapshot files for rollback target")?;
+    let snapshot_required_paths = snapshot_required_paths(&snapshot_files);
+
+    let extra_paths = workspace_paths_not_in_snapshot(&workspace_root, &snapshot_required_paths)
+        .context("failed to evaluate rollback safety rails")?;
+    if !extra_paths.is_empty() && !args.force {
+        eprintln!("substrate: workspace rollback refused: would delete non-checkpointed paths; re-run with --force");
+        print_path_list_truncated("  paths", &extra_paths);
+        return Ok(5);
+    }
+
+    internal_git_checkout_main(&workspace_root, &internal_git_dir)
+        .context("failed to checkout internal branch main for rollback")?;
+    internal_git_reset_hard(&workspace_root, &internal_git_dir, &target_commit)
+        .context("failed to restore workspace to rollback target")?;
+
+    if args.force && !extra_paths.is_empty() {
+        delete_workspace_paths(&workspace_root, &extra_paths)
+            .context("failed to delete non-checkpointed paths during rollback")?;
+    }
+
+    if args.verbose {
+        eprintln!("substrate: workspace rollback applied");
+        eprintln!("  checkpoint_id: {checkpoint_id}");
+        eprintln!("  commit: {target_commit}");
+        if args.force {
+            eprintln!("  deleted_non_checkpointed_paths: {}", extra_paths.len());
+        }
+    }
+
+    Ok(0)
+}
+
+fn checkpoint_id_looks_valid(raw: &str) -> bool {
+    if !raw.starts_with("cp/") {
+        return false;
+    }
+    let ts = match raw.strip_prefix("cp/") {
+        Some(t) => t,
+        None => return false,
+    };
+    chrono::NaiveDateTime::parse_from_str(ts, "%Y%m%dT%H%M%SZ").is_ok()
+}
+
+fn internal_git_rev_parse_tag_commit(
+    workspace_root: &Path,
+    internal_git_dir: &Path,
+    tag: &str,
+) -> Result<Option<String>> {
+    let mut cmd = internal_git_base_cmd(workspace_root, internal_git_dir);
+    cmd.arg("rev-parse")
+        .arg("--verify")
+        .arg("--quiet")
+        .arg(format!("refs/tags/{tag}^{{commit}}"));
+    let out = match cmd.output() {
+        Ok(o) => o,
+        Err(err) => return Err(anyhow!("failed to run git rev-parse for tag {tag}: {err}")),
+    };
+    if !out.status.success() {
+        return Ok(None);
+    }
+    Ok(Some(
+        String::from_utf8_lossy(&out.stdout).trim().to_string(),
+    ))
+}
+
+fn internal_git_ls_tree_files(
+    workspace_root: &Path,
+    internal_git_dir: &Path,
+    commit: &str,
+) -> Result<Vec<String>> {
+    let mut cmd = internal_git_base_cmd(workspace_root, internal_git_dir);
+    cmd.arg("ls-tree").arg("-r").arg("--name-only").arg(commit);
+    let out = internal_git_run(cmd)?;
+    let mut files: Vec<String> = Vec::new();
+    for line in String::from_utf8_lossy(&out.stdout).lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let normalized = normalize_workspace_rel_path(trimmed)
+            .map_err(|msg| anyhow!("invalid snapshot path from git ls-tree: {msg}"))?;
+        files.push(normalized);
+    }
+    Ok(files)
+}
+
+fn snapshot_required_paths(snapshot_files: &[String]) -> HashSet<String> {
+    let mut required: HashSet<String> = HashSet::new();
+    for file in snapshot_files {
+        required.insert(file.clone());
+        let parts: Vec<&str> = file.split('/').collect();
+        if parts.len() <= 1 {
+            continue;
+        }
+        let mut prefix = String::new();
+        for part in &parts[..parts.len() - 1] {
+            if prefix.is_empty() {
+                prefix.push_str(part);
+            } else {
+                prefix.push('/');
+                prefix.push_str(part);
+            }
+            required.insert(prefix.clone());
+        }
+    }
+    required
+}
+
+fn is_protected_workspace_path(path: &str) -> bool {
+    for prot in crate::execution::config_model::PROTECTED_EXCLUDES {
+        if glob_matches_path(prot, path) {
+            return true;
+        }
+    }
+    false
+}
+
+fn workspace_paths_not_in_snapshot(
+    workspace_root: &Path,
+    snapshot_required_paths: &HashSet<String>,
+) -> Result<Vec<String>> {
+    fn walk(
+        workspace_root: &Path,
+        dir: &Path,
+        snapshot_required_paths: &HashSet<String>,
+        out: &mut Vec<String>,
+    ) -> Result<()> {
+        let entries = fs::read_dir(dir)
+            .with_context(|| format!("failed to read directory {}", dir.display()))?;
+        for entry in entries {
+            let entry = entry
+                .with_context(|| format!("failed to read directory entry in {}", dir.display()))?;
+            let path = entry.path();
+            let rel = match path.strip_prefix(workspace_root) {
+                Ok(p) => p,
+                Err(_) => continue,
+            };
+            let rel_str = rel.to_string_lossy();
+            let normalized = normalize_workspace_rel_path(&rel_str)
+                .map_err(|msg| anyhow!("failed to normalize workspace path {rel_str}: {msg}"))?;
+
+            if is_protected_workspace_path(&normalized) {
+                continue;
+            }
+
+            if !snapshot_required_paths.contains(&normalized) {
+                out.push(normalized.clone());
+            }
+
+            let meta = fs::symlink_metadata(&path)
+                .with_context(|| format!("failed to stat {}", path.display()))?;
+            let ft = meta.file_type();
+            if ft.is_dir() && !ft.is_symlink() {
+                walk(workspace_root, &path, snapshot_required_paths, out)?;
+            }
+        }
+        Ok(())
+    }
+
+    let mut out: Vec<String> = Vec::new();
+    walk(
+        workspace_root,
+        workspace_root,
+        snapshot_required_paths,
+        &mut out,
+    )?;
+    out.sort();
+    out.dedup();
+    Ok(out)
+}
+
+fn delete_workspace_paths(workspace_root: &Path, paths: &[String]) -> Result<()> {
+    let mut sorted = paths.to_vec();
+    sorted.sort_by(|a, b| {
+        let depth_a = a.split('/').count();
+        let depth_b = b.split('/').count();
+        depth_b.cmp(&depth_a).then_with(|| b.cmp(a))
+    });
+
+    for path in sorted {
+        if is_protected_workspace_path(&path) {
+            continue;
+        }
+        let host_path = workspace_root.join(&path);
+        let meta = match fs::symlink_metadata(&host_path) {
+            Ok(m) => m,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
+            Err(err) => return Err(anyhow!("failed to stat {}: {err}", host_path.display())),
+        };
+        let ft = meta.file_type();
+        let result = if ft.is_dir() && !ft.is_symlink() {
+            fs::remove_dir_all(&host_path)
+        } else {
+            fs::remove_file(&host_path)
+        };
+        match result {
+            Ok(()) => {}
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+            Err(err) => {
+                return Err(anyhow!(
+                    "failed to delete {} during rollback: {err}",
+                    host_path.display()
+                ))
+            }
+        }
+    }
+    Ok(())
+}
+
+fn internal_git_checkout_main(workspace_root: &Path, internal_git_dir: &Path) -> Result<()> {
+    let mut cmd = internal_git_base_cmd(workspace_root, internal_git_dir);
+    cmd.arg("checkout").arg("-f").arg("main");
+    internal_git_run(cmd).map(|_| ())
+}
+
+fn internal_git_reset_hard(
+    workspace_root: &Path,
+    internal_git_dir: &Path,
+    commit: &str,
+) -> Result<()> {
+    let mut cmd = internal_git_base_cmd(workspace_root, internal_git_dir);
+    cmd.arg("reset").arg("--hard").arg(commit);
+    internal_git_run(cmd).map(|_| ())
+}
+
+fn print_path_list_truncated(label: &str, paths: &[String]) {
+    const MAX: usize = 50;
+    eprintln!("{label}:");
+    for item in paths.iter().take(MAX) {
+        eprintln!("    - {item}");
+    }
+    if paths.len() > MAX {
+        eprintln!("    - ... ({} more)", paths.len().saturating_sub(MAX));
+    }
 }
 
 fn internal_git_base_cmd(workspace_root: &Path, internal_git_dir: &Path) -> Command {
