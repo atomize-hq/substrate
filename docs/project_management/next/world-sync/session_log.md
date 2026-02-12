@@ -470,3 +470,11 @@
 - Workflow follow-ups on `feat/world-sync` to keep Feature Smoke useful even when runner provisioning is limited:
   - Allow smoke scripts to run from `WORKFLOW_REF` while building `substrate` from `SMOKE_CHECKOUT_REF`
   - Run `lima-warm.sh` using the candidate checkout when `checkout_ref` is set
+
+## START — 2026-02-12T04:53:00Z — integration — WS5-integ
+- Dispatch:
+  - `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/next/world-sync" SLICE_ID="WS5" LAUNCH_CODEX=1`
+
+## END — 2026-02-12T05:01:58Z — integration — WS5-integ
+- HEAD: `91105f3829fdf4a5b7f7c7b940dc48dc77c9360e`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS5/integ/last_message.md`
