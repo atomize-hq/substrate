@@ -700,6 +700,87 @@ fn run_workspace_sync_impl(
         } else {
             println!("  excluded_by_patterns: false");
         }
+
+        let mut pty_out_writes: Vec<String> = Vec::new();
+        let mut pty_out_mods: Vec<String> = Vec::new();
+        let mut pty_out_deletes: Vec<String> = Vec::new();
+        let mut pty_excluded_count: usize = 0;
+
+        if let Some(ref pty) = record.pty {
+            for (bucket, items) in [
+                ("writes", &pty.writes),
+                ("mods", &pty.mods),
+                ("deletes", &pty.deletes),
+            ] {
+                for raw in items {
+                    let normalized = match normalize_workspace_rel_path(raw) {
+                        Ok(p) => p,
+                        Err(msg) => {
+                            errln!("substrate: workspace sync refused: invalid diff path: {msg}");
+                            return Ok(5);
+                        }
+                    };
+
+                    let excluded = excludes_non_protected
+                        .iter()
+                        .any(|pat| glob_matches_path(pat, &normalized));
+                    if excluded {
+                        pty_excluded_count += 1;
+                        continue;
+                    }
+
+                    match bucket {
+                        "writes" => pty_out_writes.push(normalized),
+                        "mods" => pty_out_mods.push(normalized),
+                        "deletes" => pty_out_deletes.push(normalized),
+                        _ => {}
+                    }
+                }
+            }
+
+            pty_out_writes.sort();
+            pty_out_mods.sort();
+            pty_out_deletes.sort();
+            pty_out_writes.dedup();
+            pty_out_mods.dedup();
+            pty_out_deletes.dedup();
+
+            let pty_total_paths = pty_out_writes.len() + pty_out_mods.len() + pty_out_deletes.len();
+            println!("substrate: pending diff summary (pty)");
+            println!("  total_paths: {pty_total_paths}");
+            println!("  writes: {}", pty_out_writes.len());
+            println!("  mods: {}", pty_out_mods.len());
+            println!("  deletes: {}", pty_out_deletes.len());
+            if pty_excluded_count > 0 {
+                println!("  excluded_by_patterns: true ({pty_excluded_count})");
+            } else {
+                println!("  excluded_by_patterns: false");
+            }
+        } else {
+            println!("substrate: PTY pending diffs unsupported by this backend");
+        }
+
+        let pty_total_paths = pty_out_writes.len() + pty_out_mods.len() + pty_out_deletes.len();
+        let combined_total_paths = {
+            let mut set: HashSet<&str> = HashSet::new();
+            for item in out_writes
+                .iter()
+                .chain(out_mods.iter())
+                .chain(out_deletes.iter())
+                .chain(pty_out_writes.iter())
+                .chain(pty_out_mods.iter())
+                .chain(pty_out_deletes.iter())
+            {
+                set.insert(item.as_str());
+            }
+            set.len()
+        };
+
+        println!("substrate: pending diff summary (combined)");
+        println!("  total_paths: {combined_total_paths}");
+        println!("  non_pty_total_paths: {total_paths}");
+        println!("  pty_total_paths: {pty_total_paths}");
+
         return Ok(0);
     }
 

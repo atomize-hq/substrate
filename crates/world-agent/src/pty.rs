@@ -888,6 +888,8 @@ async fn handle_persistent_session(
                     session_env = persisted_env;
                     session_cwd = draining.new_cwd.clone();
 
+                    service.note_pty_pending_diff(&world.world_id);
+
                     if ws_write_tx
                         .send(PersistentServerMessage::CommandComplete {
                             seq: draining.seq,
@@ -1073,6 +1075,8 @@ async fn handle_persistent_session(
 
                             session_env = persisted_env;
                             session_cwd = draining.new_cwd.clone();
+
+                            service.note_pty_pending_diff(&world.world_id);
 
                             if ws_write_tx.send(PersistentServerMessage::CommandComplete {
                                 seq: draining.seq,
@@ -2442,6 +2446,11 @@ async fn handle_legacy_start(
         .await
         .send(Message::Text(exit_payload.to_string()))
         .await;
+
+    #[cfg(target_os = "linux")]
+    if let Some(ref world_id) = world_id_for_logs {
+        service.note_pty_pending_diff(world_id);
+    }
 
     // Clean up tasks
     reader_task.abort();
