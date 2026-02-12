@@ -645,7 +645,7 @@ fn workspace_sync_without_dry_run_requires_world_backend_in_ws2() {
 }
 
 #[test]
-fn workspace_checkpoint_is_stubbed_in_ws0() {
+fn workspace_checkpoint_does_not_require_world_backend() {
     let fixture = WorkspaceSyncFixture::new();
     fixture.init_workspace();
 
@@ -662,14 +662,15 @@ fn workspace_checkpoint_is_stubbed_in_ws0() {
 
     assert_eq!(
         output.status.code(),
-        Some(4),
-        "workspace checkpoint must be stubbed in WS0 (exit 4): {}",
+        Some(0),
+        "workspace checkpoint must be host-only (must not require world backend): {}",
         combined_output(&output)
     );
-    let combined = combined_output(&output);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let checkpoint_id = stdout.trim();
     assert!(
-        combined.contains("not implemented") && combined.contains("WS6"),
-        "workspace checkpoint stub must mention WS6: {combined}"
+        checkpoint_id.starts_with("cp/") && checkpoint_id.ends_with('Z'),
+        "workspace checkpoint must print a checkpoint id to stdout: {stdout}"
     );
 
     let after_workspace_yaml =
