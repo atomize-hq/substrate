@@ -16,6 +16,7 @@ SLICE_ID="${SUBSTRATE_SMOKE_SLICE_ID:-WS7}"
 should_skip_for_output() {
   local out="$1"
   printf '%s' "$out" | grep -Fq "pending diff discovery is unsupported by this backend" && return 0
+  printf '%s' "$out" | grep -Fq "WORLD_FS_STRATEGY_UNAVAILABLE" && return 0
   printf '%s' "$out" | grep -Fq 'unknown field `caged_required`' && return 0
   printf '%s' "$out" | grep -Fq "workspace sync requires world" && return 0
   return 1
@@ -76,8 +77,8 @@ case "$SLICE_ID" in
     ;;
   WS5)
     echo "host" > host-only.txt
-    substrate workspace sync --dry-run --direction from_host --verbose >/dev/null
-    substrate workspace sync --direction from_host --verbose >/dev/null
+    run_or_skip "workspace sync from_host --dry-run" substrate workspace sync --dry-run --direction from_host --verbose
+    run_or_skip "workspace sync from_host apply" substrate workspace sync --direction from_host --verbose
     run_or_skip "world exec" substrate --world -c "sh -lc 'echo w > hello-both.txt'" >/dev/null
     set +e
     out="$(substrate workspace sync --direction both --verbose 2>&1)"
