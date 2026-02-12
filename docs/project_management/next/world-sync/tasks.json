@@ -1733,7 +1733,7 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-sync\" TASK_ID=\"WS7-integ-linux\""
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "integration",
       "workflow": ".github/workflows/feature-smoke.yml",
       "worktree": "wt/world-sync-ws7-integ-linux"
@@ -1789,7 +1789,7 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-sync\" TASK_ID=\"WS7-integ-macos\""
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "integration",
       "workflow": ".github/workflows/feature-smoke.yml",
       "worktree": "wt/world-sync-ws7-integ-macos"
