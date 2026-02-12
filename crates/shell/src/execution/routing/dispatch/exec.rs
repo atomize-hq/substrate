@@ -26,6 +26,7 @@ use crate::execution::socket_activation;
 use crate::execution::{
     configure_child_shell_env, needs_shell, update_world_env, ShellConfig, ShellMode,
 };
+use crate::execution::{AnchorModeArg, Cli, SyncDirectionArg, WorkspaceSyncArgs};
 use anyhow::{Context, Result};
 use serde_json::json;
 use std::env;
@@ -159,6 +160,53 @@ fn exit_status_from_code(code: i32) -> ExitStatus {
     {
         use std::os::windows::process::ExitStatusExt;
         ExitStatus::from_raw(code as u32)
+    }
+}
+
+fn first_non_empty_line(value: &str) -> Option<&str> {
+    value.lines().map(str::trim).find(|l| !l.is_empty())
+}
+
+fn cli_for_auto_sync(config: &ShellConfig) -> Cli {
+    let (caged, uncaged) = match config.cli_caged {
+        Some(true) => (true, false),
+        Some(false) => (false, true),
+        None => (false, false),
+    };
+
+    let anchor_mode = config.cli_anchor_mode.map(|mode| match mode {
+        WorldRootMode::Project => AnchorModeArg::Workspace,
+        WorldRootMode::FollowCwd => AnchorModeArg::FollowCwd,
+        WorldRootMode::Custom => AnchorModeArg::Custom,
+    });
+
+    Cli {
+        command: None,
+        script: None,
+        ci_mode: config.ci_mode,
+        no_exit_on_error: config.no_exit_on_error,
+        use_pty: false,
+        shell: Some(config.shell_path.clone()),
+        version_json: false,
+        shim_status: false,
+        shim_status_json: false,
+        shim_skip: config.skip_shims,
+        shim_deploy: false,
+        shim_remove: false,
+        async_repl: config.async_repl,
+        legacy_repl: !config.async_repl,
+        repl_host_escape: config.repl_host_escape,
+        trace: None,
+        replay: None,
+        replay_verbose: false,
+        flip_world: false,
+        caged,
+        uncaged,
+        anchor_mode,
+        anchor_path: config.cli_anchor_path.clone(),
+        world: config.cli_world,
+        no_world: config.cli_no_world,
+        sub: None,
     }
 }
 
@@ -1201,6 +1249,53 @@ pub(crate) fn execute_command(
     }
 
     if let Some(outcome) = agent_result {
+        let mut final_exit_code = outcome.exit_code;
+
+        if outcome.exit_code == 0 && effective_config.sync.auto_sync {
+            match effective_config.sync.direction {
+                config_model::SyncDirection::FromHost => {
+                    // Spec: direction=from_host is a no-op for auto-sync (WS5 will implement).
+                }
+                config_model::SyncDirection::FromWorld | config_model::SyncDirection::Both => {
+                    let cli = cli_for_auto_sync(config);
+                    let sync_args = WorkspaceSyncArgs {
+                        dry_run: false,
+                        direction: Some(SyncDirectionArg::FromWorld),
+                        conflict_policy: None,
+                        exclude: Vec::new(),
+                        verbose: false,
+                    };
+
+                    match crate::execution::workspace_cmd::run_workspace_sync_for_auto_sync(
+                        &sync_args, &cli,
+                    ) {
+                        Ok((code, failure_reason)) => {
+                            if code != 0 {
+                                let reason = failure_reason
+                                    .as_deref()
+                                    .and_then(first_non_empty_line)
+                                    .unwrap_or("workspace sync failed");
+                                eprintln!("auto-sync failed: {reason}");
+                                final_exit_code = code;
+                            } else {
+                                final_exit_code = code;
+                            }
+                        }
+                        Err(err) => {
+                            let reason = format!("{:#}", err);
+                            let reason =
+                                first_non_empty_line(&reason).unwrap_or("workspace sync failed");
+                            eprintln!("auto-sync failed: {reason}");
+                            final_exit_code =
+                                crate::execution::workspace_cmd::workspace_cmd_exit_code_for_error(
+                                    &err,
+                                );
+                        }
+                    }
+                }
+            }
+        }
+
         if let Some(mut active_span) = span {
             if let Ok(resolved) =
                 crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_for_profile)
@@ -1218,13 +1313,13 @@ pub(crate) fn execute_command(
                 );
             }
             let _ = active_span.finish(
-                outcome.exit_code,
+                final_exit_code,
                 outcome.scopes_used.clone(),
                 outcome.fs_diff.clone(),
             );
         }
         let mut completion_extra = json!({
-            log_schema::EXIT_CODE: outcome.exit_code,
+            log_schema::EXIT_CODE: final_exit_code,
             log_schema::DURATION_MS: start_time.elapsed().as_millis()
         });
         if let Some(span_id) = span_id_for_cmd_events.as_ref() {
@@ -1252,12 +1347,12 @@ pub(crate) fn execute_command(
         #[cfg(unix)]
         {
             use std::os::unix::process::ExitStatusExt;
-            return Ok(ExitStatus::from_raw((outcome.exit_code & 0xff) << 8));
+            return Ok(ExitStatus::from_raw((final_exit_code & 0xff) << 8));
         }
         #[cfg(windows)]
         {
             use std::os::windows::process::ExitStatusExt;
-            return Ok(ExitStatus::from_raw(outcome.exit_code as u32));
+            return Ok(ExitStatus::from_raw(final_exit_code as u32));
         }
     }
 
