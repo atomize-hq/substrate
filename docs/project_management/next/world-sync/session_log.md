@@ -532,3 +532,11 @@
 - Dispatch (if audit recommends run):
   - `make ci-compile-parity CI_WORKFLOW_REF="feat/world-sync" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF="cbe63e34ce3c1cb135976dd2d1532f48093c48d2"`
   - `make feature-smoke FEATURE_DIR="docs/project_management/next/world-sync" PLATFORM=behavior SMOKE_SLICE_ID="WS7" SMOKE_CHECKOUT_REF="cbe63e34ce3c1cb135976dd2d1532f48093c48d2" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/world-sync" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=0`
+
+## END — 2026-02-12T06:28:04Z — ops — CP3-ci-checkpoint
+- Candidate SHA (WS7-integ-core): `cbe63e34ce3c1cb135976dd2d1532f48093c48d2`
+- CI audit (advisory):
+  - CI Testing: `RECOMMEND=run` (changes since last green: `21933430366` → `https://github.com/atomize-hq/substrate/actions/runs/21933430366`)
+  - Feature Smoke: `RECOMMEND=run` (changes since last green: `21933919268` → `https://github.com/atomize-hq/substrate/actions/runs/21933919268`)
+- Compile parity: `21935933784` → `success` → `https://github.com/atomize-hq/substrate/actions/runs/21935933784`
+- Feature Smoke (behavior; passed `linux,macos`): `21935948219` → `success` → `https://github.com/atomize-hq/substrate/actions/runs/21935948219`
