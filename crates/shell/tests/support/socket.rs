@@ -86,6 +86,18 @@ pub enum SocketResponse {
     /// Responds to `/v1/capabilities` and `/v1/doctor/world`, and returns an
     /// `execute/stream` error frame with the provided message.
     CapabilitiesAndExecuteStreamError { message: String },
+    /// Handles non-PTY execute calls plus pending-diff discovery/clear routes.
+    ///
+    /// This is a test stub for WS3 auto-sync flows: run a successful non-PTY
+    /// command (`POST /v1/execute`), then apply `workspace sync` automatically
+    /// by consuming `pending_diff_v1` and `pending_diff_clear_v1`.
+    CapabilitiesExecutePendingDiffAndAck {
+        stdout: String,
+        stderr: String,
+        exit: i32,
+        scopes: Vec<String>,
+        state: Arc<Mutex<PendingDiffAckState>>,
+    },
 }
 
 /// Minimal Unix socket server used to simulate socket-activated world-agent
@@ -432,6 +444,98 @@ impl AgentSocket {
                                     write_stream_response(&mut stream, &payload);
                                 } else {
                                     let _ = stream.write_all(b"HTTP/1.1 400 Bad Request\r\n\r\n");
+                                }
+                            }
+                            SocketResponse::CapabilitiesExecutePendingDiffAndAck {
+                                stdout,
+                                stderr,
+                                exit,
+                                scopes,
+                                state,
+                            } => {
+                                if first_line.starts_with("GET /v1/capabilities") {
+                                    let features = state
+                                        .lock()
+                                        .ok()
+                                        .map(|s| s.features.clone())
+                                        .unwrap_or_else(|| vec!["execute".to_string()]);
+                                    write_capabilities_with_features(&mut stream, &features);
+                                } else if first_line.starts_with("GET /v1/doctor/world") {
+                                    write_world_doctor_report(&mut stream);
+                                } else if first_line.starts_with("POST /v1/execute/stream") {
+                                    let payload =
+                                        build_stream_payload(*exit, stdout, stderr, scopes);
+                                    write_stream_response(&mut stream, &payload);
+                                } else if first_line.starts_with("POST /v1/execute") {
+                                    let payload = json!({
+                                        "exit": exit,
+                                        "span_id": "agent-span",
+                                        "stdout_b64": BASE64.encode(stdout.as_bytes()),
+                                        "stderr_b64": BASE64.encode(stderr.as_bytes()),
+                                        "scopes_used": scopes,
+                                        "fs_diff": serde_json::Value::Null
+                                    })
+                                    .to_string();
+                                    write_response(&mut stream, &payload);
+                                } else if is_pending_diff_ack_route(first_line) {
+                                    let mut guard =
+                                        state.lock().expect("lock pending diff ack state");
+                                    guard.ack_calls += 1;
+                                    if let Some(err) = guard.ack_error.clone() {
+                                        write_status_response(
+                                            &mut stream,
+                                            err.status,
+                                            http_reason_phrase(err.status),
+                                            &err.body,
+                                        );
+                                        continue;
+                                    }
+
+                                    let req_id = match extract_diff_id(&request.body) {
+                                        Some(id) => id,
+                                        None => {
+                                            write_status_response(
+                                                &mut stream,
+                                                400,
+                                                "Bad Request",
+                                                "{\"error\":\"missing diff_id\"}",
+                                            );
+                                            continue;
+                                        }
+                                    };
+                                    let cur_id = guard
+                                        .current_pending_diff
+                                        .get("diff_id")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("");
+                                    if cur_id != req_id {
+                                        write_response(
+                                            &mut stream,
+                                            "{\"schema_version\":1,\"cleared\":false}",
+                                        );
+                                        continue;
+                                    }
+
+                                    guard.current_pending_diff = guard.cleared_pending_diff.clone();
+                                    write_response(
+                                        &mut stream,
+                                        "{\"schema_version\":1,\"cleared\":true}",
+                                    );
+                                } else if is_pending_diff_discovery_route(first_line) {
+                                    let mut guard =
+                                        state.lock().expect("lock pending diff ack state");
+                                    let payload = guard.current_pending_diff.to_string();
+                                    write_response(&mut stream, &payload);
+                                    guard.pending_diff_calls += 1;
+                                    if guard.pending_diff_calls == 1 {
+                                        if let Some(next) =
+                                            guard.flip_after_first_pending_diff.take()
+                                        {
+                                            guard.current_pending_diff = next;
+                                        }
+                                    }
+                                } else {
+                                    let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\n\r\n");
                                 }
                             }
                         };
