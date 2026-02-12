@@ -652,31 +652,32 @@ fn workspace_checkpoint_is_stubbed_in_ws0() {
     let before_workspace_yaml =
         fs::read_to_string(fixture.workspace_yaml_path()).expect("read workspace.yaml");
 
-    let missing_socket = fixture.workspace_root.join("missing.substrate.sock");
+    fs::write(
+        fixture.workspace_root.join("checkpoint.txt"),
+        "hello from checkpoint\n",
+    )
+    .expect("write checkpoint fixture file");
+
     let mut cmd = fixture.command();
     cmd.current_dir(&fixture.workspace_root)
-        .env("SUBSTRATE_OVERRIDE_WORLD", "enabled")
-        .env("SUBSTRATE_WORLD_SOCKET", &missing_socket)
         .args(["workspace", "checkpoint"]);
     let output = cmd.output().expect("run workspace checkpoint");
 
     assert_eq!(
         output.status.code(),
-        Some(4),
-        "workspace checkpoint must be stubbed in WS0 (exit 4): {}",
+        Some(0),
+        "workspace checkpoint must succeed: {}",
         combined_output(&output)
     );
-    let combined = combined_output(&output);
-    assert!(
-        combined.contains("not implemented") && combined.contains("WS6"),
-        "workspace checkpoint stub must mention WS6: {combined}"
-    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let id = stdout.trim();
+    assert!(id.starts_with("cp/") && id.ends_with('Z') && id.contains('T'));
 
     let after_workspace_yaml =
         fs::read_to_string(fixture.workspace_yaml_path()).expect("read workspace.yaml after");
     assert_eq!(
         before_workspace_yaml, after_workspace_yaml,
-        "workspace checkpoint stub must not mutate workspace.yaml"
+        "workspace checkpoint must not mutate workspace.yaml"
     );
 }
 

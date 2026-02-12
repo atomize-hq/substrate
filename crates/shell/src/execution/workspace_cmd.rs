@@ -12,6 +12,7 @@ use std::env;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::process::{Command, Output};
 use substrate_common::WorldRootMode;
 use tempfile::NamedTempFile;
 
@@ -1376,11 +1377,75 @@ fn run_workspace_sync_impl(
     Ok(0)
 }
 
-fn run_workspace_checkpoint(_args: &WorkspaceCheckpointArgs) -> Result<i32> {
+fn run_workspace_checkpoint(args: &WorkspaceCheckpointArgs) -> Result<i32> {
     let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let _workspace_root = require_workspace_root(&cwd, "workspace checkpoint")?;
-    eprintln!("substrate: workspace checkpoint is not implemented until WS6");
-    Ok(4)
+    let workspace_root = require_workspace_root(&cwd, "workspace checkpoint")?;
+
+    // Per internal-git-spec.md, the directory is created by `workspace init` only.
+    let internal_git_dir = workspace::internal_git_dir(&workspace_root);
+    if !internal_git_dir.is_dir() {
+        eprintln!(
+            "substrate: workspace checkpoint requires internal git dir; run `substrate workspace init --force`"
+        );
+        return Ok(2);
+    }
+
+    match Command::new("git").arg("--version").output() {
+        Ok(output) if output.status.success() => {}
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {
+            eprintln!("substrate: workspace checkpoint requires git; install git and retry");
+            return Ok(3);
+        }
+        Ok(_) | Err(_) => {
+            return Err(anyhow!(
+                "failed to validate git dependency for workspace checkpoint"
+            ));
+        }
+    }
+
+    ensure_internal_git_initialized(&workspace_root, &internal_git_dir)
+        .context("failed to initialize internal git repo")?;
+
+    internal_git_add_all(&workspace_root, &internal_git_dir)
+        .context("failed to stage workspace snapshot")?;
+
+    let has_staged_changes = internal_git_has_staged_changes(&workspace_root, &internal_git_dir)
+        .context("failed to detect staged changes")?;
+    if !has_staged_changes {
+        println!("no-op");
+        return Ok(0);
+    }
+
+    let checkpoint_id = internal_git_next_checkpoint_id(&workspace_root, &internal_git_dir)
+        .context("failed to allocate checkpoint id (cp/<YYYYMMDDTHHMMSSZ>)")?;
+
+    let commit_message = match args.message.as_deref() {
+        Some(raw) => {
+            if raw.contains('\n') || raw.contains('\r') {
+                eprintln!("substrate: invalid --message (must be single-line text)");
+                return Ok(2);
+            }
+            format!("checkpoint: {checkpoint_id} {raw}")
+        }
+        None => format!("checkpoint: {checkpoint_id}"),
+    };
+
+    internal_git_commit(&workspace_root, &internal_git_dir, &commit_message)
+        .context("failed to create internal git commit")?;
+    internal_git_tag(&workspace_root, &internal_git_dir, &checkpoint_id)
+        .context("failed to tag internal git checkpoint")?;
+
+    if args.verbose {
+        if let Ok(Some(head)) = internal_git_rev_parse_head(&workspace_root, &internal_git_dir) {
+            eprintln!("substrate: workspace checkpoint created");
+            eprintln!("  checkpoint_id: {checkpoint_id}");
+            eprintln!("  commit: {head}");
+        }
+    }
+
+    // Stable stdout contract: print the created checkpoint id.
+    println!("{checkpoint_id}");
+    Ok(0)
 }
 
 fn run_workspace_rollback(_args: &WorkspaceRollbackArgs) -> Result<i32> {
@@ -1388,6 +1453,155 @@ fn run_workspace_rollback(_args: &WorkspaceRollbackArgs) -> Result<i32> {
     let _workspace_root = require_workspace_root(&cwd, "workspace rollback")?;
     eprintln!("substrate: workspace rollback is not implemented until WS7");
     Ok(4)
+}
+
+fn internal_git_base_cmd(workspace_root: &Path, internal_git_dir: &Path) -> Command {
+    let mut cmd = Command::new("git");
+    cmd.current_dir(workspace_root);
+    cmd.arg("--git-dir")
+        .arg(internal_git_dir)
+        .arg("--work-tree")
+        .arg(workspace_root);
+
+    cmd.env("GIT_TERMINAL_PROMPT", "0");
+    cmd.env("GIT_AUTHOR_NAME", "Substrate");
+    cmd.env("GIT_AUTHOR_EMAIL", "substrate@localhost");
+    cmd.env("GIT_COMMITTER_NAME", "Substrate");
+    cmd.env("GIT_COMMITTER_EMAIL", "substrate@localhost");
+
+    cmd
+}
+
+fn internal_git_run(mut cmd: Command) -> Result<Output> {
+    let rendered = format!("{cmd:?}");
+    let output = cmd
+        .output()
+        .with_context(|| format!("failed to run git command: {rendered}"))?;
+    if !output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(anyhow!(
+            "git command failed (exit={}): stdout={} stderr={}",
+            output.status,
+            stdout.trim(),
+            stderr.trim()
+        ));
+    }
+    Ok(output)
+}
+
+fn ensure_internal_git_initialized(workspace_root: &Path, internal_git_dir: &Path) -> Result<()> {
+    let head = internal_git_dir.join("HEAD");
+    if head.exists() {
+        return Ok(());
+    }
+
+    let mut cmd = internal_git_base_cmd(workspace_root, internal_git_dir);
+    cmd.arg("init").arg("--initial-branch=main");
+    internal_git_run(cmd).map(|_| ())
+}
+
+fn internal_git_add_all(workspace_root: &Path, internal_git_dir: &Path) -> Result<()> {
+    let mut cmd = internal_git_base_cmd(workspace_root, internal_git_dir);
+    cmd.arg("add")
+        .arg("-A")
+        .arg("-f")
+        .arg("--")
+        .arg(".")
+        .arg(":!.git")
+        .arg(":!.substrate");
+    internal_git_run(cmd).map(|_| ())
+}
+
+fn internal_git_has_staged_changes(workspace_root: &Path, internal_git_dir: &Path) -> Result<bool> {
+    let mut cmd = internal_git_base_cmd(workspace_root, internal_git_dir);
+    cmd.arg("status")
+        .arg("--porcelain")
+        .arg("--untracked-files=no");
+    let out = internal_git_run(cmd)?;
+    Ok(!String::from_utf8_lossy(&out.stdout).trim().is_empty())
+}
+
+fn internal_git_next_checkpoint_id(
+    workspace_root: &Path,
+    internal_git_dir: &Path,
+) -> Result<String> {
+    let mut candidate = format!("cp/{}", chrono::Utc::now().format("%Y%m%dT%H%M%SZ"));
+
+    if let Some(last) = internal_git_last_checkpoint_id(workspace_root, internal_git_dir)? {
+        if candidate <= last {
+            let last_ts = last
+                .strip_prefix("cp/")
+                .ok_or_else(|| anyhow!("invalid checkpoint tag: {last}"))?;
+            let last_dt = chrono::NaiveDateTime::parse_from_str(last_ts, "%Y%m%dT%H%M%SZ")
+                .with_context(|| format!("invalid checkpoint timestamp in tag: {last}"))?;
+            let next = chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(
+                last_dt + chrono::Duration::seconds(1),
+                chrono::Utc,
+            );
+            candidate = format!("cp/{}", next.format("%Y%m%dT%H%M%SZ"));
+        }
+    }
+
+    Ok(candidate)
+}
+
+fn internal_git_last_checkpoint_id(
+    workspace_root: &Path,
+    internal_git_dir: &Path,
+) -> Result<Option<String>> {
+    let mut cmd = internal_git_base_cmd(workspace_root, internal_git_dir);
+    cmd.arg("tag").arg("--list").arg("cp/*");
+    let out = internal_git_run(cmd)?;
+    let mut tags: Vec<String> = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty())
+        .collect();
+    tags.sort();
+    Ok(tags.pop())
+}
+
+fn internal_git_rev_parse_head(
+    workspace_root: &Path,
+    internal_git_dir: &Path,
+) -> Result<Option<String>> {
+    let mut cmd = internal_git_base_cmd(workspace_root, internal_git_dir);
+    cmd.arg("rev-parse").arg("HEAD");
+    let out = match cmd.output() {
+        Ok(o) => o,
+        Err(err) => return Err(anyhow!("failed to run git rev-parse HEAD: {err}")),
+    };
+    if !out.status.success() {
+        return Ok(None);
+    }
+    Ok(Some(
+        String::from_utf8_lossy(&out.stdout).trim().to_string(),
+    ))
+}
+
+fn internal_git_commit(
+    workspace_root: &Path,
+    internal_git_dir: &Path,
+    message: &str,
+) -> Result<()> {
+    let mut cmd = internal_git_base_cmd(workspace_root, internal_git_dir);
+    cmd.arg("-c")
+        .arg("commit.gpgsign=false")
+        .arg("-c")
+        .arg("user.name=Substrate")
+        .arg("-c")
+        .arg("user.email=substrate@localhost")
+        .arg("commit")
+        .arg("-m")
+        .arg(message);
+    internal_git_run(cmd).map(|_| ())
+}
+
+fn internal_git_tag(workspace_root: &Path, internal_git_dir: &Path, tag: &str) -> Result<()> {
+    let mut cmd = internal_git_base_cmd(workspace_root, internal_git_dir);
+    cmd.arg("-c").arg("tag.gpgSign=false").arg("tag").arg(tag);
+    internal_git_run(cmd).map(|_| ())
 }
 
 fn ensure_gitignore_rules(root: &Path) -> Result<()> {
