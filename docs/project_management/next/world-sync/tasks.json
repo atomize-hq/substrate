@@ -1,4 +1,4 @@
-  {
+{
   "meta": {
     "automation": {
       "enabled": true,
@@ -647,9 +647,9 @@
       ],
       "status": "completed",
       "type": "integration",
-    "workflow": ".github/workflows/feature-smoke.yml",
-    "worktree": "wt/world-sync-ws2-integ-macos"
-  },
+      "workflow": ".github/workflows/feature-smoke.yml",
+      "worktree": "wt/world-sync-ws2-integ-macos"
+    },
     {
       "acceptance_criteria": [
         "Slice closeout report completed and local integration gates are green"
@@ -759,7 +759,7 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world-sync\" SLICE_ID=\"WS3\""
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "code",
       "worktree": "wt/world-sync-ws3-code"
     },
@@ -810,7 +810,7 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world-sync\" SLICE_ID=\"WS3\""
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "test",
       "worktree": "wt/world-sync-ws3-test"
     },
