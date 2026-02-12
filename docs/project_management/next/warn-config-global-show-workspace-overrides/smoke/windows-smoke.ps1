@@ -113,6 +113,42 @@ world:
       Get-Content -Path $stderrJson | Write-Host
       exit 1
     }
+
+    # Implicit `config set` emits write-target note; stdout remains uncontaminated.
+    $stdoutConfigSet = Join-Path $tmp "stdout-config-set.txt"
+    $stderrConfigSet = Join-Path $tmp "stderr-config-set.txt"
+    & $SubstrateBin config set sync.auto_sync=true 1> $stdoutConfigSet 2> $stderrConfigSet
+
+    foreach ($pat in @(
+      "substrate: note: write target is workspace config",
+      "workspace.yaml",
+      "(implicit scope)"
+    )) {
+      if (-not (Select-String -Path $stderrConfigSet -Pattern $pat -Quiet)) {
+        Write-Error "FAIL: missing expected pattern in stderr (config set): $pat"
+        Get-Content -Path $stderrConfigSet | Write-Host
+        exit 1
+      }
+    }
+
+    if (Select-String -Path $stdoutConfigSet -Pattern "substrate: note:" -Quiet) {
+      Write-Error "FAIL: stdout is contaminated with note text (config set)"
+      Get-Content -Path $stdoutConfigSet | Write-Host
+      exit 1
+    }
+
+    # `config set --json` stdout remains valid JSON when note is present.
+    $stdoutConfigSetJson = Join-Path $tmp "stdout-config-set-json.txt"
+    $stderrConfigSetJson = Join-Path $tmp "stderr-config-set-json.txt"
+    & $SubstrateBin config set --json sync.auto_sync=true 1> $stdoutConfigSetJson 2> $stderrConfigSetJson
+
+    Get-Content -Path $stdoutConfigSetJson -Raw | ConvertFrom-Json | Out-Null
+
+    if (-not (Select-String -Path $stderrConfigSetJson -Pattern "substrate: note: write target is workspace config" -Quiet)) {
+      Write-Error "FAIL: missing write-target note (config set --json)"
+      Get-Content -Path $stderrConfigSetJson | Write-Host
+      exit 1
+    }
   } finally {
     Pop-Location
   }

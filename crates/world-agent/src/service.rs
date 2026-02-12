@@ -2,15 +2,15 @@
 
 #[cfg(target_os = "linux")]
 use agent_api_types::ExecuteStreamFrame;
+#[cfg(any(target_os = "linux", test))]
+use agent_api_types::PendingDiffBucketV1;
+#[cfg(target_os = "linux")]
+use agent_api_types::WorldFsEntryTypeV1;
 use agent_api_types::{
     Budget, ExecuteRequest, ExecuteResponse, PendingDiffClearRequestV1, PendingDiffClearResponseV1,
     PendingDiffReconcileRequestV1, PendingDiffReconcileResponseV1, PendingDiffRecordV1,
     PendingDiffRequestV1, WorldFsReadRequestV1, WorldFsReadResponseV1,
 };
-#[cfg(any(target_os = "linux", test))]
-use agent_api_types::PendingDiffBucketV1;
-#[cfg(target_os = "linux")]
-use agent_api_types::WorldFsEntryTypeV1;
 #[cfg(target_os = "linux")]
 use anyhow::Context;
 use anyhow::{anyhow, Result};
@@ -288,7 +288,8 @@ impl WorldAgentService {
         // - deletes as a set
         //
         // The UX buckets are still preserved in the record; only the clear token is stabilized.
-        let mut updates: Vec<&str> = Vec::with_capacity(snapshot.writes.len() + snapshot.mods.len());
+        let mut updates: Vec<&str> =
+            Vec::with_capacity(snapshot.writes.len() + snapshot.mods.len());
         for item in &snapshot.writes {
             updates.push(item.as_str());
         }
@@ -1177,8 +1178,8 @@ impl WorldAgentService {
 mod pending_diff_id_tests {
     use super::WorldAgentService;
     use agent_api_types::PendingDiffBucketV1;
-    use substrate_common::FsDiff;
     use std::path::PathBuf;
+    use substrate_common::FsDiff;
 
     #[test]
     fn diff_id_is_stable_across_writes_vs_mods_reclassification() {

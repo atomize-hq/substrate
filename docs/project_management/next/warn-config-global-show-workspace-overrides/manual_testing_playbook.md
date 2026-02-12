@@ -1,4 +1,4 @@
-# Manual Testing Playbook — Warn on `config global show` when workspace config overrides
+# Manual Testing Playbook — Scope clarity notes (`config global show`, implicit `config set`)
 
 This playbook is authoritative for the manual validation described in:
 - `docs/project_management/adrs/draft/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md`
@@ -106,3 +106,24 @@ Expected:
 - stdout is valid JSON.
 - stderr contains the workspace-override note.
 - stdout does not contain `substrate: note:`.
+
+### Case 6 — Implicit `config set` emits write-target note (stderr-only)
+
+Setup:
+- Use the workspace `WS` from Case 1.
+
+Run (from inside `WS`):
+- `substrate config set sync.auto_sync=true`
+
+Expected:
+- stderr contains a single-line note that:
+  - contains `substrate: note: write target is workspace config`
+  - contains `workspace.yaml`
+  - contains `(implicit scope)`
+- stdout contains only the serialized effective merged config (no `substrate: note:` text).
+
+JSON mode:
+- `substrate config set --json sync.auto_sync=true`
+
+Expected (JSON mode):
+- stdout is valid JSON and does not contain `substrate: note:`.
