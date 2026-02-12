@@ -1196,8 +1196,7 @@
       ],
       "concurrent_with": [],
       "depends_on": [
-        "WS5-integ-core",
-        "CP2-ci-checkpoint"
+        "WS5-integ-core"
       ],
       "description": "linux platform-fix integration task (may be a no-op if already green).",
       "end_checklist": [
@@ -1252,8 +1251,7 @@
       ],
       "concurrent_with": [],
       "depends_on": [
-        "WS5-integ-core",
-        "CP2-ci-checkpoint"
+        "WS5-integ-core"
       ],
       "description": "macos platform-fix integration task (may be a no-op if already green).",
       "end_checklist": [
