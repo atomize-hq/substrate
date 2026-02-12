@@ -842,16 +842,24 @@ pub(crate) fn execute_command(
     #[cfg(target_os = "macos")]
     {
         let context = pw::get_context();
-        if world_enabled && fail_closed_routing && context.is_none() {
+        let socket_override_path = std::env::var_os("SUBSTRATE_WORLD_SOCKET")
+            .map(std::path::PathBuf::from)
+            .filter(|p| p.exists());
+        if world_enabled
+            && fail_closed_routing
+            && context.is_none()
+            && socket_override_path.is_none()
+        {
             eprintln!(
                 "substrate: error: world routing failed; world backend unavailable on this platform (world_fs.fail_closed.routing=true)"
             );
             return Ok(exit_status_from_code(4));
         }
-        let uds_exists = context
-            .as_ref()
-            .map(|c| matches!(&c.transport, pw::WorldTransport::Unix(path) if path.exists()))
-            .unwrap_or(false);
+        let uds_exists = socket_override_path.is_some()
+            || context
+                .as_ref()
+                .map(|c| matches!(&c.transport, pw::WorldTransport::Unix(path) if path.exists()))
+                .unwrap_or(false);
         let world_available = world_enabled && uds_exists;
         if world_required && world_enabled && !uds_exists {
             return Err(required_world_backend_unavailable_error(

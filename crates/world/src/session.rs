@@ -274,6 +274,15 @@ impl SessionWorld {
         }
     }
 
+    /// Clear the current session's pending diff state by discarding the overlay upper/work layers.
+    pub fn clear_pending_diff(&mut self) -> Result<()> {
+        if let Some(mut overlay) = self.overlay.take() {
+            overlay.cleanup().context("overlay cleanup failed")?;
+        }
+        self.overlay_mode = None;
+        Ok(())
+    }
+
     /// Ensure the overlay is mounted and return the merged root for reuse across entry points.
     pub(crate) fn ensure_overlay_root(&mut self) -> Result<PathBuf> {
         self.ensure_overlay_mounted()

@@ -3,9 +3,11 @@
 #[cfg(target_os = "linux")]
 use agent_api_types::ExecuteStreamFrame;
 use agent_api_types::{
-    Budget, ExecuteRequest, ExecuteResponse, PendingDiffBucketV1, PendingDiffRecordV1,
-    PendingDiffRequestV1,
+    Budget, ExecuteRequest, ExecuteResponse, PendingDiffClearRequestV1, PendingDiffClearResponseV1,
+    PendingDiffRecordV1, PendingDiffRequestV1, WorldFsReadRequestV1, WorldFsReadResponseV1,
 };
+#[cfg(target_os = "linux")]
+use agent_api_types::{PendingDiffBucketV1, WorldFsEntryTypeV1};
 #[cfg(target_os = "linux")]
 use anyhow::Context;
 use anyhow::{anyhow, Result};
@@ -26,6 +28,8 @@ use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 #[cfg(target_os = "linux")]
 use std::convert::Infallible;
+#[cfg(target_os = "linux")]
+use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, RwLock};
@@ -469,6 +473,260 @@ impl WorldAgentService {
         {
             let _ = req;
             anyhow::bail!("pending diff discovery is only supported on Linux agents")
+        }
+    }
+
+    /// Conditionally clear the current session's pending diff snapshot.
+    pub async fn pending_diff_clear(
+        &self,
+        req: PendingDiffClearRequestV1,
+    ) -> Result<PendingDiffClearResponseV1> {
+        #[cfg(target_os = "linux")]
+        {
+            if req.agent_id.is_empty() {
+                anyhow::bail!("agent_id is required for API calls");
+            }
+
+            let cwd = req
+                .cwd
+                .clone()
+                .map(PathBuf::from)
+                .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+            let env_ref = req.env.as_ref();
+            let project_dir = resolve_project_dir(env_ref, Some(&cwd))?;
+
+            let snapshot = req
+                .policy_snapshot
+                .canonicalize()
+                .map_err(BadRequestError::new)?;
+            let fs_mode = if snapshot.world_fs.write.enabled {
+                WorldFsMode::Writable
+            } else {
+                WorldFsMode::ReadOnly
+            };
+
+            let always_isolate = !matches!(req.profile.as_deref(), Some("world-deps-provision"));
+
+            let spec = WorldSpec {
+                reuse_session: true,
+                isolate_network: true,
+                limits: world_api::ResourceLimits::default(),
+                enable_preload: false,
+                allowed_domains: substrate_broker::allowed_domains(),
+                project_dir,
+                always_isolate,
+                fs_mode,
+            };
+
+            let world = match self.backend.ensure_session(&spec) {
+                Ok(w) => w,
+                Err(e) => {
+                    tracing::error!(error = %e, error_debug = ?e, "ensure_session failed");
+                    return Err(anyhow::anyhow!("Failed to ensure session world"));
+                }
+            };
+
+            let (_started_at, diff) = self
+                .linux_backend
+                .pending_diff(&world)
+                .context("pending_diff failed")?;
+
+            fn normalize(path: &std::path::Path) -> String {
+                path.to_string_lossy().replace('\\', "/")
+            }
+
+            let mut writes: Vec<String> = diff.writes.iter().map(|p| normalize(p)).collect();
+            let mut mods: Vec<String> = diff.mods.iter().map(|p| normalize(p)).collect();
+            let mut deletes: Vec<String> = diff.deletes.iter().map(|p| normalize(p)).collect();
+            writes.sort();
+            mods.sort();
+            deletes.sort();
+            writes.dedup();
+            mods.dedup();
+            deletes.dedup();
+
+            let mut hasher = Sha256::new();
+            hasher.update(b"writes\0");
+            for item in &writes {
+                hasher.update(item.as_bytes());
+                hasher.update(b"\n");
+            }
+            hasher.update(b"mods\0");
+            for item in &mods {
+                hasher.update(item.as_bytes());
+                hasher.update(b"\n");
+            }
+            hasher.update(b"deletes\0");
+            for item in &deletes {
+                hasher.update(item.as_bytes());
+                hasher.update(b"\n");
+            }
+            let digest = hasher.finalize();
+            let mut current_hex = String::with_capacity(digest.len() * 2);
+            for b in digest {
+                use std::fmt::Write as _;
+                let _ = write!(&mut current_hex, "{:02x}", b);
+            }
+
+            if current_hex != req.diff_id {
+                return Ok(PendingDiffClearResponseV1 {
+                    schema_version: 1,
+                    cleared: false,
+                });
+            }
+
+            self.linux_backend
+                .clear_pending_diff(&world)
+                .context("clear_pending_diff failed")?;
+
+            Ok(PendingDiffClearResponseV1 {
+                schema_version: 1,
+                cleared: true,
+            })
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = req;
+            anyhow::bail!("pending diff clear is only supported on Linux agents")
+        }
+    }
+
+    /// Read metadata and optionally contents from the current session's overlay filesystem.
+    pub async fn world_fs_read(&self, req: WorldFsReadRequestV1) -> Result<WorldFsReadResponseV1> {
+        #[cfg(target_os = "linux")]
+        {
+            if req.agent_id.is_empty() {
+                anyhow::bail!("agent_id is required for API calls");
+            }
+
+            let mut rel = req.path.trim().replace('\\', "/");
+            while let Some(stripped) = rel.strip_prefix("./") {
+                rel = stripped.to_string();
+            }
+            if rel.is_empty() {
+                return Err(BadRequestError::new("empty path".to_string()).into());
+            }
+            if rel.starts_with('/') {
+                return Err(
+                    BadRequestError::new(format!("absolute paths are not allowed: {rel}")).into(),
+                );
+            }
+            if rel.len() >= 2 && rel.as_bytes()[1] == b':' {
+                return Err(
+                    BadRequestError::new(format!("absolute paths are not allowed: {rel}")).into(),
+                );
+            }
+            if rel.split('/').any(|segment| segment == "..") {
+                return Err(
+                    BadRequestError::new(format!("path segments must not be '..': {rel}")).into(),
+                );
+            }
+
+            let cwd = req
+                .cwd
+                .clone()
+                .map(PathBuf::from)
+                .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+            let env_ref = req.env.as_ref();
+            let project_dir = resolve_project_dir(env_ref, Some(&cwd))?;
+
+            let snapshot = req
+                .policy_snapshot
+                .canonicalize()
+                .map_err(BadRequestError::new)?;
+            let fs_mode = if snapshot.world_fs.write.enabled {
+                WorldFsMode::Writable
+            } else {
+                WorldFsMode::ReadOnly
+            };
+
+            let always_isolate = !matches!(req.profile.as_deref(), Some("world-deps-provision"));
+
+            let spec = WorldSpec {
+                reuse_session: true,
+                isolate_network: true,
+                limits: world_api::ResourceLimits::default(),
+                enable_preload: false,
+                allowed_domains: substrate_broker::allowed_domains(),
+                project_dir,
+                always_isolate,
+                fs_mode,
+            };
+
+            let world = match self.backend.ensure_session(&spec) {
+                Ok(w) => w,
+                Err(e) => {
+                    tracing::error!(error = %e, error_debug = ?e, "ensure_session failed");
+                    return Err(anyhow::anyhow!("Failed to ensure session world"));
+                }
+            };
+
+            let overlay_root = self
+                .linux_backend
+                .ensure_overlay_root(&world)
+                .context("ensure_overlay_root failed")?;
+
+            let full_path = overlay_root.join(&rel);
+            let meta = std::fs::symlink_metadata(&full_path).with_context(|| {
+                format!(
+                    "failed to read metadata for world fs path {}",
+                    full_path.display()
+                )
+            })?;
+
+            let ft = meta.file_type();
+            let entry_type = if ft.is_file() {
+                WorldFsEntryTypeV1::RegularFile
+            } else if ft.is_dir() {
+                WorldFsEntryTypeV1::Directory
+            } else if ft.is_symlink() {
+                WorldFsEntryTypeV1::Symlink
+            } else if ft.is_socket() {
+                WorldFsEntryTypeV1::Socket
+            } else if ft.is_fifo() {
+                WorldFsEntryTypeV1::Fifo
+            } else if ft.is_block_device() {
+                WorldFsEntryTypeV1::BlockDevice
+            } else if ft.is_char_device() {
+                WorldFsEntryTypeV1::CharDevice
+            } else {
+                WorldFsEntryTypeV1::Unknown
+            };
+
+            let mode = Some(meta.permissions().mode());
+            let size = match entry_type {
+                WorldFsEntryTypeV1::RegularFile => Some(meta.len()),
+                _ => None,
+            };
+
+            let contents_b64 =
+                if req.include_contents && entry_type == WorldFsEntryTypeV1::RegularFile {
+                    let bytes = std::fs::read(&full_path).with_context(|| {
+                        format!(
+                            "failed to read bytes for world fs path {}",
+                            full_path.display()
+                        )
+                    })?;
+                    Some(BASE64.encode(bytes))
+                } else {
+                    None
+                };
+
+            Ok(WorldFsReadResponseV1 {
+                schema_version: 1,
+                path: rel,
+                entry_type,
+                size,
+                mode,
+                contents_b64,
+            })
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = req;
+            anyhow::bail!("world fs read is only supported on Linux agents")
         }
     }
 

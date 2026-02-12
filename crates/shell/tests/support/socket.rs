@@ -30,6 +30,21 @@ pub enum SocketResponse {
         features: Vec<String>,
         pending_diff: JsonValue,
     },
+    /// Responds to pending diff discovery plus a best-effort clear endpoint.
+    ///
+    /// The clear endpoint is intentionally permissive about the exact path so the
+    /// WS2 tests can exercise "clear by diff_id" semantics.
+    ///
+    /// Supported routes:
+    /// - `POST /v1/pending_diff/clear`
+    /// - `POST /v1/workspace/pending_diff/clear`
+    ///
+    /// Request body must include a string `diff_id` field (or `diffId`).
+    ///
+    /// Response body matches `PendingDiffClearResponseV1` (`{ schema_version, cleared }`).
+    CapabilitiesPendingDiffAndAck {
+        state: Arc<Mutex<PendingDiffAckState>>,
+    },
     /// Responds to `/v1/capabilities` and `/v1/doctor/world`, but returns a
     /// non-2xx response for `/v1/pending_diff`.
     ///
@@ -83,6 +98,24 @@ pub struct AgentSocket {
     handle: Option<thread::JoinHandle<()>>,
 }
 
+/// Mutable state for [`SocketResponse::CapabilitiesPendingDiffAndAck`].
+#[derive(Debug, Clone)]
+pub struct PendingDiffAckState {
+    pub features: Vec<String>,
+    pub current_pending_diff: JsonValue,
+    pub cleared_pending_diff: JsonValue,
+    pub flip_after_first_pending_diff: Option<JsonValue>,
+    pub ack_error: Option<PendingDiffAckError>,
+    pub pending_diff_calls: usize,
+    pub ack_calls: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct PendingDiffAckError {
+    pub status: u16,
+    pub body: String,
+}
+
 impl AgentSocket {
     /// Spawn a new stub server bound to the provided path.
     pub fn start(path: &Path, response: SocketResponse) -> Self {
@@ -108,6 +141,10 @@ impl AgentSocket {
             while !shutdown_flag.load(Ordering::SeqCst) {
                 match listener.accept() {
                     Ok((mut stream, _addr)) => {
+                        // `UnixListener` is configured as non-blocking; on some platforms the
+                        // accepted stream inherits this flag. Switch back to blocking IO so the
+                        // request reader doesn't spuriously drop connections with `WouldBlock`.
+                        let _ = stream.set_nonblocking(false);
                         connections_for_thread.fetch_add(1, Ordering::SeqCst);
                         let request = match read_http_request(&mut stream) {
                             Ok(req) => req,
@@ -137,12 +174,79 @@ impl AgentSocket {
                                     write_capabilities_with_features(&mut stream, features);
                                 } else if first_line.starts_with("GET /v1/doctor/world") {
                                     write_world_doctor_report(&mut stream);
-                                } else if first_line.starts_with("GET /v1/pending_diff")
-                                    || first_line.starts_with("POST /v1/pending_diff")
-                                    || first_line.starts_with("GET /v1/workspace/pending_diff")
-                                    || first_line.starts_with("POST /v1/workspace/pending_diff")
-                                {
+                                } else if is_pending_diff_discovery_route(first_line) {
                                     write_response(&mut stream, &pending_diff.to_string());
+                                } else {
+                                    let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\n\r\n");
+                                }
+                            }
+                            SocketResponse::CapabilitiesPendingDiffAndAck { state } => {
+                                if first_line.starts_with("GET /v1/capabilities") {
+                                    let features = state
+                                        .lock()
+                                        .ok()
+                                        .map(|s| s.features.clone())
+                                        .unwrap_or_else(|| vec!["execute".to_string()]);
+                                    write_capabilities_with_features(&mut stream, &features);
+                                } else if first_line.starts_with("GET /v1/doctor/world") {
+                                    write_world_doctor_report(&mut stream);
+                                } else if is_pending_diff_ack_route(first_line) {
+                                    let mut guard =
+                                        state.lock().expect("lock pending diff ack state");
+                                    guard.ack_calls += 1;
+                                    if let Some(err) = guard.ack_error.clone() {
+                                        write_status_response(
+                                            &mut stream,
+                                            err.status,
+                                            http_reason_phrase(err.status),
+                                            &err.body,
+                                        );
+                                        continue;
+                                    }
+
+                                    let req_id = match extract_diff_id(&request.body) {
+                                        Some(id) => id,
+                                        None => {
+                                            write_status_response(
+                                                &mut stream,
+                                                400,
+                                                "Bad Request",
+                                                "{\"error\":\"missing diff_id\"}",
+                                            );
+                                            continue;
+                                        }
+                                    };
+                                    let cur_id = guard
+                                        .current_pending_diff
+                                        .get("diff_id")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("");
+                                    if cur_id != req_id {
+                                        write_response(
+                                            &mut stream,
+                                            "{\"schema_version\":1,\"cleared\":false}",
+                                        );
+                                        continue;
+                                    }
+
+                                    guard.current_pending_diff = guard.cleared_pending_diff.clone();
+                                    write_response(
+                                        &mut stream,
+                                        "{\"schema_version\":1,\"cleared\":true}",
+                                    );
+                                } else if is_pending_diff_discovery_route(first_line) {
+                                    let mut guard =
+                                        state.lock().expect("lock pending diff ack state");
+                                    let payload = guard.current_pending_diff.to_string();
+                                    write_response(&mut stream, &payload);
+                                    guard.pending_diff_calls += 1;
+                                    if guard.pending_diff_calls == 1 {
+                                        if let Some(next) =
+                                            guard.flip_after_first_pending_diff.take()
+                                        {
+                                            guard.current_pending_diff = next;
+                                        }
+                                    }
                                 } else {
                                     let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\n\r\n");
                                 }
@@ -156,11 +260,7 @@ impl AgentSocket {
                                     write_capabilities_with_features(&mut stream, features);
                                 } else if first_line.starts_with("GET /v1/doctor/world") {
                                     write_world_doctor_report(&mut stream);
-                                } else if first_line.starts_with("GET /v1/pending_diff")
-                                    || first_line.starts_with("POST /v1/pending_diff")
-                                    || first_line.starts_with("GET /v1/workspace/pending_diff")
-                                    || first_line.starts_with("POST /v1/workspace/pending_diff")
-                                {
+                                } else if is_pending_diff_discovery_route(first_line) {
                                     write_status_response(
                                         &mut stream,
                                         *status,
@@ -383,6 +483,34 @@ impl Drop for AgentSocket {
     }
 }
 
+fn is_pending_diff_ack_route(first_line: &str) -> bool {
+    first_line.starts_with("POST /v1/pending_diff/ack ")
+        || first_line.starts_with("POST /v1/pending_diff/clear ")
+        || first_line.starts_with("POST /v1/workspace/pending_diff/ack ")
+        || first_line.starts_with("POST /v1/workspace/pending_diff/clear ")
+}
+
+fn is_pending_diff_discovery_route(first_line: &str) -> bool {
+    first_line.starts_with("GET /v1/pending_diff ")
+        || first_line.starts_with("POST /v1/pending_diff ")
+        || first_line.starts_with("GET /v1/workspace/pending_diff ")
+        || first_line.starts_with("POST /v1/workspace/pending_diff ")
+}
+
+fn extract_diff_id(body: &[u8]) -> Option<String> {
+    let value = serde_json::from_slice::<JsonValue>(body).ok()?;
+    value
+        .get("diff_id")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .or_else(|| {
+            value
+                .get("diffId")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+        })
+}
+
 fn write_capabilities(stream: &mut UnixStream) {
     write_capabilities_with_features(stream, &["execute".to_string()]);
 }
@@ -557,7 +685,15 @@ fn decode_chunked_body(buf: &[u8]) -> Option<Vec<u8>> {
         let size = usize::from_str_radix(size_str, 16).ok()?;
         pos = line_end + 2;
         if size == 0 {
-            // Expect trailing CRLF after the 0-size chunk payload.
+            // Expect trailing CRLF after the 0-size chunk payload (no trailers).
+            // Without this, we can treat a partial `0\r\n` read as completion and respond early,
+            // causing clients to see broken pipes while still streaming the request body.
+            if buf.len() < pos + 2 {
+                return None;
+            }
+            if &buf[pos..pos + 2] != b"\r\n" {
+                return None;
+            }
             return Some(out);
         }
         if buf.len() < pos + size + 2 {
