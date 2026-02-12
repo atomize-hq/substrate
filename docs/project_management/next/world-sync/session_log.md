@@ -433,3 +433,10 @@
 ## END — 2026-02-12T04:09:37Z — integration — WS5-integ-core
 - HEAD: `3c31d2b768feb368316cc02f139242e45b2171c2`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS5/integ-core/last_message.md`
+
+## START — 2026-02-12T04:20:52Z — ops — CP2-ci-checkpoint
+- Dispatch (after CI audit recommends `run`):
+  - `make ci-compile-parity CI_WORKFLOW_REF="feat/world-sync" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF="3c31d2b768feb368316cc02f139242e45b2171c2"`
+  - `make feature-smoke FEATURE_DIR="docs/project_management/next/world-sync" PLATFORM=behavior SMOKE_SLICE_ID="WS5" SMOKE_CHECKOUT_REF="3c31d2b768feb368316cc02f139242e45b2171c2" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/world-sync" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=0`
+- Local preflight note:
+  - Linux smoke WS5 is blocked on this host by the system world-agent missing `pending_diff_v1` (cannot run `sudo` provisioning in this environment).
