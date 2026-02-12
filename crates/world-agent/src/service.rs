@@ -7,8 +7,10 @@ use agent_api_types::{
     PendingDiffReconcileRequestV1, PendingDiffReconcileResponseV1, PendingDiffRecordV1,
     PendingDiffRequestV1, WorldFsReadRequestV1, WorldFsReadResponseV1,
 };
+#[cfg(any(target_os = "linux", test))]
+use agent_api_types::PendingDiffBucketV1;
 #[cfg(target_os = "linux")]
-use agent_api_types::{PendingDiffBucketV1, WorldFsEntryTypeV1};
+use agent_api_types::WorldFsEntryTypeV1;
 #[cfg(target_os = "linux")]
 use anyhow::Context;
 use anyhow::{anyhow, Result};
@@ -24,7 +26,7 @@ use base64::Engine;
 use chrono::SecondsFormat;
 #[cfg(target_os = "linux")]
 use futures_util::StreamExt;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", test))]
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 #[cfg(target_os = "linux")]
@@ -251,7 +253,7 @@ impl WorldAgentService {
         Ok((world, merged))
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", test))]
     fn normalize_pending_diff_bucket(diff: &substrate_common::FsDiff) -> PendingDiffBucketV1 {
         fn normalize(path: &std::path::Path) -> String {
             path.to_string_lossy().replace('\\', "/")
@@ -274,24 +276,44 @@ impl WorldAgentService {
         }
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", test))]
     fn pending_diff_id_for_snapshot(snapshot: &PendingDiffBucketV1) -> String {
-        let mut hasher = Sha256::new();
-        hasher.update(b"writes\0");
+        // `diff_id` is used as a conditional clear token (Clear/ack semantics).
+        //
+        // It must remain stable across harmless reclassification of a path between `writes` and
+        // `mods` (e.g., when a sync to the host causes the overlay lower layer to start reporting
+        // the path as "existing", flipping upper->lower classification without any new world
+        // mutation). To avoid false "diff_id mismatch" failures, compute the id from:
+        // - updates = (writes ∪ mods) as a set
+        // - deletes as a set
+        //
+        // The UX buckets are still preserved in the record; only the clear token is stabilized.
+        let mut updates: Vec<&str> = Vec::with_capacity(snapshot.writes.len() + snapshot.mods.len());
         for item in &snapshot.writes {
-            hasher.update(item.as_bytes());
-            hasher.update(b"\n");
+            updates.push(item.as_str());
         }
-        hasher.update(b"mods\0");
         for item in &snapshot.mods {
+            updates.push(item.as_str());
+        }
+        updates.sort();
+        updates.dedup();
+
+        let mut deletes: Vec<&str> = snapshot.deletes.iter().map(|s| s.as_str()).collect();
+        deletes.sort();
+        deletes.dedup();
+
+        let mut hasher = Sha256::new();
+        hasher.update(b"updates\0");
+        for item in updates {
             hasher.update(item.as_bytes());
             hasher.update(b"\n");
         }
         hasher.update(b"deletes\0");
-        for item in &snapshot.deletes {
+        for item in deletes {
             hasher.update(item.as_bytes());
             hasher.update(b"\n");
         }
+
         let digest = hasher.finalize();
         let mut hex = String::with_capacity(digest.len() * 2);
         for b in digest {
@@ -301,7 +323,7 @@ impl WorldAgentService {
         hex
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", test))]
     fn pending_diff_id_for_diff(diff: &substrate_common::FsDiff) -> String {
         let snapshot = Self::normalize_pending_diff_bucket(diff);
         Self::pending_diff_id_for_snapshot(&snapshot)
@@ -1148,6 +1170,79 @@ impl WorldAgentService {
         Ok(serde_json::json!({
             "status": "not_implemented"
         }))
+    }
+}
+
+#[cfg(test)]
+mod pending_diff_id_tests {
+    use super::WorldAgentService;
+    use agent_api_types::PendingDiffBucketV1;
+    use substrate_common::FsDiff;
+    use std::path::PathBuf;
+
+    #[test]
+    fn diff_id_is_stable_across_writes_vs_mods_reclassification() {
+        let s1 = PendingDiffBucketV1 {
+            writes: vec!["flipcheck.md".to_string()],
+            mods: vec![],
+            deletes: vec![],
+        };
+        let s2 = PendingDiffBucketV1 {
+            writes: vec![],
+            mods: vec!["flipcheck.md".to_string()],
+            deletes: vec![],
+        };
+        assert_eq!(
+            WorldAgentService::pending_diff_id_for_snapshot(&s1),
+            WorldAgentService::pending_diff_id_for_snapshot(&s2),
+            "diff_id must not change when a path moves between writes and mods"
+        );
+    }
+
+    #[test]
+    fn diff_id_changes_when_updates_or_deletes_change() {
+        let base = PendingDiffBucketV1 {
+            writes: vec!["a.txt".to_string()],
+            mods: vec![],
+            deletes: vec![],
+        };
+        let with_more_updates = PendingDiffBucketV1 {
+            writes: vec!["a.txt".to_string(), "b.txt".to_string()],
+            mods: vec![],
+            deletes: vec![],
+        };
+        let with_delete = PendingDiffBucketV1 {
+            writes: vec!["a.txt".to_string()],
+            mods: vec![],
+            deletes: vec!["gone.txt".to_string()],
+        };
+        assert_ne!(
+            WorldAgentService::pending_diff_id_for_snapshot(&base),
+            WorldAgentService::pending_diff_id_for_snapshot(&with_more_updates),
+            "diff_id must change when the update set changes"
+        );
+        assert_ne!(
+            WorldAgentService::pending_diff_id_for_snapshot(&base),
+            WorldAgentService::pending_diff_id_for_snapshot(&with_delete),
+            "diff_id must change when the delete set changes"
+        );
+    }
+
+    #[test]
+    fn diff_id_for_diff_is_stable_across_fs_diff_writes_mods_flip() {
+        let d1 = FsDiff {
+            writes: vec![PathBuf::from("flipcheck.md")],
+            ..Default::default()
+        };
+        let d2 = FsDiff {
+            mods: vec![PathBuf::from("flipcheck.md")],
+            ..Default::default()
+        };
+        assert_eq!(
+            WorldAgentService::pending_diff_id_for_diff(&d1),
+            WorldAgentService::pending_diff_id_for_diff(&d2),
+            "diff_id must not change when FsDiff reclassifies a path between writes and mods"
+        );
     }
 }
 
