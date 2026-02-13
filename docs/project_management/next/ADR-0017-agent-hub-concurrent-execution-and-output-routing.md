@@ -79,6 +79,7 @@ ADR_BODY_SHA256: f98e101d96918048c0407b0d8c26c127fcdef4c566d4a954b1a770cbdfc2869
     - Structured events MUST be handled via a bounded buffer and MUST NOT backpressure execution.
       - If the buffer overflows, Substrate MUST drop additional structured lines for the duration of the passthrough and MUST emit an explicit dropped-count summary after passthrough ends.
         - Source of truth: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0006)
+        - Phase 8 additive clarification: when `channel` is used, the dropped-count summary SHOULD optionally include a per-channel breakdown so suppressed output remains explainable without heuristics.
   - While the line editor is active (`Idle`), PTY bytes MAY arrive (out-of-band) and Substrate MUST render them without corrupting the current input buffer.
     - PTY bytes MUST be rendered as raw bytes with prompt/input redraw semantics (byte fidelity preserved).
 
@@ -92,6 +93,7 @@ ADR_BODY_SHA256: f98e101d96918048c0407b0d8c26c127fcdef4c566d4a954b1a770cbdfc2869
     - Required when applicable:
       - `thread_id` (LLM/conversation grouping)
       - `role` (agent hub role: orchestrator vs executor)
+      - `backend_id` when the emitting backend’s kind is known (v1 default: known) to avoid heuristic inference from `agent_id` alone.
     - Join keys (required when the event is tied to execution/trace):
       - `cmd_id` and/or `span_id`
     - Source of truth: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003)
@@ -102,6 +104,34 @@ ADR_BODY_SHA256: f98e101d96918048c0407b0d8c26c127fcdef4c566d4a954b1a770cbdfc2869
       - Source of truth: `docs/project_management/next/agent_hub_core/decision_register.md` (DR-0004) and `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003).
     - Phase 8 additive alignment: the structured-event envelope MAY carry an optional event-plane routing hint (`channel`) so future subscribe/filter behavior is expressible without PTY injection or attribution ambiguity.
       - Source of truth: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003).
+
+### Structured agent event envelope (v1; Phase 8 additive clarifications)
+
+Structured agent events are serialized as a top-level envelope with stable correlation fields for deterministic joins. This envelope is the surface emitted to the shell/UI and (after adding `session_id` and any trace-writer metadata) persisted to canonical trace.
+
+Authoritative shape and field requirements live in:
+- `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003, DR-0008, DR-0009)
+- Phase 8 correlation vocabulary (canonical field names): `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
+
+Envelope fields (top-level; no nesting required for joinability):
+- `ts` (RFC3339 UTC timestamp)
+- `kind` (enum; `registered|status|task_start|task_progress|task_end|pty_data|alert`)
+- Correlation (required/conditional/optional):
+  - `orchestration_session_id` (required)
+  - `run_id` (required)
+  - `agent_id` (required; agent inventory id for the emitting backend)
+  - `backend_id` (conditional required when kind is known; v1 default: known; `<kind>:<agent_id>`)
+  - `world_id` (conditional required when the emitting backend executes inside a world boundary)
+  - `thread_id` (optional)
+  - `role` (optional)
+  - `cmd_id` / `span_id` (optional; required when tied to execution/trace joins)
+  - `channel` (optional; event-plane routing hint; not used for policy gating)
+- `data` (JSON object; schema depends on `kind`)
+
+`channel` constraints (non-negotiable):
+- Meaning: a producer-declared event-plane routing hint (pub/sub-style “topic”) for subscribe/filter and for explainable suppression summaries; it MUST NOT be used for policy gating.
+- MUST be producer-declared (not arbitrary user-provided freeform) and MUST NOT contain secrets.
+- MUST be capped (implementation-defined cap) and MUST be safe to print and persist.
 
 ### Config (buffer tuning)
 - Files and locations (existing layering model):

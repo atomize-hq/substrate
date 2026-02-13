@@ -151,6 +151,7 @@ Scope:
 - **Cascading implications:**
   - The summary MUST be emitted via the structured-event path (not PTY), after passthrough ends.
   - Summary payload MUST include a deterministic counter (e.g., `dropped_structured_event_lines: <int>`), and MAY also include the configured cap value.
+  - Phase 8 additive clarification (channel-aware UX): when multiple structured-event channels are active during passthrough, the summary SHOULD remain explainable without heuristics by optionally including a per-channel breakdown.
 - **Risks:**
   - Minimal; additive metadata.
 - **Unlocks:**
@@ -167,6 +168,12 @@ Scope:
 - After passthrough ends (before returning to the prompt), emit exactly one structured summary warning containing:
   - `dropped_structured_event_lines: <int>`
   - `max_pty_buffered_lines: <int>` (optional but recommended)
+  - OPTIONAL (recommended when `channel` is used by emitters): `dropped_structured_event_lines_by_channel`
+    - Shape: a list of `{ channel: <string>, dropped: <int> }`
+    - Semantics:
+      - `channel` values follow the structured event envelope `channel` contract (producer-declared, capped, no secrets).
+      - Events with no channel set SHOULD be counted under `channel="(unset)"`.
+      - The list MAY be capped to the top-N channels by dropped count (implementation-defined), with the remaining drops aggregated into `channel="(other)"` to keep payload bounded.
   - Emission mechanism (non-negotiable):
     - Write a canonical trace record to `trace.jsonl` with:
       - `component: "shell"`
@@ -246,6 +253,11 @@ Scope:
       - `cmd_id` (string; optional)
       - `span_id` (string; optional)
       - `channel` (string; optional; event-plane routing hint for subscribe/filter behavior; not used for policy gating)
+        - Constraints (non-negotiable):
+          - Meaning: a producer-declared “topic” for subscribe/filter; must never be required for joins, and must never affect policy gating decisions.
+          - MUST be producer-declared (not arbitrary user-provided freeform).
+          - MUST be capped (recommendation: <= 64 bytes) and safe to print/persist.
+          - MUST NOT contain secrets; if a producer attempts to set a channel containing obvious secret material, the value MUST be dropped and a structured warning MAY be emitted.
     - Payload:
       - `data` is a JSON object whose schema depends on `kind` (e.g., `message`, or stream `chunk` + `stream`).
 

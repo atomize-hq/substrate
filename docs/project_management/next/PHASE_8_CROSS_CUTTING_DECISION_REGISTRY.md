@@ -157,8 +157,8 @@ Each item below is written as: **Decision/contract to lock**, **current sources*
 - Phase 8 explicit discussion points: `LLM_AI_CAPABILITY_ENABLEMENT_PLANNING_ORDER.md` (Phase 8 section)
 
 **Gap**
-- `world_id` is required by Agent Hub DR-0004 for operators to verify shared-world semantics, but it is not present in the ADR-0017 envelope definition.
-- No concrete “channel/topic” contract exists yet (needed to avoid PTY injection hacks for future subscribe/filter behavior).
+- ADR-0017 historically referenced envelope fields only via decision registers; the ADR text must stay in sync with the DR-defined envelope extensions (`backend_id`, conditional `world_id`, optional `channel`) so Phase 2 acceptance does not drift from Phase 8 correlation vocabulary.
+- `channel` is reserved as an event-plane routing hint, but its strict constraints (producer-declared, capped, no secrets) must be treated as a contract across emitters and persisted records.
 
 **Alignment action**
 - Additive Phase 8 updates:
