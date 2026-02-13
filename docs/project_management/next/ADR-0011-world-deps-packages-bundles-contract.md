@@ -2,9 +2,9 @@
 
 > NOTICE (2026-01-24)
 >
-> The world-first persistent REPL work in `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md` changes the interactive shell contract: the REPL uses a persistent in-world bash session (no rcfiles) rather than the historical “`/bin/sh -c` for everything” model.
->
-> This ADR currently states that *interactive* `substrate>` runs execute under `/bin/sh -c`. That statement will need to be revised to stay in parity with ADR-0016. See “Proposed draft edit (post-ADR-0016)” below.
+> This ADR is aligned to ADR-0016 interactive REPL semantics:
+> - Non-interactive world execution uses `/bin/sh -c`.
+> - Interactive `substrate>` REPL evaluation uses a bash evaluator with no rcfiles (`/bin/bash --noprofile --norc`).
 
 ## Status
 - Status: Approved
@@ -25,6 +25,13 @@
 ## Related Docs
 - Source contract doc (must remain in parity with this ADR’s contract section):
   - `docs/project_management/next/world_deps_packages_bundles_contract.md`
+- Planning Pack (execution v4; this feature directory):
+  - `docs/project_management/next/world-deps-packages-bundles-contract/plan.md`
+  - `docs/project_management/next/world-deps-packages-bundles-contract/tasks.json`
+  - `docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md`
+  - `docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md`
+  - `docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md`
+  - `docs/project_management/next/world-deps-packages-bundles-contract/manual_testing_playbook.md`
 - Existing world-deps work (may be superseded / requires reconciliation if this ADR is Accepted):
   - `docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
   - `docs/project_management/_archived/world_deps_selection_layer/plan.md`
@@ -38,7 +45,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: d3565690a3f536bcf7a2913ee8180cef7e987d50b13b6ff43f480f0f942b8230
+ADR_BODY_SHA256: 9f5a5ead04247401589648d3f25852c89defdf29ffe290c2a9971ae684ddec3c
 ### Changes (operator-facing)
 - World deps becomes “inventory + enabled patches”
   - Existing: world-deps behavior is anchored on legacy manifest/overlay/selection files (`manager_hooks.yaml`, `world-deps.yaml`, `world-deps.selection.yaml`) with semantics that are easy to misread and hard to reason about across scopes.
@@ -123,8 +130,9 @@ Replacement completeness requirement:
 Substrate world execution is intentionally conservative and does not behave like an interactive login shell.
 
 Contract:
-- World commands (interactive `substrate>` and non-interactive runs) execute under `/bin/sh -c` in the world (not bash), with no user shell rc sourcing.
-- Therefore, runnable deps MUST expose real executable entrypoints (files) and MUST NOT rely on shell functions, aliases, or `~/.bashrc`-style initialization.
+- World commands executed via non-interactive pathways (e.g., `substrate -c`, automation, world-agent `/v1/execute`) execute under `/bin/sh -c` in the world, with no user shell rc sourcing.
+- Interactive REPL sessions (`substrate>`) execute under the world-first persistent-session model and evaluate submissions under `/bin/bash --noprofile --norc -c` (still no user rc sourcing).
+- Therefore, runnable deps MUST expose real executable entrypoints (files) and MUST NOT rely on shell functions, aliases, or `~/.bashrc`-style initialization. If a tool requires shell init, it MUST be made runnable via a generated wrapper entrypoint (e.g., `bash_function` / `bash_source_exec` wrappers).
 
 Install-time note:
 - Script-based installs (`install.method=script`) MAY run under `bash -lc` for compatibility with common installer recipes, but that does not change the runtime execution contract above.
@@ -141,14 +149,6 @@ Implication for `nvm`-style deps:
 - ADR-0016 introduces a persistent in-world REPL session that uses `bash --noprofile --norc` (no rcfiles) for interactive `substrate>` sessions.
 - This ADR’s world-deps contract should remain compatible with non-interactive world execution (`/bin/sh -c`) and must not rely on shell init behavior for “runnable” packages.
 - For consistency, the world-first REPL session environment should include `/var/lib/substrate/world-deps/bin` in `PATH` so enabled deps are runnable without requiring manual PATH edits.
-
-### Proposed draft edit (post-ADR-0016)
-This is a proposed replacement for the “World Shell Contract” wording above, to keep this ADR consistent with ADR-0016 while preserving the world-deps “runnable package” contract.
-
-Proposed replacement text:
-- World commands executed via non-interactive pathways (e.g., `substrate -c`, automation, world-agent `/v1/execute`) execute under `/bin/sh -c` in the world, with no user shell rc sourcing.
-- Interactive REPL sessions (`substrate>` when world-first persistent REPL is enabled) execute in a persistent in-world `bash --noprofile --norc` session (still no user rc sourcing).
-- Therefore, runnable deps MUST expose real executable entrypoints (files) and MUST NOT rely on shell functions, aliases, or `~/.bashrc`-style initialization. If a tool requires shell init, it MUST be made runnable via a generated wrapper entrypoint (e.g., `bash_function` / `bash_source_exec` wrappers).
 
 ### Inventory Model
 
@@ -655,5 +655,5 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 - No backwards-compat layer is provided unless a future Accepted revision explicitly defines a compat policy and end condition.
 
 ## Decision Summary
-- No decision register exists yet for this contract document.
-- If this body of work proceeds beyond contract drafting into execution triads, a `decision_register.md` MUST be introduced to capture any non-trivial A/B decisions (schema versioning, built-in inventory embedding strategy, and legacy path removal strategy), and this ADR must link to it.
+- Decision register:
+  - `docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md`

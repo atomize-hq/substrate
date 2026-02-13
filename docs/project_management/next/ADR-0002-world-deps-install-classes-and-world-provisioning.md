@@ -32,8 +32,7 @@ Related tracks:
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 13264bd73aef13d8768d6180986d7d2fa5848b7990c200a14bb0dd184da8bf62
-ADR_BODY_SHA256: <run `python3 scripts/planning/check_adr_exec_summary.py --adr <this-file> --fix` after editing>
+ADR_BODY_SHA256: 52c2b836df2158e5f0b15392e7604d1a9d314f34b1bd66068c00b10bbb67838b
 
 - Existing: `substrate world deps *` behavior is not fully selection-driven; some operations risk feeling “implicit” or “surprising” across platforms.
 - New: `substrate world deps status|sync|install|provision` is selection-driven and no-ops (exit `0`, no world calls) when no selection file exists.

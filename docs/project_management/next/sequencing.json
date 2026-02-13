@@ -374,6 +374,45 @@
       ]
     },
     {
+      "order": 30.25,
+      "id": "world_deps_packages_bundles_contract",
+      "title": "World deps packages/bundles contract",
+      "branch": "feat/world-deps-packages-bundles-contract",
+      "directory": "docs/project_management/next/world-deps-packages-bundles-contract",
+      "plan": "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+      "status": "not_started",
+      "sequence": [
+        {
+          "id": "WDP0",
+          "spec": "docs/project_management/next/world-deps-packages-bundles-contract/WDP0-spec.md"
+        },
+        {
+          "id": "WDP1",
+          "spec": "docs/project_management/next/world-deps-packages-bundles-contract/WDP1-spec.md"
+        },
+        {
+          "id": "WDP2",
+          "spec": "docs/project_management/next/world-deps-packages-bundles-contract/WDP2-spec.md"
+        },
+        {
+          "id": "WDP3",
+          "spec": "docs/project_management/next/world-deps-packages-bundles-contract/WDP3-spec.md"
+        },
+        {
+          "id": "WDP4",
+          "spec": "docs/project_management/next/world-deps-packages-bundles-contract/WDP4-spec.md"
+        },
+        {
+          "id": "WDP5",
+          "spec": "docs/project_management/next/world-deps-packages-bundles-contract/WDP5-spec.md"
+        }
+      ],
+      "notes": [
+        "Implements ADR-0011 contract: inventory directories + enabled patches; legacy paths removed from plumbing.",
+        "CLI contract is owned by docs/project_management/next/world_deps_packages_bundles_contract.md and must remain in parity with ADR-0011."
+      ]
+    },
+    {
       "order": 31,
       "id": "full_isolation_landlock_overlayfs_compat",
       "title": "Full isolation Landlock ↔ overlayfs backing dirs compat",

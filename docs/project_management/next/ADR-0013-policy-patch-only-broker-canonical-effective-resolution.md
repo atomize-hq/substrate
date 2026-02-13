@@ -27,7 +27,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: a49f73cdb2f8536432dcc9695f5ab84bbeeaebebb1076e1784a38da10a9236b9
+ADR_BODY_SHA256: e76fefd1ad5675cbb847765c919492bf69eabc7689548035d1710ee51cd39b45
 Run `make adr-fix ADR=docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md` after drafting.
 
 ### Changes (operator-facing)

@@ -24,8 +24,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 7c10d96c4bf46beccd3aa36c10275ec2ce3bbf713743ab7b88928fed6aeafe74
-ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md` after drafting>
+ADR_BODY_SHA256: e4244dcbb53f6fde6b0fd7987b2750f545ec226b4192cbdb1dccc0112c55af3d
 
 ### Changes (operator-facing)
 - Config “effective/current” views can explain multi-layer keys

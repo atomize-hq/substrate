@@ -1,0 +1,1253 @@
+{
+  "meta": {
+    "schema_version": 4,
+    "feature": "world-deps-packages-bundles-contract",
+    "cross_platform": true,
+    "execution_gates": true,
+    "automation": {
+      "enabled": true,
+      "orchestration_branch": "feat/world-deps-packages-bundles-contract"
+    },
+    "checkpoint_boundaries": ["WDP2", "WDP5"],
+    "behavior_platforms_required": ["linux", "macos", "windows"],
+    "ci_parity_platforms_required": ["linux", "macos", "windows"]
+  },
+  "tasks": [
+    {
+      "id": "F0-exec-preflight",
+      "name": "Execution preflight gate (feature start)",
+      "type": "ops",
+      "phase": "Ops",
+      "status": "pending",
+      "description": "Run the execution preflight gate for this Planning Pack (required before any triads begin).",
+      "references": [
+        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/ci_checkpoint_plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/manual_testing_playbook.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/quality_gate_report.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/execution_preflight_report.md",
+        "docs/project_management/next/world_deps_packages_bundles_contract.md",
+        "docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md"
+      ],
+      "acceptance_criteria": [
+        "execution_preflight_report.md completed with RECOMMENDATION: ACCEPT",
+        "quality_gate_report.md exists and is ACCEPT"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, and kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs"
+      ],
+      "end_checklist": [
+        "Complete: docs/project_management/next/world-deps-packages-bundles-contract/execution_preflight_report.md",
+        "Update tasks/session_log on orchestration branch; commit docs"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/F0-exec-preflight.md",
+      "depends_on": [],
+      "concurrent_with": []
+    },
+
+    {
+      "id": "WDP0-code",
+      "name": "WDP0 slice (code)",
+      "type": "code",
+      "phase": "WDP0",
+      "status": "pending",
+      "description": "Implement WDP0 spec (production code only).",
+      "references": [
+        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
+        "docs/project_management/next/world_deps_packages_bundles_contract.md",
+        "docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP0-spec.md"
+      ],
+      "acceptance_criteria": ["Meets all acceptance criteria in WDP0-spec.md"],
+      "start_checklist": [
+        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDP0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" SLICE_ID=\"WDP0\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDP0-code\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-packages-bundles-contract-wdp0-code",
+      "integration_task": "WDP0-integ",
+      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/WDP0-code.md",
+      "depends_on": ["F0-exec-preflight"],
+      "concurrent_with": ["WDP0-test"],
+      "git_branch": "world-deps-packages-bundles-contract-wdp0-code",
+      "required_make_targets": ["triad-code-checks"]
+    },
+    {
+      "id": "WDP0-test",
+      "name": "WDP0 slice (test)",
+      "type": "test",
+      "phase": "WDP0",
+      "status": "pending",
+      "description": "Add/modify tests for WDP0 spec (tests only).",
+      "references": [
+        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
+        "docs/project_management/next/world_deps_packages_bundles_contract.md",
+        "docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP0-spec.md"
+      ],
+      "acceptance_criteria": ["Tests enforce WDP0 acceptance criteria"],
+      "start_checklist": [
+        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDP0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" SLICE_ID=\"WDP0\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "Run the targeted tests you add/modify (may be red until code lands; must be deterministic)",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDP0-test\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-packages-bundles-contract-wdp0-test",
+      "integration_task": "WDP0-integ",
+      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/WDP0-test.md",
+      "depends_on": ["F0-exec-preflight"],
+      "concurrent_with": ["WDP0-code"],
+      "git_branch": "world-deps-packages-bundles-contract-wdp0-test",
+      "required_make_targets": ["triad-test-checks"]
+    },
+    {
+      "id": "WDP0-integ",
+      "name": "WDP0 slice (integration)",
+      "type": "integration",
+      "phase": "WDP0",
+      "status": "pending",
+      "description": "Integrate WDP0 code+tests, reconcile to spec, and run integration gate.",
+      "references": [
+        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/ci_checkpoint_plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/manual_testing_playbook.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP0-spec.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP0-closeout_report.md",
+        "docs/project_management/next/world_deps_packages_bundles_contract.md"
+      ],
+      "acceptance_criteria": [
+        "Slice is green under make integ-checks and matches the spec",
+        "Slice closeout report completed: WDP0-closeout_report.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDP0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" TASK_ID=\"WDP0-integ\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests for WDP0",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDP0-integ\"",
+        "Complete: docs/project_management/next/world-deps-packages-bundles-contract/WDP0-closeout_report.md",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-packages-bundles-contract-wdp0-integ",
+      "integration_task": "WDP0-integ",
+      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/WDP0-integ.md",
+      "depends_on": ["WDP0-code", "WDP0-test"],
+      "concurrent_with": [],
+      "git_branch": "world-deps-packages-bundles-contract-wdp0-integ",
+      "required_make_targets": ["integ-checks"],
+      "merge_to_orchestration": true
+    },
+
+    {
+      "id": "WDP1-code",
+      "name": "WDP1 slice (code)",
+      "type": "code",
+      "phase": "WDP1",
+      "status": "pending",
+      "description": "Implement WDP1 spec (production code only).",
+      "references": [
+        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
+        "docs/project_management/next/world_deps_packages_bundles_contract.md",
+        "docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP1-spec.md"
+      ],
+      "acceptance_criteria": ["Meets all acceptance criteria in WDP1-spec.md"],
+      "start_checklist": [
+        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDP1-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" SLICE_ID=\"WDP1\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDP1-code\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-packages-bundles-contract-wdp1-code",
+      "integration_task": "WDP1-integ",
+      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/WDP1-code.md",
+      "depends_on": ["WDP0-integ"],
+      "concurrent_with": ["WDP1-test"],
+      "git_branch": "world-deps-packages-bundles-contract-wdp1-code",
+      "required_make_targets": ["triad-code-checks"]
+    },
+    {
+      "id": "WDP1-test",
+      "name": "WDP1 slice (test)",
+      "type": "test",
+      "phase": "WDP1",
+      "status": "pending",
+      "description": "Add/modify tests for WDP1 spec (tests only).",
+      "references": [
+        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
+        "docs/project_management/next/world_deps_packages_bundles_contract.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP1-spec.md"
+      ],
+      "acceptance_criteria": ["Tests enforce WDP1 acceptance criteria"],
+      "start_checklist": [
+        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDP1-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" SLICE_ID=\"WDP1\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "Run the targeted tests you add/modify (may be red until code lands; must be deterministic)",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDP1-test\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-packages-bundles-contract-wdp1-test",
+      "integration_task": "WDP1-integ",
+      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/WDP1-test.md",
+      "depends_on": ["WDP0-integ"],
+      "concurrent_with": ["WDP1-code"],
+      "git_branch": "world-deps-packages-bundles-contract-wdp1-test",
+      "required_make_targets": ["triad-test-checks"]
+    },
+    {
+      "id": "WDP1-integ",
+      "name": "WDP1 slice (integration)",
+      "type": "integration",
+      "phase": "WDP1",
+      "status": "pending",
+      "description": "Integrate WDP1 code+tests, reconcile to spec, and run integration gate.",
+      "references": [
+        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/ci_checkpoint_plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/manual_testing_playbook.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP1-spec.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP1-closeout_report.md",
+        "docs/project_management/next/world_deps_packages_bundles_contract.md"
+      ],
+      "acceptance_criteria": [
+        "Slice is green under make integ-checks and matches the spec",
+        "Slice closeout report completed: WDP1-closeout_report.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDP1-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" TASK_ID=\"WDP1-integ\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests for WDP1",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDP1-integ\"",
+        "Complete: docs/project_management/next/world-deps-packages-bundles-contract/WDP1-closeout_report.md",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-packages-bundles-contract-wdp1-integ",
+      "integration_task": "WDP1-integ",
+      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/WDP1-integ.md",
+      "depends_on": ["WDP1-code", "WDP1-test"],
+      "concurrent_with": [],
+      "git_branch": "world-deps-packages-bundles-contract-wdp1-integ",
+      "required_make_targets": ["integ-checks"],
+      "merge_to_orchestration": true
+    },
+
+    {
+      "id": "WDP2-code",
+      "name": "WDP2 slice (code)",
+      "type": "code",
+      "phase": "WDP2",
+      "status": "pending",
+      "description": "Implement WDP2 spec (production code only).",
+      "references": [
+        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/ci_checkpoint_plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
+        "docs/project_management/next/world_deps_packages_bundles_contract.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP2-spec.md"
+      ],
+      "acceptance_criteria": ["Meets all acceptance criteria in WDP2-spec.md"],
+      "start_checklist": [
+        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDP2-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" SLICE_ID=\"WDP2\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDP2-code\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-packages-bundles-contract-wdp2-code",
+      "integration_task": "WDP2-integ-core",
+      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/WDP2-code.md",
+      "depends_on": ["WDP1-integ"],
+      "concurrent_with": ["WDP2-test"],
+      "git_branch": "world-deps-packages-bundles-contract-wdp2-code",
+      "required_make_targets": ["triad-code-checks"]
+    },
+    {
+      "id": "WDP2-test",
+      "name": "WDP2 slice (test)",
+      "type": "test",
+      "phase": "WDP2",
+      "status": "pending",
+      "description": "Add/modify tests for WDP2 spec (tests only).",
+      "references": [
+        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/ci_checkpoint_plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
+        "docs/project_management/next/world_deps_packages_bundles_contract.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP2-spec.md"
+      ],
+      "acceptance_criteria": ["Tests enforce WDP2 acceptance criteria"],
+      "start_checklist": [
+        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDP2-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" SLICE_ID=\"WDP2\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "Run the targeted tests you add/modify (may be red until code lands; must be deterministic)",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDP2-test\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-packages-bundles-contract-wdp2-test",
+      "integration_task": "WDP2-integ-core",
+      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/WDP2-test.md",
+      "depends_on": ["WDP1-integ"],
+      "concurrent_with": ["WDP2-code"],
+      "git_branch": "world-deps-packages-bundles-contract-wdp2-test",
+      "required_make_targets": ["triad-test-checks"]
+    },
+    {
+      "id": "WDP2-integ-core",
+      "name": "WDP2 slice (integration core)",
+      "type": "integration",
+      "phase": "WDP2",
+      "status": "pending",
+      "description": "Integrate WDP2 code+tests and produce a checkpoint-ready core state.",
+      "references": [
+        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/ci_checkpoint_plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/manual_testing_playbook.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP2-spec.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP2-closeout_report.md",
+        "docs/project_management/next/world_deps_packages_bundles_contract.md"
+      ],
+      "acceptance_criteria": ["Core integration state is green under make integ-checks and matches WDP2 spec"],
+      "start_checklist": [
+        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDP2-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" TASK_ID=\"WDP2-integ-core\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests for WDP2",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDP2-integ-core\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-packages-bundles-contract-wdp2-integ-core",
+      "integration_task": "WDP2-integ-core",
+      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/WDP2-integ-core.md",
+      "depends_on": ["WDP2-code", "WDP2-test"],
+      "concurrent_with": [],
+      "git_branch": "world-deps-packages-bundles-contract-wdp2-integ-core",
+      "required_make_targets": ["integ-checks"],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "CP1-ci-checkpoint",
+      "name": "CP1 cross-platform CI checkpoint (ops)",
+      "type": "ops",
+      "phase": "CI Checkpoints",
+      "status": "pending",
+      "description": "Dispatch bounded cross-platform CI gates for checkpoint CP1 (slices: WDP0, WDP1, WDP2) and record evidence.",
+      "references": [
+        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/ci_checkpoint_plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/manual_testing_playbook.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
+        "docs/project_management/next/world_deps_packages_bundles_contract.md"
+      ],
+      "acceptance_criteria": [
+        "Advisory ci-audit run and recommendation followed",
+        "Required checkpoint CI gates dispatched and evidence recorded in session_log.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
+        "Read ci_checkpoint_plan.md and confirm which slice id this checkpoint validates",
+        "Set status to in_progress; add START entry; commit docs"
+      ],
+      "end_checklist": [
+        "Run advisory audit and dispatch CI gates for boundary slice WDP2",
+        "Record run ids/URLs in session_log.md (do not commit ledgers)",
+        "Update tasks/session_log on orchestration branch; commit docs"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/CP1-ci-checkpoint.md",
+      "depends_on": ["WDP2-integ-core"],
+      "concurrent_with": []
+    },
+    {
+      "id": "WDP2-integ-linux",
+      "name": "WDP2 slice (integration linux)",
+      "type": "integration",
+      "phase": "WDP2",
+      "status": "pending",
+      "description": "linux platform-fix integration task (may be a no-op if already green).",
+      "references": [
+        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/ci_checkpoint_plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP2-spec.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/smoke/linux-smoke.sh"
+      ],
+      "acceptance_criteria": ["linux smoke is green for this checkpoint boundary"],
+      "start_checklist": [
+        "Run on linux host if possible",
+        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDP2-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" TASK_ID=\"WDP2-integ-linux\""
+      ],
+      "end_checklist": [
+        "Dispatch the required gate for this platform per the kickoff prompt (use ci-audit; record run id/URL)",
+        "If needed: fix + fmt/clippy + targeted tests",
+        "Ensure smoke is green; record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDP2-integ-linux\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-packages-bundles-contract-wdp2-integ-linux",
+      "integration_task": "WDP2-integ-linux",
+      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/WDP2-integ-linux.md",
+      "depends_on": ["WDP2-integ-core", "CP1-ci-checkpoint"],
+      "concurrent_with": [],
+      "platform": "linux",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/feature-smoke.yml",
+      "git_branch": "world-deps-packages-bundles-contract-wdp2-integ-linux",
+      "required_make_targets": ["triad-code-checks"],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "WDP2-integ-macos",
+      "name": "WDP2 slice (integration macos)",
+      "type": "integration",
+      "phase": "WDP2",
+      "status": "pending",
+      "description": "macos platform-fix integration task (may be a no-op if already green).",
+      "references": [
+        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/ci_checkpoint_plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP2-spec.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/smoke/macos-smoke.sh"
+      ],
+      "acceptance_criteria": ["macos smoke is green for this checkpoint boundary"],
+      "start_checklist": [
+        "Run on macOS host if possible",
+        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDP2-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" TASK_ID=\"WDP2-integ-macos\""
+      ],
+      "end_checklist": [
+        "Dispatch the required gate for this platform per the kickoff prompt (use ci-audit; record run id/URL)",
+        "If needed: fix + fmt/clippy + targeted tests",
+        "Ensure smoke is green; record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDP2-integ-macos\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-packages-bundles-contract-wdp2-integ-macos",
+      "integration_task": "WDP2-integ-macos",
+      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/WDP2-integ-macos.md",
+      "depends_on": ["WDP2-integ-core", "CP1-ci-checkpoint"],
+      "concurrent_with": [],
+      "platform": "macos",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/feature-smoke.yml",
+      "git_branch": "world-deps-packages-bundles-contract-wdp2-integ-macos",
+      "required_make_targets": ["triad-code-checks"],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "WDP2-integ-windows",
+      "name": "WDP2 slice (integration windows)",
+      "type": "integration",
+      "phase": "WDP2",
+      "status": "pending",
+      "description": "windows platform-fix integration task (may be a no-op if already green).",
+      "references": [
+        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/ci_checkpoint_plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP2-spec.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/smoke/windows-smoke.ps1"
+      ],
+      "acceptance_criteria": ["windows smoke is green for this checkpoint boundary"],
+      "start_checklist": [
+        "Run on Windows host if possible",
+        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDP2-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" TASK_ID=\"WDP2-integ-windows\""
+      ],
+      "end_checklist": [
+        "Dispatch the required gate for this platform per the kickoff prompt (use ci-audit; record run id/URL)",
+        "If needed: fix + fmt/clippy + targeted tests",
+        "Ensure smoke is green; record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDP2-integ-windows\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-packages-bundles-contract-wdp2-integ-windows",
+      "integration_task": "WDP2-integ-windows",
+      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/WDP2-integ-windows.md",
+      "depends_on": ["WDP2-integ-core", "CP1-ci-checkpoint"],
+      "concurrent_with": [],
+      "platform": "windows",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/feature-smoke.yml",
+      "git_branch": "world-deps-packages-bundles-contract-wdp2-integ-windows",
+      "required_make_targets": ["triad-code-checks"],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "WDP2-integ",
+      "name": "WDP2 slice (integration final)",
+      "type": "integration",
+      "phase": "WDP2",
+      "status": "pending",
+      "description": "Merge platform-fix branches (if any), finalize WDP2, and land to orchestration branch.",
+      "references": [
+        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/ci_checkpoint_plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/manual_testing_playbook.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP2-spec.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP2-closeout_report.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/smoke/linux-smoke.sh",
+        "docs/project_management/next/world-deps-packages-bundles-contract/smoke/macos-smoke.sh",
+        "docs/project_management/next/world-deps-packages-bundles-contract/smoke/windows-smoke.ps1"
+      ],
+      "acceptance_criteria": [
+        "Slice is green under make integ-checks and matches the spec",
+        "Slice closeout report completed: WDP2-closeout_report.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDP2-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" TASK_ID=\"WDP2-integ\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests for WDP2",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDP2-integ\"",
+        "Complete: docs/project_management/next/world-deps-packages-bundles-contract/WDP2-closeout_report.md",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-packages-bundles-contract-wdp2-integ",
+      "integration_task": "WDP2-integ",
+      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/WDP2-integ.md",
+      "depends_on": [
+        "WDP2-integ-core",
+        "CP1-ci-checkpoint",
+        "WDP2-integ-linux",
+        "WDP2-integ-macos",
+        "WDP2-integ-windows"
+      ],
+      "concurrent_with": [],
+      "git_branch": "world-deps-packages-bundles-contract-wdp2-integ",
+      "required_make_targets": ["integ-checks"],
+      "merge_to_orchestration": true
+    },
+
+    {
+      "id": "WDP3-code",
+      "name": "WDP3 slice (code)",
+      "type": "code",
+      "phase": "WDP3",
+      "status": "pending",
+      "description": "Implement WDP3 spec (production code only).",
+      "references": [
+        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
+        "docs/project_management/next/world_deps_packages_bundles_contract.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP3-spec.md"
+      ],
+      "acceptance_criteria": ["Meets all acceptance criteria in WDP3-spec.md"],
+      "start_checklist": [
+        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDP3-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" SLICE_ID=\"WDP3\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDP3-code\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-packages-bundles-contract-wdp3-code",
+      "integration_task": "WDP3-integ",
+      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/WDP3-code.md",
+      "depends_on": ["CP1-ci-checkpoint", "WDP2-integ"],
+      "concurrent_with": ["WDP3-test"],
+      "git_branch": "world-deps-packages-bundles-contract-wdp3-code",
+      "required_make_targets": ["triad-code-checks"]
+    },
+    {
+      "id": "WDP3-test",
+      "name": "WDP3 slice (test)",
+      "type": "test",
+      "phase": "WDP3",
+      "status": "pending",
+      "description": "Add/modify tests for WDP3 spec (tests only).",
+      "references": [
+        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
+        "docs/project_management/next/world_deps_packages_bundles_contract.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP3-spec.md"
+      ],
+      "acceptance_criteria": ["Tests enforce WDP3 acceptance criteria"],
+      "start_checklist": [
+        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDP3-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" SLICE_ID=\"WDP3\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "Run the targeted tests you add/modify (may be red until code lands; must be deterministic)",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDP3-test\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-packages-bundles-contract-wdp3-test",
+      "integration_task": "WDP3-integ",
+      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/WDP3-test.md",
+      "depends_on": ["CP1-ci-checkpoint", "WDP2-integ"],
+      "concurrent_with": ["WDP3-code"],
+      "git_branch": "world-deps-packages-bundles-contract-wdp3-test",
+      "required_make_targets": ["triad-test-checks"]
+    },
+    {
+      "id": "WDP3-integ",
+      "name": "WDP3 slice (integration)",
+      "type": "integration",
+      "phase": "WDP3",
+      "status": "pending",
+      "description": "Integrate WDP3 code+tests, reconcile to spec, and run integration gate.",
+      "references": [
+        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/ci_checkpoint_plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/manual_testing_playbook.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP3-spec.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP3-closeout_report.md",
+        "docs/project_management/next/world_deps_packages_bundles_contract.md"
+      ],
+      "acceptance_criteria": [
+        "Slice is green under make integ-checks and matches the spec",
+        "Slice closeout report completed: WDP3-closeout_report.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDP3-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" TASK_ID=\"WDP3-integ\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests for WDP3",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDP3-integ\"",
+        "Complete: docs/project_management/next/world-deps-packages-bundles-contract/WDP3-closeout_report.md",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-packages-bundles-contract-wdp3-integ",
+      "integration_task": "WDP3-integ",
+      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/WDP3-integ.md",
+      "depends_on": ["WDP3-code", "WDP3-test"],
+      "concurrent_with": [],
+      "git_branch": "world-deps-packages-bundles-contract-wdp3-integ",
+      "required_make_targets": ["integ-checks"],
+      "merge_to_orchestration": true
+    },
+
+    {
+      "id": "WDP4-code",
+      "name": "WDP4 slice (code)",
+      "type": "code",
+      "phase": "WDP4",
+      "status": "pending",
+      "description": "Implement WDP4 spec (production code only).",
+      "references": [
+        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
+        "docs/project_management/next/world_deps_packages_bundles_contract.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP4-spec.md"
+      ],
+      "acceptance_criteria": ["Meets all acceptance criteria in WDP4-spec.md"],
+      "start_checklist": [
+        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDP4-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" SLICE_ID=\"WDP4\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDP4-code\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-packages-bundles-contract-wdp4-code",
+      "integration_task": "WDP4-integ",
+      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/WDP4-code.md",
+      "depends_on": ["WDP3-integ"],
+      "concurrent_with": ["WDP4-test"],
+      "git_branch": "world-deps-packages-bundles-contract-wdp4-code",
+      "required_make_targets": ["triad-code-checks"]
+    },
+    {
+      "id": "WDP4-test",
+      "name": "WDP4 slice (test)",
+      "type": "test",
+      "phase": "WDP4",
+      "status": "pending",
+      "description": "Add/modify tests for WDP4 spec (tests only).",
+      "references": [
+        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
+        "docs/project_management/next/world_deps_packages_bundles_contract.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP4-spec.md"
+      ],
+      "acceptance_criteria": ["Tests enforce WDP4 acceptance criteria"],
+      "start_checklist": [
+        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDP4-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" SLICE_ID=\"WDP4\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "Run the targeted tests you add/modify (may be red until code lands; must be deterministic)",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDP4-test\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-packages-bundles-contract-wdp4-test",
+      "integration_task": "WDP4-integ",
+      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/WDP4-test.md",
+      "depends_on": ["WDP3-integ"],
+      "concurrent_with": ["WDP4-code"],
+      "git_branch": "world-deps-packages-bundles-contract-wdp4-test",
+      "required_make_targets": ["triad-test-checks"]
+    },
+    {
+      "id": "WDP4-integ",
+      "name": "WDP4 slice (integration)",
+      "type": "integration",
+      "phase": "WDP4",
+      "status": "pending",
+      "description": "Integrate WDP4 code+tests, reconcile to spec, and run integration gate.",
+      "references": [
+        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/ci_checkpoint_plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/manual_testing_playbook.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP4-spec.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP4-closeout_report.md",
+        "docs/project_management/next/world_deps_packages_bundles_contract.md"
+      ],
+      "acceptance_criteria": [
+        "Slice is green under make integ-checks and matches the spec",
+        "Slice closeout report completed: WDP4-closeout_report.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDP4-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" TASK_ID=\"WDP4-integ\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests for WDP4",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDP4-integ\"",
+        "Complete: docs/project_management/next/world-deps-packages-bundles-contract/WDP4-closeout_report.md",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-packages-bundles-contract-wdp4-integ",
+      "integration_task": "WDP4-integ",
+      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/WDP4-integ.md",
+      "depends_on": ["WDP4-code", "WDP4-test"],
+      "concurrent_with": [],
+      "git_branch": "world-deps-packages-bundles-contract-wdp4-integ",
+      "required_make_targets": ["integ-checks"],
+      "merge_to_orchestration": true
+    },
+
+    {
+      "id": "WDP5-code",
+      "name": "WDP5 slice (code)",
+      "type": "code",
+      "phase": "WDP5",
+      "status": "pending",
+      "description": "Implement WDP5 spec (production code only).",
+      "references": [
+        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/ci_checkpoint_plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
+        "docs/project_management/next/world_deps_packages_bundles_contract.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP5-spec.md"
+      ],
+      "acceptance_criteria": ["Meets all acceptance criteria in WDP5-spec.md"],
+      "start_checklist": [
+        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDP5-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" SLICE_ID=\"WDP5\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDP5-code\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-packages-bundles-contract-wdp5-code",
+      "integration_task": "WDP5-integ-core",
+      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/WDP5-code.md",
+      "depends_on": ["WDP4-integ"],
+      "concurrent_with": ["WDP5-test"],
+      "git_branch": "world-deps-packages-bundles-contract-wdp5-code",
+      "required_make_targets": ["triad-code-checks"]
+    },
+    {
+      "id": "WDP5-test",
+      "name": "WDP5 slice (test)",
+      "type": "test",
+      "phase": "WDP5",
+      "status": "pending",
+      "description": "Add/modify tests for WDP5 spec (tests only).",
+      "references": [
+        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/ci_checkpoint_plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
+        "docs/project_management/next/world_deps_packages_bundles_contract.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP5-spec.md"
+      ],
+      "acceptance_criteria": ["Tests enforce WDP5 acceptance criteria"],
+      "start_checklist": [
+        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDP5-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" SLICE_ID=\"WDP5\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "Run the targeted tests you add/modify (may be red until code lands; must be deterministic)",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDP5-test\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-packages-bundles-contract-wdp5-test",
+      "integration_task": "WDP5-integ-core",
+      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/WDP5-test.md",
+      "depends_on": ["WDP4-integ"],
+      "concurrent_with": ["WDP5-code"],
+      "git_branch": "world-deps-packages-bundles-contract-wdp5-test",
+      "required_make_targets": ["triad-test-checks"]
+    },
+    {
+      "id": "WDP5-integ-core",
+      "name": "WDP5 slice (integration core)",
+      "type": "integration",
+      "phase": "WDP5",
+      "status": "pending",
+      "description": "Integrate WDP5 code+tests and produce a checkpoint-ready core state.",
+      "references": [
+        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/ci_checkpoint_plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/manual_testing_playbook.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP5-spec.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP5-closeout_report.md",
+        "docs/project_management/next/world_deps_packages_bundles_contract.md"
+      ],
+      "acceptance_criteria": ["Core integration state is green under make integ-checks and matches WDP5 spec"],
+      "start_checklist": [
+        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDP5-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" TASK_ID=\"WDP5-integ-core\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests for WDP5",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDP5-integ-core\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-packages-bundles-contract-wdp5-integ-core",
+      "integration_task": "WDP5-integ-core",
+      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/WDP5-integ-core.md",
+      "depends_on": ["WDP5-code", "WDP5-test"],
+      "concurrent_with": [],
+      "git_branch": "world-deps-packages-bundles-contract-wdp5-integ-core",
+      "required_make_targets": ["integ-checks"],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "CP2-ci-checkpoint",
+      "name": "CP2 cross-platform CI checkpoint (ops)",
+      "type": "ops",
+      "phase": "CI Checkpoints",
+      "status": "pending",
+      "description": "Dispatch bounded cross-platform CI gates for checkpoint CP2 (slices: WDP3, WDP4, WDP5) and record evidence.",
+      "references": [
+        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/ci_checkpoint_plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/manual_testing_playbook.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
+        "docs/project_management/next/world_deps_packages_bundles_contract.md"
+      ],
+      "acceptance_criteria": [
+        "Advisory ci-audit run and recommendation followed",
+        "Required checkpoint CI gates dispatched and evidence recorded in session_log.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
+        "Read ci_checkpoint_plan.md and confirm which slice id this checkpoint validates",
+        "Set status to in_progress; add START entry; commit docs"
+      ],
+      "end_checklist": [
+        "Run advisory audit and dispatch CI gates for boundary slice WDP5",
+        "Record run ids/URLs in session_log.md (do not commit ledgers)",
+        "Update tasks/session_log on orchestration branch; commit docs"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/CP2-ci-checkpoint.md",
+      "depends_on": ["WDP5-integ-core"],
+      "concurrent_with": []
+    },
+    {
+      "id": "WDP5-integ-linux",
+      "name": "WDP5 slice (integration linux)",
+      "type": "integration",
+      "phase": "WDP5",
+      "status": "pending",
+      "description": "linux platform-fix integration task (may be a no-op if already green).",
+      "references": [
+        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/ci_checkpoint_plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP5-spec.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/smoke/linux-smoke.sh"
+      ],
+      "acceptance_criteria": ["linux smoke is green for this checkpoint boundary"],
+      "start_checklist": [
+        "Run on linux host if possible",
+        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDP5-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" TASK_ID=\"WDP5-integ-linux\""
+      ],
+      "end_checklist": [
+        "Dispatch the required gate for this platform per the kickoff prompt (use ci-audit; record run id/URL)",
+        "If needed: fix + fmt/clippy + targeted tests",
+        "Ensure smoke is green; record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDP5-integ-linux\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-packages-bundles-contract-wdp5-integ-linux",
+      "integration_task": "WDP5-integ-linux",
+      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/WDP5-integ-linux.md",
+      "depends_on": ["WDP5-integ-core", "CP2-ci-checkpoint"],
+      "concurrent_with": [],
+      "platform": "linux",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/feature-smoke.yml",
+      "git_branch": "world-deps-packages-bundles-contract-wdp5-integ-linux",
+      "required_make_targets": ["triad-code-checks"],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "WDP5-integ-macos",
+      "name": "WDP5 slice (integration macos)",
+      "type": "integration",
+      "phase": "WDP5",
+      "status": "pending",
+      "description": "macos platform-fix integration task (may be a no-op if already green).",
+      "references": [
+        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/ci_checkpoint_plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP5-spec.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/smoke/macos-smoke.sh"
+      ],
+      "acceptance_criteria": ["macos smoke is green for this checkpoint boundary"],
+      "start_checklist": [
+        "Run on macOS host if possible",
+        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDP5-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" TASK_ID=\"WDP5-integ-macos\""
+      ],
+      "end_checklist": [
+        "Dispatch the required gate for this platform per the kickoff prompt (use ci-audit; record run id/URL)",
+        "If needed: fix + fmt/clippy + targeted tests",
+        "Ensure smoke is green; record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDP5-integ-macos\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-packages-bundles-contract-wdp5-integ-macos",
+      "integration_task": "WDP5-integ-macos",
+      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/WDP5-integ-macos.md",
+      "depends_on": ["WDP5-integ-core", "CP2-ci-checkpoint"],
+      "concurrent_with": [],
+      "platform": "macos",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/feature-smoke.yml",
+      "git_branch": "world-deps-packages-bundles-contract-wdp5-integ-macos",
+      "required_make_targets": ["triad-code-checks"],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "WDP5-integ-windows",
+      "name": "WDP5 slice (integration windows)",
+      "type": "integration",
+      "phase": "WDP5",
+      "status": "pending",
+      "description": "windows platform-fix integration task (may be a no-op if already green).",
+      "references": [
+        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/ci_checkpoint_plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP5-spec.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/smoke/windows-smoke.ps1"
+      ],
+      "acceptance_criteria": ["windows smoke is green for this checkpoint boundary"],
+      "start_checklist": [
+        "Run on Windows host if possible",
+        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDP5-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" TASK_ID=\"WDP5-integ-windows\""
+      ],
+      "end_checklist": [
+        "Dispatch the required gate for this platform per the kickoff prompt (use ci-audit; record run id/URL)",
+        "If needed: fix + fmt/clippy + targeted tests",
+        "Ensure smoke is green; record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDP5-integ-windows\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-packages-bundles-contract-wdp5-integ-windows",
+      "integration_task": "WDP5-integ-windows",
+      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/WDP5-integ-windows.md",
+      "depends_on": ["WDP5-integ-core", "CP2-ci-checkpoint"],
+      "concurrent_with": [],
+      "platform": "windows",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/feature-smoke.yml",
+      "git_branch": "world-deps-packages-bundles-contract-wdp5-integ-windows",
+      "required_make_targets": ["triad-code-checks"],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "WDP5-integ",
+      "name": "WDP5 slice (integration final)",
+      "type": "integration",
+      "phase": "WDP5",
+      "status": "pending",
+      "description": "Merge platform-fix branches (if any), finalize WDP5, and land to orchestration branch.",
+      "references": [
+        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/ci_checkpoint_plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/manual_testing_playbook.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP5-spec.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/WDP5-closeout_report.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/smoke/linux-smoke.sh",
+        "docs/project_management/next/world-deps-packages-bundles-contract/smoke/macos-smoke.sh",
+        "docs/project_management/next/world-deps-packages-bundles-contract/smoke/windows-smoke.ps1"
+      ],
+      "acceptance_criteria": [
+        "Slice is green under make integ-checks and matches the spec",
+        "Slice closeout report completed: WDP5-closeout_report.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDP5-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" TASK_ID=\"WDP5-integ\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests for WDP5",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDP5-integ\"",
+        "Complete: docs/project_management/next/world-deps-packages-bundles-contract/WDP5-closeout_report.md",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-packages-bundles-contract-wdp5-integ",
+      "integration_task": "WDP5-integ",
+      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/WDP5-integ.md",
+      "depends_on": [
+        "WDP5-integ-core",
+        "CP2-ci-checkpoint",
+        "WDP5-integ-linux",
+        "WDP5-integ-macos",
+        "WDP5-integ-windows"
+      ],
+      "concurrent_with": [],
+      "git_branch": "world-deps-packages-bundles-contract-wdp5-integ",
+      "required_make_targets": ["integ-checks"],
+      "merge_to_orchestration": true
+    },
+
+    {
+      "id": "FZ-feature-cleanup",
+      "name": "Feature cleanup (ops)",
+      "type": "ops",
+      "phase": "Ops",
+      "status": "pending",
+      "description": "Remove retained worktrees and prune local branches for this feature (run only after feature completion).",
+      "references": [
+        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/ci_checkpoint_plan.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md",
+        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
+        "docs/project_management/next/world_deps_packages_bundles_contract.md"
+      ],
+      "acceptance_criteria": [
+        "All feature worktrees removed (when REMOVE_WORKTREES=1)",
+        "Local branches pruned (when PRUNE_LOCAL=1)"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
+        "Confirm all required integration tasks are completed",
+        "Set status to in_progress; add START entry; commit docs"
+      ],
+      "end_checklist": [
+        "Run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" REMOVE_WORKTREES=1 PRUNE_LOCAL=1",
+        "Update tasks/session_log on orchestration branch; commit docs"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/FZ-feature-cleanup.md",
+      "depends_on": ["CP2-ci-checkpoint", "WDP5-integ"],
+      "concurrent_with": []
+    }
+  ]
+}

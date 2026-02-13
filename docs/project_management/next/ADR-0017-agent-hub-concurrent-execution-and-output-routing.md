@@ -25,8 +25,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: d20d6f66be403daeafeea8a53e33dc7bf0b25451e1480827952366e2dd4e5e6a
-
+ADR_BODY_SHA256: f98e101d96918048c0407b0d8c26c127fcdef4c566d4a954b1a770cbdfc28696
 ### Changes (operator-facing)
 - Make concurrent outputs predictable and non-corrupting when multiple agents run
   - Existing: Substrate can render concurrent **structured** agent output during the REPL (e.g., `:demo-agent`), but there is no explicit output contract that separates:
