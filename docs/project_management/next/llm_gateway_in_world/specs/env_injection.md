@@ -1,6 +1,8 @@
-# spec — llm_gateway_in_world: secret env injection (v1)
+# spec — llm_gateway_in_world: secret delivery (v1 legacy env injection + v1.1 FD/pipe auth bundle)
 
-This spec defines how secret environment variables (e.g., provider API keys) are delivered to the in-world gateway/engine for `api:*` backends, without storing secrets in Substrate YAML.
+This spec defines how secret values (e.g., provider API keys) are delivered to the in-world gateway/engine for `api:*` backends, without storing secrets in Substrate YAML.
+
+Phase 8 additive upgrade: v1.1 introduces a preferred secret-channel payload + in-world FD/pipe delivery path so secret values do not live in in-world process environments by default (see DR-0018).
 
 Authoritative inputs:
 - ADR-0023: `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md`
@@ -22,6 +24,7 @@ Authoritative inputs:
 - Missing secrets MUST fail closed with actionable error messages that include the env var name(s), never their values.
 
 ## Delivery mechanism (v1)
+- Note: v1.1 is the preferred mechanism once implemented; v1 remains documented as the legacy compatibility path.
 - Command surface (v1):
   - `substrate world sync gateway`
   - `substrate world sync gateway --restart`
@@ -29,9 +32,22 @@ Authoritative inputs:
 - The world-agent spawns the gateway/engine process inside the session world with those env vars set in the process environment.
 - Secrets are in-memory only from Substrate’s perspective: Substrate does not write them to disk.
 
+## Delivery mechanism (v1.1 preferred) — secret-channel payload + in-world FD/pipe delivery
+
+Phase 8 additive upgrade (see `docs/project_management/next/llm_gateway_in_world/decision_register.md` (DR-0018)):
+
+- Host-side secret sourcing remains the same as v1:
+  - `api:*` secrets sourced from host env var values (names-only in inventory; gated by `llm.secrets.env_allowed`).
+  - `cli:*` secrets sourced from host credential reads when applicable (gated by `agents.host_credentials.read.allowed_backends`) and/or explicit env overrides if supported by the backend adapter.
+- Host→world transport MUST treat secret values as a secret-channel payload on the gateway spawn request (never logged/printed).
+- The world-agent MUST deliver the secret-channel payload to the in-world gateway/manager via an inherited one-time FD/pipe channel (not via secret-bearing env vars) and SHOULD do so by:
+  - writing an auth bundle payload to a pipe, and
+  - passing the read-end FD to the gateway/manager process.
+- The gateway/manager MUST read the bundle once, close the FD promptly, and retain secrets in memory only.
+
 ## In-world propagation (gateway/manager → Substrate-spawned engines)
 
-Even when secret values enter the in-world gateway/manager via env injection (host→world transport constraint), Substrate MUST minimize secret exposure within the in-world process tree:
+Even when secret values enter the in-world gateway/manager (via legacy env injection or via the v1.1 auth bundle), Substrate MUST minimize secret exposure within the in-world process tree:
 
 - If the gateway/manager spawns a Substrate-owned backend engine/wrapper process (e.g., `cli:codex` wrapper), the gateway/manager MUST deliver secret values to that child via a one-time FD/pipe secret channel (not via child-process env vars), following:
   - `docs/project_management/standards/SECRETS_DELIVERY_CHANNEL_RUBRIC.md`
@@ -44,6 +60,8 @@ Even when secret values enter the in-world gateway/manager via env injection (ho
 - Client wiring env vars (non-secret; may be printed by `substrate world status gateway`):
   - `SUBSTRATE_LLM_OPENAI_BASE_URL`
   - `SUBSTRATE_LLM_ANTHROPIC_BASE_URL`
+- Auth bundle pointer env vars (non-secret; safe to print):
+  - `SUBSTRATE_LLM_AUTH_BUNDLE_FD: int`
 - Injected backend auth env vars (secret-bearing; MUST never be printed; MUST always be redacted/capped):
   - `SUBSTRATE_LLM_BACKEND_AUTH_<KIND>_<NAME>_<FIELD>`
   - v1 (`cli:codex`):
@@ -57,12 +75,15 @@ Even when secret values enter the in-world gateway/manager via env injection (ho
       - `SUBSTRATE_LLM_BACKEND_AUTH_API_<NAME>_<FIELD>`
       - Example: `api:openai` reading host `OPENAI_API_KEY` injects `SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY`.
 
+In v1.1 (preferred), `SUBSTRATE_LLM_BACKEND_AUTH_*` are still the canonical **auth field names**, but their **values** are not carried in the in-world process environment by default. Instead, the auth bundle payload read from `SUBSTRATE_LLM_AUTH_BUNDLE_FD` MUST use those same keys so redaction/caps rules remain uniform across env-based and FD/pipe-based delivery.
+
 ## Rotation / updates
 - If a secret value changes, operators restart the gateway session (or re-run `substrate world sync gateway` if it is defined as idempotent with “replace env” semantics).
 - The exact idempotency/replace semantics are implementation-defined but MUST remain fail-closed and must not leak secrets in logs.
+  - Note: in v1.1 (FD/pipe bundle), rotation still requires a restart or re-sync that re-delivers a fresh bundle; the FD/pipe payload is explicitly read-once.
 
 ## “Without persisting to disk” (clarification)
 - “Not persisted to disk” means Substrate does not write secret *values* into files on host or in-world storage. They exist only:
-  - in the in-world gateway/engine process environment and memory, and
+  - in the in-world gateway/engine process environment and memory (legacy v1), or in memory only (v1.1 preferred), and
   - as provided by the operator to the host process environment at invocation time.
-- Note: secrets set as environment variables are typically readable by same-user processes via `/proc/<pid>/environ` on Linux; this is an OS property. The threat model for who can read process environments inside a world should be documented as part of gateway hardening.
+- Note: secrets set as environment variables are typically readable by same-user processes via `/proc/<pid>/environ` on Linux; this is an OS property. v1.1 reduces this exposure by avoiding secret-bearing env vars in-world by default. The threat model for who can read process environments and process memory inside a world should be documented as part of gateway hardening.

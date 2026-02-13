@@ -63,7 +63,8 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
 ### CLI
 - Commands:
   - Gateway lifecycle is owned by the world subsystem (session world management + deps provisioning).
-    - v1 requirement: the “ensure gateway running” path MUST pass any required secret env vars to the in-world gateway/engine spawn request over the existing world-agent transport (see `docs/project_management/next/llm_gateway_in_world/specs/env_injection.md`).
+    - v1 requirement (legacy): the “ensure gateway running” path MUST pass any required secret values to the in-world gateway/engine spawn request over the existing world-agent transport (see `docs/project_management/next/llm_gateway_in_world/specs/env_injection.md`).
+    - Phase 8 additive upgrade (preferred): secret values MUST NOT live in the in-world gateway/manager process environment by default. Host→world secret delivery SHOULD use a secret-channel payload and an inherited one-time FD/pipe bundle into the gateway/manager (see `docs/project_management/next/llm_gateway_in_world/decision_register.md` (DR-0018)).
   - `substrate world status gateway`:
     - Behavior: prints per-world-session gateway state (running/not), bind endpoints inside the world, active backend kind, and policy mode.
     - Default output: status + health only (no client wiring exports by default).
@@ -75,7 +76,7 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
     - `--json`: prints structured JSON including client wiring fields (non-secret).
     - Exit codes: `0` success; `4` gateway not available; `5` world required but not available (fail-closed).
   - `substrate world sync gateway`:
-    - Behavior: idempotently ensure the in-world gateway is running for the current world session; performs secret env injection as needed.
+    - Behavior: idempotently ensure the in-world gateway is running for the current world session; performs secret delivery as needed (legacy env injection or v1.1 FD/pipe auth bundle).
     - Output: on success, prints a status/health summary by default.
       - `--debug`: prints the same client wiring section as `substrate world status gateway --debug`.
       - `--json`: includes the same `client_wiring.*` fields as `substrate world status gateway --json`.

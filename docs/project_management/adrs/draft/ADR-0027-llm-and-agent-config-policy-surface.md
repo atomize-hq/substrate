@@ -208,8 +208,8 @@ All keys below are part of the policy schema and MUST be strict (unknown keys re
   - Elements format: `<kind>:<name>`.
 
 - `llm.secrets.env_allowed: [string]`
-  - Meaning: allowlist of secret env var *names* that Substrate is permitted to read from the host process environment and inject into the in-world gateway/engine spawn environment.
-  - Default: `[]` (deny-by-default; no secret env injection allowed).
+  - Meaning: allowlist of secret env var *names* that Substrate is permitted to read from the host process environment for host→world secret delivery to the in-world gateway/engine.
+  - Default: `[]` (deny-by-default; no secret host env reads allowed for LLM secret delivery).
   - Note: env var names only; values must never be stored in Substrate YAML; missing names fail closed with actionable errors.
 
 ##### `agents` (agent backend gating; enforced in agent hub)
@@ -222,7 +222,7 @@ All keys below are part of the policy schema and MUST be strict (unknown keys re
   - Default: `true`.
 
 - `agents.host_credentials.read.allowed_backends: [string]`
-  - Meaning: allowlist of backend ids permitted to read host credential material as part of a backend adapter’s host-side preparation step (e.g., reading an existing CLI login state so required auth fields can be injected into an in-world process environment).
+  - Meaning: allowlist of backend ids permitted to read host credential material as part of a backend adapter’s host-side preparation step (e.g., reading an existing CLI login state so required auth fields can be delivered to an in-world component over a Substrate-owned secret channel, rather than persisting them).
   - Elements format: `<kind>:<name>`.
   - Default: `[]` (deny-by-default).
   - Note: This gates host credential reads only; network egress remains governed by `net_allowed` at the world boundary.

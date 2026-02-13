@@ -263,6 +263,7 @@ Scope:
 
 **Problem / Context**
 - We introduced `llm.secrets.env_allowed` as a policy allowlist of secret env var *names* that Substrate may read on the host and inject into in-world gateway/engine processes.
+- Phase 8 additive clarification: this key gates **host env reads** for host→world secret delivery, regardless of whether the in-world gateway/engine receives those secret values via legacy env injection (v1) or via an FD/pipe auth bundle (v1.1).
 - Agent files may include a `policy_overlay`, but it must be restriction-only. We need to decide whether this key is eligible for per-agent tightening.
 
 **Option A — Allow `llm.secrets.env_allowed` in `policy_overlay` (subset-only)**

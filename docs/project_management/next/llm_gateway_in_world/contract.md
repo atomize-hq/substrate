@@ -14,7 +14,11 @@ Authoritative inputs:
 - **No secrets persisted.** Substrate config/policy files must not store API keys/tokens; request/response bodies are not logged by default.
   - Exception (still redacted + policy-gated): backend adapters MAY emit backend-native structured events (e.g., `cli:codex` JSONL ingestion) into session logs after applying Substrate redaction/caps.
 
-## Secret delivery for `api:*` backends (v1)
+## Secret delivery for `api:*` backends (v1.1 preferred)
+- Preferred mechanism (Phase 8 additive): host→world secret values are delivered to the in-world gateway/manager via a secret-channel payload and an inherited one-time FD/pipe auth bundle (no secret-bearing env vars in-world by default).
+  - See: `docs/project_management/next/llm_gateway_in_world/decision_register.md` (DR-0018) and `docs/project_management/next/llm_gateway_in_world/specs/env_injection.md`.
+
+## Secret delivery for `api:*` backends (v1 legacy)
 - Secrets are provided via environment-variable injection (see `docs/project_management/next/llm_gateway_in_world/decision_register.md` DR-0007).
 - Inventory/config MAY reference env var *names* only (e.g., `OPENAI_API_KEY`), never values.
 - Delivery mechanism:

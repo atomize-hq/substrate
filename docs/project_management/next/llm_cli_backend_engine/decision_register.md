@@ -9,6 +9,10 @@ Scope:
 
 ---
 
+Phase 8 additive note:
+- Earlier v1 decisions describe injecting secret values into in-world process environments as the host→world delivery mechanism.
+- The preferred mechanism going forward is a host→world secret-channel payload delivered to the in-world gateway/manager via an inherited one-time FD/pipe auth bundle (no secret-bearing env vars in-world by default). See `docs/project_management/next/llm_gateway_in_world/decision_register.md` (DR-0018) and `docs/project_management/next/llm_gateway_in_world/specs/env_injection.md`.
+
 ### DR-0001 — CLI session strategy: persistent vs per-request
 
 **Decision owner(s):** Shell + Engine maintainers  
@@ -185,6 +189,9 @@ Scope:
 - **Selected:** Option B — Extract needed Codex auth fields on host and inject into in-world process env (no auth files in-world)
 - **Rationale (crisp):** Avoids adding a new cross-platform file-forwarding/mount mechanism in v1 while still keeping egress in-world; secret values stay out of Substrate YAML and are injected into the in-world gateway/manager process environment with strict redaction/caps. When the in-world gateway/manager spawns a Substrate-owned wrapper/engine process, it MUST propagate secrets to that child via FD/pipe rather than env vars when supported (see `docs/project_management/standards/SECRETS_DELIVERY_CHANNEL_RUBRIC.md` and `docs/project_management/next/llm_gateway_in_world/decision_register.md` (DR-0017)).
 
+Phase 8 additive clarification:
+- DR-0012 upgrades the preferred in-world delivery mechanism so secret values do not live in the in-world gateway/manager process environment by default (FD/pipe auth bundle), while keeping the host-side extraction posture intact.
+
 ---
 
 ### DR-0007 — Codex auth source on host for in-world injection (`cli:codex`)
@@ -196,6 +203,7 @@ Scope:
 
 **Problem / Context**
 - DR-0006 establishes that `cli:codex` auth is injected into the in-world gateway/manager process environment (no auth files in-world).
+- Phase 8 additive clarification: DR-0012 upgrades the preferred in-world delivery mechanism to an FD/pipe auth bundle (no secret-bearing env vars in-world by default).
 - We still need a deterministic way for host-side Substrate components to obtain the necessary auth values safely, without pushing operators toward exporting secrets broadly.
 
 **Option A — Operator-provided env vars only (no host file reads)**
@@ -364,3 +372,34 @@ Scope:
 **Recommendation**
 - **Selected:** Option A — Host-side shell/world subsystem performs credential preflight
 - **Rationale (crisp):** Keeps the boundary simple and auditable (host reads host; world receives injected values at spawn time), avoids inventing a new secret RPC surface, and aligns with `substrate world sync gateway` as the lifecycle entrypoint.
+
+---
+
+### DR-0012 — Host→world delivery of `cli:codex` auth to in-world gateway/manager: env injection vs FD/pipe auth bundle
+
+**Decision owner(s):** Engine + World + Security  
+**Date:** 2026-02-13  
+**Status:** Accepted  
+**Related docs:** `docs/project_management/standards/SECRETS_DELIVERY_CHANNEL_RUBRIC.md`, `docs/project_management/next/llm_gateway_in_world/decision_register.md` (DR-0018)
+
+**Problem / Context**
+- `cli:codex` auth material is sourced on the host (from policy-gated host credential reads and/or explicit env overrides).
+- v1 describes injecting those secret values into the in-world gateway/manager process environment at spawn time.
+- Phase 8 requires an additive upgrade so secret values do not live in in-world process environments by default.
+
+**Option A — Continue v1: inject secret values into the in-world gateway/manager process environment**
+- **Pros:** Minimal change; aligns with earlier v1 language.
+- **Cons:** Secret values are present in the in-world process environment; higher accidental disclosure risk; conflicts with “FD/pipe by default” rubric posture when Substrate spawns the consumer.
+
+**Option B — Preferred: deliver auth via an inherited one-time FD/pipe bundle into the in-world gateway/manager (recommended)**
+- **Pros:** Keeps secrets out of in-world process env by default; scopes auth to the intended consumer; aligns with the cross-track secrets rubric and the gateway host→world decision (DR-0018).
+- **Cons:** Requires a small amount of spawn plumbing and a stable “bundle payload” contract.
+- **Cascading implications:**
+  - The host→world gateway spawn request MUST treat auth values as a secret-channel payload (never logged/printed).
+  - The world-agent MUST deliver those values to the in-world gateway/manager via a one-time FD/pipe auth bundle.
+  - An env var MAY be used to convey the FD number (non-secret; safe to print), e.g. `SUBSTRATE_LLM_AUTH_BUNDLE_FD: int`.
+  - The bundle keys MUST use the canonical `SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_*` field names so redaction/caps rules remain uniform with legacy env injection.
+
+**Recommendation**
+- **Selected:** Option B — FD/pipe auth bundle into the in-world gateway/manager.
+- **Rationale (crisp):** Substrate spawns the in-world gateway/manager and can provide auth via an inherited one-time FD/pipe channel, avoiding secret-bearing env vars while preserving strict, policy-gated host sourcing.

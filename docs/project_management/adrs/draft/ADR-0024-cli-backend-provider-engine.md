@@ -138,7 +138,7 @@ Normative mapping for this ADR:
   - If effective policy has `llm.fail_closed.routing=true` and the world is unavailable, request fails (policy exit code `5` semantics).
 - Protected paths/invariants:
   - Do not copy/emit CLI credentials; Substrate does not persist subscription tokens.
-    - v1 (Codex): required auth fields are extracted from host login state and injected into the in-world process environment (no auth files are present in-world). This MUST be explicit, policy-gated (`agents.host_credentials.read.allowed_backends`), and MUST NOT log secret values (see `docs/project_management/next/llm_cli_backend_engine/decision_register.md` DR-0006 and DR-0008).
+    - v1 (Codex legacy): required auth fields are extracted from host login state and delivered to the in-world gateway/manager at spawn time (no auth files are present in-world). This MUST be explicit, policy-gated (`agents.host_credentials.read.allowed_backends`), and MUST NOT log secret values (see `docs/project_management/next/llm_cli_backend_engine/decision_register.md` DR-0006, DR-0008, and Phase 8 DR-0012).
   - Do not log request/response bodies by default; redact before persisting if body logging enabled.
 
 ## Validation Plan (Authoritative)

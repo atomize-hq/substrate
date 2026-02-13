@@ -113,8 +113,8 @@ Merge strategy:
 - `llm.allowed_backends: [string]`
   - Default (effective): `[]` (deny-by-default).
 - `llm.secrets.env_allowed: [string]`
-  - Meaning: allowlist of secret env var *names* that Substrate is permitted to read from the host process environment and inject into the in-world gateway/engine spawn environment.
-  - Default (effective): `[]` (deny-by-default; no secret env injection allowed).
+  - Meaning: allowlist of secret env var *names* that Substrate is permitted to read from the host process environment for host→world secret delivery to the in-world gateway/engine.
+  - Default (effective): `[]` (deny-by-default; no secret host env reads allowed for LLM secret delivery).
   - Constraints: names only; values must never be stored in Substrate YAML; missing names fail closed with actionable errors.
 
 ### `agents`
@@ -124,7 +124,7 @@ Merge strategy:
   - Meaning: when `true`, agent executions that are configured/routed to run in-world MUST fail closed if a world boundary is not available (no host fallback).
   - Default (effective): `true`.
 - `agents.host_credentials.read.allowed_backends: [string]`
-  - Meaning: allowlist of backend ids permitted to read *host* credential material as part of a backend adapter’s host-side preparation step (e.g., reading a CLI’s existing login state so required auth fields can be injected into an in-world process environment).
+  - Meaning: allowlist of backend ids permitted to read *host* credential material as part of a backend adapter’s host-side preparation step (e.g., reading a CLI’s existing login state so required auth fields can be delivered to an in-world component over a Substrate-owned secret channel).
   - Elements format: `<kind>:<name>`.
   - Default (effective): `[]` (deny-by-default).
   - Notes:
@@ -161,7 +161,7 @@ API agents:
   - Meaning: upstream provider base URL used by this `api:*` backend (non-secret; auth is handled separately).
   - Constraints: MUST be an `https://` URL; MUST NOT include userinfo (`user:pass@`); SHOULD NOT include query params.
 - `config.api.auth.env: [string]` (required for `config.kind=api`)
-  - Meaning: required secret env var *names* that must be present on the host so Substrate can inject their values into the in-world gateway/engine process environment.
+  - Meaning: required secret env var *names* that must be present on the host so Substrate can deliver their values to the in-world gateway/engine over a Substrate-owned secret channel.
   - Default: `[]` (but for `config.kind=api` it MUST be non-empty).
   - Constraints: names only; values must never be stored in Substrate YAML; missing names fail closed with actionable errors.
 

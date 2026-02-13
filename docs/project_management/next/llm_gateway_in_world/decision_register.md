@@ -604,3 +604,43 @@ Scope:
 **Recommendation**
 - **Selected:** Option B — Propagate secrets to Substrate-spawned child engines via FD/pipe.
 - **Rationale (crisp):** Env injection is a pragmatic v1 host→world mechanism, but within the world Substrate should default to the least-exposure channel for Substrate-spawned components.
+
+---
+
+### DR-0018 — Host→world secret delivery to the in-world gateway/manager: env injection vs secret-channel + FD/pipe
+
+**Decision owner(s):** World + Gateway + Security  
+**Date:** 2026-02-13  
+**Status:** Accepted  
+**Related docs:** DR-0007, `docs/project_management/standards/SECRETS_DELIVERY_CHANNEL_RUBRIC.md`, `docs/project_management/next/llm_gateway_in_world/specs/env_injection.md`
+
+**Problem / Context**
+- DR-0007 selects env injection as the v1 host→world delivery mechanism for getting secret values into the in-world gateway/engine process without persisting them to disk.
+- Phase 8 requires tightening “end-to-end secret channel” semantics so secret values do not live in in-world process environments by default (consistent with the shared secrets rubric and with DR-0017’s in-world propagation posture).
+- We need an additive upgrade that keeps the v1 mechanism available, but makes the preferred path:
+  - explicit,
+  - minimal exposure (no secret-bearing env vars in-world by default),
+  - and fail-closed when required secrets are missing.
+
+**Option A — Continue v1: inject secret values into the gateway/manager process environment**
+- **Pros:** Minimal implementation complexity; matches DR-0007 and existing spec language.
+- **Cons:** Secret values are present in the in-world process environment (OS-level exposure such as `/proc/<pid>/environ`); broader accidental disclosure risk; makes “no secret env by default” impossible.
+- **Cascading implications:** All `SUBSTRATE_LLM_BACKEND_AUTH_*` env vars remain secret-bearing and must be redacted/capped everywhere and never printed by default.
+
+**Option B — Additive upgrade: host→world secret-channel payload + in-world FD/pipe delivery to gateway/manager (recommended)**
+- **Pros:** Keeps secrets out of in-world process env by default; scopes secrets to the intended consumer; aligns with the cross-track secrets rubric and the toolbox token approach (`*_TOKEN_FD` pointers).
+- **Cons:** Requires a small amount of additional spawn plumbing (world-agent writes a one-time payload to a pipe/FD and passes only a pointer).
+- **Cascading implications:**
+  - Host-side secret sourcing remains unchanged and must remain policy-gated:
+    - host env reads gated by `llm.secrets.env_allowed` (DR-0015 / ADR-0027),
+    - host credential file reads gated by `agents.host_credentials.read.allowed_backends` (ADR-0027 / CLI engine DRs).
+  - The world-agent/gateway spawn request MUST carry secret values only via a secret-channel payload (never via printed/exported env).
+  - The in-world gateway/manager MUST receive the secret-channel payload via an inherited one-time FD/pipe and load it into memory.
+  - An env var MAY be used to convey the FD number (non-secret) but it MUST NOT use the `SUBSTRATE_LLM_BACKEND_AUTH_*` secret-bearing env family. Prefer a pointer name such as:
+    - `SUBSTRATE_LLM_AUTH_BUNDLE_FD: int` (non-secret; safe to print)
+  - The auth payload keys MUST use the canonical `SUBSTRATE_LLM_BACKEND_AUTH_<KIND>_<NAME>_<FIELD>` field names (even when values are not carried as env vars) so redaction/caps rules remain uniform.
+  - Legacy v1 env injection remains permitted only as a compatibility path (implementation-defined), but MUST NOT be the default once Option B is implemented.
+
+**Recommendation**
+- **Selected:** Option B — Secret-channel payload + in-world FD/pipe delivery to gateway/manager.
+- **Rationale (crisp):** Substrate spawns and controls the in-world gateway/manager process, so we can use an inherited one-time FD/pipe channel to avoid placing secrets in the in-world process environment while preserving strict, policy-gated host secret sourcing.
