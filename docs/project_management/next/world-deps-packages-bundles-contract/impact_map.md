@@ -29,7 +29,7 @@ Authoring standards:
 - `docs/project_management/next/world-deps-packages-bundles-contract/session_log.md` — evidence ledger
 - `docs/project_management/next/world-deps-packages-bundles-contract/quality_gate_report.md` — planning quality gate artifact
 - `docs/project_management/next/world-deps-packages-bundles-contract/execution_preflight_report.md` — execution preflight gate artifact
-- `docs/project_management/next/world-deps-packages-bundles-contract/smoke/*` — Linux/macOS/Windows smoke scripts
+- `docs/project_management/next/world-deps-packages-bundles-contract/smoke/*` — Linux/macOS smoke scripts (plus WSL via Linux smoke dispatch with `RUN_WSL=1`)
 - `docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/*` — triad kickoff prompts
 - `docs/project_management/next/world-deps-packages-bundles-contract/WDP*-spec.md` — slice specs
 - `docs/project_management/next/world-deps-packages-bundles-contract/WDP*-closeout_report.md` — slice closeout gate reports

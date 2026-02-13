@@ -11,8 +11,9 @@ Standard:
 - `docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md`
 - Slice specs: `docs/project_management/next/world-deps-packages-bundles-contract/*-spec*.md`
 - Required platforms (authoritative):
-  - Behavior smoke platforms: `tasks.json` → `meta.behavior_platforms_required` (`linux`, `macos`, `windows`)
-  - CI parity platforms: `tasks.json` → `meta.ci_parity_platforms_required` (`linux`, `macos`, `windows`)
+  - Behavior smoke platforms: `tasks.json` → `meta.behavior_platforms_required` (`linux`, `macos`)
+  - CI parity platforms: `tasks.json` → `meta.ci_parity_platforms_required` (`linux`, `macos`)
+  - WSL coverage: `tasks.json` → `meta.wsl_required=true` (bundled into Linux smoke via `RUN_WSL=1`)
 
 ## Operator rules
 - This plan is authoritative for **CI cadence**.
@@ -74,4 +75,3 @@ Standard:
   - `docs/project_management/next/world-deps-packages-bundles-contract/manual_testing_playbook.md` (smoke parity with operator workflow)
 - Risk reduced:
   - Ensures the highest-risk surfaces (apt + prefix installers + legacy removal) are validated across platforms at one bounded checkpoint.
-

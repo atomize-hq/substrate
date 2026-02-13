@@ -19,18 +19,36 @@ Exit code taxonomy:
 - World backend healthy for the platform under test:
   - Run `substrate world doctor` and fix any reported issues before proceeding.
 - Tools:
-  - `bash` (Linux/macOS)
-  - PowerShell (`pwsh`) (Windows)
+  - `bash` (Linux/macOS/WSL)
 
 ## Smoke scripts (required)
 - Linux: `docs/project_management/next/world-deps-packages-bundles-contract/smoke/linux-smoke.sh`
 - macOS: `docs/project_management/next/world-deps-packages-bundles-contract/smoke/macos-smoke.sh`
-- Windows: `docs/project_management/next/world-deps-packages-bundles-contract/smoke/windows-smoke.ps1`
+- WSL: run the Linux smoke inside WSL: `docs/project_management/next/world-deps-packages-bundles-contract/smoke/linux-smoke.sh`
 
-## Case 1 — Smoke (Linux)
-Run:
+## Case 1 — Smoke (WDP2 checkpoint boundary: inventory + enabled + applied + explain)
+
+Run your platform’s smoke with:
+- `SUBSTRATE_SMOKE_SLICE_ID=WDP2`
+
+Linux:
 ```bash
 export SUBSTRATE_BIN="${SUBSTRATE_BIN:-substrate}"
+export SUBSTRATE_SMOKE_SLICE_ID="WDP2"
+bash docs/project_management/next/world-deps-packages-bundles-contract/smoke/linux-smoke.sh
+```
+
+macOS:
+```bash
+export SUBSTRATE_BIN="${SUBSTRATE_BIN:-substrate}"
+export SUBSTRATE_SMOKE_SLICE_ID="WDP2"
+bash docs/project_management/next/world-deps-packages-bundles-contract/smoke/macos-smoke.sh
+```
+
+WSL (run inside a WSL shell):
+```bash
+export SUBSTRATE_BIN="${SUBSTRATE_BIN:-substrate}"
+export SUBSTRATE_SMOKE_SLICE_ID="WDP2"
 bash docs/project_management/next/world-deps-packages-bundles-contract/smoke/linux-smoke.sh
 ```
 
@@ -38,31 +56,51 @@ Expected:
 - Exit code `0`.
 - Output contains an `OK:` line.
 
-## Case 2 — Smoke (macOS)
-Run:
+## Case 2 — Smoke (WDP5 checkpoint boundary: install planning + sync apply)
+
+Run your platform’s smoke with:
+- `SUBSTRATE_SMOKE_SLICE_ID=WDP5` (default)
+
+Linux:
 ```bash
 export SUBSTRATE_BIN="${SUBSTRATE_BIN:-substrate}"
+export SUBSTRATE_SMOKE_SLICE_ID="WDP5"
+bash docs/project_management/next/world-deps-packages-bundles-contract/smoke/linux-smoke.sh
+```
+
+macOS:
+```bash
+export SUBSTRATE_BIN="${SUBSTRATE_BIN:-substrate}"
+export SUBSTRATE_SMOKE_SLICE_ID="WDP5"
 bash docs/project_management/next/world-deps-packages-bundles-contract/smoke/macos-smoke.sh
 ```
 
-Expected:
-- Exit code `0`.
-- Output contains an `OK:` line.
-
-## Case 3 — Smoke (Windows)
-Run:
-```powershell
-$env:SUBSTRATE_BIN = $env:SUBSTRATE_BIN ?? "substrate"
-pwsh -File docs/project_management/next/world-deps-packages-bundles-contract/smoke/windows-smoke.ps1
+WSL (run inside a WSL shell):
+```bash
+export SUBSTRATE_BIN="${SUBSTRATE_BIN:-substrate}"
+export SUBSTRATE_SMOKE_SLICE_ID="WDP5"
+bash docs/project_management/next/world-deps-packages-bundles-contract/smoke/linux-smoke.sh
 ```
 
 Expected:
 - Exit code `0`.
 - Output contains an `OK:` line.
 
-## Case 4 — Inventory merge sanity (all platforms)
+## What the smoke scripts enforce (authoritative summary)
 
-Setup a temp workspace and SUBSTRATE_HOME:
+The smoke scripts are designed to be deterministic and enforce:
+- Legacy-path replacement completeness (intentionally-invalid YAML is placed at legacy file paths; `world deps` must ignore it).
+- Non-world views do not require the backend (`current list available|enabled`, `current show` succeed even if `SUBSTRATE_WORLD_SOCKET` points to a missing socket).
+- World-backed views fail-closed when the backend is unavailable (`current list applied` and `current show --explain` exit `3` under a missing socket override).
+- `current list applied --all` includes non-enabled inventory items.
+- `--json` output is parseable and contains required fields (shape stability).
+- `blocked` status behavior via a `method=manual` fixture package.
+- Install planning (`current install ... --dry-run`) includes apt and script plan content.
+- Sync apply (`current sync`) results in `world=present` for a deterministic script-installed entrypoint.
+
+## Optional spot-check — Example inventory (Linux/macOS)
+
+If you want to validate the example inventory definitions under `deps_examples/`:
 ```bash
 set -euo pipefail
 tmp_root="$(mktemp -d)"
@@ -72,47 +110,11 @@ mkdir -p "$workspace"
 cd "$workspace"
 
 substrate workspace init --force >/dev/null
-```
 
-Install the example inventory under global scope:
-```bash
 mkdir -p "$SUBSTRATE_HOME/deps/packages" "$SUBSTRATE_HOME/deps/bundles" "$SUBSTRATE_HOME/deps/scripts"
 cp -R docs/project_management/next/world-deps-packages-bundles-contract/deps_examples/packages/. "$SUBSTRATE_HOME/deps/packages/"
 cp -R docs/project_management/next/world-deps-packages-bundles-contract/deps_examples/bundles/. "$SUBSTRATE_HOME/deps/bundles/"
 cp -R docs/project_management/next/world-deps-packages-bundles-contract/deps_examples/scripts/. "$SUBSTRATE_HOME/deps/scripts/"
-```
 
-Run:
-```bash
 substrate world deps current list available
 ```
-
-Expected:
-- Exit `0`.
-- Output includes `bun` and `node-runtime`.
-
-## Case 5 — Enabled patch editing + effective enabled view (all platforms)
-
-Run:
-```bash
-substrate world deps global add bun node-runtime
-substrate world deps workspace add python-build-deps
-substrate world deps current list enabled
-```
-
-Expected:
-- `global add` and `workspace add` exit `0`.
-- `current list enabled` exits `0` and includes (in-order): `bun`, `node-runtime`, `python-build-deps`.
-
-## Case 6 — World-backed status (requires backend)
-
-Run:
-```bash
-substrate world doctor >/dev/null
-substrate world deps current list applied
-```
-
-Expected:
-- Exit `0`.
-- Output includes `world=present|missing|blocked` for each enabled item.
-

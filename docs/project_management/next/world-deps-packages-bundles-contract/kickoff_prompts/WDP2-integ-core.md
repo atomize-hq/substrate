@@ -21,9 +21,7 @@ Do not edit planning docs inside the worktree.
 - If this machine matches a behavior platform, run the local smoke script before finishing:
   - Linux: `bash docs/project_management/next/world-deps-packages-bundles-contract/smoke/linux-smoke.sh`
   - macOS: `bash docs/project_management/next/world-deps-packages-bundles-contract/smoke/macos-smoke.sh`
-  - Windows: `pwsh -File docs/project_management/next/world-deps-packages-bundles-contract/smoke/windows-smoke.ps1`
 
 ## End Checklist
 1. From inside the worktree, run: `make triad-task-finish TASK_ID="WDP2-integ-core"`
 2. Update tasks/session_log on orchestration branch; do not delete worktrees.
-

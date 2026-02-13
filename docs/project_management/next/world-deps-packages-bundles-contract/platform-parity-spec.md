@@ -7,9 +7,9 @@ Owner standard:
 This spec is authoritative for platform guarantees and permitted divergences for `substrate world deps` (ADR-0011).
 
 ## Required platforms
-- Behavior platforms (smoke required): `linux, macos, windows`
-- CI parity platforms (parity required): `linux, macos, windows`
-- WSL required: `false`
+- Behavior platforms (smoke required): `linux, macos`
+- CI parity platforms (parity required): `linux, macos`
+- WSL required: `true` (bundled into Linux smoke via `RUN_WSL=1`)
 
 ## Guarantees (explicit)
 - The CLI contract in `docs/project_management/next/world_deps_packages_bundles_contract.md` is identical across platforms.
@@ -19,7 +19,7 @@ This spec is authoritative for platform guarantees and permitted divergences for
 ## Permitted divergences (explicit)
 - Backend remediation steps in error messages may be platform-specific:
   - macOS remediation references Lima warm/doctor scripts.
-  - Windows remediation references WSL warm/doctor scripts.
+  - WSL remediation may reference WSL warm/doctor scripts where applicable.
 
 ## Validation evidence requirements (authoritative)
 - Smoke scripts under `docs/project_management/next/world-deps-packages-bundles-contract/smoke/` encode these platform guarantees.
@@ -28,4 +28,3 @@ This spec is authoritative for platform guarantees and permitted divergences for
 - Each smoke script:
   - exits `0` only when the slice’s required behaviors are satisfied for that platform, and
   - asserts exit codes and one or more key message substrings for unsupported/error paths.
-

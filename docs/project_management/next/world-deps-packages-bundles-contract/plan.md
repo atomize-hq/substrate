@@ -39,8 +39,9 @@ World execution is not an interactive login shell:
 The new `substrate world deps` contract MUST NOT read (or be influenced by) any legacy world-deps paths listed in the contract doc (manager hooks, overlay, selection).
 
 ## Cross-platform execution model (v4; bounded checkpoints)
-- Behavior platforms (feature smoke required): `linux, macos, windows`
-- CI parity platforms (compile parity required): `linux, macos, windows`
+- Behavior platforms (feature smoke required): `linux, macos`
+- CI parity platforms (compile parity required): `linux, macos`
+- WSL coverage required: `true` (bundled into Linux smoke via `RUN_WSL=1`)
 - Cross-platform CI dispatch occurs only at checkpoint boundaries in `ci_checkpoint_plan.md`.
 
 ## Execution gates (enabled)

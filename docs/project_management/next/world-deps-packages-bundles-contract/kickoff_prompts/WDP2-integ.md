@@ -16,7 +16,6 @@ Do not edit planning docs inside the worktree.
   - `world-deps-packages-bundles-contract-wdp2-integ-core`
   - `world-deps-packages-bundles-contract-wdp2-integ-linux`
   - `world-deps-packages-bundles-contract-wdp2-integ-macos`
-  - `world-deps-packages-bundles-contract-wdp2-integ-windows`
 - Run:
   - `cargo fmt`
   - `cargo clippy --workspace --all-targets -- -D warnings`
@@ -28,4 +27,3 @@ Do not edit planning docs inside the worktree.
 ## End Checklist
 1. From inside the worktree, run: `make triad-task-finish TASK_ID="WDP2-integ"`
 2. Hand off closeout report completion and checkpoint status to the operator.
-

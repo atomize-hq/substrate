@@ -41,7 +41,7 @@ Policy:
 - `make ci-compile-parity CI_WORKFLOW_REF="feat/world-deps-packages-bundles-contract" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF="$CHECKOUT_SHA"`
 
 2) Cross-platform behavioral smoke (self-hosted; behavior platforms only):
-- `make feature-smoke FEATURE_DIR="docs/project_management/next/world-deps-packages-bundles-contract" PLATFORM=behavior SMOKE_SLICE_ID="<slice>" SMOKE_CHECKOUT_REF="$CHECKOUT_SHA" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/world-deps-packages-bundles-contract" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=0`
+- `make feature-smoke FEATURE_DIR="docs/project_management/next/world-deps-packages-bundles-contract" PLATFORM=behavior RUN_WSL=1 SMOKE_SLICE_ID="<slice>" SMOKE_CHECKOUT_REF="$CHECKOUT_SHA" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/world-deps-packages-bundles-contract" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=0`
 
 ## If smoke fails
 
@@ -56,4 +56,3 @@ Start only failing platform-fix tasks (from orchestration checkout):
 1. Record run ids/URLs (compile parity + smoke, and any CI Testing runs) in `session_log.md`.
 2. Mark this task `completed` in `tasks.json` and add an END entry.
 3. If this checkpoint is blocking the next slice group, do not proceed until the checkpoint is completed.
-

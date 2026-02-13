@@ -9,8 +9,10 @@
       "orchestration_branch": "feat/world-deps-packages-bundles-contract"
     },
     "checkpoint_boundaries": ["WDP2", "WDP5"],
-    "behavior_platforms_required": ["linux", "macos", "windows"],
-    "ci_parity_platforms_required": ["linux", "macos", "windows"]
+    "behavior_platforms_required": ["linux", "macos"],
+    "ci_parity_platforms_required": ["linux", "macos"],
+    "wsl_required": true,
+    "wsl_task_mode": "bundled"
   },
   "tasks": [
     {
@@ -478,6 +480,7 @@
       ],
       "end_checklist": [
         "Dispatch the required gate for this platform per the kickoff prompt (use ci-audit; record run id/URL)",
+        "WSL smoke is required (bundled): dispatch with RUN_WSL=1",
         "If needed: fix + fmt/clippy + targeted tests",
         "Ensure smoke is green; record run id/URL",
         "From inside the worktree: make triad-task-finish TASK_ID=\"WDP2-integ-linux\"",
@@ -539,49 +542,6 @@
       "merge_to_orchestration": false
     },
     {
-      "id": "WDP2-integ-windows",
-      "name": "WDP2 slice (integration windows)",
-      "type": "integration",
-      "phase": "WDP2",
-      "status": "pending",
-      "description": "windows platform-fix integration task (may be a no-op if already green).",
-      "references": [
-        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
-        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
-        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
-        "docs/project_management/next/world-deps-packages-bundles-contract/ci_checkpoint_plan.md",
-        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
-        "docs/project_management/next/world-deps-packages-bundles-contract/WDP2-spec.md",
-        "docs/project_management/next/world-deps-packages-bundles-contract/smoke/windows-smoke.ps1"
-      ],
-      "acceptance_criteria": ["windows smoke is green for this checkpoint boundary"],
-      "start_checklist": [
-        "Run on Windows host if possible",
-        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
-        "Read plan.md, tasks.json, session_log.md, WDP2-spec.md, kickoff prompt",
-        "Set status to in_progress; add START entry; commit docs",
-        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" TASK_ID=\"WDP2-integ-windows\""
-      ],
-      "end_checklist": [
-        "Dispatch the required gate for this platform per the kickoff prompt (use ci-audit; record run id/URL)",
-        "If needed: fix + fmt/clippy + targeted tests",
-        "Ensure smoke is green; record run id/URL",
-        "From inside the worktree: make triad-task-finish TASK_ID=\"WDP2-integ-windows\"",
-        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
-      ],
-      "worktree": "wt/world-deps-packages-bundles-contract-wdp2-integ-windows",
-      "integration_task": "WDP2-integ-windows",
-      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/WDP2-integ-windows.md",
-      "depends_on": ["WDP2-integ-core", "CP1-ci-checkpoint"],
-      "concurrent_with": [],
-      "platform": "windows",
-      "runner": "github-actions",
-      "workflow": ".github/workflows/feature-smoke.yml",
-      "git_branch": "world-deps-packages-bundles-contract-wdp2-integ-windows",
-      "required_make_targets": ["triad-code-checks"],
-      "merge_to_orchestration": false
-    },
-    {
       "id": "WDP2-integ",
       "name": "WDP2 slice (integration final)",
       "type": "integration",
@@ -598,8 +558,7 @@
         "docs/project_management/next/world-deps-packages-bundles-contract/WDP2-spec.md",
         "docs/project_management/next/world-deps-packages-bundles-contract/WDP2-closeout_report.md",
         "docs/project_management/next/world-deps-packages-bundles-contract/smoke/linux-smoke.sh",
-        "docs/project_management/next/world-deps-packages-bundles-contract/smoke/macos-smoke.sh",
-        "docs/project_management/next/world-deps-packages-bundles-contract/smoke/windows-smoke.ps1"
+        "docs/project_management/next/world-deps-packages-bundles-contract/smoke/macos-smoke.sh"
       ],
       "acceptance_criteria": [
         "Slice is green under make integ-checks and matches the spec",
@@ -626,8 +585,7 @@
         "WDP2-integ-core",
         "CP1-ci-checkpoint",
         "WDP2-integ-linux",
-        "WDP2-integ-macos",
-        "WDP2-integ-windows"
+        "WDP2-integ-macos"
       ],
       "concurrent_with": [],
       "git_branch": "world-deps-packages-bundles-contract-wdp2-integ",
@@ -1057,6 +1015,7 @@
       ],
       "end_checklist": [
         "Dispatch the required gate for this platform per the kickoff prompt (use ci-audit; record run id/URL)",
+        "WSL smoke is required (bundled): dispatch with RUN_WSL=1",
         "If needed: fix + fmt/clippy + targeted tests",
         "Ensure smoke is green; record run id/URL",
         "From inside the worktree: make triad-task-finish TASK_ID=\"WDP5-integ-linux\"",
@@ -1118,49 +1077,6 @@
       "merge_to_orchestration": false
     },
     {
-      "id": "WDP5-integ-windows",
-      "name": "WDP5 slice (integration windows)",
-      "type": "integration",
-      "phase": "WDP5",
-      "status": "pending",
-      "description": "windows platform-fix integration task (may be a no-op if already green).",
-      "references": [
-        "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
-        "docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md",
-        "docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md",
-        "docs/project_management/next/world-deps-packages-bundles-contract/ci_checkpoint_plan.md",
-        "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
-        "docs/project_management/next/world-deps-packages-bundles-contract/WDP5-spec.md",
-        "docs/project_management/next/world-deps-packages-bundles-contract/smoke/windows-smoke.ps1"
-      ],
-      "acceptance_criteria": ["windows smoke is green for this checkpoint boundary"],
-      "start_checklist": [
-        "Run on Windows host if possible",
-        "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
-        "Read plan.md, tasks.json, session_log.md, WDP5-spec.md, kickoff prompt",
-        "Set status to in_progress; add START entry; commit docs",
-        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" TASK_ID=\"WDP5-integ-windows\""
-      ],
-      "end_checklist": [
-        "Dispatch the required gate for this platform per the kickoff prompt (use ci-audit; record run id/URL)",
-        "If needed: fix + fmt/clippy + targeted tests",
-        "Ensure smoke is green; record run id/URL",
-        "From inside the worktree: make triad-task-finish TASK_ID=\"WDP5-integ-windows\"",
-        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
-      ],
-      "worktree": "wt/world-deps-packages-bundles-contract-wdp5-integ-windows",
-      "integration_task": "WDP5-integ-windows",
-      "kickoff_prompt": "docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/WDP5-integ-windows.md",
-      "depends_on": ["WDP5-integ-core", "CP2-ci-checkpoint"],
-      "concurrent_with": [],
-      "platform": "windows",
-      "runner": "github-actions",
-      "workflow": ".github/workflows/feature-smoke.yml",
-      "git_branch": "world-deps-packages-bundles-contract-wdp5-integ-windows",
-      "required_make_targets": ["triad-code-checks"],
-      "merge_to_orchestration": false
-    },
-    {
       "id": "WDP5-integ",
       "name": "WDP5 slice (integration final)",
       "type": "integration",
@@ -1177,8 +1093,7 @@
         "docs/project_management/next/world-deps-packages-bundles-contract/WDP5-spec.md",
         "docs/project_management/next/world-deps-packages-bundles-contract/WDP5-closeout_report.md",
         "docs/project_management/next/world-deps-packages-bundles-contract/smoke/linux-smoke.sh",
-        "docs/project_management/next/world-deps-packages-bundles-contract/smoke/macos-smoke.sh",
-        "docs/project_management/next/world-deps-packages-bundles-contract/smoke/windows-smoke.ps1"
+        "docs/project_management/next/world-deps-packages-bundles-contract/smoke/macos-smoke.sh"
       ],
       "acceptance_criteria": [
         "Slice is green under make integ-checks and matches the spec",
@@ -1205,8 +1120,7 @@
         "WDP5-integ-core",
         "CP2-ci-checkpoint",
         "WDP5-integ-linux",
-        "WDP5-integ-macos",
-        "WDP5-integ-windows"
+        "WDP5-integ-macos"
       ],
       "concurrent_with": [],
       "git_branch": "world-deps-packages-bundles-contract-wdp5-integ",

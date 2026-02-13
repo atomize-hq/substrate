@@ -29,9 +29,9 @@ RECOMMENDATION: **REVISE**
 ## 1) Cross-Platform Coverage (explicit and correct)
 
 From `docs/project_management/next/world-deps-packages-bundles-contract/tasks.json` meta:
-- Declared behavior platforms (smoke required): `linux, macos, windows`
-- Declared CI parity platforms (parity required): `linux, macos, windows`
-- WSL required: `false`
+- Declared behavior platforms (smoke required): `linux, macos`
+- Declared CI parity platforms (parity required): `linux, macos`
+- WSL required: `true` (bundled into Linux smoke via `RUN_WSL=1`)
 
 ## 2) Smoke Scripts Are Not “Toy” Checks
 
@@ -41,7 +41,7 @@ Manual playbook:
 Smoke scripts to validate:
 - Linux smoke: `docs/project_management/next/world-deps-packages-bundles-contract/smoke/linux-smoke.sh`
 - macOS smoke: `docs/project_management/next/world-deps-packages-bundles-contract/smoke/macos-smoke.sh`
-- Windows smoke: `docs/project_management/next/world-deps-packages-bundles-contract/smoke/windows-smoke.ps1`
+- WSL smoke: run the Linux smoke inside WSL (CI dispatch via `RUN_WSL=1`)
 
 ## 3) CI Dispatch Path Is Runnable
 
@@ -51,4 +51,3 @@ Smoke scripts to validate:
 ## 4) Required Fixes Before Starting The First Slice
 
 - Produce the planning quality gate report with `RECOMMENDATION: ACCEPT`.
-

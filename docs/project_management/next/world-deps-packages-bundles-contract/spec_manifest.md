@@ -71,4 +71,4 @@ For every selected spec document, confirm it explicitly defines:
 - Error model (exit codes, error messages where applicable) and failure posture
 - Ordering/atomicity/concurrency rules (if any)
 - Security/redaction invariants (if any)
-- Platform guarantees (Linux/macOS/Windows/WSL as applicable)
+- Platform guarantees (Linux/macOS/WSL as applicable)

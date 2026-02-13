@@ -36,7 +36,6 @@ Slice spec:
 Record run ids/URLs for required platforms:
 - Linux:
 - macOS:
-- Windows:
 - WSL:
 
 ## Smoke ↔ Manual Parity
@@ -45,4 +44,3 @@ Record run ids/URLs for required platforms:
 - [ ] Smoke scripts validate exit codes and key output (not just “command ran”)
 
 Notes:
-
