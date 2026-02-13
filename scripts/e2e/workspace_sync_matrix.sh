@@ -295,8 +295,9 @@ scenario_from_host_conflict_prefer_host_discards_shadowed_path() {
     local logfile="$2"
     log "Scenario: direction=from_host + prefer_host => conflicting shadowed path is discarded (world sees host)"
 
+    # Start the world session first so the host edit is definitely after session_started_at.
+    run_world_nonpty "${ws_dir}" "${logfile}" "true"
     run_capture "${logfile}" bash -lc "cd '${ws_dir}' && printf 'host\\n' > shadow.md" >/dev/null
-    run_capture "${logfile}" touch_future "${ws_dir}/shadow.md" >/dev/null
     run_world_pty "${ws_dir}" "${logfile}" "printf world > shadow.md"
 
     local preview
@@ -329,8 +330,9 @@ scenario_from_host_conflict_prefer_world_keeps_shadowed_path() {
     local logfile="$2"
     log "Scenario: direction=from_host + prefer_world => conflicting shadowed path is kept (world continues to shadow host)"
 
+    # Start the world session first so the host edit is definitely after session_started_at.
+    run_world_nonpty "${ws_dir}" "${logfile}" "true"
     run_capture "${logfile}" bash -lc "cd '${ws_dir}' && printf 'host\\n' > shadow.md" >/dev/null
-    run_capture "${logfile}" touch_future "${ws_dir}/shadow.md" >/dev/null
     run_world_pty "${ws_dir}" "${logfile}" "printf world > shadow.md"
 
     local preview
@@ -576,7 +578,6 @@ scenario_conflict_policy_abort_refuses_on_from_host_conflict() {
     run_world_nonpty "${ws_dir}" "${logfile}" "true"
 
     run_capture "${logfile}" bash -lc "cd '${ws_dir}' && printf 'host\\n' > abort.md" >/dev/null
-    run_capture "${logfile}" touch_future "${ws_dir}/abort.md" >/dev/null
     run_world_pty "${ws_dir}" "${logfile}" "printf world > abort.md"
 
     local out status
