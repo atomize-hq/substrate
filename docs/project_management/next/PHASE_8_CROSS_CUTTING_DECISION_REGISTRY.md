@@ -201,6 +201,21 @@ Each item below is written as: **Decision/contract to lock**, **current sources*
 | Codex subscription auth for `cli:codex` (e.g., account id + access token extracted from `~/.codex/auth.json`) | Host credential file read (with optional env override if specified) | World-agent spawn request (gateway ensure/sync) | In-world gateway/manager and/or Substrate-owned wrapper | **v1:** secret-bearing env vars on the gateway/manager process (`SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_*`) | `agents.host_credentials.read.allowed_backends` (deny-by-default) + `llm.allowed_backends` + `net_allowed` | Keep host credential reads narrow + policy-gated, but upgrade host→world to a **secret-channel payload** and deliver to the in-world gateway/manager via **FD/pipe by default** (no secret values in in-world process env). |
 | Gateway/manager → Substrate-spawned wrapper/engine auth propagation | In-world gateway/manager memory | In-world inherited FD/pipe | Substrate-owned wrapper/engine process | **v1:** FD/pipe by default (env var fallback only when required) | N/A (internal propagation; still subject to redaction/caps invariants) | Keep FD/pipe as the default for Substrate-spawned processes; ensure the same “no secret env by default” posture holds for host→world delivery. |
 
+**Inventory (Phase 8 circle-back; canonical `SUBSTRATE_LLM_BACKEND_AUTH_*` field-name set)**
+
+These identifiers are the canonical **auth field names** (even when values are delivered via FD/pipe bundles rather than env vars). Any field name in this family MUST be treated as secret-bearing for redaction/caps purposes.
+
+| Auth field name (`SUBSTRATE_LLM_BACKEND_AUTH_*`) | Scope | Source of value | Notes |
+|---|---|---|---|
+| `SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID` | `cli:codex` | Host credential read (default) and/or explicit env override (if supported by adapter) | Fixed, closed set for `cli:codex` v1. |
+| `SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN` | `cli:codex` | Host credential read (default) and/or explicit env override (if supported by adapter) | Fixed, closed set for `cli:codex` v1. |
+| `SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY` | `api:openai` | Host env read (`OPENAI_API_KEY`), gated by `llm.secrets.env_allowed` | Current v1 “quick win” example; `api:*` backends may add additional fields additively per-inventory. |
+
+For `api:*` backends, the canonical field-name family is defined by:
+- `SUBSTRATE_LLM_BACKEND_AUTH_API_<BACKEND_NAME>_<FIELD>`
+- `BACKEND_NAME` is the backend id name component (e.g., `api:openai` → `OPENAI`).
+- `FIELD` is the backend’s declared auth field name (v1: derived from the declared host env var name(s) in `config.api.auth.env` per the gateway spec/DR; must be deterministic and documented per backend).
+
 ---
 
 ### CC-0007 — Workflow-router derived event families + correlation keys (trace-aligned)
