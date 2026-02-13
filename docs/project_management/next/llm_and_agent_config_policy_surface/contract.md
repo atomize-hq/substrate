@@ -20,7 +20,7 @@ Authoritative inputs:
   - Workspace: `<workspace_root>/.substrate/agents/<agent_id>.yaml`
 - New key families are introduced (new keys only; no new file families):
   - Config: `llm.*`, `agents.*`
-  - Policy: `llm.*`, `agents.*`
+  - Policy: `llm.*`, `agents.*`, `workflow.router.*` (router daemon indirect execution; Phase 8 additive)
 
 ## Non-negotiable invariants
 - **Strict schema.** Unknown keys in config/policy patches are hard errors (exit code `2`).
@@ -41,6 +41,8 @@ Authoritative inputs:
 - **No secrets in config/policy files.**
   - API keys/tokens must not be stored in Substrate YAML patches. Backends must use their own login state or environment variables defined by the backend contract.
   - If a backend adapter needs to read host credential material (e.g., a CLI’s existing login state) in order to deliver required auth fields to an in-world component over a Substrate-owned secret channel, that host credential read MUST be explicitly policy-gated (`agents.host_credentials.read.allowed_backends`).
+- **Router indirect execution is fail-closed by default.**
+  - Router-derived requests/actions (ADR-0029) MUST be explicitly policy-enabled via `workflow.router.enabled=true` and remain guarded by deny-by-default allowlists (rule ids, workflow ids, and target workspace ids).
 
 ## Precedence (summary)
 - Config effective precedence is unchanged and applies per-key:

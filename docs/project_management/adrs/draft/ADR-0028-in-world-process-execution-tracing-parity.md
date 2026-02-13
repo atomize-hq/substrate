@@ -268,8 +268,27 @@ This table records the v1 required set for joinability. New event families intro
   - OPTIONAL: `thread_id`, `role`, `cmd_id`, `span_id`
 
 - Workflow-router derived events (ADR-0029; derived from `trace.jsonl`):
-  - REQUIRED: `session_id`, `orchestration_session_id` (when tied to orchestration), `cmd_id` and/or `span_id` cause reference (one must be present), and a router-specific request identifier (`request_id`) once defined.
+  - REQUIRED:
+    - `session_id`
+    - `request_id` (router request identifier; UUID string; required for all router request/action lifecycle events)
+    - `idempotency_key` (hex string; required so at-least-once processing is joinable/dedupable)
+    - `workspace_id` (the workspace identity that the router is operating in / routing from; required to avoid heuristic path-based joins)
+    - a cause reference (one must be present):
+      - `source_span_id` when the source trace record has a span id (preferred), and/or
+      - `source_cmd_id`
+  - CONDITIONAL REQUIRED:
+    - `orchestration_session_id` when tied to orchestration context.
   - OPTIONAL: `rule_id`, `target_workspace_id`, `workflow_run_id`, `backend_id`
+
+Router-derived event families (v1; additive-only list):
+- Derived router events appended to canonical trace MUST use explicit `event_type` values (see router decision register DR-0016) such as:
+  - `workflow_router_rule_match`
+  - `workflow_router_request_enqueued`
+  - `workflow_router_request_denied`
+  - `workflow_router_request_pending_approval`
+  - `workflow_router_action_enqueued`
+  - `workflow_router_action_executed`
+  - `workflow_router_cursor_gap_detected`
 
 ### Joinability rule (non-negotiable)
 

@@ -131,6 +131,21 @@ Merge strategy:
     - This key gates **host credential reads**, not network egress. Egress remains governed by `net_allowed` at the world boundary.
     - This key is intentionally backend-generic (not Codex-specific) so additional `cli:*` adapters can be added later without reshaping the policy surface.
 
+### `workflow.router` (router daemon indirect execution)
+
+Phase 8 additive note: ADR-0029 introduces an indirect execution path (trace event → request → action). This path MUST be explicitly policy-gated and fail-closed by default.
+
+- `workflow.router.enabled: bool`
+  - Default (effective): `false` (fail-closed).
+- `workflow.router.allow_cross_workspace: bool`
+  - Default (effective): `false` (fail-closed).
+- `workflow.router.allowed_rule_ids: [string]`
+  - Default (effective): `[]` (deny-by-default).
+- `workflow.router.allowed_workflow_ids: [string]`
+  - Default (effective): `[]` (deny-by-default).
+- `workflow.router.allowed_target_workspace_ids: [string]`
+  - Default (effective): `[]` (deny-by-default).
+
 ## Interaction with existing policy keys
 - Network egress remains governed by `net_allowed`.
   - LLM backends that egress MUST be constrained by `net_allowed` at the world boundary.

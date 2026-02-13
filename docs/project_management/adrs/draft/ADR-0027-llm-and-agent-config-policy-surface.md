@@ -227,6 +227,30 @@ All keys below are part of the policy schema and MUST be strict (unknown keys re
   - Default: `[]` (deny-by-default).
   - Note: This gates host credential reads only; network egress remains governed by `net_allowed` at the world boundary.
 
+##### `workflow.router` (indirect execution via router daemon; enforced in router)
+
+Phase 8 additive note: ADR-0029 introduces an indirect execution path (trace event → request → action). This must be explicitly policy-gated, fail-closed by default, and explainable.
+
+- `workflow.router.enabled: bool`
+  - Meaning: when `true`, router-derived requests/actions are eligible for evaluation/execution (still gated by the additional allowlists below).
+  - Default: `false` (fail-closed; router is disabled unless explicitly enabled).
+
+- `workflow.router.allow_cross_workspace: bool`
+  - Meaning: when `true`, router may enqueue/execute actions targeting a different workspace than the source event workspace (subject to target allowlists).
+  - Default: `false` (fail-closed; no cross-workspace routing).
+
+- `workflow.router.allowed_rule_ids: [string]`
+  - Meaning: allowlist of router `rule_id` values eligible to trigger requests/actions.
+  - Default: `[]` (deny-by-default).
+
+- `workflow.router.allowed_workflow_ids: [string]`
+  - Meaning: allowlist of workflow ids eligible for router-triggered `workflow.run` actions.
+  - Default: `[]` (deny-by-default).
+
+- `workflow.router.allowed_target_workspace_ids: [string]`
+  - Meaning: allowlist of workspace ids eligible as routing targets.
+  - Default: `[]` (deny-by-default).
+
 #### Interaction with existing policy keys
 - Network egress control remains policy-owned via `net_allowed`:
   - LLM gateways/backends that make outbound requests MUST have those requests governed by the effective policy `net_allowed` allowlist.
