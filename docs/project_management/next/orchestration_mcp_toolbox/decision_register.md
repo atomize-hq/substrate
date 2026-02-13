@@ -326,7 +326,7 @@ Scope:
 **Decision owner(s):** Agent toolbox + Shell maintainers  
 **Date:** 2026-02-10  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`
+**Related docs:** `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`, `docs/project_management/standards/SECRETS_DELIVERY_CHANNEL_RUBRIC.md`
 
 **Problem / Context**
 - We chose UDS-first transport, but we must lock where the UDS socket lives, what permissions it uses, and how stale sockets are handled.

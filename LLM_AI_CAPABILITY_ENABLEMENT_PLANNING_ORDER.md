@@ -75,6 +75,7 @@ This document is a lightweight tracking plan for finalizing ADRs and their corre
   - Goal: establish a concrete, reusable decision rubric for when Substrate should use:
     - inherited one-time FD/pipe secret channels (preferred for Substrate-spawned, Substrate-owned components), vs
     - environment-variable injection (interop-required cases; third-party tools/SDKs; world-boundary transport constraints).
+  - Standard: `docs/project_management/standards/SECRETS_DELIVERY_CHANNEL_RUBRIC.md`
   - Output: update the relevant Decision Registers/ADRs to reference the rubric so current and future secret-handling decisions stay consistent (and avoid ad-hoc env var proliferation).
 
 - Circle back to other foundation ADRs / decision registers (additive-only):

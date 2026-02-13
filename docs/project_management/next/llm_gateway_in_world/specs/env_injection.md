@@ -6,6 +6,7 @@ Authoritative inputs:
 - ADR-0023: `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md`
 - ADR-0027: `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
 - Decision: `docs/project_management/next/llm_gateway_in_world/decision_register.md` (DR-0007)
+- Cross-track standard: `docs/project_management/standards/SECRETS_DELIVERY_CHANNEL_RUBRIC.md`
 
 ## Requirements
 - Substrate MUST NOT store secret values in:
@@ -27,6 +28,17 @@ Authoritative inputs:
 - The sync/restart path collects secret values from the host process environment and passes them across the existing world-agent transport as part of the spawn request.
 - The world-agent spawns the gateway/engine process inside the session world with those env vars set in the process environment.
 - Secrets are in-memory only from Substrate’s perspective: Substrate does not write them to disk.
+
+## In-world propagation (gateway/manager → Substrate-spawned engines)
+
+Even when secret values enter the in-world gateway/manager via env injection (host→world transport constraint), Substrate MUST minimize secret exposure within the in-world process tree:
+
+- If the gateway/manager spawns a Substrate-owned backend engine/wrapper process (e.g., `cli:codex` wrapper), the gateway/manager MUST deliver secret values to that child via a one-time FD/pipe secret channel (not via child-process env vars), following:
+  - `docs/project_management/standards/SECRETS_DELIVERY_CHANNEL_RUBRIC.md`
+- If FD/pipe delivery is not supported for a specific engine/wrapper on a specific platform, env var delivery into that child is permitted as a compatibility fallback, but MUST remain:
+  - secret-bearing (never printed),
+  - redacted/capped everywhere,
+  - and scoped to the smallest possible process tree.
 
 ## Env var naming (contract)
 - Client wiring env vars (non-secret; may be printed by `substrate world status gateway`):

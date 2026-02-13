@@ -112,6 +112,7 @@ Scope:
   - If the Codex wrapper is pointed at the in-world gateway and the gateway performs the outbound request to the OpenAI/Codex endpoint, then the auth material (e.g., from `~/.codex/auth.json`) must still be made available to the component that performs outbound egress (gateway/engine), either:
     - passed per request (no persistence), or
     - forwarded/mounted into the world as an explicit, policy-gated mechanism (e.g., read-only mount), with clear redaction/caps guidance.
+  - Phase 8 additive clarification: when a Substrate-owned in-world wrapper/engine is spawned and needs auth material, Substrate MUST use FD/pipe propagation from the gateway/manager to that child instead of child-process env vars when supported (cross-track rubric). Env var propagation is permitted only as a compatibility fallback.
 
 **Tech debt / follow-up**
 - Document and standardize per-CLI credential locations + forwarding mechanism(s) per platform (Lima/WSL/Linux), including redaction/caps guidance for any traces/logs that mention credential paths.
@@ -182,7 +183,7 @@ Scope:
 
 **Recommendation**
 - **Selected:** Option B — Extract needed Codex auth fields on host and inject into in-world process env (no auth files in-world)
-- **Rationale (crisp):** Avoids adding a new cross-platform file-forwarding/mount mechanism in v1 while still keeping egress in-world; secret values stay out of Substrate YAML and are injected only into the in-world process environment with strict redaction/caps.
+- **Rationale (crisp):** Avoids adding a new cross-platform file-forwarding/mount mechanism in v1 while still keeping egress in-world; secret values stay out of Substrate YAML and are injected into the in-world gateway/manager process environment with strict redaction/caps. When the in-world gateway/manager spawns a Substrate-owned wrapper/engine process, it MUST propagate secrets to that child via FD/pipe rather than env vars when supported (see `docs/project_management/standards/SECRETS_DELIVERY_CHANNEL_RUBRIC.md` and `docs/project_management/next/llm_gateway_in_world/decision_register.md` (DR-0017)).
 
 ---
 
@@ -194,7 +195,7 @@ Scope:
 **Related docs:** ADR-0024, ADR-0027 (“no secrets in Substrate YAML”), DR-0006
 
 **Problem / Context**
-- DR-0006 establishes that `cli:codex` auth is injected into the in-world process environment (no auth files in-world).
+- DR-0006 establishes that `cli:codex` auth is injected into the in-world gateway/manager process environment (no auth files in-world).
 - We still need a deterministic way for host-side Substrate components to obtain the necessary auth values safely, without pushing operators toward exporting secrets broadly.
 
 **Option A — Operator-provided env vars only (no host file reads)**

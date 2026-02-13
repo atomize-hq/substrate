@@ -178,7 +178,7 @@ Scope:
 **Decision owner(s):** Gateway + World + Security  
 **Date:** 2026-02-08  
 **Status:** Accepted  
-**Related docs:** ADR-0023, ADR-0027 (“no secrets in Substrate YAML”)
+**Related docs:** ADR-0023, ADR-0027 (“no secrets in Substrate YAML”), `docs/project_management/standards/SECRETS_DELIVERY_CHANNEL_RUBRIC.md`
 
 **Problem / Context**
 - `api:*` backends (direct provider HTTP) require API keys/tokens.
@@ -284,14 +284,15 @@ Scope:
     - v1 (`cli:codex`) injected fields:
       - `SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID`
       - `SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN`
-  - Any env var with prefix `SUBSTRATE_LLM_BACKEND_AUTH_` MUST be treated as secret-bearing and MUST be redacted/capped everywhere (trace spans/events, structured errors, stdout/stderr).
+- Any env var with prefix `SUBSTRATE_LLM_BACKEND_AUTH_` MUST be treated as secret-bearing and MUST be redacted/capped everywhere (trace spans/events, structured errors, stdout/stderr).
+  - Phase 8 additive clarification: these identifiers are the canonical *auth field names*. When Substrate-owned engines/wrappers receive auth via FD/pipe (DR-0017), the payload keys MUST still use the same `SUBSTRATE_LLM_BACKEND_AUTH_*` names so redaction/caps rules remain uniform.
 - **Risks:**
   - If mapping glue is sloppy, clients may still leak provider endpoints or secrets in their own logs; mitigate with wrapper hardening + explicit “do not print” guidance.
 - **Unlocks:**
   - Future backends can add injected fields without reshaping the operator-facing “client wiring” contract.
   - Uniform secret-handling posture across both CLI and API backends.
 - **Quick wins / low-hanging fruit:**
-  - Implement v1 using codex-wrapper: consume `SUBSTRATE_LLM_*_BASE_URL` for routing; use injected `SUBSTRATE_LLM_BACKEND_AUTH_*` only inside in-world engine processes.
+  - Implement v1 using codex-wrapper: consume `SUBSTRATE_LLM_*_BASE_URL` for routing; treat `SUBSTRATE_LLM_BACKEND_AUTH_*` as canonical auth field names and deliver their values to Substrate-spawned engine processes via FD/pipe by default (DR-0017), falling back to env vars only when required for compatibility.
 
 **Option B — Use provider/CLI-native env vars as the primary contract**
 - **Pros:**
@@ -570,3 +571,36 @@ Scope:
 **Recommendation**
 - **Selected:** Option B — Map to Substrate-owned injected env var names
 - **Rationale (crisp):** Keeps secret naming uniform and Substrate-controlled, avoids ambient provider-native secret env vars in-world, and aligns with our existing injected-auth naming scheme.
+
+---
+
+### DR-0017 — Secret delivery to Substrate-spawned engine processes: env vars vs inherited one-time FD/pipe
+
+**Decision owner(s):** Gateway + Engine + Security  
+**Date:** 2026-02-13  
+**Status:** Accepted  
+**Related docs:** `docs/project_management/standards/SECRETS_DELIVERY_CHANNEL_RUBRIC.md`, `docs/project_management/next/llm_gateway_in_world/specs/env_injection.md`
+
+**Problem / Context**
+- DR-0007 selects env injection as the v1 host→world delivery mechanism for getting secret values into the in-world gateway/manager process without persisting them to disk.
+- Once inside the world, the gateway/manager may spawn Substrate-owned backend engines/wrappers (e.g., a `cli:*` wrapper process) that need secret values.
+- We must decide whether the gateway/manager propagates those secrets to Substrate-spawned child processes via:
+  - child-process environment variables, or
+  - an inherited one-time FD/pipe secret channel.
+
+**Option A — Propagate secrets to child engines via env vars**
+- **Pros:** Simplest; no additional spawn plumbing; matches existing env-injection patterns.
+- **Cons:** Expands secret exposure across the process tree; increases accidental disclosure risk (debug logs, `/proc/<pid>/environ`); harder to guarantee “smallest possible blast radius”.
+- **Cascading implications:** Requires treating all `SUBSTRATE_LLM_BACKEND_AUTH_*` env vars as secret-bearing across *every* spawned engine process and their descendants.
+
+**Option B — Propagate secrets to Substrate-spawned child engines via FD/pipe (recommended)**
+- **Pros:** Keeps secrets out of child-process env by default; scopes secrets to the intended consumer; aligns with the cross-track secrets rubric.
+- **Cons:** Requires a small amount of spawn plumbing and a stable “auth payload” read contract for wrappers/engines.
+- **Cascading implications:**
+  - For Substrate-owned wrappers/engines, the gateway/manager MUST provide a one-time auth payload over an inherited FD/pipe.
+  - An env var MAY be used to convey the FD number (non-secret) (e.g., `SUBSTRATE_LLM_BACKEND_AUTH_FD: int`), following the rubric.
+  - Env var propagation remains permitted only as a compatibility fallback when FD/pipe is not available for a specific engine/platform.
+
+**Recommendation**
+- **Selected:** Option B — Propagate secrets to Substrate-spawned child engines via FD/pipe.
+- **Rationale (crisp):** Env injection is a pragmatic v1 host→world mechanism, but within the world Substrate should default to the least-exposure channel for Substrate-spawned components.
