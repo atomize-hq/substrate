@@ -858,7 +858,14 @@ Scope:
     - `workflow_router_action_enqueued`
     - `workflow_router_action_executed`
     - `workflow_router_cursor_gap_detected`
-  - Each derived event MUST include correlation keys: `source_cmd_id` (or equivalent), `rule_id`, `workspace_id`, and `idempotency_key`.
+  - Each derived event MUST include correlation keys:
+    - `session_id` (required on all canonical trace records; see ADR-0028 Phase 8 additive correlation vocabulary)
+    - a cause reference:
+      - `source_span_id` when available (preferred), and/or
+      - `source_cmd_id`
+    - `rule_id`
+    - `workspace_id`
+    - `idempotency_key`
 - **Risks:**
   - Poorly scoped event types could explode; mitigate by limiting v1 to the set above.
 - **Unlocks:**

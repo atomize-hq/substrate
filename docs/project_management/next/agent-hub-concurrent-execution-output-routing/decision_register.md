@@ -228,17 +228,24 @@ Scope:
   - `thread_id` (when applicable)
   - `agent_id` and `role` (when applicable)
   - join keys like `cmd_id` / `span_id` when tied to execution/trace
+  - Phase 8 additive clarifications (cross-cutting; no reshapes):
+    - `agent_id` is the agent inventory id for the emitting backend (and is the trace “actor” id when the actor is an agent).
+    - When the emitting backend’s kind is known, the event MUST include `backend_id` as `<kind>:<agent_id>` to make allowlist/routing joins explicit and avoid heuristic inference.
+    - The trace vocabulary and required/optional matrix for correlation fields is finalized additively in ADR-0028 Phase 8 circle-back.
   - Initial serialized shape (v1; additive-only extensions allowed in the circle-back pass):
     - Envelope fields (top-level; not nested in `data`):
       - `ts` (RFC3339 UTC timestamp)
       - `agent_id` (string; backend identity)
+      - `backend_id` (string; optional; `<kind>:<agent_id>`)
       - `kind` (enum; `registered|status|task_start|task_progress|task_end|pty_data|alert`)
       - `orchestration_session_id` (string; required)
       - `run_id` (string; required)
       - `thread_id` (string; optional)
       - `role` (string; optional taxonomy label; v1 reserved values include `orchestrator|member`)
+      - `world_id` (string; optional; required when the emitting backend executes inside a world boundary)
       - `cmd_id` (string; optional)
       - `span_id` (string; optional)
+      - `channel` (string; optional; event-plane routing hint for subscribe/filter behavior; not used for policy gating)
     - Payload:
       - `data` is a JSON object whose schema depends on `kind` (e.g., `message`, or stream `chunk` + `stream`).
 

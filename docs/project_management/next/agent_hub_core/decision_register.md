@@ -218,6 +218,7 @@ Scope:
 **Follow-up tasks (explicit)**
 - Define the explicit world restart triggers and emit a structured `world_restarted` event with `reason`.
 - Ensure structured agent events include `world_id` when `execution.scope=world`.
+  - Schema source of truth: `docs/project_management/next/agent_hub_core/decision_register.md` (DR-0010).
 
 ---
 

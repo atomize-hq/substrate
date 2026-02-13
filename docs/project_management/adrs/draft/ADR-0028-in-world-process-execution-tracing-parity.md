@@ -128,9 +128,9 @@ This ADR extends the world-agent responses to optionally include process events.
   - The active span lifecycle MUST push `SHIM_PARENT_SPAN=<current_span_id>` for the duration of command execution and MUST restore the previous value (or unset) when the command completes.
 - Cross-component joinability:
   - When `SHIM_PARENT_CMD_ID` is available, spans MUST record it as `parent_cmd_id` on both `command_start` and `command_complete`.
-  - Shell `command_start`/`command_complete` events SHOULD include `span_id` when a span exists for that command, so analysts can join shell summaries ⇄ spans ⇄ world process events deterministically.
+  - Shell `command_start`/`command_complete` events MUST include `span_id` when a span exists for that command, so analysts can join shell summaries ⇄ spans ⇄ world process events deterministically.
 - Completion ergonomics:
-  - `command_complete` spans SHOULD include `duration_ms`.
+  - `command_complete` spans MUST include `duration_ms`.
   - When a command is denied by policy, the completion span MUST be unambiguous (`outcome: "denied"` and the `policy_decision` must be present on completion).
 - Preexec safety:
   - When `SUBSTRATE_ENABLE_PREEXEC=1`, `builtin_command` records in the canonical trace MUST omit command bodies (metadata + correlation only).
@@ -183,6 +183,99 @@ To bound volume:
 - When truncation occurs, the world-agent response MUST include summary fields:
   - `process_events_status: "truncated"`
   - `process_events_dropped: <n>`
+
+## Phase 8 additive — Correlation vocabulary + required/optional matrix (cross-feature)
+
+This section is additive-only and exists to prevent correlation drift across LLM/agents/workflows/router features.
+
+### Vocabulary (canonical field names)
+
+Unless explicitly noted otherwise:
+- All fields are top-level JSON keys (no nesting required for joinability).
+- All correlation fields are metadata-only (no secrets); redact/cap any field that can accidentally carry secret material (e.g., URLs with embedded credentials).
+
+Canonical correlation fields:
+- `session_id`
+  - Meaning: the trace session identifier for the current Substrate shell session.
+  - Rule: MUST be present on all trace records appended to canonical trace (`trace.jsonl`), including derived/router/toolbox records.
+
+- `orchestration_session_id`
+  - Meaning: multi-agent orchestration session identifier (spans concurrent agents and their events).
+  - Rule: MUST be present on any agent/LLM/workflow/toolbox/router record that participates in multi-agent orchestration joins.
+
+- `run_id`
+  - Meaning: unit-of-work identifier inside an orchestration session (e.g., an agent task run, an LLM request run, or a workflow run).
+  - Rule: MUST be present on structured agent events and other “run-scoped” event families; MAY be omitted on purely interactive human-only command spans.
+
+- `thread_id`
+  - Meaning: optional conversation/thread identifier where applicable (LLM + agent interactions).
+  - Rule: OPTIONAL; present only when the emitting component has a real thread concept.
+
+- `agent_id`
+  - Meaning: actor identifier.
+    - `human` for direct operator actions.
+    - for agent-driven actions/events, this is the agent inventory id (e.g., `codex`, `claude_code`).
+  - Rule: OPTIONAL on command spans; REQUIRED on structured agent events and toolbox tool-call events when an agent is the actor.
+
+- `role`
+  - Meaning: agent role taxonomy label (e.g., `orchestrator`, `member`).
+  - Rule: OPTIONAL; when present it MUST reflect the effective role assignment used for gating/attribution.
+
+- `backend_id`
+  - Meaning: backend allowlist/routing identifier in `<kind>:<name>` form (e.g., `cli:codex`, `api:openai`).
+  - Rule: when a specific backend is involved (LLM engine/backend, agent backend), `backend_id` MUST be present to avoid heuristic mapping from `agent_id` or other fields.
+
+- `world_id`
+  - Meaning: identity of the active world boundary (filesystem/network isolation boundary).
+  - Rule: REQUIRED on in-world process telemetry (`world_process_*`). When a record is emitted “in-world” or describes an in-world execution/session, it MUST include `world_id` so operators can verify boundary sharing and restarts.
+
+- `span_id` / `parent_span`
+  - Meaning: trace span identifiers and linkage.
+  - Rule: command spans MUST include `span_id` and MAY include `parent_span`. Any non-span record that attaches to a command span MUST include `cmd_id` and/or `parent_span` to make joins explicit.
+
+- `cmd_id` / `parent_cmd_id`
+  - Meaning: command identifier and linkage for non-span event records that reference a command span.
+  - Rule: any record that is “about” a particular command execution MUST include `cmd_id`. Any record that is “about” a subprocess tree for a command MUST include `parent_cmd_id` when available.
+
+- `tool_call_id`
+  - Meaning: identifier for a toolbox/MCP tool invocation instance.
+  - Rule: OPTIONAL in v1 unless/until a toolbox tool-call trace family is introduced; reserved for Phase 8 to avoid later reshapes.
+
+- `workflow_run_id` / `workflow_node_id`
+  - Meaning: identifiers for workflow root and workflow node instances.
+  - Rule: RESERVED for Phase 7/Phase 8 additions (workflow composition remains Draft), but the keys are reserved here to prevent later naming drift.
+
+### Required/optional matrix (v1; additive-only extensions allowed)
+
+This table records the v1 required set for joinability. New event families introduced by later ADRs MUST extend this matrix additively.
+
+- `command_start` / `command_complete` (span records):
+  - REQUIRED: `session_id`, `span_id`
+  - CONDITIONAL REQUIRED:
+    - `world_id` when the command executed inside a world boundary.
+    - `backend_id` when a specific backend is involved (LLM engine/backend, agent backend).
+  - OPTIONAL: `cmd_id`, `parent_span`, `agent_id`, `role`, `orchestration_session_id`, `run_id`, `thread_id`
+
+- `world_process_start` / `world_process_exit` (world subprocess telemetry):
+  - REQUIRED: `session_id`, `world_id`, `parent_span`
+  - OPTIONAL (recommended when available): `parent_cmd_id`
+
+- Structured agent events (ADR-0017 envelope persisted to trace):
+  - REQUIRED: `session_id`, `orchestration_session_id`, `run_id`, `agent_id`
+  - CONDITIONAL REQUIRED:
+    - `backend_id` when the emitting backend’s kind is known (v1 default: known).
+    - `world_id` when the emitting backend executes inside a world boundary.
+  - OPTIONAL: `thread_id`, `role`, `cmd_id`, `span_id`
+
+- Workflow-router derived events (ADR-0029; derived from `trace.jsonl`):
+  - REQUIRED: `session_id`, `orchestration_session_id` (when tied to orchestration), `cmd_id` and/or `span_id` cause reference (one must be present), and a router-specific request identifier (`request_id`) once defined.
+  - OPTIONAL: `rule_id`, `target_workspace_id`, `workflow_run_id`, `backend_id`
+
+### Joinability rule (non-negotiable)
+
+Any record intended to trigger routing or cross-component attribution MUST carry enough correlation keys to avoid heuristic joins. Specifically:
+- A consumer MUST NOT be required to parse stdout/stderr or PTY bytes to join cause→effect.
+- A consumer MUST NOT be required to join across multiple records merely to determine deny vs executed; deny/allow/outcome classification must be detectable from the relevant completion/derived record(s).
 
 ## Architecture Shape
 - Components:

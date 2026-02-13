@@ -98,7 +98,10 @@ ADR_BODY_SHA256: f98e101d96918048c0407b0d8c26c127fcdef4c566d4a954b1a770cbdfc2869
     - Placement: attribution fields are top-level keys on the serialized event envelope.
       - Source of truth: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0008)
   - Review / decision hook (agent hub alignment):
-    - Decide whether structured agent events SHOULD also carry `world_id` (and optionally a “world restarted” reason) so operators can verify that concurrently-running in-world agents share (or intentionally do not share) the same session world / filesystem boundary.
+    - Phase 8 additive alignment: structured agent events MUST carry `world_id` when the emitting backend executes inside a world boundary, so operators can verify whether concurrently-running in-world agents share (or intentionally do not share) the same filesystem/isolation boundary.
+      - Source of truth: `docs/project_management/next/agent_hub_core/decision_register.md` (DR-0004) and `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003).
+    - Phase 8 additive alignment: the structured-event envelope MAY carry an optional event-plane routing hint (`channel`) so future subscribe/filter behavior is expressible without PTY injection or attribution ambiguity.
+      - Source of truth: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003).
 
 ### Config (buffer tuning)
 - Files and locations (existing layering model):

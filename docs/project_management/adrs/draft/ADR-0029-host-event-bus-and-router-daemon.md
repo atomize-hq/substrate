@@ -125,6 +125,7 @@ Only an explicit allowlist of event families is triggerable. v1 supports:
   - `fs_change` derived events emitted by the workflow router from `command_complete.fs_diff` indicating create/modify/delete/rename of workspace-relative paths
   - path matching MUST reuse the same workspace-relative semantics and matcher behavior as ADR-0018
 - Derived workflow-router event types and required correlation keys are defined by Decision Register DR-0016.
+  - Phase 8 additive alignment: any derived workflow-router trace record appended to canonical `trace.jsonl` MUST follow the correlation vocabulary and joinability rules defined in ADR-0028 (Phase 8 additive section), including carrying `session_id` and an explicit cause reference (`source_span_id` and/or `source_cmd_id`).
 
 ### File operation triggers (Authoritative)
 - File triggers MUST be derived from Substrate-produced fs diffs (not OS filesystem watching in v1).
@@ -160,7 +161,7 @@ Only an explicit allowlist of event families is triggerable. v1 supports:
 - Processing semantics:
   - Handling is at-least-once; duplicate processing MUST be bounded via dedupe keys.
   - Each request/action MUST have a stable idempotency key derived from:
-    - the source event identity (e.g., `span_id` + `event_type` + rule_id), and
+    - the source event identity (prefer `span_id` when available; e.g., `span_id` + `event_type` + rule_id), and
     - the target workspace identity (`workspace_id`).
   - The workflow router MUST persist per-subscriber cursors and dedupe state in `workflow/state.json` so restarts do not replay unboundedly.
   - Queue items are append-only; acknowledgement is cursor-based (see Decision Register DR-0014).
@@ -175,6 +176,7 @@ Only an explicit allowlist of event families is triggerable. v1 supports:
   - `source` (object):
     - `trace_path` (string; usually `SUBSTRATE_HOME/trace.jsonl`)
     - `source_event_type` (string; `command_complete` or `fs_change`)
+    - `source_span_id` (string; optional; when the source trace record has a `span_id`, this MUST be set)
     - `source_cmd_id` (string)
     - `source_ts` (RFC3339 UTC string)
   - `rule_id` (string)
