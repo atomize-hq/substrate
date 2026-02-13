@@ -155,7 +155,15 @@ run_world_nonpty() {
     local logfile="$2"
     local program="$3"
 
-    run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' -c \"${program}\"" >/dev/null
+    # Pass the program via env (not inline shell quoting) to avoid host-side
+    # interpolation/expansion issues (e.g., `$i`, `$((..))`, `$(...)`).
+    run_capture "${logfile}" \
+        env \
+        SUBSTRATE_E2E_WS_DIR="${ws_dir}" \
+        SUBSTRATE_E2E_SUBSTRATE_BIN="${SUBSTRATE_BIN}" \
+        SUBSTRATE_E2E_C_ARG="${program}" \
+        bash -lc 'cd "$SUBSTRATE_E2E_WS_DIR" && "$SUBSTRATE_E2E_SUBSTRATE_BIN" -c "$SUBSTRATE_E2E_C_ARG"' \
+        >/dev/null
 }
 
 run_world_pty() {
@@ -164,7 +172,15 @@ run_world_pty() {
     local program="$3"
 
     # Force PTY route; world-agent strips the leading ":pty ".
-    run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' -c \":pty ${program}\"" >/dev/null
+    # Pass the program via env (not inline shell quoting) to avoid host-side
+    # interpolation/expansion issues (e.g., `$i`, `$((..))`, `$(...)`).
+    run_capture "${logfile}" \
+        env \
+        SUBSTRATE_E2E_WS_DIR="${ws_dir}" \
+        SUBSTRATE_E2E_SUBSTRATE_BIN="${SUBSTRATE_BIN}" \
+        SUBSTRATE_E2E_C_ARG=":pty ${program}" \
+        bash -lc 'cd "$SUBSTRATE_E2E_WS_DIR" && "$SUBSTRATE_E2E_SUBSTRATE_BIN" -c "$SUBSTRATE_E2E_C_ARG"' \
+        >/dev/null
 }
 
 set_sync_config() {
@@ -383,6 +399,10 @@ scenario_delete_host_file_in_world_prefer_host_discards_delete() {
     local logfile="$2"
     log "Scenario: host creates file; world deletes; prefer_host => sync discards world delete (host keeps)"
 
+    # Establish a baseline session_started_at first so the host write is considered a conflict.
+    # This ensures `prefer_host` exercises the conflict policy (discard world delete).
+    run_world_nonpty "${ws_dir}" "${logfile}" "true"
+
     run_capture "${logfile}" bash -lc "cd '${ws_dir}' && printf 'host\\n' > kept.md" >/dev/null
     run_world_pty "${ws_dir}" "${logfile}" "rm -f kept.md"
 
@@ -526,14 +546,24 @@ scenario_excluded_paths_not_synced() {
     run_world_pty "${ws_dir}" "${logfile}" "mkdir -p .git; printf x > .git/excluded.md; printf y > .substrate/excluded.md"
 
     local preview
+    local preview_status
+    set +e
     preview="$(ws_sync_dry_verbose "${ws_dir}" "${logfile}")"
-    assert_contains "${preview}" "pending diff summary (combined)" "exclude preview"
-    assert_contains "${preview}" "total_paths: 0" "exclude preview"
-    assert_contains "${preview}" "excluded_by_patterns: true" "exclude preview"
+    preview_status="$?"
+    set -e
+    assert_status_eq "${preview_status}" 5 "exclude preview status"
+    assert_contains "${preview}" "workspace sync refused: pending diff contains protected paths" "exclude preview"
+    assert_contains "${preview}" ".git/excluded.md" "exclude preview"
+    assert_contains "${preview}" ".substrate/excluded.md" "exclude preview"
 
     local applied
+    local applied_status
+    set +e
     applied="$(ws_sync_apply_verbose "${ws_dir}" "${logfile}")"
-    assert_contains "${applied}" "workspace sync applied" "exclude apply"
+    applied_status="$?"
+    set -e
+    assert_status_eq "${applied_status}" 5 "exclude apply status"
+    assert_contains "${applied}" "workspace sync refused: pending diff contains protected paths" "exclude apply"
 
     local host_check
     host_check="$(
@@ -638,6 +668,110 @@ scenario_concurrent_mod_conflict_prefer_world_applies() {
     local host_cat
     host_cat="$(run_capture "${logfile}" bash -lc "cd '${ws_dir}' && (cat conflict.md && echo '')")"
     assert_contains "${host_cat}" "world" "prefer_world concurrent host content"
+}
+
+scenario_exec_bit_change_applies() {
+    local ws_dir="$1"
+    local logfile="$2"
+    log "Scenario: world chmod +x on host file => sync applies execute bit"
+
+    # Changing permissions on a host file from inside the world may be blocked by the world backend.
+    # Create the file in-world (upper) with +x and ensure apply preserves execute bits on host.
+    run_world_pty "${ws_dir}" "${logfile}" "printf '#!/bin/sh\\necho hi\\n' > tool.sh; chmod +x tool.sh"
+
+    local preview
+    preview="$(ws_sync_dry_verbose "${ws_dir}" "${logfile}")"
+    assert_contains "${preview}" "pending diff summary (pty)" "exec-bit preview"
+    assert_contains "${preview}" "total_paths: 1" "exec-bit preview"
+    assert_any_contains "${preview}" "exec-bit preview kind" "mods: 1" "writes: 1"
+
+    local applied
+    applied="$(ws_sync_apply_verbose "${ws_dir}" "${logfile}")"
+    assert_contains "${applied}" "workspace sync applied" "exec-bit apply"
+    assert_any_contains "${applied}" "exec-bit apply count" "mods_applied: 1" "writes_applied: 1"
+
+    local host_check
+    host_check="$(
+        run_capture "${logfile}" bash -lc "cd '${ws_dir}' && if test -x tool.sh; then echo 'exec_bit_applied=1'; else echo 'exec_bit_applied=0'; fi"
+    )"
+    assert_contains "${host_check}" "exec_bit_applied=1" "exec-bit host executable"
+
+    local after
+    after="$(ws_sync_dry_verbose "${ws_dir}" "${logfile}")"
+    assert_contains "${after}" "total_paths: 0" "exec-bit cleared"
+}
+
+scenario_symlink_refused_by_apply() {
+    local ws_dir="$1"
+    local logfile="$2"
+    log "Scenario: symlink in pending diff => workspace sync refuses with exit 5"
+
+    run_capture "${logfile}" bash -lc "cd '${ws_dir}' && printf 'host\\n' > target.md" >/dev/null
+    run_world_pty "${ws_dir}" "${logfile}" "ln -s target.md link.md"
+
+    local preview
+    preview="$(ws_sync_dry_verbose "${ws_dir}" "${logfile}")"
+    assert_contains "${preview}" "pending diff summary (pty)" "symlink preview"
+    assert_contains "${preview}" "total_paths: 1" "symlink preview"
+
+    local out status
+    set +e
+    out="$(ws_sync_apply_verbose "${ws_dir}" "${logfile}")"
+    status=$?
+    set -e
+    assert_status_eq "${status}" 5 "symlink apply status"
+    assert_contains "${out}" "workspace sync refused: unsupported file type in apply set" "symlink apply"
+    assert_contains "${out}" "  path: link.md" "symlink apply"
+
+    local host_check
+    host_check="$(
+        run_capture "${logfile}" bash -lc "cd '${ws_dir}' && if test -L link.md; then echo 'host_has_symlink=1'; else echo 'host_has_symlink=0'; fi"
+    )"
+    assert_contains "${host_check}" "host_has_symlink=0" "symlink host check"
+
+    local world_check
+    world_check="$(
+        run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' -c \"if test -L link.md; then echo 'world_has_symlink=1'; else echo 'world_has_symlink=0'; fi; exit 0\""
+    )"
+    assert_contains "${world_check}" "world_has_symlink=1" "symlink world check"
+
+    local after
+    after="$(ws_sync_dry_verbose "${ws_dir}" "${logfile}")"
+    assert_contains "${after}" "total_paths: 1" "symlink still pending after refusal"
+}
+
+scenario_many_paths_stress_applies() {
+    local ws_dir="$1"
+    local logfile="$2"
+    log "Scenario: many new files in non-PTY => sync applies all writes"
+
+    # Create the directory on the host so the diff counts only the 200 new files (not the dir).
+    run_capture "${logfile}" bash -lc "cd '${ws_dir}' && mkdir -p stress" >/dev/null
+    # Avoid external `seq` to reduce dependency surface and avoid hanging if `seq` is unavailable or intercepted.
+    # shellcheck disable=SC2016
+    run_world_nonpty "${ws_dir}" "${logfile}" 'i=1; while [ $i -le 200 ]; do printf x > stress/file_$i.md; i=$((i+1)); done'
+
+    local preview
+    preview="$(ws_sync_dry_verbose "${ws_dir}" "${logfile}")"
+    assert_contains "${preview}" "pending diff summary (non_pty)" "many-paths preview"
+    assert_contains "${preview}" "total_paths: 200" "many-paths preview"
+    assert_contains "${preview}" "writes: 200" "many-paths preview"
+
+    local applied
+    applied="$(ws_sync_apply_verbose "${ws_dir}" "${logfile}")"
+    assert_contains "${applied}" "workspace sync applied" "many-paths apply"
+    assert_contains "${applied}" "writes_applied: 200" "many-paths apply"
+
+    local host_check
+    host_check="$(
+        run_capture "${logfile}" bash -lc "cd '${ws_dir}' && \
+if test -f stress/file_1.md && test -f stress/file_100.md && test -f stress/file_200.md; then echo 'stress_files_on_host=1'; else echo 'stress_files_on_host=0'; fi"
+    )"
+    assert_contains "${host_check}" "stress_files_on_host=1" "many-paths host spot check"
+
+    local after
+    after="$(ws_sync_dry_verbose "${ws_dir}" "${logfile}")"
+    assert_contains "${after}" "total_paths: 0" "many-paths cleared"
 }
 
 SUBSTRATE_BIN="substrate"
@@ -753,6 +887,9 @@ main() {
     run_case "scenario_05i_abort_policy_refuses" "both" "abort" scenario_conflict_policy_abort_refuses_on_from_host_conflict
     run_case "scenario_06_concurrent_mod_prefer_host" "both" "prefer_host" scenario_concurrent_mod_conflict_prefer_host_skips_apply
     run_case "scenario_07_concurrent_mod_prefer_world" "both" "prefer_world" scenario_concurrent_mod_conflict_prefer_world_applies
+    run_case "scenario_08_exec_bit_change" "from_world" "prefer_world" scenario_exec_bit_change_applies
+    run_case "scenario_09_symlink_refused" "from_world" "prefer_host" scenario_symlink_refused_by_apply
+    run_case "scenario_10_many_paths_stress" "from_world" "prefer_host" scenario_many_paths_stress_applies
 
     log "DONE"
     log "Logs written to: ${LOG_DIR}"
