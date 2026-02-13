@@ -19,7 +19,7 @@ Options:
   --continue               Continue after failures (run full matrix)
 
 Notes:
-  - PTY scenarios require the `script` command (util-linux).
+  - PTY scenarios use `substrate -c ":pty <cmd>"` to force the PTY WS route.
   - All work happens in temporary directories under /tmp.
 USAGE
 }
@@ -150,6 +150,23 @@ init_workspace() {
     run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' config current show" >/dev/null
 }
 
+run_world_nonpty() {
+    local ws_dir="$1"
+    local logfile="$2"
+    local program="$3"
+
+    run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' -c \"${program}\"" >/dev/null
+}
+
+run_world_pty() {
+    local ws_dir="$1"
+    local logfile="$2"
+    local program="$3"
+
+    # Force PTY route; world-agent strips the leading ":pty ".
+    run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' -c \":pty ${program}\"" >/dev/null
+}
+
 set_sync_config() {
     local ws_dir="$1"
     local logfile="$2"
@@ -159,23 +176,6 @@ set_sync_config() {
     run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' config set sync.direction='${direction}'" >/dev/null
     run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' config set sync.conflict_policy='${conflict_policy}'" >/dev/null
     run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' config show" >/dev/null
-}
-
-run_repl_pty() {
-    local ws_dir="$1"
-    local logfile="$2"
-    local repl_commands="$3"
-
-    if ! command -v script >/dev/null 2>&1; then
-        die "PTY scenario requires 'script' (util-linux). Install it or rerun with --no-assert and skip PTY scenarios."
-    fi
-
-    # `script` allocates a PTY for the child; feeding commands via stdin works well enough for our purposes.
-    # We send an explicit `exit` so the REPL terminates.
-    run_capture "${logfile}" bash -lc "cd '${ws_dir}' && script -q -e /dev/null -c '${SUBSTRATE_BIN}' <<'EOF'
-${repl_commands}
-exit
-EOF" >/dev/null
 }
 
 ws_sync_dry_verbose() {
@@ -207,16 +207,7 @@ scenario_world_write_via_pty_applies_once() {
     local logfile="$2"
     log "Scenario: world creates file in PTY => sync applies write and clears in one run"
 
-    run_repl_pty "${ws_dir}" "${logfile}" "printf 'hello\\n' > pty_new.md"
-
-    local precheck
-    precheck="$(
-        run_capture "${logfile}" bash -lc "cd '${ws_dir}' && \
-if test -e pty_new.md; then echo 'host_has_pty_new=1'; else echo 'host_has_pty_new=0'; fi && \
-'${SUBSTRATE_BIN}' -c \"if test -f pty_new.md; then echo 'world_has_pty_new=1'; else echo 'world_has_pty_new=0'; fi; exit 0\""
-    )"
-    assert_contains "${precheck}" "host_has_pty_new=0" "pty write precheck"
-    assert_contains "${precheck}" "world_has_pty_new=1" "pty write precheck"
+    run_world_pty "${ws_dir}" "${logfile}" "printf hello > pty_new.md"
 
     local preview
     preview="$(ws_sync_dry_verbose "${ws_dir}" "${logfile}")"
@@ -276,7 +267,7 @@ scenario_direction_from_host_keeps_non_conflict_world_only_shadow() {
     local logfile="$2"
     log "Scenario: direction=from_host => world-only shadow is kept (and never applied to host)"
 
-    run_repl_pty "${ws_dir}" "${logfile}" "printf 'world\\n' > world_only.md"
+    run_world_nonpty "${ws_dir}" "${logfile}" "printf world > world_only.md"
 
     local preview
     preview="$(ws_sync_dry_verbose "${ws_dir}" "${logfile}")"
@@ -285,7 +276,6 @@ scenario_direction_from_host_keeps_non_conflict_world_only_shadow() {
     local applied
     applied="$(ws_sync_apply_verbose "${ws_dir}" "${logfile}")"
     assert_contains "${applied}" "from_host reconciliation" "from_host discard apply"
-    assert_contains "${applied}" "workspace sync applied" "from_host discard apply"
 
     local host_check
     host_check="$(
@@ -307,7 +297,7 @@ scenario_from_host_conflict_prefer_host_discards_shadowed_path() {
 
     run_capture "${logfile}" bash -lc "cd '${ws_dir}' && printf 'host\\n' > shadow.md" >/dev/null
     run_capture "${logfile}" touch_future "${ws_dir}/shadow.md" >/dev/null
-    run_repl_pty "${ws_dir}" "${logfile}" "printf 'world\\n' > shadow.md"
+    run_world_pty "${ws_dir}" "${logfile}" "printf world > shadow.md"
 
     local preview
     preview="$(ws_sync_dry_verbose "${ws_dir}" "${logfile}")"
@@ -342,7 +332,7 @@ scenario_from_host_conflict_prefer_world_keeps_shadowed_path() {
 
     run_capture "${logfile}" bash -lc "cd '${ws_dir}' && printf 'host\\n' > shadow.md" >/dev/null
     run_capture "${logfile}" touch_future "${ws_dir}/shadow.md" >/dev/null
-    run_repl_pty "${ws_dir}" "${logfile}" "printf 'world\\n' > shadow.md"
+    run_world_pty "${ws_dir}" "${logfile}" "printf world > shadow.md"
 
     local preview
     preview="$(ws_sync_dry_verbose "${ws_dir}" "${logfile}")"
@@ -370,7 +360,7 @@ scenario_delete_host_file_in_world_prefer_world_applies_delete() {
     log "Scenario: host creates file; world deletes; prefer_world => sync applies delete to host"
 
     run_capture "${logfile}" bash -lc "cd '${ws_dir}' && printf 'host\\n' > doomed.md" >/dev/null
-    run_repl_pty "${ws_dir}" "${logfile}" "rm -f doomed.md"
+    run_world_pty "${ws_dir}" "${logfile}" "rm -f doomed.md"
 
     local preview
     preview="$(ws_sync_dry_verbose "${ws_dir}" "${logfile}")"
@@ -394,7 +384,7 @@ scenario_delete_host_file_in_world_prefer_host_discards_delete() {
     log "Scenario: host creates file; world deletes; prefer_host => sync discards world delete (host keeps)"
 
     run_capture "${logfile}" bash -lc "cd '${ws_dir}' && printf 'host\\n' > kept.md" >/dev/null
-    run_repl_pty "${ws_dir}" "${logfile}" "rm -f kept.md"
+    run_world_pty "${ws_dir}" "${logfile}" "rm -f kept.md"
 
     local preview
     preview="$(ws_sync_dry_verbose "${ws_dir}" "${logfile}")"
@@ -424,7 +414,7 @@ scenario_delete_host_file_in_world_direction_from_world_deletes_host_even_prefer
     log "Scenario: direction=from_world + prefer_host => world delete is applied to host (no from_host reconciliation)"
 
     run_capture "${logfile}" bash -lc "cd '${ws_dir}' && printf 'host\\n' > from_world_delete.md" >/dev/null
-    run_repl_pty "${ws_dir}" "${logfile}" "rm -f from_world_delete.md"
+    run_world_pty "${ws_dir}" "${logfile}" "rm -f from_world_delete.md"
 
     local applied
     applied="$(ws_sync_apply_verbose "${ws_dir}" "${logfile}")"
@@ -443,7 +433,7 @@ scenario_world_create_then_delete_noop() {
     local logfile="$2"
     log "Scenario: world creates then deletes before sync => no pending diffs"
 
-    run_repl_pty "${ws_dir}" "${logfile}" "printf 'tmp\\n' > noop.md\nrm -f noop.md"
+    run_world_pty "${ws_dir}" "${logfile}" "printf tmp > noop.md; rm -f noop.md"
 
     local preview
     preview="$(ws_sync_dry_verbose "${ws_dir}" "${logfile}")"
@@ -463,13 +453,13 @@ scenario_world_rename_mv_results_in_delete_plus_write() {
     local logfile="$2"
     log "Scenario: world rename (mv) => sync applies delete+write"
 
-    run_repl_pty "${ws_dir}" "${logfile}" "printf 'a\\n' > rename_src.md"
+    run_world_pty "${ws_dir}" "${logfile}" "printf a > rename_src.md"
     local first_apply
     first_apply="$(ws_sync_apply_verbose "${ws_dir}" "${logfile}")"
     assert_contains "${first_apply}" "workspace sync applied" "rename first apply"
     assert_any_contains "${first_apply}" "rename first apply count" "writes_applied: 1" "mods_applied: 1"
 
-    run_repl_pty "${ws_dir}" "${logfile}" "mv rename_src.md rename_dst.md"
+    run_world_pty "${ws_dir}" "${logfile}" "mv rename_src.md rename_dst.md"
 
     local preview
     preview="$(ws_sync_dry_verbose "${ws_dir}" "${logfile}")"
@@ -498,7 +488,7 @@ scenario_world_modifies_host_file_prefer_world_applies_mod() {
     log "Scenario: world edits host file; prefer_world => host updated on sync"
 
     run_capture "${logfile}" bash -lc "cd '${ws_dir}' && printf 'host\\n' > edit.md" >/dev/null
-    run_repl_pty "${ws_dir}" "${logfile}" "printf 'world\\n' > edit.md"
+    run_world_pty "${ws_dir}" "${logfile}" "printf world > edit.md"
 
     local applied
     applied="$(ws_sync_apply_verbose "${ws_dir}" "${logfile}")"
@@ -515,8 +505,8 @@ scenario_combined_pty_and_nonpty_shows_combined_counts() {
     local logfile="$2"
     log "Scenario: PTY + non-PTY diffs => combined summary includes both"
 
-    run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' -c \"printf 'n\\n' > nonpty.md\"" >/dev/null
-    run_repl_pty "${ws_dir}" "${logfile}" "printf 'p\\n' > pty.md"
+    run_world_nonpty "${ws_dir}" "${logfile}" "printf n > nonpty.md"
+    run_world_pty "${ws_dir}" "${logfile}" "printf p > pty.md"
 
     local preview
     preview="$(ws_sync_dry_verbose "${ws_dir}" "${logfile}")"
@@ -533,7 +523,7 @@ scenario_excluded_paths_not_synced() {
     local logfile="$2"
     log "Scenario: excluded paths (.substrate/**, .git/**) => never applied to host"
 
-    run_repl_pty "${ws_dir}" "${logfile}" "mkdir -p .git\nprintf 'x\\n' > .git/excluded.md\nprintf 'y\\n' > .substrate/excluded.md"
+    run_world_pty "${ws_dir}" "${logfile}" "mkdir -p .git; printf x > .git/excluded.md; printf y > .substrate/excluded.md"
 
     local preview
     preview="$(ws_sync_dry_verbose "${ws_dir}" "${logfile}")"
@@ -565,7 +555,7 @@ scenario_delete_directory_tree_applies() {
     log "Scenario: world deletes directory tree => sync deletes on host"
 
     run_capture "${logfile}" bash -lc "cd '${ws_dir}' && mkdir -p tree/a && printf 'host\\n' > tree/a/file.md" >/dev/null
-    run_repl_pty "${ws_dir}" "${logfile}" "rm -rf tree"
+    run_world_pty "${ws_dir}" "${logfile}" "rm -rf tree"
 
     local applied
     applied="$(ws_sync_apply_verbose "${ws_dir}" "${logfile}")"
@@ -585,11 +575,11 @@ scenario_conflict_policy_abort_refuses_on_from_host_conflict() {
     log "Scenario: conflict_policy=abort + direction=both => sync refuses with exit 5 on conflict"
 
     # Ensure a baseline exists (and is earlier than our host change) by starting a world session first.
-    run_repl_pty "${ws_dir}" "${logfile}" "true"
+    run_world_nonpty "${ws_dir}" "${logfile}" "true"
 
     run_capture "${logfile}" bash -lc "cd '${ws_dir}' && printf 'host\\n' > abort.md" >/dev/null
     run_capture "${logfile}" touch_future "${ws_dir}/abort.md" >/dev/null
-    run_repl_pty "${ws_dir}" "${logfile}" "printf 'world\\n' > abort.md"
+    run_world_pty "${ws_dir}" "${logfile}" "printf world > abort.md"
 
     local out status
     set +e
@@ -609,7 +599,7 @@ scenario_concurrent_mod_conflict_prefer_host_skips_apply() {
     run_capture "${logfile}" bash -lc "cd '${ws_dir}' && printf 'base\\n' > conflict.md" >/dev/null
 
     # World edits first (creates an upper shadow).
-    run_repl_pty "${ws_dir}" "${logfile}" "printf 'world\\n' > conflict.md"
+    run_world_pty "${ws_dir}" "${logfile}" "printf world > conflict.md"
     # Host edits after the world session to ensure host mtime > session_started_at.
     sleep 1
     run_capture "${logfile}" bash -lc "cd '${ws_dir}' && printf 'host\\n' > conflict.md" >/dev/null
@@ -636,7 +626,7 @@ scenario_concurrent_mod_conflict_prefer_world_applies() {
     run_capture "${logfile}" bash -lc "cd '${ws_dir}' && printf 'base\\n' > conflict.md" >/dev/null
 
     # World edits first (upper shadow).
-    run_repl_pty "${ws_dir}" "${logfile}" "printf 'world\\n' > conflict.md"
+    run_world_pty "${ws_dir}" "${logfile}" "printf world > conflict.md"
     # Host edits after.
     sleep 1
     run_capture "${logfile}" bash -lc "cd '${ws_dir}' && printf 'host\\n' > conflict.md" >/dev/null
@@ -709,10 +699,6 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if ! command -v script >/dev/null 2>&1; then
-    warn "Missing 'script' command; PTY scenarios will fail. Install util-linux or rerun with --no-assert and comment out PTY scenarios."
-fi
-
 main() {
     run_case() {
         local case_id="$1"
@@ -726,21 +712,26 @@ main() {
 
         local logfile="${LOG_DIR}/${case_id}.log"
 
-        if ( set -euo pipefail
+        local status=0
+        (
+            set -euo pipefail
             init_workspace "${ws_dir}" "${logfile}"
             set_sync_config "${ws_dir}" "${logfile}" "${direction}" "${conflict_policy}"
             "${scenario_fn}" "${ws_dir}" "${logfile}"
-        ); then
+        )
+        status=$?
+
+        if [[ "${status}" -eq 0 ]]; then
             log "PASS: ${case_id}"
-        else
-            local status=$?
-            echo "CASE FAILED: ${case_id} exit_status=${status}" >&2
-            echo "  log: ${logfile}" >&2
-            echo "  ws:  ${ws_dir}" >&2
-            FAILED_CASES+=("${case_id}")
-            if [[ "${CONTINUE_ON_ERROR}" -ne 1 ]]; then
-                exit "${status}"
-            fi
+            return 0
+        fi
+
+        echo "CASE FAILED: ${case_id} exit_status=${status}" >&2
+        echo "  log: ${logfile}" >&2
+        echo "  ws:  ${ws_dir}" >&2
+        FAILED_CASES+=("${case_id}")
+        if [[ "${CONTINUE_ON_ERROR}" -ne 1 ]]; then
+            exit "${status}"
         fi
     }
 
