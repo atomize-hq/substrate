@@ -1,0 +1,319 @@
+# Phase 8 — Cross-Cutting Decision Registry (LLM/Agents/Workflows/Router)
+
+This document is the Phase 8 “circle-back” registry for cross-cutting contracts that span:
+
+- Trace foundations: ADR-0028 (`docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`)
+- Output/event routing: ADR-0017 (`docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`)
+- Config/policy surface: ADR-0027 (`docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`)
+- LLM gateway + engines: ADR-0023 / ADR-0024
+- Agent hub + toolbox: ADR-0025 / ADR-0026
+- Host router daemon: ADR-0029
+- (Deferred, but must remain compatible): workflow-engine + forge (ADR-0021 / ADR-0022)
+
+Non-negotiable (Phase 8 constraint): updates to foundation ADRs that are `Accepted` must be additive-only (no contract reshapes). This registry is intended to surface “what must be aligned before acceptance” and “what must be added additively during the circle-back pass”.
+
+---
+
+## Phase 8 checklist mapping (from `LLM_AI_CAPABILITY_ENABLEMENT_PLANNING_ORDER.md`)
+
+This registry covers:
+
+- ADR-0028 circle-back: new event families + correlation fields + derived router events + redaction/caps notes + `docs/TRACE.md` updates.
+- Secrets delivery channel rubric: when to prefer inherited one-time FD/pipe vs env var injection.
+- ADR-0017 circle-back: finalize correlation field set, buffering/backpressure compatibility, optional routing hints (channel/topic), and world session reuse attribution (`world_id`).
+- ADR-0027 circle-back: ensure backend id formats + gating keys remain aligned and fail-closed; keep it limited to selection/allowlists and reference appendices.
+- ADR-0025 circle-back: explicit control-plane vs event-plane separation; event-plane subscription/channel model.
+- ADR-0029 circle-back: v1 trigger allowlist alignment + derived request/event schemas with stable join keys.
+
+---
+
+## Current alignment snapshot (what already composes cleanly)
+
+- Backend id format is consistent across LLM + agents: `<kind>:<name>` (e.g., `cli:codex`) and is used for allowlists and routing selection.
+- Default posture is fail-closed / deny-by-default via empty allowlists and `fail_closed.routing` (policy-owned boundary decision).
+- Output classes separation (PTY bytes vs structured events) is established, and buffering is explicitly bounded (buffer + drop-with-summary), keeping TUI correctness non-negotiable.
+- The workflow-router service is trace-first (tails `trace.jsonl`) and emits derived events append-only (no parallel “event plane” is introduced).
+
+## Primary cross-cutting risks (what can drift without a Phase 8 lock)
+
+- No single “correlation vocabulary + required/optional matrix” exists yet (risk: heuristic joins and event-family drift).
+- `agent_id` semantics are not yet unified across trace spans vs structured agent events (risk: audit confusion).
+- Control plane vs event plane is not yet an explicit contract in Agent Hub (risk: accidental second execution plane).
+- Secrets delivery mechanisms differ by subsystem without a shared rubric (risk: env var proliferation and inconsistent hardening).
+- Router derived-event schemas/correlation keys are not yet locked (risk: fragile cause/effect joins and recursion-footguns).
+
+---
+
+## Registry (cross-cutting alignment items)
+
+Each item below is written as: **Decision/contract to lock**, **current sources**, **gap**, and **alignment action**.
+
+### CC-0001 — Canonical correlation field set (trace-wide vocabulary + required/optional classification)
+
+**Decision/contract to lock**
+- Define the canonical set of correlation identifiers and their required/optional classification, by event family, across:
+  - command spans (`command_start` / `command_complete`)
+  - in-world process tree events (`world_process_*`)
+  - structured agent events
+  - LLM request lifecycle events/spans
+  - workflow root/node spans (future; must remain compatible)
+  - workflow-router derived events (rule/request lifecycle)
+  - MCP/toolbox tool-call events
+
+**Current sources**
+- Attribution envelope draft: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003)
+- Workflow trace intent: `docs/project_management/next/workflow-engine/decision_register.md` (DR-0005)
+- Router derived events: `docs/project_management/next/host_event_bus_router_daemon/decision_register.md` (DR-0003, DR-0007, DR-0008)
+- LLM gateway correlation intent: `docs/project_management/next/llm_gateway_in_world/contract.md`
+
+**Gap**
+- ADR-0028 currently does not enumerate correlation fields beyond the existing command/span keys (it only references `world_id` explicitly).
+- Several “must carry” fields are asserted in downstream ADRs/DRs without a single authoritative matrix (making drift likely).
+
+**Alignment action**
+- Add a Phase 8 additive section to ADR-0028 (or its planning outputs) that defines:
+  - a **field vocabulary** (names + meanings),
+  - a **required/optional matrix** per event family,
+  - and a **“join key” rule** (which fields are guaranteed to be stable for deterministic joins).
+
+---
+
+### CC-0002 — `session_id` vs `orchestration_session_id` semantics (no heuristic joins)
+
+**Decision/contract to lock**
+- Define whether:
+  - `session_id` remains the shell trace session identifier, and
+  - `orchestration_session_id` is the multi-agent orchestration session identifier,
+  - and when both must appear on a record (or whether one supersedes the other for certain families).
+
+**Current sources**
+- Existing trace docs use `session_id`: `docs/TRACE.md`
+- Structured agent events require `orchestration_session_id`: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003)
+- LLM gateway wants `orchestration_session_id`/`run_id`/`thread_id`: `docs/project_management/next/llm_gateway_in_world/contract.md`
+
+**Gap**
+- Without a single decision, consumers (router, session loggers, UIs) risk heuristic “best-effort” joins between trace sessions and orchestration sessions.
+
+**Alignment action**
+- In the ADR-0028 Phase 8 circle-back, define:
+  - which families must carry `orchestration_session_id`,
+  - whether `session_id` stays mandatory on all trace records,
+  - and a deterministic mapping story where required (e.g., “shell sessions can host multiple orchestration sessions” or “one-to-one”).
+
+---
+
+### CC-0003 — `agent_id` meaning (principal identity vs backend identity)
+
+**Decision/contract to lock**
+- Decide a single semantic meaning for `agent_id` across:
+  - trace command spans,
+  - structured agent events,
+  - LLM spans/events,
+  - router derived events,
+  - toolbox tool-call events.
+
+**Current sources**
+- Trace example uses `agent_id` as a generic “who ran this” label: `docs/TRACE.md`
+- Structured agent event envelope treats `agent_id` as “backend identity”: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003)
+- Agent hub derives `backend_id` (`<kind>:<agent_id>`): `docs/project_management/next/agent_hub_core/decision_register.md` (DR-0001)
+
+**Gap**
+- Ambiguity between “human/actor principal” and “agent backend inventory id” creates downstream join and audit confusion.
+
+**Alignment action**
+- Define:
+  - `agent_id` as the **principal/actor identifier** (which can be `human` or a registered agent inventory id), and
+  - `backend_id` as the **backend identifier** in `<kind>:<name>` form when applicable.
+- Ensure all LLM/agent/toolbox/router families include `backend_id` when a backend is involved, so the meaning is never inferred.
+
+---
+
+### CC-0004 — Structured agent event envelope extensions (world attribution + routing hints)
+
+**Decision/contract to lock**
+- Extend the structured agent event envelope additively to support:
+  - `world_id` attribution (when `execution.scope=world`)
+  - an event-plane routing hint (`channel`/`topic`) suitable for subscribe/filter semantics
+
+**Current sources**
+- Initial envelope shape: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003)
+- World session reuse decision requires surfacing `world_id`: `docs/project_management/next/agent_hub_core/decision_register.md` (DR-0004)
+- Phase 8 explicit discussion points: `LLM_AI_CAPABILITY_ENABLEMENT_PLANNING_ORDER.md` (Phase 8 section)
+
+**Gap**
+- `world_id` is required by Agent Hub DR-0004 for operators to verify shared-world semantics, but it is not present in the ADR-0017 envelope definition.
+- No concrete “channel/topic” contract exists yet (needed to avoid PTY injection hacks for future subscribe/filter behavior).
+
+**Alignment action**
+- Additive Phase 8 updates:
+  - Require `world_id` on structured events when the agent execution is world-scoped.
+  - Introduce an optional `channel` (string) field with strict semantics (producer-declared; not user-generated freeform without caps).
+
+---
+
+### CC-0005 — Agent Hub control plane vs event plane (explicit separation + policy gates)
+
+**Decision/contract to lock**
+- Explicitly define:
+  - the **control plane** (task assignment, cancel, steering RPCs) and its policy gates
+  - the **event plane** (structured events/telemetry) and its routing/attribution contract
+
+**Current sources**
+- Phase 8 discussion point: `LLM_AI_CAPABILITY_ENABLEMENT_PLANNING_ORDER.md`
+- ADR-0026 already insists tools must not create a second execution plane: `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`
+
+**Gap**
+- The separation is referenced as necessary, but there is no locked contract defining surfaces, gates, and trace attribution for control-plane actions.
+
+**Alignment action**
+- Add decision-register entries (Agent Hub +/or ADR-0017) to lock:
+  - control-plane verb allowlist (v1 minimal set),
+  - required correlation fields for control-plane actions (`tool_call_id`/`request_id` + cause refs),
+  - and explicit policy keys that gate steering/cancel across roles.
+
+---
+
+### CC-0006 — Secrets delivery channel rubric (FD/pipe vs env vars; cross-track standard)
+
+**Decision/contract to lock**
+- Establish a reusable rubric for secrets delivery between Substrate-managed components:
+  - prefer inherited one-time FD/pipe channels where Substrate spawns and controls both endpoints,
+  - allow env var injection where interop requires it (3rd-party tools/SDKs) or where transport constraints make FD/pipe infeasible.
+
+**Current sources**
+- Toolbox token explicitly chooses FD/pipe: `docs/project_management/next/orchestration_mcp_toolbox/decision_register.md` (DR-0009)
+- LLM gateway chooses env injection (v1): `docs/project_management/next/llm_gateway_in_world/specs/env_injection.md`
+
+**Gap**
+- No single rubric exists today, so new secret-handling decisions risk ad-hoc env var expansion and inconsistent operator expectations.
+
+**Alignment action**
+- Create a standard doc (Phase 8 output) and update all relevant ADRs/DRs to reference it:
+  - toolbox auth token
+  - gateway/engine auth injection
+  - any future router/workflow/agent secrets (if introduced)
+
+---
+
+### CC-0007 — Workflow-router derived event families + correlation keys (trace-aligned)
+
+**Decision/contract to lock**
+- Define the derived router event families (at minimum):
+  - `rule_match`
+  - `request_enqueued`
+  - `request_denied` / `request_allowed` (or a single status event with outcome)
+  - `action_executed` (and failure variants)
+- Define required correlation keys:
+  - stable cause references to the source trace record (`span_id`/`cmd_id` and/or a future `event_id`)
+  - `workspace_id` (source and target)
+  - `rule_id`, `request_id`, `idempotency_key`
+
+**Current sources**
+- Derived events appended to `trace.jsonl`: `docs/project_management/next/host_event_bus_router_daemon/decision_register.md` (DR-0003)
+- Trigger allowlist + recursion guard: `docs/project_management/next/host_event_bus_router_daemon/decision_register.md` (DR-0007)
+
+**Gap**
+- Router DRs choose “append derived events to trace” but do not yet specify the derived event schemas or the exact correlation keys required to join cause→effect without heuristics.
+
+**Alignment action**
+- Additive Phase 8 updates:
+  - extend ADR-0028 with router-derived event families + their required fields,
+  - ensure the router never needs to join across multiple records to determine “deny vs executed”.
+
+---
+
+### CC-0008 — Workflow trace classification additions (future, but must be reserved additively)
+
+**Decision/contract to lock**
+- Reserve and define the workflow trace families/fields needed by:
+  - a workflow root span (`workflow_run`)
+  - workflow node spans (`workflow_node`)
+  - linkage between node spans and underlying command spans
+
+**Current sources**
+- Workflow spans decision: `docs/project_management/next/workflow-engine/decision_register.md` (DR-0005)
+
+**Gap**
+- ADR-0028 has no reserved workflow families/fields yet, but downstream planning already assumes they exist and will be added additively.
+
+**Alignment action**
+- Phase 8 additive extension to ADR-0028 that reserves:
+  - `workflow_run_id`, `workflow_node_id`, and linkage fields,
+  - and clarifies redaction/caps rules for workflow artifacts (align with forge “trace-only artifacts” posture).
+
+---
+
+### CC-0009 — MCP/toolbox tool-call correlation (`tool_call_id` and trace visibility)
+
+**Decision/contract to lock**
+- Define `tool_call_id` (and related fields) and ensure tool invocations are:
+  - attributable to `(orchestration_session_id, agent_id, role, world_id?)`
+  - persisted in trace in a stable family suitable for router/analytics (even if router v1 cannot trigger on it)
+
+**Current sources**
+- Toolbox exists and requires attribution: `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`
+- Phase 8 explicitly calls out `tool_call_id`: `LLM_AI_CAPABILITY_ENABLEMENT_PLANNING_ORDER.md`
+
+**Gap**
+- `tool_call_id` is referenced as a likely needed correlation field, but it is not yet part of the canonical trace vocabulary (ADR-0028) and not present in the ADR-0017 envelope.
+
+**Alignment action**
+- Additive Phase 8 update:
+  - define `tool_call_id` as part of the correlation vocabulary and introduce a tool-call trace family (or a dedicated `event_type` with a strict schema).
+
+---
+
+### CC-0010 — World session reuse + restart attribution (operator-verifiable)
+
+**Decision/contract to lock**
+- Ensure operators can verify:
+  - whether multiple agents shared the same world boundary (same `world_id`), and
+  - when/why a world was restarted.
+
+**Current sources**
+- Shared-world default + required `world_restarted` event: `docs/project_management/next/agent_hub_core/decision_register.md` (DR-0004)
+- ADR-0017 still treats `world_id` as a review hook: `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+
+**Gap**
+- `world_id` is not yet locked as a required field on structured agent events in the ADR-0017 envelope, despite being required for the shared-world contract.
+
+**Alignment action**
+- Additive Phase 8 update:
+  - require `world_id` on structured events for world-scoped agents,
+  - define the `world_restarted` event schema (fields + stable reason codes) and ensure it is persisted to trace.
+
+---
+
+### CC-0011 — Workflow-router rules surface in ADR-0027 (`workflow.*` keys + gating)
+
+**Decision/contract to lock**
+- Define the minimal `workflow.*` config and policy surfaces needed by ADR-0029 without introducing new file families.
+
+**Current sources**
+- Router DR requires adding `workflow.*` keys to ADR-0027 surfaces: `docs/project_management/next/host_event_bus_router_daemon/decision_register.md` (DR-0006 follow-up)
+
+**Gap**
+- ADR-0027 currently scopes to `llm.*` and `agents.*`. ADR-0029 requires workflow routing rule locations + precedence and policy gating keys, but these are not yet represented in the ADR-0027 contract/schema outputs.
+
+**Alignment action**
+- Add ADR-0027 additive extensions to cover the minimal router rule configuration keys (and keep them strictly validated + fail-closed).
+
+---
+
+### CC-0012 — `docs/TRACE.md` alignment to Phase 1–6 contracts (Phase 8 documentation pointers)
+
+**Decision/contract to lock**
+- Update `docs/TRACE.md` to reflect:
+  - the new correlation vocabulary (once CC-0001..CC-0003 are resolved),
+  - the router derived families (CC-0007),
+  - and reserved workflow fields (CC-0008),
+  - plus any explicit redaction/caps rules for LLM/agent/toolbox event families.
+
+**Current sources**
+- Phase 8 requires documentation pointers/updates: `LLM_AI_CAPABILITY_ENABLEMENT_PLANNING_ORDER.md`
+
+**Gap**
+- `docs/TRACE.md` currently documents a command-span-centric schema and does not describe the Phase 1–6 planned event-family expansions (LLM/agents/router/workflows).
+
+**Alignment action**
+- Phase 8: add a “Trace event families” section to `docs/TRACE.md` that links to ADR-0028 as canonical and lists the v1 allowlisted families for router triggers.

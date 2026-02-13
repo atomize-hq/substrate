@@ -58,6 +58,7 @@ This document is a lightweight tracking plan for finalizing ADRs and their corre
 - ADR-0022: `docs/project_management/adrs/draft/ADR-0022-forge-agent-loop-as-workflow-node.md`
 
 ## Phase 8 — Circle-back pass (additive-only): trace classifications + landing items
+- Phase 8 working registry (cross-cutting alignment): `docs/project_management/next/PHASE_8_CROSS_CUTTING_DECISION_REGISTRY.md`
 - Note (workflow composition):
   - ADR-0021 and ADR-0022 MUST remain `Draft` until we are closer to implementation.
   - We will defer solidifying remaining `workflow-engine` / `forge` contract details (beyond already-accepted DR items) until enough upstream foundations have landed (Phases 1–6) and we are ready to produce the Phase 7 Planning Packs.

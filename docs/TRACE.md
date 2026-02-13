@@ -4,6 +4,9 @@
 
 The Substrate Trace module (`crates/trace`) provides comprehensive span-based tracing for command execution across the Substrate ecosystem. It captures detailed execution context, policy decisions, and system state to enable command replay, security auditing, and graph-based analysis of command relationships.
 
+For the Phase 8 cross-cutting trace-family/correlation-field extensions (LLM/agents/router/workflows), track alignment in:
+- `docs/project_management/next/PHASE_8_CROSS_CUTTING_DECISION_REGISTRY.md`
+
 ### Key Features
 
 - **Extended JSONL Schema**: Rich span format with policy decisions, graph edges, and replay context
