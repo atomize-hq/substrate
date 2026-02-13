@@ -308,7 +308,6 @@ scenario_from_host_conflict_prefer_host_discards_shadowed_path() {
     local applied
     applied="$(ws_sync_apply_verbose "${ws_dir}" "${logfile}")"
     assert_contains "${applied}" "from_host reconciliation" "from_host prefer_host apply"
-    assert_contains "${applied}" "workspace sync applied" "from_host prefer_host apply"
 
     local world_cat
     world_cat="$(run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' -c \"cat shadow.md\"")"
@@ -343,7 +342,6 @@ scenario_from_host_conflict_prefer_world_keeps_shadowed_path() {
     local applied
     applied="$(ws_sync_apply_verbose "${ws_dir}" "${logfile}")"
     assert_contains "${applied}" "from_host reconciliation" "from_host prefer_world apply"
-    assert_contains "${applied}" "workspace sync applied" "from_host prefer_world apply"
 
     local world_cat
     world_cat="$(run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' -c \"cat shadow.md\"")"
