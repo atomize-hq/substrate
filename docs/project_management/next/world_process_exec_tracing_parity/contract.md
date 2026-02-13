@@ -12,6 +12,7 @@ Authoritative inputs:
 - Canonical trace (`~/.substrate/trace.jsonl`) gains:
   - joinability improvements across shell/shim/replay records, and
   - a new `world_process_*` event family for subprocess exec/exit telemetry (Linux backend; degrade elsewhere).
+- Phase 8 additive note (cross-feature): ADR-0028 also defines a shared correlation vocabulary and reserves/adds additional trace families (router/toolbox/workflow). This planning pack implements the `world_process_*` family and preexec posture; router-derived families are owned by ADR-0029 and documented in the router decision register.
 
 ## Non-negotiable invariants
 - Canonical trace is safe-by-default:
@@ -21,4 +22,3 @@ Authoritative inputs:
   - completion spans MUST reflect denied vs executed clearly (`outcome: "denied"` on deny).
 - Degrade is explicit:
   - if in-world process capture is unavailable, world-agent responses MUST include deterministic diagnostics; omission must not be silent.
-

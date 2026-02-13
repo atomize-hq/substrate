@@ -237,6 +237,30 @@ Canonical correlation fields:
   - Meaning: command identifier and linkage for non-span event records that reference a command span.
   - Rule: any record that is “about” a particular command execution MUST include `cmd_id`. Any record that is “about” a subprocess tree for a command MUST include `parent_cmd_id` when available.
 
+- `workspace_id`
+  - Meaning: stable workspace identity (UUID string) for cross-workspace routing and attribution.
+  - Rule: REQUIRED on workflow-router derived events and any record that participates in cross-workspace routing/joins; SHOULD be treated as the **source workspace** identity when both source and target exist.
+
+- `target_workspace_id`
+  - Meaning: stable workspace identity (UUID string) for the routing target when a router request/action targets a different workspace.
+  - Rule: OPTIONAL; present on workflow-router derived events and request/queue artifacts only when a distinct target workspace exists.
+
+- `request_id`
+  - Meaning: workflow-router request identifier (UUID string) for request/action lifecycle joins.
+  - Rule: REQUIRED on workflow-router derived event families and router request/queue artifacts.
+
+- `idempotency_key`
+  - Meaning: deterministic dedupe/join key for at-least-once router processing (hex string).
+  - Rule: REQUIRED on workflow-router derived event families and router request/queue artifacts so duplicates are detectable without heuristics.
+
+- `source_span_id` / `source_cmd_id`
+  - Meaning: explicit cause reference to the source trace record that triggered a router rule match.
+  - Rule: REQUIRED on workflow-router derived event families (one must be present; `source_span_id` preferred when available).
+
+- `rule_id`
+  - Meaning: workflow-router rule identifier.
+  - Rule: REQUIRED on workflow-router derived event families.
+
 - `tool_call_id`
   - Meaning: identifier for a toolbox/MCP tool invocation instance.
   - Rule: OPTIONAL in v1 unless/until a toolbox tool-call trace family is introduced; reserved for Phase 8 to avoid later reshapes.

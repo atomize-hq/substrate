@@ -91,3 +91,40 @@ When `SUBSTRATE_PREEXEC_RAW_LOG` is set:
 - Write `event_type: builtin_command_raw` records to that file path.
 - Raw records MUST include:
   - `may_contain_secrets: true`
+
+## 5) Router-derived event families (Phase 8 additive; owned by ADR-0029)
+
+ADR-0028’s Phase 8 additive correlation vocabulary extends beyond `world_process_*` to cover router-derived events emitted by the host workflow router daemon (ADR-0029). This planning pack does not implement the router, but the canonical trace schema must reserve and document the derived event families so downstream joins are deterministic and non-heuristic.
+
+Authoritative sources:
+- ADR-0028 Phase 8 additive correlation vocabulary + matrix: `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
+- Router derived-event taxonomy + required fields: `docs/project_management/next/host_event_bus_router_daemon/decision_register.md` (DR-0016)
+
+### Event types (v1; additive-only list)
+Router-derived events appended to canonical `trace.jsonl` MUST use explicit `event_type` values such as:
+- `workflow_router_rule_match`
+- `workflow_router_request_enqueued`
+- `workflow_router_request_denied`
+- `workflow_router_request_pending_approval`
+- `workflow_router_action_enqueued`
+- `workflow_router_action_executed`
+- `workflow_router_cursor_gap_detected`
+
+### Required fields (all router-derived events)
+- `ts`
+- `event_type` (one of the above)
+- `component: "workflow-router"`
+- `session_id`
+- Correlation / join keys (must be sufficient to avoid heuristic joins):
+  - `request_id` (UUID string)
+  - `idempotency_key` (hex string)
+  - `workspace_id` (source workspace id; UUID string)
+  - one cause reference:
+    - `source_span_id` when available, and/or
+    - `source_cmd_id`
+  - `rule_id`
+
+### Optional fields (router-derived events)
+- `orchestration_session_id` (when tied to orchestration)
+- `target_workspace_id` (when routing targets a distinct workspace)
+- `backend_id` (when a specific backend is involved)
