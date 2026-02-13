@@ -582,7 +582,7 @@ impl WorldAgentService {
 
             let started_at: chrono::DateTime<chrono::Utc> = started_at.into();
             let session_started_at =
-                started_at.to_rfc3339_opts(SecondsFormat::Secs, /* use_z */ true);
+                started_at.to_rfc3339_opts(SecondsFormat::Nanos, /* use_z */ true);
 
             let mut non_pty = PendingDiffBucketV1::default();
             let mut pty = PendingDiffBucketV1::default();
@@ -1090,6 +1090,8 @@ impl WorldAgentService {
         });
 
         let backend = self.backend.clone();
+        #[cfg(target_os = "linux")]
+        let service = self.clone();
         let agent_id = req.agent_id.clone();
         task::spawn_blocking(move || {
             let sink = Arc::new(StreamingSink::new(tx.clone()));
@@ -1099,6 +1101,16 @@ impl WorldAgentService {
 
             match result {
                 Ok(exec_result) => {
+                    #[cfg(target_os = "linux")]
+                    if let Some(ref diff) = exec_result.fs_diff {
+                        let snapshot = WorldAgentService::normalize_pending_diff_bucket(diff);
+                        service.note_pending_diff_origin_for_world(
+                            &world.id,
+                            PendingDiffOrigin::NonPty,
+                            &snapshot,
+                        );
+                    }
+
                     if let (Some(primary), Some(final_strategy), Some(reason)) = (
                         exec_result.world_fs_strategy_primary,
                         exec_result.world_fs_strategy_final,

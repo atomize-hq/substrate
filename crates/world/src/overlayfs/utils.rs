@@ -78,6 +78,25 @@ pub(crate) fn compute_diff(
             } else {
                 diff.writes.push(rel_pathbuf.clone());
             }
+        } else if entry.file_type().is_symlink() {
+            // Track symlinks in the pending diff so workspace sync can refuse safely rather than
+            // silently discarding them during diff clear.
+            file_count += 1;
+
+            if let Ok(metadata) = entry.metadata() {
+                total_size += metadata.len() as usize;
+            }
+
+            if file_count > max_files || total_size > max_diff_size_bytes {
+                diff.truncated = true;
+                break;
+            }
+
+            if is_modification(lower_dir, &rel_pathbuf) {
+                diff.mods.push(rel_pathbuf.clone());
+            } else {
+                diff.writes.push(rel_pathbuf.clone());
+            }
         } else if entry.file_type().is_dir() {
             dir_count += 1;
             if dir_count <= max_dirs && !is_modification(lower_dir, &rel_pathbuf) {
@@ -183,6 +202,11 @@ mod tests {
         // New file + directory
         std::fs::write(upper.join("added.txt"), "fresh").unwrap();
         std::fs::create_dir_all(upper.join("dir")).unwrap();
+        // Symlink should be tracked as a write.
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink("added.txt", upper.join("link.txt")).unwrap();
+        }
         // Whiteout should translate into delete
         std::fs::write(upper.join(".wh.removed.txt"), "").unwrap();
 
@@ -194,6 +218,11 @@ mod tests {
         assert!(
             diff.writes.contains(&PathBuf::from("added.txt")),
             "writes should include brand new files"
+        );
+        #[cfg(unix)]
+        assert!(
+            diff.writes.contains(&PathBuf::from("link.txt")),
+            "writes should include symlinks"
         );
         assert!(
             diff.deletes.contains(&PathBuf::from("removed.txt")),
