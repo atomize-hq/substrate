@@ -242,3 +242,11 @@ Policy:
 ## END — 2026-02-14T17:04:42Z — integration — WDP2-integ
 - HEAD: `5114e504d57c51c94e66b87c7dbe7aa199e7c58c`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-deps-packages-bundles-contract/logs/WDP2/integ/last_message.md`
+
+## START — 2026-02-14T18:25:14Z — code — WDP3-code
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-deps-packages-bundles-contract" SLICE_ID="WDP3"`
+
+## START — 2026-02-14T18:25:14Z — test — WDP3-test
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-deps-packages-bundles-contract" SLICE_ID="WDP3"`
