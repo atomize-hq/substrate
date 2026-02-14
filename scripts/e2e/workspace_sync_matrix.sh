@@ -14,6 +14,7 @@ Purpose:
 Options:
   --substrate-bin <path>   Substrate binary (default: substrate)
   --log-dir <dir>          Where to write logs (default: target/world-sync-matrix/<utc>/)
+  --profile <name>         Scenario profile: auto|linux|macos (default: auto)
   --keep                   Keep temp workspaces (default: cleanup)
   --no-assert              Do not assert log patterns (still writes logs)
   --continue               Continue after failures (run full matrix)
@@ -51,6 +52,19 @@ touch_future() {
 
 utc_now_compact() {
     date -u +%Y%m%dT%H%M%SZ
+}
+
+detect_profile() {
+    local profile="${PROFILE}"
+    if [[ -z "${profile}" || "${profile}" == "auto" ]]; then
+        case "$(uname -s 2>/dev/null || echo unknown)" in
+            Linux) echo "linux" ;;
+            Darwin) echo "macos" ;;
+            *) echo "linux" ;;
+        esac
+        return 0
+    fi
+    echo "${profile}"
 }
 
 log() {
@@ -779,6 +793,7 @@ LOG_DIR="target/world-sync-matrix/$(utc_now_compact)"
 KEEP=0
 ASSERT=1
 CONTINUE_ON_ERROR=0
+PROFILE="${SUBSTRATE_WS_SYNC_MATRIX_PROFILE:-auto}"
 FAILED_CASES=()
 
 while [[ $# -gt 0 ]]; do
@@ -789,6 +804,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --log-dir)
             LOG_DIR="${2:-}"
+            shift 2
+            ;;
+        --profile)
+            PROFILE="${2:-}"
             shift 2
             ;;
         --keep)
@@ -868,28 +887,60 @@ main() {
         fi
     }
 
-    run_case "scenario_00_empty" "both" "prefer_host" scenario_empty_sync_preview
-    run_case "scenario_01_pty_write" "from_world" "prefer_host" scenario_world_write_via_pty_applies_once
-    run_case "scenario_02_nonpty_write" "from_world" "prefer_host" scenario_world_write_via_nonpty_applies
-    run_case "scenario_03_host_visible" "both" "prefer_host" scenario_host_create_visible_in_world_no_sync_needed
-    run_case "scenario_03b_from_host_keeps_world_only_shadow" "from_host" "prefer_host" scenario_direction_from_host_keeps_non_conflict_world_only_shadow
-    run_case "scenario_03c_from_host_conflict_prefer_host_discards" "from_host" "prefer_host" scenario_from_host_conflict_prefer_host_discards_shadowed_path
-    run_case "scenario_03d_from_host_conflict_prefer_world_keeps" "from_host" "prefer_world" scenario_from_host_conflict_prefer_world_keeps_shadowed_path
-    run_case "scenario_04_world_delete_prefer_world" "both" "prefer_world" scenario_delete_host_file_in_world_prefer_world_applies_delete
-    run_case "scenario_05_world_delete_prefer_host" "both" "prefer_host" scenario_delete_host_file_in_world_prefer_host_discards_delete
-    run_case "scenario_05b_from_world_delete_prefer_host" "from_world" "prefer_host" scenario_delete_host_file_in_world_direction_from_world_deletes_host_even_prefer_host
-    run_case "scenario_05c_world_create_then_delete_noop" "from_world" "prefer_host" scenario_world_create_then_delete_noop
-    run_case "scenario_05d_world_rename_mv" "from_world" "prefer_world" scenario_world_rename_mv_results_in_delete_plus_write
-    run_case "scenario_05e_world_edits_host_file_prefer_world" "from_world" "prefer_world" scenario_world_modifies_host_file_prefer_world_applies_mod
-    run_case "scenario_05f_combined_pty_nonpty_counts" "from_world" "prefer_host" scenario_combined_pty_and_nonpty_shows_combined_counts
-    run_case "scenario_05g_excluded_paths" "from_world" "prefer_host" scenario_excluded_paths_not_synced
-    run_case "scenario_05h_delete_directory_tree" "from_world" "prefer_world" scenario_delete_directory_tree_applies
-    run_case "scenario_05i_abort_policy_refuses" "both" "abort" scenario_conflict_policy_abort_refuses_on_from_host_conflict
-    run_case "scenario_06_concurrent_mod_prefer_host" "both" "prefer_host" scenario_concurrent_mod_conflict_prefer_host_skips_apply
-    run_case "scenario_07_concurrent_mod_prefer_world" "both" "prefer_world" scenario_concurrent_mod_conflict_prefer_world_applies
-    run_case "scenario_08_exec_bit_change" "from_world" "prefer_world" scenario_exec_bit_change_applies
-    run_case "scenario_09_symlink_refused" "from_world" "prefer_host" scenario_symlink_refused_by_apply
-    run_case "scenario_10_many_paths_stress" "from_world" "prefer_host" scenario_many_paths_stress_applies
+    local resolved_profile
+    resolved_profile="$(detect_profile)"
+    log "Matrix profile: ${resolved_profile} (set via --profile or SUBSTRATE_WS_SYNC_MATRIX_PROFILE)"
+
+    case "${resolved_profile}" in
+        linux)
+            run_case "scenario_00_empty" "both" "prefer_host" scenario_empty_sync_preview
+            run_case "scenario_01_pty_write" "from_world" "prefer_host" scenario_world_write_via_pty_applies_once
+            run_case "scenario_02_nonpty_write" "from_world" "prefer_host" scenario_world_write_via_nonpty_applies
+            run_case "scenario_03_host_visible" "both" "prefer_host" scenario_host_create_visible_in_world_no_sync_needed
+            run_case "scenario_03b_from_host_keeps_world_only_shadow" "from_host" "prefer_host" scenario_direction_from_host_keeps_non_conflict_world_only_shadow
+            run_case "scenario_03c_from_host_conflict_prefer_host_discards" "from_host" "prefer_host" scenario_from_host_conflict_prefer_host_discards_shadowed_path
+            run_case "scenario_03d_from_host_conflict_prefer_world_keeps" "from_host" "prefer_world" scenario_from_host_conflict_prefer_world_keeps_shadowed_path
+            run_case "scenario_04_world_delete_prefer_world" "both" "prefer_world" scenario_delete_host_file_in_world_prefer_world_applies_delete
+            run_case "scenario_05_world_delete_prefer_host" "both" "prefer_host" scenario_delete_host_file_in_world_prefer_host_discards_delete
+            run_case "scenario_05b_from_world_delete_prefer_host" "from_world" "prefer_host" scenario_delete_host_file_in_world_direction_from_world_deletes_host_even_prefer_host
+            run_case "scenario_05c_world_create_then_delete_noop" "from_world" "prefer_host" scenario_world_create_then_delete_noop
+            run_case "scenario_05d_world_rename_mv" "from_world" "prefer_world" scenario_world_rename_mv_results_in_delete_plus_write
+            run_case "scenario_05e_world_edits_host_file_prefer_world" "from_world" "prefer_world" scenario_world_modifies_host_file_prefer_world_applies_mod
+            run_case "scenario_05f_combined_pty_nonpty_counts" "from_world" "prefer_host" scenario_combined_pty_and_nonpty_shows_combined_counts
+            run_case "scenario_05g_excluded_paths" "from_world" "prefer_host" scenario_excluded_paths_not_synced
+            run_case "scenario_05h_delete_directory_tree" "from_world" "prefer_world" scenario_delete_directory_tree_applies
+            run_case "scenario_05i_abort_policy_refuses" "both" "abort" scenario_conflict_policy_abort_refuses_on_from_host_conflict
+            run_case "scenario_06_concurrent_mod_prefer_host" "both" "prefer_host" scenario_concurrent_mod_conflict_prefer_host_skips_apply
+            run_case "scenario_07_concurrent_mod_prefer_world" "both" "prefer_world" scenario_concurrent_mod_conflict_prefer_world_applies
+            run_case "scenario_08_exec_bit_change" "from_world" "prefer_world" scenario_exec_bit_change_applies
+            run_case "scenario_09_symlink_refused" "from_world" "prefer_host" scenario_symlink_refused_by_apply
+            run_case "scenario_10_many_paths_stress" "from_world" "prefer_host" scenario_many_paths_stress_applies
+            ;;
+        macos)
+            # macOS uses the Lima/VM world backend; some Linux-only overlay discard/reconcile paths
+            # (notably `direction=from_host` and some discard-based conflict behaviors) are backend-
+            # specific. This profile focuses on portable "from_world" and basic visibility flows.
+            run_case "scenario_00_empty" "both" "prefer_host" scenario_empty_sync_preview
+            run_case "scenario_01_pty_write" "from_world" "prefer_host" scenario_world_write_via_pty_applies_once
+            run_case "scenario_02_nonpty_write" "from_world" "prefer_host" scenario_world_write_via_nonpty_applies
+            run_case "scenario_03_host_visible" "both" "prefer_host" scenario_host_create_visible_in_world_no_sync_needed
+            run_case "scenario_04_world_delete_prefer_world" "both" "prefer_world" scenario_delete_host_file_in_world_prefer_world_applies_delete
+            run_case "scenario_05b_from_world_delete_prefer_host" "from_world" "prefer_host" scenario_delete_host_file_in_world_direction_from_world_deletes_host_even_prefer_host
+            run_case "scenario_05c_world_create_then_delete_noop" "from_world" "prefer_host" scenario_world_create_then_delete_noop
+            run_case "scenario_05d_world_rename_mv" "from_world" "prefer_world" scenario_world_rename_mv_results_in_delete_plus_write
+            run_case "scenario_05e_world_edits_host_file_prefer_world" "from_world" "prefer_world" scenario_world_modifies_host_file_prefer_world_applies_mod
+            run_case "scenario_05f_combined_pty_nonpty_counts" "from_world" "prefer_host" scenario_combined_pty_and_nonpty_shows_combined_counts
+            run_case "scenario_05g_excluded_paths" "from_world" "prefer_host" scenario_excluded_paths_not_synced
+            run_case "scenario_05h_delete_directory_tree" "from_world" "prefer_world" scenario_delete_directory_tree_applies
+            run_case "scenario_06_concurrent_mod_prefer_host" "both" "prefer_host" scenario_concurrent_mod_conflict_prefer_host_skips_apply
+            run_case "scenario_07_concurrent_mod_prefer_world" "both" "prefer_world" scenario_concurrent_mod_conflict_prefer_world_applies
+            run_case "scenario_08_exec_bit_change" "from_world" "prefer_world" scenario_exec_bit_change_applies
+            run_case "scenario_10_many_paths_stress" "from_world" "prefer_host" scenario_many_paths_stress_applies
+            ;;
+        *)
+            die "Unknown profile: ${resolved_profile} (expected: auto|linux|macos)"
+            ;;
+    esac
 
     log "DONE"
     log "Logs written to: ${LOG_DIR}"
