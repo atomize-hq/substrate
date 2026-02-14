@@ -276,7 +276,7 @@ fn run_global_add(args: &WorldDepsScopedMutateArgs) -> Result<()> {
     } else {
         println!("Enabled deps updated (global): added: {}", csv(&added));
     }
-    eprintln!(
+    println!(
         "substrate: note: enabled deps changes apply to the world only after 'substrate world deps current sync'"
     );
     Ok(())
@@ -335,7 +335,7 @@ fn run_global_remove(args: &WorldDepsScopedMutateArgs) -> Result<()> {
     } else {
         println!("Enabled deps updated (global): removed: {}", csv(&removed));
     }
-    eprintln!("substrate: note: 'remove' only updates enabled deps; it does not uninstall. Run 'substrate world deps current sync' to apply");
+    println!("substrate: note: 'remove' only updates enabled deps; it does not uninstall. Run 'substrate world deps current sync' to apply");
 
     if !removed.is_empty() {
         if let Some(workspace_root) = crate::execution::find_workspace_root(&cwd) {
@@ -346,7 +346,7 @@ fn run_global_remove(args: &WorldDepsScopedMutateArgs) -> Result<()> {
             let ws_enabled = ws_patch.world.deps.enabled.unwrap_or_default();
             for item in removed {
                 if ws_enabled.iter().any(|name| name == &item) {
-                    eprintln!("substrate: note: '{item}' was removed from global enabled deps but is still enabled via workspace; run 'substrate world deps workspace remove {item}' to fully disable it for this workspace");
+                    println!("substrate: note: '{item}' was removed from global enabled deps but is still enabled via workspace; run 'substrate world deps workspace remove {item}' to fully disable it for this workspace");
                 }
             }
         }
@@ -389,7 +389,7 @@ fn run_global_reset(args: &WorldDepsScopedResetArgs) -> Result<()> {
     } else {
         println!("Enabled deps reset (global)");
     }
-    eprintln!(
+    println!(
         "substrate: note: run 'substrate world deps current sync' to apply enabled deps changes"
     );
     Ok(())
@@ -458,7 +458,7 @@ fn run_workspace_add(args: &WorldDepsScopedMutateArgs) -> Result<()> {
     } else {
         println!("Enabled deps updated (workspace): added: {}", csv(&added));
     }
-    eprintln!(
+    println!(
         "substrate: note: enabled deps changes apply to the world only after 'substrate world deps current sync'"
     );
     Ok(())
@@ -515,14 +515,14 @@ fn run_workspace_remove(args: &WorldDepsScopedMutateArgs) -> Result<()> {
             csv(&removed)
         );
     }
-    eprintln!("substrate: note: 'remove' only updates enabled deps; it does not uninstall. Run 'substrate world deps current sync' to apply");
+    println!("substrate: note: 'remove' only updates enabled deps; it does not uninstall. Run 'substrate world deps current sync' to apply");
 
     if !removed.is_empty() {
         let (global_patch, _) = config_model::read_global_config_patch_or_empty()?;
         let global_enabled = global_patch.world.deps.enabled.unwrap_or_default();
         for item in removed {
             if global_enabled.iter().any(|name| name == &item) {
-                eprintln!("substrate: note: '{item}' was removed from workspace enabled deps but is still enabled via global; run 'substrate world deps global remove {item}' to fully disable it");
+                println!("substrate: note: '{item}' was removed from workspace enabled deps but is still enabled via global; run 'substrate world deps global remove {item}' to fully disable it");
             }
         }
     }
@@ -560,7 +560,7 @@ fn run_workspace_reset(args: &WorldDepsScopedResetArgs) -> Result<()> {
     } else {
         println!("Enabled deps reset (workspace)");
     }
-    eprintln!(
+    println!(
         "substrate: note: run 'substrate world deps current sync' to apply enabled deps changes"
     );
     Ok(())
@@ -753,33 +753,19 @@ fn write_atomic_patch_yaml(
 
 fn print_enabled_table(items: &[InventoryListItemSummaryV1]) {
     let mut kind_width = "Kind".len();
-    let mut name_width = "Name".len();
     for item in items {
         kind_width = kind_width.max(item.kind.len());
-        name_width = name_width.max(item.name.len());
     }
 
-    println!(
-        "{:<kind_width$} {:<name_width$}",
-        "Kind",
-        "Name",
-        kind_width = kind_width,
-        name_width = name_width
-    );
-    println!(
-        "{:-<kind_width$} {:-<name_width$}",
-        "",
-        "",
-        kind_width = kind_width,
-        name_width = name_width
-    );
+    println!("{:<kind_width$} Name", "Kind", kind_width = kind_width);
+    let kind_sep = "-".repeat(kind_width);
+    println!("{kind_sep} ----");
     for item in items {
         println!(
-            "{:<kind_width$} {:<name_width$}",
+            "{:<kind_width$} {}",
             item.kind,
             item.name,
-            kind_width = kind_width,
-            name_width = name_width
+            kind_width = kind_width
         );
     }
 }

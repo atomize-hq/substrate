@@ -287,16 +287,16 @@ fn test_scoped_list_enabled_is_patch_view_not_effective_merged() {
         .args(["world", "deps", "global", "list", "enabled"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("a"))
-        .stdout(predicate::str::contains("w").not());
+        .stdout(predicate::str::contains("\n    - a"))
+        .stdout(predicate::str::contains("\n    - w").not());
 
     substrate_command_for_home(&fixture)
         .current_dir(&ws_root)
         .args(["world", "deps", "workspace", "list", "enabled"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("w"))
-        .stdout(predicate::str::contains("a").not());
+        .stdout(predicate::str::contains("\n    - w"))
+        .stdout(predicate::str::contains("\n    - a").not());
 }
 
 #[test]
