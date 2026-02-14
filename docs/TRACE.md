@@ -4,8 +4,9 @@
 
 The Substrate Trace module (`crates/trace`) provides comprehensive span-based tracing for command execution across the Substrate ecosystem. It captures detailed execution context, policy decisions, and system state to enable command replay, security auditing, and graph-based analysis of command relationships.
 
-For the Phase 8 cross-cutting trace-family/correlation-field extensions (LLM/agents/router/workflows), track alignment in:
-- `docs/project_management/next/PHASE_8_CROSS_CUTTING_DECISION_REGISTRY.md`
+Canonical trace schema/correlation vocabulary (Phase 8 cross-cutting spines for LLM/agents/router/workflows):
+- Source of truth: `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md` (Phase 8 additive correlation vocabulary + required/optional matrix)
+- Phase 8 registry/progress: `docs/project_management/next/PHASE_8_CROSS_CUTTING_DECISION_REGISTRY.md`
 
 ### Key Features
 
@@ -46,7 +47,20 @@ jq 'select(.session_id == "ses_xxx")' ~/.substrate/trace.jsonl
 jq 'select(.policy_decision.action == "deny")' ~/.substrate/trace.jsonl
 ```
 
-### Span Schema
+### Record Families (Phase 8; heterogeneous JSONL)
+
+`trace.jsonl` is an append-only JSONL log containing multiple record families. All records MUST carry:
+- `ts` (RFC3339 UTC timestamp)
+- `event_type` (string)
+- `session_id` (shell trace session id)
+
+Phase 8 introduces/locks additional cross-feature correlation fields (e.g., `orchestration_session_id`, `run_id`, `backend_id`, router/workflow/toolbox ids). These fields are not limited to command spans; they appear on other record families appended to `trace.jsonl` (router derived events, structured agent events, toolbox tool-call events, etc.). See ADR-0028 for the canonical field vocabulary and the per-family required/optional matrix.
+
+Operator note (non-negotiable):
+- Do not rely on heuristic joins. Prefer explicit join keys (`session_id`, `orchestration_session_id`, `run_id`, explicit cause refs) as defined in ADR-0028/Phase 8 contracts.
+- Trace is safe-by-default: do not mirror raw third-party JSONL/NDJSON agent logs into `trace.jsonl` by default. Treat raw wrapper logs and any payloads that may contain secrets as per-session artifacts, and apply redaction/caps rules per ADR-0028 and the Phase 8 secrets rubric.
+
+### Command Span Schema (`command_start` / `command_complete`)
 
 ```json
 {
@@ -87,6 +101,53 @@ jq 'select(.policy_decision.action == "deny")' ~/.substrate/trace.jsonl
   }
 }
 ```
+
+### Phase 8 Additive Correlation (selected fields; operator-facing summary)
+
+These are canonical cross-feature correlation identifiers. Details and required/optional classification live in ADR-0028.
+
+- `session_id`: shell trace session id (present on all records appended to canonical trace).
+- `orchestration_session_id`: multi-agent orchestration session id; required on any agent/LLM/workflow/toolbox/router record that participates in orchestration joins.
+- `run_id`: unit-of-work identifier inside an orchestration session; required on structured agent events and other run-scoped families.
+- `agent_id`: actor/principal identifier (`human` for direct operator actions; agent inventory id for agent-driven records).
+- `backend_id`: backend identifier in `<kind>:<name>` form (e.g., `cli:codex`, `api:openai`) when a specific backend is involved.
+- `world_id`: world boundary identity; required on in-world telemetry families (e.g., `world_process_*`) and any record that describes an in-world boundary/session.
+
+### Router-Derived Event Families (workflow router daemon; Phase 8)
+
+The workflow-router daemon appends derived events to `trace.jsonl` (append-only). v1 uses explicit `event_type` values (see router DR-0016):
+- `workflow_router_rule_match`
+- `workflow_router_request_enqueued`
+- `workflow_router_request_denied`
+- `workflow_router_request_pending_approval`
+- `workflow_router_action_enqueued`
+- `workflow_router_action_executed`
+- `workflow_router_cursor_gap_detected`
+
+All router-derived events MUST include stable join keys (no heuristic joins). At minimum, expect:
+- `workspace_id`, `request_id`, `idempotency_key`, `rule_id`
+- one explicit cause reference: `source_span_id` and/or `source_cmd_id` (preferred: `source_span_id` when available)
+
+Router trigger posture (v1):
+- The router is allowlist-driven for triggers; only specific trace event families/event_types are eligible to trigger routing actions (see router decision register; DR-0007).
+
+Example filters:
+
+```bash
+# View only workflow-router derived events
+jq 'select(.component == "workflow-router")' ~/.substrate/trace.jsonl
+
+# Show router derived events for a request_id
+jq 'select(.request_id == "req_xxx")' ~/.substrate/trace.jsonl
+```
+
+### Reserved Workflow/Toolbox Correlation Fields (Phase 8)
+
+Phase 8 reserves/adds correlation identifiers so future workflow/toolbox trace families can be introduced additively without reshaping existing records:
+- Workflow: `workflow_run_id`, `workflow_node_id`
+- Toolbox/tool calls: `tool_call_id`
+
+These fields may appear on non-span records even when command spans remain unchanged.
 
 ### Policy Snapshot Metadata (No Raw Policy Content)
 

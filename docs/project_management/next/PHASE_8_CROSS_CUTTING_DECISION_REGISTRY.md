@@ -56,7 +56,7 @@ This section records a quick validate/invalidated snapshot of the `LLM_AI_CAPABI
 - Phase 5 (Agent hub + toolbox / ADR-0025/ADR-0026): **Invalidated (gaps remain)** — control plane vs event plane contract + policy gates not yet locked (see CC-0005); toolbox tool-call trace family and `tool_call_id` correlation are not yet fully specified end-to-end (see CC-0009).
 - Phase 6 (Router daemon / ADR-0029): **Partially validated** — router DRs define derived event taxonomy and required correlation keys, but ADR-0028 must be updated additively to list those derived families and match the router’s explicit cause-reference naming (see CC-0007).
 - Phase 7 (Workflow composition / ADR-0021/ADR-0022): **Validated as deferred** — remains Draft and must stay compatible with reserved workflow correlation keys in ADR-0028; do not lock additional workflow fields beyond accepted DR items unless explicitly called for.
-- Phase 8 (Circle-back registry): **In progress** — CC-0006 (secrets) is addressed; CC-0005/CC-0007/CC-0009/CC-0011/CC-0012 remain the highest-risk open alignment items.
+- Phase 8 (Circle-back registry): **In progress** — CC-0006 (secrets) is addressed; CC-0012 (`docs/TRACE.md` alignment) is addressed; CC-0005/CC-0007/CC-0009/CC-0011 remain the highest-risk open alignment items.
 
 ---
 
@@ -352,7 +352,11 @@ For `api:*` backends, the canonical field-name family is defined by:
 - Phase 8 requires documentation pointers/updates: `LLM_AI_CAPABILITY_ENABLEMENT_PLANNING_ORDER.md`
 
 **Gap**
-- `docs/TRACE.md` currently documents a command-span-centric schema and does not describe the Phase 1–6 planned event-family expansions (LLM/agents/router/workflows).
+- `docs/TRACE.md` historically documented a command-span-centric schema and did not describe Phase 1–6 planned event-family expansions (LLM/agents/router/workflows).
 
 **Alignment action**
-- Phase 8: add a “Trace event families” section to `docs/TRACE.md` that links to ADR-0028 as canonical and lists the v1 allowlisted families for router triggers.
+- Phase 8: addressed by updating `docs/TRACE.md` to:
+  - link to ADR-0028 as canonical for correlation vocabulary/matrix,
+  - document router-derived `workflow_router_*` event types and required join keys,
+  - list reserved workflow/toolbox correlation ids (`workflow_run_id`, `workflow_node_id`, `tool_call_id`),
+  - and state safe-by-default redaction/caps posture (raw wrapper logs remain per-session artifacts; no heuristic joins).
