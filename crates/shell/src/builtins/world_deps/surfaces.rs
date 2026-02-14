@@ -352,13 +352,11 @@ fn apply_install_plan_v1(view: &InventoryViewV1, plan: &InstallPlanV1) -> Result
         )));
     }
 
-    if !plan.apt.is_empty() {
-        return Err(anyhow!(WorldDepsUnmetPrerequisiteError::new(
-            "apt installs are not implemented in this slice; run with --dry-run to inspect the plan and remove apt packages (WDP5 adds apt execution)"
-        )));
-    }
-
     ensure_world_backend_available()?;
+
+    if !plan.apt.is_empty() {
+        apply_apt_install_plan_v1(&plan.apt)?;
+    }
 
     for pkg_name in &plan.script_packages {
         let pkg = view.packages.get(pkg_name).ok_or_else(|| {
@@ -387,6 +385,130 @@ fn apply_install_plan_v1(view: &InventoryViewV1, plan: &InstallPlanV1) -> Result
     }
 
     Ok(())
+}
+
+struct WorldCommandOutputV1 {
+    exit: i32,
+    stdout: String,
+    stderr: String,
+}
+
+fn run_world_command_output_for_deps(
+    cmd: &str,
+    cwd_override: Option<&str>,
+) -> Result<WorldCommandOutputV1> {
+    let response =
+        run_world_command_for_deps_at(cmd, cwd_override).map_err(classify_world_backend_error)?;
+    let stdout = BASE64
+        .decode(response.stdout_b64.as_bytes())
+        .unwrap_or_default();
+    let stderr = BASE64
+        .decode(response.stderr_b64.as_bytes())
+        .unwrap_or_default();
+    Ok(WorldCommandOutputV1 {
+        exit: response.exit,
+        stdout: String::from_utf8_lossy(&stdout).to_string(),
+        stderr: String::from_utf8_lossy(&stderr).to_string(),
+    })
+}
+
+fn output_snippet_for_error(out: &WorldCommandOutputV1) -> String {
+    let stderr = out.stderr.trim();
+    if !stderr.is_empty() {
+        return stderr.to_string();
+    }
+    out.stdout.trim().to_string()
+}
+
+fn looks_like_hardening_violation_message(message: &str) -> bool {
+    let hardening_paths = [
+        "/var/lib/substrate/world-deps",
+        "/var/lib/apt",
+        "/var/cache/apt",
+        "/var/lib/dpkg",
+        "/etc/apt",
+    ];
+    hardening_paths.iter().any(|path| message.contains(path))
+        && (message.contains("Permission denied")
+            || message.contains("permission denied")
+            || message.contains("Read-only file system")
+            || message.contains("read-only file system"))
+}
+
+fn apply_apt_install_plan_v1(apt: &[AptSpecV1]) -> Result<()> {
+    if apt.is_empty() {
+        return Ok(());
+    }
+
+    let cmd = build_world_apt_install_command_v1(apt);
+    let out = run_world_command_output_for_deps(&cmd, Some("/tmp"))?;
+    if out.exit == 0 {
+        return Ok(());
+    }
+
+    let snippet = output_snippet_for_error(&out);
+    if looks_like_hardening_violation_message(&snippet) {
+        return Err(anyhow!(
+            "world apt install failed (exit={}): {}",
+            out.exit,
+            snippet
+        ));
+    }
+
+    Err(anyhow!(WorldDepsUnmetPrerequisiteError::new(format!(
+        "world apt install failed (exit={}): {}",
+        out.exit,
+        if snippet.trim().is_empty() {
+            "unknown error".to_string()
+        } else {
+            snippet
+        }
+    ))))
+}
+
+fn build_world_apt_install_command_v1(apt: &[AptSpecV1]) -> String {
+    let mut pkgs: Vec<String> = Vec::with_capacity(apt.len());
+    for spec in apt {
+        if let Some(version) = &spec.version {
+            pkgs.push(format!("{}={}", spec.name, version));
+        } else {
+            pkgs.push(spec.name.clone());
+        }
+    }
+
+    let escaped = pkgs
+        .iter()
+        .map(|pkg| sh_quote(pkg))
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    let mut script = String::new();
+    script.push_str("set -eu\n");
+    script.push_str("if ! command -v apt-get >/dev/null 2>&1; then\n");
+    script.push_str("  echo 'apt-get not found in world; install.method=apt requires an apt-based world image' >&2\n");
+    script.push_str("  exit 127\n");
+    script.push_str("fi\n");
+    script.push_str("apt_dir='/var/lib/substrate/world-deps/apt'\n");
+    script.push_str(
+        "mkdir -p \"$apt_dir/state\" \"$apt_dir/lists/partial\" \"$apt_dir/cache/archives\"\n",
+    );
+    script.push_str("APT_OPTS=\"-o APT::Sandbox::User=root -o Dir::State=$apt_dir/state -o Dir::State::lists=$apt_dir/lists -o Dir::Cache=$apt_dir/cache -o Dir::Cache::archives=$apt_dir/cache/archives\"\n");
+    script.push_str("SUDO=''\n");
+    script.push_str("if [ \"$(id -u)\" -ne 0 ]; then\n");
+    script.push_str("  if command -v sudo >/dev/null 2>&1; then\n");
+    script.push_str("    SUDO='sudo -n'\n");
+    script.push_str("  else\n");
+    script.push_str(
+        "    echo 'not running as root and sudo is unavailable; cannot run apt-get' >&2\n",
+    );
+    script.push_str("    exit 126\n");
+    script.push_str("  fi\n");
+    script.push_str("fi\n");
+    script.push_str("$SUDO env DEBIAN_FRONTEND=noninteractive apt-get $APT_OPTS update\n");
+    script.push_str("$SUDO env DEBIAN_FRONTEND=noninteractive apt-get $APT_OPTS install -y ");
+    script.push_str(&escaped);
+    script.push('\n');
+    script
 }
 
 fn apply_script_package_v1(pkg: &super::inventory::PackageDefV1) -> Result<()> {
@@ -912,7 +1034,12 @@ fn build_current_show_explain_v1(
         };
         (Some(why), next_command)
     } else {
-        (None, None)
+        // Even when the item is present, a consistent "next step" keeps `--explain` output
+        // actionable and aligns with the behavior smoke harness expectations.
+        (
+            None,
+            Some("substrate world deps current list applied".to_string()),
+        )
     };
 
     Ok(CurrentShowExplainV1 {
@@ -1509,7 +1636,10 @@ fn run_current_list_applied(
     let view = resolve_current_inventory_view(cwd, cfg)?;
     let enabled = &cfg.world.deps.enabled;
 
-    let enabled_set: HashSet<&str> = enabled.iter().map(|s| s.as_str()).collect();
+    // For `applied`, expand enabled bundles to their packages so users can see the status of
+    // concrete installables even when they only enabled a bundle.
+    let effective_enabled = expand_enabled_items_for_applied(&view, enabled);
+    let enabled_set: HashSet<&str> = effective_enabled.iter().map(|s| s.as_str()).collect();
 
     let mut unknown: Vec<String> = Vec::new();
     if !all {
@@ -1537,7 +1667,7 @@ fn run_current_list_applied(
         all_names.sort();
         all_names
     } else {
-        enabled.clone()
+        effective_enabled.clone()
     };
 
     let mut packages_to_check: Vec<String> = Vec::new();
@@ -1601,6 +1731,22 @@ fn run_current_list_applied(
         print_applied_table(&items);
     }
     Ok(())
+}
+
+fn expand_enabled_items_for_applied(view: &InventoryViewV1, enabled: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for name in enabled {
+        out.push(name.clone());
+        let Some(InventoryItemDefV1::Bundle(bundle)) = view.get(name) else {
+            continue;
+        };
+        for pkg in &bundle.packages {
+            if view.packages.contains_key(pkg) {
+                out.push(pkg.clone());
+            }
+        }
+    }
+    dedupe_ordered(&out)
 }
 
 fn print_applied_table(items: &[InventoryListItemSummaryV1]) {
@@ -1823,17 +1969,22 @@ fn query_world_package_presence(
     }
 
     let stdout_text = String::from_utf8_lossy(&stdout);
-    let mut out: HashMap<String, bool> = HashMap::new();
-    for line in stdout_text.lines() {
-        let Some(rest) = line.strip_prefix("__SUBSTRATE_WDP2__ ") else {
-            continue;
-        };
-        let mut parts = rest.split_whitespace();
-        let Some(name) = parts.next() else { continue };
-        let val = parts.next();
-        let present = matches!(val, Some("1"));
-        out.insert(name.to_string(), present);
+    let mut out: HashMap<String, bool> = parse_world_probe_output(&stdout_text);
+
+    // Some test stubs (and some degraded backends) may drop stdout entirely. When we can't recover
+    // per-package statuses from the bulk probe script, fall back to individual exit-code checks.
+    let missing_checks: Vec<PackageWorldCheck> = checks
+        .iter()
+        .filter(|check| !out.contains_key(&check.name))
+        .cloned()
+        .collect();
+    if !missing_checks.is_empty() {
+        for check in missing_checks {
+            let present = run_world_presence_check_v1(&check)?;
+            out.insert(check.name.clone(), present);
+        }
     }
+
     Ok(out)
 }
 
@@ -1885,18 +2036,56 @@ fn query_world_package_entrypoint_presence(
     }
 
     let stdout_text = String::from_utf8_lossy(&stdout);
+    let mut out: HashMap<String, bool> = parse_world_probe_output(&stdout_text);
+
+    let missing_checks: Vec<PackageWorldCheck> = checks
+        .iter()
+        .filter(|check| !out.contains_key(&check.name))
+        .cloned()
+        .collect();
+    if !missing_checks.is_empty() {
+        for check in missing_checks {
+            let present = run_world_presence_check_v1(&check)?;
+            out.insert(check.name.clone(), present);
+        }
+    }
+
+    Ok(out)
+}
+
+fn parse_world_probe_output(stdout: &str) -> HashMap<String, bool> {
     let mut out: HashMap<String, bool> = HashMap::new();
-    for line in stdout_text.lines() {
+    for line in stdout.lines() {
         let Some(rest) = line.strip_prefix("__SUBSTRATE_WDP2__ ") else {
             continue;
         };
         let mut parts = rest.split_whitespace();
-        let Some(name) = parts.next() else { continue };
+        let Some(name) = parts.next() else {
+            continue;
+        };
         let val = parts.next();
         let present = matches!(val, Some("1"));
         out.insert(name.to_string(), present);
     }
-    Ok(out)
+    out
+}
+
+fn run_world_presence_check_v1(check: &PackageWorldCheck) -> Result<bool> {
+    let cmd = match &check.check {
+        PackageCheckKind::Probe { command } => {
+            // Match the bulk probe script semantics: treat the probe string as a shell snippet.
+            // Redirect output so the caller can rely on the exit code only.
+            format!("sh -c {} >/dev/null 2>&1", sh_quote(command))
+        }
+        PackageCheckKind::Entrypoints { entrypoints } => entrypoints
+            .iter()
+            .map(|ep| format!("command -v {} >/dev/null 2>&1", sh_quote(ep)))
+            .collect::<Vec<_>>()
+            .join(" && "),
+    };
+
+    let response = run_world_command_for_deps(&cmd).map_err(classify_world_backend_error)?;
+    Ok(response.exit == 0)
 }
 
 fn ensure_world_backend_available() -> Result<()> {
