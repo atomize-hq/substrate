@@ -48,6 +48,45 @@ impl LinuxLocalBackend {
         session_world.ensure_overlay_root()
     }
 
+    /// Retrieve the current session's pending diff and session start time.
+    pub fn pending_diff(&self, world: &WorldHandle) -> Result<(std::time::SystemTime, FsDiff)> {
+        let cache = self
+            .session_cache
+            .read()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire session cache read lock: {}", e))?;
+        let session_world = cache.get(&world.id).context("World not found in cache")?;
+        let diff = session_world.compute_pending_diff()?;
+        Ok((session_world.started_at, diff))
+    }
+
+    /// Clear the current session's pending diff state (discard overlay upper/work layers).
+    pub fn clear_pending_diff(&self, world: &WorldHandle) -> Result<()> {
+        let mut cache = self
+            .session_cache
+            .write()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire session cache write lock: {}", e))?;
+        let session_world = cache
+            .get_mut(&world.id)
+            .context("World not found in cache")?;
+        session_world.clear_pending_diff()
+    }
+
+    /// Discard the overlay upper entries for specific workspace-relative paths.
+    pub fn discard_pending_paths(
+        &self,
+        world: &WorldHandle,
+        paths: &[std::path::PathBuf],
+    ) -> Result<u32> {
+        let mut cache = self
+            .session_cache
+            .write()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire session cache write lock: {}", e))?;
+        let session_world = cache
+            .get_mut(&world.id)
+            .context("World not found in cache")?;
+        session_world.discard_pending_paths(paths)
+    }
+
     #[cfg(not(target_os = "linux"))]
     fn check_platform(&self) -> Result<()> {
         anyhow::bail!("LinuxLocal backend is only supported on Linux")

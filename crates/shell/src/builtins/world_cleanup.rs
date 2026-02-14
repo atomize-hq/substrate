@@ -383,7 +383,10 @@ mod linux {
             .as_ref()
             .map(|c| c.path.display().to_string())
             .unwrap_or_else(|| format!("/sys/fs/cgroup/substrate/{}", world.world_id));
-        println!("    sudo rm -rf {}", cg_path);
+        println!(
+            "    sudo sh -c 'test -e {0}/cgroup.kill && echo 1 > {0}/cgroup.kill || true; rmdir {0} 2>/dev/null || find {0} -depth -type d -exec rmdir {{}} +'",
+            cg_path
+        );
     }
 
     fn purge_world(world: &WorldResidue) -> Result<()> {
@@ -417,14 +420,14 @@ mod linux {
             run_step(
                 &format!("remove cgroup {}", cg.path.display()),
                 remove_cgroup_dir(&cg.path),
-                Some(format!("sudo rm -rf {}", cg.path.display())),
+                Some(manual_remove_cgroup_cmd(&cg.path)),
             );
         } else {
             let path = PathBuf::from(format!("/sys/fs/cgroup/substrate/{}", world.world_id));
             run_step(
                 &format!("remove cgroup {}", path.display()),
                 remove_cgroup_dir(&path),
-                Some(format!("sudo rm -rf {}", path.display())),
+                Some(manual_remove_cgroup_cmd(&path)),
             );
         }
         Ok(())
@@ -449,6 +452,9 @@ mod linux {
             .context("failed to run ip netns exec nft delete")?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
+            if is_nft_table_missing(&stderr) {
+                return Ok(());
+            }
             return Err(anyhow!(
                 "nft delete table inet {} inside {}: {}",
                 table,
@@ -466,6 +472,9 @@ mod linux {
             .context("failed to run ip netns delete")?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
+            if stderr.contains("No such file or directory") {
+                return Ok(());
+            }
             return Err(anyhow!("ip netns delete {}: {}", ns, stderr.trim()));
         }
         Ok(())
@@ -478,6 +487,9 @@ mod linux {
             .context("failed to run nft delete table")?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
+            if is_nft_table_missing(&stderr) {
+                return Ok(());
+            }
             return Err(anyhow!(
                 "nft delete table inet {} failed: {}",
                 table,
@@ -487,16 +499,71 @@ mod linux {
         Ok(())
     }
 
+    fn is_nft_table_missing(stderr: &str) -> bool {
+        let stderr = stderr.trim();
+        stderr.contains("No such file or directory") || stderr.contains("No such file")
+    }
+
+    fn manual_remove_cgroup_cmd(path: &Path) -> String {
+        let path = path.display();
+        format!(
+            "sudo sh -c 'test -e {0}/cgroup.kill && echo 1 > {0}/cgroup.kill || true; rmdir {0} 2>/dev/null || find {0} -depth -type d -exec rmdir {{}} +'",
+            path
+        )
+    }
+
     fn remove_cgroup_dir(path: &Path) -> Result<()> {
         if !path.exists() {
             return Ok(());
         }
-        match fs::remove_dir_all(path) {
+        remove_cgroup_dir_inner(path)
+            .with_context(|| format!("failed to remove {}", path.display()))?;
+        Ok(())
+    }
+
+    fn remove_cgroup_dir_inner(path: &Path) -> Result<()> {
+        if !path.exists() {
+            return Ok(());
+        }
+
+        // cgroupfs directories cannot be removed with `rm -rf` semantics: the control files are
+        // virtual and not unlinkable. Use rmdir semantics, removing child cgroups first.
+        //
+        // Note: we intentionally ignore non-directory entries.
+        let entries = match fs::read_dir(path) {
+            Ok(entries) => entries,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(e) => return Err(e).context("read_dir failed"),
+        };
+
+        for entry in entries {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(e) => return Err(e).context("read_dir entry failed"),
+            };
+            let ft = match entry.file_type() {
+                Ok(ft) => ft,
+                Err(e) => return Err(e).context("stat cgroup entry failed"),
+            };
+            if !ft.is_dir() {
+                continue;
+            }
+            remove_cgroup_dir_inner(&entry.path()).with_context(|| {
+                format!("failed to remove child cgroup {}", entry.path().display())
+            })?;
+        }
+
+        // Best-effort kill (safe even if already idle). Ignore failures so we still try rmdir.
+        // `cgroup.kill` exists on cgroup v2 and kills processes in the subtree.
+        let kill_file = path.join("cgroup.kill");
+        if kill_file.exists() {
+            let _ = fs::write(&kill_file, b"1\n");
+        }
+
+        match fs::remove_dir(path) {
             Ok(_) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(e) => Err(e),
+            Err(e) => Err(e).context("remove_dir failed"),
         }
-        .with_context(|| format!("failed to remove {}", path.display()))?;
-        Ok(())
     }
 }

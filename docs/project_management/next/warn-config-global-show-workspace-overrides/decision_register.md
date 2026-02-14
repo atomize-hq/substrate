@@ -84,3 +84,25 @@ Decision:
 
 Links:
 - Spec: `docs/project_management/next/warn-config-global-show-workspace-overrides/C0-spec.md#interaction-with-existing-notes`
+
+## DR-0004 — Explicit write-target note for implicit `substrate config set`
+
+Context:
+- `substrate config set ...` writes to the workspace config patch by default, but operators can miss which scope/file was targeted.
+
+### Option A — Emit a single stderr note stating the write target (scope + path)
+- Note includes `<workspace_root>/.substrate/workspace.yaml` and the phrase `(implicit scope)`.
+- Guidance points to `substrate config workspace show` for patch inspection.
+
+Tradeoffs:
+- ✅ Makes write target explicit without changing stdout (script-safe).
+- ✅ Avoids “did this update global or workspace?” confusion.
+- ❌ Adds a single stderr line to a previously quiet command.
+
+### Option B — No note; rely on docs/help output
+Tradeoffs:
+- ✅ No CLI output change.
+- ❌ Continues operator confusion for implicit-scope updates.
+
+Decision:
+- **Choose Option A**.

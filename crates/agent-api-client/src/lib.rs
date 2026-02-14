@@ -6,7 +6,12 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use agent_api_types::{ApiError, ExecuteRequest, ExecuteResponse, WorldDoctorReportV1};
+use agent_api_types::{
+    ApiError, ExecuteRequest, ExecuteResponse, PendingDiffClearRequestV1,
+    PendingDiffClearResponseV1, PendingDiffReconcileRequestV1, PendingDiffReconcileResponseV1,
+    PendingDiffRecordV1, PendingDiffRequestV1, WorldDoctorReportV1, WorldFsReadRequestV1,
+    WorldFsReadResponseV1,
+};
 use anyhow::{anyhow, Context, Result};
 use http_body_util::{BodyExt, Full};
 use hyper::{body::Bytes, Method, Request, Response, StatusCode};
@@ -130,6 +135,55 @@ impl AgentClient {
             .get("/v1/capabilities")
             .await
             .context("Failed to get capabilities")?;
+
+        self.parse_response(response).await
+    }
+
+    /// Retrieve the current session's pending diff record (`POST /v1/pending_diff`).
+    pub async fn pending_diff(&self, request: PendingDiffRequestV1) -> Result<PendingDiffRecordV1> {
+        let response = self
+            .post("/v1/pending_diff", &request)
+            .await
+            .context("Failed to request pending diff")?;
+
+        self.parse_response(response).await
+    }
+
+    /// Conditionally clear the current session's pending diff snapshot (`POST /v1/pending_diff/clear`).
+    pub async fn pending_diff_clear(
+        &self,
+        request: PendingDiffClearRequestV1,
+    ) -> Result<PendingDiffClearResponseV1> {
+        let response = self
+            .post("/v1/pending_diff/clear", &request)
+            .await
+            .context("Failed to clear pending diff")?;
+
+        self.parse_response(response).await
+    }
+
+    /// Reconcile pending diff paths (host-prefer policy) by discarding overlay upper entries (`POST /v1/pending_diff/reconcile`).
+    pub async fn pending_diff_reconcile(
+        &self,
+        request: PendingDiffReconcileRequestV1,
+    ) -> Result<PendingDiffReconcileResponseV1> {
+        let response = self
+            .post("/v1/pending_diff/reconcile", &request)
+            .await
+            .context("Failed to reconcile pending diff")?;
+
+        self.parse_response(response).await
+    }
+
+    /// Read metadata and (optionally) contents from the current session's overlay (`POST /v1/world_fs/read`).
+    pub async fn world_fs_read(
+        &self,
+        request: WorldFsReadRequestV1,
+    ) -> Result<WorldFsReadResponseV1> {
+        let response = self
+            .post("/v1/world_fs/read", &request)
+            .await
+            .context("Failed to read world fs path")?;
 
         self.parse_response(response).await
     }

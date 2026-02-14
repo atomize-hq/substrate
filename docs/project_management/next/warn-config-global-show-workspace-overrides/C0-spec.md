@@ -1,9 +1,12 @@
-# C0 Spec — Warn on `config global show` when workspace config overrides
+# C0 Spec — Scope clarity notes for `config global show` and implicit `config set`
 
 ## Summary
 
 This slice adds a single stderr note to `substrate config global show` when run from within an
 enabled workspace whose workspace config patch is non-empty (or cannot be parsed).
+
+This slice also adds a single stderr note to implicit-scope `substrate config set ...` so operators can see the
+write target (scope + path) without having to infer it from workspace context.
 
 This is user-facing messaging + tests only; it does **not** change config merge behavior.
 
@@ -59,6 +62,16 @@ Rule:
 - Outside a workspace.
 - Inside an enabled workspace when the workspace config patch parses successfully and is empty (`{}`).
 
+### Implicit `config set` write-target note (added)
+
+When invoked as `substrate config set <KEY>=<VALUE> ...` (i.e., without an explicit `global` / `workspace` subcommand),
+the command MUST emit exactly one stderr note stating the write target:
+
+`substrate: note: write target is workspace config <WORKSPACE_CONFIG_PATH> (implicit scope); run 'substrate config workspace show' to view the workspace patch`
+
+Where:
+- `<WORKSPACE_CONFIG_PATH>` is the resolved path to `<workspace_root>/.substrate/workspace.yaml` (platform-native display).
+
 ## Output invariants (must hold)
 
 - Stdout MUST contain only the serialized global patch. Warning/note text MUST NOT appear on stdout.
@@ -79,3 +92,9 @@ Rule:
    - still exits successfully,
    - prints the global patch to stdout, and
    - emits the workspace-override note on stderr.
+
+6. `substrate config set <KEY>=<VALUE> ...` emits exactly one stderr note stating the write target and contains:
+   - `workspace.yaml`
+   - `write target is workspace config`
+   - `(implicit scope)`
+7. In `--json` mode for `substrate config set ...`, stdout parses as JSON and contains only the effective merged config.

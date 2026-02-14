@@ -531,6 +531,124 @@ pub struct ExecuteResponse {
     pub fs_diff: Option<FsDiff>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendingDiffRequestV1 {
+    pub profile: Option<String>,
+    pub cwd: Option<String>,
+    pub env: Option<HashMap<String, String>>,
+    pub agent_id: String,
+    pub policy_snapshot: PolicySnapshotV3,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PendingDiffBucketV1 {
+    pub writes: Vec<String>,
+    pub mods: Vec<String>,
+    pub deletes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendingDiffRecordV1 {
+    #[serde(default = "pending_diff_record_v1_default_schema_version")]
+    pub schema_version: u32,
+    pub session_started_at: String,
+    pub diff_id: String,
+    pub non_pty: PendingDiffBucketV1,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pty: Option<PendingDiffBucketV1>,
+}
+
+fn pending_diff_record_v1_default_schema_version() -> u32 {
+    1
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendingDiffClearRequestV1 {
+    pub profile: Option<String>,
+    pub cwd: Option<String>,
+    pub env: Option<HashMap<String, String>>,
+    pub agent_id: String,
+    pub policy_snapshot: PolicySnapshotV3,
+    pub diff_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendingDiffReconcileRequestV1 {
+    pub profile: Option<String>,
+    pub cwd: Option<String>,
+    pub env: Option<HashMap<String, String>>,
+    pub agent_id: String,
+    pub policy_snapshot: PolicySnapshotV3,
+    pub diff_id: String,
+    pub discard_paths: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendingDiffReconcileResponseV1 {
+    #[serde(default = "pending_diff_reconcile_response_v1_default_schema_version")]
+    pub schema_version: u32,
+    pub reconciled: bool,
+    pub discarded: u32,
+}
+
+fn pending_diff_reconcile_response_v1_default_schema_version() -> u32 {
+    1
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendingDiffClearResponseV1 {
+    #[serde(default = "pending_diff_clear_response_v1_default_schema_version")]
+    pub schema_version: u32,
+    pub cleared: bool,
+}
+
+fn pending_diff_clear_response_v1_default_schema_version() -> u32 {
+    1
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorldFsEntryTypeV1 {
+    RegularFile,
+    Directory,
+    Symlink,
+    Socket,
+    Fifo,
+    BlockDevice,
+    CharDevice,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorldFsReadRequestV1 {
+    pub profile: Option<String>,
+    pub cwd: Option<String>,
+    pub env: Option<HashMap<String, String>>,
+    pub agent_id: String,
+    pub policy_snapshot: PolicySnapshotV3,
+    pub path: String,
+    #[serde(default)]
+    pub include_contents: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorldFsReadResponseV1 {
+    #[serde(default = "world_fs_read_response_v1_default_schema_version")]
+    pub schema_version: u32,
+    pub path: String,
+    pub entry_type: WorldFsEntryTypeV1,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contents_b64: Option<String>,
+}
+
+fn world_fs_read_response_v1_default_schema_version() -> u32 {
+    1
+}
+
 /// Streaming frame describing incremental execution output.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]

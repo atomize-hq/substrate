@@ -52,7 +52,8 @@ Pending diff discovery returns a single “pending diff record” for the curren
 - `session_started_at`: UTC timestamp of session start (RFC3339, e.g., `2026-02-10T18:38:23Z`)
   - Used as the conflict baseline (see Conflict detection).
 - `diff_id`: opaque identifier for the returned pending diff snapshot
-  - MUST change whenever the underlying pending diff set changes.
+  - MUST change whenever the underlying pending diff set changes (updates = `writes ∪ mods`, plus `deletes`).
+  - MUST NOT change solely because a path is reclassified between `writes` and `mods` (e.g., due to lower-layer existence changes during host apply).
   - Used to safely acknowledge/clear diffs after apply (see Clear/ack semantics).
 - One or two buckets of disjoint path sets:
   - `non_pty`: pending changes from non-PTY world executions

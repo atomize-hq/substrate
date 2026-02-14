@@ -108,6 +108,38 @@ grep -q "substrate: note: workspace config" "$tmp/stderr-json.txt" || {
   exit 1
 }
 
+# Case: implicit `config set` emits write-target note; stdout remains uncontaminated.
+"$SUBSTRATE_BIN" config set sync.auto_sync=true >"$tmp/stdout-config-set.txt" 2>"$tmp/stderr-config-set.txt"
+
+grep -q "substrate: note: write target is workspace config" "$tmp/stderr-config-set.txt" || {
+  echo "FAIL: missing write-target note (config set)"
+  cat "$tmp/stderr-config-set.txt"
+  exit 1
+}
+grep -q "workspace.yaml" "$tmp/stderr-config-set.txt" || { echo "FAIL: write-target note missing workspace.yaml hint"; cat "$tmp/stderr-config-set.txt"; exit 1; }
+grep -q "(implicit scope)" "$tmp/stderr-config-set.txt" || { echo "FAIL: write-target note missing (implicit scope)"; cat "$tmp/stderr-config-set.txt"; exit 1; }
+
+if grep -q "substrate: note:" "$tmp/stdout-config-set.txt"; then
+  echo "FAIL: stdout is contaminated with note text (config set)"
+  cat "$tmp/stdout-config-set.txt"
+  exit 1
+fi
+
+# Case: `config set --json` stdout remains valid JSON when note is present.
+"$SUBSTRATE_BIN" config set --json sync.auto_sync=true >"$tmp/stdout-config-set-json.txt" 2>"$tmp/stderr-config-set-json.txt"
+
+python3 - <<PY
+import json
+with open("$tmp/stdout-config-set-json.txt","r",encoding="utf-8") as f:
+    json.load(f)
+PY
+
+grep -q "substrate: note: write target is workspace config" "$tmp/stderr-config-set-json.txt" || {
+  echo "FAIL: missing write-target note (config set --json)"
+  cat "$tmp/stderr-config-set-json.txt"
+  exit 1
+}
+
 popd >/dev/null
 
 echo "PASS: linux smoke"

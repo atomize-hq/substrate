@@ -8,12 +8,16 @@ Owners: Substrate maintainers
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 923e0afc8199fa223bb72691526679c0553105a991b785747fbfadc07aa509da
+ADR_BODY_SHA256: 3766377ab49c9368e460e6df4a3bd6aa5fcc0ae29844ff209e00bcceb1c6ccb6
 ### Changes (operator-facing)
 - Workspace override note for `substrate config global show`
   - Existing: `substrate config global show` prints the global config patch, which can be misinterpreted as the effective config when run inside a workspace.
   - New: when run inside an enabled workspace whose workspace config override is active (non-empty or unparseable), the command emits a single stderr note routing operators to `substrate config show --explain`; stdout and exit codes remain unchanged.
   - Why: reduce operator confusion while preserving script safety (stdout patch-only; stderr-only note).
+- Explicit write-scope note for implicit-scope `substrate config set`
+  - Existing: `substrate config set ...` updates the workspace config patch by default, but the command output does not explicitly state which scope/file was modified.
+  - New: when the user does not explicitly specify the scope (i.e., uses `substrate config set ...` rather than `substrate config global set ...`), emit a single stderr note that names the updated scope and the on-disk config path.
+  - Why: prevent “I changed config but don’t know where” confusion while keeping stdout stable for scripting.
 - Existing note interaction
   - Existing: the command emits an informational note when the global patch is empty.
   - New: when the workspace-override note is emitted, the global-empty note is suppressed for that invocation.
@@ -38,6 +42,11 @@ Today, operators can misinterpret the global patch output as “the config I’m
 unexpected behavior in a workspace. The effective view already exists (`substrate config show --explain`); this ADR
 adds a high-signal note to route operators to the correct command when a workspace override is active.
 
+Additionally, `substrate config set ...` (without an explicit `global` or `workspace` subcommand) writes to the
+workspace config patch. Because the command prints the effective merged config after the update, operators can miss
+which scope/file was actually modified. A single-line stderr note stating the write scope + path makes this explicit
+at the point of action.
+
 Related ADRs / background:
 - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 - `docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md`
@@ -45,6 +54,7 @@ Related ADRs / background:
 ## Goals
 
 - Make it obvious (at the point of use) that `config global show` is not the effective config view when workspace overrides apply.
+- Make it obvious (at the point of update) which config scope/file was modified for implicit-scope `config set`.
 - Maintain script safety:
   - stdout remains patch-only (no extra text),
   - exit codes remain unchanged for successful show operations.
@@ -55,6 +65,7 @@ Related ADRs / background:
 - Do not change config precedence, merge semantics, or supported config keys.
 - Do not add per-key “overlap” enumeration (which keys are overridden); keep the note minimal and stable.
 - Do not change `policy global show` behavior in this ADR (separate work item if needed).
+- Do not change the default scope resolution for `substrate config set ...` (it remains workspace-scoped).
 
 ## Decision
 
@@ -81,6 +92,19 @@ Where `<WORKSPACE_CONFIG_PATH>` is `<workspace_root>/.substrate/workspace.yaml`.
 
 If the workspace-override note is emitted, suppress the existing “global config patch is empty (no overrides)” note for that invocation.
 This keeps stderr output high-signal (no double-notes) while leaving stdout unchanged.
+
+### Explicit write-scope note for implicit `config set` (new)
+
+`substrate config set <KEY>=<VALUE> ...` updates the workspace config patch. When invoked without an explicit scope,
+the command MUST emit a single stderr note stating the write target:
+
+`substrate: note: write target is workspace config <WORKSPACE_CONFIG_PATH> (implicit scope); run 'substrate config workspace show' to view the workspace patch`
+
+Where `<WORKSPACE_CONFIG_PATH>` is `<workspace_root>/.substrate/workspace.yaml`.
+
+Notes:
+- This note is stderr-only; stdout and exit codes remain unchanged.
+- This note is only required for implicit-scope `substrate config set ...` (not `substrate config global set ...`).
 
 ## User Contract
 

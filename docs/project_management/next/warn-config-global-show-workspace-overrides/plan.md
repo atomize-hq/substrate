@@ -10,11 +10,15 @@ Make `substrate config global show` self-explanatory when run inside a workspace
 workspace config overrides, by emitting a single stderr note that points the operator at the
 effective config view: `substrate config show --explain`.
 
+Additionally, make implicit-scope `substrate config set ...` self-explanatory by emitting a single stderr note
+that states the write target (workspace scope + path).
+
 ## Guardrails (non-negotiable)
 
 - **No behavior/semantics changes**: config precedence and merge behavior are unchanged.
 - **No stdout contamination**: `config global show` stdout MUST remain *only* the serialized global patch (YAML/JSON).
 - **Stderr-only note**: the new warning MUST be emitted on stderr and MUST be a single line.
+- **No stdout contamination (implicit set)**: `config set` stdout MUST remain *only* the serialized effective merged config (YAML/JSON).
 - **No new failure modes**: `config global show` MUST NOT begin failing due to unreadable or invalid workspace config.
 - **No overlap-key enumeration in v1**: do not attempt to list “which keys are overridden”; keep the UX minimal and stable.
 

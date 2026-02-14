@@ -202,18 +202,29 @@ jobs:
     if: needs.feature_meta.outputs.run_linux == '1' && inputs.runner_kind == 'self-hosted'
     runs-on: [self-hosted, Linux, linux-host]
     steps:
-      - name: Checkout repository (override ref)
+      - name: Checkout repository (workflow ref)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Checkout repository (candidate ref)
         if: inputs.checkout_ref != ''
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.checkout_ref }}
           submodules: recursive
+          path: candidate
 
-      - name: Checkout repository
-        if: inputs.checkout_ref == ''
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - name: Select build checkout
+        id: checkout_dir
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -d "$GITHUB_WORKSPACE/candidate" ]]; then
+            echo "dir=candidate" >> "$GITHUB_OUTPUT"
+          else
+            echo "dir=." >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Preflight substrate world socket (Linux self-hosted)
         shell: bash
@@ -293,7 +304,8 @@ jobs:
           fi
 
       - name: Provision world-agent (Linux self-hosted; WAPS)
-        if: startsWith(inputs.feature_dir, 'docs/project_management/_archived/world-agent-policy-snapshot') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/full-isolation-landlock-overlayfs-compat')
+        if: startsWith(inputs.feature_dir, 'docs/project_management/next/world-sync') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/world-agent-policy-snapshot') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/full-isolation-landlock-overlayfs-compat')
+        working-directory: ${{ steps.checkout_dir.outputs.dir }}
         run: |
           set -euo pipefail
           if sudo -n true >/dev/null 2>&1; then
@@ -305,16 +317,26 @@ jobs:
 
       - name: Run integration checks (Linux self-hosted)
         if: inputs.run_integ_checks
+        working-directory: ${{ steps.checkout_dir.outputs.dir }}
         run: |
           cargo fmt --all -- --check
           cargo clippy --workspace --all-targets -- -D warnings
           cargo test --workspace --all-targets
 
       - name: Build substrate (debug)
+        working-directory: ${{ steps.checkout_dir.outputs.dir }}
         run: cargo build --bin substrate --bin substrate-shim
 
       - name: Add substrate to PATH
-        run: echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
+        shell: bash
+        run: |
+          set -euo pipefail
+          dir="${{ steps.checkout_dir.outputs.dir }}"
+          if [[ "${dir}" == "candidate" ]]; then
+            echo "$GITHUB_WORKSPACE/candidate/target/debug" >> "$GITHUB_PATH"
+          else
+            echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
+          fi
 
       - name: Run linux smoke
         run: bash "${{ inputs.feature_dir }}/smoke/linux-smoke.sh"
@@ -381,25 +403,37 @@ jobs:
       CARGO_BUILD_JOBS: 2
       RUST_TEST_THREADS: 1
     steps:
-      - name: Checkout repository (override ref)
+      - name: Checkout repository (workflow ref)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Checkout repository (candidate ref)
         if: inputs.checkout_ref != ''
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.checkout_ref }}
           submodules: recursive
+          path: candidate
 
-      - name: Checkout repository
-        if: inputs.checkout_ref == ''
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - name: Select build checkout
+        id: checkout_dir
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -d "$GITHUB_WORKSPACE/candidate" ]]; then
+            echo "dir=candidate" >> "$GITHUB_OUTPUT"
+          else
+            echo "dir=." >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Prevent sleep (macOS self-hosted)
         run: caffeinate -dimsu &
 
       - name: Warm Lima world (macOS self-hosted; WAPS)
-        if: startsWith(inputs.feature_dir, 'docs/project_management/_archived/world-agent-policy-snapshot') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/full-isolation-landlock-overlayfs-compat')
-        run: bash scripts/mac/lima-warm.sh "$GITHUB_WORKSPACE"
+        if: startsWith(inputs.feature_dir, 'docs/project_management/next/world-sync') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/world-agent-policy-snapshot') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/full-isolation-landlock-overlayfs-compat')
+        working-directory: ${{ steps.checkout_dir.outputs.dir }}
+        run: bash scripts/mac/lima-warm.sh "$PWD"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -409,16 +443,26 @@ jobs:
 
       - name: Run integration checks (macOS self-hosted)
         if: inputs.run_integ_checks
+        working-directory: ${{ steps.checkout_dir.outputs.dir }}
         run: |
           cargo fmt --all -- --check
           cargo clippy --workspace --all-targets -- -D warnings
           cargo test --workspace --all-targets
 
       - name: Build substrate (debug)
+        working-directory: ${{ steps.checkout_dir.outputs.dir }}
         run: cargo build --bin substrate --bin substrate-shim
 
       - name: Add substrate to PATH
-        run: echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
+        shell: bash
+        run: |
+          set -euo pipefail
+          dir="${{ steps.checkout_dir.outputs.dir }}"
+          if [[ "${dir}" == "candidate" ]]; then
+            echo "$GITHUB_WORKSPACE/candidate/target/debug" >> "$GITHUB_PATH"
+          else
+            echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
+          fi
 
       - name: Run macOS smoke
         run: bash "${{ inputs.feature_dir }}/smoke/macos-smoke.sh"

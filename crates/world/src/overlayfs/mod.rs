@@ -9,6 +9,7 @@
 )]
 
 use crate::guard::{should_guard_anchor, wrap_with_anchor_guard};
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Child;
 
@@ -41,6 +42,12 @@ pub struct OverlayFs {
     work_dir: PathBuf,
     merged_dir: PathBuf,
     lower_dir: Option<PathBuf>,
+    mounted_mode: Option<WorldFsMode>,
+    /// True when the active merged mount consults the upper/work layers for reads.
+    ///
+    /// Kernel overlayfs read-only mounts are currently created as lower-only (no upper/work),
+    /// while fuse-overlayfs may still consult upper/work even in read-only mode.
+    uses_upper_layer: bool,
     #[allow(dead_code)]
     bind_lower_dir: Option<PathBuf>,
     is_mounted: bool,
@@ -67,6 +74,8 @@ impl OverlayFs {
             work_dir,
             merged_dir,
             lower_dir: None,
+            mounted_mode: None,
+            uses_upper_layer: false,
             bind_lower_dir: None,
             is_mounted: false,
             using_fuse: false,
@@ -140,6 +149,8 @@ impl OverlayFs {
                 },
             );
             self.is_mounted = true;
+            self.mounted_mode = Some(WorldFsMode::Writable);
+            self.uses_upper_layer = true;
             Ok(self.merged_dir.clone())
         }
 
@@ -211,6 +222,11 @@ impl OverlayFs {
                 },
             );
             self.is_mounted = true;
+            self.mounted_mode = Some(WorldFsMode::ReadOnly);
+            self.uses_upper_layer = matches!(
+                selection.final_strategy,
+                substrate_common::WorldFsStrategy::Fuse
+            );
             Ok(self.merged_dir.clone())
         }
 
@@ -239,6 +255,7 @@ impl OverlayFs {
         )
         .context("Failed to remount overlay read-only")?;
 
+        self.mounted_mode = Some(WorldFsMode::ReadOnly);
         Ok(())
     }
 
@@ -260,6 +277,7 @@ impl OverlayFs {
         )
         .context("Failed to remount overlay writable")?;
 
+        self.mounted_mode = Some(WorldFsMode::Writable);
         Ok(())
     }
 
@@ -271,6 +289,8 @@ impl OverlayFs {
         self.is_mounted = false;
         self.using_fuse = false;
         self.fuse_child = None;
+        self.mounted_mode = None;
+        self.uses_upper_layer = false;
         strategy_state::clear(&self.world_id);
         Ok(())
     }
@@ -375,6 +395,169 @@ impl OverlayFs {
         self.lower_dir = Some(lower_dir.to_path_buf());
         self.is_mounted = true;
         Ok(self.merged_dir.clone())
+    }
+
+    /// Discard (revert) the pending overlay upper entry for each provided workspace-relative path.
+    ///
+    /// This removes any materialized file/directory at `<upperdir>/<path>` as well as any whiteout
+    /// file named `.wh.<basename>` in the same parent directory. Missing paths are ignored.
+    ///
+    /// Returns the number of filesystem entries removed.
+    pub fn discard_paths(&mut self, rel_paths: &[PathBuf]) -> Result<u32> {
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = rel_paths;
+            anyhow::bail!("overlayfs path discard is only supported on Linux");
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            for rel in rel_paths {
+                if rel.is_absolute() {
+                    anyhow::bail!(
+                        "discard_paths: absolute paths are not allowed: {}",
+                        rel.display()
+                    );
+                }
+                if rel
+                    .components()
+                    .any(|c| matches!(c, std::path::Component::ParentDir))
+                {
+                    anyhow::bail!(
+                        "discard_paths: path segments must not be '..': {}",
+                        rel.display()
+                    );
+                }
+            }
+
+            // Modifying `upperdir` behind an active overlay mount is not guaranteed to invalidate
+            // overlayfs dentries. To ensure discards take effect in the merged view, remove entries
+            // while unmounted and then restore the mount when it consults upper/work.
+            let restore: Option<(PathBuf, WorldFsMode)> =
+                if self.is_mounted && self.uses_upper_layer && !rel_paths.is_empty() {
+                    let lower_dir = self
+                        .lower_dir
+                        .clone()
+                        .context("discard_paths: missing lower_dir for mounted overlay")?;
+                    let mode = self.mounted_mode.unwrap_or(WorldFsMode::Writable);
+                    self.unmount().context("discard_paths: unmount failed")?;
+                    Some((lower_dir, mode))
+                } else {
+                    None
+                };
+
+            fn restore_mount(
+                overlay: &mut OverlayFs,
+                lower_dir: &Path,
+                mode: WorldFsMode,
+            ) -> Result<()> {
+                overlay
+                    .mount(lower_dir)
+                    .context("discard_paths: failed to remount overlay")?;
+                if mode == WorldFsMode::ReadOnly {
+                    if overlay.is_using_fuse() {
+                        // fuse-overlayfs does not reliably honor MS_RDONLY remount semantics.
+                        overlay
+                            .unmount()
+                            .context("discard_paths: unmount before fuse ro rebuild")?;
+                        overlay
+                            .mount_fuse_only_read_only(lower_dir)
+                            .context("discard_paths: failed to remount fuse overlay read-only")?;
+                        overlay.mounted_mode = Some(WorldFsMode::ReadOnly);
+                        overlay.uses_upper_layer = true;
+                    } else {
+                        overlay
+                            .remount_read_only()
+                            .context("discard_paths: failed to remount overlay read-only")?;
+                    }
+                }
+                Ok(())
+            }
+
+            let removed = (|| -> Result<u32> {
+                let mut removed: u32 = 0;
+                for rel in rel_paths {
+                    let upper_entry = self.upper_dir.join(rel);
+                    match fs::symlink_metadata(&upper_entry) {
+                        Ok(meta) => {
+                            let ft = meta.file_type();
+                            if ft.is_dir() && !ft.is_symlink() {
+                                fs::remove_dir_all(&upper_entry).with_context(|| {
+                                    format!(
+                                        "failed to remove overlay upper directory {}",
+                                        upper_entry.display()
+                                    )
+                                })?;
+                            } else {
+                                fs::remove_file(&upper_entry).with_context(|| {
+                                    format!(
+                                        "failed to remove overlay upper file {}",
+                                        upper_entry.display()
+                                    )
+                                })?;
+                            }
+                            removed = removed.saturating_add(1);
+                        }
+                        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                        Err(err) => {
+                            return Err(anyhow::anyhow!(
+                                "failed to stat overlay upper entry {}: {err}",
+                                upper_entry.display()
+                            ));
+                        }
+                    }
+
+                    let Some(file_name) = rel.file_name().and_then(|s| s.to_str()) else {
+                        continue;
+                    };
+                    let parent = rel.parent().unwrap_or_else(|| Path::new(""));
+                    let whiteout = self.upper_dir.join(parent).join(format!(".wh.{file_name}"));
+                    match fs::symlink_metadata(&whiteout) {
+                        Ok(meta) => {
+                            if meta.file_type().is_dir() {
+                                fs::remove_dir_all(&whiteout).with_context(|| {
+                                    format!(
+                                        "failed to remove overlay upper whiteout directory {}",
+                                        whiteout.display()
+                                    )
+                                })?;
+                            } else {
+                                fs::remove_file(&whiteout).with_context(|| {
+                                    format!(
+                                        "failed to remove overlay upper whiteout file {}",
+                                        whiteout.display()
+                                    )
+                                })?;
+                            }
+                            removed = removed.saturating_add(1);
+                        }
+                        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                        Err(err) => {
+                            return Err(anyhow::anyhow!(
+                                "failed to stat overlay upper whiteout {}: {err}",
+                                whiteout.display()
+                            ));
+                        }
+                    }
+                }
+                Ok(removed)
+            })();
+
+            match removed {
+                Ok(removed) => {
+                    if let Some((lower_dir, mode)) = restore {
+                        restore_mount(self, lower_dir.as_path(), mode)?;
+                    }
+                    Ok(removed)
+                }
+                Err(err) => {
+                    if let Some((lower_dir, mode)) = restore {
+                        let _ = restore_mount(self, lower_dir.as_path(), mode);
+                    }
+                    Err(err)
+                }
+            }
+        }
     }
 }
 
@@ -559,6 +742,8 @@ mod tests {
             work_dir: temp_dir.path().join("work"),
             merged_dir: temp_dir.path().join("merged"),
             lower_dir: None,
+            mounted_mode: None,
+            uses_upper_layer: false,
             bind_lower_dir: None,
             is_mounted: false,
             using_fuse: false,
@@ -587,6 +772,8 @@ mod tests {
             work_dir,
             merged_dir,
             lower_dir: None,
+            mounted_mode: None,
+            uses_upper_layer: false,
             bind_lower_dir: None,
             is_mounted: false,
             using_fuse: false,
@@ -737,6 +924,8 @@ mod tests {
             work_dir: mnt_b.join("work"),
             merged_dir: mnt_a.join("merged"),
             lower_dir: None,
+            mounted_mode: None,
+            uses_upper_layer: false,
             bind_lower_dir: None,
             is_mounted: false,
             using_fuse: false,
@@ -765,5 +954,82 @@ mod tests {
         overlay.cleanup().unwrap();
         let _ = umount2(&mnt_a, MntFlags::MNT_DETACH);
         let _ = umount2(&mnt_b, MntFlags::MNT_DETACH);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn discard_paths_reveals_lower_after_remount() {
+        use nix::unistd::Uid;
+
+        if !Uid::current().is_root() {
+            println!("Skipping discard remount test (requires root)");
+            return;
+        }
+
+        let temp_dir = TempDir::new().unwrap();
+        let lower_dir = temp_dir.path().join("lower");
+        std::fs::create_dir_all(&lower_dir).unwrap();
+        std::fs::write(lower_dir.join("shadow.md"), b"host").unwrap();
+
+        let overlay_dir = temp_dir.path().join("overlay");
+        let upper_dir = overlay_dir.join("upper");
+        let work_dir = overlay_dir.join("work");
+        let merged_dir = overlay_dir.join("merged");
+
+        let mut overlay = OverlayFs {
+            world_id: "discard_test".to_string(),
+            overlay_dir,
+            upper_dir,
+            work_dir,
+            merged_dir: merged_dir.clone(),
+            lower_dir: None,
+            mounted_mode: None,
+            uses_upper_layer: false,
+            bind_lower_dir: None,
+            is_mounted: false,
+            using_fuse: false,
+            fuse_child: None,
+        };
+
+        let merged = match overlay.mount(&lower_dir) {
+            Ok(path) => path,
+            Err(err) => {
+                let message = err.to_string();
+                // Some CI environments disallow mounts entirely.
+                if message.contains("Operation not permitted") || message.contains("EPERM") {
+                    println!("Skipping discard remount test (EPERM): {}", message);
+                    return;
+                }
+                if message.contains("Failed to mount overlayfs")
+                    || message.contains("Invalid argument")
+                    || message.contains("EINVAL")
+                {
+                    println!(
+                        "Skipping discard remount test (overlayfs unavailable): {}",
+                        message
+                    );
+                    return;
+                }
+                panic!("Unexpected error mounting overlayfs: {err:#}");
+            }
+        };
+
+        std::fs::write(merged.join("shadow.md"), b"world").unwrap();
+        assert_eq!(
+            std::fs::read_to_string(merged.join("shadow.md")).unwrap(),
+            "world"
+        );
+
+        let removed = overlay
+            .discard_paths(&[PathBuf::from("shadow.md")])
+            .unwrap();
+        assert!(removed >= 1, "expected at least one removed entry");
+
+        assert_eq!(
+            std::fs::read_to_string(merged.join("shadow.md")).unwrap(),
+            "host"
+        );
+
+        overlay.cleanup().unwrap();
     }
 }

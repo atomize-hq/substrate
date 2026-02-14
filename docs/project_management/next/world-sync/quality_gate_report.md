@@ -332,3 +332,55 @@ jq -e . docs/project_management/next/sequencing.json >/dev/null
 - Required human decisions (explicit): None (deterministic doc alignment fixes only).
 - Blockers to execution:
   - Fix Finding 012, then re-run this quality gate.
+
+---
+
+## Pass 4 — 2026-02-11 — Recommendation: ACCEPT (post-remediation verification)
+
+## Metadata
+- Feature directory: `docs/project_management/next/world-sync/`
+- Reviewed commit: `4e8788615e6ba2f79d5fcc844ea92572bb78283e` (plus uncommitted planning-doc remediation)
+- Reviewer: `Codex (verification during execution preflight)`
+- Date (UTC): `2026-02-11`
+- Recommendation: `ACCEPT`
+
+## Evidence: Commands Run (verbatim)
+
+```bash
+export FEATURE_DIR="docs/project_management/next/world-sync"
+
+make planning-lint FEATURE_DIR="$FEATURE_DIR"
+# exit: 0
+
+make planning-validate FEATURE_DIR="$FEATURE_DIR"
+# exit: 0
+
+jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
+# exit: 0
+
+jq -e . docs/project_management/next/sequencing.json >/dev/null
+# exit: 0
+```
+
+## Findings (must be exhaustive)
+
+### Finding 013 — Manual testing playbook rollback safety rail is aligned to internal-git spec
+- Status: `VERIFIED`
+- Evidence:
+  - `docs/project_management/next/world-sync/manual_testing_playbook.md` (rollback without `--force` expects exit `5`; rollback with `--force` expects exit `0` and deletion of the non-checkpointed path)
+  - `docs/project_management/next/world-sync/internal-git-spec.md` (safety rail contract)
+- Impact: Removes execution drift between spec, smoke scripts, and human playbook for a safety-critical mutation surface.
+- Fix required (exact): none
+- If DEFECT: Alternative (one viable): none
+
+### Finding 014 — Planning lint/validate pass end-to-end for the world-sync Planning Pack
+- Status: `VERIFIED`
+- Evidence:
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world-sync"` → `0`
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/world-sync"` → `0`
+- Impact: Confirms the planning pack is mechanically runnable and free of banned ambiguity patterns.
+- Fix required (exact): none
+- If DEFECT: Alternative (one viable): none
+
+## Decision: ACCEPT
+- Summary: Prior defect(s) are remediated and mechanical validation gates pass; the Planning Pack is execution-ready.

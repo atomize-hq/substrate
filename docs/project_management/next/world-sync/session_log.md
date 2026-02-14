@@ -225,3 +225,326 @@
   - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` → `0` → `PASS`
   - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` → `0` → `PASS`
   - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0` → `PASS`
+
+## START — 2026-02-11T18:51:06Z — ops — F0-exec-preflight (execution preflight gate)
+- Feature: `docs/project_management/next/world-sync`
+- Branch (current checkout): `feat/world-sync`
+- Goal: Run the execution preflight gate per `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md` and produce a concrete recommendation (`ACCEPT` or `REVISE`) in `execution_preflight_report.md` before starting any triads.
+- Commands run (with results):
+  - `make triad-orch-ensure FEATURE_DIR="docs/project_management/next/world-sync"` → `0`
+
+## END — 2026-02-11T18:55:18Z — ops — F0-exec-preflight (execution preflight gate)
+- Recommendation: `ACCEPT`
+- Summary of changes (exhaustive):
+  - Completed `docs/project_management/next/world-sync/execution_preflight_report.md` with `RECOMMENDATION: ACCEPT`.
+  - Appended an `ACCEPT` verification pass to `docs/project_management/next/world-sync/quality_gate_report.md`.
+  - Fixed ADR executive summary hash drift for `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` via `make adr-fix` so planning lint passes for referenced ADR inputs.
+  - Strengthened `docs/project_management/next/world-sync/smoke/*` to assert that `workspace sync --verbose` output includes the pending path(s) being applied (non-toy observable output check).
+- Mechanical checks:
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world-sync"` → `0` → `PASS`
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/world-sync"` → `0` → `PASS`
+- Required fixes before starting `WS0`: none.
+
+## START — 2026-02-11T19:05:17Z — code — WS0-code
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" SLICE_ID="WS0"`
+
+## START — 2026-02-11T19:05:17Z — test — WS0-test
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" SLICE_ID="WS0"`
+
+## END — 2026-02-11T19:15:16Z — code — WS0-code
+- HEAD: `9274c027a1e97c0e2ffaec50b1f53c3c7d592c68`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS0/code/last_message.md`
+
+## END — 2026-02-11T19:15:16Z — test — WS0-test
+- HEAD: `f21e5ecb8514ad18e5a8045d73d559f5d2da4c39`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS0/test/last_message.md`
+
+## START — 2026-02-11T19:15:16Z — integration — WS0-integ
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" TASK_ID="WS0-integ" LAUNCH_CODEX=1`
+
+## END — 2026-02-11T19:26:31Z — integration — WS0-integ
+- HEAD: `21a4db7fca8fcb83d4c7670ab2ee99c62d39a7c9`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS0/integ/last_message.md`
+
+## START — 2026-02-11T19:37:33Z — code — WS1-code
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" SLICE_ID="WS1"`
+
+## START — 2026-02-11T19:37:33Z — test — WS1-test
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" SLICE_ID="WS1"`
+
+## END — 2026-02-11T20:06:12Z — code — WS1-code
+- HEAD: `a90bda6b05ab135421710a29b3eb4a50f1348308`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS1/code/last_message.md`
+
+## END — 2026-02-11T20:06:12Z — test — WS1-test
+- HEAD: `77cee35d4e4f0ffae2e443713745d8ad48c7831b`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS1/test/last_message.md`
+
+## START — 2026-02-11T20:06:12Z — integration — WS1-integ
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" TASK_ID="WS1-integ" LAUNCH_CODEX=1`
+
+## END — 2026-02-11T20:24:33Z — integration — WS1-integ
+- HEAD: `4fbec9bee247cc18b81d66574695b4bff0677cf9`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS1/integ/last_message.md`
+
+## START — 2026-02-11T21:21:47Z — code — WS2-code
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" SLICE_ID="WS2"`
+
+## START — 2026-02-11T21:21:47Z — test — WS2-test
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" SLICE_ID="WS2"`
+
+## END — 2026-02-11T21:41:31Z — code — WS2-code
+- HEAD: `adf73bb7586b535b853523e3499a873ad407c374`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS2/code/last_message.md`
+
+## END — 2026-02-11T21:41:31Z — test — WS2-test
+- HEAD: `1f591f56c8b9e491c9ab7b29b62d09d684c1c0ad`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS2/test/last_message.md`
+
+## START — 2026-02-11T21:41:31Z — integration — WS2-integ-core
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" TASK_ID="WS2-integ-core" LAUNCH_CODEX=1`
+
+## END — 2026-02-11T21:55:00Z — integration — WS2-integ-core
+- HEAD: `2a3547c11213f960775c8af425bd5b63c5643248`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS2/integ-core/last_message.md`
+
+## START — 2026-02-11T22:04:02Z — ops — CP1-ci-checkpoint
+- Dispatch:
+  - `make ci-compile-parity CI_WORKFLOW_REF="feat/world-sync" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF="<CHECKOUT_SHA>"`
+  - `make feature-smoke FEATURE_DIR="docs/project_management/next/world-sync" PLATFORM=behavior SMOKE_SLICE_ID="WS2" SMOKE_CHECKOUT_REF="<CHECKOUT_SHA>" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/world-sync" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=0`
+
+## START — 2026-02-11T22:18:39Z — platform-fix — WS2-integ-macos
+- Dispatch:
+  - `make triad-task-start-platform-fixes FEATURE_DIR="docs/project_management/next/world-sync" SLICE_ID="WS2" PLATFORMS="macos" LAUNCH_CODEX=1`
+
+## END — 2026-02-11T22:19:15Z — platform-fix — WS2-integ-macos
+- HEAD: `73de680c7aca239f9c57285593bf77c8dbf9161d`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS2/integ-macos/last_message.md`
+
+## START — 2026-02-11T22:33:41Z — platform-fix — WS2-integ-linux
+- Dispatch:
+  - `make triad-task-start-platform-fixes FEATURE_DIR="docs/project_management/next/world-sync" SLICE_ID="WS2" PLATFORMS="linux" LAUNCH_CODEX=1`
+
+## END — 2026-02-11T22:38:06Z — platform-fix — WS2-integ-linux
+- HEAD: `87f9bf0191d4b6b7953a7a4f887f918585f6c60c`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS2/integ-linux/last_message.md`
+
+## START — 2026-02-11T22:56:45Z — platform-fix — WS2-integ-macos (restart)
+- Reason: CP1 `ci-testing` (quick) failed on `macos-14` (run `21925971428`) due to `wfgadax2_control_caged_required_allows_caged_workspace_execution`.
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" TASK_ID="WS2-integ-macos" LAUNCH_CODEX=1`
+
+## END — 2026-02-11T23:00:16Z — platform-fix — WS2-integ-macos (restart)
+- HEAD: `ff054f0c00ff6c1dae2a842f686cf95db2324568`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS2/integ-macos/last_message.md`
+
+## END — 2026-02-11T23:57:30Z — ops — CP1-ci-checkpoint
+- CHECKOUT_SHA: `136d6814a650066c58e09c43a1d849da1cdbbb8f`
+- `ci-compile-parity`: `21927720591` (success) — https://github.com/atomize-hq/substrate/actions/runs/21927720591
+- `feature-smoke` (behavior, WS2): `21927790446` (success) — https://github.com/atomize-hq/substrate/actions/runs/21927790446
+- `ci-testing` (quick): `21927501473` (success) — https://github.com/atomize-hq/substrate/actions/runs/21927501473
+
+## START — 2026-02-11T23:59:42Z — integration — WS2-integ
+- Dispatch:
+  - `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/next/world-sync" SLICE_ID="WS2" LAUNCH_CODEX=1` (Codex headless launch terminated; worktree created)
+
+## END — 2026-02-12T00:05:39Z — integration — WS2-integ
+- HEAD: `962d7e3117c07313466d25de3d3e2454de7570f8`
+- Merged to orchestration: `e5fdeb57f3a6a7f8f8a3fdf62fa4f5b0ed08f571`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS2/integ/last_message.md`
+
+## START — 2026-02-12T00:51:28Z — code — WS3-code
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" SLICE_ID="WS3"`
+
+## START — 2026-02-12T00:51:28Z — test — WS3-test
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" SLICE_ID="WS3"`
+
+## END — 2026-02-12T01:10:08Z — code — WS3-code
+- HEAD: `6826df12dc25b1fc82d660b41a320513a6e48a2c`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS3/code/last_message.md`
+
+## END — 2026-02-12T01:10:08Z — test — WS3-test
+- HEAD: `c2a2fb2ef338027615cb5f675b8448c86ad365a8`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS3/test/last_message.md`
+
+## START — 2026-02-12T01:10:08Z — integration — WS3-integ
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" TASK_ID="WS3-integ" LAUNCH_CODEX=1`
+
+## END — 2026-02-12T01:22:50Z — integration — WS3-integ
+- HEAD: `9af7f664b346684538fb945a79986deac0a32e6f`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS3/integ/last_message.md`
+
+## START — 2026-02-12T02:32:51Z — code — WS4-code
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" SLICE_ID="WS4"`
+
+## START — 2026-02-12T02:32:51Z — test — WS4-test
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" SLICE_ID="WS4"`
+
+## END — 2026-02-12T02:47:37Z — code — WS4-code
+- HEAD: `29eb765abf90d162b2a8f8db6450ec2346a0737e`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS4/code/last_message.md`
+
+## END — 2026-02-12T02:47:37Z — test — WS4-test
+- HEAD: `dee4432c99b262ad61db89078914aee1ccfa5361`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS4/test/last_message.md`
+
+## START — 2026-02-12T02:47:37Z — integration — WS4-integ
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" TASK_ID="WS4-integ" LAUNCH_CODEX=1`
+
+## END — 2026-02-12T03:00:15Z — integration — WS4-integ
+- HEAD: `39521a18ec20165a2ef4f22145154e4db997b56c`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS4/integ/last_message.md`
+
+## START — 2026-02-12T03:06:05Z — code — WS5-code
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" SLICE_ID="WS5"`
+
+## START — 2026-02-12T03:06:05Z — test — WS5-test
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" SLICE_ID="WS5"`
+
+## END — 2026-02-12T03:40:21Z — code — WS5-code
+- HEAD: `10481d796d2c83bad86eb785c1d062404d01a3e5`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS5/code/last_message.md`
+
+## END — 2026-02-12T03:40:21Z — test — WS5-test
+- HEAD: `1266ce2d724cce07f623b998bba9e414e221f161`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS5/test/last_message.md`
+
+## START — 2026-02-12T03:40:21Z — integration — WS5-integ-core
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" TASK_ID="WS5-integ-core" LAUNCH_CODEX=1`
+
+## END — 2026-02-12T04:09:37Z — integration — WS5-integ-core
+- HEAD: `3c31d2b768feb368316cc02f139242e45b2171c2`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS5/integ-core/last_message.md`
+
+## START — 2026-02-12T04:20:52Z — ops — CP2-ci-checkpoint
+- Dispatch (after CI audit recommends `run`):
+  - `make ci-compile-parity CI_WORKFLOW_REF="feat/world-sync" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF="3c31d2b768feb368316cc02f139242e45b2171c2"`
+  - `make feature-smoke FEATURE_DIR="docs/project_management/next/world-sync" PLATFORM=behavior SMOKE_SLICE_ID="WS5" SMOKE_CHECKOUT_REF="3c31d2b768feb368316cc02f139242e45b2171c2" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/world-sync" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=0`
+- Local preflight note:
+  - Linux smoke WS5 is blocked on this host by the system world-agent missing `pending_diff_v1` (cannot run `sudo` provisioning in this environment).
+
+## START — 2026-02-12T04:27:15Z — integration — WS5-integ-linux
+- Trigger: Feature Smoke run `21933493196` failed `linux,macos`.
+- Dispatch:
+  - `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="docs/project_management/next/world-sync" SLICE_ID="WS5" SMOKE_RUN_ID="21933493196" LAUNCH_CODEX=1`
+
+## START — 2026-02-12T04:27:15Z — integration — WS5-integ-macos
+- Trigger: Feature Smoke run `21933493196` failed `linux,macos`.
+- Dispatch:
+  - `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="docs/project_management/next/world-sync" SLICE_ID="WS5" SMOKE_RUN_ID="21933493196" LAUNCH_CODEX=1`
+
+## END — 2026-02-12T04:48:10Z — integration — WS5-integ-linux
+- HEAD: `b790402e46a9e8950d3e19b419756e5ba71d8da5`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS5/integ-linux/last_message.md`
+
+## END — 2026-02-12T04:48:10Z — integration — WS5-integ-macos
+- HEAD: `d257468013e3f2d532cb51ce77df77064122f169`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS5/integ-macos/last_message.md`
+
+## END — 2026-02-12T04:51:57Z — ops — CP2-ci-checkpoint
+- Candidate SHA (WS5-integ-core): `3c31d2b768feb368316cc02f139242e45b2171c2`
+- Compile parity: `21933430366` → `success` → `https://github.com/atomize-hq/substrate/actions/runs/21933430366`
+- Feature Smoke (behavior) attempts:
+  - `21933493196` → `failure` → `https://github.com/atomize-hq/substrate/actions/runs/21933493196` (runner world backend missing `pending_diff_v1`)
+  - `21933649387` → `failure` → `https://github.com/atomize-hq/substrate/actions/runs/21933649387` (runner `sudo -n` unavailable; cannot provision world-agent)
+  - `21933824948` → `failure` → `https://github.com/atomize-hq/substrate/actions/runs/21933824948` (macOS backend missing `pending_diff_reconcile_v1`)
+  - `21933919268` → `success` → `https://github.com/atomize-hq/substrate/actions/runs/21933919268`
+- Workflow follow-ups on `feat/world-sync` to keep Feature Smoke useful even when runner provisioning is limited:
+  - Allow smoke scripts to run from `WORKFLOW_REF` while building `substrate` from `SMOKE_CHECKOUT_REF`
+  - Run `lima-warm.sh` using the candidate checkout when `checkout_ref` is set
+
+## START — 2026-02-12T04:53:00Z — integration — WS5-integ
+- Dispatch:
+  - `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/next/world-sync" SLICE_ID="WS5" LAUNCH_CODEX=1`
+
+## END — 2026-02-12T05:01:58Z — integration — WS5-integ
+- HEAD: `91105f3829fdf4a5b7f7c7b940dc48dc77c9360e`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS5/integ/last_message.md`
+
+## START — 2026-02-12T05:21:22Z — code — WS6-code
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" SLICE_ID="WS6"`
+
+## START — 2026-02-12T05:21:22Z — test — WS6-test
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" SLICE_ID="WS6"`
+
+## END — 2026-02-12T05:34:21Z — code — WS6-code
+- HEAD: `2b2150edd72e5ad2d861b6aa7d9713f896d5396f`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS6/code/last_message.md`
+
+## END — 2026-02-12T05:34:21Z — test — WS6-test
+- HEAD: `4025b2647fa5816064b4f61179d6b7a22a71e8bf`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS6/test/last_message.md`
+
+## START — 2026-02-12T05:34:21Z — integration — WS6-integ
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" TASK_ID="WS6-integ" LAUNCH_CODEX=1`
+
+## END — 2026-02-12T05:47:08Z — integration — WS6-integ
+- HEAD: `66e22824566cc1056eb8827e0cef2f715b9ef5d0`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS6/integ/last_message.md`
+
+## START — 2026-02-12T05:54:38Z — code — WS7-code
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" SLICE_ID="WS7"`
+
+## START — 2026-02-12T05:54:38Z — test — WS7-test
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" SLICE_ID="WS7"`
+
+## END — 2026-02-12T06:08:29Z — code — WS7-code
+- HEAD: `ec1a0b50401eda69863588bf84b806b756299000`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS7/code/last_message.md`
+
+## END — 2026-02-12T06:08:29Z — test — WS7-test
+- HEAD: `4318934b9d7c408bd2717549c9f54a63d9a86415`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS7/test/last_message.md`
+
+## START — 2026-02-12T06:08:29Z — integration — WS7-integ-core
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync" TASK_ID="WS7-integ-core" LAUNCH_CODEX=1`
+
+## END — 2026-02-12T06:19:51Z — integration — WS7-integ-core
+- HEAD: `cbe63e34ce3c1cb135976dd2d1532f48093c48d2`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS7/integ-core/last_message.md`
+
+## START — 2026-02-12T06:21:12Z — ops — CP3-ci-checkpoint
+- Candidate SHA (WS7-integ-core): `cbe63e34ce3c1cb135976dd2d1532f48093c48d2`
+- Dispatch (if audit recommends run):
+  - `make ci-compile-parity CI_WORKFLOW_REF="feat/world-sync" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF="cbe63e34ce3c1cb135976dd2d1532f48093c48d2"`
+  - `make feature-smoke FEATURE_DIR="docs/project_management/next/world-sync" PLATFORM=behavior SMOKE_SLICE_ID="WS7" SMOKE_CHECKOUT_REF="cbe63e34ce3c1cb135976dd2d1532f48093c48d2" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/world-sync" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=0`
+
+## END — 2026-02-12T06:28:04Z — ops — CP3-ci-checkpoint
+- Candidate SHA (WS7-integ-core): `cbe63e34ce3c1cb135976dd2d1532f48093c48d2`
+- CI audit (advisory):
+  - CI Testing: `RECOMMEND=run` (changes since last green: `21933430366` → `https://github.com/atomize-hq/substrate/actions/runs/21933430366`)
+  - Feature Smoke: `RECOMMEND=run` (changes since last green: `21933919268` → `https://github.com/atomize-hq/substrate/actions/runs/21933919268`)
+- Compile parity: `21935933784` → `success` → `https://github.com/atomize-hq/substrate/actions/runs/21935933784`
+- Feature Smoke (behavior; passed `linux,macos`): `21935948219` → `success` → `https://github.com/atomize-hq/substrate/actions/runs/21935948219`
+
+## START — 2026-02-12T06:28:58Z — integration — WS7-integ
+- Dispatch:
+  - `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/next/world-sync" SLICE_ID="WS7" LAUNCH_CODEX=1`
+
+## END — 2026-02-12T06:37:10Z — integration — WS7-integ
+- HEAD: `83be4e8c51196cfba637199f5f813b07536af127`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-sync/logs/WS7/integ/last_message.md`

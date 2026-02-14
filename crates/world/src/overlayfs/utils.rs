@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 use anyhow::Context;
 use anyhow::Result;
 use sha2::{Digest, Sha256};
+#[cfg(target_os = "linux")]
+use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use substrate_common::FsDiff;
 use walkdir::WalkDir;
 
@@ -44,7 +46,41 @@ pub(crate) fn compute_diff(
             }
         }
 
+        // Kernel overlayfs represents deletions as whiteouts: character devices with rdev=0/0 at
+        // the deleted path in the upper directory (not `.wh.<name>` files). If we ignore these,
+        // deleting a host-created file in-world will not appear in the pending diff, and `workspace
+        // sync` will not propagate the delete to the host.
+        #[cfg(target_os = "linux")]
+        {
+            if let Ok(meta) = entry.metadata() {
+                let ft = meta.file_type();
+                if ft.is_char_device() && meta.rdev() == 0 {
+                    diff.deletes.push(rel_pathbuf.clone());
+                    continue;
+                }
+            }
+        }
+
         if entry.file_type().is_file() {
+            file_count += 1;
+
+            if let Ok(metadata) = entry.metadata() {
+                total_size += metadata.len() as usize;
+            }
+
+            if file_count > max_files || total_size > max_diff_size_bytes {
+                diff.truncated = true;
+                break;
+            }
+
+            if is_modification(lower_dir, &rel_pathbuf) {
+                diff.mods.push(rel_pathbuf.clone());
+            } else {
+                diff.writes.push(rel_pathbuf.clone());
+            }
+        } else if entry.file_type().is_symlink() {
+            // Track symlinks in the pending diff so workspace sync can refuse safely rather than
+            // silently discarding them during diff clear.
             file_count += 1;
 
             if let Ok(metadata) = entry.metadata() {
@@ -166,6 +202,11 @@ mod tests {
         // New file + directory
         std::fs::write(upper.join("added.txt"), "fresh").unwrap();
         std::fs::create_dir_all(upper.join("dir")).unwrap();
+        // Symlink should be tracked as a write.
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink("added.txt", upper.join("link.txt")).unwrap();
+        }
         // Whiteout should translate into delete
         std::fs::write(upper.join(".wh.removed.txt"), "").unwrap();
 
@@ -177,6 +218,11 @@ mod tests {
         assert!(
             diff.writes.contains(&PathBuf::from("added.txt")),
             "writes should include brand new files"
+        );
+        #[cfg(unix)]
+        assert!(
+            diff.writes.contains(&PathBuf::from("link.txt")),
+            "writes should include symlinks"
         );
         assert!(
             diff.deletes.contains(&PathBuf::from("removed.txt")),
@@ -210,6 +256,48 @@ mod tests {
         assert!(
             diff.summary.as_ref().is_some(),
             "truncation should include a summary"
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn compute_diff_detects_kernel_overlayfs_char_device_whiteouts() {
+        use nix::sys::stat::{makedev, mknod, Mode, SFlag};
+        use nix::unistd::Uid;
+
+        if !Uid::effective().is_root() {
+            // Creating device nodes requires CAP_MKNOD (typically root). Skip when unavailable.
+            return;
+        }
+
+        let temp = tempdir().unwrap();
+        let upper = temp.path().join("upper");
+        let lower = temp.path().join("lower");
+        std::fs::create_dir_all(&upper).unwrap();
+        std::fs::create_dir_all(&lower).unwrap();
+
+        // Simulate a host-created file (exists in lower) deleted in overlayfs upper via kernel
+        // whiteout: char device with rdev=0/0 at the deleted path.
+        std::fs::write(lower.join("host.md"), "seed").unwrap();
+
+        let whiteout_path = upper.join("host.md");
+        let dev = makedev(0, 0);
+        let result = mknod(
+            &whiteout_path,
+            SFlag::S_IFCHR,
+            Mode::from_bits_truncate(0o600),
+            dev,
+        );
+        if let Err(err) = result {
+            // Some environments may restrict mknod even as root; skip rather than failing.
+            eprintln!("skipping kernel whiteout test (mknod failed): {err}");
+            return;
+        }
+
+        let diff = compute_diff(&upper, Some(&lower), 10, 10, 10 * 1024 * 1024).unwrap();
+        assert!(
+            diff.deletes.contains(&PathBuf::from("host.md")),
+            "deletes should include kernel overlayfs whiteout entries"
         );
     }
 }

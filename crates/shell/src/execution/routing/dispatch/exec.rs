@@ -842,16 +842,24 @@ pub(crate) fn execute_command(
     #[cfg(target_os = "macos")]
     {
         let context = pw::get_context();
-        if world_enabled && fail_closed_routing && context.is_none() {
+        let socket_override_path = std::env::var_os("SUBSTRATE_WORLD_SOCKET")
+            .map(std::path::PathBuf::from)
+            .filter(|p| p.exists());
+        if world_enabled
+            && fail_closed_routing
+            && context.is_none()
+            && socket_override_path.is_none()
+        {
             eprintln!(
                 "substrate: error: world routing failed; world backend unavailable on this platform (world_fs.fail_closed.routing=true)"
             );
             return Ok(exit_status_from_code(4));
         }
-        let uds_exists = context
-            .as_ref()
-            .map(|c| matches!(&c.transport, pw::WorldTransport::Unix(path) if path.exists()))
-            .unwrap_or(false);
+        let uds_exists = socket_override_path.is_some()
+            || context
+                .as_ref()
+                .map(|c| matches!(&c.transport, pw::WorldTransport::Unix(path) if path.exists()))
+                .unwrap_or(false);
         let world_available = world_enabled && uds_exists;
         if world_required && world_enabled && !uds_exists {
             return Err(required_world_backend_unavailable_error(
@@ -1193,6 +1201,16 @@ pub(crate) fn execute_command(
     }
 
     if let Some(outcome) = agent_result {
+        let mut final_exit_code = outcome.exit_code;
+
+        if outcome.exit_code == 0 {
+            let auto_sync_exit_code =
+                crate::execution::run_auto_sync_if_enabled(config, &effective_config)?;
+            if auto_sync_exit_code != 0 {
+                final_exit_code = auto_sync_exit_code;
+            }
+        }
+
         if let Some(mut active_span) = span {
             if let Ok(resolved) =
                 crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_for_profile)
@@ -1210,13 +1228,13 @@ pub(crate) fn execute_command(
                 );
             }
             let _ = active_span.finish(
-                outcome.exit_code,
+                final_exit_code,
                 outcome.scopes_used.clone(),
                 outcome.fs_diff.clone(),
             );
         }
         let mut completion_extra = json!({
-            log_schema::EXIT_CODE: outcome.exit_code,
+            log_schema::EXIT_CODE: final_exit_code,
             log_schema::DURATION_MS: start_time.elapsed().as_millis()
         });
         if let Some(span_id) = span_id_for_cmd_events.as_ref() {
@@ -1244,12 +1262,12 @@ pub(crate) fn execute_command(
         #[cfg(unix)]
         {
             use std::os::unix::process::ExitStatusExt;
-            return Ok(ExitStatus::from_raw((outcome.exit_code & 0xff) << 8));
+            return Ok(ExitStatus::from_raw((final_exit_code & 0xff) << 8));
         }
         #[cfg(windows)]
         {
             use std::os::windows::process::ExitStatusExt;
-            return Ok(ExitStatus::from_raw(outcome.exit_code as u32));
+            return Ok(ExitStatus::from_raw(final_exit_code as u32));
         }
     }
 

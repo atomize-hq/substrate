@@ -1,7 +1,8 @@
-# Contract — `config global show` workspace override note
+# Contract — Config scope notes (`config global show`, implicit `config set`)
 
 This contract is authoritative for the user-visible behavior of:
 - `substrate config global show`
+- `substrate config set` (implicit workspace scope; no explicit `global` / `workspace` subcommand)
 
 It does not change:
 - config precedence / merge semantics,
@@ -52,6 +53,25 @@ Specifically:
 
 If the workspace override note is emitted, the command MUST NOT also emit the existing
 “global config patch is empty (no overrides)” note in the same invocation.
+
+### Command: `substrate config set <KEY>=<VALUE> ...` (implicit scope)
+
+Purpose:
+- Update the workspace config patch (`<workspace_root>/.substrate/workspace.yaml`) and print the effective merged config.
+
+Stdout:
+- MUST contain only the serialized **effective merged config** (same as `substrate config show`).
+- Default format: YAML.
+- With `--json`: stdout MUST be valid JSON.
+
+Stderr:
+- MUST emit exactly one informational note indicating the write target:
+
+`substrate: note: write target is workspace config <WORKSPACE_CONFIG_PATH> (implicit scope); run 'substrate config workspace show' to view the workspace patch`
+
+Additional requirements:
+- The note MUST be emitted on stderr only (stdout remains config-only).
+- The note MUST be a single line and MUST use the `substrate: note:` prefix.
 
 ## Config surface (paths and precedence)
 

@@ -2,7 +2,15 @@
 
 #[cfg(target_os = "linux")]
 use agent_api_types::ExecuteStreamFrame;
-use agent_api_types::{Budget, ExecuteRequest, ExecuteResponse};
+#[cfg(any(target_os = "linux", test))]
+use agent_api_types::PendingDiffBucketV1;
+#[cfg(target_os = "linux")]
+use agent_api_types::WorldFsEntryTypeV1;
+use agent_api_types::{
+    Budget, ExecuteRequest, ExecuteResponse, PendingDiffClearRequestV1, PendingDiffClearResponseV1,
+    PendingDiffReconcileRequestV1, PendingDiffReconcileResponseV1, PendingDiffRecordV1,
+    PendingDiffRequestV1, WorldFsReadRequestV1, WorldFsReadResponseV1,
+};
 #[cfg(target_os = "linux")]
 use anyhow::Context;
 use anyhow::{anyhow, Result};
@@ -15,10 +23,18 @@ use axum::{
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 #[cfg(target_os = "linux")]
+use chrono::SecondsFormat;
+#[cfg(target_os = "linux")]
 use futures_util::StreamExt;
+#[cfg(any(target_os = "linux", test))]
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 #[cfg(target_os = "linux")]
+use std::collections::HashSet;
+#[cfg(target_os = "linux")]
 use std::convert::Infallible;
+#[cfg(target_os = "linux")]
+use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, RwLock};
@@ -136,10 +152,26 @@ pub struct WorldAgentService {
     backend: Arc<dyn WorldBackend>,
     #[cfg(target_os = "linux")]
     linux_backend: Arc<world::LinuxLocalBackend>,
+    #[cfg(target_os = "linux")]
+    pending_diff_origin: Arc<RwLock<HashMap<String, PendingDiffOriginTracker>>>,
     #[allow(dead_code)]
     worlds: Arc<RwLock<HashMap<String, WorldHandle>>>,
     budgets: Arc<RwLock<HashMap<String, AgentBudgetTracker>>>,
     last_policy_resolution_mode: Arc<AtomicU8>,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PendingDiffOrigin {
+    NonPty,
+    Pty,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Debug, Default)]
+struct PendingDiffOriginTracker {
+    last_seen_paths: HashSet<String>,
+    origin_by_path: HashMap<String, PendingDiffOrigin>,
 }
 
 pub struct AgentBudgetTracker {
@@ -187,6 +219,7 @@ impl WorldAgentService {
             Ok(Self {
                 backend,
                 linux_backend,
+                pending_diff_origin: Arc::new(RwLock::new(HashMap::new())),
                 worlds: Arc::new(RwLock::new(HashMap::new())),
                 budgets: Arc::new(RwLock::new(HashMap::new())),
                 last_policy_resolution_mode: Arc::new(AtomicU8::new(0)),
@@ -218,6 +251,134 @@ impl WorldAgentService {
         let world = self.linux_backend.ensure_session(spec)?;
         let merged = self.linux_backend.ensure_overlay_root(&world)?;
         Ok((world, merged))
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    fn normalize_pending_diff_bucket(diff: &substrate_common::FsDiff) -> PendingDiffBucketV1 {
+        fn normalize(path: &std::path::Path) -> String {
+            path.to_string_lossy().replace('\\', "/")
+        }
+
+        let mut writes: Vec<String> = diff.writes.iter().map(|p| normalize(p)).collect();
+        let mut mods: Vec<String> = diff.mods.iter().map(|p| normalize(p)).collect();
+        let mut deletes: Vec<String> = diff.deletes.iter().map(|p| normalize(p)).collect();
+        writes.sort();
+        mods.sort();
+        deletes.sort();
+        writes.dedup();
+        mods.dedup();
+        deletes.dedup();
+
+        PendingDiffBucketV1 {
+            writes,
+            mods,
+            deletes,
+        }
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    fn pending_diff_id_for_snapshot(snapshot: &PendingDiffBucketV1) -> String {
+        // `diff_id` is used as a conditional clear token (Clear/ack semantics).
+        //
+        // It must remain stable across harmless reclassification of a path between `writes` and
+        // `mods` (e.g., when a sync to the host causes the overlay lower layer to start reporting
+        // the path as "existing", flipping upper->lower classification without any new world
+        // mutation). To avoid false "diff_id mismatch" failures, compute the id from:
+        // - updates = (writes ∪ mods) as a set
+        // - deletes as a set
+        //
+        // The UX buckets are still preserved in the record; only the clear token is stabilized.
+        let mut updates: Vec<&str> =
+            Vec::with_capacity(snapshot.writes.len() + snapshot.mods.len());
+        for item in &snapshot.writes {
+            updates.push(item.as_str());
+        }
+        for item in &snapshot.mods {
+            updates.push(item.as_str());
+        }
+        updates.sort();
+        updates.dedup();
+
+        let mut deletes: Vec<&str> = snapshot.deletes.iter().map(|s| s.as_str()).collect();
+        deletes.sort();
+        deletes.dedup();
+
+        let mut hasher = Sha256::new();
+        hasher.update(b"updates\0");
+        for item in updates {
+            hasher.update(item.as_bytes());
+            hasher.update(b"\n");
+        }
+        hasher.update(b"deletes\0");
+        for item in deletes {
+            hasher.update(item.as_bytes());
+            hasher.update(b"\n");
+        }
+
+        let digest = hasher.finalize();
+        let mut hex = String::with_capacity(digest.len() * 2);
+        for b in digest {
+            use std::fmt::Write as _;
+            let _ = write!(&mut hex, "{:02x}", b);
+        }
+        hex
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    fn pending_diff_id_for_diff(diff: &substrate_common::FsDiff) -> String {
+        let snapshot = Self::normalize_pending_diff_bucket(diff);
+        Self::pending_diff_id_for_snapshot(&snapshot)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn note_pending_diff_origin_for_world(
+        &self,
+        world_id: &str,
+        origin: PendingDiffOrigin,
+        snapshot: &PendingDiffBucketV1,
+    ) {
+        let mut current_paths: HashSet<String> = HashSet::new();
+        current_paths.extend(snapshot.writes.iter().cloned());
+        current_paths.extend(snapshot.mods.iter().cloned());
+        current_paths.extend(snapshot.deletes.iter().cloned());
+
+        let mut guard = self
+            .pending_diff_origin
+            .write()
+            .expect("pending diff origin tracker lock poisoned");
+
+        if current_paths.is_empty() {
+            guard.remove(world_id);
+            return;
+        }
+
+        let tracker = guard.entry(world_id.to_string()).or_default();
+
+        for removed in tracker.last_seen_paths.difference(&current_paths) {
+            tracker.origin_by_path.remove(removed);
+        }
+        for added in current_paths.difference(&tracker.last_seen_paths) {
+            tracker.origin_by_path.insert(added.clone(), origin);
+        }
+
+        tracker.last_seen_paths = current_paths;
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn note_pty_pending_diff(&self, world_id: &str) {
+        let world = WorldHandle {
+            id: world_id.to_string(),
+        };
+        let (_started_at, diff) = match self.linux_backend.pending_diff(&world) {
+            Ok(v) => v,
+            Err(err) => {
+                tracing::warn!(error = %err, world_id = world_id, "failed to snapshot pending diff after PTY command");
+                return;
+            }
+        };
+
+        let snapshot = Self::normalize_pending_diff_bucket(&diff);
+        self.note_pending_diff_origin_for_world(world_id, PendingDiffOrigin::Pty, &snapshot);
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -339,6 +500,18 @@ impl WorldAgentService {
             }
         };
 
+        #[cfg(target_os = "linux")]
+        {
+            if let Some(ref diff) = result.fs_diff {
+                let snapshot = Self::normalize_pending_diff_bucket(diff);
+                self.note_pending_diff_origin_for_world(
+                    &world.id,
+                    PendingDiffOrigin::NonPty,
+                    &snapshot,
+                );
+            }
+        }
+
         // Generate span ID
         let span_id = format!("spn_{}", uuid::Uuid::now_v7());
 
@@ -350,6 +523,464 @@ impl WorldAgentService {
             scopes_used: result.scopes_used,
             fs_diff: result.fs_diff,
         })
+    }
+
+    /// Retrieve the current session's pending diff record.
+    pub async fn pending_diff(&self, req: PendingDiffRequestV1) -> Result<PendingDiffRecordV1> {
+        #[cfg(target_os = "linux")]
+        {
+            if req.agent_id.is_empty() {
+                anyhow::bail!("agent_id is required for API calls");
+            }
+
+            let cwd = req
+                .cwd
+                .clone()
+                .map(PathBuf::from)
+                .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+            let env_ref = req.env.as_ref();
+            let project_dir = resolve_project_dir(env_ref, Some(&cwd))?;
+
+            let snapshot = req
+                .policy_snapshot
+                .canonicalize()
+                .map_err(BadRequestError::new)?;
+            let fs_mode = if snapshot.world_fs.write.enabled {
+                WorldFsMode::Writable
+            } else {
+                WorldFsMode::ReadOnly
+            };
+
+            let always_isolate = !matches!(req.profile.as_deref(), Some("world-deps-provision"));
+
+            let spec = WorldSpec {
+                reuse_session: true,
+                isolate_network: true,
+                limits: world_api::ResourceLimits::default(),
+                enable_preload: false,
+                allowed_domains: substrate_broker::allowed_domains(),
+                project_dir,
+                always_isolate,
+                fs_mode,
+            };
+
+            let world = match self.backend.ensure_session(&spec) {
+                Ok(w) => w,
+                Err(e) => {
+                    tracing::error!(error = %e, error_debug = ?e, "ensure_session failed");
+                    return Err(anyhow::anyhow!("Failed to ensure session world"));
+                }
+            };
+
+            let (started_at, diff) = self
+                .linux_backend
+                .pending_diff(&world)
+                .context("pending_diff failed")?;
+
+            let snapshot = Self::normalize_pending_diff_bucket(&diff);
+            let hex = Self::pending_diff_id_for_snapshot(&snapshot);
+
+            let started_at: chrono::DateTime<chrono::Utc> = started_at.into();
+            let session_started_at =
+                started_at.to_rfc3339_opts(SecondsFormat::Nanos, /* use_z */ true);
+
+            let mut non_pty = PendingDiffBucketV1::default();
+            let mut pty = PendingDiffBucketV1::default();
+
+            let origin_map: Option<HashMap<String, PendingDiffOrigin>> = self
+                .pending_diff_origin
+                .read()
+                .ok()
+                .and_then(|guard| guard.get(&world.id).map(|t| t.origin_by_path.clone()));
+
+            let classify = |path: &str| -> PendingDiffOrigin {
+                origin_map
+                    .as_ref()
+                    .and_then(|m| m.get(path).copied())
+                    .unwrap_or(PendingDiffOrigin::NonPty)
+            };
+
+            for item in &snapshot.writes {
+                match classify(item) {
+                    PendingDiffOrigin::NonPty => non_pty.writes.push(item.clone()),
+                    PendingDiffOrigin::Pty => pty.writes.push(item.clone()),
+                }
+            }
+            for item in &snapshot.mods {
+                match classify(item) {
+                    PendingDiffOrigin::NonPty => non_pty.mods.push(item.clone()),
+                    PendingDiffOrigin::Pty => pty.mods.push(item.clone()),
+                }
+            }
+            for item in &snapshot.deletes {
+                match classify(item) {
+                    PendingDiffOrigin::NonPty => non_pty.deletes.push(item.clone()),
+                    PendingDiffOrigin::Pty => pty.deletes.push(item.clone()),
+                }
+            }
+
+            Ok(PendingDiffRecordV1 {
+                schema_version: 1,
+                session_started_at,
+                diff_id: hex,
+                non_pty,
+                pty: Some(pty),
+            })
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = req;
+            anyhow::bail!("pending diff discovery is only supported on Linux agents")
+        }
+    }
+
+    /// Conditionally clear the current session's pending diff snapshot.
+    pub async fn pending_diff_clear(
+        &self,
+        req: PendingDiffClearRequestV1,
+    ) -> Result<PendingDiffClearResponseV1> {
+        #[cfg(target_os = "linux")]
+        {
+            if req.agent_id.is_empty() {
+                anyhow::bail!("agent_id is required for API calls");
+            }
+
+            let cwd = req
+                .cwd
+                .clone()
+                .map(PathBuf::from)
+                .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+            let env_ref = req.env.as_ref();
+            let project_dir = resolve_project_dir(env_ref, Some(&cwd))?;
+
+            let snapshot = req
+                .policy_snapshot
+                .canonicalize()
+                .map_err(BadRequestError::new)?;
+            let fs_mode = if snapshot.world_fs.write.enabled {
+                WorldFsMode::Writable
+            } else {
+                WorldFsMode::ReadOnly
+            };
+
+            let always_isolate = !matches!(req.profile.as_deref(), Some("world-deps-provision"));
+
+            let spec = WorldSpec {
+                reuse_session: true,
+                isolate_network: true,
+                limits: world_api::ResourceLimits::default(),
+                enable_preload: false,
+                allowed_domains: substrate_broker::allowed_domains(),
+                project_dir,
+                always_isolate,
+                fs_mode,
+            };
+
+            let world = match self.backend.ensure_session(&spec) {
+                Ok(w) => w,
+                Err(e) => {
+                    tracing::error!(error = %e, error_debug = ?e, "ensure_session failed");
+                    return Err(anyhow::anyhow!("Failed to ensure session world"));
+                }
+            };
+
+            let (_started_at, diff) = self
+                .linux_backend
+                .pending_diff(&world)
+                .context("pending_diff failed")?;
+            let current_hex = Self::pending_diff_id_for_diff(&diff);
+
+            if current_hex != req.diff_id {
+                return Ok(PendingDiffClearResponseV1 {
+                    schema_version: 1,
+                    cleared: false,
+                });
+            }
+
+            self.linux_backend
+                .clear_pending_diff(&world)
+                .context("clear_pending_diff failed")?;
+
+            if let Ok(mut guard) = self.pending_diff_origin.write() {
+                guard.remove(&world.id);
+            }
+
+            Ok(PendingDiffClearResponseV1 {
+                schema_version: 1,
+                cleared: true,
+            })
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = req;
+            anyhow::bail!("pending diff clear is only supported on Linux agents")
+        }
+    }
+
+    /// Conditionally reconcile (discard) specific pending diff paths by mutating the overlay upper/work layers.
+    pub async fn pending_diff_reconcile(
+        &self,
+        req: PendingDiffReconcileRequestV1,
+    ) -> Result<PendingDiffReconcileResponseV1> {
+        #[cfg(target_os = "linux")]
+        {
+            if req.agent_id.is_empty() {
+                anyhow::bail!("agent_id is required for API calls");
+            }
+
+            let cwd = req
+                .cwd
+                .clone()
+                .map(PathBuf::from)
+                .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+            let env_ref = req.env.as_ref();
+            let project_dir = resolve_project_dir(env_ref, Some(&cwd))?;
+
+            let snapshot = req
+                .policy_snapshot
+                .canonicalize()
+                .map_err(BadRequestError::new)?;
+            let fs_mode = if snapshot.world_fs.write.enabled {
+                WorldFsMode::Writable
+            } else {
+                WorldFsMode::ReadOnly
+            };
+
+            let always_isolate = !matches!(req.profile.as_deref(), Some("world-deps-provision"));
+
+            let spec = WorldSpec {
+                reuse_session: true,
+                isolate_network: true,
+                limits: world_api::ResourceLimits::default(),
+                enable_preload: false,
+                allowed_domains: substrate_broker::allowed_domains(),
+                project_dir,
+                always_isolate,
+                fs_mode,
+            };
+
+            let world = match self.backend.ensure_session(&spec) {
+                Ok(w) => w,
+                Err(e) => {
+                    tracing::error!(error = %e, error_debug = ?e, "ensure_session failed");
+                    return Err(anyhow::anyhow!("Failed to ensure session world"));
+                }
+            };
+
+            let (_started_at, diff) = self
+                .linux_backend
+                .pending_diff(&world)
+                .context("pending_diff failed")?;
+            let current_hex = Self::pending_diff_id_for_diff(&diff);
+
+            if current_hex != req.diff_id {
+                return Ok(PendingDiffReconcileResponseV1 {
+                    schema_version: 1,
+                    reconciled: false,
+                    discarded: 0,
+                });
+            }
+
+            let mut rel_paths: Vec<PathBuf> = Vec::new();
+            let mut normalized_for_tracker: Vec<String> = Vec::new();
+            for raw in &req.discard_paths {
+                let mut rel = raw.trim().replace('\\', "/");
+                while let Some(stripped) = rel.strip_prefix("./") {
+                    rel = stripped.to_string();
+                }
+                if rel.is_empty() {
+                    return Err(BadRequestError::new("empty discard path".to_string()).into());
+                }
+                if rel.starts_with('/') {
+                    return Err(BadRequestError::new(format!(
+                        "absolute paths are not allowed: {rel}"
+                    ))
+                    .into());
+                }
+                if rel.len() >= 2 && rel.as_bytes()[1] == b':' {
+                    return Err(BadRequestError::new(format!(
+                        "absolute paths are not allowed: {rel}"
+                    ))
+                    .into());
+                }
+                if rel.split('/').any(|segment| segment == "..") {
+                    return Err(BadRequestError::new(format!(
+                        "path segments must not be '..': {rel}"
+                    ))
+                    .into());
+                }
+                rel_paths.push(PathBuf::from(&rel));
+                normalized_for_tracker.push(rel);
+            }
+
+            let removed = self
+                .linux_backend
+                .discard_pending_paths(&world, &rel_paths)
+                .context("discard_pending_paths failed")?;
+
+            if !normalized_for_tracker.is_empty() {
+                if let Ok(mut guard) = self.pending_diff_origin.write() {
+                    if let Some(tracker) = guard.get_mut(&world.id) {
+                        for p in &normalized_for_tracker {
+                            tracker.origin_by_path.remove(p);
+                            tracker.last_seen_paths.remove(p);
+                        }
+                    }
+                }
+            }
+
+            Ok(PendingDiffReconcileResponseV1 {
+                schema_version: 1,
+                reconciled: true,
+                discarded: removed,
+            })
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = req;
+            anyhow::bail!("pending diff reconcile is only supported on Linux agents")
+        }
+    }
+
+    /// Read metadata and optionally contents from the current session's overlay filesystem.
+    pub async fn world_fs_read(&self, req: WorldFsReadRequestV1) -> Result<WorldFsReadResponseV1> {
+        #[cfg(target_os = "linux")]
+        {
+            if req.agent_id.is_empty() {
+                anyhow::bail!("agent_id is required for API calls");
+            }
+
+            let mut rel = req.path.trim().replace('\\', "/");
+            while let Some(stripped) = rel.strip_prefix("./") {
+                rel = stripped.to_string();
+            }
+            if rel.is_empty() {
+                return Err(BadRequestError::new("empty path".to_string()).into());
+            }
+            if rel.starts_with('/') {
+                return Err(
+                    BadRequestError::new(format!("absolute paths are not allowed: {rel}")).into(),
+                );
+            }
+            if rel.len() >= 2 && rel.as_bytes()[1] == b':' {
+                return Err(
+                    BadRequestError::new(format!("absolute paths are not allowed: {rel}")).into(),
+                );
+            }
+            if rel.split('/').any(|segment| segment == "..") {
+                return Err(
+                    BadRequestError::new(format!("path segments must not be '..': {rel}")).into(),
+                );
+            }
+
+            let cwd = req
+                .cwd
+                .clone()
+                .map(PathBuf::from)
+                .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+            let env_ref = req.env.as_ref();
+            let project_dir = resolve_project_dir(env_ref, Some(&cwd))?;
+
+            let snapshot = req
+                .policy_snapshot
+                .canonicalize()
+                .map_err(BadRequestError::new)?;
+            let fs_mode = if snapshot.world_fs.write.enabled {
+                WorldFsMode::Writable
+            } else {
+                WorldFsMode::ReadOnly
+            };
+
+            let always_isolate = !matches!(req.profile.as_deref(), Some("world-deps-provision"));
+
+            let spec = WorldSpec {
+                reuse_session: true,
+                isolate_network: true,
+                limits: world_api::ResourceLimits::default(),
+                enable_preload: false,
+                allowed_domains: substrate_broker::allowed_domains(),
+                project_dir,
+                always_isolate,
+                fs_mode,
+            };
+
+            let world = match self.backend.ensure_session(&spec) {
+                Ok(w) => w,
+                Err(e) => {
+                    tracing::error!(error = %e, error_debug = ?e, "ensure_session failed");
+                    return Err(anyhow::anyhow!("Failed to ensure session world"));
+                }
+            };
+
+            let overlay_root = self
+                .linux_backend
+                .ensure_overlay_root(&world)
+                .context("ensure_overlay_root failed")?;
+
+            let full_path = overlay_root.join(&rel);
+            let meta = std::fs::symlink_metadata(&full_path).with_context(|| {
+                format!(
+                    "failed to read metadata for world fs path {}",
+                    full_path.display()
+                )
+            })?;
+
+            let ft = meta.file_type();
+            let entry_type = if ft.is_file() {
+                WorldFsEntryTypeV1::RegularFile
+            } else if ft.is_dir() {
+                WorldFsEntryTypeV1::Directory
+            } else if ft.is_symlink() {
+                WorldFsEntryTypeV1::Symlink
+            } else if ft.is_socket() {
+                WorldFsEntryTypeV1::Socket
+            } else if ft.is_fifo() {
+                WorldFsEntryTypeV1::Fifo
+            } else if ft.is_block_device() {
+                WorldFsEntryTypeV1::BlockDevice
+            } else if ft.is_char_device() {
+                WorldFsEntryTypeV1::CharDevice
+            } else {
+                WorldFsEntryTypeV1::Unknown
+            };
+
+            let mode = Some(meta.permissions().mode());
+            let size = match entry_type {
+                WorldFsEntryTypeV1::RegularFile => Some(meta.len()),
+                _ => None,
+            };
+
+            let contents_b64 =
+                if req.include_contents && entry_type == WorldFsEntryTypeV1::RegularFile {
+                    let bytes = std::fs::read(&full_path).with_context(|| {
+                        format!(
+                            "failed to read bytes for world fs path {}",
+                            full_path.display()
+                        )
+                    })?;
+                    Some(BASE64.encode(bytes))
+                } else {
+                    None
+                };
+
+            Ok(WorldFsReadResponseV1 {
+                schema_version: 1,
+                path: rel,
+                entry_type,
+                size,
+                mode,
+                contents_b64,
+            })
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = req;
+            anyhow::bail!("world fs read is only supported on Linux agents")
+        }
     }
 
     /// Execute a command and stream incremental output frames via NDJSON.
@@ -459,6 +1090,8 @@ impl WorldAgentService {
         });
 
         let backend = self.backend.clone();
+        #[cfg(target_os = "linux")]
+        let service = self.clone();
         let agent_id = req.agent_id.clone();
         task::spawn_blocking(move || {
             let sink = Arc::new(StreamingSink::new(tx.clone()));
@@ -468,6 +1101,16 @@ impl WorldAgentService {
 
             match result {
                 Ok(exec_result) => {
+                    #[cfg(target_os = "linux")]
+                    if let Some(ref diff) = exec_result.fs_diff {
+                        let snapshot = WorldAgentService::normalize_pending_diff_bucket(diff);
+                        service.note_pending_diff_origin_for_world(
+                            &world.id,
+                            PendingDiffOrigin::NonPty,
+                            &snapshot,
+                        );
+                    }
+
                     if let (Some(primary), Some(final_strategy), Some(reason)) = (
                         exec_result.world_fs_strategy_primary,
                         exec_result.world_fs_strategy_final,
@@ -540,6 +1183,79 @@ impl WorldAgentService {
         Ok(serde_json::json!({
             "status": "not_implemented"
         }))
+    }
+}
+
+#[cfg(test)]
+mod pending_diff_id_tests {
+    use super::WorldAgentService;
+    use agent_api_types::PendingDiffBucketV1;
+    use std::path::PathBuf;
+    use substrate_common::FsDiff;
+
+    #[test]
+    fn diff_id_is_stable_across_writes_vs_mods_reclassification() {
+        let s1 = PendingDiffBucketV1 {
+            writes: vec!["flipcheck.md".to_string()],
+            mods: vec![],
+            deletes: vec![],
+        };
+        let s2 = PendingDiffBucketV1 {
+            writes: vec![],
+            mods: vec!["flipcheck.md".to_string()],
+            deletes: vec![],
+        };
+        assert_eq!(
+            WorldAgentService::pending_diff_id_for_snapshot(&s1),
+            WorldAgentService::pending_diff_id_for_snapshot(&s2),
+            "diff_id must not change when a path moves between writes and mods"
+        );
+    }
+
+    #[test]
+    fn diff_id_changes_when_updates_or_deletes_change() {
+        let base = PendingDiffBucketV1 {
+            writes: vec!["a.txt".to_string()],
+            mods: vec![],
+            deletes: vec![],
+        };
+        let with_more_updates = PendingDiffBucketV1 {
+            writes: vec!["a.txt".to_string(), "b.txt".to_string()],
+            mods: vec![],
+            deletes: vec![],
+        };
+        let with_delete = PendingDiffBucketV1 {
+            writes: vec!["a.txt".to_string()],
+            mods: vec![],
+            deletes: vec!["gone.txt".to_string()],
+        };
+        assert_ne!(
+            WorldAgentService::pending_diff_id_for_snapshot(&base),
+            WorldAgentService::pending_diff_id_for_snapshot(&with_more_updates),
+            "diff_id must change when the update set changes"
+        );
+        assert_ne!(
+            WorldAgentService::pending_diff_id_for_snapshot(&base),
+            WorldAgentService::pending_diff_id_for_snapshot(&with_delete),
+            "diff_id must change when the delete set changes"
+        );
+    }
+
+    #[test]
+    fn diff_id_for_diff_is_stable_across_fs_diff_writes_mods_flip() {
+        let d1 = FsDiff {
+            writes: vec![PathBuf::from("flipcheck.md")],
+            ..Default::default()
+        };
+        let d2 = FsDiff {
+            mods: vec![PathBuf::from("flipcheck.md")],
+            ..Default::default()
+        };
+        assert_eq!(
+            WorldAgentService::pending_diff_id_for_diff(&d1),
+            WorldAgentService::pending_diff_id_for_diff(&d2),
+            "diff_id must not change when FsDiff reclassifies a path between writes and mods"
+        );
     }
 }
 
