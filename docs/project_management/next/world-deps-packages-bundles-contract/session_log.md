@@ -327,3 +327,8 @@ Policy:
 - CHECKOUT_SHA: `bd4429b3a2554ab5247024b4a58829e0975cb6e3`
 - CI compile parity run: `22024610209` (success)
 - Feature Smoke run: `22024645441` (success)
+
+## UPDATE — 2026-02-14T21:38:36Z — checkpoint — CP2-ci-checkpoint (WDP5) — no-op platform fixes
+- From Feature Smoke run `22024645441`, marked no-op platform-fix tasks completed:
+  - `WDP5-integ-linux`
+  - `WDP5-integ-macos`
