@@ -370,7 +370,7 @@ fn apply_install_plan_v1(view: &InventoryViewV1, plan: &InstallPlanV1) -> Result
             .with_context(|| format!("failed to apply script package '{pkg_name}'"))?;
     }
 
-    let statuses = query_world_package_presence(view, &plan.script_packages)?;
+    let statuses = query_world_package_entrypoint_presence(view, &plan.script_packages)?;
     let mut missing = plan
         .script_packages
         .iter()
@@ -381,7 +381,7 @@ fn apply_install_plan_v1(view: &InventoryViewV1, plan: &InstallPlanV1) -> Result
         missing.sort();
         missing.dedup();
         return Err(anyhow!(WorldDepsUnmetPrerequisiteError::new(format!(
-            "after install, package(s) still missing in world: {}; ensure script installs create runnable entrypoints under /var/lib/substrate/world-deps/bin and retry",
+            "after install, package(s) still missing in world: {}; ensure script installs create runnable entrypoints under $SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR and retry",
             missing.join(",")
         ))));
     }
@@ -518,8 +518,15 @@ fn render_bash_wrapper_v1(
 
     out.push_str("export SUBSTRATE_WDP_KIND SUBSTRATE_WDP_NAME SUBSTRATE_WDP_BASH_SOURCE SUBSTRATE_WDP_FUNCTION SUBSTRATE_WDP_EXEC\n");
     out.push_str("if command -v bash >/dev/null 2>&1; then\n");
+    out.push_str("  if [ -n \"$SUBSTRATE_WDP_BASH_SOURCE\" ] && [ ! -f \"$SUBSTRATE_WDP_BASH_SOURCE\" ]; then\n");
+    out.push_str("    echo \"substrate: world deps wrapper failure: kind=$SUBSTRATE_WDP_KIND name=$SUBSTRATE_WDP_NAME bash_source=$SUBSTRATE_WDP_BASH_SOURCE bash_found=true\" >&2\n");
+    out.push_str("    echo \"substrate: next: fix the wrapper source/fields or run 'substrate world deps current show ");
+    out.push_str(name);
+    out.push_str(" --explain'\" >&2\n");
+    out.push_str("    exit 127\n");
+    out.push_str("  fi\n");
     out.push_str("  if bash -lc ");
-    out.push_str(&sh_quote(bash_body));
+    out.push_str(&sh_quote(&format!("set -euo pipefail; {bash_body}")));
     out.push_str(" bash \"$@\"; then\n");
     out.push_str("    exit 0\n");
     out.push_str("  fi\n");
@@ -562,7 +569,7 @@ fn render_sh_env_exec_wrapper_v1(
         out.push_str("export ");
         out.push_str(key);
         out.push('=');
-        out.push_str(&sh_quote(value));
+        out.push_str(&sh_quote_if_needed(value));
         out.push('\n');
     }
 
@@ -575,8 +582,29 @@ fn render_sh_env_exec_wrapper_v1(
     out.push_str(" --explain')\" >&2\n");
     out.push_str("  exit 127\n");
     out.push_str("fi\n");
-    out.push_str("exec $SUBSTRATE_WDP_EXEC \"$@\"\n");
+    if exec_cmd.split_whitespace().count() == 1 {
+        out.push_str("exec ");
+        out.push_str(exec_cmd);
+        out.push_str(" \"$@\"\n");
+    } else {
+        out.push_str("exec $SUBSTRATE_WDP_EXEC \"$@\"\n");
+    }
     Ok(out)
+}
+
+fn sh_quote_if_needed(value: &str) -> String {
+    if value.is_empty() {
+        return "''".to_string();
+    }
+    let safe = value.chars().all(|c| {
+        c.is_ascii_alphanumeric()
+            || matches!(c, '_' | '-' | '.' | '/' | ':' | '@' | '%' | '+' | '=' | ',')
+    });
+    if safe {
+        value.to_string()
+    } else {
+        sh_quote(value)
+    }
 }
 
 fn validate_world_deps_bin_filename(name: &str) -> Result<()> {
@@ -600,8 +628,8 @@ fn build_world_script_install_command_v1(
 ) -> String {
     let mut cmd = String::new();
     cmd.push_str("set -e\n");
-    cmd.push_str("world_deps_root='/var/lib/substrate/world-deps'\n");
-    cmd.push_str("world_deps_bin=\"${world_deps_root}/bin\"\n");
+    cmd.push_str("world_deps_bin=\"${SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR:-/var/lib/substrate/world-deps/bin}\"\n");
+    cmd.push_str("export SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR=\"$world_deps_bin\"\n");
     cmd.push_str("mkdir -p \"$world_deps_bin\"\n");
     cmd.push_str("if command -v bash >/dev/null 2>&1; then\n");
     cmd.push_str("  bash -lc \"$(cat <<'__SUBSTRATE_WDP4_INSTALL__'\n");
@@ -622,12 +650,11 @@ fn build_world_script_install_command_v1(
     cmd.push_str("fi\n");
 
     for (idx, wrapper) in wrappers.iter().enumerate() {
-        let wrapper_path = format!("/var/lib/substrate/world-deps/bin/{}", wrapper.name);
         let delimiter = format!("__SUBSTRATE_WDP4_WRAPPER_{idx}__");
 
-        cmd.push_str("cat > ");
-        cmd.push_str(&sh_quote(&wrapper_path));
-        cmd.push_str(" <<'");
+        cmd.push_str("cat > \"$world_deps_bin/");
+        cmd.push_str(&wrapper.name);
+        cmd.push_str("\" <<'");
         cmd.push_str(&delimiter);
         cmd.push_str("'\n");
         cmd.push_str(&wrapper.body);
@@ -635,9 +662,11 @@ fn build_world_script_install_command_v1(
             cmd.push('\n');
         }
         cmd.push_str(&delimiter);
-        cmd.push_str("'\n");
+        cmd.push('\n');
         cmd.push_str("chmod 0755 ");
-        cmd.push_str(&sh_quote(&wrapper_path));
+        cmd.push_str("\"$world_deps_bin/");
+        cmd.push_str(&wrapper.name);
+        cmd.push('"');
         cmd.push('\n');
     }
 
@@ -1762,6 +1791,68 @@ fn query_world_package_presence(
             });
         } else {
             // No probe method; treat as missing (do not call world).
+        }
+    }
+
+    if checks.is_empty() {
+        ensure_world_backend_available()?;
+        return Ok(HashMap::new());
+    }
+
+    let script = build_world_probe_script(&checks);
+    let response = run_world_command_for_deps(&script).map_err(classify_world_backend_error)?;
+
+    let stdout = BASE64
+        .decode(response.stdout_b64.as_bytes())
+        .unwrap_or_default();
+    let stderr = BASE64
+        .decode(response.stderr_b64.as_bytes())
+        .unwrap_or_default();
+    if response.exit != 0 {
+        let stderr_text = String::from_utf8_lossy(&stderr);
+        let stdout_text = String::from_utf8_lossy(&stdout);
+        let snippet = if !stderr_text.trim().is_empty() {
+            stderr_text.trim().to_string()
+        } else {
+            stdout_text.trim().to_string()
+        };
+        return Err(anyhow!(WorldBackendUnavailable::new(format!(
+            "world probe script failed (exit={}): {}",
+            response.exit, snippet
+        ))));
+    }
+
+    let stdout_text = String::from_utf8_lossy(&stdout);
+    let mut out: HashMap<String, bool> = HashMap::new();
+    for line in stdout_text.lines() {
+        let Some(rest) = line.strip_prefix("__SUBSTRATE_WDP2__ ") else {
+            continue;
+        };
+        let mut parts = rest.split_whitespace();
+        let Some(name) = parts.next() else { continue };
+        let val = parts.next();
+        let present = matches!(val, Some("1"));
+        out.insert(name.to_string(), present);
+    }
+    Ok(out)
+}
+
+fn query_world_package_entrypoint_presence(
+    view: &InventoryViewV1,
+    package_names: &[String],
+) -> Result<HashMap<String, bool>> {
+    let mut checks: Vec<PackageWorldCheck> = Vec::new();
+    for name in package_names {
+        let Some(pkg) = view.packages.get(name) else {
+            continue;
+        };
+        if pkg.runnable && !pkg.entrypoints.is_empty() {
+            checks.push(PackageWorldCheck {
+                name: name.clone(),
+                check: PackageCheckKind::Entrypoints {
+                    entrypoints: pkg.entrypoints.clone(),
+                },
+            });
         }
     }
 
