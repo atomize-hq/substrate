@@ -236,14 +236,16 @@ Scope:
   - `agent_id` and `role` (when applicable)
   - join keys like `cmd_id` / `span_id` when tied to execution/trace
   - Phase 8 additive clarifications (cross-cutting; no reshapes):
-    - `agent_id` is the agent inventory id for the emitting backend (and is the trace “actor” id when the actor is an agent).
-    - When the emitting backend’s kind is known, the event MUST include `backend_id` as `<kind>:<agent_id>` to make allowlist/routing joins explicit and avoid heuristic inference.
+    - `agent_id` is the actor/principal identifier:
+      - `human` for direct operator actions.
+      - for agent-driven structured events, this is the agent inventory id (so attribution is audit-friendly and stable).
+    - When a specific backend is involved and its kind/name is known, the event MUST include `backend_id` in `<kind>:<name>` form to make allowlist/routing joins explicit and avoid heuristic inference from `agent_id` alone.
     - The trace vocabulary and required/optional matrix for correlation fields is finalized additively in ADR-0028 Phase 8 circle-back.
   - Initial serialized shape (v1; additive-only extensions allowed in the circle-back pass):
     - Envelope fields (top-level; not nested in `data`):
       - `ts` (RFC3339 UTC timestamp)
-      - `agent_id` (string; backend identity)
-      - `backend_id` (string; optional; `<kind>:<agent_id>`)
+      - `agent_id` (string; actor/principal id)
+      - `backend_id` (string; optional; `<kind>:<name>`)
       - `kind` (enum; `registered|status|task_start|task_progress|task_end|pty_data|alert`)
       - `orchestration_session_id` (string; required)
       - `run_id` (string; required)

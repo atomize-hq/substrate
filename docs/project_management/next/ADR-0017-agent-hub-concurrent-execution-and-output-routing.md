@@ -119,8 +119,8 @@ Envelope fields (top-level; no nesting required for joinability):
 - Correlation (required/conditional/optional):
   - `orchestration_session_id` (required)
   - `run_id` (required)
-  - `agent_id` (required; agent inventory id for the emitting backend)
-  - `backend_id` (conditional required when kind is known; v1 default: known; `<kind>:<agent_id>`)
+  - `agent_id` (required; actor/principal id: `human` for operator actions; for agent-driven structured events, this is the agent inventory id)
+  - `backend_id` (conditional required when the emitting backend kind/name is known; v1 default: known; `<kind>:<name>`)
   - `world_id` (conditional required when the emitting backend executes inside a world boundary)
   - `thread_id` (optional)
   - `role` (optional)

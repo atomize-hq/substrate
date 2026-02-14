@@ -37,7 +37,7 @@ This registry covers:
 ## Primary cross-cutting risks (what can drift without a Phase 8 lock)
 
 - No single “correlation vocabulary + required/optional matrix” exists yet (risk: heuristic joins and event-family drift).
-- `agent_id` semantics are not yet unified across trace spans vs structured agent events (risk: audit confusion).
+- `agent_id` semantics must remain unified across trace spans vs structured agent events (risk: audit confusion if emitters drift and `backend_id` is inferred heuristically).
 - Control plane vs event plane is not yet an explicit contract in Agent Hub (risk: accidental second execution plane).
 - Secrets delivery mechanisms differ by subsystem without a shared rubric (risk: env var proliferation and inconsistent hardening).
 - Router derived-event schemas/correlation keys are not yet locked (risk: fragile cause/effect joins and recursion-footguns).
@@ -130,17 +130,21 @@ Each item below is written as: **Decision/contract to lock**, **current sources*
 
 **Current sources**
 - Trace example uses `agent_id` as a generic “who ran this” label: `docs/TRACE.md`
-- Structured agent event envelope treats `agent_id` as “backend identity”: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003)
+- Structured agent event envelope defines `agent_id` as the actor/principal identifier and relies on `backend_id` for backend selection identity: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003)
 - Agent hub derives `backend_id` (`<kind>:<agent_id>`): `docs/project_management/next/agent_hub_core/decision_register.md` (DR-0001)
 
 **Gap**
-- Ambiguity between “human/actor principal” and “agent backend inventory id” creates downstream join and audit confusion.
+- Historically, ambiguity between “human/actor principal” and “agent backend identity” created downstream join and audit confusion.
 
 **Alignment action**
-- Define:
-  - `agent_id` as the **principal/actor identifier** (which can be `human` or a registered agent inventory id), and
-  - `backend_id` as the **backend identifier** in `<kind>:<name>` form when applicable.
-- Ensure all LLM/agent/toolbox/router families include `backend_id` when a backend is involved, so the meaning is never inferred.
+- Phase 8 additive alignment:
+  - Define `agent_id` as the **principal/actor identifier** (`human` for operator actions; agent inventory id for agent-driven actions/events).
+  - Define `backend_id` as the **backend identifier** in `<kind>:<name>` form when a specific backend is involved.
+  - Require `backend_id` when the backend kind/name is known so allowlist/routing joins are explicit and non-heuristic.
+  - Implemented via additive clarifications in:
+    - ADR-0028 Phase 8 correlation vocabulary (`agent_id` vs `backend_id`)
+    - ADR-0017 structured agent event envelope section
+    - Agent Hub DR-0003 envelope field descriptions
 
 ---
 

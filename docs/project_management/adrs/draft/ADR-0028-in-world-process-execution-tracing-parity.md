@@ -216,6 +216,7 @@ Canonical correlation fields:
     - `human` for direct operator actions.
     - for agent-driven actions/events, this is the agent inventory id (e.g., `codex`, `claude_code`).
   - Rule: OPTIONAL on command spans; REQUIRED on structured agent events and toolbox tool-call events when an agent is the actor.
+  - Non-negotiable clarification: `agent_id` is for attribution/audit as the actor/principal. It MUST NOT be treated as a backend-selection identifier; when a specific backend is involved, `backend_id` MUST be present so allowlist/routing joins are explicit and non-heuristic.
 
 - `role`
   - Meaning: agent role taxonomy label (e.g., `orchestrator`, `member`).
