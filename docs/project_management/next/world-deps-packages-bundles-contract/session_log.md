@@ -310,3 +310,7 @@ Policy:
 ## START — 2026-02-14T21:08:26Z — integration — WDP5-integ-core
 - Dispatch:
   - `make triad-task-start FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-deps-packages-bundles-contract" TASK_ID="WDP5-integ-core" LAUNCH_CODEX=1`
+
+## END — 2026-02-14T21:28:31Z — integration — WDP5-integ-core
+- HEAD: `bd4429b3a2554ab5247024b4a58829e0975cb6e3`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-deps-packages-bundles-contract/logs/WDP5/integ-core/last_message.md`
