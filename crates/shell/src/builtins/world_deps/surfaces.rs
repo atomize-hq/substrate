@@ -39,6 +39,8 @@ struct ListOutputV1 {
 struct ShowOutputV1 {
     schema_version: u32,
     scope: String,
+    name: String,
+    kind: String,
     item: InventoryItemDefV1,
 }
 
@@ -167,9 +169,15 @@ fn run_current_show(args: &WorldDepsCurrentShowArgs) -> Result<()> {
     }
 
     if args.json {
+        let (kind, name) = match &item {
+            InventoryItemDefV1::Package(pkg) => ("package", pkg.name.as_str()),
+            InventoryItemDefV1::Bundle(bundle) => ("bundle", bundle.name.as_str()),
+        };
         let out = ShowOutputV1 {
             schema_version: 1,
             scope: "current".to_string(),
+            name: name.to_string(),
+            kind: kind.to_string(),
             item,
         };
         println!("{}", serde_json::to_string_pretty(&out)?);
@@ -993,46 +1001,69 @@ fn run_current_list_applied(
 fn print_applied_table(items: &[InventoryListItemSummaryV1]) {
     let mut kind_width = "Kind".len();
     let mut name_width = "Name".len();
+    let mut enabled_width = "Enabled".len();
+    let mut world_width = "World".len();
     for item in items {
         kind_width = kind_width.max(item.kind.len());
         name_width = name_width.max(item.name.len());
+        let enabled = item
+            .enabled
+            .map(|v| if v { "enabled=true" } else { "enabled=false" })
+            .unwrap_or("-");
+        enabled_width = enabled_width.max(enabled.len());
+        let world = item
+            .world
+            .as_deref()
+            .map(|v| format!("world={v}"))
+            .unwrap_or_else(|| "-".to_string());
+        world_width = world_width.max(world.len());
     }
 
     println!(
-        "{:<kind_width$} {:<name_width$} {:<7} {:<7} Remediation",
+        "{:<kind_width$} {:<name_width$} {:<enabled_width$} {:<world_width$} Remediation",
         "Kind",
         "Name",
         "Enabled",
         "World",
         kind_width = kind_width,
-        name_width = name_width
+        name_width = name_width,
+        enabled_width = enabled_width,
+        world_width = world_width
     );
     println!(
-        "{:-<kind_width$} {:-<name_width$} {:-<7} {:-<7} {:-<11}",
+        "{:-<kind_width$} {:-<name_width$} {:-<enabled_width$} {:-<world_width$} {:-<11}",
         "",
         "",
         "",
         "",
         "",
         kind_width = kind_width,
-        name_width = name_width
+        name_width = name_width,
+        enabled_width = enabled_width,
+        world_width = world_width
     );
     for item in items {
         let enabled = item
             .enabled
-            .map(|v| if v { "true" } else { "false" })
+            .map(|v| if v { "enabled=true" } else { "enabled=false" })
             .unwrap_or("-");
-        let world = item.world.as_deref().unwrap_or("-");
+        let world = item
+            .world
+            .as_deref()
+            .map(|v| format!("world={v}"))
+            .unwrap_or_else(|| "-".to_string());
         let remediation = item.remediation.as_deref().unwrap_or("-");
         println!(
-            "{:<kind_width$} {:<name_width$} {:<7} {:<7} {}",
+            "{:<kind_width$} {:<name_width$} {:<enabled_width$} {:<world_width$} {}",
             item.kind,
             item.name,
             enabled,
             world,
             remediation,
             kind_width = kind_width,
-            name_width = name_width
+            name_width = name_width,
+            enabled_width = enabled_width,
+            world_width = world_width
         );
     }
 }
