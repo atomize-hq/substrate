@@ -523,7 +523,7 @@
         "Read ci_checkpoint_plan.md and confirm which slice id this checkpoint validates",
         "Set status to in_progress; add START entry; commit docs"
       ],
-      "status": "in_progress",
+      "status": "completed",
       "type": "ops",
       "worktree": null
     },
@@ -573,7 +573,7 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" TASK_ID=\"WDP2-integ-linux\""
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "integration",
       "workflow": ".github/workflows/feature-smoke.yml",
       "worktree": "wt/world-deps-packages-bundles-contract-wdp2-integ-linux"
@@ -623,7 +623,7 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" TASK_ID=\"WDP2-integ-macos\""
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "integration",
       "workflow": ".github/workflows/feature-smoke.yml",
       "worktree": "wt/world-deps-packages-bundles-contract-wdp2-integ-macos"
