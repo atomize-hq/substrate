@@ -200,3 +200,4 @@ Policy:
 - CI compile parity (ci-testing): run `22018577432` — https://github.com/atomize-hq/substrate/actions/runs/22018577432 (conclusion: success)
 - Feature Smoke (behavior + WSL bundled via `RUN_WSL=1`): run `22018595263` — https://github.com/atomize-hq/substrate/actions/runs/22018595263 (conclusion: cancelled; `wsl` job did not complete)
 - Runner preflight: `scripts/ci/check_self_hosted_runners.sh` reports **missing** Linux-in-WSL runner label contract `[self-hosted, Linux, wsl]` (WSL smoke is required for this feature per plan/tasks meta).
+- Planning pack wiring fix (schema v4+): updated `WDP2-integ-linux` and `WDP2-integ-macos` to depend on `WDP2-integ-core` (not `CP1-ci-checkpoint`) so platform-fix tasks can be started while the checkpoint task remains `in_progress`.
