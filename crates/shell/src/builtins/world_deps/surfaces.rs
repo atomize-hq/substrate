@@ -1,17 +1,17 @@
 use super::guest::WorldBackendUnavailable;
 use super::inventory::{
     builtin_inventory_v1, find_workspace_inventory_chain, load_inventory_dir_v1,
-    merge_inventory_layer_v1, summarize_inventory_v1, HostPlatform, InstallMethodV1,
+    merge_inventory_layer_v1, summarize_inventory_v1, AptSpecV1, HostPlatform, InstallMethodV1,
     InventoryItemDefV1, InventoryListItemSummaryV1, InventoryViewV1, WrapperDefV1, WrapperKindV1,
 };
 use crate::execution::build_agent_client_and_request;
 use crate::execution::config_model;
 use crate::execution::{
-    WorldDepsCurrentAction, WorldDepsCurrentCmd, WorldDepsCurrentListArgs,
-    WorldDepsCurrentListViewArg, WorldDepsCurrentShowArgs, WorldDepsGlobalAction,
-    WorldDepsGlobalCmd, WorldDepsScopedListArgs, WorldDepsScopedListViewArg,
-    WorldDepsScopedMutateArgs, WorldDepsScopedResetArgs, WorldDepsWorkspaceAction,
-    WorldDepsWorkspaceCmd,
+    WorldDepsCurrentAction, WorldDepsCurrentCmd, WorldDepsCurrentInstallArgs,
+    WorldDepsCurrentListArgs, WorldDepsCurrentListViewArg, WorldDepsCurrentShowArgs,
+    WorldDepsCurrentSyncArgs, WorldDepsGlobalAction, WorldDepsGlobalCmd, WorldDepsScopedListArgs,
+    WorldDepsScopedListViewArg, WorldDepsScopedMutateArgs, WorldDepsScopedResetArgs,
+    WorldDepsWorkspaceAction, WorldDepsWorkspaceCmd,
 };
 use anyhow::{anyhow, Context, Result};
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -48,6 +48,8 @@ pub(crate) fn run_current(cmd: &WorldDepsCurrentCmd) -> Result<()> {
     match &cmd.action {
         WorldDepsCurrentAction::List(args) => run_current_list(args),
         WorldDepsCurrentAction::Show(args) => run_current_show(args),
+        WorldDepsCurrentAction::Install(args) => run_current_install(args),
+        WorldDepsCurrentAction::Sync(args) => run_current_sync(args),
     }
 }
 
@@ -185,6 +187,231 @@ fn run_current_show(args: &WorldDepsCurrentShowArgs) -> Result<()> {
         println!("{}", serde_yaml::to_string(&item)?);
     }
     Ok(())
+}
+
+#[derive(Debug)]
+struct InstallPlanV1 {
+    apt: Vec<AptSpecV1>,
+    script_packages: Vec<String>,
+    manual_packages: Vec<ManualPackagePlanV1>,
+}
+
+#[derive(Debug)]
+struct ManualPackagePlanV1 {
+    name: String,
+    manual_instructions: String,
+}
+
+fn run_current_install(args: &WorldDepsCurrentInstallArgs) -> Result<()> {
+    if !args.dry_run {
+        return Err(config_model::user_error(
+            "`substrate world deps current install` is only implemented for --dry-run in WDP3",
+        ));
+    }
+
+    let cwd = env::current_dir().unwrap_or_else(|_| ".".into());
+    let cfg = config_model::resolve_effective_config(&cwd, &Default::default())
+        .context("failed to resolve effective config")?;
+    let view = resolve_current_inventory_view(&cwd, &cfg)?;
+
+    let plan = compute_install_plan_v1(&view, &args.item_names)?;
+    if args.verbose {
+        let mut expanded = expand_items_to_packages_v1(&view, &args.item_names)?;
+        expanded.sort();
+        eprintln!("substrate: note: expanded packages: {}", expanded.join(","));
+    }
+    print_install_plan_v1(&plan);
+    Ok(())
+}
+
+fn run_current_sync(args: &WorldDepsCurrentSyncArgs) -> Result<()> {
+    if !args.dry_run {
+        return Err(config_model::user_error(
+            "`substrate world deps current sync` is only implemented for --dry-run in WDP3",
+        ));
+    }
+
+    let cwd = env::current_dir().unwrap_or_else(|_| ".".into());
+    let cfg = config_model::resolve_effective_config(&cwd, &Default::default())
+        .context("failed to resolve effective config")?;
+    let view = resolve_current_inventory_view(&cwd, &cfg)?;
+
+    let item_names: Vec<String> = if args.all {
+        let mut out: Vec<String> = Vec::new();
+        out.extend(view.packages.keys().cloned());
+        out.extend(view.bundles.keys().cloned());
+        out.sort();
+        out
+    } else {
+        cfg.world.deps.enabled.clone()
+    };
+
+    let plan = compute_install_plan_v1(&view, &item_names)?;
+    if args.verbose {
+        let mut expanded = expand_items_to_packages_v1(&view, &item_names)?;
+        expanded.sort();
+        eprintln!("substrate: note: expanded packages: {}", expanded.join(","));
+    }
+    print_install_plan_v1(&plan);
+    Ok(())
+}
+
+fn compute_install_plan_v1(view: &InventoryViewV1, item_names: &[String]) -> Result<InstallPlanV1> {
+    let package_names = expand_items_to_packages_v1(view, item_names)?;
+
+    let mut apt_versions: HashMap<String, Option<String>> = HashMap::new();
+    let mut script_packages: Vec<String> = Vec::new();
+    let mut manual_packages: Vec<ManualPackagePlanV1> = Vec::new();
+
+    for pkg_name in package_names {
+        let pkg = view.packages.get(&pkg_name).ok_or_else(|| {
+            config_model::user_error(format!(
+                "invalid deps inventory: referenced package '{pkg_name}' is not visible for this platform"
+            ))
+        })?;
+
+        match pkg.install.method {
+            InstallMethodV1::Apt => {
+                for spec in &pkg.install.apt {
+                    match apt_versions.get(&spec.name) {
+                        None => {
+                            apt_versions.insert(spec.name.clone(), spec.version.clone());
+                        }
+                        Some(existing) => {
+                            if existing != &spec.version {
+                                return Err(config_model::user_error(format!(
+                                    "invalid deps inventory: conflicting apt version requirements for '{}': {:?} vs {:?}",
+                                    spec.name, existing, spec.version
+                                )));
+                            }
+                        }
+                    }
+                }
+            }
+            InstallMethodV1::Script => {
+                script_packages.push(pkg.name.clone());
+            }
+            InstallMethodV1::Manual => {
+                manual_packages.push(ManualPackagePlanV1 {
+                    name: pkg.name.clone(),
+                    manual_instructions: pkg
+                        .install
+                        .manual_instructions
+                        .clone()
+                        .unwrap_or_default(),
+                });
+            }
+        }
+    }
+
+    let mut apt: Vec<AptSpecV1> = apt_versions
+        .into_iter()
+        .map(|(name, version)| AptSpecV1 { name, version })
+        .collect();
+    apt.sort_by(|a, b| a.name.cmp(&b.name));
+
+    script_packages.sort();
+    script_packages.dedup();
+
+    manual_packages.sort_by(|a, b| a.name.cmp(&b.name));
+    manual_packages.dedup_by(|a, b| a.name == b.name);
+
+    Ok(InstallPlanV1 {
+        apt,
+        script_packages,
+        manual_packages,
+    })
+}
+
+fn expand_items_to_packages_v1(
+    view: &InventoryViewV1,
+    item_names: &[String],
+) -> Result<Vec<String>> {
+    let mut unknown: Vec<String> = Vec::new();
+    let mut out: Vec<String> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+
+    for item_name in item_names {
+        let item = match view.get(item_name) {
+            Some(item) => item,
+            None => {
+                unknown.push(item_name.clone());
+                continue;
+            }
+        };
+        match item {
+            InventoryItemDefV1::Package(_) => {
+                if seen.insert(item_name.clone()) {
+                    out.push(item_name.clone());
+                }
+            }
+            InventoryItemDefV1::Bundle(bundle) => {
+                for pkg in &bundle.packages {
+                    if !view.packages.contains_key(pkg) {
+                        return Err(config_model::user_error(format!(
+                            "invalid deps inventory: bundle '{}' references unknown package '{}'",
+                            bundle.name, pkg
+                        )));
+                    }
+                    if seen.insert(pkg.clone()) {
+                        out.push(pkg.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    if !unknown.is_empty() {
+        unknown.sort();
+        unknown.dedup();
+        return Err(config_model::user_error(format!(
+            "unknown deps item(s): {}",
+            unknown.join(",")
+        )));
+    }
+
+    Ok(out)
+}
+
+fn print_install_plan_v1(plan: &InstallPlanV1) {
+    println!("World deps plan (dry-run)");
+
+    let apt_items: Vec<String> = plan
+        .apt
+        .iter()
+        .map(|spec| match &spec.version {
+            Some(v) => format!("{}={}", spec.name, v),
+            None => spec.name.clone(),
+        })
+        .collect();
+    print_plan_list_v1("APT", &apt_items);
+    print_plan_list_v1("SCRIPT", &plan.script_packages);
+
+    if plan.manual_packages.is_empty() {
+        return;
+    }
+    println!("MANUAL (blocked):");
+    for pkg in &plan.manual_packages {
+        println!("  - {}", pkg.name);
+        let instructions = pkg.manual_instructions.trim();
+        if instructions.is_empty() {
+            continue;
+        }
+        for line in instructions.lines() {
+            println!("      {line}");
+        }
+    }
+}
+
+fn print_plan_list_v1(label: &str, items: &[String]) {
+    if items.is_empty() {
+        println!("{label}: -");
+        return;
+    }
+    println!("{label}:");
+    for item in items {
+        println!("  - {item}");
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
