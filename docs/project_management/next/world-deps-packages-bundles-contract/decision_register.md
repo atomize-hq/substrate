@@ -50,16 +50,23 @@ Template standard:
 - **Cons:** introduces a new persisted schema and migration surface; risks drift between state and reality.
 - **Cascading implications:** new file location, versioning, and corruption semantics.
 - **Risks:** false positives/negatives if state diverges.
+- **Unlocks:** stable `applied` output independent of probe runtime.
+- **Quick wins / low-hanging fruit:** incremental implementation that starts with a small, fixed schema and a single read path.
 
 **Option B — Derive applied status from probes on demand**
 - **Pros:** no new persisted schema; status reflects reality at query time; matches contract’s probe-centric semantics.
 - **Cons:** `applied` may be slower for large inventories.
 - **Cascading implications:** probes must be stable and observable; concurrency must be controlled.
-- **Risks:** performance; mitigated by caching and by scoping `applied` default to the enabled set.
+- **Risks:** performance; mitigated by scoping default `applied` to the enabled set and requiring `--all` for full inventory.
+- **Unlocks:** no migration surface; probe results remain the single source of truth.
+- **Quick wins / low-hanging fruit:** aligns directly with WDP2 scope without introducing a new on-disk format.
 
 **Recommendation**
 - **Selected:** Option B — Derive from probes on demand
 - **Rationale (crisp):** avoids introducing a new state schema surface and keeps “applied” grounded in reality.
+
+**Follow-up tasks (explicit)**
+- Implement the WDP2 applied derivation contract (tasks: `WDP2-code`, `WDP2-test`, `WDP2-integ-core`, `WDP2-integ-linux`, `WDP2-integ-macos`, `WDP2-integ`).
 
 ### DR-0003 — Script installer execution shell inside the world
 
@@ -74,12 +81,22 @@ Template standard:
 **Option A — Execute script installers under POSIX `sh -c`**
 - **Pros:** minimal dependency footprint; aligned to non-interactive runtime shell.
 - **Cons:** incompatible with common installer recipes; increases wrapper/script complexity.
+- **Cascading implications:** installer docs and examples avoid bash-only constructs; more escape/quoting rules appear in wrapper generation.
+- **Risks:** installer failure rates increase for common ecosystems; failures surface late during mutation slices.
+- **Unlocks:** no additional world image dependency for installs.
+- **Quick wins / low-hanging fruit:** reuse existing `sh -c` execution plumbing without introducing a bash requirement.
 
 **Option B — Execute script installers under `bash -lc`**
 - **Pros:** high compatibility with ecosystem installers; matches contract’s install-time note.
 - **Cons:** requires bash to exist in the world image.
+- **Cascading implications:** world images guarantee bash availability for install execution; wrapper generation and remediation messaging reference `bash -lc` explicitly.
+- **Risks:** installs fail-closed when bash is absent; failure is deterministic and actionable.
+- **Unlocks:** supports `source`-based installers and bash functions without additional wrapper shims.
+- **Quick wins / low-hanging fruit:** aligns with common installer recipes without requiring rewrite.
 
 **Recommendation**
 - **Selected:** Option B — Execute under `bash -lc`
 - **Rationale (crisp):** maximizes compatibility while preserving the runtime “no rcfiles required” contract via generated wrappers.
 
+**Follow-up tasks (explicit)**
+- Implement the WDP4 script installer execution shell contract and wrapper generation (tasks: `WDP4-code`, `WDP4-test`, `WDP4-integ`).

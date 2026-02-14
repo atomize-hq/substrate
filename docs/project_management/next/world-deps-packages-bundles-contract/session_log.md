@@ -49,3 +49,33 @@ When running triads, use the advisory CI audit + evidence ledger tooling to avoi
 Policy:
 - Docs/planning-only changes (anything under `docs/`) may skip all CI/smoke when the audit outputs `DIFF_CLASS=docs_only` and `RECOMMEND=skip`.
 
+---
+
+## START — 2026-02-13T23:36:36Z — planning — quality gate remediation
+- Feature: `docs/project_management/next/world-deps-packages-bundles-contract`
+- Branch: `testing`
+- Goal: Remediate Planning Pack defects from `quality_gate_report.md` for re-review.
+- Findings addressed:
+  - Finding 001
+  - Finding 002
+  - Finding 003
+  - Finding 004
+
+## END — 2026-02-13T23:38:22Z — planning — quality gate remediation
+- Summary of changes (exhaustive):
+  - Fixed ADR executive summary hash drift for ADR-0017 (mechanical planning lint gate).
+  - Updated DR-0002 and DR-0003 to match the Decision Register template and added explicit follow-up task-ID mapping.
+  - Added explicit Decision Register (DR) references to `tasks.json` for tasks implementing DR-0001, DR-0002, and DR-0003.
+  - Updated checkpoint kickoff prompts to include deterministic no-op completion steps for non-required platform-fix tasks.
+- Files modified:
+  - `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+  - `docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md`
+  - `docs/project_management/next/world-deps-packages-bundles-contract/tasks.json`
+  - `docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/CP1-ci-checkpoint.md`
+  - `docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/CP2-ci-checkpoint.md`
+- Commands run (verbatim) + exit codes:
+  - `make adr-fix ADR=docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md` (exit 0)
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world-deps-packages-bundles-contract"` (exit 0)
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/world-deps-packages-bundles-contract"` (exit 0)
+  - `jq -e . "docs/project_management/next/world-deps-packages-bundles-contract/tasks.json" >/dev/null` (exit 0)
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` (exit 0)

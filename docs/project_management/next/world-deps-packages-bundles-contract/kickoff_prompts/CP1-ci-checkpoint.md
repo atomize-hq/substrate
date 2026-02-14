@@ -51,6 +51,15 @@ Start only failing platform-fix tasks (from orchestration checkout):
 - Per-platform smoke runs:
   - `make triad-task-start-platform-fixes FEATURE_DIR="docs/project_management/next/world-deps-packages-bundles-contract" SLICE_ID="<slice>" PLATFORMS="<csv>" LAUNCH_CODEX=1`
 
+## If smoke passes (or is skipped by ci-audit)
+
+If smoke indicates no platform fixes are required, platform-fix tasks for a checkpoint-boundary slice remain `pending` by default and still block the final aggregator’s `depends_on` (e.g., `<slice>-integ` depends on `<slice>-integ-linux` and `<slice>-integ-macos`).
+
+Mark non-required platform-fix tasks as deterministic no-ops from the orchestration checkout:
+
+- `scripts/triad/mark_noop_platform_fixes_completed.sh --feature-dir "docs/project_management/next/world-deps-packages-bundles-contract" --slice-id "<slice>" --from-smoke-run "<run-id>"`
+  - If Feature Smoke was skipped via ci-audit, omit `--from-smoke-run` and record the ci-audit evidence lines in `session_log.md`.
+
 ## End Checklist
 
 1. Record run ids/URLs (compile parity + smoke, and any CI Testing runs) in `session_log.md`.
