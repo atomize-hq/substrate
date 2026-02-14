@@ -79,3 +79,24 @@ Policy:
   - `make planning-validate FEATURE_DIR="docs/project_management/next/world-deps-packages-bundles-contract"` (exit 0)
   - `jq -e . "docs/project_management/next/world-deps-packages-bundles-contract/tasks.json" >/dev/null` (exit 0)
   - `jq -e . docs/project_management/next/sequencing.json >/dev/null` (exit 0)
+
+---
+
+## START — 2026-02-14T02:58:43Z — ops — F0-exec-preflight
+- Feature: `docs/project_management/next/world-deps-packages-bundles-contract`
+- Branch: `feat/world-deps-packages-bundles-contract`
+- Goal: Run the execution preflight gate (feature start) before any triads begin.
+- Inputs reviewed (end-to-end):
+  - `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
+  - `docs/project_management/next/world-deps-packages-bundles-contract/plan.md`
+  - `docs/project_management/next/world-deps-packages-bundles-contract/tasks.json`
+  - `docs/project_management/next/world-deps-packages-bundles-contract/session_log.md`
+  - `docs/project_management/next/world-deps-packages-bundles-contract/quality_gate_report.md`
+  - `docs/project_management/next/world-deps-packages-bundles-contract/manual_testing_playbook.md`
+  - `docs/project_management/next/world-deps-packages-bundles-contract/smoke/_core.sh`
+  - `docs/project_management/next/world-deps-packages-bundles-contract/ci_checkpoint_plan.md`
+  - `docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md`
+  - `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md` (Executive Summary + contract)
+  - `docs/project_management/next/world_deps_packages_bundles_contract.md`
+- Commands run (verbatim) + exit codes:
+  - `make triad-orch-ensure FEATURE_DIR="docs/project_management/next/world-deps-packages-bundles-contract"` (exit 0)

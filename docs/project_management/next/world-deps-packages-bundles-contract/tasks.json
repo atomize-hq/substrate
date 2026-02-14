@@ -20,7 +20,7 @@
       "name": "Execution preflight gate (feature start)",
       "type": "ops",
       "phase": "Ops",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Run the execution preflight gate for this Planning Pack (required before any triads begin).",
       "references": [
         "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
