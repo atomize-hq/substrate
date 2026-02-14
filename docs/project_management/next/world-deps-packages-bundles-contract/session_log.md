@@ -332,3 +332,7 @@ Policy:
 - From Feature Smoke run `22024645441`, marked no-op platform-fix tasks completed:
   - `WDP5-integ-linux`
   - `WDP5-integ-macos`
+
+## START — 2026-02-14T21:39:20Z — integration — WDP5-integ
+- Dispatch:
+  - `make triad-task-start-integ-final FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-deps-packages-bundles-contract" SLICE_ID="WDP5" LAUNCH_CODEX=1`
