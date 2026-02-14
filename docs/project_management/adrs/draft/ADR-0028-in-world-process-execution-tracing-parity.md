@@ -198,10 +198,14 @@ Canonical correlation fields:
 - `session_id`
   - Meaning: the trace session identifier for the current Substrate shell session.
   - Rule: MUST be present on all trace records appended to canonical trace (`trace.jsonl`), including derived/router/toolbox records.
+  - Relationship to orchestration: `session_id` scopes records to a particular shell session, but it is not sufficient for multi-agent joins; multi-agent attribution MUST use `orchestration_session_id`/`run_id` when applicable (no heuristic joins).
 
 - `orchestration_session_id`
   - Meaning: multi-agent orchestration session identifier (spans concurrent agents and their events).
   - Rule: MUST be present on any agent/LLM/workflow/toolbox/router record that participates in multi-agent orchestration joins.
+  - Relationship to `session_id` (non-negotiable):
+    - `orchestration_session_id` is additive and does not supersede `session_id`; canonical trace records still require `session_id`.
+    - A single `session_id` MAY contain multiple orchestration sessions (and vice versa); consumers MUST NOT assume a 1:1 mapping and MUST NOT attempt heuristic mapping between them.
 
 - `run_id`
   - Meaning: unit-of-work identifier inside an orchestration session (e.g., an agent task run, an LLM request run, or a workflow run).

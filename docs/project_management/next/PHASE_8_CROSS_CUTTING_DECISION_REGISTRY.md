@@ -36,7 +36,7 @@ This registry covers:
 
 ## Primary cross-cutting risks (what can drift without a Phase 8 lock)
 
-- No single “correlation vocabulary + required/optional matrix” exists yet (risk: heuristic joins and event-family drift).
+- Correlation vocabulary/matrix must remain singular and authoritative (risk: heuristic joins and event-family drift if downstream docs diverge from ADR-0028).
 - `agent_id` semantics must remain unified across trace spans vs structured agent events (risk: audit confusion if emitters drift and `backend_id` is inferred heuristically).
 - Control plane vs event plane is not yet an explicit contract in Agent Hub (risk: accidental second execution plane).
 - Secrets delivery mechanisms differ by subsystem without a shared rubric (risk: env var proliferation and inconsistent hardening).
@@ -108,13 +108,13 @@ Each item below is written as: **Decision/contract to lock**, **current sources*
 - LLM gateway wants `orchestration_session_id`/`run_id`/`thread_id`: `docs/project_management/next/llm_gateway_in_world/contract.md`
 
 **Gap**
-- Without a single decision, consumers (router, session loggers, UIs) risk heuristic “best-effort” joins between trace sessions and orchestration sessions.
+- Without an explicit mapping story, consumers (router, session loggers, UIs) risk heuristic “best-effort” joins between trace sessions and orchestration sessions.
 
 **Alignment action**
-- In the ADR-0028 Phase 8 circle-back, define:
-  - which families must carry `orchestration_session_id`,
-  - whether `session_id` stays mandatory on all trace records,
-  - and a deterministic mapping story where required (e.g., “shell sessions can host multiple orchestration sessions” or “one-to-one”).
+- Phase 8: addressed by ADR-0028 Phase 8 additive vocabulary + required/optional matrix:
+  - `session_id` remains mandatory on all canonical trace records,
+  - `orchestration_session_id` is required on any record family that participates in multi-agent orchestration joins,
+  - and consumers MUST NOT assume a 1:1 mapping between `session_id` and `orchestration_session_id` (no heuristic joins).
 
 ---
 
