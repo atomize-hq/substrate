@@ -231,3 +231,10 @@ Policy:
   - `linux_self_hosted`: success
   - `wsl`: success
   - `macos_hosted`: failure — `substrate world doctor` not healthy on GitHub-hosted macOS (smoke exits `4`)
+
+## UPDATE — 2026-02-14T16:40:00Z — checkpoint — CP1-ci-checkpoint (WDP2) — proceed despite macOS runner outage (evidence split across runs)
+- Self-hosted macOS runner is offline for the day, so a single all-green behavior+WSL run is not currently possible.
+- Evidence for `CHECKOUT_SHA=7dc42c11bbc24b4ca74997ead412068789dc701c` is split across runs:
+  - macOS (self-hosted) passed as part of run `22019947173` (run conclusion is failure due to WSL misprovisioning).
+  - WSL (self-hosted) passed as part of run `22020059723` (run conclusion is cancelled due to macOS runner offline / queued).
+- Operator decision: treat Feature Smoke coverage as satisfied for WDP2 based on the above per-platform evidence and proceed with deterministic no-op platform-fix completion + final aggregator.
