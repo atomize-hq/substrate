@@ -216,3 +216,18 @@ Policy:
   - `macos_self_hosted`: success
   - `wsl`: failure (runner misprovisioned: `/run/substrate.sock` exists but runner user lacks permission)
   - Socket perms observed in logs: `root:substrate 0660` at `/run/substrate.sock`; runner user missing `substrate` group membership (needs runner service restart after group add).
+
+## UPDATE — 2026-02-14T16:30:05Z — checkpoint — CP1-ci-checkpoint (WDP2) — macOS runner offline (queue stall)
+- Feature Smoke re-dispatch: run `22020059723` — https://github.com/atomize-hq/substrate/actions/runs/22020059723 (conclusion: cancelled)
+  - `linux_self_hosted`: success
+  - `wsl`: success
+  - `macos_self_hosted`: queued indefinitely (self-hosted macOS runner offline), so the run was cancelled.
+
+## UPDATE — 2026-02-14T16:33:00Z — checkpoint — CP1-ci-checkpoint (WDP2) — GH-hosted macOS fallback attempt (fails: no world backend)
+- Attempted a hybrid dispatch to keep `linux` + `wsl` on self-hosted but run `macos` on GitHub-hosted:
+  - Change: added `macos_runner_kind` workflow input (commit `17719e0213ec6cdc2dd50418db9cfb17a406482d`) to allow macOS hosted fallback while `runner_kind=self-hosted`.
+  - Dispatch: `make feature-smoke FEATURE_DIR="docs/project_management/next/world-deps-packages-bundles-contract" PLATFORM=behavior RUN_WSL=1 SMOKE_SLICE_ID="WDP2" SMOKE_CHECKOUT_REF="7dc42c11bbc24b4ca74997ead412068789dc701c" RUNNER_KIND=self-hosted MACOS_RUNNER_KIND=github-hosted WORKFLOW_REF="feat/world-deps-packages-bundles-contract" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=0`
+- Feature Smoke run `22020644117` — https://github.com/atomize-hq/substrate/actions/runs/22020644117 (conclusion: failure)
+  - `linux_self_hosted`: success
+  - `wsl`: success
+  - `macos_hosted`: failure — `substrate world doctor` not healthy on GitHub-hosted macOS (smoke exits `4`)
