@@ -533,8 +533,7 @@
       ],
       "concurrent_with": [],
       "depends_on": [
-        "WDP2-integ-core",
-        "CP1-ci-checkpoint"
+        "WDP2-integ-core"
       ],
       "description": "linux platform-fix integration task (may be a no-op if already green).",
       "end_checklist": [
@@ -585,8 +584,7 @@
       ],
       "concurrent_with": [],
       "depends_on": [
-        "WDP2-integ-core",
-        "CP1-ci-checkpoint"
+        "WDP2-integ-core"
       ],
       "description": "macos platform-fix integration task (may be a no-op if already green).",
       "end_checklist": [
