@@ -87,23 +87,34 @@ pub(crate) struct ProbeDefV1 {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", tag = "kind")]
 pub(crate) enum WrapperKindV1 {
-    BashFunction {
-        bash_source: String,
-        function: String,
-    },
-    BashSourceExec {
-        bash_source: String,
-        exec: String,
-    },
-    ShEnvExec {
-        exec: String,
-        #[serde(default)]
-        env: HashMap<String, String>,
-    },
+    BashFunction(BashFunctionWrapperDefV1),
+    BashSourceExec(BashSourceExecWrapperDefV1),
+    ShEnvExec(ShEnvExecWrapperDefV1),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
+pub(crate) struct BashFunctionWrapperDefV1 {
+    pub bash_source: String,
+    pub function: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct BashSourceExecWrapperDefV1 {
+    pub bash_source: String,
+    pub exec: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ShEnvExecWrapperDefV1 {
+    pub exec: String,
+    #[serde(default)]
+    pub env: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub(crate) struct WrapperDefV1 {
     pub name: String,
     #[serde(flatten)]
@@ -473,32 +484,50 @@ fn validate_package_v1(
                 path.display()
             )));
         }
+        if !pkg.entrypoints.iter().any(|e| e == &wrapper.name) {
+            return Err(config_model::user_error(format!(
+                "invalid package schema in {}: wrappers[].name '{}' must be listed in entrypoints[]",
+                path.display(),
+                wrapper.name
+            )));
+        }
         match &wrapper.kind {
-            WrapperKindV1::BashFunction {
-                bash_source,
-                function,
-            } => {
-                if bash_source.trim().is_empty() || function.trim().is_empty() {
+            WrapperKindV1::BashFunction(def) => {
+                if def.bash_source.trim().is_empty() || def.function.trim().is_empty() {
                     return Err(config_model::user_error(format!(
                         "invalid package schema in {}: wrappers[].kind=bash_function requires non-empty bash_source and function",
                         path.display()
                     )));
                 }
             }
-            WrapperKindV1::BashSourceExec { bash_source, exec } => {
-                if bash_source.trim().is_empty() || exec.trim().is_empty() {
+            WrapperKindV1::BashSourceExec(def) => {
+                if def.bash_source.trim().is_empty() || def.exec.trim().is_empty() {
                     return Err(config_model::user_error(format!(
                         "invalid package schema in {}: wrappers[].kind=bash_source_exec requires non-empty bash_source and exec",
                         path.display()
                     )));
                 }
             }
-            WrapperKindV1::ShEnvExec { exec, .. } => {
-                if exec.trim().is_empty() {
+            WrapperKindV1::ShEnvExec(def) => {
+                if def.exec.trim().is_empty() {
                     return Err(config_model::user_error(format!(
                         "invalid package schema in {}: wrappers[].kind=sh_env_exec requires non-empty exec",
                         path.display()
                     )));
+                }
+                if def.env.is_empty() {
+                    return Err(config_model::user_error(format!(
+                        "invalid package schema in {}: wrappers[].kind=sh_env_exec requires non-empty env",
+                        path.display()
+                    )));
+                }
+                for key in def.env.keys() {
+                    if key.trim().is_empty() {
+                        return Err(config_model::user_error(format!(
+                            "invalid package schema in {}: wrappers[].kind=sh_env_exec requires non-empty env keys",
+                            path.display()
+                        )));
+                    }
                 }
             }
         }
