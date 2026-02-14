@@ -189,3 +189,14 @@ Policy:
 ## END — 2026-02-14T13:40:43Z — integration — WDP2-integ-core
 - HEAD: `4c8bd027f32902d3e5f3ea7157fec8998217d15f`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-deps-packages-bundles-contract/logs/WDP2/integ-core/last_message.md`
+
+## UPDATE — 2026-02-14T13:47:10Z — integration — WDP2-integ-core (rerun finisher)
+- HEAD: `7dc42c11bbc24b4ca74997ead412068789dc701c`
+- Note: `make triad-task-finish TASK_ID="WDP2-integ-core"` re-ran `make integ-checks` after hardening `crates/shell/tests/replay_world.rs` for environments where `/run/user/$UID/...` cannot be reliably blocked.
+
+## START — 2026-02-14T13:50:00Z — checkpoint — CP1-ci-checkpoint (WDP2)
+- CHECKOUT_SHA: `7dc42c11bbc24b4ca74997ead412068789dc701c` (from `world-deps-packages-bundles-contract-wdp2-integ-core`)
+- Local preflight (Linux host): `SUBSTRATE_SMOKE_SLICE_ID=WDP2 bash docs/project_management/next/world-deps-packages-bundles-contract/smoke/linux-smoke.sh` (exit 0)
+- CI compile parity (ci-testing): run `22018577432` — https://github.com/atomize-hq/substrate/actions/runs/22018577432 (conclusion: success)
+- Feature Smoke (behavior + WSL bundled via `RUN_WSL=1`): run `22018595263` — https://github.com/atomize-hq/substrate/actions/runs/22018595263 (conclusion: cancelled; `wsl` job did not complete)
+- Runner preflight: `scripts/ci/check_self_hosted_runners.sh` reports **missing** Linux-in-WSL runner label contract `[self-hosted, Linux, wsl]` (WSL smoke is required for this feature per plan/tasks meta).
