@@ -199,3 +199,192 @@ Mark `YES` only if read end-to-end.
 - Blockers to execution:
   - `make planning-lint FEATURE_DIR="docs/project_management/next/world-deps-packages-bundles-contract"` must pass.
   - Decision register DR-0002 and DR-0003 must be brought into template compliance with explicit follow-up task mapping.
+
+---
+
+# Planning Quality Gate Report — world-deps-packages-bundles-contract (Pass 2)
+
+RECOMMENDATION: ACCEPT
+
+## Metadata
+- Feature directory: `docs/project_management/next/world-deps-packages-bundles-contract/`
+- Reviewed commit: `0b16de9ed66813e838bfa3c5f7743294f3839f4d`
+- Reviewer: `Codex (GPT-5.2), third-party reviewer`
+- Date (UTC): `2026-02-14`
+- Recommendation: `ACCEPT`
+
+## Evidence: Commands Run (verbatim)
+
+### Required preflight (minimum)
+
+```bash
+export FEATURE_DIR="docs/project_management/next/world-deps-packages-bundles-contract"
+
+# JSON validity
+jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
+# exit 0
+
+jq -e . docs/project_management/next/sequencing.json >/dev/null
+# exit 0
+
+# tasks.json required-field audit
+python - <<'PY'
+import json, os
+feature_dir=os.environ["FEATURE_DIR"]
+path=os.path.join(feature_dir,"tasks.json")
+data=json.load(open(path,"r",encoding="utf-8"))
+tasks=data["tasks"] if isinstance(data,dict) and "tasks" in data else data
+required=[
+  "id","name","type","phase","status","description",
+  "references","acceptance_criteria","start_checklist","end_checklist",
+  "worktree","integration_task","kickoff_prompt",
+  "depends_on","concurrent_with"
+]
+missing=[]
+for t in tasks:
+  m=[k for k in required if k not in t]
+  if m:
+    missing.append((t.get("id","<no id>"),m))
+if missing:
+  for tid,m in missing:
+    print(tid,":",", ".join(m))
+  raise SystemExit(1)
+print("OK: tasks.json required fields present")
+PY
+# exit 0
+```
+
+### Planning lint (mechanical)
+Reference: `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
+
+```bash
+export FEATURE_DIR="docs/project_management/next/world-deps-packages-bundles-contract"
+make planning-lint FEATURE_DIR="$FEATURE_DIR"
+# exit 0
+```
+
+### Additional review commands (if any)
+
+```bash
+export FEATURE_DIR="docs/project_management/next/world-deps-packages-bundles-contract"
+make planning-validate FEATURE_DIR="$FEATURE_DIR"
+# exit 0
+```
+
+## Required Inputs Read End-to-End (checklist)
+Mark `YES` only if read end-to-end.
+
+- ADR(s): `YES`
+- `spec_manifest.md`: `YES`
+- `plan.md`: `YES`
+- `tasks.json`: `YES`
+- `session_log.md`: `YES`
+- All specs in scope: `YES`
+- `decision_register.md` (if present/required): `YES`
+- `impact_map.md` (if present/required): `YES`
+- `manual_testing_playbook.md` (if present/required): `YES`
+- Feature smoke scripts under `smoke/` (if required): `YES`
+- `docs/project_management/next/sequencing.json`: `YES`
+- Standards:
+  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
+  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
+  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`: `YES`
+
+## Gate Results (PASS/FAIL with evidence)
+
+### 1) Zero-ambiguity contracts
+- Result: `PASS`
+- Evidence: `make planning-lint FEATURE_DIR="docs/project_management/next/world-deps-packages-bundles-contract"` (exit `0`)
+- Notes: Hard-ban + ambiguity scans passed; no prohibited planning language found in scoped planning outputs.
+
+### 2) Decision quality (2 options, explicit tradeoffs, explicit selection)
+- Result: `PASS`
+- Evidence: `docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md` (DR-0001, DR-0002, DR-0003)
+- Notes: Each decision has exactly two viable options, explicit tradeoffs, and a single selected option with rationale.
+
+### 3) Cross-doc consistency (CLI/config/exit codes/paths)
+- Result: `PASS`
+- Evidence:
+  - `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md`
+  - `docs/project_management/next/world_deps_packages_bundles_contract.md`
+  - `docs/project_management/next/world-deps-packages-bundles-contract/manual_testing_playbook.md`
+  - `docs/project_management/next/world-deps-packages-bundles-contract/smoke/_core.sh`
+- Notes: CLI spelling/flags, backend-unavailable exit `3` posture, and legacy-path removal semantics are consistent across docs.
+
+### 4) Sequencing and dependency alignment
+- Result: `PASS`
+- Evidence:
+  - `docs/project_management/next/sequencing.json` entry: `world_deps_packages_bundles_contract` (WDP0..WDP5)
+  - `docs/project_management/next/world-deps-packages-bundles-contract/tasks.json` code task deps:
+    - `WDP1-code` depends on `WDP0-integ`
+    - `WDP2-code` depends on `WDP1-integ`
+    - `WDP3-code` depends on `CP1-ci-checkpoint` and `WDP2-integ`
+    - `WDP4-code` depends on `WDP3-integ`
+    - `WDP5-code` depends on `WDP4-integ`
+- Notes: No slice can start before prior slice integration and required checkpoint gates complete.
+
+### 5) Testability and validation readiness
+- Result: `PASS`
+- Evidence:
+  - Manual playbook: `docs/project_management/next/world-deps-packages-bundles-contract/manual_testing_playbook.md`
+  - Smoke scripts: `docs/project_management/next/world-deps-packages-bundles-contract/smoke/linux-smoke.sh`, `docs/project_management/next/world-deps-packages-bundles-contract/smoke/macos-smoke.sh`, `docs/project_management/next/world-deps-packages-bundles-contract/smoke/_core.sh`
+- Notes: Smoke encodes explicit exit codes and key output assertions (backend unavailable, JSON stability, legacy-path ignore).
+
+### 5.1) Cross-platform parity task structure (schema v2/v3/v4)
+- Result: `PASS`
+- Evidence:
+  - `tasks.json` meta:
+    - `schema_version=4`
+    - `behavior_platforms_required=["linux","macos"]`
+    - `ci_parity_platforms_required=["linux","macos"]`
+    - `wsl_required=true`, `wsl_task_mode="bundled"`
+    - `checkpoint_boundaries=["WDP2","WDP5"]`
+  - Boundary-only platform-fix:
+    - Boundary slices (`WDP2`, `WDP5`) define `*-integ-core`, `CPk-ci-checkpoint`, `*-integ-linux`, `*-integ-macos`, `*-integ`.
+    - Normal slices (`WDP0`, `WDP1`, `WDP3`, `WDP4`) use only `X-integ`.
+- Notes: CI checkpoints are wired so execution cannot bypass the boundary gates.
+
+### 6) Triad interoperability (execution workflow)
+- Result: `PASS`
+- Evidence:
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world-deps-packages-bundles-contract"` includes kickoff prompt sentinel scan (exit `0`)
+  - Checkpoint prompts explicitly document deterministic no-op completion for non-required platform-fix tasks:
+    - `docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/CP1-ci-checkpoint.md`
+    - `docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/CP2-ci-checkpoint.md`
+- Notes: Worktree safety rule is enforced and execution cannot stall on green-smoke boundary slices.
+
+## Findings (must be exhaustive)
+
+### Finding 001 — Mechanical lint and validation passed
+- Status: `VERIFIED`
+- Evidence: `make planning-lint FEATURE_DIR="docs/project_management/next/world-deps-packages-bundles-contract"` (exit `0`); `make planning-validate FEATURE_DIR="docs/project_management/next/world-deps-packages-bundles-contract"` (exit `0`)
+- Impact: Establishes the plan meets mechanical gate requirements and task graph invariants.
+- Fix required (exact): none
+- If DEFECT: Alternative (one viable): N/A
+
+### Finding 002 — Decision register meets the 2-option decision standard
+- Status: `VERIFIED`
+- Evidence: `docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md` (DR-0001..DR-0003)
+- Impact: Decisions are auditable and justify execution-shaping tradeoffs.
+- Fix required (exact): none
+- If DEFECT: Alternative (one viable): N/A
+
+### Finding 003 — Cross-platform checkpoint wiring is deterministic (schema v4+ boundary-only platform-fix)
+- Status: `VERIFIED`
+- Evidence: `docs/project_management/next/world-deps-packages-bundles-contract/tasks.json` meta + deps; `docs/project_management/next/world-deps-packages-bundles-contract/ci_checkpoint_plan.md`
+- Impact: Execution cannot proceed past CI checkpoints without completing the bounded cross-platform gates.
+- Fix required (exact): none
+- If DEFECT: Alternative (one viable): N/A
+
+### Finding 004 — Manual testing playbook and smoke scripts are present and runnable
+- Status: `VERIFIED`
+- Evidence: `docs/project_management/next/world-deps-packages-bundles-contract/manual_testing_playbook.md`; `docs/project_management/next/world-deps-packages-bundles-contract/smoke/*`
+- Impact: Acceptance criteria are runnable and encode expected exit codes/output for critical paths (backend unavailable, JSON shape, legacy ignore).
+- Fix required (exact): none
+- If DEFECT: Alternative (one viable): N/A
+
+## Decision: ACCEPT or FLAG
+
+### If ACCEPT
+- Summary: Mechanical checks pass; docs/specs/playbook/smoke/task graph are consistent; checkpoint model is wired and non-stalling. This Planning Pack is implementation-ready.
+- Next step: “Execution triads may begin.”
