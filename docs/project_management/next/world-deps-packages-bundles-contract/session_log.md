@@ -318,3 +318,12 @@ Policy:
 ## START — 2026-02-14T21:31:46Z — checkpoint — CP2-ci-checkpoint (WDP5)
 - CHECKOUT_SHA: `bd4429b3a2554ab5247024b4a58829e0975cb6e3` (from `world-deps-packages-bundles-contract-wdp5-integ-core`)
 - Local preflight (Linux host): `cd wt/world-deps-packages-bundles-contract-wdp5-integ-core && cargo build --bin substrate && export PATH="$PWD/target/debug:$PATH" && bash docs/project_management/next/world-deps-packages-bundles-contract/smoke/linux-smoke.sh` (exit 0)
+- CI audit (advisory): `scripts/ci-audit/ci_audit.sh --kind ci-testing` → `RECOMMEND=run` (last green `22018577432`)
+- CI audit (advisory): `scripts/ci-audit/ci_audit.sh --kind feature-smoke` → `RECOMMEND=run` (no last green)
+- CI compile parity (ci-testing): run `22024610209` — https://github.com/atomize-hq/substrate/actions/runs/22024610209 (conclusion: success)
+- Feature Smoke (behavior + WSL bundled via `RUN_WSL=1`): run `22024645441` — https://github.com/atomize-hq/substrate/actions/runs/22024645441 (conclusion: success; platforms: linux, macos, wsl)
+
+## END — 2026-02-14T21:38:00Z — checkpoint — CP2-ci-checkpoint (WDP5)
+- CHECKOUT_SHA: `bd4429b3a2554ab5247024b4a58829e0975cb6e3`
+- CI compile parity run: `22024610209` (success)
+- Feature Smoke run: `22024645441` (success)
