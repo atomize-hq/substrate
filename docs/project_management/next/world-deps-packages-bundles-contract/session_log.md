@@ -201,3 +201,11 @@ Policy:
 - Feature Smoke (behavior + WSL bundled via `RUN_WSL=1`): run `22018595263` — https://github.com/atomize-hq/substrate/actions/runs/22018595263 (conclusion: cancelled; `wsl` job did not complete)
 - Runner preflight: `scripts/ci/check_self_hosted_runners.sh` reports **missing** Linux-in-WSL runner label contract `[self-hosted, Linux, wsl]` (WSL smoke is required for this feature per plan/tasks meta).
 - Planning pack wiring fix (schema v4+): updated `WDP2-integ-linux` and `WDP2-integ-macos` to depend on `WDP2-integ-core` (not `CP1-ci-checkpoint`) so platform-fix tasks can be started while the checkpoint task remains `in_progress`.
+
+## UPDATE — 2026-02-14T14:55:40Z — checkpoint — CP1-ci-checkpoint (WDP2) — WSL runner provision gate
+- Fixed runner label contract: added `wsl` label to self-hosted runner `WSL` so it matches `[self-hosted, Linux, wsl]`.
+- Feature Smoke re-dispatch: run `22019366304` — https://github.com/atomize-hq/substrate/actions/runs/22019366304 (conclusion: failure)
+  - `linux_self_hosted`: success
+  - `macos_self_hosted`: success
+  - `wsl`: failure (runner misprovisioned: missing `/run/substrate.sock`)
+  - Preflight failure message (from run logs): “WSL runner is missing required world-agent socket: `/run/substrate.sock`”
