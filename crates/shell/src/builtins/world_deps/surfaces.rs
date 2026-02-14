@@ -352,13 +352,11 @@ fn apply_install_plan_v1(view: &InventoryViewV1, plan: &InstallPlanV1) -> Result
         )));
     }
 
-    if !plan.apt.is_empty() {
-        return Err(anyhow!(WorldDepsUnmetPrerequisiteError::new(
-            "apt installs are not implemented in this slice; run with --dry-run to inspect the plan and remove apt packages (WDP5 adds apt execution)"
-        )));
-    }
-
     ensure_world_backend_available()?;
+
+    if !plan.apt.is_empty() {
+        apply_apt_install_plan_v1(&plan.apt)?;
+    }
 
     for pkg_name in &plan.script_packages {
         let pkg = view.packages.get(pkg_name).ok_or_else(|| {
@@ -387,6 +385,130 @@ fn apply_install_plan_v1(view: &InventoryViewV1, plan: &InstallPlanV1) -> Result
     }
 
     Ok(())
+}
+
+struct WorldCommandOutputV1 {
+    exit: i32,
+    stdout: String,
+    stderr: String,
+}
+
+fn run_world_command_output_for_deps(
+    cmd: &str,
+    cwd_override: Option<&str>,
+) -> Result<WorldCommandOutputV1> {
+    let response =
+        run_world_command_for_deps_at(cmd, cwd_override).map_err(classify_world_backend_error)?;
+    let stdout = BASE64
+        .decode(response.stdout_b64.as_bytes())
+        .unwrap_or_default();
+    let stderr = BASE64
+        .decode(response.stderr_b64.as_bytes())
+        .unwrap_or_default();
+    Ok(WorldCommandOutputV1 {
+        exit: response.exit,
+        stdout: String::from_utf8_lossy(&stdout).to_string(),
+        stderr: String::from_utf8_lossy(&stderr).to_string(),
+    })
+}
+
+fn output_snippet_for_error(out: &WorldCommandOutputV1) -> String {
+    let stderr = out.stderr.trim();
+    if !stderr.is_empty() {
+        return stderr.to_string();
+    }
+    out.stdout.trim().to_string()
+}
+
+fn looks_like_hardening_violation_message(message: &str) -> bool {
+    let hardening_paths = [
+        "/var/lib/substrate/world-deps",
+        "/var/lib/apt",
+        "/var/cache/apt",
+        "/var/lib/dpkg",
+        "/etc/apt",
+    ];
+    hardening_paths.iter().any(|path| message.contains(path))
+        && (message.contains("Permission denied")
+            || message.contains("permission denied")
+            || message.contains("Read-only file system")
+            || message.contains("read-only file system"))
+}
+
+fn apply_apt_install_plan_v1(apt: &[AptSpecV1]) -> Result<()> {
+    if apt.is_empty() {
+        return Ok(());
+    }
+
+    let cmd = build_world_apt_install_command_v1(apt);
+    let out = run_world_command_output_for_deps(&cmd, Some("/tmp"))?;
+    if out.exit == 0 {
+        return Ok(());
+    }
+
+    let snippet = output_snippet_for_error(&out);
+    if looks_like_hardening_violation_message(&snippet) {
+        return Err(anyhow!(
+            "world apt install failed (exit={}): {}",
+            out.exit,
+            snippet
+        ));
+    }
+
+    Err(anyhow!(WorldDepsUnmetPrerequisiteError::new(format!(
+        "world apt install failed (exit={}): {}",
+        out.exit,
+        if snippet.trim().is_empty() {
+            "unknown error".to_string()
+        } else {
+            snippet
+        }
+    ))))
+}
+
+fn build_world_apt_install_command_v1(apt: &[AptSpecV1]) -> String {
+    let mut pkgs: Vec<String> = Vec::with_capacity(apt.len());
+    for spec in apt {
+        if let Some(version) = &spec.version {
+            pkgs.push(format!("{}={}", spec.name, version));
+        } else {
+            pkgs.push(spec.name.clone());
+        }
+    }
+
+    let escaped = pkgs
+        .iter()
+        .map(|pkg| sh_quote(pkg))
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    let mut script = String::new();
+    script.push_str("set -eu\n");
+    script.push_str("if ! command -v apt-get >/dev/null 2>&1; then\n");
+    script.push_str("  echo 'apt-get not found in world; install.method=apt requires an apt-based world image' >&2\n");
+    script.push_str("  exit 127\n");
+    script.push_str("fi\n");
+    script.push_str("apt_dir='/var/lib/substrate/world-deps/apt'\n");
+    script.push_str(
+        "mkdir -p \"$apt_dir/state\" \"$apt_dir/lists/partial\" \"$apt_dir/cache/archives\"\n",
+    );
+    script.push_str("APT_OPTS=\"-o APT::Sandbox::User=root -o Dir::State=$apt_dir/state -o Dir::State::lists=$apt_dir/lists -o Dir::Cache=$apt_dir/cache -o Dir::Cache::archives=$apt_dir/cache/archives\"\n");
+    script.push_str("SUDO=''\n");
+    script.push_str("if [ \"$(id -u)\" -ne 0 ]; then\n");
+    script.push_str("  if command -v sudo >/dev/null 2>&1; then\n");
+    script.push_str("    SUDO='sudo -n'\n");
+    script.push_str("  else\n");
+    script.push_str(
+        "    echo 'not running as root and sudo is unavailable; cannot run apt-get' >&2\n",
+    );
+    script.push_str("    exit 126\n");
+    script.push_str("  fi\n");
+    script.push_str("fi\n");
+    script.push_str("$SUDO env DEBIAN_FRONTEND=noninteractive apt-get $APT_OPTS update\n");
+    script.push_str("$SUDO env DEBIAN_FRONTEND=noninteractive apt-get $APT_OPTS install -y ");
+    script.push_str(&escaped);
+    script.push('\n');
+    script
 }
 
 fn apply_script_package_v1(pkg: &super::inventory::PackageDefV1) -> Result<()> {

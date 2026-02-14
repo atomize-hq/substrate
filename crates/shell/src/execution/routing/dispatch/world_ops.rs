@@ -63,7 +63,10 @@ pub(super) fn normalize_env_for_linux_guest(
             if current_path.trim().is_empty() {
                 env_map.insert("PATH".to_string(), world_deps_bin.clone());
             } else {
-                env_map.insert("PATH".to_string(), format!("{world_deps_bin}:{current_path}"));
+                env_map.insert(
+                    "PATH".to_string(),
+                    format!("{world_deps_bin}:{current_path}"),
+                );
             }
         }
     } else {
