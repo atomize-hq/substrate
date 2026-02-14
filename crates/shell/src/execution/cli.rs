@@ -597,6 +597,12 @@ pub struct WorldDepsCmd {
 
 #[derive(Subcommand, Debug)]
 pub enum WorldDepsAction {
+    /// Current effective deps views for this directory.
+    Current(WorldDepsCurrentCmd),
+    /// Global patch-scoped deps surfaces ($SUBSTRATE_HOME).
+    Global(WorldDepsGlobalCmd),
+    /// Workspace patch-scoped deps surfaces (<workspace_root>/.substrate).
+    Workspace(WorldDepsWorkspaceCmd),
     Status(WorldDepsStatusArgs),
     Install(WorldDepsInstallArgs),
     Sync(WorldDepsSyncArgs),
@@ -617,6 +623,100 @@ pub struct WorldDepsStatusArgs {
     #[arg(long = "all")]
     pub all: bool,
     /// Emit JSON summary for automation
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct WorldDepsCurrentCmd {
+    #[command(subcommand)]
+    pub action: WorldDepsCurrentAction,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum WorldDepsCurrentAction {
+    /// Show the effective deps views for this directory.
+    List(WorldDepsCurrentListArgs),
+    /// Show the effective (merged) definition for a single item.
+    Show(WorldDepsCurrentShowArgs),
+}
+
+#[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq)]
+#[value(rename_all = "kebab-case")]
+pub enum WorldDepsCurrentListViewArg {
+    Available,
+    Enabled,
+    Applied,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct WorldDepsCurrentListArgs {
+    /// View to show (default: available).
+    #[arg(value_name = "VIEW", default_value = "available")]
+    pub view: WorldDepsCurrentListViewArg,
+
+    /// Include every visible inventory item (valid only for applied; debug/bring-up only).
+    #[arg(long = "all")]
+    pub all: bool,
+
+    /// Output machine-readable JSON.
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct WorldDepsCurrentShowArgs {
+    /// Inventory item name (package or bundle).
+    #[arg(value_name = "ITEM")]
+    pub item_name: String,
+
+    /// Output machine-readable JSON.
+    #[arg(long)]
+    pub json: bool,
+
+    /// Show provenance and world-backed status (implemented in a later slice).
+    #[arg(long)]
+    pub explain: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct WorldDepsGlobalCmd {
+    #[command(subcommand)]
+    pub action: WorldDepsGlobalAction,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum WorldDepsGlobalAction {
+    /// Show the global patch-scoped deps views.
+    List(WorldDepsScopedListArgs),
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct WorldDepsWorkspaceCmd {
+    #[command(subcommand)]
+    pub action: WorldDepsWorkspaceAction,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum WorldDepsWorkspaceAction {
+    /// Show the workspace patch-scoped deps views.
+    List(WorldDepsScopedListArgs),
+}
+
+#[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq)]
+#[value(rename_all = "kebab-case")]
+pub enum WorldDepsScopedListViewArg {
+    Available,
+    Enabled,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct WorldDepsScopedListArgs {
+    /// View to show (default: available).
+    #[arg(value_name = "VIEW", default_value = "available")]
+    pub view: WorldDepsScopedListViewArg,
+
+    /// Output machine-readable JSON.
     #[arg(long)]
     pub json: bool,
 }

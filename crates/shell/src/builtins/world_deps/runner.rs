@@ -14,6 +14,7 @@ use super::selection::{
     write_empty_selection_file, ActiveSelection, SelectionConfigError,
 };
 use super::state::WorldState;
+use super::surfaces;
 use crate::{
     WorldDepsAction, WorldDepsCmd, WorldDepsInitArgs, WorldDepsInstallArgs, WorldDepsProvisionArgs,
     WorldDepsSelectArgs, WorldDepsStatusArgs, WorldDepsSyncArgs,
@@ -36,14 +37,24 @@ pub(crate) fn status_report_for_health(
 
 pub fn run(cmd: &WorldDepsCmd, cli_no_world: bool, cli_force_world: bool) -> i32 {
     let result = (|| -> Result<()> {
-        let runner = build_runner(cli_no_world, cli_force_world)?;
         match &cmd.action {
-            WorldDepsAction::Status(args) => runner.run_status(args),
-            WorldDepsAction::Install(args) => runner.run_install(args),
-            WorldDepsAction::Sync(args) => runner.run_sync(args),
-            WorldDepsAction::Provision(args) => runner.run_provision(args),
-            WorldDepsAction::Init(args) => runner.run_init(args),
-            WorldDepsAction::Select(args) => runner.run_select(args),
+            WorldDepsAction::Current(current) => surfaces::run_current(current),
+            WorldDepsAction::Global(global) => surfaces::run_global(global),
+            WorldDepsAction::Workspace(workspace) => surfaces::run_workspace(workspace),
+            _ => {
+                let runner = build_runner(cli_no_world, cli_force_world)?;
+                match &cmd.action {
+                    WorldDepsAction::Status(args) => runner.run_status(args),
+                    WorldDepsAction::Install(args) => runner.run_install(args),
+                    WorldDepsAction::Sync(args) => runner.run_sync(args),
+                    WorldDepsAction::Provision(args) => runner.run_provision(args),
+                    WorldDepsAction::Init(args) => runner.run_init(args),
+                    WorldDepsAction::Select(args) => runner.run_select(args),
+                    WorldDepsAction::Current(_)
+                    | WorldDepsAction::Global(_)
+                    | WorldDepsAction::Workspace(_) => unreachable!(),
+                }
+            }
         }
     })();
 
@@ -87,6 +98,9 @@ fn world_backend_unavailable_reason(err: &anyhow::Error) -> Option<String> {
 }
 
 fn world_deps_exit_code(err: &anyhow::Error) -> i32 {
+    if crate::execution::config_model::is_user_error(err) {
+        return 2;
+    }
     if err.is::<SelectionConfigError>() {
         return 2;
     }

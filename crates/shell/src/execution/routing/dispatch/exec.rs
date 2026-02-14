@@ -204,14 +204,19 @@ pub(crate) fn execute_command(
     let world_enabled = !world_disabled;
 
     // Always refresh policy/profile for this cwd before we read world_fs.
-    let profile_result = detect_profile(&cwd_for_profile).with_context(|| {
-        format!(
-            "failed to load Substrate profile for cwd {}",
-            cwd_for_profile.display()
-        )
-    });
-    if let Err(err) = profile_result {
-        return Err(config_model::user_error(format!("{:#}", err)));
+    //
+    // In unit tests we initialize the broker with an explicit policy; avoid profile detection
+    // overriding the test policy via host-global policy patches.
+    if std::env::var("TEST_MODE").as_deref() != Ok("1") {
+        let profile_result = detect_profile(&cwd_for_profile).with_context(|| {
+            format!(
+                "failed to load Substrate profile for cwd {}",
+                cwd_for_profile.display()
+            )
+        });
+        if let Err(err) = profile_result {
+            return Err(config_model::user_error(format!("{:#}", err)));
+        }
     }
 
     let world_fs = world_fs_policy();
