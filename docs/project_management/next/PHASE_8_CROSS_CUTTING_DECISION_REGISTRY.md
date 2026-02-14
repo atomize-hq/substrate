@@ -39,8 +39,8 @@ This registry covers:
 - Correlation vocabulary/matrix must remain singular and authoritative (risk: heuristic joins and event-family drift if downstream docs diverge from ADR-0028).
 - `agent_id` semantics must remain unified across trace spans vs structured agent events (risk: audit confusion if emitters drift and `backend_id` is inferred heuristically).
 - Control plane vs event plane is not yet an explicit contract in Agent Hub (risk: accidental second execution plane).
-- Secrets delivery mechanisms differ by subsystem without a shared rubric (risk: env var proliferation and inconsistent hardening).
-- Router derived-event schemas/correlation keys are not yet locked (risk: fragile cause/effect joins and recursion-footguns).
+- Toolbox/tool-call trace family + `tool_call_id` correlation are not yet locked end-to-end (risk: weak auditability and fragile joins once tools become first-class).
+- Secrets delivery mechanisms are now standardized, but new secret surfaces must reference the rubric and keep “no secret persistence” + redaction/caps invariants intact (risk: env var proliferation and inconsistent hardening).
 
 ---
 
@@ -49,14 +49,14 @@ This registry covers:
 This section records a quick validate/invalidated snapshot of the `LLM_AI_CAPABILITY_ENABLEMENT_PLANNING_ORDER.md` phases, strictly focusing on cross-cutting alignment risks.
 
 - Phase 0 (No rewrite rules): **Validated** (planning order states additive-only once Accepted).
-- Phase 1 (Trace foundation / ADR-0028): **Partially validated** — Phase 8 additive correlation vocabulary + required/optional matrix exists in ADR-0028, but router-derived cause-reference naming and derived event family enumeration still need explicit alignment (see CC-0007).
-- Phase 2 (Output/routing / ADR-0017): **Partially validated** — ADR-0017 references decision registers for envelope fields; ensure the ADR text stays in sync with the DR-defined envelope extensions (`backend_id`, `world_id` conditional requirement, `channel` optional).
-- Phase 3 (Config/policy surface / ADR-0027): **Invalidated (gap remains)** — router policy gating keys (`workflow.router.*`) required by ADR-0029 are not yet represented in ADR-0027 schema/contract outputs (see CC-0011).
+- Phase 1 (Trace foundation / ADR-0028): **Validated** — Phase 8 additive correlation vocabulary + required/optional matrix exists in ADR-0028, including router-derived families/keys and reserved workflow/toolbox identifiers (see CC-0001/CC-0007/CC-0008/CC-0009).
+- Phase 2 (Output/routing / ADR-0017): **Validated** — ADR-0017 now includes an explicit structured agent event envelope section aligned to DR-defined envelope extensions (`backend_id`, conditional `world_id`, optional `channel`) and Phase 8 operator-verifiable world lifecycle alerts (see CC-0003/CC-0004/CC-0010).
+- Phase 3 (Config/policy surface / ADR-0027): **Validated** — router policy gating keys (`workflow.router.*`) required by ADR-0029 are represented in ADR-0027 schema/contract outputs (see CC-0011).
 - Phase 4 (LLM gateway + engines / ADR-0023/ADR-0024): **Partially validated** — correlation and secrets posture references exist (and Phase 8 adds a preferred FD/pipe auth bundle path), but ensure all logging/attribution requirements explicitly defer to ADR-0028 + ADR-0017 as the authoritative spines.
 - Phase 5 (Agent hub + toolbox / ADR-0025/ADR-0026): **Invalidated (gaps remain)** — control plane vs event plane contract + policy gates not yet locked (see CC-0005); toolbox tool-call trace family and `tool_call_id` correlation are not yet fully specified end-to-end (see CC-0009).
-- Phase 6 (Router daemon / ADR-0029): **Partially validated** — router DRs define derived event taxonomy and required correlation keys, but ADR-0028 must be updated additively to list those derived families and match the router’s explicit cause-reference naming (see CC-0007).
+- Phase 6 (Router daemon / ADR-0029): **Validated** — router DRs define derived event taxonomy and required correlation keys, and ADR-0028/`docs/TRACE.md` list the derived families and match the router’s explicit cause-reference naming (see CC-0007/CC-0012).
 - Phase 7 (Workflow composition / ADR-0021/ADR-0022): **Validated as deferred** — remains Draft and must stay compatible with reserved workflow correlation keys in ADR-0028; do not lock additional workflow fields beyond accepted DR items unless explicitly called for.
-- Phase 8 (Circle-back registry): **In progress** — CC-0006 (secrets) is addressed; CC-0012 (`docs/TRACE.md` alignment) is addressed; CC-0005/CC-0007/CC-0009/CC-0011 remain the highest-risk open alignment items.
+- Phase 8 (Circle-back registry): **In progress** — CC-0006 (secrets), CC-0012 (`docs/TRACE.md` alignment), CC-0003 (`agent_id` vs `backend_id` semantics), and CC-0010 (world lifecycle attribution) are addressed; CC-0005 (control plane vs event plane) and CC-0009 (tool-call trace family) remain the highest-risk open alignment items.
 
 ---
 
@@ -83,14 +83,13 @@ Each item below is written as: **Decision/contract to lock**, **current sources*
 - LLM gateway correlation intent: `docs/project_management/next/llm_gateway_in_world/contract.md`
 
 **Gap**
-- ADR-0028 currently does not enumerate correlation fields beyond the existing command/span keys (it only references `world_id` explicitly).
-- Several “must carry” fields are asserted in downstream ADRs/DRs without a single authoritative matrix (making drift likely).
+- Historically, downstream ADRs/DRs asserted “must carry” fields without a single authoritative matrix (drift risk).
 
 **Alignment action**
-- Add a Phase 8 additive section to ADR-0028 (or its planning outputs) that defines:
-  - a **field vocabulary** (names + meanings),
-  - a **required/optional matrix** per event family,
-  - and a **“join key” rule** (which fields are guaranteed to be stable for deterministic joins).
+- Phase 8: addressed by the additive “Correlation vocabulary + required/optional matrix” section in ADR-0028:
+  - field vocabulary (names + meanings),
+  - required/optional matrix per event family,
+  - and a strict “no heuristic joins” joinability rule.
 
 ---
 
@@ -161,13 +160,13 @@ Each item below is written as: **Decision/contract to lock**, **current sources*
 - Phase 8 explicit discussion points: `LLM_AI_CAPABILITY_ENABLEMENT_PLANNING_ORDER.md` (Phase 8 section)
 
 **Gap**
-- ADR-0017 historically referenced envelope fields only via decision registers; the ADR text must stay in sync with the DR-defined envelope extensions (`backend_id`, conditional `world_id`, optional `channel`) so Phase 2 acceptance does not drift from Phase 8 correlation vocabulary.
-- `channel` is reserved as an event-plane routing hint, but its strict constraints (producer-declared, capped, no secrets) must be treated as a contract across emitters and persisted records.
+- Historically, ADR-0017 referenced envelope fields only via decision registers, creating drift risk between ADR text and the DR-defined envelope extensions.
 
 **Alignment action**
-- Additive Phase 8 updates:
-  - Require `world_id` on structured events when the agent execution is world-scoped.
-  - Introduce an optional `channel` (string) field with strict semantics (producer-declared; not user-generated freeform without caps).
+- Phase 8: addressed additively by:
+  - adding an explicit “Structured agent event envelope (v1; Phase 8 additive clarifications)” section to ADR-0017 that lists the envelope fields and their required/conditional/optional semantics (`backend_id`, conditional `world_id`, optional `channel`),
+  - locking `channel` constraints in ADR-0017 as non-negotiable (producer-declared, capped, no secrets, not a join key, not used for policy gating),
+  - and aligning the envelope field names to ADR-0028’s canonical correlation vocabulary.
 
 ---
 
@@ -203,15 +202,13 @@ Each item below is written as: **Decision/contract to lock**, **current sources*
 **Current sources**
 - Toolbox token explicitly chooses FD/pipe: `docs/project_management/next/orchestration_mcp_toolbox/decision_register.md` (DR-0009)
 - LLM gateway chooses env injection (v1): `docs/project_management/next/llm_gateway_in_world/specs/env_injection.md`
+- Cross-track rubric (authoritative): `docs/project_management/standards/SECRETS_DELIVERY_CHANNEL_RUBRIC.md`
 
 **Gap**
-- No single rubric exists today, so new secret-handling decisions risk ad-hoc env var expansion and inconsistent operator expectations.
+- Historically, secret-handling decisions were scattered across tracks, creating ad-hoc env var expansion risk and inconsistent operator expectations.
 
 **Alignment action**
-- Create a standard doc (Phase 8 output) and update all relevant ADRs/DRs to reference it:
-  - toolbox auth token
-  - gateway/engine auth injection
-  - any future router/workflow/agent secrets (if introduced)
+- Phase 8: addressed by introducing the shared standard `docs/project_management/standards/SECRETS_DELIVERY_CHANNEL_RUBRIC.md` and updating relevant ADRs/DRs/specs to reference it as the shared rationale.
 
 **Inventory (Phase 8 circle-back; host→world secret channel surfaces)**
 
@@ -256,12 +253,13 @@ For `api:*` backends, the canonical field-name family is defined by:
 - Trigger allowlist + recursion guard: `docs/project_management/next/host_event_bus_router_daemon/decision_register.md` (DR-0007)
 
 **Gap**
-- Router DRs choose “append derived events to trace” but do not yet specify the derived event schemas or the exact correlation keys required to join cause→effect without heuristics.
+- Historically, router DRs chose “append derived events to trace” before the canonical trace vocabulary explicitly enumerated router-derived families/keys.
 
 **Alignment action**
-- Additive Phase 8 updates:
-  - extend ADR-0028 with router-derived event families + their required fields,
-  - ensure the router never needs to join across multiple records to determine “deny vs executed”.
+- Phase 8: addressed additively by:
+  - router DR-0016 enumerating the v1 `workflow_router_*` derived event types and required correlation keys,
+  - ADR-0028 listing router-derived families and requiring explicit cause references (`source_span_id`/`source_cmd_id`) and stable join keys (`workspace_id`, `request_id`, `idempotency_key`, `rule_id`),
+  - and `docs/TRACE.md` documenting the operator-facing derived families and join keys.
 
 ---
 
@@ -277,12 +275,10 @@ For `api:*` backends, the canonical field-name family is defined by:
 - Workflow spans decision: `docs/project_management/next/workflow-engine/decision_register.md` (DR-0005)
 
 **Gap**
-- ADR-0028 has no reserved workflow families/fields yet, but downstream planning already assumes they exist and will be added additively.
+- Historically, workflow fields were assumed downstream without explicit reservation in the canonical vocabulary.
 
 **Alignment action**
-- Phase 8 additive extension to ADR-0028 that reserves:
-  - `workflow_run_id`, `workflow_node_id`, and linkage fields,
-  - and clarifies redaction/caps rules for workflow artifacts (align with forge “trace-only artifacts” posture).
+- Phase 8: addressed additively by reserving `workflow_run_id` and `workflow_node_id` in ADR-0028’s correlation vocabulary (no reshapes; future workflow composition remains Draft).
 
 ---
 
@@ -298,7 +294,7 @@ For `api:*` backends, the canonical field-name family is defined by:
 - Phase 8 explicitly calls out `tool_call_id`: `LLM_AI_CAPABILITY_ENABLEMENT_PLANNING_ORDER.md`
 
 **Gap**
-- `tool_call_id` is referenced as a likely needed correlation field, but it is not yet part of the canonical trace vocabulary (ADR-0028) and not present in the ADR-0017 envelope.
+- `tool_call_id` is reserved in ADR-0028’s correlation vocabulary, but the end-to-end tool-call trace family and/or dedicated `event_type` schema is not yet locked and documented as a persisted record family.
 
 **Alignment action**
 - Additive Phase 8 update:
@@ -339,10 +335,10 @@ For `api:*` backends, the canonical field-name family is defined by:
 - Router DR requires adding `workflow.*` keys to ADR-0027 surfaces: `docs/project_management/next/host_event_bus_router_daemon/decision_register.md` (DR-0006 follow-up)
 
 **Gap**
-- ADR-0027 currently scopes to `llm.*` and `agents.*`. ADR-0029 requires workflow routing rule locations + precedence and policy gating keys, but these are not yet represented in the ADR-0027 contract/schema outputs.
+- Historically, ADR-0027 scoped to `llm.*` and `agents.*`; ADR-0029 required `workflow.router.*` gating keys.
 
 **Alignment action**
-- Add ADR-0027 additive extensions to cover the minimal router rule configuration keys (and keep them strictly validated + fail-closed).
+- Phase 8: addressed by adding `workflow.router.*` policy keys to ADR-0027 and syncing them into the schema/contract planning outputs (fail-closed defaults; deny-by-default allowlists).
 
 ---
 
