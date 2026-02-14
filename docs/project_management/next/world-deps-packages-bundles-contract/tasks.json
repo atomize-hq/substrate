@@ -344,7 +344,7 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" TASK_ID=\"WDP1-integ\""
       ],
-      "status": "in_progress",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/world-deps-packages-bundles-contract-wdp1-integ"
     },
