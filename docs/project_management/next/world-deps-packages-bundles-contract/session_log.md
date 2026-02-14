@@ -125,3 +125,7 @@ Policy:
 ## END — 2026-02-14T03:26:59Z — test — WDP0-test
 - HEAD: `8f04ab8d73b4336921c20ae320b36edfe3df2ca6`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-deps-packages-bundles-contract/logs/WDP0/test/last_message.md`
+
+## START — 2026-02-14T03:26:59Z — integration — WDP0-integ
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-deps-packages-bundles-contract" TASK_ID="WDP0-integ" LAUNCH_CODEX=1`
