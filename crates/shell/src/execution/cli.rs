@@ -674,7 +674,7 @@ pub struct WorldDepsCurrentShowArgs {
     #[arg(long)]
     pub json: bool,
 
-    /// Show provenance and world-backed status (implemented in a later slice).
+    /// Show provenance and world-backed status.
     #[arg(long)]
     pub explain: bool,
 }

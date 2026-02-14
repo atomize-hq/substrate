@@ -22,7 +22,7 @@ pub(crate) struct WorldBackendUnavailable {
 }
 
 impl WorldBackendUnavailable {
-    fn new(reason: String) -> Self {
+    pub(crate) fn new(reason: String) -> Self {
         Self { reason }
     }
 

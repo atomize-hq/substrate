@@ -1530,10 +1530,31 @@ fn replay_retries_copydiff_roots_and_dedupes_warnings() {
     let run_user_prefix = PathBuf::from(format!("/run/user/{}", uid));
     if run_user_prefix.is_dir() {
         let run_user_parent = run_user_prefix.join("substrate");
-        if fs::create_dir_all(&run_user_parent).is_ok() {
-            let _ = fs::remove_dir_all(&run_user_root);
-            let _ = fs::remove_file(&run_user_root);
-            let _ = fs::write(&run_user_root, b"block run-user copydiff root");
+        if let Err(err) = fs::create_dir_all(&run_user_parent) {
+            eprintln!(
+                "skipping copy-diff retry test: unable to create run-user copydiff parent {}: {err}",
+                run_user_parent.display()
+            );
+            let _ = fs::remove_file(&tmp_root);
+            return;
+        }
+        let _ = fs::remove_dir_all(&run_user_root);
+        let _ = fs::remove_file(&run_user_root);
+        if let Err(err) = fs::write(&run_user_root, b"block run-user copydiff root") {
+            eprintln!(
+                "skipping copy-diff retry test: unable to block run-user copydiff root {}: {err}",
+                run_user_root.display()
+            );
+            let _ = fs::remove_file(&tmp_root);
+            return;
+        }
+        if !run_user_root.is_file() {
+            eprintln!(
+                "skipping copy-diff retry test: run-user copydiff root {} is not blocked (expected file)",
+                run_user_root.display()
+            );
+            let _ = fs::remove_file(&tmp_root);
+            return;
         }
     }
 
