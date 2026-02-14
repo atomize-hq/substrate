@@ -185,3 +185,7 @@ Policy:
 ## END — 2026-02-14T13:22:17Z — test — WDP2-test
 - HEAD: `f84f1c26272dc8440796653535306aeb373e631b`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-deps-packages-bundles-contract/logs/WDP2/test/last_message.md`
+
+## END — 2026-02-14T13:40:43Z — integration — WDP2-integ-core
+- HEAD: `4c8bd027f32902d3e5f3ea7157fec8998217d15f`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-deps-packages-bundles-contract/logs/WDP2/integ-core/last_message.md`
