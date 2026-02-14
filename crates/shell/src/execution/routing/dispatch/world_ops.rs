@@ -42,10 +42,36 @@ pub(super) fn normalize_env_for_linux_guest(
     // run inside the Linux VM. Prefer a stable Linux guest PATH.
     const GUEST_BASE_PATH: &str = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
     const WORLD_DEPS_BIN: &str = "/var/lib/substrate/world-deps/bin";
+    let world_deps_bin = env_map
+        .get("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR")
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| WORLD_DEPS_BIN.to_string());
     env_map.insert(
-        "PATH".to_string(),
-        format!("{WORLD_DEPS_BIN}:{GUEST_BASE_PATH}"),
+        "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR".to_string(),
+        world_deps_bin.clone(),
     );
+    let world_deps_bin_str = world_deps_bin.as_str();
+    let current_path = env_map.get("PATH").map(String::as_str).unwrap_or("");
+    // If the caller already provided a Linux-ish PATH (common in tests/fixtures and advanced
+    // setups), don't clobber it; just ensure the world-deps bin is present.
+    if current_path.contains(GUEST_BASE_PATH) {
+        let has_world_deps_bin = current_path
+            .split(':')
+            .any(|segment| segment.trim_end_matches('/') == world_deps_bin_str);
+        if !has_world_deps_bin {
+            if current_path.trim().is_empty() {
+                env_map.insert("PATH".to_string(), world_deps_bin.clone());
+            } else {
+                env_map.insert("PATH".to_string(), format!("{world_deps_bin}:{current_path}"));
+            }
+        }
+    } else {
+        env_map.insert(
+            "PATH".to_string(),
+            format!("{world_deps_bin_str}:{GUEST_BASE_PATH}"),
+        );
+    }
 
     // Avoid leaking host HOME into the Linux guest. This both reduces accidental use of host
     // toolchains and keeps guest-only state in a predictable location.
@@ -57,9 +83,8 @@ pub(super) fn normalize_env_for_linux_guest(
         env_map.insert("HOME".to_string(), "/root".to_string());
     }
 
-    env_map
-        .entry("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR".to_string())
-        .or_insert_with(|| WORLD_DEPS_BIN.to_string());
+    // Note: SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR is set above and may be overridden by tests/fixtures
+    // that use a host-exec world-agent stub.
 }
 
 /// Collect filesystem diff and network scopes from world backend
