@@ -109,3 +109,11 @@ Policy:
   - Smoke scripts run real workflows and assert exit codes + key output (backend-unavailable fail-closed exit `3`, legacy-path ignore, `--json` shape).
   - CI dispatch commands referenced by checkpoint/integration prompts map to repo Make targets and expected runner labels.
 - Required fixes before triads begin: none.
+
+## START — 2026-02-14T03:04:31Z — code — WDP0-code
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-deps-packages-bundles-contract" SLICE_ID="WDP0"`
+
+## START — 2026-02-14T03:04:31Z — test — WDP0-test
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-deps-packages-bundles-contract" SLICE_ID="WDP0"`
