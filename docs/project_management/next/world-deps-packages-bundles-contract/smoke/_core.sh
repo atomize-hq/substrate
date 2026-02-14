@@ -204,7 +204,7 @@ applied_all="$("$SUBSTRATE_BIN" world deps current list applied --all 2>&1)"
 printf "%s\n" "$applied_all" | grep -q "smoke-apt"
 
 applied_json="$("$SUBSTRATE_BIN" world deps current list applied --json 2>/dev/null)"
-printf "%s" "$applied_json" | "$PYTHON_BIN" - <<'PY'
+printf "%s" "$applied_json" | "$PYTHON_BIN" /dev/fd/3 3<<'PY'
 import json
 import sys
 
@@ -223,7 +223,7 @@ for it in items:
 PY
 
 applied_all_json="$("$SUBSTRATE_BIN" world deps current list applied --all --json 2>/dev/null)"
-printf "%s" "$applied_all_json" | "$PYTHON_BIN" - <<'PY'
+printf "%s" "$applied_all_json" | "$PYTHON_BIN" /dev/fd/3 3<<'PY'
 import json
 import sys
 
@@ -238,7 +238,7 @@ if "smoke-apt" not in names:
 PY
 
 show_json="$("$SUBSTRATE_BIN" world deps current show smoke-hello --json 2>/dev/null)"
-printf "%s" "$show_json" | "$PYTHON_BIN" - <<'PY'
+printf "%s" "$show_json" | "$PYTHON_BIN" /dev/fd/3 3<<'PY'
 import json
 import sys
 
