@@ -1,12 +1,13 @@
 # ADR-0028 — In-World Process Execution Tracing Parity (Process Tree Exec/Exit Telemetry)
 
 ## Status
-- Status: Draft
+- Status: Accepted
 - Date (UTC): 2026-01-29
 - Owner(s): Shell + World-Agent + World runtime
 
 ## Scope
 - Feature directory: `docs/project_management/next/world_process_exec_tracing_parity/`
+- Intended branch name(s): `feat/world-process-exec-tracing-parity`
 - Sequencing spine: `docs/project_management/next/sequencing.json`
 - Standards:
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
@@ -29,7 +30,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 0ce051e9c7bc1517a35c742beb80d637ab97a70c6aa8f548b454831d461e06fd
+ADR_BODY_SHA256: 785fb497e333bd6b0c212a8e8a0bd11701d42b4a3ca6812682123b9cc8794fd8
 ### Changes (operator-facing)
 - World executions gain subprocess-level visibility (exec/exit telemetry) comparable to host shim tracing
   - Existing: host execution is richly observable via shims, but world execution is observable primarily at “one command per world execute/stream” granularity (no structured visibility into spawned subprocess trees).

@@ -23,7 +23,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
+ADR_BODY_SHA256: 171ccb4d15846f07ada84e5f9f1a7dc4f1986a0170998b98cf5d429050cb2b65
 
 ### Changes (operator-facing)
 - Treat subscription-authenticated CLIs (starting with Codex) as LLM “provider backends”
@@ -46,7 +46,10 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
 - Future (planned): cross-provider routing by adding additional `cli:*` adapters (e.g., Claude Code, Gemini CLI) behind the same canonical adapter contract.
 - Preserve streaming semantics where supported; otherwise emit a bounded, explicit “buffered stream” behavior.
 - Keep authentication subscription-first: the CLI’s own authentication is used; Substrate does not require API keys for this backend.
-- Emit stable attribution for every routed request: `run_id`, `backend_kind=cli`, `backend_agent_id`, `provider_hint`, `policy_decision`.
+- Emit stable attribution for every routed request, aligned to Phase 8 correlation vocabulary:
+  - `backend_id` (`cli:<name>`; explicit backend selection; never inferred from `agent_id`)
+  - correlation (`orchestration_session_id`, `run_id`, optional `thread_id`) when tied to orchestration
+  - policy decision metadata (allow/deny/require-approval)
 
 ## Non-Goals
 - Extracting or reverse-engineering tokens or proprietary billing details from CLIs (“token scraping”).
@@ -84,11 +87,11 @@ Policy (constraints surface; ADR-0027):
 - `net_allowed` remains authoritative for outbound egress enforcement inside the world boundary.
 
 CLI backends are registered via agent inventory files (ADR-0027):
-- Global: `$SUBSTRATE_HOME/agents/<agent_id>.yaml` (default `~/.substrate/agents/<agent_id>.yaml`)
-- Workspace: `<workspace_root>/.substrate/agents/<agent_id>.yaml`
+- Global: `$SUBSTRATE_HOME/agents/<inventory_id>.yaml` (default `~/.substrate/agents/<inventory_id>.yaml`)
+- Workspace: `<workspace_root>/.substrate/agents/<inventory_id>.yaml`
 
 Normative mapping for this ADR:
-- A CLI backend id of the form `cli:<agent_id>` MUST resolve to an agent inventory item with `id: <agent_id>` where:
+- A CLI backend id of the form `cli:<name>` MUST resolve to an agent inventory item with `id: <name>` where:
   - `config.kind: cli`
   - `config.capabilities.llm: true`
   - `config.cli.binary: <string>` (optional; default resolve via PATH)
@@ -103,7 +106,13 @@ Normative mapping for this ADR:
 - Components:
   - `crates/llm-manager` (new/existing from ADR-0023): adds `CliBackendEngine`.
   - `crates/cli-agents` (existing/new): minimal runner wrappers for CLI backends (v1: Codex) with consistent spawn/session semantics.
-  - `crates/trace`: logs a structured span per request including backend agent identity and routing decision.
+  - `crates/trace`: logs structured request spans/events with explicit correlation keys and `backend_id` (routing decision) per the ADR-0028 vocabulary.
+
+### Correlation + trace alignment (Phase 8)
+
+This ADR does not define its own correlation vocabulary. Any trace records and/or structured events emitted as part of CLI-backend routing MUST explicitly defer to:
+- ADR-0028 (canonical correlation vocabulary + required/optional matrix): `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
+- ADR-0017 (structured event envelope + routing attribution) when emitting structured events: `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 
 - End-to-end flow:
   - Inputs:
@@ -122,15 +131,15 @@ Normative mapping for this ADR:
   - Outputs:
     - dialect response to client
     - span/event record including:
-      - `backend_kind=cli`
-      - `backend_agent_id`
-      - `run_id`, `orchestration_session_id`
+      - `backend_id` (`cli:<name>`)
+      - correlation (`orchestration_session_id`, `run_id`, optional `thread_id`) when applicable
 
 ## Sequencing / Dependencies
 - Sequencing entry: `docs/project_management/next/sequencing.json` → `llm-cli-backend-engine` (to be scheduled)
 - Prerequisite integration task IDs:
   - ADR-0023 must land first (gateway + manager shape).
   - ADR-0017 must be available for stable event framing and attribution.
+  - ADR-0028 must be available as the canonical correlation vocabulary + required/optional matrix.
 
 ## Security / Safety Posture
 - Fail-closed rules:

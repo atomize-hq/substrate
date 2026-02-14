@@ -25,7 +25,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
+ADR_BODY_SHA256: f97329869256e14f8e3fc8594732d5a0d6d50085088baa59f116cdee2f67e0c9
 
 ### Changes (operator-facing)
 - Substrate-owned LLM gateway runs inside the world boundary
@@ -112,6 +112,18 @@ Minimum required config keys (from ADR-0027):
 Operational parameters (bind endpoints, logging destinations, metrics) are intentionally NOT part of the ADR-0027 config surface in v1.
 - `substrate world status gateway --json` (and `--debug` for human output) is the authoritative “client wiring” output (base URLs / exports) and may change implementation details (ports/transports) without reshaping config.
 
+### Correlation + trace contract (Phase 8 alignment; authoritative spines)
+
+This ADR intentionally does not re-define correlation vocabulary or envelope semantics. All persisted records MUST explicitly defer to the Phase 8 spines:
+- Canonical correlation vocabulary + required/optional matrix: ADR-0028 (`docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`)
+- Structured event framing/routing attribution (envelope) when applicable: ADR-0017 (`docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`)
+
+Non-negotiable rules (Phase 8):
+- No heuristic correlation joins: the gateway/manager/engines MUST NOT guess or derive join keys from request bodies, prompt content, or transport details; they MUST either mint correlation ids or accept them from a trusted integration boundary (and otherwise omit them).
+- `backend_id` is the only backend-selection identifier (`<kind>:<name>`); it MUST be persisted on request records when a concrete backend is selected and MUST NOT be inferred from `agent_id`.
+- `agent_id` is attribution for the actor/principal (when the gateway is invoked on behalf of an agent); it MUST be treated as distinct from backend selection.
+- `channel` (if present on any structured event envelope emitted alongside gateway operations) is a routing hint only: safe/capped/non-secret; never a join key; never used for policy gating.
+
 ### Platform guarantees
 - Linux:
   - Gateway runs inside the world network namespace; outbound egress is subject to world-level enforcement.
@@ -153,6 +165,7 @@ Operational parameters (bind endpoints, logging destinations, metrics) are inten
 - Sequencing entry: `docs/project_management/next/sequencing.json` → `llm-gateway-in-world` (to be scheduled)
 - Prerequisite integration task IDs:
   - ADR-0017 (Output/Event Contract) must be available for stable event framing and routing attribution.
+  - ADR-0028 (Correlation vocabulary + required/optional matrix) must be available as the canonical join-key spine for persisted trace records (no heuristic joins).
   - Agent transport parity work must be available for macOS (Lima) and Windows (WSL) bridging.
 
 ## Security / Safety Posture
