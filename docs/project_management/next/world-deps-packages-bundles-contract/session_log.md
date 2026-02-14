@@ -314,3 +314,7 @@ Policy:
 ## END — 2026-02-14T21:28:31Z — integration — WDP5-integ-core
 - HEAD: `bd4429b3a2554ab5247024b4a58829e0975cb6e3`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-deps-packages-bundles-contract/logs/WDP5/integ-core/last_message.md`
+
+## START — 2026-02-14T21:31:46Z — checkpoint — CP2-ci-checkpoint (WDP5)
+- CHECKOUT_SHA: `bd4429b3a2554ab5247024b4a58829e0975cb6e3` (from `world-deps-packages-bundles-contract-wdp5-integ-core`)
+- Local preflight (Linux host): `cd wt/world-deps-packages-bundles-contract-wdp5-integ-core && cargo build --bin substrate && export PATH="$PWD/target/debug:$PATH" && bash docs/project_management/next/world-deps-packages-bundles-contract/smoke/linux-smoke.sh` (exit 0)
