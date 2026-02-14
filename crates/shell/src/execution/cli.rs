@@ -639,6 +639,10 @@ pub enum WorldDepsCurrentAction {
     List(WorldDepsCurrentListArgs),
     /// Show the effective (merged) definition for a single item.
     Show(WorldDepsCurrentShowArgs),
+    /// Compute and apply an install plan immediately (does not modify enabled list).
+    Install(WorldDepsCurrentInstallArgs),
+    /// Apply the current effective enabled list for this directory.
+    Sync(WorldDepsCurrentSyncArgs),
 }
 
 #[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq)]
@@ -677,6 +681,36 @@ pub struct WorldDepsCurrentShowArgs {
     /// Show provenance and world-backed status.
     #[arg(long)]
     pub explain: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct WorldDepsCurrentInstallArgs {
+    /// Inventory item name(s) (package or bundle).
+    #[arg(value_name = "ITEM", required = true)]
+    pub item_names: Vec<String>,
+
+    /// Print a dry-run preview (no mutations).
+    #[arg(long = "dry-run")]
+    pub dry_run: bool,
+
+    /// Include additional debug output.
+    #[arg(long = "verbose")]
+    pub verbose: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct WorldDepsCurrentSyncArgs {
+    /// Print a dry-run preview (no mutations).
+    #[arg(long = "dry-run")]
+    pub dry_run: bool,
+
+    /// Include additional debug output.
+    #[arg(long = "verbose")]
+    pub verbose: bool,
+
+    /// Ignore enabled list and use the full inventory scope (debug/bring-up only).
+    #[arg(long = "all")]
+    pub all: bool,
 }
 
 #[derive(Args, Debug, Clone)]
