@@ -689,6 +689,12 @@ pub struct WorldDepsGlobalCmd {
 pub enum WorldDepsGlobalAction {
     /// Show the global patch-scoped deps views.
     List(WorldDepsScopedListArgs),
+    /// Add items to the global enabled patch (does not install).
+    Add(WorldDepsScopedMutateArgs),
+    /// Remove items from the global enabled patch (does not uninstall).
+    Remove(WorldDepsScopedMutateArgs),
+    /// Reset the global enabled patch to inherited defaults.
+    Reset(WorldDepsScopedResetArgs),
 }
 
 #[derive(Args, Debug, Clone)]
@@ -701,6 +707,12 @@ pub struct WorldDepsWorkspaceCmd {
 pub enum WorldDepsWorkspaceAction {
     /// Show the workspace patch-scoped deps views.
     List(WorldDepsScopedListArgs),
+    /// Add items to the workspace enabled patch (does not install).
+    Add(WorldDepsScopedMutateArgs),
+    /// Remove items from the workspace enabled patch (does not uninstall).
+    Remove(WorldDepsScopedMutateArgs),
+    /// Reset the workspace enabled patch to inherited defaults.
+    Reset(WorldDepsScopedResetArgs),
 }
 
 #[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq)]
@@ -716,6 +728,24 @@ pub struct WorldDepsScopedListArgs {
     #[arg(value_name = "VIEW", default_value = "available")]
     pub view: WorldDepsScopedListViewArg,
 
+    /// Output machine-readable JSON.
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct WorldDepsScopedMutateArgs {
+    /// Inventory item name(s) (package or bundle).
+    #[arg(value_name = "ITEM", required = true)]
+    pub item_names: Vec<String>,
+
+    /// Output machine-readable JSON.
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct WorldDepsScopedResetArgs {
     /// Output machine-readable JSON.
     #[arg(long)]
     pub json: bool,
