@@ -1,3 +1,4 @@
+mod errors;
 mod guest;
 mod inventory;
 mod models;

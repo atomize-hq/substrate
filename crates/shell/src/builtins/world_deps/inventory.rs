@@ -138,6 +138,8 @@ pub(crate) struct PackageDefV1 {
     pub install: InstallDefV1,
     #[serde(default)]
     pub probe: Option<ProbeDefV1>,
+    #[serde(default, skip_serializing, skip_deserializing)]
+    pub(crate) definition_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -242,13 +244,36 @@ fn builtin_packages_v1() -> Vec<PackageDefV1> {
             install: InstallDefV1 {
                 method: InstallMethodV1::Script,
                 apt: Vec::new(),
-                script: None,
-                script_path: Some("../scripts/bun.sh".to_string()),
+                script: Some(
+                    r#"#!/usr/bin/env bash
+set -euo pipefail
+
+world_deps_root="/var/lib/substrate/world-deps"
+world_deps_bin="${world_deps_root}/bin"
+bun_root="${world_deps_root}/bun"
+
+mkdir -p "${world_deps_bin}"
+mkdir -p "${bun_root}"
+
+export BUN_INSTALL="${bun_root}"
+
+if [ -x "${bun_root}/bin/bun" ]; then
+  "${bun_root}/bin/bun" upgrade
+else
+  curl -fsSL https://bun.sh/install | bash
+fi
+
+ln -sf "${bun_root}/bin/bun" "${world_deps_bin}/bun"
+"#
+                    .to_string(),
+                ),
+                script_path: None,
                 manual_instructions: None,
             },
             probe: Some(ProbeDefV1 {
                 command: "bun --version".to_string(),
             }),
+            definition_path: None,
         },
         PackageDefV1 {
             version: 1,
@@ -271,6 +296,7 @@ fn builtin_packages_v1() -> Vec<PackageDefV1> {
             probe: Some(ProbeDefV1 {
                 command: "node --version".to_string(),
             }),
+            definition_path: None,
         },
         PackageDefV1 {
             version: 1,
@@ -293,6 +319,7 @@ fn builtin_packages_v1() -> Vec<PackageDefV1> {
             probe: Some(ProbeDefV1 {
                 command: "npm --version && npx --version".to_string(),
             }),
+            definition_path: None,
         },
     ]
 }
@@ -347,13 +374,14 @@ fn load_package_dir_v1(
 
         let raw = fs::read_to_string(&path)
             .with_context(|| format!("failed to read {}", path.display()))?;
-        let parsed: PackageDefV1 = serde_yaml::from_str(&raw).map_err(|err| {
+        let mut parsed: PackageDefV1 = serde_yaml::from_str(&raw).map_err(|err| {
             config_model::user_error(format!(
                 "invalid YAML in {}: {}",
                 path.display(),
                 err.to_string().trim()
             ))
         })?;
+        parsed.definition_path = Some(path.clone());
         validate_package_v1(&path, &stem, &parsed, platform)?;
         if is_visible_on_platform(&parsed.platforms, platform)? {
             out.insert(parsed.name.clone(), parsed);

@@ -1,3 +1,4 @@
+use super::errors::WorldDepsUnmetPrerequisiteError;
 use super::guest::WorldBackendUnavailable;
 use super::inventory::{
     builtin_inventory_v1, find_workspace_inventory_chain, load_inventory_dir_v1,
@@ -203,12 +204,6 @@ struct ManualPackagePlanV1 {
 }
 
 fn run_current_install(args: &WorldDepsCurrentInstallArgs) -> Result<()> {
-    if !args.dry_run {
-        return Err(config_model::user_error(
-            "`substrate world deps current install` is only implemented for --dry-run in WDP3",
-        ));
-    }
-
     let cwd = env::current_dir().unwrap_or_else(|_| ".".into());
     let cfg = config_model::resolve_effective_config(&cwd, &Default::default())
         .context("failed to resolve effective config")?;
@@ -220,17 +215,24 @@ fn run_current_install(args: &WorldDepsCurrentInstallArgs) -> Result<()> {
         expanded.sort();
         eprintln!("substrate: note: expanded packages: {}", expanded.join(","));
     }
-    print_install_plan_v1(&plan);
+
+    if args.dry_run {
+        print_install_plan_v1(&plan);
+        return Ok(());
+    }
+
+    apply_install_plan_v1(&view, &plan)?;
+    println!(
+        "World deps applied: image(apt)={}, prefix(script)={}",
+        plan.apt.len(),
+        csv(&plan.script_packages),
+    );
+    println!("substrate: note: this updates the world only (enabled list not modified)");
+    println!("substrate: hint: run 'substrate world deps current list applied' to verify");
     Ok(())
 }
 
 fn run_current_sync(args: &WorldDepsCurrentSyncArgs) -> Result<()> {
-    if !args.dry_run {
-        return Err(config_model::user_error(
-            "`substrate world deps current sync` is only implemented for --dry-run in WDP3",
-        ));
-    }
-
     let cwd = env::current_dir().unwrap_or_else(|_| ".".into());
     let cfg = config_model::resolve_effective_config(&cwd, &Default::default())
         .context("failed to resolve effective config")?;
@@ -252,7 +254,16 @@ fn run_current_sync(args: &WorldDepsCurrentSyncArgs) -> Result<()> {
         expanded.sort();
         eprintln!("substrate: note: expanded packages: {}", expanded.join(","));
     }
-    print_install_plan_v1(&plan);
+
+    if args.dry_run {
+        print_install_plan_v1(&plan);
+        return Ok(());
+    }
+
+    apply_install_plan_v1(&view, &plan)?;
+    println!("World deps synced");
+    println!("substrate: note: applied effective enabled deps list for this directory (sources: workspace, global, defaults as applicable)");
+    println!("substrate: hint: run 'substrate world deps current list applied' to verify");
     Ok(())
 }
 
@@ -321,6 +332,344 @@ fn compute_install_plan_v1(view: &InventoryViewV1, item_names: &[String]) -> Res
         script_packages,
         manual_packages,
     })
+}
+
+fn apply_install_plan_v1(view: &InventoryViewV1, plan: &InstallPlanV1) -> Result<()> {
+    if !plan.manual_packages.is_empty() {
+        eprintln!("MANUAL (blocked):");
+        for pkg in &plan.manual_packages {
+            eprintln!("  - {}", pkg.name);
+            let instructions = pkg.manual_instructions.trim();
+            if instructions.is_empty() {
+                continue;
+            }
+            for line in instructions.lines() {
+                eprintln!("      {line}");
+            }
+        }
+        return Err(anyhow!(WorldDepsUnmetPrerequisiteError::new(
+            "manual install required"
+        )));
+    }
+
+    if !plan.apt.is_empty() {
+        return Err(anyhow!(WorldDepsUnmetPrerequisiteError::new(
+            "apt installs are not implemented in this slice; run with --dry-run to inspect the plan and remove apt packages (WDP5 adds apt execution)"
+        )));
+    }
+
+    ensure_world_backend_available()?;
+
+    for pkg_name in &plan.script_packages {
+        let pkg = view.packages.get(pkg_name).ok_or_else(|| {
+            config_model::user_error(format!(
+                "invalid deps inventory: referenced package '{pkg_name}' is not visible for this platform"
+            ))
+        })?;
+        apply_script_package_v1(pkg)
+            .with_context(|| format!("failed to apply script package '{pkg_name}'"))?;
+    }
+
+    let statuses = query_world_package_presence(view, &plan.script_packages)?;
+    let mut missing = plan
+        .script_packages
+        .iter()
+        .filter(|name| !statuses.get(*name).copied().unwrap_or(false))
+        .cloned()
+        .collect::<Vec<_>>();
+    if !missing.is_empty() {
+        missing.sort();
+        missing.dedup();
+        return Err(anyhow!(WorldDepsUnmetPrerequisiteError::new(format!(
+            "after install, package(s) still missing in world: {}; ensure script installs create runnable entrypoints under /var/lib/substrate/world-deps/bin and retry",
+            missing.join(",")
+        ))));
+    }
+
+    Ok(())
+}
+
+fn apply_script_package_v1(pkg: &super::inventory::PackageDefV1) -> Result<()> {
+    let script = resolve_script_body_for_package_v1(pkg)?;
+    let wrappers = pkg
+        .wrappers
+        .iter()
+        .map(render_wrapper_file_v1)
+        .collect::<Result<Vec<_>>>()?;
+
+    let cmd = build_world_script_install_command_v1(&script, &wrappers);
+    run_world_command_checked_for_deps(&cmd, Some("/tmp"))
+        .with_context(|| format!("world install script failed for '{}'", pkg.name))?;
+    Ok(())
+}
+
+fn resolve_script_body_for_package_v1(pkg: &super::inventory::PackageDefV1) -> Result<String> {
+    if let Some(path_raw) = &pkg.install.script_path {
+        let path = PathBuf::from(path_raw);
+        let resolved = if path.is_absolute() {
+            path
+        } else if let Some(def_path) = &pkg.definition_path {
+            def_path
+                .parent()
+                .ok_or_else(|| anyhow!("invalid package definition path for '{}'", pkg.name))?
+                .join(path)
+        } else {
+            return Err(config_model::user_error(format!(
+                "invalid deps inventory: package '{}' declares a relative install.script_path but has no source path (built-ins should use install.script)",
+                pkg.name
+            )));
+        };
+
+        let raw = fs::read_to_string(&resolved).with_context(|| {
+            format!(
+                "failed to read install.script_path for '{}': {}",
+                pkg.name,
+                resolved.display()
+            )
+        })?;
+        return Ok(raw);
+    }
+
+    if let Some(script) = &pkg.install.script {
+        return Ok(script.clone());
+    }
+
+    Err(config_model::user_error(format!(
+        "invalid deps inventory: package '{}' declares install.method=script but has no script content",
+        pkg.name
+    )))
+}
+
+struct WrapperFileV1 {
+    name: String,
+    body: String,
+}
+
+fn render_wrapper_file_v1(wrapper: &WrapperDefV1) -> Result<WrapperFileV1> {
+    validate_world_deps_bin_filename(&wrapper.name)?;
+    let body = match &wrapper.kind {
+        WrapperKindV1::BashFunction(def) => render_bash_wrapper_v1(
+            "bash_function",
+            &wrapper.name,
+            Some(&def.bash_source),
+            "source \"$SUBSTRATE_WDP_BASH_SOURCE\"; \"$SUBSTRATE_WDP_FUNCTION\" \"$@\"",
+            Some(&def.function),
+            None,
+            &[],
+        ),
+        WrapperKindV1::BashSourceExec(def) => render_bash_wrapper_v1(
+            "bash_source_exec",
+            &wrapper.name,
+            Some(&def.bash_source),
+            "source \"$SUBSTRATE_WDP_BASH_SOURCE\"; exec \"$SUBSTRATE_WDP_EXEC\" \"$@\"",
+            None,
+            Some(&def.exec),
+            &[],
+        ),
+        WrapperKindV1::ShEnvExec(def) => {
+            render_sh_env_exec_wrapper_v1(&wrapper.name, &def.exec, &def.env)
+        }
+    }?;
+
+    Ok(WrapperFileV1 {
+        name: wrapper.name.clone(),
+        body,
+    })
+}
+
+fn render_bash_wrapper_v1(
+    kind: &str,
+    name: &str,
+    bash_source: Option<&str>,
+    bash_body: &str,
+    function: Option<&str>,
+    exec: Option<&str>,
+    extra_env: &[(&str, &str)],
+) -> Result<String> {
+    let bash_source = bash_source.unwrap_or("");
+    let function = function.unwrap_or("");
+    let exec = exec.unwrap_or("");
+
+    let mut out = String::new();
+    out.push_str("#!/bin/sh\n");
+    out.push_str("set -eu\n");
+    out.push_str("SUBSTRATE_WDP_KIND=");
+    out.push_str(&sh_quote(kind));
+    out.push('\n');
+    out.push_str("SUBSTRATE_WDP_NAME=");
+    out.push_str(&sh_quote(name));
+    out.push('\n');
+    out.push_str("SUBSTRATE_WDP_BASH_SOURCE=");
+    out.push_str(&sh_quote(bash_source));
+    out.push('\n');
+    out.push_str("SUBSTRATE_WDP_FUNCTION=");
+    out.push_str(&sh_quote(function));
+    out.push('\n');
+    out.push_str("SUBSTRATE_WDP_EXEC=");
+    out.push_str(&sh_quote(exec));
+    out.push('\n');
+
+    for (key, value) in extra_env {
+        out.push_str(key);
+        out.push('=');
+        out.push_str(&sh_quote(value));
+        out.push('\n');
+    }
+
+    out.push_str("export SUBSTRATE_WDP_KIND SUBSTRATE_WDP_NAME SUBSTRATE_WDP_BASH_SOURCE SUBSTRATE_WDP_FUNCTION SUBSTRATE_WDP_EXEC\n");
+    out.push_str("if command -v bash >/dev/null 2>&1; then\n");
+    out.push_str("  if bash -lc ");
+    out.push_str(&sh_quote(bash_body));
+    out.push_str(" bash \"$@\"; then\n");
+    out.push_str("    exit 0\n");
+    out.push_str("  fi\n");
+    out.push_str("  rc=$?\n");
+    out.push_str("  echo \"substrate: world deps wrapper failure: kind=$SUBSTRATE_WDP_KIND name=$SUBSTRATE_WDP_NAME bash_source=$SUBSTRATE_WDP_BASH_SOURCE bash_found=true exit=$rc\" >&2\n");
+    out.push_str("  echo \"substrate: next: fix the wrapper source/fields or run 'substrate world deps current show ");
+    out.push_str(name);
+    out.push_str(" --explain'\" >&2\n");
+    out.push_str("  exit $rc\n");
+    out.push_str("fi\n");
+    out.push_str("echo \"substrate: world deps wrapper failure: kind=$SUBSTRATE_WDP_KIND name=$SUBSTRATE_WDP_NAME bash_source=$SUBSTRATE_WDP_BASH_SOURCE bash_found=false\" >&2\n");
+    out.push_str("echo \"substrate: next: install bash in the world and retry (or run 'substrate world deps current show ");
+    out.push_str(name);
+    out.push_str(" --explain')\" >&2\n");
+    out.push_str("exit 127\n");
+    Ok(out)
+}
+
+fn render_sh_env_exec_wrapper_v1(
+    name: &str,
+    exec_cmd: &str,
+    env_map: &HashMap<String, String>,
+) -> Result<String> {
+    let mut keys = env_map.keys().cloned().collect::<Vec<_>>();
+    keys.sort();
+
+    let mut out = String::new();
+    out.push_str("#!/bin/sh\n");
+    out.push_str("set -eu\n");
+    out.push_str("SUBSTRATE_WDP_KIND='sh_env_exec'\n");
+    out.push_str("SUBSTRATE_WDP_NAME=");
+    out.push_str(&sh_quote(name));
+    out.push('\n');
+    out.push_str("SUBSTRATE_WDP_EXEC=");
+    out.push_str(&sh_quote(exec_cmd));
+    out.push('\n');
+
+    for key in &keys {
+        let value = env_map.get(key).map(String::as_str).unwrap_or("");
+        out.push_str("export ");
+        out.push_str(key);
+        out.push('=');
+        out.push_str(&sh_quote(value));
+        out.push('\n');
+    }
+
+    out.push_str("set -- $SUBSTRATE_WDP_EXEC\n");
+    out.push_str("cmd=\"$1\"\n");
+    out.push_str("if ! command -v \"$cmd\" >/dev/null 2>&1; then\n");
+    out.push_str("  echo \"substrate: world deps wrapper failure: kind=$SUBSTRATE_WDP_KIND name=$SUBSTRATE_WDP_NAME exec=$SUBSTRATE_WDP_EXEC\" >&2\n");
+    out.push_str("  echo \"substrate: next: ensure the exec target is installed in the world and retry (or run 'substrate world deps current show ");
+    out.push_str(name);
+    out.push_str(" --explain')\" >&2\n");
+    out.push_str("  exit 127\n");
+    out.push_str("fi\n");
+    out.push_str("exec $SUBSTRATE_WDP_EXEC \"$@\"\n");
+    Ok(out)
+}
+
+fn validate_world_deps_bin_filename(name: &str) -> Result<()> {
+    let trimmed = name.trim();
+    if trimmed.is_empty()
+        || trimmed == "."
+        || trimmed == ".."
+        || trimmed.contains('/')
+        || trimmed.contains('\\')
+    {
+        return Err(config_model::user_error(format!(
+            "invalid deps inventory: wrapper name '{name}' is not a valid filename"
+        )));
+    }
+    Ok(())
+}
+
+fn build_world_script_install_command_v1(
+    installer_script: &str,
+    wrappers: &[WrapperFileV1],
+) -> String {
+    let mut cmd = String::new();
+    cmd.push_str("set -e\n");
+    cmd.push_str("world_deps_root='/var/lib/substrate/world-deps'\n");
+    cmd.push_str("world_deps_bin=\"${world_deps_root}/bin\"\n");
+    cmd.push_str("mkdir -p \"$world_deps_bin\"\n");
+    cmd.push_str("if command -v bash >/dev/null 2>&1; then\n");
+    cmd.push_str("  bash -lc \"$(cat <<'__SUBSTRATE_WDP4_INSTALL__'\n");
+    cmd.push_str(installer_script);
+    if !installer_script.ends_with('\n') {
+        cmd.push('\n');
+    }
+    cmd.push_str("__SUBSTRATE_WDP4_INSTALL__\n");
+    cmd.push_str(")\"\n");
+    cmd.push_str("else\n");
+    cmd.push_str("  sh -c \"$(cat <<'__SUBSTRATE_WDP4_INSTALL__'\n");
+    cmd.push_str(installer_script);
+    if !installer_script.ends_with('\n') {
+        cmd.push('\n');
+    }
+    cmd.push_str("__SUBSTRATE_WDP4_INSTALL__\n");
+    cmd.push_str(")\"\n");
+    cmd.push_str("fi\n");
+
+    for (idx, wrapper) in wrappers.iter().enumerate() {
+        let wrapper_path = format!("/var/lib/substrate/world-deps/bin/{}", wrapper.name);
+        let delimiter = format!("__SUBSTRATE_WDP4_WRAPPER_{idx}__");
+
+        cmd.push_str("cat > ");
+        cmd.push_str(&sh_quote(&wrapper_path));
+        cmd.push_str(" <<'");
+        cmd.push_str(&delimiter);
+        cmd.push_str("'\n");
+        cmd.push_str(&wrapper.body);
+        if !wrapper.body.ends_with('\n') {
+            cmd.push('\n');
+        }
+        cmd.push_str(&delimiter);
+        cmd.push_str("'\n");
+        cmd.push_str("chmod 0755 ");
+        cmd.push_str(&sh_quote(&wrapper_path));
+        cmd.push('\n');
+    }
+
+    cmd
+}
+
+fn run_world_command_checked_for_deps(cmd: &str, cwd_override: Option<&str>) -> Result<()> {
+    let response =
+        run_world_command_for_deps_at(cmd, cwd_override).map_err(classify_world_backend_error)?;
+
+    if response.exit == 0 {
+        return Ok(());
+    }
+
+    let stdout = BASE64
+        .decode(response.stdout_b64.as_bytes())
+        .unwrap_or_default();
+    let stderr = BASE64
+        .decode(response.stderr_b64.as_bytes())
+        .unwrap_or_default();
+    let stderr_text = String::from_utf8_lossy(&stderr);
+    let stdout_text = String::from_utf8_lossy(&stdout);
+    let snippet = if !stderr_text.trim().is_empty() {
+        stderr_text.trim().to_string()
+    } else {
+        stdout_text.trim().to_string()
+    };
+    Err(anyhow!(
+        "world command failed (exit={}): {}",
+        response.exit,
+        snippet
+    ))
 }
 
 fn expand_items_to_packages_v1(
@@ -1524,10 +1873,25 @@ fn build_world_probe_script(checks: &[PackageWorldCheck]) -> String {
 }
 
 fn run_world_command_for_deps(cmd: &str) -> Result<agent_api_types::ExecuteResponse> {
+    run_world_command_for_deps_at(cmd, None)
+}
+
+fn run_world_command_for_deps_at(
+    cmd: &str,
+    cwd_override: Option<&str>,
+) -> Result<agent_api_types::ExecuteResponse> {
     let (client, mut request, _) = build_agent_client_and_request(cmd)?;
-    if cfg!(target_os = "macos") {
+
+    if let Some(cwd) = cwd_override {
+        request.cwd = Some(cwd.to_string());
+    } else if cfg!(target_os = "macos") {
         request.cwd = Some("/tmp".to_string());
     }
+
+    if let Some(env) = request.env.as_mut() {
+        ensure_world_deps_bin_on_path(env);
+    }
+
     let rt = Runtime::new()?;
     let response = rt.block_on(async move {
         client
@@ -1536,6 +1900,23 @@ fn run_world_command_for_deps(cmd: &str) -> Result<agent_api_types::ExecuteRespo
             .context("world-agent /v1/execute request failed")
     })?;
     Ok(response)
+}
+
+fn ensure_world_deps_bin_on_path(env: &mut HashMap<String, String>) {
+    const BIN: &str = "/var/lib/substrate/world-deps/bin";
+    let current = env.get("PATH").cloned().unwrap_or_default();
+    let sep = ':';
+    let has = current
+        .split(sep)
+        .any(|segment| segment.trim_end_matches('/') == BIN);
+    if has {
+        return;
+    }
+    if current.trim().is_empty() {
+        env.insert("PATH".to_string(), BIN.to_string());
+    } else {
+        env.insert("PATH".to_string(), format!("{BIN}:{current}"));
+    }
 }
 
 fn classify_world_backend_error(err: anyhow::Error) -> anyhow::Error {

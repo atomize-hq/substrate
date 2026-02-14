@@ -1,3 +1,7 @@
+use super::errors::{
+    WorldDepsBackendRequiredError, WorldDepsProvisionUnsupportedError,
+    WorldDepsUnmetPrerequisiteError,
+};
 #[cfg(target_os = "windows")]
 use super::guest::detect_guest_for_provision;
 use super::guest::{
@@ -198,45 +202,6 @@ fn diff_paths(target: &Path, base: &Path) -> Option<PathBuf> {
     // the planning-pack smoke expectations (e.g., `.substrate/world-deps.selection.yaml`).
     Some(PathBuf::from(segments.join("/")))
 }
-
-#[derive(Debug)]
-struct WorldDepsBackendRequiredError {
-    message: String,
-}
-
-impl std::fmt::Display for WorldDepsBackendRequiredError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.message)
-    }
-}
-
-impl std::error::Error for WorldDepsBackendRequiredError {}
-
-#[derive(Debug)]
-struct WorldDepsUnmetPrerequisiteError {
-    message: String,
-}
-
-impl std::fmt::Display for WorldDepsUnmetPrerequisiteError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.message)
-    }
-}
-
-impl std::error::Error for WorldDepsUnmetPrerequisiteError {}
-
-#[derive(Debug)]
-struct WorldDepsProvisionUnsupportedError {
-    message: String,
-}
-
-impl std::fmt::Display for WorldDepsProvisionUnsupportedError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.message)
-    }
-}
-
-impl std::error::Error for WorldDepsProvisionUnsupportedError {}
 
 struct ManifestPaths {
     inventory_base: PathBuf,
@@ -447,11 +412,9 @@ impl WorldDepsRunner {
             } else {
                 "Hint: run `substrate world doctor --json` and/or `substrate world enable`, then retry."
             };
-            return Err(anyhow!(WorldDepsBackendRequiredError {
-                message: format!(
-                    "substrate: world backend unavailable for world deps ({reason})\n{remediation}"
-                ),
-            }));
+            return Err(anyhow!(WorldDepsBackendRequiredError::new(format!(
+                "substrate: world backend unavailable for world deps ({reason})\n{remediation}"
+            ))));
         }
         Ok(())
     }
@@ -854,11 +817,9 @@ impl WorldDepsRunner {
                 packages.join(" "),
                 packages.join(" "),
             );
-            return Err(anyhow!(WorldDepsProvisionUnsupportedError {
-                message:
-                    "substrate: world deps provision: unsupported on Linux host backend (would mutate host system packages)"
-                        .to_string(),
-            }));
+            return Err(anyhow!(WorldDepsProvisionUnsupportedError::new(
+                "substrate: world deps provision: unsupported on Linux host backend (would mutate host system packages)",
+            )));
         }
 
         if args.dry_run {
@@ -869,11 +830,9 @@ impl WorldDepsRunner {
 
         let apt_available = detect_guest(&[String::from("command -v apt-get >/dev/null 2>&1")])?;
         if !apt_available {
-            return Err(anyhow!(WorldDepsProvisionUnsupportedError {
-                message:
-                    "substrate: world deps provision: guest does not support apt; provisioning is not supported on this world image"
-                        .to_string(),
-            }));
+            return Err(anyhow!(WorldDepsProvisionUnsupportedError::new(
+                "substrate: world deps provision: guest does not support apt; provisioning is not supported on this world image",
+            )));
         }
 
         let verbose = args.verbose;
