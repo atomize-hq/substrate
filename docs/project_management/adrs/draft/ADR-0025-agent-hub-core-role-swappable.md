@@ -19,7 +19,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 9a50f6fbd0fbe3a52890ab491979fa738721185a9e63434ecaa2ec9f132ac314
+ADR_BODY_SHA256: 95d13ad2c1eb2c16813d7fc93cf16cda3f53f392568601c1f344e276980c71e5
 ### Changes (operator-facing)
 - Agent Hub provides a stable registry + session router for CLI and API agents
   - Existing: Substrate can run worlds, trace commands, and call a world-agent API, but “agents” are not uniformly registered/routed as role-swappable backends.
@@ -54,6 +54,28 @@ Clarification (v1; non-negotiable):
 - Full UI/UX for agent lifecycle management in v1 (basic CLI only).
 - Multi-tenant remote agent registration in v1.
 - Persisting third-party agent credentials or internal session memory.
+
+## Control plane vs event plane (v1; Phase 8 lock)
+
+This ADR explicitly separates two planes to prevent “second execution plane” drift.
+
+- **Control plane**: request/response operations that ask Substrate to perform orchestration-adjacent work (v1: internal toolbox tool calls; ADR-0026).
+  - Control-plane operations MUST be explicitly gated (role + policy + auth token) and MUST be attributable to a concrete caller identity (no heuristic inference).
+  - In v1, the control-plane tool surface is introspection-only (read-only); no mutating tools exist (ADR-0026, Decision Register DR-0010).
+
+- **Event plane**: append-only structured events and trace records used for observability and deterministic joins (ADR-0017 envelope + ADR-0028 trace vocabulary).
+  - Event-plane records are consumable for UI/REPL rendering and for routing/analytics, but MUST NOT be treated as a general-purpose execution trigger.
+
+Non-negotiable invariants:
+- The Agent Hub MUST NOT perform host/world actions merely because it observed event-plane records.
+  - The only v1 indirect-execution surface is the workflow-router daemon (ADR-0029), which is separately policy-gated under `workflow.router.*` (ADR-0027) and has its own derived-event families (ADR-0028).
+- Every authenticated toolbox tool invocation MUST emit tool-call trace records with a stable `tool_call_id` so control-plane activity is auditable and joinable without heuristics (ADR-0026, ADR-0028).
+
+Control-plane enablement gates (v1; fail closed):
+- Toolbox is enabled only when:
+  - effective config has `agents.enabled=true` AND `agents.toolbox.enabled=true` (ADR-0027), AND
+  - the orchestrator backend id is allowlisted by effective policy `agents.allowed_backends[*]` (ADR-0027), AND
+  - the caller presents a valid per-session auth token (ADR-0026).
 
 ## User Contract (Authoritative)
 

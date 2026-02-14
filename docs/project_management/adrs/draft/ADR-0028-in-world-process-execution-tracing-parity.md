@@ -29,7 +29,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: c30b42297686c16fc01adc33b154a860a65665bb8a97e9ad40c1b852979a411a
+ADR_BODY_SHA256: 0ce051e9c7bc1517a35c742beb80d637ab97a70c6aa8f548b454831d461e06fd
 ### Changes (operator-facing)
 - World executions gain subprocess-level visibility (exec/exit telemetry) comparable to host shim tracing
   - Existing: host execution is richly observable via shims, but world execution is observable primarily at “one command per world execute/stream” granularity (no structured visibility into spawned subprocess trees).
@@ -268,7 +268,7 @@ Canonical correlation fields:
 
 - `tool_call_id`
   - Meaning: identifier for a toolbox/MCP tool invocation instance.
-  - Rule: OPTIONAL in v1 unless/until a toolbox tool-call trace family is introduced; reserved for Phase 8 to avoid later reshapes.
+  - Rule: REQUIRED on toolbox tool-call trace records (`toolbox_tool_call_*`, Phase 8); OPTIONAL elsewhere. Reserved in this vocabulary to avoid later reshapes.
 
 - `workflow_run_id` / `workflow_node_id`
   - Meaning: identifiers for workflow root and workflow node instances.
@@ -296,6 +296,19 @@ This table records the v1 required set for joinability. New event families intro
     - `world_id` when the emitting backend executes inside a world boundary.
   - OPTIONAL: `thread_id`, `role`, `cmd_id`, `span_id`
 
+- Toolbox tool-call events (ADR-0026; control-plane audit records):
+  - REQUIRED:
+    - `session_id`
+    - `orchestration_session_id`
+    - `run_id`
+    - `agent_id`
+    - `backend_id`
+    - `role`
+    - `tool_call_id`
+  - CONDITIONAL REQUIRED:
+    - `world_id` when the tool execution occurs inside a world boundary (future; v1 toolbox is host-scoped).
+  - OPTIONAL: `thread_id`, `source_span_id`, `source_cmd_id`
+
 - Workflow-router derived events (ADR-0029; derived from `trace.jsonl`):
   - REQUIRED:
     - `session_id`
@@ -318,6 +331,10 @@ Router-derived event families (v1; additive-only list):
   - `workflow_router_action_enqueued`
   - `workflow_router_action_executed`
   - `workflow_router_cursor_gap_detected`
+
+Toolbox tool-call event families (v1; additive-only list; ADR-0026):
+- `toolbox_tool_call_start`
+- `toolbox_tool_call_complete`
 
 ### Joinability rule (non-negotiable)
 

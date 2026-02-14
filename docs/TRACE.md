@@ -141,6 +141,34 @@ jq 'select(.component == "workflow-router")' ~/.substrate/trace.jsonl
 jq 'select(.request_id == "req_xxx")' ~/.substrate/trace.jsonl
 ```
 
+### Toolbox Tool-Call Event Families (internal orchestration toolbox; Phase 8)
+
+The internal orchestration toolbox (ADR-0026) appends tool-call audit records to `trace.jsonl` so control-plane activity is attributable and joinable without heuristics.
+
+v1 uses explicit `event_type` values:
+- `toolbox_tool_call_start`
+- `toolbox_tool_call_complete`
+
+At minimum, expect stable join keys on these records (see ADR-0028 for the authoritative matrix):
+- `tool_call_id` (primary join key for start ⇄ complete)
+- `orchestration_session_id`, `run_id`
+- `agent_id`, `role` (v1 caller is the orchestrator)
+- `backend_id`
+- tool identity: `toolbox_version`, `tool_name`
+
+Safe-by-default note:
+- Tool-call records omit full request args and full response bodies in v1 (`args_omitted=true`, `result_omitted=true`). Treat tool I/O payloads as potentially sensitive; only capture them under an explicit future debug/trace mode with redaction/caps.
+
+Example filters:
+
+```bash
+# Show toolbox tool-call audit records
+jq 'select(.component == "agent-toolbox")' ~/.substrate/trace.jsonl
+
+# Follow one tool_call_id from start to completion
+jq 'select(.tool_call_id == "tcall_xxx")' ~/.substrate/trace.jsonl
+```
+
 ### Reserved Workflow/Toolbox Correlation Fields (Phase 8)
 
 Phase 8 reserves/adds correlation identifiers so future workflow/toolbox trace families can be introduced additively without reshaping existing records:

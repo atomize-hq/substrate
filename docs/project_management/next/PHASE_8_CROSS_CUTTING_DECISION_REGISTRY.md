@@ -38,8 +38,8 @@ This registry covers:
 
 - Correlation vocabulary/matrix must remain singular and authoritative (risk: heuristic joins and event-family drift if downstream docs diverge from ADR-0028).
 - `agent_id` semantics must remain unified across trace spans vs structured agent events (risk: audit confusion if emitters drift and `backend_id` is inferred heuristically).
-- Control plane vs event plane is not yet an explicit contract in Agent Hub (risk: accidental second execution plane).
-- Toolbox/tool-call trace family + `tool_call_id` correlation are not yet locked end-to-end (risk: weak auditability and fragile joins once tools become first-class).
+- Control plane vs event plane separation is now locked, but future mutating control-plane surfaces must preserve fail-closed gates and must not reintroduce “second execution plane” drift.
+- Toolbox/tool-call trace family is now locked; future toolbox expansions must preserve deterministic `tool_call_id` joinability and safe-by-default payload posture (no raw secrets in trace by default).
 - Secrets delivery mechanisms are now standardized, but new secret surfaces must reference the rubric and keep “no secret persistence” + redaction/caps invariants intact (risk: env var proliferation and inconsistent hardening).
 
 ---
@@ -53,10 +53,10 @@ This section records a quick validate/invalidated snapshot of the `LLM_AI_CAPABI
 - Phase 2 (Output/routing / ADR-0017): **Validated** — ADR-0017 now includes an explicit structured agent event envelope section aligned to DR-defined envelope extensions (`backend_id`, conditional `world_id`, optional `channel`) and Phase 8 operator-verifiable world lifecycle alerts (see CC-0003/CC-0004/CC-0010).
 - Phase 3 (Config/policy surface / ADR-0027): **Validated** — router policy gating keys (`workflow.router.*`) required by ADR-0029 are represented in ADR-0027 schema/contract outputs (see CC-0011).
 - Phase 4 (LLM gateway + engines / ADR-0023/ADR-0024): **Partially validated** — correlation and secrets posture references exist (and Phase 8 adds a preferred FD/pipe auth bundle path), but ensure all logging/attribution requirements explicitly defer to ADR-0028 + ADR-0017 as the authoritative spines.
-- Phase 5 (Agent hub + toolbox / ADR-0025/ADR-0026): **Invalidated (gaps remain)** — control plane vs event plane contract + policy gates not yet locked (see CC-0005); toolbox tool-call trace family and `tool_call_id` correlation are not yet fully specified end-to-end (see CC-0009).
+- Phase 5 (Agent hub + toolbox / ADR-0025/ADR-0026): **Validated** — control-plane vs event-plane separation is explicitly locked (Agent Hub + toolbox), and toolbox tool-call trace families/required join keys are specified so control-plane activity is auditable and joinable without heuristics (see CC-0005/CC-0009).
 - Phase 6 (Router daemon / ADR-0029): **Validated** — router DRs define derived event taxonomy and required correlation keys, and ADR-0028/`docs/TRACE.md` list the derived families and match the router’s explicit cause-reference naming (see CC-0007/CC-0012).
 - Phase 7 (Workflow composition / ADR-0021/ADR-0022): **Validated as deferred** — remains Draft and must stay compatible with reserved workflow correlation keys in ADR-0028; do not lock additional workflow fields beyond accepted DR items unless explicitly called for.
-- Phase 8 (Circle-back registry): **In progress** — CC-0006 (secrets), CC-0012 (`docs/TRACE.md` alignment), CC-0003 (`agent_id` vs `backend_id` semantics), and CC-0010 (world lifecycle attribution) are addressed; CC-0005 (control plane vs event plane) and CC-0009 (tool-call trace family) remain the highest-risk open alignment items.
+- Phase 8 (Circle-back registry): **In progress** — CC-0005 and CC-0009 are now addressed; remaining Phase 8 alignment work is primarily ensuring Phase 4 (gateway/engines) explicitly defers to ADR-0028 + ADR-0017 for attribution and trace-family/correlation vocabulary.
 
 ---
 
@@ -180,15 +180,20 @@ Each item below is written as: **Decision/contract to lock**, **current sources*
 **Current sources**
 - Phase 8 discussion point: `LLM_AI_CAPABILITY_ENABLEMENT_PLANNING_ORDER.md`
 - ADR-0026 already insists tools must not create a second execution plane: `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`
+- Router indirect execution is separately gated by `workflow.router.*`: `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md` and router DR-0017
 
 **Gap**
-- The separation is referenced as necessary, but there is no locked contract defining surfaces, gates, and trace attribution for control-plane actions.
+- Historically, “control plane” vs “event plane” was referenced as a risk, but not locked as an explicit contract with surfaces, gates, and audit records.
 
 **Alignment action**
-- Add decision-register entries (Agent Hub +/or ADR-0017) to lock:
-  - control-plane verb allowlist (v1 minimal set),
-  - required correlation fields for control-plane actions (`tool_call_id`/`request_id` + cause refs),
-  - and explicit policy keys that gate steering/cancel across roles.
+- Phase 8: addressed by explicitly locking the two-plane model and its gates:
+  - Agent Hub core defines control-plane vs event-plane separation and forbids treating event-plane records as a general-purpose execution trigger (ADR-0025).
+  - The internal toolbox is the v1 control-plane surface and is introspection-only (no mutating tools), preventing “second execution plane” drift (ADR-0026; DR-0010).
+  - Control-plane enablement is fail-closed and explicit:
+    - `agents.enabled=true` and `agents.toolbox.enabled=true` (config; ADR-0027),
+    - orchestrator backend allowlisted by `agents.allowed_backends[*]` (policy; ADR-0027),
+    - valid per-session auth token (ADR-0026).
+  - Control-plane auditability is provided by a dedicated tool-call trace family keyed by `tool_call_id` (ADR-0026; ADR-0028).
 
 ---
 
@@ -294,11 +299,13 @@ For `api:*` backends, the canonical field-name family is defined by:
 - Phase 8 explicitly calls out `tool_call_id`: `LLM_AI_CAPABILITY_ENABLEMENT_PLANNING_ORDER.md`
 
 **Gap**
-- `tool_call_id` is reserved in ADR-0028’s correlation vocabulary, but the end-to-end tool-call trace family and/or dedicated `event_type` schema is not yet locked and documented as a persisted record family.
+- `tool_call_id` was reserved in ADR-0028’s correlation vocabulary, but the end-to-end tool-call trace family and required join keys were not previously locked as a persisted record family.
 
 **Alignment action**
-- Additive Phase 8 update:
-  - define `tool_call_id` as part of the correlation vocabulary and introduce a tool-call trace family (or a dedicated `event_type` with a strict schema).
+- Phase 8: addressed by introducing a dedicated toolbox tool-call trace family and wiring it into the correlation vocabulary:
+  - `toolbox_tool_call_start` / `toolbox_tool_call_complete` (ADR-0026; v1 additive list),
+  - `tool_call_id` is required on these records (ADR-0028 matrix),
+  - operator-facing trace documentation includes the tool-call families and join keys (see `docs/TRACE.md`).
 
 ---
 

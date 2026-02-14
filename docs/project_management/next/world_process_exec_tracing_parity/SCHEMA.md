@@ -128,3 +128,40 @@ Router-derived events appended to canonical `trace.jsonl` MUST use explicit `eve
 - `orchestration_session_id` (when tied to orchestration)
 - `target_workspace_id` (when routing targets a distinct workspace)
 - `backend_id` (when a specific backend is involved)
+
+## 6) Toolbox tool-call event family (Phase 8 additive; owned by ADR-0026)
+
+The internal orchestration toolbox (ADR-0026) emits tool-call audit records into canonical `trace.jsonl` so control-plane activity is joinable without heuristics. This planning pack does not implement the toolbox, but the canonical trace schema must reserve and document the tool-call event family so later additions do not reshape existing records.
+
+Authoritative sources:
+- Tool surface + emission rules: `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`
+- Correlation vocabulary + required/optional matrix: `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
+
+### Event types (v1; additive-only list)
+- `toolbox_tool_call_start`
+- `toolbox_tool_call_complete`
+
+### Required fields (all toolbox tool-call records)
+- `ts`
+- `event_type` (one of the above)
+- `component: "agent-toolbox"`
+- `session_id`
+- Correlation / join keys:
+  - `orchestration_session_id`
+  - `run_id`
+  - `agent_id`
+  - `backend_id`
+  - `tool_call_id`
+- Tool identity:
+  - `toolbox_version` (v1: `1`)
+  - `tool_name` (stable `substrate.*` tool name)
+
+### Completion-only required fields
+- `outcome: "ok" | "error" | "denied"`
+- `duration_ms`
+
+### Safe-by-default payload posture
+- Tool-call records MUST NOT embed full tool request args or full tool response bodies in v1.
+  - Records MUST include:
+    - `args_omitted: true`
+    - `result_omitted: true`

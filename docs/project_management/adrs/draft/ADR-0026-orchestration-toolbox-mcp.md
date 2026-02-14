@@ -20,7 +20,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 81e2e9f1afc4381179e79fe5ed34056fd76e410c5389ee51d83ed275b5176c6d
+ADR_BODY_SHA256: 486da7f019f858ac7a373d6692b4ea0a9bae3acd98325ad78a415b992d2952a5
 ### Changes (operator-facing)
 - Substrate exposes an internal orchestration toolbox providing orchestrator-only tools (speaks MCP)
   - Existing: Orchestration context and levers are primarily internal; agents cannot uniformly access Substrate orchestration functions.
@@ -161,6 +161,49 @@ v1 tool list (stable names; minimum required set):
 
 Explicit exclusions (v1):
 - No mutating tools such as `substrate.run_agent`, `substrate.cancel_run`, `substrate.restart_world`, or config/policy mutation tools.
+
+### Tool-call trace events (Phase 8; authoritative; CC-0009)
+
+Every authenticated toolbox tool invocation MUST emit canonical trace records so control-plane activity is auditable and joinable without heuristics.
+
+Event types (v1; additive-only list):
+- `toolbox_tool_call_start`
+- `toolbox_tool_call_complete`
+
+Emission rules (non-negotiable):
+- The toolbox server MUST generate a stable `tool_call_id` for each invocation and MUST reuse it on the corresponding completion record.
+- The toolbox server MUST append exactly one start record and exactly one completion record for each invocation.
+- Tool-call trace records MUST be appended to canonical `trace.jsonl` (same file as command spans) and MUST follow ADR-0028 correlation vocabulary.
+- Unauthorized/unauthenticated connection attempts (missing/invalid token) MUST be denied, but are not required to be written to canonical trace because they are not attributable to a stable `(agent_id, role, orchestration_session_id)` identity.
+
+Required fields (all tool-call records):
+- `ts` (RFC3339 UTC timestamp)
+- `event_type` (`toolbox_tool_call_start` or `toolbox_tool_call_complete`)
+- `component: "agent-toolbox"`
+- `session_id`
+- `orchestration_session_id`
+- `run_id`
+- `agent_id` (the orchestrator agent id)
+- `role: "orchestrator"`
+- `backend_id` (the orchestrator backend id; `<kind>:<name>`)
+- `tool_call_id`
+- `toolbox_version` (`1` in v1)
+- `tool_name` (one of the stable `substrate.*` tool names listed above)
+
+Completion-only required fields:
+- `outcome: "ok" | "error" | "denied"`
+- `duration_ms`
+
+Denies (role/policy/tool gating; authenticated only):
+- If the toolbox denies a request after authentication (e.g., wrong role, backend not allowlisted, tool not supported), it MUST:
+  - emit `toolbox_tool_call_complete` with `outcome="denied"`, and
+  - include a redacted, capped `error_summary` string (safe to print/persist; MUST NOT contain secrets).
+
+Safe-by-default payload posture (non-negotiable):
+- Tool-call trace records MUST NOT embed full tool request arguments or tool response bodies in v1.
+  - Records MUST include:
+    - `args_omitted: true`
+    - `result_omitted: true`
 
 ## Architecture Shape
 - Components:
