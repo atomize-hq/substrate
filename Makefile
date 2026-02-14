@@ -148,12 +148,13 @@ ci-compile-parity:
 
 # Dispatch defaults (override as needed)
 PLATFORM ?= linux
-RUNNER_KIND ?= self-hosted
-RUN_WSL ?= 0
-RUN_INTEG_CHECKS ?= 0
-SMOKE_SLICE_ID ?=
-SMOKE_CHECKOUT_REF ?=
-WORKFLOW ?= .github/workflows/feature-smoke.yml
+	RUNNER_KIND ?= self-hosted
+	MACOS_RUNNER_KIND ?=
+	RUN_WSL ?= 0
+	RUN_INTEG_CHECKS ?= 0
+	SMOKE_SLICE_ID ?=
+	SMOKE_CHECKOUT_REF ?=
+	WORKFLOW ?= .github/workflows/feature-smoke.yml
 WORKFLOW_REF ?= $(CURRENT_REF)
 REMOTE ?= origin
 CLEANUP ?= 1
@@ -166,6 +167,7 @@ feature-smoke:
 	@if [ "$(RUN_WSL)" = "1" ] && [ "$(RUNNER_KIND)" != "self-hosted" ]; then echo "ERROR: RUN_WSL=1 requires RUNNER_KIND=self-hosted"; exit 2; fi
 	@set -euo pipefail; \
 	args="--feature-dir \"$(FEATURE_DIR)\" --runner-kind $(RUNNER_KIND) --platform $(PLATFORM) --workflow \"$(WORKFLOW)\" --workflow-ref \"$(WORKFLOW_REF)\" --remote \"$(REMOTE)\""; \
+	if [ -n "$(MACOS_RUNNER_KIND)" ]; then args="$$args --macos-runner-kind $(MACOS_RUNNER_KIND)"; fi; \
 	if [ "$(RUN_WSL)" = "1" ]; then args="$$args --run-wsl"; fi; \
 	if [ "$(RUN_INTEG_CHECKS)" = "1" ]; then args="$$args --run-integ-checks"; fi; \
 	if [ -n "$(SMOKE_CHECKOUT_REF)" ]; then args="$$args --checkout-ref \"$(SMOKE_CHECKOUT_REF)\""; fi; \

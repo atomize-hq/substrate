@@ -20,6 +20,14 @@ on:
           - github-hosted
           - self-hosted
         default: github-hosted
+      macos_runner_kind:
+        description: "Override where macOS runs when runner_kind=self-hosted (hybrid fallback)."
+        required: false
+        type: choice
+        options:
+          - self-hosted
+          - github-hosted
+        default: self-hosted
       platform:
         description: "Which platform smoke to run"
         required: true
@@ -343,7 +351,7 @@ jobs:
 
   macos_hosted:
     needs: feature_meta
-    if: needs.feature_meta.outputs.run_macos == '1' && inputs.runner_kind == 'github-hosted'
+    if: needs.feature_meta.outputs.run_macos == '1' && (inputs.runner_kind == 'github-hosted' || (inputs.runner_kind == 'self-hosted' && inputs.macos_runner_kind == 'github-hosted'))
     runs-on: macos-14
     steps:
       - name: Checkout repository (override ref)
@@ -397,7 +405,7 @@ jobs:
 
   macos_self_hosted:
     needs: feature_meta
-    if: needs.feature_meta.outputs.run_macos == '1' && inputs.runner_kind == 'self-hosted'
+    if: needs.feature_meta.outputs.run_macos == '1' && inputs.runner_kind == 'self-hosted' && inputs.macos_runner_kind != 'github-hosted'
     runs-on: [self-hosted, macOS]
     env:
       CARGO_BUILD_JOBS: 2
