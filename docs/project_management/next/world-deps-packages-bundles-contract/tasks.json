@@ -1008,7 +1008,7 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" SLICE_ID=\"WDP5\""
       ],
-      "status": "in_progress",
+      "status": "completed",
       "type": "code",
       "worktree": "wt/world-deps-packages-bundles-contract-wdp5-code"
     },
@@ -1054,7 +1054,7 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world-deps-packages-bundles-contract\" SLICE_ID=\"WDP5\""
       ],
-      "status": "in_progress",
+      "status": "completed",
       "type": "test",
       "worktree": "wt/world-deps-packages-bundles-contract-wdp5-test"
     },
