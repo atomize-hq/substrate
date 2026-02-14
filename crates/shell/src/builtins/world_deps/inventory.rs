@@ -197,6 +197,12 @@ pub(crate) struct InventoryListItemSummaryV1 {
     pub kind: String,
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub world: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remediation: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub runnable: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub method: Option<InstallMethodV1>,
@@ -605,6 +611,9 @@ pub(crate) fn summarize_inventory_v1(view: &InventoryViewV1) -> Vec<InventoryLis
         out.push(InventoryListItemSummaryV1 {
             kind: "package".to_string(),
             name: pkg.name.clone(),
+            enabled: None,
+            world: None,
+            remediation: None,
             runnable: Some(pkg.runnable),
             method: Some(pkg.install.method.clone()),
             entrypoints: pkg.entrypoints.clone(),
@@ -616,6 +625,9 @@ pub(crate) fn summarize_inventory_v1(view: &InventoryViewV1) -> Vec<InventoryLis
         out.push(InventoryListItemSummaryV1 {
             kind: "bundle".to_string(),
             name: bundle.name.clone(),
+            enabled: None,
+            world: None,
+            remediation: None,
             runnable: None,
             method: None,
             entrypoints: Vec::new(),
