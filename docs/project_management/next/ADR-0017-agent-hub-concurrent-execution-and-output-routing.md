@@ -133,6 +133,33 @@ Envelope fields (top-level; no nesting required for joinability):
 - MUST be producer-declared (not arbitrary user-provided freeform) and MUST NOT contain secrets.
 - MUST be capped (implementation-defined cap) and MUST be safe to print and persist.
 
+### World session reuse + restart attribution (Phase 8 additive; operator-verifiable)
+
+World-scoped member agents share a world boundary by default (same `world_id` per `orchestration_session_id`) per Agent Hub core decisions. Operators MUST be able to verify:
+- whether multiple agents shared the same world boundary (`world_id` on world-scoped events), and
+- when/why a world was restarted (explicit structured alert events; never implied).
+
+Authoritative sources:
+- World reuse semantics: `docs/project_management/next/agent_hub_core/decision_register.md` (DR-0004)
+- Drift handling + reason taxonomy: `docs/project_management/next/agent_hub_core/decision_register.md` (DR-0008)
+- `world_restarted` alert schema: `docs/project_management/next/agent_hub_core/decision_register.md` (DR-0010)
+- `world_restart_required` alert schema (fail-closed drift posture): `docs/project_management/next/agent_hub_core/decision_register.md` (DR-0009)
+
+Structured alert event: `world_restarted` (required on auto-restart)
+- Envelope:
+  - `kind: "alert"`
+  - correlation: `orchestration_session_id`, `run_id`, `agent_id`, `role: "orchestrator"` (required)
+- `data` (required fields; stable schema):
+  - `code: "world_restarted"`
+  - `reason: <one of DR-0008 taxonomy strings>`
+  - `on_drift: "auto_restart"`
+  - `previous_world_id`, `new_world_id`
+  - `previous_world_generation`, `new_world_generation`
+  - `message` (human-readable; safe to print/persist)
+
+Fail-closed drift posture (`agents.hub.world_restart.on_drift=fail_closed`)
+- The hub MUST NOT restart implicitly; it MUST fail closed and MUST emit a structured alert event with `data.code="world_restart_required"` (schema in DR-0009), using the same DR-0008 reason taxonomy.
+
 ### Config (buffer tuning)
 - Files and locations (existing layering model):
   - Global config patch: `$SUBSTRATE_HOME/config.yaml`

@@ -149,6 +149,28 @@ Phase 8 reserves/adds correlation identifiers so future workflow/toolbox trace f
 
 These fields may appear on non-span records even when command spans remain unchanged.
 
+### World Lifecycle Alerts (Agent Hub; Phase 8)
+
+Agent Hub emits structured alert events to make world session reuse and restart behavior operator-verifiable. These alerts are appended to `trace.jsonl` as structured agent events (not command spans).
+
+Key machine-detectable alert codes:
+- `data.code="world_restarted"`: emitted when the hub auto-restarts the world (e.g., due to world-relevant drift).
+- `data.code="world_restart_required"`: emitted when drift is detected under a fail-closed posture (no implicit restart; operator action required).
+
+Reason taxonomy (v1; non-empty string) is defined by Agent Hub core decisions (DR-0008), e.g.:
+- `policy_snapshot_changed`
+- `workspace_root_changed`
+- `world_fs_policy_changed`
+- `net_policy_changed`
+- `execution_scope_changed`
+
+Example filters:
+
+```bash
+# Show world lifecycle alerts
+jq 'select(.kind == "alert" and .data.code? and (.data.code == "world_restarted" or .data.code == "world_restart_required"))' ~/.substrate/trace.jsonl
+```
+
 ### Policy Snapshot Metadata (No Raw Policy Content)
 
 Snapshot enforcement semantics and the authoritative definitions of `policy_resolution_mode` and related fields live in `docs/project_management/_archived/world-agent-policy-snapshot/policy-snapshot-spec.md`.

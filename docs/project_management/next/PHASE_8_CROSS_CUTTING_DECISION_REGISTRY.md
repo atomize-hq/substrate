@@ -315,15 +315,18 @@ For `api:*` backends, the canonical field-name family is defined by:
 
 **Current sources**
 - Shared-world default + required `world_restarted` event: `docs/project_management/next/agent_hub_core/decision_register.md` (DR-0004)
-- ADR-0017 still treats `world_id` as a review hook: `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+- Drift handling + reason taxonomy: `docs/project_management/next/agent_hub_core/decision_register.md` (DR-0008)
+- `world_restarted` alert event schema: `docs/project_management/next/agent_hub_core/decision_register.md` (DR-0010)
+- `docs/TRACE.md` (operator-facing trace family overview; Phase 8 alignment)
 
 **Gap**
-- `world_id` is not yet locked as a required field on structured agent events in the ADR-0017 envelope, despite being required for the shared-world contract.
+- Historically, `world_id` and restart attribution were asserted in Agent Hub DRs but not clearly surfaced as an operator-facing, persisted contract across the Phase 2 envelope and trace docs.
 
 **Alignment action**
-- Additive Phase 8 update:
-  - require `world_id` on structured events for world-scoped agents,
-  - define the `world_restarted` event schema (fields + stable reason codes) and ensure it is persisted to trace.
+- Phase 8: addressed additively by:
+  - requiring `world_id` on structured events for world-scoped agents (ADR-0017 envelope + DR-0003),
+  - locking the `world_restarted` alert schema (`kind=alert` + `data.code="world_restarted"`; required world id/generation fields) and reason taxonomy (DR-0008/DR-0010),
+  - and documenting the operator-facing alert codes and reason taxonomy in `docs/TRACE.md`.
 
 ---
 
