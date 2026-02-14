@@ -117,14 +117,16 @@ fn world_deps_exit_code(err: &anyhow::Error) -> i32 {
     if err.is::<WorldDepsBackendRequiredError>() {
         return 3;
     }
+    // Hardening conflicts should win even when surfaced through a backend-unavailable wrapper.
+    // This keeps exit codes aligned with the world deps contract: hardening/cage denials are `5`.
+    if looks_like_world_deps_hardening_violation(err) {
+        return 5;
+    }
     if err
         .chain()
         .any(|cause| cause.downcast_ref::<WorldBackendUnavailable>().is_some())
     {
         return 3;
-    }
-    if looks_like_world_deps_hardening_violation(err) {
-        return 5;
     }
     1
 }
