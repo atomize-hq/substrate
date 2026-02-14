@@ -238,3 +238,7 @@ Policy:
   - macOS (self-hosted) passed as part of run `22019947173` (run conclusion is failure due to WSL misprovisioning).
   - WSL (self-hosted) passed as part of run `22020059723` (run conclusion is cancelled due to macOS runner offline / queued).
 - Operator decision: treat Feature Smoke coverage as satisfied for WDP2 based on the above per-platform evidence and proceed with deterministic no-op platform-fix completion + final aggregator.
+
+## END — 2026-02-14T17:04:42Z — integration — WDP2-integ
+- HEAD: `5114e504d57c51c94e66b87c7dbe7aa199e7c58c`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-deps-packages-bundles-contract/logs/WDP2/integ/last_message.md`
