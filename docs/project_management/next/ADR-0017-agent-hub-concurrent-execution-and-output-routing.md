@@ -15,6 +15,13 @@
 
 ## Related Docs
 - Plan: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/plan.md`
+- Spec manifest: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/spec_manifest.md`
+- Impact map: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/impact_map.md`
+- Contract: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/contract.md`
+- Spec: structured event envelope: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/agent-hub-event-envelope-schema-spec.md`
+- Spec: telemetry/trace records: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/telemetry-spec.md`
+- Spec: platform parity: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/platform-parity-spec.md`
+- Slice spec (v1): `docs/project_management/next/agent-hub-concurrent-execution-output-routing/OR0-spec.md`
 - Decision Register: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md`
 - Agent Hub core decisions (world reuse, drift posture, alert schema):
   - `docs/project_management/next/agent_hub_core/decision_register.md`

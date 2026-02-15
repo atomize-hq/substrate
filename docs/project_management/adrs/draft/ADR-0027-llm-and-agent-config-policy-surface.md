@@ -10,20 +10,29 @@
 - Sequencing spine: `docs/project_management/next/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
+  - `docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md`
+  - `docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md`
+  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 
 ## Related Docs
+- Plan: `docs/project_management/next/llm_and_agent_config_policy_surface/plan.md` (not created; ADR draft phase)
+- Tasks: `docs/project_management/next/llm_and_agent_config_policy_surface/tasks.json` (not created; ADR draft phase)
+- Spec manifest: `docs/project_management/next/llm_and_agent_config_policy_surface/spec_manifest.md` (not created; ADR draft phase)
+- Specs:
+  - Contract: `docs/project_management/next/llm_and_agent_config_policy_surface/contract.md`
+  - Schema: `docs/project_management/next/llm_and_agent_config_policy_surface/SCHEMA.md`
+- Decision Register: `docs/project_management/next/llm_and_agent_config_policy_surface/decision_register.md`
+- Impact Map: `docs/project_management/next/llm_and_agent_config_policy_surface/impact_map.md` (not created; ADR draft phase)
+- Manual playbook: `docs/project_management/next/llm_and_agent_config_policy_surface/manual_testing_playbook.md`
 - Existing config/policy layering model:
   - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
   - `docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md`
   - `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md`
   - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
   - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
-- Phase 3 planning pack outputs:
-  - Contract: `docs/project_management/next/llm_and_agent_config_policy_surface/contract.md`
-  - Schema: `docs/project_management/next/llm_and_agent_config_policy_surface/SCHEMA.md`
-  - Decision Register: `docs/project_management/next/llm_and_agent_config_policy_surface/decision_register.md`
-  - Manual playbook: `docs/project_management/next/llm_and_agent_config_policy_surface/manual_testing_playbook.md`
 - Profiles (future; must remain compatible):
   - `docs/project_management/next/ADR-0020-profiles-config-policy-snapshots.md`
 - LLM + agents feature ADRs (draft; must defer to this ADR for config/policy shape):
@@ -36,8 +45,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 09b441dc416b9764c14a08dd4a14b170193d821c95135a442edbb970f88db2e5
-
+ADR_BODY_SHA256: feade316e0dbba73b491d42334effb7c42eeb98b82d2cb32f04a64f9f93e16aa
 ### Changes (operator-facing)
 - LLM + agent behavior is configured and governed via the existing config/policy files (new keys only)
   - Existing: There is no repo-wide, stable config/policy surface for LLM gateway routing, CLI agent backends, or agent role selection, which invites ad-hoc files/env vars and inconsistent enforcement boundaries.
@@ -48,6 +56,9 @@ ADR_BODY_SHA256: 09b441dc416b9764c14a08dd4a14b170193d821c95135a442edbb970f88db2e
   - Why: Keep Substrate’s enforcement/audit claims accurate and avoid a “second config system” as LLM + agent features land (gateway, CLI backends, agent hub, orchestration toolbox).
   - Links:
     - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md#L1`
+    - `docs/project_management/next/llm_and_agent_config_policy_surface/contract.md#L1`
+    - `docs/project_management/next/llm_and_agent_config_policy_surface/SCHEMA.md#L1`
+    - `docs/project_management/next/llm_and_agent_config_policy_surface/decision_register.md#L1`
 
 ## Problem / Context
 - The next major body of work adds:
@@ -328,6 +339,13 @@ Phase 8 additive note: ADR-0029 introduces an indirect execution path (trace eve
 - Compat work: none
 
 ## Decision Summary
-- This ADR has non-trivial decisions (where the config/policy lives; default enable posture; backend allowlisting shape). Create:
-  - `docs/project_management/next/llm_and_agent_config_policy_surface/decision_register.md`
-  and record A/B choices there (ADR remains the authoritative end-to-end contract).
+- Decision Register: `docs/project_management/next/llm_and_agent_config_policy_surface/decision_register.md`
+  - DR-0001: config/policy live in existing YAML patch files (new keys only)
+  - DR-0002: backend ids use `<kind>:<name>` string format
+  - DR-0004: policy expresses requirements + allowlists (no `policy.*.enabled`)
+  - DR-0005: agent definitions are inventory items under `agents/<agent_id>.yaml`
+  - DR-0006: per-agent restriction-only `policy_overlay` is embedded in agent files (not separate policy files)
+  - DR-0007: `policy_overlay` composition is restriction-only AND semantics (cannot broaden)
+  - DR-0008: host/world fallback is governed by `*.fail_closed.routing` (no implicit host fallback)
+  - DR-0009: overlays may further restrict host credential read allowlists (subset-only)
+  - DR-0010: overlays may further restrict secret env var allowlists (subset-only)

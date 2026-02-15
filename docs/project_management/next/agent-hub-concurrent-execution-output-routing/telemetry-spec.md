@@ -1,0 +1,95 @@
+# agent-hub-concurrent-execution-output-routing — telemetry spec
+
+Owner standard:
+- `docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md`
+
+## Scope
+- This spec is authoritative for new/changed telemetry (trace records) required by ADR-0017.
+
+## Stability guarantees (explicit)
+- Field stability: additive-only (new optional fields permitted; no renames/removals).
+- Backwards compatibility for consumers:
+  - Consumers MUST tolerate unknown fields and unknown record types in `trace.jsonl`.
+  - Existing span records MUST remain unchanged in meaning.
+
+## Trace/log schema changes (authoritative)
+
+### Structured agent event records
+
+Requirement:
+- Each structured agent event MUST be persisted as its own JSON record in canonical trace.
+
+Canonical record:
+- `event_type: "agent_event"`
+- Required fields:
+  - `event_type` (string; must be `"agent_event"`)
+  - `ts` (RFC3339 UTC string)
+  - `session_id` (string; host session id)
+  - `component` (string; MUST be `"agent-hub"` for agent hub events)
+  - `payload` (object; the event envelope; schema: `agent-hub-event-envelope-schema-spec.md`)
+- Recommended fields (when known):
+  - `world_id` (string)
+  - `span_id` (string)
+  - `cmd_id` (string)
+
+Redaction rule:
+- `payload.channel` MUST be safe-to-print (no secrets) per schema spec.
+
+Consumer impact:
+- Enables deterministic multi-agent joins and downstream routing without terminal scraping.
+
+### PTY passthrough suppression summary records
+
+When structured event lines are dropped during PTY passthrough, the shell MUST emit exactly one summary record.
+
+Canonical record:
+- `event_type: "warning"`
+- Required fields:
+  - `event_type` (string; must be `"warning"`)
+  - `ts` (RFC3339 UTC string)
+  - `session_id` (string)
+  - `component` (string; MUST be `"shell"`)
+  - `code` (string; MUST be `"pty_structured_event_drops"`)
+  - `dropped_structured_event_lines` (int; number dropped)
+- Optional fields:
+  - `max_pty_buffered_lines` (int; configured cap)
+  - `dropped_structured_event_lines_by_channel` (array of objects `{ channel: string, dropped: int }`)
+  - `world_id` (string; if the passthrough is tied to a world session)
+  - `cmd_id` (string; if the passthrough is tied to a command)
+  - `span_id` (string; if the passthrough is tied to a traced span)
+
+Redaction rule:
+- `dropped_structured_event_lines_by_channel[*].channel` MUST obey the envelope `channel` constraints (producer-declared, bounded, no secrets).
+
+Consumer impact:
+- Downstream tools can report suppressed activity deterministically without heuristics.
+
+### Clamp warning record (out-of-range `repl.max_pty_buffered_lines`)
+
+If an out-of-range value is provided and clamped, the shell MUST emit a structured warning record (not PTY-injected).
+
+Canonical record:
+- `event_type: "warning"`
+- Required fields:
+  - `event_type` (string; must be `"warning"`)
+  - `ts` (RFC3339 UTC string)
+  - `session_id` (string)
+  - `component` (string; MUST be `"shell"`)
+  - `code` (string; MUST be `"config_value_clamped"`)
+  - `key` (string; MUST be `"repl.max_pty_buffered_lines"`)
+  - `provided` (int)
+  - `effective` (int)
+  - `min` (int; `0`)
+  - `max` (int; `16384`)
+
+## Metrics (if any)
+- None in v1 (trace records are sufficient for correctness and auditing).
+
+## Acceptance criteria (testable)
+- Every structured agent event produces exactly one `event_type="agent_event"` trace record containing:
+  - `session_id`
+  - `component="agent-hub"`
+  - `payload` matching `agent-hub-event-envelope-schema-spec.md`.
+- Each PTY passthrough session that drops structured lines produces exactly one `code="pty_structured_event_drops"` warning record.
+- A clamped config value produces exactly one `code="config_value_clamped"` warning record and does not change exit code.
+
