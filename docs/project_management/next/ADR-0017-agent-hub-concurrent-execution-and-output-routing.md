@@ -10,12 +10,19 @@
 - Sequencing spine: `docs/project_management/next/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
+  - `docs/project_management/standards/EXECUTIVE_SUMMARY_STANDARD.md`
+  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 
 ## Related Docs
 - Plan: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/plan.md`
 - Decision Register: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md`
+- Agent Hub core decisions (world reuse, drift posture, alert schema):
+  - `docs/project_management/next/agent_hub_core/decision_register.md`
+- Phase 8 cross-cutting registry (sequencing umbrella):
+  - `docs/project_management/next/PHASE_8_CROSS_CUTTING_DECISION_REGISTRY.md`
 - Related ADRs:
   - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
+  - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
 - Historical context:
   - `docs/project_management/_archived/p0-agent-hub-isolation-hardening/`
 - Grounding code references:
@@ -25,7 +32,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 41fcd002c7e017054b2e4812420598a60ad6041277ebcfc9e41f881b5a83b29f
+ADR_BODY_SHA256: 1b1d2aa65beb12dfd8be022d580933e821a848f287986b10e1b12dc4b101c92f
 ### Changes (operator-facing)
 - Make concurrent outputs predictable and non-corrupting when multiple agents run
   - Existing: Substrate can render concurrent **structured** agent output during the REPL (e.g., `:demo-agent`), but there is no explicit output contract that separates:
@@ -36,9 +43,12 @@ ADR_BODY_SHA256: 41fcd002c7e017054b2e4812420598a60ad6041277ebcfc9e41f881b5a83b29
     - Structured agent events are rendered via a structured output path and are buffered during PTY passthrough to avoid corrupting TUIs.
   - Why: Agent hub orchestration will run multiple agent CLIs concurrently (via bindings/SDK wrappers). Without an output contract, concurrent outputs can corrupt terminal state or be mis-attributed, undermining usability and auditability.
   - Links:
-    - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md#user-contract-authoritative`
+    - `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md#L78` (this ADR: contract)
+    - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md#L12` (DR-0001: output classes)
+    - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md#L89` (PTY passthrough contract)
     - `docs/project_management/_archived/world-first-repl-persistent-pty/STATE_MACHINE.md`
     - `docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md`
+    - `crates/shell/src/repl/async_repl.rs` (concurrent structured printing today)
 
 ## Problem / Context
 - Substrate’s future direction includes an “agent hub” that runs multiple concurrent agent CLIs (Codex / Claude Code / Gemini CLI and others) via wrappers/bindings.
@@ -66,44 +76,53 @@ ADR_BODY_SHA256: 41fcd002c7e017054b2e4812420598a60ad6041277ebcfc9e41f881b5a83b29
 - Adding new world-agent wire protocols beyond what ADR-0016 requires.
 
 ## User Contract (Authoritative)
-- Output classes:
-  - **PTY output**:
-    - Raw bytes from a PTY stream (world sessions, TUIs, interactive commands).
-    - Must be forwarded and rendered as bytes (binary-safe).
-  - **Structured agent events**:
-    - Substrate-managed, typed events associated with background/concurrent agent activity (status/progress/log lines).
-    - Must be rendered via a structured output path that does not require injecting bytes into a PTY stream.
+### CLI
+- Commands and flags: no new top-level `substrate` commands or flags are introduced by this ADR.
+- Interactive scope: this ADR defines output routing behavior for the interactive REPL and any execution path that enters PTY passthrough (as defined by ADR-0016).
+- Exit codes:
+  - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+  - `0`: success
+  - `1`: unexpected failure
+  - `2`: actionable user error (including invalid config types/values at the CLI/config boundary)
 
-- Rendering rules (interactive REPL):
-  - During PTY passthrough (TUIs/interactive commands), Substrate MUST NOT inject structured agent events into the PTY byte stream.
-    - Structured events MUST be handled via a bounded buffer and MUST NOT backpressure execution.
-      - If the buffer overflows, Substrate MUST drop additional structured lines for the duration of the passthrough and MUST emit an explicit dropped-count summary after passthrough ends.
-        - Source of truth: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0006)
-        - Phase 8 additive clarification: when `channel` is used, the dropped-count summary SHOULD optionally include a per-channel breakdown so suppressed output remains explainable without heuristics.
-  - While the line editor is active (`Idle`), PTY bytes MAY arrive (out-of-band) and Substrate MUST render them without corrupting the current input buffer.
-    - PTY bytes MUST be rendered as raw bytes with prompt/input redraw semantics (byte fidelity preserved).
+### Output Classes
+- **PTY output**:
+  - Raw bytes from a PTY stream (world sessions, TUIs, interactive commands).
+  - MUST be forwarded and rendered as bytes (binary-safe).
+- **Structured agent events**:
+  - Substrate-managed, typed events associated with background/concurrent agent activity (status/progress/log lines).
+  - MUST be rendered via a structured output path that does not require injecting bytes into a PTY stream.
 
-- Attribution:
-  - PTY bytes are not attributed to a specific agent/task by default (session-level stream).
-  - Structured agent events MUST include stable attribution fields suitable for deterministic joins across the LLM/agent/workflow/router tracks.
-    - Required (minimum):
-      - `orchestration_session_id`
-      - `run_id`
-      - `agent_id`
-    - Required when applicable:
-      - `thread_id` (LLM/conversation grouping)
-      - `role` (agent hub role: orchestrator vs executor)
-      - `backend_id` when the emitting backend’s kind is known (v1 default: known) to avoid heuristic inference from `agent_id` alone.
-    - Join keys (required when the event is tied to execution/trace):
-      - `cmd_id` and/or `span_id`
-    - Source of truth: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003)
-    - Placement: attribution fields are top-level keys on the serialized event envelope.
-      - Source of truth: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0008)
-  - Review / decision hook (agent hub alignment):
-    - Phase 8 additive alignment: structured agent events MUST carry `world_id` when the emitting backend executes inside a world boundary, so operators can verify whether concurrently-running in-world agents share (or intentionally do not share) the same filesystem/isolation boundary.
-      - Source of truth: `docs/project_management/next/agent_hub_core/decision_register.md` (DR-0004) and `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003).
-    - Phase 8 additive alignment: the structured-event envelope MAY carry an optional event-plane routing hint (`channel`) so future subscribe/filter behavior is expressible without PTY injection or attribution ambiguity.
-      - Source of truth: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003).
+### Rendering Rules (Interactive REPL)
+- During PTY passthrough (TUIs/interactive commands), Substrate MUST NOT inject structured agent events into the PTY byte stream.
+  - Structured events MUST be handled via a bounded buffer and MUST NOT backpressure execution.
+  - If the buffer overflows, Substrate MUST drop additional structured lines for the duration of the passthrough and MUST emit an explicit dropped-count summary after passthrough ends.
+    - Source of truth: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0006)
+  - If the structured-event envelope includes `channel` values, the dropped-count summary MAY include a per-channel breakdown in addition to the total dropped count.
+- While the line editor is active (`Idle`), PTY bytes MAY arrive (out-of-band) and Substrate MUST render them without corrupting the current input buffer.
+  - PTY bytes MUST be rendered as raw bytes with prompt/input redraw semantics (byte fidelity preserved).
+
+### Attribution (Structured Events)
+- PTY bytes are not attributed to a specific agent/task by default (session-level stream).
+- Structured agent events MUST include stable attribution fields suitable for deterministic joins across the LLM/agent/workflow/router tracks.
+  - Required (minimum):
+    - `orchestration_session_id`
+    - `run_id`
+    - `agent_id`
+  - Required when applicable:
+    - `thread_id` (LLM/conversation grouping)
+    - `role` (agent hub role: orchestrator vs executor)
+    - `backend_id` when the emitting backend’s kind is known (v1 default: known) to avoid heuristic inference from `agent_id` alone.
+  - Join keys (required when the event is tied to execution/trace):
+    - `cmd_id` and/or `span_id`
+  - Source of truth: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003)
+- Placement: attribution fields are top-level keys on the serialized event envelope.
+  - Source of truth: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0008)
+- Alignment hooks (agent hub core):
+  - Structured agent events MUST carry `world_id` when the emitting backend executes inside a world boundary, so operators can verify whether concurrently-running in-world agents share (or intentionally do not share) the same filesystem/isolation boundary.
+    - Source of truth: `docs/project_management/next/agent_hub_core/decision_register.md` (DR-0004) and `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003).
+  - The structured-event envelope MAY carry an optional event-plane routing hint (`channel`) so future subscribe/filter behavior is expressible without PTY injection or attribution ambiguity.
+    - Source of truth: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003).
 
 ### Structured agent event envelope (v1; Phase 8 additive clarifications)
 
@@ -183,46 +202,89 @@ Fail-closed drift posture (`agents.hub.world_restart.on_drift=fail_closed`)
         max_pty_buffered_lines: 2048
       ```
 
+### Platform Notes
+- All platforms:
+  - The output routing and rendering rules in this ADR are required anywhere PTY passthrough and structured agent events can occur concurrently.
+- Linux/macOS:
+  - PTY passthrough is expected to use world-agent streaming (`/v1/stream`) per ADR-0016; structured event printing must remain out-of-band (no PTY injection).
+- Windows:
+  - This ADR introduces no platform-specific exceptions; if PTY passthrough is supported on Windows, the same non-injection rule applies.
+
 ## Architecture Shape
+### Components affected
 - `crates/shell`:
   - Maintains two concurrent output paths:
     - PTY-bytes rendering path (binary-safe).
-    - Structured-event rendering path (string/typed messages; existing external-printer style).
+    - Structured-event rendering path (typed messages; existing external-printer style).
   - Ensures structured-event output is not injected into PTY passthrough.
 - `crates/world-agent`:
   - Continues to treat `stdout` as a raw PTY byte stream.
 - `crates/common` / `crates/trace`:
   - Structured agent events MUST be traceable with stable correlation identifiers (persisted to canonical `trace.jsonl`).
-    - This ADR defines the minimum required attribution fields; trace/span schema alignment remains additive-only and is finalized in the “circle-back” pass.
   - Trace persistence (authoritative):
     - Each structured agent event MUST be persisted as its own JSONL record in canonical trace.
     - Source of truth: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0009)
 
+### End-to-end flow
+- Inputs:
+  - PTY byte stream from world-agent streaming (`/v1/stream`) or host PTY passthrough.
+  - Structured agent events emitted by agent hub wrappers/orchestration and/or internal REPL tasks.
+  - Effective config (`repl.max_pty_buffered_lines`) from config layering.
+- Derived state:
+  - REPL mode (`Idle` vs PTY passthrough).
+  - Structured-event buffer occupancy and dropped counters (during PTY passthrough).
+- Actions:
+  - Route PTY bytes directly to the terminal output stream (byte fidelity preserved).
+  - Route structured agent events through the structured renderer; if PTY passthrough is active, buffer up to the cap and drop beyond the cap without backpressure.
+  - After PTY passthrough ends, emit a dropped-count summary (and optional per-channel breakdown when available).
+- Outputs:
+  - Terminal output with no structured-event injection into PTY bytes.
+  - Canonical trace records for structured events with correlation fields (per DR-0009).
+
 ## Sequencing / Dependencies
-- Depends on ADR-0016’s PTY passthrough and out-of-band PTY output rules for the REPL.
+- Sequencing entry: `docs/project_management/next/sequencing.json` → (must be added before execution triads begin; use the Phase 8 registry as the umbrella until a dedicated sprint entry exists).
+- Prerequisite integration task IDs:
+  - None declared in this Draft. Before execution triads begin, represent dependencies in the feature `tasks.json` and reference the prerequisite integration task IDs here.
+- Dependencies:
+  - Depends on ADR-0016’s PTY passthrough and out-of-band PTY output rules for the REPL.
+  - Correlation vocabulary and field names should remain consistent with `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md` (additive-only alignment).
 - This ADR is intentionally minimal and can be executed incrementally:
   - First: lock output classification + rendering rules.
   - Later: expand agent hub orchestration and config.
 
 ## Security / Safety Posture
-- Prevent terminal corruption and output spoofing risks by separating:
-  - PTY byte streams from
-  - structured host/agent events.
-- Maintain fail-closed posture for world execution where required by policy:
-  - This ADR does not introduce any implicit host execution path.
+- Fail-closed vs degrade behavior:
+  - Fail-closed: this ADR does not introduce any implicit host execution path; world execution posture remains governed by existing policy/config (see ADR-0016 for REPL world enablement and fail-closed startup rules).
+  - Degrade (bounded): during PTY passthrough, structured agent events degrade by dropping after the bounded cap is reached; execution must not be backpressured by structured printing.
+- Protected invariants:
+  - Structured agent events MUST NOT be injected into PTY byte streams during PTY passthrough.
+  - PTY bytes MUST be rendered as raw bytes (binary-safe) with no re-encoding assumptions.
+- Observability:
+  - Structured agent events MUST include stable correlation fields and MUST be persisted to canonical trace (DR-0003/DR-0008/DR-0009).
 
 ## Validation Plan (Authoritative)
-- Tests (high-level):
-  - During PTY passthrough, structured agent events are buffered and do not corrupt the TUI output.
+### Tests
+- Unit tests:
+  - During PTY passthrough, structured agent events are buffered up to the cap and dropped beyond the cap without corrupting TUI output.
   - While idle, out-of-band PTY bytes are rendered without corrupting the input buffer.
-  - Structured events include stable attribution fields.
-- Manual playbook:
-  - Verify `:demo-agent` (or equivalent) can run concurrently with a PTY passthrough command without corrupting the terminal.
+  - Structured events include stable attribution fields and are serialized with top-level correlation keys.
+- Integration tests:
+  - REPL scenario where a PTY passthrough command is active while structured agent events are emitted concurrently; verify no corruption and correct drop-summary behavior at the end of passthrough.
+
+### Manual validation
+- Manual playbook: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/manual_testing_playbook.md`
+  - Verify a structured-event producer (e.g., `:demo-agent`) can run concurrently with a PTY passthrough command without corrupting the terminal.
+
+### Smoke scripts
+- Linux: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/smoke/windows-smoke.ps1`
 
 ## Rollout / Backwards Compatibility
 - Greenfield breaking is acceptable: behavior changes are allowed so long as the operator-facing contract is explicit and high-signal.
 - This ADR does not deprecate any stable public API; it only refines interactive output behavior.
 
 ## Decision Summary
-- Decisions live in:
-  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md`
+- Decision Register entries:
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md`:
+    - DR-0001, DR-0002, DR-0003, DR-0004, DR-0005, DR-0006, DR-0007, DR-0008, DR-0009, DR-0010
