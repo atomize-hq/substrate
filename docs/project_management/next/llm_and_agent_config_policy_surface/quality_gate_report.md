@@ -170,3 +170,134 @@ make planning-validate FEATURE_DIR="$FEATURE_DIR"
 ### If ACCEPT
 - Summary: Mechanical gates are green and the pack defines deterministic contracts, decisions, and task wiring.
 - Next step: “Execution triads may begin.”
+
+---
+
+## Pass 3 — 2026-02-15 — Recommendation: ACCEPT (Finding 008 remediation verified)
+
+## Metadata
+- Feature directory: `docs/project_management/next/llm_and_agent_config_policy_surface/`
+- Reviewed commit: `fc8ef8d6888fe4313c827b609c91439749c37ae6` (plus uncommitted planning-doc fixes)
+- Reviewer: `Codex (quality gate pass 3)`
+- Date (UTC): `2026-02-15`
+- Recommendation: `ACCEPT`
+
+## Evidence: Commands Run (verbatim)
+
+```bash
+export FEATURE_DIR="docs/project_management/next/llm_and_agent_config_policy_surface"
+
+# JSON validity
+jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
+# exit: 0
+
+jq -e . docs/project_management/next/sequencing.json >/dev/null
+# exit: 0
+
+# tasks.json required-field audit
+python - <<'PY'
+import json, os
+feature_dir=os.environ["FEATURE_DIR"]
+path=os.path.join(feature_dir,"tasks.json")
+data=json.load(open(path,"r",encoding="utf-8"))
+tasks=data["tasks"] if isinstance(data,dict) and "tasks" in data else data
+required=[
+  "id","name","type","phase","status","description",
+  "references","acceptance_criteria","start_checklist","end_checklist",
+  "worktree","integration_task","kickoff_prompt",
+  "depends_on","concurrent_with"
+]
+missing=[]
+for t in tasks:
+  m=[k for k in required if k not in t]
+  if m:
+    missing.append((t.get("id","<no id>"),m))
+if missing:
+  for tid,m in missing:
+    print(tid,":",", ".join(m))
+  raise SystemExit(1)
+print("OK: tasks.json required fields present")
+PY
+# exit: 0
+
+# Planning lint (mechanical)
+make planning-lint FEATURE_DIR="$FEATURE_DIR"
+# exit: 0
+
+# Planning validate (mechanical)
+make planning-validate FEATURE_DIR="$FEATURE_DIR"
+# exit: 0
+
+# Decision register structure check (2 viable options + selection per DR)
+python3 - <<'PY'
+import re, pathlib
+p=pathlib.Path("docs/project_management/next/llm_and_agent_config_policy_surface/decision_register.md")
+text=p.read_text(encoding="utf-8")
+parts=re.split(r"\\n(?=### DR-\\d{4} — )", text)
+fail=[]
+for part in parts[1:]:
+  m=re.match(r"### (DR-\\d{4}) — ([^\\n]+)", part)
+  if not m:
+    continue
+  dr=m.group(1)
+  has_a="**Option A" in part
+  has_b="**Option B" in part
+  has_selected=bool(re.search(r"\\*\\*Selected:\\*\\* Option [AB]", part))
+  if not (has_a and has_b and has_selected):
+    fail.append((dr, has_a, has_b, has_selected))
+if fail:
+  for dr,has_a,has_b,has_selected in fail:
+    print(dr,"missing",{"A":not has_a,"B":not has_b,"Selected":not has_selected})
+  raise SystemExit(1)
+print("OK: all DR sections contain Option A, Option B, and Selected")
+PY
+# exit: 0
+```
+
+## Findings (must be exhaustive)
+
+### Finding 005 — Mechanical planning lint passed (required)
+- Status: `VERIFIED`
+- Evidence: `make planning-lint FEATURE_DIR="$FEATURE_DIR"` exited `0`.
+- Impact: Confirms baseline Planning Pack completeness and mechanical invariants.
+- Fix required (exact): none
+- If DEFECT: Alternative (one viable): none
+
+### Finding 006 — Decision register meets the 2-option A/B standard
+- Status: `VERIFIED`
+- Evidence: `docs/project_management/next/llm_and_agent_config_policy_surface/decision_register.md` plus the decision-structure check in “Evidence: Commands Run”.
+- Impact: Ensures major design decisions are explicit, comparable, and auditably selected.
+- Fix required (exact): none
+- If DEFECT: Alternative (one viable): none
+
+### Finding 007 — Cross-platform + checkpoint wiring remains schema v4 boundary-only (CP1 ends at LACP1)
+- Status: `VERIFIED`
+- Evidence:
+  - `docs/project_management/next/llm_and_agent_config_policy_surface/tasks.json` meta `schema_version=4` and `checkpoint_boundaries=["LACP1"]`
+  - `docs/project_management/next/llm_and_agent_config_policy_surface/ci_checkpoint_plan.md` (CP1 slices `["LACP0","LACP1"]`, task `CP1-ci-checkpoint`)
+- Impact: Prevents per-slice platform-fix drift and enforces bounded CI checkpoint execution.
+- Fix required (exact): none
+- If DEFECT: Alternative (one viable): none
+
+### Finding 008 — Platform-fix integration tasks’ enforced checks align with their kickoff prompts (resolved)
+- Status: `VERIFIED`
+- Note (prepend to remediation entry)
+
+  Finding 008 is resolved by aligning the platform-fix integration tasks’ enforced checks with their kickoff prompts:
+
+  - Updated `docs/project_management/next/llm_and_agent_config_policy_surface/tasks.json` to remove `required_make_targets=["integ-checks"]` from `LACP1-integ-linux` and `LACP1-integ-macos`, keeping platform-fix tasks bounded to smoke + local `cargo fmt`/`cargo clippy` as documented in their prompts.
+  - No changes were made to production code.
+- Evidence:
+  - `docs/project_management/next/llm_and_agent_config_policy_surface/tasks.json` tasks `LACP1-integ-linux` and `LACP1-integ-macos` have `required_make_targets=[]`.
+  - Kickoff prompts:
+    - `docs/project_management/next/llm_and_agent_config_policy_surface/kickoff_prompts/LACP1-integ-linux.md` uses `RUN_INTEG_CHECKS=0` and requires only smoke + local `cargo fmt`/`cargo clippy`.
+    - `docs/project_management/next/llm_and_agent_config_policy_surface/kickoff_prompts/LACP1-integ-macos.md` uses `RUN_INTEG_CHECKS=0` and requires only smoke + local `cargo fmt`/`cargo clippy`.
+- Impact: Keeps platform-fix work bounded to the intended smoke + local lint checks, preventing accidental “full integ-checks” expansion on platform-fix tasks.
+- Fix required (exact): none
+- If DEFECT: Alternative (one viable): none
+
+## Decision: ACCEPT or FLAG
+
+### If ACCEPT
+- Summary: Mechanical gates are green and the remaining review findings are verified; platform-fix enforcement is now consistent with the documented kickoff prompts.
+- Next step: “Execution triads may begin.”

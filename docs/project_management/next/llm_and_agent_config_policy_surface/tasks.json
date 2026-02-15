@@ -307,7 +307,7 @@
       "depends_on": ["LACP1-integ-core", "CP1-ci-checkpoint"],
       "concurrent_with": [],
       "git_branch": "llm-and-agent-config-policy-surface-lacp1-integ-linux",
-      "required_make_targets": ["integ-checks"],
+      "required_make_targets": [],
       "merge_to_orchestration": false,
       "platform": "linux"
     },
@@ -343,7 +343,7 @@
       "depends_on": ["LACP1-integ-core", "CP1-ci-checkpoint"],
       "concurrent_with": [],
       "git_branch": "llm-and-agent-config-policy-surface-lacp1-integ-macos",
-      "required_make_targets": ["integ-checks"],
+      "required_make_targets": [],
       "merge_to_orchestration": false,
       "platform": "macos"
     },
@@ -416,4 +416,3 @@
     }
   ]
 }
-
