@@ -150,8 +150,9 @@ Scope:
   - Slightly more plumbing: must track a dropped counter and emit one summary record.
 - **Cascading implications:**
   - The summary MUST be emitted via the structured-event path (not PTY), after passthrough ends.
-  - Summary payload MUST include a deterministic counter (e.g., `dropped_structured_event_lines: <int>`), and MAY also include the configured cap value.
-  - Phase 8 additive clarification (channel-aware UX): when multiple structured-event channels are active during passthrough, the summary SHOULD remain explainable without heuristics by optionally including a per-channel breakdown.
+  - Summary payload MUST include:
+    - `dropped_structured_event_lines: <int>`
+    - `max_pty_buffered_lines: <int>` (effective configured cap)
 - **Risks:**
   - Minimal; additive metadata.
 - **Unlocks:**
@@ -167,13 +168,7 @@ Scope:
 - Track `dropped_structured_event_lines` during PTY passthrough once the buffer cap is hit.
 - After passthrough ends (before returning to the prompt), emit exactly one structured summary warning containing:
   - `dropped_structured_event_lines: <int>`
-  - `max_pty_buffered_lines: <int>` (optional but recommended)
-  - OPTIONAL (recommended when `channel` is used by emitters): `dropped_structured_event_lines_by_channel`
-    - Shape: a list of `{ channel: <string>, dropped: <int> }`
-    - Semantics:
-      - `channel` values follow the structured event envelope `channel` contract (producer-declared, capped, no secrets).
-      - Events with no channel set SHOULD be counted under `channel="(unset)"`.
-      - The list MAY be capped to the top-N channels by dropped count (implementation-defined), with the remaining drops aggregated into `channel="(other)"` to keep payload bounded.
+  - `max_pty_buffered_lines: <int>` (effective configured cap)
   - Emission mechanism (non-negotiable):
     - Write a canonical trace record to `trace.jsonl` with:
       - `component: "shell"`
@@ -245,21 +240,21 @@ Scope:
     - Envelope fields (top-level; not nested in `data`):
       - `ts` (RFC3339 UTC timestamp)
       - `agent_id` (string; actor/principal id)
-      - `backend_id` (string; optional; `<kind>:<name>`)
+      - `backend_id` (string; non-required; `<kind>:<name>`)
       - `kind` (enum; `registered|status|task_start|task_progress|task_end|pty_data|alert`)
       - `orchestration_session_id` (string; required)
       - `run_id` (string; required)
-      - `thread_id` (string; optional)
-      - `role` (string; optional taxonomy label; v1 reserved values include `orchestrator|member`)
-      - `world_id` (string; optional; required when the emitting backend executes inside a world boundary)
-      - `cmd_id` (string; optional)
-      - `span_id` (string; optional)
-      - `channel` (string; optional; event-plane routing hint for subscribe/filter behavior; not used for policy gating)
+      - `thread_id` (string; non-required)
+      - `role` (string; non-required taxonomy label; v1 reserved values include `orchestrator|member`)
+      - `world_id` (string; non-required; required when the emitting backend executes inside a world boundary)
+      - `cmd_id` (string; non-required)
+      - `span_id` (string; non-required)
+      - `channel` (string; non-required; event-plane routing hint for subscribe/filter behavior; not used for policy gating)
         - Constraints (non-negotiable):
           - Meaning: a producer-declared “topic” for subscribe/filter; must never be required for joins, and must never affect policy gating decisions.
           - MUST be producer-declared (not arbitrary user-provided freeform).
           - MUST be capped (recommendation: <= 64 bytes) and safe to print/persist.
-          - MUST NOT contain secrets; if a producer attempts to set a channel containing obvious secret material, the value MUST be dropped and a structured warning MAY be emitted.
+          - MUST NOT contain secrets; if a producer attempts to set a channel containing obvious secret material, the value MUST be dropped deterministically and no warning record is emitted.
     - Payload:
       - `data` is a JSON object whose schema depends on `kind` (e.g., `message`, or stream `chunk` + `stream`).
 
@@ -303,7 +298,7 @@ Scope:
 - **Unlocks:**
   - Safer ops tuning across different environments (local dev vs CI vs demos).
 - **Quick wins / low-hanging fruit:**
-  - Default remains the current constant; knob is optional.
+  - Default remains the current constant; if the key is absent, the default applies.
 
 **Recommendation**
 - **Selected:** Option B — Config knob in existing global + workspace YAML config.
@@ -540,11 +535,11 @@ Scope:
 
 **Follow-up tasks (explicit)**
 - Canonical trace record shape (v1; additive-only extensions allowed):
-  - `component: "agent-hub"` (or equivalent stable component name for agent events)
+  - `component: "agent-hub"`
   - `event_type: "agent_event"`
-  - `session_id` (host session)
-  - `agent_id`, `kind`, `data`
-  - required correlation fields (`orchestration_session_id`, `run_id`, …) as top-level keys (DR-0003/DR-0008)
+  - `session_id` (shell trace session id)
+  - envelope fields (`agent_id`, `kind`, `data`, and correlation fields) at the record top level (no nested envelope object)
+  - required correlation fields (`orchestration_session_id`, `run_id`) present on every record (DR-0003/DR-0008)
 
 ---
 

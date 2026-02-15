@@ -197,3 +197,56 @@ The overlay may include only these keys (all optional):
 - `cmd_isolated`
 - `require_approval`
 - `limits.*`
+
+### `policy_overlay` composition rules (restriction-only AND semantics)
+
+Agent `policy_overlay` MUST be restriction-only: it MUST NOT broaden permissions beyond the effective base policy derived from `policy.yaml` (global/workspace + defaults).
+
+Error posture:
+- If an overlay attempts to broaden a permission (by value or by list contents), Substrate MUST reject the agent file as invalid and MUST fail closed with exit code `2`.
+
+General rules:
+- Omitted keys in the overlay have no effect; the base policy governs.
+- For keys composed by AND/OR rules below, the effective behavior is defined as “most restrictive wins”.
+- For list keys where “subset-only” is required, the overlay list MUST be a subset of the base list (exact string match). If it is not, it is a broadening attempt and MUST be rejected.
+
+Key-family rules:
+
+1) **Subset-only allowlists (overlay can only narrow)**
+- `llm.secrets.env_allowed`:
+  - Overlay MAY further restrict the set of secret env var names eligible for host→world secret delivery.
+  - Overlay list MUST be a subset of the base `llm.secrets.env_allowed`.
+- `agents.host_credentials.read.allowed_backends`:
+  - Overlay MAY further restrict which backends may read host credential material during adapter preparation.
+  - Overlay list MUST be a subset of the base `agents.host_credentials.read.allowed_backends`.
+
+2) **Boolean “tighten-only” constraints (overlay can require stricter posture)**
+- `llm.fail_closed.routing`: effective is `base OR overlay` (overlay may require fail-closed routing).
+- `agents.fail_closed.routing`: effective is `base OR overlay` (overlay may require fail-closed routing).
+- `require_approval`: effective is `base OR overlay` (overlay may require approval).
+
+3) **Allow/deny command surfaces**
+- `cmd_denied`: union (overlay may deny additional commands).
+- `cmd_isolated`: union (overlay may require isolation for additional commands).
+- `cmd_allowed`: additional allow filter:
+  - If the overlay `cmd_allowed` list is empty or omitted, it has no effect.
+  - If the overlay `cmd_allowed` list is non-empty, a command MUST match BOTH:
+    - the base allow rules (if any), AND
+    - the overlay allow rules.
+  - Rationale: overlay cannot broaden; it can only add additional allow constraints.
+
+4) **Network allowlist**
+- `net_allowed`: additional allow filter:
+  - If the overlay `net_allowed` list is empty or omitted, it has no effect.
+  - If the overlay `net_allowed` list is non-empty, an outbound host MUST be allowed by BOTH:
+    - base `net_allowed`, AND
+    - overlay `net_allowed`.
+
+5) **Resource limits**
+- `limits.*`: “more restrictive wins”:
+  - Each limit field composes as: effective = `min(base, overlay)` when both are present.
+  - If only one side specifies a given limit, that value is used.
+
+6) **Filesystem policy (`world_fs.*`)**
+- Overlay MAY only tighten `world_fs.*` constraints (ADR-0018); it MUST NOT broaden.
+- Composition for `world_fs.*` is implementation-defined but MUST follow the restriction-only rule, and MUST fail closed on any broadening attempt.

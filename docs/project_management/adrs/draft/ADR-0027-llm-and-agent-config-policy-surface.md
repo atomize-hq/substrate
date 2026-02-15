@@ -18,14 +18,15 @@
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 
 ## Related Docs
-- Plan: `docs/project_management/next/llm_and_agent_config_policy_surface/plan.md` (not created; ADR draft phase)
-- Tasks: `docs/project_management/next/llm_and_agent_config_policy_surface/tasks.json` (not created; ADR draft phase)
-- Spec manifest: `docs/project_management/next/llm_and_agent_config_policy_surface/spec_manifest.md` (not created; ADR draft phase)
+- Plan: `docs/project_management/next/llm_and_agent_config_policy_surface/plan.md` (not created; planning-pack authoring phase)
+- Tasks: `docs/project_management/next/llm_and_agent_config_policy_surface/tasks.json` (not created; planning-pack authoring phase)
+- Spec manifest: `docs/project_management/next/llm_and_agent_config_policy_surface/spec_manifest.md`
 - Specs:
   - Contract: `docs/project_management/next/llm_and_agent_config_policy_surface/contract.md`
   - Schema: `docs/project_management/next/llm_and_agent_config_policy_surface/SCHEMA.md`
+  - Phase 3 slice: `docs/project_management/next/llm_and_agent_config_policy_surface/LACP0-spec.md`
 - Decision Register: `docs/project_management/next/llm_and_agent_config_policy_surface/decision_register.md`
-- Impact Map: `docs/project_management/next/llm_and_agent_config_policy_surface/impact_map.md` (not created; ADR draft phase)
+- Impact Map: `docs/project_management/next/llm_and_agent_config_policy_surface/impact_map.md`
 - Manual playbook: `docs/project_management/next/llm_and_agent_config_policy_surface/manual_testing_playbook.md`
 - Existing config/policy layering model:
   - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`

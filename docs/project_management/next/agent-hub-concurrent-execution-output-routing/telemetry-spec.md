@@ -22,18 +22,22 @@ Requirement:
 Canonical record:
 - `event_type: "agent_event"`
 - Required fields:
-  - `event_type` (string; must be `"agent_event"`)
-  - `ts` (RFC3339 UTC string)
-  - `session_id` (string; host session id)
-  - `component` (string; MUST be `"agent-hub"` for agent hub events)
-  - `payload` (object; the event envelope; schema: `agent-hub-event-envelope-schema-spec.md`)
-- Recommended fields (when known):
-  - `world_id` (string)
-  - `span_id` (string)
-  - `cmd_id` (string)
+  - `event_type` (string; MUST be `"agent_event"`)
+  - `ts` (string; RFC3339 UTC timestamp; MUST equal the envelope `ts`)
+  - `session_id` (string; shell trace session id)
+  - `component` (string; MUST be `"agent-hub"`)
+  - Envelope required fields (top-level; schema: `agent-hub-event-envelope-schema-spec.md`):
+    - `kind`
+    - `agent_id`
+    - `orchestration_session_id`
+    - `run_id`
+    - `data`
+
+Optional envelope fields (top-level; emitted when known and applicable):
+- `backend_id`, `thread_id`, `role`, `world_id`, `cmd_id`, `span_id`, `channel`, `project`
 
 Redaction rule:
-- `payload.channel` MUST be safe-to-print (no secrets) per schema spec.
+- `channel` MUST be safe-to-print (no secrets) per schema spec.
 
 Consumer impact:
 - Enables deterministic multi-agent joins and downstream routing without terminal scraping.
@@ -51,15 +55,14 @@ Canonical record:
   - `component` (string; MUST be `"shell"`)
   - `code` (string; MUST be `"pty_structured_event_drops"`)
   - `dropped_structured_event_lines` (int; number dropped)
+  - `max_pty_buffered_lines` (int; effective configured cap)
 - Optional fields:
-  - `max_pty_buffered_lines` (int; configured cap)
-  - `dropped_structured_event_lines_by_channel` (array of objects `{ channel: string, dropped: int }`)
-  - `world_id` (string; if the passthrough is tied to a world session)
-  - `cmd_id` (string; if the passthrough is tied to a command)
-  - `span_id` (string; if the passthrough is tied to a traced span)
+  - `world_id` (string; when the passthrough is tied to a world session)
+  - `cmd_id` (string; when the passthrough is tied to a command)
+  - `span_id` (string; when the passthrough is tied to a traced span)
 
 Redaction rule:
-- `dropped_structured_event_lines_by_channel[*].channel` MUST obey the envelope `channel` constraints (producer-declared, bounded, no secrets).
+- No user-provided payload is emitted in this warning record.
 
 Consumer impact:
 - Downstream tools can report suppressed activity deterministically without heuristics.
@@ -89,7 +92,6 @@ Canonical record:
 - Every structured agent event produces exactly one `event_type="agent_event"` trace record containing:
   - `session_id`
   - `component="agent-hub"`
-  - `payload` matching `agent-hub-event-envelope-schema-spec.md`.
+  - the envelope fields at the record top level (no nested envelope object).
 - Each PTY passthrough session that drops structured lines produces exactly one `code="pty_structured_event_drops"` warning record.
 - A clamped config value produces exactly one `code="config_value_clamped"` warning record and does not change exit code.
-

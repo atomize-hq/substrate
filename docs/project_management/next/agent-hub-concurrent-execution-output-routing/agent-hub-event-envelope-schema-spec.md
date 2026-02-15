@@ -10,7 +10,7 @@ Owner standard:
 
 ## Format
 - Format: JSON
-- Canonical file name(s): N/A (event payloads are embedded in trace records)
+- Canonical file name(s): N/A (events are trace records)
 - Canonical location(s):
   - `~/.substrate/trace.jsonl` (or `SHIM_TRACE_LOG`) as `event_type="agent_event"` records (see `telemetry-spec.md`)
 
@@ -86,14 +86,14 @@ Routing hint:
   - Constraints:
     - Producer-declared only (MUST NOT be arbitrary user-provided freeform).
     - Capped (recommendation: <= 64 bytes when UTF-8 encoded).
-    - MUST NOT contain secrets. Producers MUST drop unsafe values; emit a structured warning MAY occur.
+    - MUST NOT contain secrets. Producers MUST drop unsafe values deterministically and MUST NOT emit the dropped value in any warning/log/trace field.
     - MUST NOT affect policy gating decisions.
 
-Legacy field (back-compat; not required by ADR-0017):
+Legacy field (reserved; not required by ADR-0017):
 - `project`
   - Type: string
   - Required: no
-  - Meaning: legacy grouping label; producers MAY omit.
+  - Meaning: legacy grouping label; v1 producers MUST omit.
 
 ### Per-kind `data` schema (v1)
 
@@ -211,6 +211,5 @@ Additional fields for `data.code="world_restart_required"`:
 
 ## Acceptance criteria (testable)
 - Every emitted structured agent event contains the required top-level fields (`ts`, `kind`, `agent_id`, `orchestration_session_id`, `run_id`, `data`).
-- `kind` values are in the allowed taxonomy (unknown kinds are rejected by producers and ignored by consumers).
+- Producers emit only `kind` values from the allowed taxonomy; consumers ignore unknown `kind` values without crashing.
 - `channel` is producer-declared, bounded, and safe-to-print (unsafe values are dropped).
-
