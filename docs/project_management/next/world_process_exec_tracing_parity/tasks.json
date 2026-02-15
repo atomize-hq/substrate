@@ -249,7 +249,7 @@
       "type": "integration",
       "phase": "WPEP0",
       "status": "pending",
-      "description": "Merge WPEP0 core + platform parity fixes and run smoke for WPEP0.",
+      "description": "Merge WPEP0 core + platform parity fixes.",
       "references": [
         "docs/project_management/next/world_process_exec_tracing_parity/WPEP0-spec.md",
         "docs/project_management/next/world_process_exec_tracing_parity/manual_testing_playbook.md"
@@ -257,9 +257,8 @@
       "acceptance_criteria": [
         "Run: cargo fmt → exit 0",
         "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: SUBSTRATE_SMOKE_SLICE_ID=WPEP0 bash docs/project_management/next/world_process_exec_tracing_parity/smoke/linux-smoke.sh → exit 0",
-        "Run: SUBSTRATE_SMOKE_SLICE_ID=WPEP0 bash docs/project_management/next/world_process_exec_tracing_parity/smoke/macos-smoke.sh → exit 0",
-        "WPEP0 is green on linux/macos/windows and merged back to orchestration."
+        "Run: make integ-checks → exit 0",
+        "WPEP0 is merged back to orchestration."
       ],
       "start_checklist": [
         "Do not edit planning docs inside the worktree."
@@ -270,8 +269,6 @@
         "cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant tests",
         "make integ-checks",
-        "Run: SUBSTRATE_SMOKE_SLICE_ID=WPEP0 bash docs/project_management/next/world_process_exec_tracing_parity/smoke/linux-smoke.sh",
-        "Run: SUBSTRATE_SMOKE_SLICE_ID=WPEP0 bash docs/project_management/next/world_process_exec_tracing_parity/smoke/macos-smoke.sh",
         "From inside the worktree: make triad-task-finish TASK_ID=\"WPEP0-integ\""
       ],
       "worktree": "wt/world-process-exec-tracing-parity-wpep0-integ",
@@ -382,7 +379,7 @@
       "type": "integration",
       "phase": "WPEP1",
       "status": "pending",
-      "description": "Merge WPEP1 code+test and run smoke (WPEP1 slice mode).",
+      "description": "Merge WPEP1 code+test.",
       "references": [
         "docs/project_management/next/world_process_exec_tracing_parity/WPEP1-spec.md",
         "docs/project_management/next/world_process_exec_tracing_parity/manual_testing_playbook.md"
@@ -390,9 +387,8 @@
       "acceptance_criteria": [
         "Run: cargo fmt → exit 0",
         "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: SUBSTRATE_SMOKE_SLICE_ID=WPEP1 bash docs/project_management/next/world_process_exec_tracing_parity/smoke/linux-smoke.sh → exit 0",
-        "Run: SUBSTRATE_SMOKE_SLICE_ID=WPEP1 bash docs/project_management/next/world_process_exec_tracing_parity/smoke/macos-smoke.sh → exit 0",
-        "WPEP1 is green on linux/macos/windows and merged back to orchestration."
+        "Run: make integ-checks → exit 0",
+        "WPEP1 is merged back to orchestration."
       ],
       "start_checklist": [
         "Do not edit planning docs inside the worktree."
@@ -403,8 +399,6 @@
         "cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant tests",
         "make integ-checks",
-        "Run: SUBSTRATE_SMOKE_SLICE_ID=WPEP1 bash docs/project_management/next/world_process_exec_tracing_parity/smoke/linux-smoke.sh",
-        "Run: SUBSTRATE_SMOKE_SLICE_ID=WPEP1 bash docs/project_management/next/world_process_exec_tracing_parity/smoke/macos-smoke.sh",
         "From inside the worktree: make triad-task-finish TASK_ID=\"WPEP1-integ\""
       ],
       "worktree": "wt/world-process-exec-tracing-parity-wpep1-integ",
@@ -489,7 +483,7 @@
       "type": "integration",
       "phase": "WPEP2",
       "status": "pending",
-      "description": "Merge WPEP2 code+test and run smoke with slice mode WPEP2.",
+      "description": "Merge WPEP2 code+test.",
       "references": [
         "docs/project_management/next/world_process_exec_tracing_parity/WPEP2-spec.md",
         "docs/project_management/next/world_process_exec_tracing_parity/manual_testing_playbook.md"
@@ -497,9 +491,8 @@
       "acceptance_criteria": [
         "Run: cargo fmt → exit 0",
         "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: SUBSTRATE_SMOKE_SLICE_ID=WPEP2 bash docs/project_management/next/world_process_exec_tracing_parity/smoke/linux-smoke.sh → exit 0",
-        "Run: SUBSTRATE_SMOKE_SLICE_ID=WPEP2 bash docs/project_management/next/world_process_exec_tracing_parity/smoke/macos-smoke.sh → exit 0",
-        "WPEP2 is green and merged back to orchestration."
+        "Run: make integ-checks → exit 0",
+        "WPEP2 is merged back to orchestration."
       ],
       "start_checklist": [
         "Do not edit planning docs inside the worktree."
@@ -510,8 +503,6 @@
         "cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant tests",
         "make integ-checks",
-        "Run: SUBSTRATE_SMOKE_SLICE_ID=WPEP2 bash docs/project_management/next/world_process_exec_tracing_parity/smoke/linux-smoke.sh",
-        "Run: SUBSTRATE_SMOKE_SLICE_ID=WPEP2 bash docs/project_management/next/world_process_exec_tracing_parity/smoke/macos-smoke.sh",
         "From inside the worktree: make triad-task-finish TASK_ID=\"WPEP2-integ\""
       ],
       "worktree": "wt/world-process-exec-tracing-parity-wpep2-integ",
@@ -632,7 +623,8 @@
       "status": "pending",
       "description": "Resolve Linux-specific compile/test parity issues for WPEP3.",
       "references": [
-        "docs/project_management/next/world_process_exec_tracing_parity/WPEP3-spec.md"
+        "docs/project_management/next/world_process_exec_tracing_parity/WPEP3-spec.md",
+        "docs/project_management/next/world_process_exec_tracing_parity/smoke/linux-smoke.sh"
       ],
       "acceptance_criteria": [
         "Run: cargo fmt → exit 0",
@@ -665,7 +657,8 @@
       "status": "pending",
       "description": "Resolve macOS-specific compile/test parity issues for WPEP3.",
       "references": [
-        "docs/project_management/next/world_process_exec_tracing_parity/WPEP3-spec.md"
+        "docs/project_management/next/world_process_exec_tracing_parity/WPEP3-spec.md",
+        "docs/project_management/next/world_process_exec_tracing_parity/smoke/macos-smoke.sh"
       ],
       "acceptance_criteria": [
         "Run: cargo fmt → exit 0",
@@ -731,7 +724,7 @@
       "type": "integration",
       "phase": "WPEP3",
       "status": "pending",
-      "description": "Merge WPEP3 core + platform parity fixes and run smoke for WPEP3.",
+      "description": "Merge WPEP3 core + platform parity fixes.",
       "references": [
         "docs/project_management/next/world_process_exec_tracing_parity/WPEP3-spec.md",
         "docs/project_management/next/world_process_exec_tracing_parity/manual_testing_playbook.md"
@@ -739,9 +732,8 @@
       "acceptance_criteria": [
         "Run: cargo fmt → exit 0",
         "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: SUBSTRATE_SMOKE_SLICE_ID=WPEP3 bash docs/project_management/next/world_process_exec_tracing_parity/smoke/linux-smoke.sh → exit 0",
-        "Run: SUBSTRATE_SMOKE_SLICE_ID=WPEP3 bash docs/project_management/next/world_process_exec_tracing_parity/smoke/macos-smoke.sh → exit 0",
-        "WPEP3 is green on linux/macos/windows and merged back to orchestration."
+        "Run: make integ-checks → exit 0",
+        "WPEP3 is merged back to orchestration."
       ],
       "start_checklist": [
         "Do not edit planning docs inside the worktree."
@@ -752,8 +744,6 @@
         "cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant tests",
         "make integ-checks",
-        "Run: SUBSTRATE_SMOKE_SLICE_ID=WPEP3 bash docs/project_management/next/world_process_exec_tracing_parity/smoke/linux-smoke.sh",
-        "Run: SUBSTRATE_SMOKE_SLICE_ID=WPEP3 bash docs/project_management/next/world_process_exec_tracing_parity/smoke/macos-smoke.sh",
         "From inside the worktree: make triad-task-finish TASK_ID=\"WPEP3-integ\""
       ],
       "worktree": "wt/world-process-exec-tracing-parity-wpep3-integ",

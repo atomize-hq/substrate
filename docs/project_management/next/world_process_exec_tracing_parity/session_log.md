@@ -53,3 +53,25 @@
   - `make planning-validate FEATURE_DIR="docs/project_management/next/world_process_exec_tracing_parity"` → exit 0
   - `jq -e . "docs/project_management/next/world_process_exec_tracing_parity/tasks.json" >/dev/null` → exit 0
   - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → exit 0
+
+## START — 2026-02-14T23:31:06Z — remediation — fix quality gate DEFECT findings
+- Goal: Resolve DEFECT findings in `quality_gate_report.md` so the Planning Pack is implementation-ready for re-review.
+- Findings addressed: 009, 010
+
+## END — 2026-02-14T23:31:12Z — remediation — fix quality gate DEFECT findings
+- Files changed:
+  - `docs/project_management/next/world_process_exec_tracing_parity/tasks.json`
+  - `docs/project_management/next/world_process_exec_tracing_parity/kickoff_prompts/WPEP0-integ.md`
+  - `docs/project_management/next/world_process_exec_tracing_parity/kickoff_prompts/WPEP1-integ.md`
+  - `docs/project_management/next/world_process_exec_tracing_parity/kickoff_prompts/WPEP2-integ.md`
+  - `docs/project_management/next/world_process_exec_tracing_parity/kickoff_prompts/WPEP3-integ.md`
+  - `docs/project_management/next/world_process_exec_tracing_parity/SCHEMA.md`
+- Commands run (verbatim) + exit codes:
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world_process_exec_tracing_parity"` → exit 2
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/world_process_exec_tracing_parity"` → exit 2
+  - `jq -e . "docs/project_management/next/world_process_exec_tracing_parity/tasks.json" >/dev/null` → exit 0
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → exit 0
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world_process_exec_tracing_parity"` → exit 0
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/world_process_exec_tracing_parity"` → exit 0
+  - `jq -e . "docs/project_management/next/world_process_exec_tracing_parity/tasks.json" >/dev/null` → exit 0
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → exit 0

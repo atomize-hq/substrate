@@ -49,6 +49,7 @@ For any world execution summary (`component: "shell"` and `event_type: "command_
 
 ### Required fields
 - `ts` (timestamp)
+- `ts_unix_ns` (integer nanoseconds since Unix epoch (UTC))
 - `event_type` (one of the above)
 - `component: "world-agent"`
 - `session_id`
