@@ -24,7 +24,8 @@ Spec templates:
 - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/telemetry-spec.md` — new/changed trace records for structured agent events + suppression warnings
 - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/platform-parity-spec.md` — platform guarantees + validation evidence requirements
 - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` — A/B decisions and selections (already exists)
-- `docs/project_management/next/agent-hub-concurrent-execution-output-routing/OR0-spec.md` — v1 implementation slice spec (output routing + buffering + trace persistence)
+- `docs/project_management/next/agent-hub-concurrent-execution-output-routing/OR0-spec.md` — slice spec (event envelope + canonical trace persistence foundation)
+- `docs/project_management/next/agent-hub-concurrent-execution-output-routing/OR1-spec.md` — slice spec (REPL output routing during PTY passthrough: buffer/drop + deterministic warnings)
 - Validation artifacts (authoritative; required by ADR-0017):
   - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/manual_testing_playbook.md`
   - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/smoke/linux-smoke.sh`
@@ -43,16 +44,16 @@ Spec templates:
 | Platform parity | `docs/project_management/next/agent-hub-concurrent-execution-output-routing/platform-parity-spec.md` | required behavior parity, permitted divergences, required validation evidence |
 | Manual validation | `docs/project_management/next/agent-hub-concurrent-execution-output-routing/manual_testing_playbook.md` | deterministic manual cases and expected outcomes |
 | Automation smoke validation | `docs/project_management/next/agent-hub-concurrent-execution-output-routing/smoke/*` | smoke mirrors manual cases and asserts invariants (no PTY injection, no prompt corruption) |
-| Slice acceptance (v1) | `docs/project_management/next/agent-hub-concurrent-execution-output-routing/OR0-spec.md` | per-slice scope, acceptance criteria, regression protections |
+| Slice acceptance (OR0) | `docs/project_management/next/agent-hub-concurrent-execution-output-routing/OR0-spec.md` | per-slice scope, acceptance criteria, regression protections |
+| Slice acceptance (OR1) | `docs/project_management/next/agent-hub-concurrent-execution-output-routing/OR1-spec.md` | per-slice scope, acceptance criteria, regression protections |
 
 ## Determinism checklist (must be satisfied before quality gate)
 
 For the docs above, confirm they explicitly define:
 - Inputs and precedence (PTY bytes vs structured events; config layering).
-- Defaults and absence semantics (default cap; unset/missing fields; missing optional correlation fields).
+- Defaults and absence semantics (default cap; unset/missing fields; missing non-required correlation fields).
 - Data model (schema) for every serialized boundary (event envelope, trace record payload).
 - Error model and failure posture (hard-error vs clamp+warning; no PTY injection).
 - Ordering/atomicity/concurrency rules (buffering, drop, flush timing).
 - Security/redaction invariants (`channel` constraints; no secrets in structured events).
 - Platform guarantees (Linux/macOS/Windows parity expectations; any permitted divergence is explicit).
-

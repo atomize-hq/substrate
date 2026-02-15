@@ -15,7 +15,7 @@ Owner standard:
   - `~/.substrate/trace.jsonl` (or `SHIM_TRACE_LOG`) as `event_type="agent_event"` records (see `telemetry-spec.md`)
 
 ## Compatibility policy (explicit)
-- Forward compatibility: additive-only changes (new optional fields, new `kind` values, additive `data` fields).
+- Forward compatibility: additive-only changes (new non-required fields, new `kind` values, additive `data` fields).
 - Backward compatibility: existing required fields MUST NOT be removed or renamed.
 - Unknown fields handling: consumers MUST ignore unknown fields.
 - Deprecation policy: deprecate by adding a new field and marking the old field as deprecated; do not reuse semantics.
@@ -207,7 +207,7 @@ Additional fields for `data.code="world_restart_required"`:
 - Producers MUST NOT place secrets into:
   - `channel`, or
   - any other top-level attribution/correlation field.
-- Any field that could contain secrets MUST live under `data` with an explicit redaction policy in a future schema revision; v1 disallows secrets entirely.
+- Any field that can contain secrets MUST live under `data` with an explicit redaction policy in a future schema revision; v1 disallows secrets entirely.
 
 ## Acceptance criteria (testable)
 - Every emitted structured agent event contains the required top-level fields (`ts`, `kind`, `agent_id`, `orchestration_session_id`, `run_id`, `data`).

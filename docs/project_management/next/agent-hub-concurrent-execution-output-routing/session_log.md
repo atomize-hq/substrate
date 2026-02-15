@@ -1,0 +1,68 @@
+# agent-hub-concurrent-execution-output-routing — session log
+
+## START — 2026-02-15T02:13:44Z — planning — planning pack completion
+- Feature: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/`
+- Branch: `testing`
+- Goal: Produce an execution-ready Planning Pack (schema v4, cross-platform, automation-enabled) with zero ambiguity.
+- Inputs to read end-to-end:
+  - `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md`
+  - `docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md`
+  - `docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md`
+  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+  - `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`
+  - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
+  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+  - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
+  - `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
+  - `docs/project_management/standards/SLICE_CLOSEOUT_GATE_STANDARD.md`
+  - `docs/TRACE.md`
+- Commands planned (if any):
+  - `jq -e . docs/project_management/next/agent-hub-concurrent-execution-output-routing/tasks.json`
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/agent-hub-concurrent-execution-output-routing"`
+
+## END — 2026-02-15T02:53:09Z — planning — planning pack completion
+- Summary of changes (exhaustive):
+  - Completed Planning Pack docs: plan, spec manifest, impact map, contract, decision register, OR0/OR1 slice specs, telemetry and schema specs, and platform parity spec.
+  - Added execution artifacts: tasks.json (schema v4), kickoff prompts for every task, CI checkpoint plan, manual testing playbook, smoke scripts, execution preflight report, and per-slice closeout reports.
+  - Aligned sequencing spine and ADR: added sprint entry to sequencing.json; updated ADR-0017 to link to Planning Pack artifacts; fixed ADR executive summary hash.
+- Files created/modified:
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/plan.md`
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/spec_manifest.md`
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/impact_map.md`
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/contract.md`
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md`
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/agent-hub-event-envelope-schema-spec.md`
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/telemetry-spec.md`
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/platform-parity-spec.md`
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/OR0-spec.md`
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/OR1-spec.md`
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/ci_checkpoint_plan.md`
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/tasks.json`
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/kickoff_prompts/`
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/manual_testing_playbook.md`
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/smoke/`
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/execution_preflight_report.md`
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/OR0-closeout_report.md`
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/OR1-closeout_report.md`
+  - `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+  - `docs/project_management/next/sequencing.json`
+- Rubric checks run (with results):
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/agent-hub-concurrent-execution-output-routing"` → exit `0` → tasks.json validator passed
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/agent-hub-concurrent-execution-output-routing"` → exit `0` → lint passed
+  - `jq -e . docs/project_management/next/agent-hub-concurrent-execution-output-routing/tasks.json` → exit `0`
+  - `jq -e . docs/project_management/next/sequencing.json` → exit `0`
+  - `bash -n docs/project_management/next/agent-hub-concurrent-execution-output-routing/smoke/linux-smoke.sh` → exit `0`
+  - `bash -n docs/project_management/next/agent-hub-concurrent-execution-output-routing/smoke/macos-smoke.sh` → exit `0`
+  - `make adr-fix ADR="docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md"` → exit `0` → ADR_BODY_SHA256 updated
+- Sequencing alignment:
+  - `sequencing.json` reviewed: `YES`
+  - Changes required: added sprint `agent_hub_concurrent_execution_output_routing` (order `41`) with sequence `OR0`, `OR1`
+- Blockers:
+  - `NONE`
+- Next steps:
+  - Run the planning quality gate review to generate `docs/project_management/next/agent-hub-concurrent-execution-output-routing/quality_gate_report.md` with `RECOMMENDATION: ACCEPT`.
+  - After quality gate `ACCEPT`, run task `F0-exec-preflight`, then start OR0 triad via `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/agent-hub-concurrent-execution-output-routing" SLICE_ID="OR0" LAUNCH_CODEX=1`.

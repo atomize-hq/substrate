@@ -37,3 +37,5 @@ Prereqs:
 - Linux: `docs/project_management/next/llm_and_agent_config_policy_surface/smoke/linux-smoke.sh`
 - macOS: `docs/project_management/next/llm_and_agent_config_policy_surface/smoke/macos-smoke.sh`
 - Windows: `docs/project_management/next/llm_and_agent_config_policy_surface/smoke/windows-smoke.ps1`
+
+Planning note: this line exists to confirm patch application.

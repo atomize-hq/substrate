@@ -644,6 +644,30 @@
           "name": "JSON input for complex workflows"
         }
       ]
+    },
+    {
+      "order": 41,
+      "id": "agent_hub_concurrent_execution_output_routing",
+      "title": "Agent hub concurrent execution output routing",
+      "branch": "feat/agent-hub-concurrent-execution-output-routing",
+      "directory": "docs/project_management/next/agent-hub-concurrent-execution-output-routing",
+      "plan": "docs/project_management/next/agent-hub-concurrent-execution-output-routing/plan.md",
+      "status": "not_started",
+      "sequence": [
+        {
+          "id": "OR0",
+          "spec": "docs/project_management/next/agent-hub-concurrent-execution-output-routing/OR0-spec.md"
+        },
+        {
+          "id": "OR1",
+          "spec": "docs/project_management/next/agent-hub-concurrent-execution-output-routing/OR1-spec.md"
+        }
+      ],
+      "notes": [
+        "Implements ADR-0017: explicit separation of PTY bytes vs structured agent events, bounded suppression during PTY passthrough, and durable trace persistence for structured agent events.",
+        "Depends on the world-first REPL PTY passthrough contract (ADR-0016) already implemented under docs/project_management/_archived/world-first-repl-persistent-pty.",
+        "Aligns correlation vocabulary additively with ADR-0028 (in-world process execution tracing parity)."
+      ]
     }
   ]
 }

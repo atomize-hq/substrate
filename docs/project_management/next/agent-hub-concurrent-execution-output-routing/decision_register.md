@@ -235,7 +235,7 @@ Scope:
       - `human` for direct operator actions.
       - for agent-driven structured events, this is the agent inventory id (so attribution is audit-friendly and stable).
     - When a specific backend is involved and its kind/name is known, the event MUST include `backend_id` in `<kind>:<name>` form to make allowlist/routing joins explicit and avoid heuristic inference from `agent_id` alone.
-    - The trace vocabulary and required/optional matrix for correlation fields is finalized additively in ADR-0028 Phase 8 circle-back.
+    - The trace vocabulary and required/non-required matrix for correlation fields is finalized additively in ADR-0028 Phase 8 circle-back.
   - Initial serialized shape (v1; additive-only extensions allowed in the circle-back pass):
     - Envelope fields (top-level; not nested in `data`):
       - `ts` (RFC3339 UTC timestamp)
@@ -294,7 +294,7 @@ Scope:
 - **Cascading implications:**
   - Key must be defined in config schema and documented; precedence must match the existing model.
 - **Risks:**
-  - Incorrectly sized values could increase memory usage; must validate and clamp.
+  - Incorrectly sized values can increase memory usage; must validate and clamp.
 - **Unlocks:**
   - Safer ops tuning across different environments (local dev vs CI vs demos).
 - **Quick wins / low-hanging fruit:**
@@ -351,7 +351,7 @@ Scope:
 - **Cascading implications:**
   - REPL must use a byte-safe printer that cooperates with the line editor (prompt redraw).
 - **Risks:**
-  - Incorrect redraw integration could still corrupt the input buffer (must be covered by tests).
+  - Incorrect redraw integration can still corrupt the input buffer (must be covered by tests).
 - **Unlocks:**
   - Correct and familiar interactive UX for long-lived PTY sessions with concurrent output.
 - **Quick wins / low-hanging fruit:**
@@ -589,3 +589,155 @@ Scope:
 
 **Follow-up tasks (explicit)**
 - Ensure all PTY passthrough entry points use the same buffering/suppression logic and honor `repl.max_pty_buffered_lines`.
+
+---
+
+### DR-0011 — Agent event canonical trace record shape (flattened vs nested payload)
+
+**Decision owner(s):** Shell + Trace maintainers  
+**Date:** 2026-02-15  
+**Status:** Accepted  
+**Related docs:** `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`, `docs/TRACE.md`
+
+**Problem / Context**
+- Phase 8 correlation vocabulary requires join keys to be present as top-level fields on trace records (operator queryability via `jq`, router/workflow joins, and auditability).
+
+**Option A — Flatten envelope fields into the trace record (recommended)**
+- **Pros:**
+  - Join keys are top-level fields on the `agent_event` record (Phase 8-compatible).
+  - Queries do not require nested-path handling.
+  - Aligns with `docs/TRACE.md` “all records carry correlation fields” guidance.
+- **Cons:**
+  - Adds more top-level keys to the record.
+- **Cascading implications:**
+  - `telemetry-spec.md` must define `agent_event` as a flattened record (no `payload` wrapper).
+  - Envelope schema remains authoritative for the flattened fields.
+- **Risks:**
+  - Low; additive-only evolution is preserved.
+- **Unlocks:**
+  - Router/workflow consumers can subscribe and join without heuristics.
+- **Quick wins / low-hanging fruit:**
+  - Emit one record family (`event_type="agent_event"`) with stable `component="agent-hub"`.
+
+**Option B — Nest the envelope under a `payload` object**
+- **Pros:**
+  - Reduces top-level key count.
+- **Cons:**
+  - Join keys become nested (`payload.orchestration_session_id`), which violates Phase 8 ergonomics and complicates routing queries.
+  - Increased drift risk (two levels of schema ownership).
+- **Cascading implications:**
+  - Consumers must implement nested extraction in all tooling.
+- **Risks:**
+  - Medium; downstream systems drift into heuristic joins.
+- **Unlocks:**
+  - None aligned with Phase 8 correlation goals.
+- **Quick wins / low-hanging fruit:**
+  - None.
+
+**Recommendation**
+- **Selected:** Option A — Flatten envelope fields into the trace record.
+- **Rationale (crisp):** Phase 8 joinability requires top-level correlation fields; nested payloads create needless tooling friction and drift risk.
+
+**Follow-up tasks (explicit)**
+- In `telemetry-spec.md`, define `agent_event` records as flattened envelope fields + trace-required keys (`ts`, `event_type`, `session_id`, `component`).
+
+---
+
+### DR-0012 — Handling unsafe `channel` values (drop silently vs emit warning record)
+
+**Decision owner(s):** Shell + Agent Hub maintainers  
+**Date:** 2026-02-15  
+**Status:** Accepted  
+**Related docs:** `docs/project_management/next/agent-hub-concurrent-execution-output-routing/agent-hub-event-envelope-schema-spec.md`
+
+**Problem / Context**
+- The `channel` field is persisted to canonical trace and may be printed. It must be secrets-safe.
+- If a producer attempts to set an unsafe channel value, the system must respond deterministically without leaking the unsafe value.
+
+**Option A — Drop unsafe values silently (recommended)**
+- **Pros:**
+  - No risk of re-emitting secret material via warnings.
+  - No new warning code or telemetry family required.
+  - Keeps the v1 schema surface minimal.
+- **Cons:**
+  - Producers do not receive an explicit warning that a channel was dropped.
+- **Cascading implications:**
+  - Envelope schema must specify that unsafe channel values are dropped and never emitted in warnings/logs.
+- **Risks:**
+  - Low; channel is a routing hint, not a correctness join key.
+- **Unlocks:**
+  - Keeps trace safe-by-default.
+- **Quick wins / low-hanging fruit:**
+  - Implement drop in a single validation helper used by all producers.
+
+**Option B — Drop unsafe values and emit a warning record**
+- **Pros:**
+  - Producers/operators get explicit signal that channel validation occurred.
+- **Cons:**
+  - Adds a new warning record contract and test surface.
+  - Even sanitized warnings risk accidental leakage if any part of the value is echoed.
+- **Cascading implications:**
+  - Requires a new warning code in `telemetry-spec.md` and corresponding docs/tests.
+- **Risks:**
+  - Medium; warning implementation mistakes can leak secrets.
+- **Unlocks:**
+  - Slightly better debuggability at the cost of broader surface.
+- **Quick wins / low-hanging fruit:**
+  - None compatible with a minimal v1.
+
+**Recommendation**
+- **Selected:** Option A — Drop unsafe values silently.
+- **Rationale (crisp):** Safety dominates; channel is not required for joins and must not expand the warning surface in v1.
+
+**Follow-up tasks (explicit)**
+- Enforce: unsafe channel values are dropped, and the dropped value is never emitted in any warning/log/trace field.
+
+---
+
+### DR-0013 — Suppression warning payload detail (total-only vs per-channel breakdown)
+
+**Decision owner(s):** Shell maintainers  
+**Date:** 2026-02-15  
+**Status:** Accepted  
+**Related docs:** `docs/project_management/next/agent-hub-concurrent-execution-output-routing/telemetry-spec.md`
+
+**Problem / Context**
+- When structured output is suppressed during PTY passthrough, the warning record must be deterministic and bounded.
+
+**Option A — Total-only suppression record (recommended)**
+- **Pros:**
+  - Minimal, bounded payload that is easy to validate and query.
+  - Avoids expanding the surface area that includes `channel` values.
+  - Satisfies operator needs for deterministic “something was suppressed” with a concrete magnitude.
+- **Cons:**
+  - Less explainable when multiple channels are active.
+- **Cascading implications:**
+  - `telemetry-spec.md` defines only `dropped_structured_event_lines` and `max_pty_buffered_lines` (plus correlation fields when available).
+- **Risks:**
+  - Low; the system remains auditable because all events are persisted as `agent_event` records.
+- **Unlocks:**
+  - Keeps OR1 implementation and tests focused on correctness and safety.
+- **Quick wins / low-hanging fruit:**
+  - Implement dropped counter and emit one record at passthrough end.
+
+**Option B — Include per-channel breakdown (bounded buckets)**
+- **Pros:**
+  - More explainable summaries for human and UI consumers.
+- **Cons:**
+  - Additional complexity and a larger payload surface.
+  - Increases the risk of accidentally persisting or printing sensitive routing hints.
+- **Cascading implications:**
+  - Requires explicit bucketing and cap rules and additional tests.
+- **Risks:**
+  - Medium; channel values become more prominent in warning payloads.
+- **Unlocks:**
+  - Richer summaries without scanning `agent_event` records.
+- **Quick wins / low-hanging fruit:**
+  - None in a minimal v1.
+
+**Recommendation**
+- **Selected:** Option A — Total-only suppression record.
+- **Rationale (crisp):** The durable `agent_event` stream remains the source of truth; suppression summaries remain minimal and secrets-safe.
+
+**Follow-up tasks (explicit)**
+- In `telemetry-spec.md`, omit any per-channel breakdown fields from the v1 suppression warning record schema.

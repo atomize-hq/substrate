@@ -54,7 +54,10 @@ Structured event handling during passthrough:
 ### Overflow signaling (suppression summary)
 
 If structured event lines were dropped during PTY passthrough, the shell MUST emit:
-- One structured warning summary (machine-readable; persisted to trace).
+- One structured warning record (machine-readable; persisted to trace) with:
+  - `event_type="warning"`
+  - `component="shell"`
+  - `code="pty_structured_event_drops"`
 - One human-readable warning line via the normal warning channel.
 
 The warning MUST NOT be injected into PTY bytes.
@@ -64,8 +67,12 @@ The warning payload schema and trace record shape are authoritative in `telemetr
 ## Config surface
 
 ### Files and precedence (existing layering model)
-1) Workspace patch: `<workspace_root>/.substrate/workspace.yaml`
-2) Global patch: `$SUBSTRATE_HOME/config.yaml`
+
+This feature introduces no CLI flags or environment overrides for `repl.max_pty_buffered_lines`.
+Effective value precedence is deterministic:
+1) Workspace config: `<workspace_root>/.substrate/workspace.yaml` (highest precedence)
+2) Global config: `$SUBSTRATE_HOME/config.yaml`
+3) Built-in default (lowest precedence)
 
 ### Key: `repl.max_pty_buffered_lines`
 
@@ -79,7 +86,10 @@ Defaults and bounds:
 
 Invalid handling (deterministic):
 - Invalid type/parse: hard error at the config boundary (exit code `2`).
-- Out-of-range integer: clamp to bounds and emit a structured warning (no PTY injection; warning persisted to trace).
+- Out-of-range integer: clamp to bounds and emit one structured warning record (no PTY injection; warning persisted to trace) with:
+  - `event_type="warning"`
+  - `component="shell"`
+  - `code="config_value_clamped"`
 
 ## Exit codes
 
@@ -96,4 +106,3 @@ Warnings (including suppression summaries and clamp notices) MUST NOT change the
 - Linux: full support required.
 - macOS: full support required.
 - Windows: the same non-injection and routing rules apply anywhere PTY passthrough exists; platforms without PTY passthrough still MUST preserve the structured-event path and prompt-safety invariants.
-

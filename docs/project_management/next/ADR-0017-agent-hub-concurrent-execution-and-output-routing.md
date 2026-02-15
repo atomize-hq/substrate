@@ -15,14 +15,23 @@
 
 ## Related Docs
 - Plan: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/plan.md`
+- Tasks: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/tasks.json`
 - Spec manifest: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/spec_manifest.md`
 - Impact map: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/impact_map.md`
+- CI checkpoint plan: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/ci_checkpoint_plan.md`
 - Contract: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/contract.md`
 - Spec: structured event envelope: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/agent-hub-event-envelope-schema-spec.md`
 - Spec: telemetry/trace records: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/telemetry-spec.md`
 - Spec: platform parity: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/platform-parity-spec.md`
-- Slice spec (v1): `docs/project_management/next/agent-hub-concurrent-execution-output-routing/OR0-spec.md`
+- Slice specs:
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/OR0-spec.md`
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/OR1-spec.md`
 - Decision Register: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md`
+- Manual playbook: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/manual_testing_playbook.md`
+- Smoke scripts:
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/smoke/linux-smoke.sh`
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/smoke/macos-smoke.sh`
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/smoke/windows-smoke.ps1`
 - Agent Hub core decisions (world reuse, drift posture, alert schema):
   - `docs/project_management/next/agent_hub_core/decision_register.md`
 - Phase 8 cross-cutting registry (sequencing umbrella):
@@ -39,7 +48,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 1b1d2aa65beb12dfd8be022d580933e821a848f287986b10e1b12dc4b101c92f
+ADR_BODY_SHA256: aa4c9b1473dbaeea3901d71ee0327aa249f4d7835942c730a7da7f8443f3c68a
 ### Changes (operator-facing)
 - Make concurrent outputs predictable and non-corrupting when multiple agents run
   - Existing: Substrate can render concurrent **structured** agent output during the REPL (e.g., `:demo-agent`), but there is no explicit output contract that separates:
@@ -243,21 +252,18 @@ Fail-closed drift posture (`agents.hub.world_restart.on_drift=fail_closed`)
 - Actions:
   - Route PTY bytes directly to the terminal output stream (byte fidelity preserved).
   - Route structured agent events through the structured renderer; if PTY passthrough is active, buffer up to the cap and drop beyond the cap without backpressure.
-  - After PTY passthrough ends, emit a dropped-count summary (and optional per-channel breakdown when available).
+  - After PTY passthrough ends, emit a dropped-count summary.
 - Outputs:
   - Terminal output with no structured-event injection into PTY bytes.
   - Canonical trace records for structured events with correlation fields (per DR-0009).
 
 ## Sequencing / Dependencies
-- Sequencing entry: `docs/project_management/next/sequencing.json` → (must be added before execution triads begin; use the Phase 8 registry as the umbrella until a dedicated sprint entry exists).
-- Prerequisite integration task IDs:
-  - None declared in this Draft. Before execution triads begin, represent dependencies in the feature `tasks.json` and reference the prerequisite integration task IDs here.
+- Sequencing entry: `docs/project_management/next/sequencing.json` → `agent_hub_concurrent_execution_output_routing` (order `41`).
+- Orchestration branch: `feat/agent-hub-concurrent-execution-output-routing`
+- Prerequisite integration task IDs: none (ADR-0016 is already implemented; this ADR is self-contained).
 - Dependencies:
   - Depends on ADR-0016’s PTY passthrough and out-of-band PTY output rules for the REPL.
-  - Correlation vocabulary and field names should remain consistent with `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md` (additive-only alignment).
-- This ADR is intentionally minimal and can be executed incrementally:
-  - First: lock output classification + rendering rules.
-  - Later: expand agent hub orchestration and config.
+  - Correlation vocabulary and field names must remain consistent with `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md` (additive-only alignment).
 
 ## Security / Safety Posture
 - Fail-closed vs degrade behavior:
@@ -294,4 +300,4 @@ Fail-closed drift posture (`agents.hub.world_restart.on_drift=fail_closed`)
 ## Decision Summary
 - Decision Register entries:
   - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md`:
-    - DR-0001, DR-0002, DR-0003, DR-0004, DR-0005, DR-0006, DR-0007, DR-0008, DR-0009, DR-0010
+    - DR-0001, DR-0002, DR-0003, DR-0004, DR-0005, DR-0006, DR-0007, DR-0008, DR-0009, DR-0010, DR-0011, DR-0012, DR-0013

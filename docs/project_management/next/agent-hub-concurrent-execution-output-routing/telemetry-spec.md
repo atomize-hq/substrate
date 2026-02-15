@@ -7,7 +7,7 @@ Owner standard:
 - This spec is authoritative for new/changed telemetry (trace records) required by ADR-0017.
 
 ## Stability guarantees (explicit)
-- Field stability: additive-only (new optional fields permitted; no renames/removals).
+- Field stability: additive-only (new non-required fields permitted; no renames/removals).
 - Backwards compatibility for consumers:
   - Consumers MUST tolerate unknown fields and unknown record types in `trace.jsonl`.
   - Existing span records MUST remain unchanged in meaning.

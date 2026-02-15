@@ -24,15 +24,24 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
 - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/agent-hub-event-envelope-schema-spec.md` — authoritative structured event schema
 - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/telemetry-spec.md` — authoritative trace record requirements
 - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/platform-parity-spec.md` — platform contract + validation evidence requirements
-- `docs/project_management/next/agent-hub-concurrent-execution-output-routing/OR0-spec.md` — v1 slice spec + acceptance criteria
-- (planning-pack completion; authoring required before execution triads begin)
+- Slice specs:
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/OR0-spec.md` — event envelope + trace persistence foundation
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/OR1-spec.md` — REPL routing during PTY passthrough + buffering + warnings + config knob
+- Planning Pack completion (required before execution triads begin):
   - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/tasks.json`
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/ci_checkpoint_plan.md`
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/session_log.md`
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/kickoff_prompts/*`
+- Validation artifacts (required by ADR-0017):
   - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/manual_testing_playbook.md`
   - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/smoke/linux-smoke.sh`
   - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/smoke/macos-smoke.sh`
   - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/smoke/windows-smoke.ps1`
-  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/kickoff_prompts/*`
-  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/session_log.md`
+- Execution gates (required because tasks.json `meta.execution_gates=true`):
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/execution_preflight_report.md`
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/OR0-closeout_report.md`
+  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/OR1-closeout_report.md`
+- Planning quality gate artifact (required before any triads start; written by the reviewer, not by execution triads):
   - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/quality_gate_report.md`
 - (implementation-time; code/test surface)
   - `crates/shell/tests/repl_output_routing.rs` (or similar) — integration coverage for PTY passthrough + concurrent structured events
@@ -47,6 +56,8 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
 - `crates/shell/src/execution/config_model.rs` — add `repl.max_pty_buffered_lines` to the strict config schema, precedence model, and explain surfaces
 - `docs/CONFIGURATION.md` — document `repl.max_pty_buffered_lines` (default, bounds, precedence, invalid handling)
 - `docs/TRACE.md` — document new trace record types (`agent_event`, warning codes) and required fields for correlation
+- `docs/project_management/next/sequencing.json` — add a sprint entry for this feature so task dependencies and sequencing are aligned before execution begins
+- `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md` — remove placeholder sequencing language and link to `tasks.json` and `ci_checkpoint_plan.md`
 
 ### Deprecate
 - None (this ADR refines interactive behavior; no stable public APIs are deprecated).
@@ -128,4 +139,3 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
   - If ADR-0028 requires additional required correlation fields, update:
     - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/agent-hub-event-envelope-schema-spec.md`
     - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/telemetry-spec.md`
-
