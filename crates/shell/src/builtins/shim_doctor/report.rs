@@ -1,4 +1,4 @@
-use crate::builtins::world_deps::{self, WorldDepsStatusReport};
+use crate::builtins::world_deps::{self, WorldDepsDoctorSnapshotV1};
 use crate::execution::{
     current_platform,
     manager_init::{self, ManagerInitConfig, ManifestPaths},
@@ -95,7 +95,7 @@ pub struct WorldDoctorSnapshot {
 #[derive(Debug, Serialize, Clone)]
 pub struct WorldDepsDoctorSection {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub report: Option<WorldDepsStatusReport>,
+    pub report: Option<WorldDepsDoctorSnapshotV1>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -385,8 +385,17 @@ fn gather_world_doctor_snapshot() -> WorldDoctorSnapshot {
 }
 
 fn gather_world_deps_section(cli_no_world: bool, cli_force_world: bool) -> WorldDepsDoctorSection {
+    if cli_no_world && !cli_force_world {
+        return WorldDepsDoctorSection {
+            report: None,
+            error: Some("skipped world deps (world disabled via --no-world)".to_string()),
+            source: Some("skipped".to_string()),
+        };
+    }
+
     match try_load_health_fixture("world_deps.json") {
-        Ok(Some(value)) => match serde_json::from_value::<WorldDepsStatusReport>(value.clone()) {
+        Ok(Some(value)) => match serde_json::from_value::<WorldDepsDoctorSnapshotV1>(value.clone())
+        {
             Ok(report) => {
                 return WorldDepsDoctorSection {
                     report: Some(report),
@@ -412,8 +421,8 @@ fn gather_world_deps_section(cli_no_world: bool, cli_force_world: bool) -> World
         Ok(None) => {}
     }
 
-    let requested: Vec<String> = Vec::new();
-    match world_deps::status_report_for_health(cli_no_world, cli_force_world, &requested) {
+    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    match world_deps::collect_doctor_snapshot_v1(&cwd, false) {
         Ok(report) => WorldDepsDoctorSection {
             report: Some(report),
             error: None,
@@ -421,7 +430,7 @@ fn gather_world_deps_section(cli_no_world: bool, cli_force_world: bool) -> World
         },
         Err(err) => WorldDepsDoctorSection {
             report: None,
-            error: Some(format!("failed to collect world deps status: {:#}", err)),
+            error: Some(format!("failed to collect world deps snapshot: {:#}", err)),
             source: Some("command".to_string()),
         },
     }

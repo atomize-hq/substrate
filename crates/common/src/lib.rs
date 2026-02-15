@@ -7,7 +7,6 @@ pub mod fs_diff;
 pub mod manager_manifest;
 pub mod paths;
 pub mod settings;
-pub mod world_deps_manifest;
 
 pub use agent_events::{AgentEvent, AgentEventKind};
 pub use fs_diff::FsDiff;
@@ -19,9 +18,6 @@ pub use settings::{WorldFsMode, WorldRootMode};
 pub use settings::{
     WorldFsStrategy, WorldFsStrategyFallbackReason, WorldFsStrategyProbe,
     WorldFsStrategyProbeResult,
-};
-pub use world_deps_manifest::{
-    WorldDepDetectSpec, WorldDepInstallRecipe, WorldDepTool, WorldDepsManifest,
 };
 
 /// Convenience re-exports for consumers that need the common substrate types.
@@ -52,9 +48,6 @@ pub mod prelude {
     pub use crate::settings::{
         WorldFsStrategy, WorldFsStrategyFallbackReason, WorldFsStrategyProbe,
         WorldFsStrategyProbeResult,
-    };
-    pub use crate::world_deps_manifest::{
-        WorldDepDetectSpec, WorldDepInstallRecipe, WorldDepTool, WorldDepsManifest,
     };
     pub use crate::{dedupe_path, redact_sensitive};
 }

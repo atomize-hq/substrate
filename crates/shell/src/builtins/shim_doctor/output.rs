@@ -1,7 +1,6 @@
 use super::report::{
     ManagerDoctorState, ShimDoctorReport, WorldDepsDoctorSection, WorldDoctorSnapshot,
 };
-use crate::builtins::world_deps::WorldDepGuestState;
 
 pub(crate) fn print_text_report(report: &ShimDoctorReport) {
     println!("== substrate shim doctor ==");
@@ -165,54 +164,43 @@ fn print_world_deps_section(section: Option<&WorldDepsDoctorSection>) {
                 println!("  Source: {}", source);
             }
             if let Some(report) = &section.report {
-                println!("  Inventory: {}", report.manifest.inventory.base.display());
-                if let Some(overlay) = &report.manifest.inventory.overlay {
-                    let status = if report.manifest.inventory.overlay_exists {
-                        "present"
-                    } else {
-                        "missing"
-                    };
-                    println!("  Inventory overlay: {} ({status})", overlay.display());
-                }
-                let installed_status = if report.manifest.overlays.installed_exists {
-                    "present"
-                } else {
-                    "missing"
-                };
                 println!(
-                    "  Installed overlay: {} ({installed_status})",
-                    report.manifest.overlays.installed.display()
+                    "  Inventory: packages={} bundles={} (mode={} builtins={})",
+                    report.inventory_packages,
+                    report.inventory_bundles,
+                    report.inventory_mode,
+                    report.builtins
                 );
-                if let Some(user) = &report.manifest.overlays.user {
-                    let status = if report.manifest.overlays.user_exists {
-                        "present"
-                    } else {
-                        "missing"
-                    };
-                    println!("  User overlay: {} ({status})", user.display());
-                }
-                if let Some(reason) = &report.world_disabled_reason {
-                    println!("  Backend: disabled ({reason})");
-                } else {
-                    println!("  Backend: enabled");
-                }
-                if report.tools.is_empty() {
-                    println!("  Tools: manifest empty");
-                    return;
-                }
-                let missing: Vec<&str> = report
-                    .tools
-                    .iter()
-                    .filter(|entry| entry.guest.status == WorldDepGuestState::Missing)
-                    .map(|entry| entry.name.as_str())
-                    .collect();
-                if missing.is_empty() {
-                    println!("  Guest tools: all present");
+                if report.enabled.is_empty() {
+                    println!("  Enabled: (none)");
                 } else {
                     println!(
-                        "  Guest tools missing ({}): {}",
-                        missing.len(),
-                        missing.join(", ")
+                        "  Enabled ({}): {}",
+                        report.enabled.len(),
+                        report.enabled.join(", ")
+                    );
+                }
+
+                if let Some(err) = &report.applied_error {
+                    println!("  Applied: unavailable ({})", err.trim());
+                    return;
+                }
+
+                let mut missing_or_blocked: Vec<String> = Vec::new();
+                for item in &report.applied {
+                    let enabled = item.enabled.unwrap_or(false);
+                    let world = item.world.as_deref().unwrap_or("unknown");
+                    if enabled && world != "present" {
+                        missing_or_blocked.push(format!("{} ({})", item.name, world));
+                    }
+                }
+                if missing_or_blocked.is_empty() {
+                    println!("  Applied: all enabled deps present");
+                } else {
+                    println!(
+                        "  Applied: missing/blocked ({}): {}",
+                        missing_or_blocked.len(),
+                        missing_or_blocked.join(", ")
                     );
                 }
             } else if let Some(err) = &section.error {

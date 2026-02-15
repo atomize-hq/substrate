@@ -39,14 +39,13 @@ pub(crate) use dispatch::world_persistent_session::{
 };
 pub(crate) use dispatch::{
     build_agent_client_and_pending_diff_request, build_agent_client_and_request, execute_command,
-    needs_pty, stream_non_pty_via_agent,
+    needs_pty,
 };
 #[cfg(target_os = "linux")]
 use nix::sys::termios::{
     self, ControlFlags, InputFlags, LocalFlags, OutputFlags, SetArg, SpecialCharacterIndices,
     Termios,
 };
-pub(crate) use path_env::world_deps_manifest_base_path;
 pub(crate) use path_env::{canonicalize_or, enforce_caged_destination};
 pub(crate) use replay::{handle_replay_command, handle_trace_command};
 #[cfg(target_os = "linux")]

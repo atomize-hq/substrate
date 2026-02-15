@@ -1,5 +1,7 @@
-use super::errors::WorldDepsUnmetPrerequisiteError;
-use super::guest::WorldBackendUnavailable;
+use super::errors::{
+    WorldDepsBackendRequiredError, WorldDepsBackendUnavailableError,
+    WorldDepsUnmetPrerequisiteError,
+};
 use super::inventory::{
     builtin_inventory_v1, find_workspace_inventory_chain, load_inventory_dir_v1,
     merge_inventory_layer_v1, summarize_inventory_v1, AptSpecV1, HostPlatform, InstallMethodV1,
@@ -14,6 +16,7 @@ use crate::execution::{
     WorldDepsScopedListViewArg, WorldDepsScopedMutateArgs, WorldDepsScopedResetArgs,
     WorldDepsWorkspaceAction, WorldDepsWorkspaceCmd,
 };
+use crate::{WorldDepsAction, WorldDepsCmd};
 use anyhow::{anyhow, Context, Result};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
@@ -43,6 +46,125 @@ struct ShowOutputV1 {
     name: String,
     kind: String,
     item: InventoryItemDefV1,
+}
+
+pub fn run(cmd: &WorldDepsCmd, cli_no_world: bool, _cli_force_world: bool) -> i32 {
+    let result = (|| -> Result<()> {
+        match &cmd.action {
+            WorldDepsAction::Current(current) => {
+                if cli_no_world {
+                    match &current.action {
+                        WorldDepsCurrentAction::List(args)
+                            if args.view == WorldDepsCurrentListViewArg::Applied =>
+                        {
+                            return Err(anyhow!(WorldDepsBackendRequiredError::new(
+                                "world backend required for `substrate world deps current list applied` (world disabled via --no-world)"
+                            )));
+                        }
+                        WorldDepsCurrentAction::Show(args) if args.explain => {
+                            return Err(anyhow!(WorldDepsBackendRequiredError::new(
+                                "world backend required for `substrate world deps current show --explain` (world disabled via --no-world)"
+                            )));
+                        }
+                        WorldDepsCurrentAction::Install(_) | WorldDepsCurrentAction::Sync(_) => {
+                            return Err(anyhow!(WorldDepsBackendRequiredError::new(
+                                "world backend required for `substrate world deps current install|sync` (world disabled via --no-world)"
+                            )));
+                        }
+                        _ => {}
+                    }
+                }
+                run_current(current)
+            }
+            WorldDepsAction::Global(global) => run_global(global),
+            WorldDepsAction::Workspace(workspace) => run_workspace(workspace),
+        }
+    })();
+
+    match result {
+        Ok(()) => 0,
+        Err(err) => {
+            let code = world_deps_exit_code(&err);
+            if code == 5 {
+                eprintln!(
+                    "substrate: world deps blocked by hardening/cage: required writes to `/var/lib/substrate/world-deps` are not permitted.\nHint: ensure `/var/lib/substrate/world-deps` is bind-mounted read-write inside the world and retry."
+                );
+                eprintln!("Underlying error: {:#}", err);
+            } else if code == 3 {
+                if cfg!(target_os = "macos") {
+                    eprintln!("Remediation:\n  - Run: scripts/mac/lima-warm.sh");
+                } else if cfg!(windows) {
+                    eprintln!("Remediation:\n  - Run: scripts/windows/wsl-warm.ps1");
+                }
+                if let Some(reason) = world_backend_unavailable_reason(&err) {
+                    let header = if cfg!(target_os = "macos") {
+                        "substrate: world backend unavailable for world deps on macOS; run `substrate world doctor --json` to inspect backend status, then retry."
+                    } else {
+                        "substrate: world backend unavailable for world deps; run `substrate world doctor --json` to inspect backend status, then retry."
+                    };
+                    eprintln!("{header}\nUnderlying error: {reason}");
+                } else {
+                    eprintln!("{:#}", err);
+                }
+            } else {
+                eprintln!("{:#}", err);
+            }
+            code
+        }
+    }
+}
+
+fn world_backend_unavailable_reason(err: &anyhow::Error) -> Option<String> {
+    err.chain()
+        .find_map(|cause| cause.downcast_ref::<WorldDepsBackendUnavailableError>())
+        .map(|e| e.reason().to_string())
+}
+
+fn world_deps_exit_code(err: &anyhow::Error) -> i32 {
+    if config_model::is_user_error(err) {
+        return 2;
+    }
+    if err.is::<WorldDepsUnmetPrerequisiteError>() {
+        return 4;
+    }
+    if err.is::<WorldDepsBackendRequiredError>() {
+        return 3;
+    }
+    // Hardening conflicts should win even when surfaced through backend-unavailable wrappers.
+    if looks_like_world_deps_hardening_violation(err) {
+        return 5;
+    }
+    if err
+        .chain()
+        .any(|cause| cause.is::<WorldDepsBackendUnavailableError>())
+    {
+        return 3;
+    }
+    1
+}
+
+fn looks_like_world_deps_hardening_violation(err: &anyhow::Error) -> bool {
+    let mut current: Option<&(dyn StdError + 'static)> = Some(err.as_ref());
+    let hardening_paths = [
+        "/var/lib/substrate/world-deps",
+        "/var/lib/apt",
+        "/var/cache/apt",
+        "/var/lib/dpkg",
+        "/etc/apt",
+    ];
+    while let Some(e) = current {
+        let msg = e.to_string();
+        if hardening_paths.iter().any(|path| msg.contains(path))
+            && (msg.contains("Permission denied")
+                || msg.contains("permission denied")
+                || msg.contains("Read-only file system")
+                || msg.contains("read-only file system"))
+        {
+            return true;
+        }
+        current = e.source();
+    }
+    false
 }
 
 pub(crate) fn run_current(cmd: &WorldDepsCurrentCmd) -> Result<()> {
@@ -160,6 +282,12 @@ fn run_current_show(args: &WorldDepsCurrentShowArgs) -> Result<()> {
             }
             if let Some(remediation) = &explain.remediation {
                 eprintln!("substrate: note: remediation: {remediation}");
+            }
+            if let Some(instructions) = &explain.manual_instructions {
+                eprintln!("substrate: note: manual_instructions:");
+                for line in instructions.lines() {
+                    eprintln!("  {line}");
+                }
             }
             if let Some(cmd) = &explain.next_command {
                 if cmd.contains('\'') {
@@ -941,6 +1069,8 @@ struct CurrentShowExplainV1 {
     world: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     remediation: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    manual_instructions: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     wrappers: Vec<WrapperExplainV1>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1012,10 +1142,19 @@ fn build_current_show_explain_v1(
     let mut packages_to_check: Vec<String> = Vec::new();
     collect_required_package_names(item_name, item, view, &mut packages_to_check);
     let package_statuses = query_world_package_presence(view, &packages_to_check)?;
-    let (world, _remediation) =
+    let (world, remediation) =
         compute_world_status_and_remediation(item_name, item, view, &package_statuses, enabled)?;
 
     let wrappers = wrappers_explain(item);
+    let manual_instructions = match item {
+        InventoryItemDefV1::Package(pkg) if pkg.install.method == InstallMethodV1::Manual => pkg
+            .install
+            .manual_instructions
+            .as_deref()
+            .map(|t| t.trim().to_string())
+            .filter(|t| !t.is_empty()),
+        _ => None,
+    };
 
     let (why, next_command) = if world != WorldStatusV1::Present {
         let why = format!("world status is '{}'", world.as_str());
@@ -1049,7 +1188,8 @@ fn build_current_show_explain_v1(
         enabled_via_global_patch,
         enabled_via_workspace_patch,
         world: world.as_str().to_string(),
-        remediation: None,
+        remediation,
+        manual_instructions,
         wrappers,
         why,
         next_command,
@@ -1632,13 +1772,31 @@ fn run_current_list_applied(
     json: bool,
 ) -> Result<()> {
     eprintln!("substrate: note: showing current world deps status for this directory");
-
     let view = resolve_current_inventory_view(cwd, cfg)?;
-    let enabled = &cfg.world.deps.enabled;
+    let items = compute_current_applied_items_v1(&view, &cfg.world.deps.enabled, all)?;
 
+    if json {
+        let out = ListOutputV1 {
+            schema_version: 1,
+            scope: "current".to_string(),
+            view: "applied".to_string(),
+            items,
+        };
+        println!("{}", serde_json::to_string_pretty(&out)?);
+    } else {
+        print_applied_table(&items);
+    }
+    Ok(())
+}
+
+pub(super) fn compute_current_applied_items_v1(
+    view: &InventoryViewV1,
+    enabled: &[String],
+    all: bool,
+) -> Result<Vec<InventoryListItemSummaryV1>> {
     // For `applied`, expand enabled bundles to their packages so users can see the status of
     // concrete installables even when they only enabled a bundle.
-    let effective_enabled = expand_enabled_items_for_applied(&view, enabled);
+    let effective_enabled = expand_enabled_items_for_applied(view, enabled);
     let enabled_set: HashSet<&str> = effective_enabled.iter().map(|s| s.as_str()).collect();
 
     let mut unknown: Vec<String> = Vec::new();
@@ -1676,14 +1834,14 @@ fn run_current_list_applied(
     } else {
         for name in enabled {
             if let Some(item) = view.get(name) {
-                collect_required_package_names(name, &item, &view, &mut packages_to_check);
+                collect_required_package_names(name, &item, view, &mut packages_to_check);
             }
         }
     }
     packages_to_check.sort();
     packages_to_check.dedup();
 
-    let package_presence = query_world_package_presence(&view, &packages_to_check)?;
+    let package_presence = query_world_package_presence(view, &packages_to_check)?;
 
     let mut items: Vec<InventoryListItemSummaryV1> = Vec::with_capacity(names_to_display.len());
     for name in &names_to_display {
@@ -1695,7 +1853,7 @@ fn run_current_list_applied(
         let (world, remediation) = compute_world_status_and_remediation(
             name,
             &item,
-            &view,
+            view,
             &package_presence,
             enabled_here,
         )?;
@@ -1719,18 +1877,7 @@ fn run_current_list_applied(
         });
     }
 
-    if json {
-        let out = ListOutputV1 {
-            schema_version: 1,
-            scope: "current".to_string(),
-            view: "applied".to_string(),
-            items,
-        };
-        println!("{}", serde_json::to_string_pretty(&out)?);
-    } else {
-        print_applied_table(&items);
-    }
-    Ok(())
+    Ok(items)
 }
 
 fn expand_enabled_items_for_applied(view: &InventoryViewV1, enabled: &[String]) -> Vec<String> {
@@ -1962,7 +2109,7 @@ fn query_world_package_presence(
         } else {
             stdout_text.trim().to_string()
         };
-        return Err(anyhow!(WorldBackendUnavailable::new(format!(
+        return Err(anyhow!(WorldDepsBackendUnavailableError::new(format!(
             "world probe script failed (exit={}): {}",
             response.exit, snippet
         ))));
@@ -2029,7 +2176,7 @@ fn query_world_package_entrypoint_presence(
         } else {
             stdout_text.trim().to_string()
         };
-        return Err(anyhow!(WorldBackendUnavailable::new(format!(
+        return Err(anyhow!(WorldDepsBackendUnavailableError::new(format!(
             "world probe script failed (exit={}): {}",
             response.exit, snippet
         ))));
@@ -2097,7 +2244,7 @@ fn ensure_world_backend_available() -> Result<()> {
         .decode(response.stderr_b64.as_bytes())
         .unwrap_or_default();
     let stderr_text = String::from_utf8_lossy(&stderr);
-    Err(anyhow!(WorldBackendUnavailable::new(format!(
+    Err(anyhow!(WorldDepsBackendUnavailableError::new(format!(
         "world backend probe failed (exit={}): {}",
         response.exit,
         stderr_text.trim()
@@ -2201,7 +2348,7 @@ fn ensure_world_deps_bin_on_path(env: &mut HashMap<String, String>) {
 
 fn classify_world_backend_error(err: anyhow::Error) -> anyhow::Error {
     if looks_like_world_backend_unavailable(&err) {
-        return anyhow!(WorldBackendUnavailable::new(format!("{:#}", err)));
+        return anyhow!(WorldDepsBackendUnavailableError::new(format!("{:#}", err)));
     }
     err
 }
@@ -2261,7 +2408,7 @@ fn workspace_marker_path(workspace_root: &Path) -> PathBuf {
     workspace_root.join(".substrate").join("workspace.yaml")
 }
 
-fn resolve_current_inventory_view(
+pub(super) fn resolve_current_inventory_view(
     cwd: &std::path::Path,
     cfg: &config_model::SubstrateConfig,
 ) -> Result<InventoryViewV1> {

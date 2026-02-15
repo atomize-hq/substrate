@@ -44,33 +44,20 @@ managers:
         "reason": "overlay missing"
     }));
     fixture.write_world_deps_fixture(json!({
-        "manifest": {
-            "inventory": {
-                "base": fixture.home().join("manager_hooks.yaml"),
-                "overlay": fixture.home().join(".substrate/manager_hooks.local.yaml"),
-                "overlay_exists": false
-            },
-            "overlays": {
-                "installed": fixture.home().join(".substrate/world-deps.yaml"),
-                "installed_exists": false,
-                "user": fixture.home().join(".substrate/world-deps.local.yaml"),
-                "user_exists": false
-            },
-            "layers": [
-                fixture.home().join("manager_hooks.yaml"),
-                fixture.home().join(".substrate/manager_hooks.local.yaml"),
-                fixture.home().join(".substrate/world-deps.yaml"),
-                fixture.home().join(".substrate/world-deps.local.yaml")
-            ]
-        },
-        "world_disabled_reason": "install metadata reports world disabled",
-        "tools": [
+        "schema_version": 1,
+        "cwd": fixture.home(),
+        "inventory_packages": 1,
+        "inventory_bundles": 0,
+        "inventory_mode": "merged",
+        "builtins": "enabled",
+        "enabled": ["node"],
+        "applied": [
             {
+                "kind": "package",
                 "name": "node",
-                "host_detected": true,
-                "install_class": "user_space",
-                "provider": "apt",
-                "guest": {"status": "missing"}
+                "enabled": true,
+                "world": "missing",
+                "remediation": "run 'substrate world deps current sync'"
             }
         ]
     }));
@@ -121,8 +108,8 @@ managers:
         "doctor output should include world deps header: {stdout}"
     );
     assert!(
-        stdout.contains("Guest tools missing (1): node"),
-        "doctor output should summarize missing guest tools: {stdout}"
+        stdout.contains("Applied: missing/blocked (1): node (missing)"),
+        "doctor output should summarize missing/blocked applied deps: {stdout}"
     );
 }
 
@@ -201,11 +188,11 @@ managers:
     let deps_report = report["world_deps"]["report"].clone();
     assert!(deps_report.is_object(), "world deps report missing");
     assert!(
-        deps_report["tools"]
+        deps_report["applied"]
             .as_array()
-            .expect("tools array missing")
+            .expect("applied array missing")
             .is_empty(),
-        "default world deps fixture should report zero tools"
+        "default world deps fixture should report zero applied items"
     );
 }
 
@@ -376,27 +363,14 @@ managers:
         "stderr": "failed to connect to /run/substrate.sock"
     }));
     fixture.write_world_deps_fixture(json!({
-        "manifest": {
-            "inventory": {
-                "base": fixture.home().join("manager_hooks.yaml"),
-                "overlay": fixture.home().join(".substrate/manager_hooks.local.yaml"),
-                "overlay_exists": false
-            },
-            "overlays": {
-                "installed": fixture.home().join(".substrate/world-deps.yaml"),
-                "installed_exists": false,
-                "user": fixture.home().join(".substrate/world-deps.local.yaml"),
-                "user_exists": false
-            },
-            "layers": [
-                fixture.home().join("manager_hooks.yaml"),
-                fixture.home().join(".substrate/manager_hooks.local.yaml"),
-                fixture.home().join(".substrate/world-deps.yaml"),
-                fixture.home().join(".substrate/world-deps.local.yaml")
-            ]
-        },
-        "world_disabled_reason": null,
-        "tools": "invalid"
+        "schema_version": 1,
+        "cwd": fixture.home(),
+        "inventory_packages": 0,
+        "inventory_bundles": 0,
+        "inventory_mode": "merged",
+        "builtins": "enabled",
+        "enabled": "invalid",
+        "applied": []
     }));
 
     let json_output = fixture
@@ -587,20 +561,19 @@ managers:
 
     let report: Value =
         serde_json::from_slice(&output.stdout).expect("doctor --json output should be valid JSON");
-    let deps = report["world_deps"]["report"]
-        .as_object()
-        .expect("world deps report missing");
-
-    assert_eq!(
-        deps.get("world_disabled_reason")
-            .and_then(|value| value.as_str()),
-        Some("--no-world flag is active")
+    assert!(
+        report["world_deps"]["report"].is_null(),
+        "expected world deps report to be omitted when --no-world is active"
     );
     assert_eq!(
-        deps.get("tools")
-            .and_then(|value| value.as_array())
-            .map(|tools| tools.len()),
-        Some(0)
+        report["world_deps"]["source"].as_str(),
+        Some("skipped"),
+        "expected world deps source=skipped when --no-world is active"
+    );
+    let err = report["world_deps"]["error"].as_str().unwrap_or_default();
+    assert!(
+        err.contains("skipped world deps"),
+        "expected skipped world deps error message, got: {err}"
     );
 }
 

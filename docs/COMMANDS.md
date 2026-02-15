@@ -80,9 +80,16 @@ Once you type `graph`, `host`, `world`, `config`, `policy`, `workspace`, `shim`,
 | --- | --- | --- | --- |
 | `substrate world doctor` | — | `--json` | World-scoped readiness report (host + world-agent facts). |
 | `substrate world enable` | — | `--prefix`, `--profile`, `--dry-run`, `--verbose`, `--force`, `--timeout` | Provisioning control per `cli.rs:197`. |
-| `substrate world deps status [--all] [TOOL...]` | Optional `tools` list (order matters) | `--all`, `--json` | Defaults to host-present tools; `--all` includes host-missing inventory entries. |
-| `substrate world deps install <TOOL...>` | One or more tool names | `--dry-run`, `--verbose` | Ensure installers respect permutations. |
-| `substrate world deps sync` | — | `--all`, `--verbose` | Cover all flag combinations (up to 4 permutations). |
+| `substrate world deps current list [VIEW]` | `view` (`available`, `enabled`, `applied`) | `--all`, `--json` | `available/enabled` are host-only; `applied` queries the world backend. |
+| `substrate world deps current show <ITEM>` | `item` name | `--json`, `--explain` | `--explain` queries the world backend and prints remediation/manual instructions when blocked. |
+| `substrate world deps current install <ITEM...>` | One or more item names | `--dry-run`, `--verbose` | Applies immediately without modifying enabled list. |
+| `substrate world deps current sync` | — | `--dry-run`, `--verbose`, `--all` | Applies the effective enabled list for the current directory. |
+| `substrate world deps global list [VIEW]` | `view` (`available`, `enabled`) | `--json` | Patch-scoped (global) views only; no built-ins. |
+| `substrate world deps global add|remove <ITEM...>` | One or more item names | `--json` | Updates `$SUBSTRATE_HOME/config.yaml` only; does not install/uninstall. |
+| `substrate world deps global reset` | — | `--json` | Removes `world.deps.enabled` from the global patch (inherit-only). |
+| `substrate world deps workspace list [VIEW]` | `view` (`available`, `enabled`) | `--json` | Patch-scoped (workspace) views only; requires a workspace. |
+| `substrate world deps workspace add|remove <ITEM...>` | One or more item names | `--json` | Updates `<workspace_root>/.substrate/workspace.yaml` only; does not install/uninstall. |
+| `substrate world deps workspace reset` | — | `--json` | Removes `world.deps.enabled` from the workspace patch (inherit-only). |
 
 ## Testing Checklist
 

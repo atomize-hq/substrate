@@ -207,7 +207,7 @@ snippet (plus a `.bak` backup) to `~/.substrate_bashenv`.
 | `--prefix <path>` | Override the installation prefix (default: `~/.substrate`) |
 | `--no-world` | Skip provisioning the world backend (use `substrate world enable` later) |
 | `--no-shims` | Skip shim deployment (useful for CI images) |
-| `--sync-deps` | Run `substrate world deps sync` after provisioning completes (installs guest tools detected on the host; use `--all` later to force installs) |
+| `--sync-deps` | Run `substrate world deps current sync` after provisioning completes (applies the enabled deps list into the world) |
 | `--dry-run` | Print all actions without executing them |
 | `--archive <path>` | Install from a local tarball instead of downloading |
 
@@ -272,13 +272,10 @@ whether `loginctl enable-linger <user>` still needs to be run.
   `substrate -c 'which git'` vs `which git`. If only the host shell is missing a
   manager snippet, run `substrate shim repair --manager <name> --yes` to update
   `~/.substrate_bashenv`.
-- **Manager parity mismatch (Linux/macOS)**: run `substrate health` to see the
-  new parity block plus `substrate health --json | jq '.summary | {attention_required_managers, world_only_managers}'`
-  whenever a world sync looks stale. `attention_required_managers` maps directly
-  to the host-only list and `world_only_managers` surfaces tools that only exist
-  in the guest. Follow the printed recommendations (run `substrate world deps sync`
-  for host-only entries, `substrate shim repair --manager <name> --yes` for
-  world-only entries) before re-running doctor.
+- **World deps not present (Linux/macOS)**: run `substrate health` to see which
+  enabled deps are `missing` or `blocked/manual`. Use `substrate world deps current sync`
+  and `substrate world deps current list applied` to provision/verify, and
+  `substrate world deps current show <name> --explain` for manual blockers.
 - **Doctor failures**: capture `substrate shim doctor --json` and
   `substrate world doctor --json`; attach both to bug reports so we can spot
   PATH vs kernel/virtualization gaps quickly.

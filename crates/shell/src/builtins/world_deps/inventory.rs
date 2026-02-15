@@ -194,7 +194,7 @@ impl InventoryViewV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct InventoryListItemSummaryV1 {
     pub kind: String,
     pub name: String,
@@ -208,9 +208,9 @@ pub(crate) struct InventoryListItemSummaryV1 {
     pub runnable: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub method: Option<InstallMethodV1>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub entrypoints: Vec<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub platforms: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,

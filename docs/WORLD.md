@@ -215,24 +215,25 @@ Notes
 
 ### World Dependencies (`world deps`)
 
-`substrate world deps` mirrors common dev tool managers (nvm/pyenv/bun/etc) into
-the guest so commands behave the same way in-world as they do on the host.
+`substrate world deps` applies inventory-defined packages/bundles into the world so
+tools are runnable under Substrate’s world shell contract (no user rcfiles).
 
-- `substrate world deps status [--all] [TOOL...]` shows host/guest availability.
-  With no tool arguments, it defaults to host-present inventory entries; use
-  `--all` to include host-missing entries.
-- `substrate world deps sync [--all]` installs missing guest tools.
-  Default behavior only installs tools detected on the host; `--all` forces
-  installs even when the tool is host-missing.
-- `substrate world deps install <TOOL...>` installs specific tools inside the
-  guest using the manifest recipes (provider label `custom` means “run the
-  bundled shell recipe”, not that Substrate updates the tool automatically).
+Inventory sources (merged, unless configured otherwise):
+- Built-in inventory (shipped with Substrate; can be hidden via config)
+- `$SUBSTRATE_HOME/deps/` (global inventory)
+- `<workspace_root>/.substrate/deps/` (workspace inventory chain; nearest wins)
 
-Manifests:
-- Inventory base: `.../config/manager_hooks.yaml` (or workspace `config/manager_hooks.yaml`)
-- Overlays: `~/.substrate/manager_hooks.local.yaml`, `.../config/world-deps.yaml`
-  (or workspace `scripts/substrate/world-deps.yaml`), `~/.substrate/world-deps.local.yaml`
-  (`*.local.yaml` may be missing; the bundled `world-deps.yaml` may be empty).
+Enabled config sources (merged by scope):
+- `$SUBSTRATE_HOME/config.yaml` (global patch)
+- `<workspace_root>/.substrate/workspace.yaml` (workspace patch)
+
+Key commands:
+- `substrate world deps current list [available|enabled|applied] [--json]`
+- `substrate world deps current sync [--dry-run] [--verbose]`
+- `substrate world deps current install <ITEM...> [--dry-run] [--verbose]`
+- `substrate world deps global|workspace add|remove|reset` (edit enabled patches only)
+
+Legacy `world-deps.yaml` overlay plumbing and `SUBSTRATE_WORLD_DEPS_MANIFEST` are ignored.
 
 ---
 

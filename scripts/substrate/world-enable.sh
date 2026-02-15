@@ -33,7 +33,7 @@ Options:
   --dry-run          Show the provisioning commands without executing
   --verbose          Print verbose execution details
   --force            Rerun provisioning even if metadata reports enabled
-  --no-sync-deps     Skip 'substrate world deps sync' after provisioning
+  --no-sync-deps     Skip 'substrate world deps current sync' after provisioning
   -h, --help         Show this help message
 USAGE
 }

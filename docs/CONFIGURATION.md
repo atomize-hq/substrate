@@ -93,7 +93,6 @@ Other world-adjacent variables:
 
 | Variable | Purpose | Default | Example |
 |----------|---------|---------|---------|
-| `SUBSTRATE_WORLD_DEPS_MANIFEST` | Override manifest for `world deps` | `<prefix>/versions/<version>/config/world-deps.yaml` | `/tmp/world_deps.yaml` |
 | `SUBSTRATE_WORLD_REQUEST_PROFILE` | Sets the Agent API request `profile` for world-agent executions (advanced/testing) | *unset* | `world-deps-provision` |
 | `SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE` | Force socket activation mode reporting (`socket_activation`, `manual`, or `unknown`) for diagnostics/tests | auto-detect via systemd | `socket_activation` |
 | `SUBSTRATE_SYSTEMCTL_TIMEOUT_MS` | Timeout (ms) for `systemctl show …` probes used by Linux socket-activation detection; prevents hangs when systemd/dbus is unhealthy | `2000` | `250` |
@@ -505,11 +504,12 @@ substrate health --json > artifacts/substrate_health.json
 substrate world doctor --json > artifacts/world_doctor.json
 ```
 
-Surface the new parity signals when archiving these artifacts:
+Key health fields to capture alongside these artifacts:
 
-- `summary.attention_required_managers` lists host-only managers that require a world sync.
-- `summary.world_only_managers` lists tools present in the guest but missing locally.
-- `summary.manager_states[].{name, parity, recommendation}` provides per-manager status plus the suggested remediation.
+- `summary.missing_managers` lists managers not detected on the host.
+- `summary.world_ok` / `summary.world_error` describe world backend health.
+- `summary.world_deps_missing` / `summary.world_deps_blocked` describe enabled deps that are missing or require manual install.
+- `summary.world_deps_error` is set when the world deps snapshot cannot be collected.
 
 Example (macOS Sonoma / zsh, temp HOME):
 
@@ -518,7 +518,7 @@ TMP=$PWD/target/tests-tmp/macos-health
 mkdir -p "$TMP/.substrate"
 HOME=$TMP SUBSTRATE_MANAGER_MANIFEST=$TMP/manager_hooks.yaml \
   substrate health --json \
-  | jq '.summary | {\n      attention_required_managers,\n      world_only_managers,\n      manager_states: [.manager_states[] | {name, parity, recommendation}]\n    }'
+  | jq '.summary | {ok, missing_managers, world_ok, world_deps_missing, world_deps_blocked, world_deps_error}'
 ```
 
 Need a legacy pipeline to inject snippets automatically? Run `substrate shim repair`
@@ -531,8 +531,9 @@ To stub the expensive world checks, drop JSON fixtures under
 
 - `world_doctor.json` – consumed by `substrate shim doctor` and
   `substrate health` before falling back to `substrate world doctor --json`.
-- `world_deps.json` – matches the `WorldDepsStatusReport` schema. Leave the
-  file out to exercise the live `substrate world deps status --json` path.
+- `world_deps.json` – matches the world deps doctor snapshot schema used by
+  `substrate shim doctor` / `substrate health` (leave it out to exercise the
+  live world backend probes).
 
 These overrides keep CI sandboxes deterministic while still exercising the same
 code paths as production builds.
