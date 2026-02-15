@@ -15,10 +15,10 @@ SLICE_ID="${SUBSTRATE_SMOKE_SLICE_ID:-WS7}"
 
 should_skip_for_output() {
   local out="$1"
-  printf '%s' "$out" | grep -Fq "pending diff discovery is unsupported by this backend" && return 0
-  printf '%s' "$out" | grep -Fq "WORLD_FS_STRATEGY_UNAVAILABLE" && return 0
-  printf '%s' "$out" | grep -Fq 'unknown field `caged_required`' && return 0
-  printf '%s' "$out" | grep -Fq "workspace sync requires world" && return 0
+  [[ "$out" == *"pending diff discovery is unsupported by this backend"* ]] && return 0
+  [[ "$out" == *"WORLD_FS_STRATEGY_UNAVAILABLE"* ]] && return 0
+  [[ "$out" == *'unknown field `caged_required`'* ]] && return 0
+  [[ "$out" == *"workspace sync requires world"* ]] && return 0
   return 1
 }
 
@@ -46,7 +46,16 @@ run_or_skip() {
   printf '%s' "$out"
 }
 
-WS_DIR="$(mktemp -d)"
+base="${SUBSTRATE_SMOKE_ROOT:-}"
+if [[ -z "${base}" ]]; then
+  if [[ -n "${HOME:-}" ]]; then
+    base="${HOME}/.substrate/tmp"
+  else
+    base="$(pwd -P)/target/world-sync-macos-smoke-tmp"
+  fi
+fi
+mkdir -p "${base}"
+WS_DIR="$(mktemp -d "${base%/}/world-sync-macos-smoke.XXXXXX")"
 cleanup() { rm -rf "$WS_DIR"; }
 trap cleanup EXIT
 
@@ -70,7 +79,7 @@ case "$SLICE_ID" in
       printf '%s\n' "$out" >&2
       exit "$rc"
     fi
-    printf '%s' "$out" | grep -Fq "hello-from-world.txt"
+    grep -Fq "hello-from-world.txt" <<<"$out"
     test -f hello-from-world.txt
     run_or_skip "workspace sync apply" substrate workspace sync --direction from_world >/dev/null
     echo "OK: world-sync macOS smoke ($SLICE_ID)"
@@ -94,7 +103,7 @@ case "$SLICE_ID" in
       printf '%s\n' "$out" >&2
       exit "$rc"
     fi
-    printf '%s' "$out" | grep -Fq "hello-both.txt"
+    grep -Fq "hello-both.txt" <<<"$out"
     test -f hello-both.txt
     echo "OK: world-sync macOS smoke ($SLICE_ID)"
     ;;

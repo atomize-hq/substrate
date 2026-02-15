@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_LAUNCH_DIR="$(pwd -P)"
+
 usage() {
     cat <<'USAGE'
 Usage:
@@ -15,13 +17,15 @@ Options:
   --substrate-bin <path>   Substrate binary (default: substrate)
   --log-dir <dir>          Where to write logs (default: target/world-sync-matrix/<utc>/)
   --profile <name>         Scenario profile: auto|linux|macos (default: auto)
+  --tmp-root <dir>         Base dir for temp workspaces (default: /tmp on Linux; $HOME/.substrate/tmp on macOS)
   --keep                   Keep temp workspaces (default: cleanup)
   --no-assert              Do not assert log patterns (still writes logs)
   --continue               Continue after failures (run full matrix)
 
 Notes:
-  - PTY scenarios use `substrate -c ":pty <cmd>"` to force the PTY WS route.
-  - All work happens in temporary directories under /tmp.
+  - PTY scenarios use `substrate --world -c ":pty <cmd>"` to force the PTY WS route.
+  - Temp workspaces default to `/tmp` on Linux and `$HOME/.substrate/tmp` on macOS.
+    Override via `--tmp-root` or `SUBSTRATE_WS_SYNC_MATRIX_TMP_ROOT`.
 USAGE
 }
 
@@ -70,6 +74,8 @@ detect_profile() {
 RESOLVED_PROFILE=""
 SYNC_WORLD_ROUTE="pty"       # pty|nonpty
 SYNC_BUCKET_LABEL="pty"      # pty|non_pty
+TMP_ROOT=""
+EFFECTIVE_TMP_ROOT=""
 
 log() {
     echo "== $*" >&2
@@ -180,7 +186,7 @@ run_world_nonpty() {
         SUBSTRATE_E2E_WS_DIR="${ws_dir}" \
         SUBSTRATE_E2E_SUBSTRATE_BIN="${SUBSTRATE_BIN}" \
         SUBSTRATE_E2E_C_ARG="${program}" \
-        bash -lc 'cd "$SUBSTRATE_E2E_WS_DIR" && "$SUBSTRATE_E2E_SUBSTRATE_BIN" -c "$SUBSTRATE_E2E_C_ARG"' \
+        bash -lc 'cd "$SUBSTRATE_E2E_WS_DIR" && "$SUBSTRATE_E2E_SUBSTRATE_BIN" --world -c "$SUBSTRATE_E2E_C_ARG"' \
         >/dev/null
 }
 
@@ -197,7 +203,7 @@ run_world_pty() {
         SUBSTRATE_E2E_WS_DIR="${ws_dir}" \
         SUBSTRATE_E2E_SUBSTRATE_BIN="${SUBSTRATE_BIN}" \
         SUBSTRATE_E2E_C_ARG=":pty ${program}" \
-        bash -lc 'cd "$SUBSTRATE_E2E_WS_DIR" && "$SUBSTRATE_E2E_SUBSTRATE_BIN" -c "$SUBSTRATE_E2E_C_ARG"' \
+        bash -lc 'cd "$SUBSTRATE_E2E_WS_DIR" && "$SUBSTRATE_E2E_SUBSTRATE_BIN" --world -c "$SUBSTRATE_E2E_C_ARG"' \
         >/dev/null
 }
 
@@ -262,7 +268,7 @@ scenario_world_write_via_pty_smoke() {
             SUBSTRATE_E2E_WS_DIR="${ws_dir}" \
             SUBSTRATE_E2E_SUBSTRATE_BIN="${SUBSTRATE_BIN}" \
             SUBSTRATE_E2E_C_ARG=":pty sh -lc 'printf hello > pty_new.md; cat pty_new.md'" \
-            bash -lc 'cd "$SUBSTRATE_E2E_WS_DIR" && "$SUBSTRATE_E2E_SUBSTRATE_BIN" -c "$SUBSTRATE_E2E_C_ARG"'
+            bash -lc 'cd "$SUBSTRATE_E2E_WS_DIR" && "$SUBSTRATE_E2E_SUBSTRATE_BIN" --world -c "$SUBSTRATE_E2E_C_ARG"'
     )"
     assert_contains "${out}" "hello" "pty smoke output"
 
@@ -300,7 +306,7 @@ scenario_world_write_via_nonpty_applies() {
     local logfile="$2"
     log "Scenario: world creates file in non-PTY (-c) => sync applies write"
 
-    run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' -c \"printf 'hello\\n' > nonpty_new.md\"" >/dev/null
+    run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' --world -c \"printf 'hello\\n' > nonpty_new.md\"" >/dev/null
 
     local preview
     preview="$(ws_sync_dry_verbose "${ws_dir}" "${logfile}")"
@@ -321,7 +327,7 @@ scenario_host_create_visible_in_world_no_sync_needed() {
     run_capture "${logfile}" bash -lc "cd '${ws_dir}' && printf 'host\\n' > host_only.md" >/dev/null
     local world_check
     world_check="$(
-        run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' -c \"if test -f host_only.md; then echo 'world_can_see_host_only=1'; else echo 'world_can_see_host_only=0'; fi; exit 0\""
+        run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' --world -c \"if test -f host_only.md; then echo 'world_can_see_host_only=1'; else echo 'world_can_see_host_only=0'; fi; exit 0\""
     )"
     assert_contains "${world_check}" "world_can_see_host_only=1" "host create world visibility"
 
@@ -354,7 +360,7 @@ scenario_direction_from_host_keeps_non_conflict_world_only_shadow() {
 
     local world_check
     world_check="$(
-        run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' -c \"if test -f world_only.md; then echo 'world_kept_shadow=1'; else echo 'world_kept_shadow=0'; fi; exit 0\""
+        run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' --world -c \"if test -f world_only.md; then echo 'world_kept_shadow=1'; else echo 'world_kept_shadow=0'; fi; exit 0\""
     )"
     assert_contains "${world_check}" "world_kept_shadow=1" "from_host keep world check"
 }
@@ -380,7 +386,7 @@ scenario_from_host_conflict_prefer_host_discards_shadowed_path() {
     assert_contains "${applied}" "from_host reconciliation" "from_host prefer_host apply"
 
     local world_cat
-    world_cat="$(run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' -c \"cat shadow.md\"")"
+    world_cat="$(run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' --world -c \"cat shadow.md\"")"
     assert_contains "${world_cat}" "host" "from_host prefer_host world sees host"
 
     local host_cat
@@ -415,7 +421,7 @@ scenario_from_host_conflict_prefer_world_keeps_shadowed_path() {
     assert_contains "${applied}" "from_host reconciliation" "from_host prefer_world apply"
 
     local world_cat
-    world_cat="$(run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' -c \"cat shadow.md\"")"
+    world_cat="$(run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' --world -c \"cat shadow.md\"")"
     assert_contains "${world_cat}" "world" "from_host prefer_world world still shadows"
 
     local host_cat
@@ -627,7 +633,7 @@ if test ! -e .git/excluded.md && test ! -e .substrate/excluded.md; then echo 'ex
 
     local world_check
     world_check="$(
-        run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' -c \"if test -f .git/excluded.md && test -f .substrate/excluded.md; then echo 'excluded_in_world=1'; else echo 'excluded_in_world=0'; fi; exit 0\""
+        run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' --world -c \"if test -f .git/excluded.md && test -f .substrate/excluded.md; then echo 'excluded_in_world=1'; else echo 'excluded_in_world=0'; fi; exit 0\""
     )"
     assert_contains "${world_check}" "excluded_in_world=1" "exclude world check"
 }
@@ -784,7 +790,7 @@ scenario_symlink_refused_by_apply() {
 
     local world_check
     world_check="$(
-        run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' -c \"if test -L link.md; then echo 'world_has_symlink=1'; else echo 'world_has_symlink=0'; fi; exit 0\""
+        run_capture "${logfile}" bash -lc "cd '${ws_dir}' && '${SUBSTRATE_BIN}' --world -c \"if test -L link.md; then echo 'world_has_symlink=1'; else echo 'world_has_symlink=0'; fi; exit 0\""
     )"
     assert_contains "${world_check}" "world_has_symlink=1" "symlink world check"
 
@@ -849,6 +855,10 @@ while [[ $# -gt 0 ]]; do
             PROFILE="${2:-}"
             shift 2
             ;;
+        --tmp-root)
+            TMP_ROOT="${2:-}"
+            shift 2
+            ;;
         --keep)
             KEEP=1
             shift
@@ -872,6 +882,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 require_cmd bash
+
+# Resolve relative binary path to an absolute path before we start `cd`-ing into temp workspaces.
+if [[ "${SUBSTRATE_BIN}" == */* && "${SUBSTRATE_BIN}" != /* ]]; then
+    SUBSTRATE_BIN="$(cd "${SCRIPT_LAUNCH_DIR}" && cd "$(dirname "${SUBSTRATE_BIN}")" && pwd -P)/$(basename "${SUBSTRATE_BIN}")"
+fi
 require_cmd "${SUBSTRATE_BIN}"
 
 mkdir -p "${LOG_DIR}"
@@ -898,7 +913,7 @@ main() {
         local scenario_fn="$4"
 
         local ws_dir
-        ws_dir="$(mktemp -d /tmp/substrate-ws-sync-matrix.XXXXXX)"
+        ws_dir="$(mktemp -d "${EFFECTIVE_TMP_ROOT%/}/substrate-ws-sync-matrix.XXXXXX")"
         TMP_DIRS+=("${ws_dir}")
 
         local logfile="${LOG_DIR}/${case_id}.log"
@@ -941,6 +956,20 @@ main() {
             ;;
     esac
     log "Matrix profile: ${resolved_profile} (set via --profile or SUBSTRATE_WS_SYNC_MATRIX_PROFILE)"
+
+    local default_tmp_root="/tmp"
+    if [[ "${RESOLVED_PROFILE}" == "macos" ]]; then
+        if [[ -n "${HOME:-}" ]]; then
+            default_tmp_root="${HOME}/.substrate/tmp"
+        else
+            default_tmp_root="${SCRIPT_LAUNCH_DIR}/target/world-sync-matrix-tmp"
+            warn "HOME is unset; defaulting temp root to: ${default_tmp_root}"
+        fi
+    fi
+
+    EFFECTIVE_TMP_ROOT="${TMP_ROOT:-${SUBSTRATE_WS_SYNC_MATRIX_TMP_ROOT:-${default_tmp_root}}}"
+    mkdir -p "${EFFECTIVE_TMP_ROOT}"
+    log "Workspace temp root: ${EFFECTIVE_TMP_ROOT}"
 
     case "${resolved_profile}" in
         linux)
