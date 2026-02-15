@@ -312,6 +312,10 @@ Scope:
   - Easy to accidentally broaden behavior by switching config defaults (e.g., allow silent host fallback).
 - **Risks:**
   - Privilege boundary drift: “routing to host” becomes a config preference rather than an enforced constraint.
+- **Unlocks:**
+  - None; this option weakens the enforcement boundary posture for host fallback decisions.
+- **Quick wins / low-hanging fruit:**
+  - No new policy keys required; all configuration remains in config surfaces.
 
 **Option B — Policy-owned `agents.fail_closed.routing` (default true); config selects scope only**
 - **Pros:**
@@ -324,6 +328,10 @@ Scope:
   - Per-agent variance is supported by allowing an embedded, restriction-only `policy_overlay` to set `agents.fail_closed.routing=true` (tighten only).
 - **Risks:**
   - Operators may over-restrict; mitigated by `--explain` and clear error messages.
+- **Unlocks:**
+  - Consistent, policy-owned enforcement posture for host fallback decisions across LLM and agents (`fail_closed.routing`).
+- **Quick wins / low-hanging fruit:**
+  - Reuse an existing policy key shape and semantics already established by ADR-0018.
 
 **Recommendation**
 - **Selected:** Option B — Policy-owned `agents.fail_closed.routing`.

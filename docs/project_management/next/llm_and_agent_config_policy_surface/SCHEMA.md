@@ -174,7 +174,7 @@ CLI agents:
 API agents:
 - `config.api.base_url: string` (required for `config.kind=api`)
   - Meaning: upstream provider base URL used by this `api:*` backend (non-secret; auth is handled separately).
-  - Constraints: MUST be an `https://` URL; MUST NOT include userinfo (`user:pass@`); SHOULD NOT include query params.
+  - Constraints: MUST be an `https://` URL; MUST NOT include userinfo (`user:pass@`); MUST NOT include query params.
 - `config.api.auth.env: [string]` (required for `config.kind=api`)
   - Meaning: required secret env var *names* that must be present on the host so Substrate can deliver their values to the in-world gateway/engine over a Substrate-owned secret channel.
   - Default: `[]` (but for `config.kind=api` it MUST be non-empty).
