@@ -28,9 +28,10 @@ Spec templates:
 - `docs/project_management/next/llm_and_agent_config_policy_surface/contract.md` — operator-facing contract (files, precedence summary, invariants, examples)
 - `docs/project_management/next/llm_and_agent_config_policy_surface/SCHEMA.md` — authoritative schema for:
   - config/policy key paths + types + defaults + constraints, and
-  - agent inventory file format (`agents/<agent_id>.yaml`) + `policy_overlay` rules
+  - agent inventory file format (agents/<agent_id>.yaml) + policy_overlay rules
 - `docs/project_management/next/llm_and_agent_config_policy_surface/decision_register.md` — A/B decisions and selections
-- `docs/project_management/next/llm_and_agent_config_policy_surface/LACP0-spec.md` — Phase 3 implementation slice spec (strict schema + agent inventory + overlay semantics)
+- `docs/project_management/next/llm_and_agent_config_policy_surface/LACP0-spec.md` — Phase 3a slice spec (config/policy strict schema + dotted updates + explain)
+- `docs/project_management/next/llm_and_agent_config_policy_surface/LACP1-spec.md` — Phase 3b slice spec (agent inventory strict parsing + restriction-only overlays)
 - Validation artifacts (authoritative; required by ADR-0027):
   - `docs/project_management/next/llm_and_agent_config_policy_surface/manual_testing_playbook.md`
   - `docs/project_management/next/llm_and_agent_config_policy_surface/smoke/linux-smoke.sh`
@@ -38,7 +39,11 @@ Spec templates:
   - `docs/project_management/next/llm_and_agent_config_policy_surface/smoke/windows-smoke.ps1`
 - Planning Pack artifacts (required before execution triads begin; created by `docs/project_management/standards/PLANNING_README.md`):
   - `docs/project_management/next/llm_and_agent_config_policy_surface/plan.md`
+  - `docs/project_management/next/llm_and_agent_config_policy_surface/ci_checkpoint_plan.md`
   - `docs/project_management/next/llm_and_agent_config_policy_surface/tasks.json`
+  - `docs/project_management/next/llm_and_agent_config_policy_surface/kickoff_prompts/`
+  - `docs/project_management/next/llm_and_agent_config_policy_surface/session_log.md`
+  - `docs/project_management/next/llm_and_agent_config_policy_surface/quality_gate_report.md`
 
 ## Coverage matrix (surface → authoritative doc)
 
@@ -53,9 +58,11 @@ Spec templates:
 | Agent inventory directory model | `docs/project_management/next/llm_and_agent_config_policy_surface/SCHEMA.md` | file locations, precedence rules, strictness rules, “no secrets” invariant |
 | Embedded per-agent `policy_overlay` | `docs/project_management/next/llm_and_agent_config_policy_surface/SCHEMA.md` | allowed key subset + restriction-only composition rules and error posture |
 | Operator-facing invariants (fail-closed defaults; deny-by-default allowlists; no secrets in YAML) | `docs/project_management/next/llm_and_agent_config_policy_surface/contract.md` | enable/allowlist interplay, fail-closed routing invariants, examples |
-| Phase 3 acceptance criteria (schema-first implementation) | `docs/project_management/next/llm_and_agent_config_policy_surface/LACP0-spec.md` | testable behavior requirements for parsing, patch updates, explain surfaces, overlays |
+| Phase 3a acceptance criteria (config/policy strict schema) | `docs/project_management/next/llm_and_agent_config_policy_surface/LACP0-spec.md` | testable behavior requirements for patch parsing, dotted updates, explain surfaces |
+| Phase 3b acceptance criteria (agent inventory + overlays) | `docs/project_management/next/llm_and_agent_config_policy_surface/LACP1-spec.md` | testable behavior requirements for inventory strictness, overlay broadening rejection, validation CLI |
 | Manual validation | `docs/project_management/next/llm_and_agent_config_policy_surface/manual_testing_playbook.md` | deterministic manual cases and expected outcomes |
 | Automation smoke validation | `docs/project_management/next/llm_and_agent_config_policy_surface/smoke/*` | cross-platform smoke mirrors key schema/strictness cases |
+| Cross-platform CI cadence + checkpoint boundaries | `docs/project_management/next/llm_and_agent_config_policy_surface/ci_checkpoint_plan.md` | which gates run at checkpoints, slice grouping, and task id wiring |
 
 ## Determinism checklist (must be satisfied before quality gate)
 
@@ -65,4 +72,4 @@ For the docs above, confirm they explicitly define:
 - Data model and strictness for every serialized boundary (config patch, policy patch, agent inventory files).
 - Error model and failure posture (exit `2` for schema violations; fail-closed routing invariants).
 - Security/redaction invariants (no secret values in YAML; names-only allowlists for secret sourcing).
-- Platform guarantees (Linux/macOS/Windows parity for file shapes and key paths).
+- Platform guarantees (Linux/macOS parity for file shapes and key paths for this Planning Pack).

@@ -18,13 +18,15 @@
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 
 ## Related Docs
-- Plan: `docs/project_management/next/llm_and_agent_config_policy_surface/plan.md` (not created; planning-pack authoring phase)
-- Tasks: `docs/project_management/next/llm_and_agent_config_policy_surface/tasks.json` (not created; planning-pack authoring phase)
+- Plan: `docs/project_management/next/llm_and_agent_config_policy_surface/plan.md`
+- Tasks: `docs/project_management/next/llm_and_agent_config_policy_surface/tasks.json`
+- CI checkpoints: `docs/project_management/next/llm_and_agent_config_policy_surface/ci_checkpoint_plan.md`
 - Spec manifest: `docs/project_management/next/llm_and_agent_config_policy_surface/spec_manifest.md`
 - Specs:
   - Contract: `docs/project_management/next/llm_and_agent_config_policy_surface/contract.md`
   - Schema: `docs/project_management/next/llm_and_agent_config_policy_surface/SCHEMA.md`
-  - Phase 3 slice: `docs/project_management/next/llm_and_agent_config_policy_surface/LACP0-spec.md`
+  - Phase 3a slice: `docs/project_management/next/llm_and_agent_config_policy_surface/LACP0-spec.md`
+  - Phase 3b slice: `docs/project_management/next/llm_and_agent_config_policy_surface/LACP1-spec.md`
 - Decision Register: `docs/project_management/next/llm_and_agent_config_policy_surface/decision_register.md`
 - Impact Map: `docs/project_management/next/llm_and_agent_config_policy_surface/impact_map.md`
 - Manual playbook: `docs/project_management/next/llm_and_agent_config_policy_surface/manual_testing_playbook.md`
@@ -46,7 +48,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: feade316e0dbba73b491d42334effb7c42eeb98b82d2cb32f04a64f9f93e16aa
+ADR_BODY_SHA256: 5063d55b19bcb8d153635032feedc8217cba26f7bd216d9d347bd38ceffecae3
 ### Changes (operator-facing)
 - LLM + agent behavior is configured and governed via the existing config/policy files (new keys only)
   - Existing: There is no repo-wide, stable config/policy surface for LLM gateway routing, CLI agent backends, or agent role selection, which invites ad-hoc files/env vars and inconsistent enforcement boundaries.

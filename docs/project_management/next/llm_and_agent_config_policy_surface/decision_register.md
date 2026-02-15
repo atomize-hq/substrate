@@ -236,7 +236,7 @@ Scope:
 - **Pros:** Lets an individual backend tighten the host-credential-read permission even if globally allowed; aligns with “policy overlays only tighten” posture; supports least-privilege per backend.
 - **Cons:** Requires defining and enforcing “tighten-only” semantics for list keys (overlay list must be a subset of effective policy list).
 - **Cascading implications:** Update the overlay allowlist and implement subset validation (fail closed if overlay attempts to broaden).
-- **Risks:** A buggy subset check could become a broadening path; must be tested and must fail closed.
+- **Risks:** A buggy subset check can become a broadening path; must be tested and must fail closed.
 - **Unlocks:** Per-backend hardening without forcing workspace/global policy edits.
 - **Quick wins / low-hanging fruit:** `cli:codex` can ship with an overlay that defaults this permission off unless explicitly enabled for that backend.
 
@@ -270,7 +270,7 @@ Scope:
 - **Pros:** Allows per-backend least privilege: an individual agent/backend can narrow which secret env var names are injectable for that backend even if the workspace/global policy is broader; matches the established “overlays only tighten” posture.
 - **Cons:** Requires subset-only validation for list keys (overlay list must be a subset of the effective policy list).
 - **Cascading implications:** Add `llm.secrets.env_allowed` to the overlay allowlist and implement subset checks that fail closed on attempted broadening.
-- **Risks:** A bug in subset validation could become a broadening path; must be tested; must fail closed.
+- **Risks:** A bug in subset validation can become a broadening path; must be tested; must fail closed.
 - **Unlocks:** Safe multi-backend environments where only some backends may receive certain secrets.
 - **Quick wins / low-hanging fruit:** `api:openai` can tighten to only `OPENAI_API_KEY`, while other backends receive none by default.
 
@@ -423,7 +423,7 @@ Scope:
 - **Cascading implications:**
   - The overlay MUST be restriction-only (see DR-0007) and MUST NOT contain secrets.
 - **Risks:**
-  - Without strict rules, could drift into “policy per agent”; mitigated by restriction-only composition.
+  - Without strict rules, can drift into “policy per agent”; mitigated by restriction-only composition.
 - **Unlocks:**
   - Per-agent tightening for `world_fs.*`, `cmd_*`, and `net_allowed` without affecting base policy.
 - **Quick wins / low-hanging fruit:**
@@ -493,3 +493,145 @@ Scope:
 **Follow-up tasks (explicit)**
 - Document the allowed overlay key subset and composition rules in `SCHEMA.md` and ADR-0027.
 - Ensure `--explain` surfaces include whether an allow/deny came from base vs overlay.
+
+---
+
+### DR-0011 — Planning Pack platform scope (Linux+macOS now vs Linux+macOS+Windows now)
+
+**Decision owner(s):** Planning Pack owner(s)  
+**Date:** 2026-02-15  
+**Status:** Accepted  
+**Related docs:** `docs/project_management/next/llm_and_agent_config_policy_surface/plan.md`, `docs/project_management/next/llm_and_agent_config_policy_surface/tasks.json`
+
+**Problem / Context**
+- ADR-0027 surfaces are cross-platform by design, but this Planning Pack does not require Windows execution at this time.
+
+**Option A — Require Linux + macOS only for Phase 3 execution**
+- **Pros:**
+  - Keeps the Phase 3 critical path bounded while still validating the primary behavior platforms.
+  - Avoids scheduling Windows runner provisioning and platform-fix loops.
+- **Cons:**
+  - Windows parity is deferred and must be planned explicitly when it becomes required.
+- **Cascading implications:**
+  - `tasks.json` sets `meta.behavior_platforms_required=["linux","macos"]` and `meta.ci_parity_platforms_required=["linux","macos"]`.
+  - CI checkpoint dispatches smoke for Linux and macOS only.
+- **Risks:**
+  - Windows-specific issues can surface later; mitigated by keeping schema and CLI surfaces strict and deterministic.
+- **Unlocks:**
+  - Unblocks downstream LLM/agent ADRs that depend on the surfaces.
+- **Quick wins / low-hanging fruit:**
+  - Smoke scripts remain deterministic on Linux and macOS via `make feature-smoke`.
+
+**Option B — Require Linux + macOS + Windows for Phase 3 execution**
+- **Pros:**
+  - Immediate parity validation across all primary desktop platforms.
+- **Cons:**
+  - Adds coordination cost and runner availability constraints to Phase 3.
+  - Requires platform-fix loops and smoke gates for Windows.
+- **Cascading implications:**
+  - `tasks.json` must include Windows in behavior and CI parity platforms and include a Windows platform-fix task at the checkpoint boundary.
+- **Risks:**
+  - Execution stalls when Windows runners are unavailable.
+- **Unlocks:**
+  - Earlier Windows signal.
+- **Quick wins / low-hanging fruit:**
+  - None; it expands the critical path.
+
+**Recommendation**
+- **Selected:** Option A — Require Linux + macOS only for Phase 3 execution.
+- **Rationale (crisp):** The Phase 3 objective is to land strict schema + inventory surfaces; Linux+macOS validation is sufficient for current execution needs.
+
+---
+
+### DR-0012 — Cross-platform execution model for this Planning Pack (schema v4 boundary-only + bounded CI checkpoints)
+
+**Decision owner(s):** Planning Pack owner(s)  
+**Date:** 2026-02-15  
+**Status:** Accepted  
+**Related docs:** `docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md`, `docs/project_management/next/llm_and_agent_config_policy_surface/ci_checkpoint_plan.md`
+
+**Problem / Context**
+- The execution plan must enforce deterministic triad structure, bounded cross-platform validation cadence, and a platform-fix model with a bounded task footprint.
+
+**Option A — Schema v4 boundary-only platform-fix + bounded CI checkpoints**
+- **Pros:**
+  - Cross-platform smoke dispatch is bounded and auditable via `ci_checkpoint_plan.md`.
+  - Platform-fix tasks exist only at checkpoint boundaries, minimizing task count.
+  - Mechanical validation enforces boundary wiring (`meta.checkpoint_boundaries`).
+- **Cons:**
+  - Platform-specific issues can be discovered at the checkpoint boundary instead of immediately after every slice.
+- **Cascading implications:**
+  - `tasks.json` uses `meta.schema_version=4`, `meta.cross_platform=true`, and `meta.checkpoint_boundaries=[...]`.
+- **Risks:**
+  - Larger checkpoint groups can accumulate drift; mitigated by keeping checkpoint sizes within bounds.
+- **Unlocks:**
+  - Fast iteration with preserved safety gates.
+- **Quick wins / low-hanging fruit:**
+  - Single checkpoint at Phase 3 completion.
+
+**Option B — Schema v3 per-slice platform-fix + per-slice cross-platform dispatch**
+- **Pros:**
+  - Platform issues surface earlier (slice-by-slice).
+- **Cons:**
+  - High dispatch cost and high coordination overhead for a schema-heavy feature.
+  - Task counts grow quickly (core + per-platform + aggregator per slice).
+- **Cascading implications:**
+  - `tasks.json` becomes larger and harder to execute deterministically.
+- **Risks:**
+  - Validation becomes the dominant cost and slows the feature’s critical path.
+- **Unlocks:**
+  - None required for Phase 3.
+- **Quick wins / low-hanging fruit:**
+  - None; it expands coordination immediately.
+
+**Recommendation**
+- **Selected:** Option A — Schema v4 boundary-only platform-fix + bounded CI checkpoints.
+- **Rationale (crisp):** It preserves safety with bounded validation cadence and bounded task footprint.
+
+---
+
+### DR-0013 — Agent inventory validation surface (`substrate agents validate` vs implicit-only validation)
+
+**Decision owner(s):** Shell maintainers  
+**Date:** 2026-02-15  
+**Status:** Accepted  
+**Related docs:** `docs/project_management/next/llm_and_agent_config_policy_surface/LACP1-spec.md`, `docs/project_management/next/llm_and_agent_config_policy_surface/contract.md`
+
+**Problem / Context**
+- Phase 3 introduces a new operator-visible file surface: the agent inventory directory (`$SUBSTRATE_HOME/agents/` and `<workspace_root>/.substrate/agents/`).
+- The feature requires deterministic validation of strict parsing and restriction-only `policy_overlay` semantics.
+
+**Option A — Add `substrate agents validate` (explicit validation command)**
+- **Pros:**
+  - Deterministic, operator-invokable validation for agent inventory strictness and overlay broadening rejection.
+  - Enables smoke scripts to validate the new surface without requiring downstream gateway/hub behavior.
+  - Produces actionable errors that point at the invalid file path.
+- **Cons:**
+  - Adds a new CLI surface that must remain stable.
+- **Cascading implications:**
+  - Define the command’s exit codes and error posture in `contract.md` and `LACP1-spec.md`.
+- **Risks:**
+  - None beyond maintaining a small, stable validation command.
+- **Unlocks:**
+  - Safe iterative development of gateway/hub features that depend on the inventory directory.
+- **Quick wins / low-hanging fruit:**
+  - Smoke scripts validate inventory/overlay without additional runtime features.
+
+**Option B — Validate agent inventory only when agent routing/execution occurs**
+- **Pros:**
+  - No new CLI surface.
+- **Cons:**
+  - Validation is not reachable until later Phase 4/5 features exist, which blocks deterministic Phase 3 smoke.
+  - Failures are coupled to unrelated runtime behavior.
+- **Cascading implications:**
+  - Phase 3 acceptance criteria cannot be validated via smoke scripts.
+- **Risks:**
+  - Higher risk of landing invalid inventory files that only fail at runtime.
+- **Unlocks:**
+  - None required for Phase 3.
+- **Quick wins / low-hanging fruit:**
+  - None; it defers validation.
+
+**Recommendation**
+- **Selected:** Option A — Add `substrate agents validate`.
+- **Rationale (crisp):** It provides deterministic validation and smoke coverage for a new operator-visible file surface without requiring downstream gateway/hub behavior.

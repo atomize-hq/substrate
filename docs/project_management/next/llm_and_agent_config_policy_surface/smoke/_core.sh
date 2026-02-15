@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Schema-only smoke for ADR-0027 config/policy keys.
+# Phase 3 smoke for ADR-0027 config/policy keys and agent inventory validation.
 #
 # Caller responsibilities:
 # - Ensure `substrate` is available via `$SUBSTRATE_BIN` (default: `substrate`).
@@ -97,5 +97,62 @@ expect_exit 2 "$SUBSTRATE_BIN" policy global set 'agents.unknown_key=true'
 echo "== Case 4: explain includes new keys =="
 expect_exit 0 "$SUBSTRATE_BIN" config current show --explain
 expect_exit 0 "$SUBSTRATE_BIN" policy current show --explain
+
+echo "== Case 5: agent inventory validate (strict + overlays) =="
+expect_exit 0 "$SUBSTRATE_BIN" agents validate
+
+echo "== Case 6: agent file unknown keys reject (exit 2) =="
+cat >"$SUBSTRATE_HOME/agents/bad_unknown.yaml" <<'YAML'
+version: 1
+id: bad_unknown
+unknown_key: true
+config:
+  kind: cli
+  enabled: true
+  execution:
+    scope: world
+  cli:
+    binary: codex
+    mode: persistent
+YAML
+expect_exit 2 "$SUBSTRATE_BIN" agents validate
+rm -f "$SUBSTRATE_HOME/agents/bad_unknown.yaml"
+
+echo "== Case 7: agent filename/id mismatch reject (exit 2) =="
+cat >"$SUBSTRATE_HOME/agents/mismatch.yaml" <<'YAML'
+version: 1
+id: other
+config:
+  kind: cli
+  enabled: true
+  execution:
+    scope: world
+  cli:
+    binary: codex
+    mode: persistent
+YAML
+expect_exit 2 "$SUBSTRATE_BIN" agents validate
+rm -f "$SUBSTRATE_HOME/agents/mismatch.yaml"
+
+echo "== Case 8: overlay broadening reject (exit 2) =="
+cat >"$SUBSTRATE_HOME/agents/broaden.yaml" <<'YAML'
+version: 1
+id: broaden
+config:
+  kind: cli
+  enabled: true
+  execution:
+    scope: world
+  cli:
+    binary: codex
+    mode: persistent
+policy_overlay:
+  llm:
+    secrets:
+      env_allowed:
+        - "OPENAI_API_KEY"
+YAML
+expect_exit 2 "$SUBSTRATE_BIN" agents validate
+rm -f "$SUBSTRATE_HOME/agents/broaden.yaml"
 
 echo "OK: llm_and_agent_config_policy_surface smoke passed"

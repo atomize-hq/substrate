@@ -119,3 +119,12 @@ config:
 - Set policy keys:
   - `substrate policy global set llm.allowed_backends+=cli:codex`
   - `substrate policy workspace set agents.allowed_backends+=cli:codex`
+
+### Agent inventory validation (Phase 3)
+
+Validation command:
+- `substrate agents validate`
+
+Contract:
+- Exit `0` when all discovered agent inventory files are valid.
+- Exit `2` when any discovered agent inventory file is invalid (strict schema, id mismatch, or `policy_overlay` broadening attempt).

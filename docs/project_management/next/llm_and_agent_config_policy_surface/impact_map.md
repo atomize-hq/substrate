@@ -20,9 +20,11 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
 ### Create
 - `docs/project_management/next/llm_and_agent_config_policy_surface/spec_manifest.md` — required spec ownership map (planning v4)
 - `docs/project_management/next/llm_and_agent_config_policy_surface/impact_map.md` — impact map (planning v4)
-- `docs/project_management/next/llm_and_agent_config_policy_surface/LACP0-spec.md` — Phase 3 slice spec + acceptance criteria
+- `docs/project_management/next/llm_and_agent_config_policy_surface/LACP0-spec.md` — Phase 3a slice spec + acceptance criteria
+- `docs/project_management/next/llm_and_agent_config_policy_surface/LACP1-spec.md` — Phase 3b slice spec + acceptance criteria
 - (planning-pack completion; required before execution triads begin)
   - `docs/project_management/next/llm_and_agent_config_policy_surface/plan.md`
+  - `docs/project_management/next/llm_and_agent_config_policy_surface/ci_checkpoint_plan.md`
   - `docs/project_management/next/llm_and_agent_config_policy_surface/tasks.json`
   - `docs/project_management/next/llm_and_agent_config_policy_surface/kickoff_prompts/*`
   - `docs/project_management/next/llm_and_agent_config_policy_surface/session_log.md`
@@ -33,7 +35,7 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
   - `crates/shell/tests/adr_0027_agent_inventory.rs` (or similar) — strict agent file parsing + overlay broadening rejection
 
 ### Edit
-- `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md` — update `Related Docs` to include `spec_manifest.md`, `impact_map.md`, and `LACP0-spec.md`; keep links internally consistent
+- `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md` — update `Related Docs` to include `spec_manifest.md`, `impact_map.md`, plan/tasks, and slice specs; keep links internally consistent
 - `docs/project_management/next/llm_and_agent_config_policy_surface/SCHEMA.md` — keep `policy_overlay` composition rules aligned with DR-0007 and keep the overlay allowed-key subset explicit
 - `docs/CONFIGURATION.md` — document new key families and strictness posture for `llm.*`, `agents.*`, and `workflow.router.*`
 - `crates/shell/src/execution/config_model.rs` — extend strict config schema/patch model to include `llm.*` and `agents.*`
@@ -140,7 +142,7 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
 ## Follow-ups (explicit)
 
 - Decision Register entries required:
-  - None (ADR-0027 decision register already captures key A/B decisions; new decisions should be added only if new operator-facing surfaces are introduced).
+  - None (ADR-0027 decision register already captures key A/B decisions; new decisions are added only when a new operator-facing surface is introduced).
 - Spec updates required (if any):
   - `docs/project_management/next/llm_and_agent_config_policy_surface/spec_manifest.md` — keep the required spec list in lockstep with created files (no implied specs).
   - `docs/project_management/next/llm_and_agent_config_policy_surface/manual_testing_playbook.md` — extend to include agent inventory strictness and overlay broadening rejection cases.

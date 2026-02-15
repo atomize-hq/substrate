@@ -668,6 +668,29 @@
         "Depends on the world-first REPL PTY passthrough contract (ADR-0016) already implemented under docs/project_management/_archived/world-first-repl-persistent-pty.",
         "Aligns correlation vocabulary additively with ADR-0028 (in-world process execution tracing parity)."
       ]
+    },
+    {
+      "order": 41.1,
+      "id": "llm_and_agent_config_policy_surface",
+      "title": "LLM and agent config/policy surface",
+      "branch": "feat/llm-and-agent-config-policy-surface",
+      "directory": "docs/project_management/next/llm_and_agent_config_policy_surface",
+      "plan": "docs/project_management/next/llm_and_agent_config_policy_surface/plan.md",
+      "status": "not_started",
+      "sequence": [
+        {
+          "id": "LACP0",
+          "spec": "docs/project_management/next/llm_and_agent_config_policy_surface/LACP0-spec.md"
+        },
+        {
+          "id": "LACP1",
+          "spec": "docs/project_management/next/llm_and_agent_config_policy_surface/LACP1-spec.md"
+        }
+      ],
+      "notes": [
+        "Implements ADR-0027: strict schema + precedence + fail-closed defaults for llm.* and agents.* config/policy keys, plus agent inventory parsing and restriction-only overlays.",
+        "Cross-platform automation pack (schema v4) with bounded CI checkpoint CP1; behavior + CI parity platforms are linux and macos; windows is deferred."
+      ]
     }
   ]
 }

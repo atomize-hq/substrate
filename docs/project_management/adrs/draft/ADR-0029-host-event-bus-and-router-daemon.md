@@ -29,7 +29,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 34ce662b20d6c46d9b519834586373cf2e62a7f7d80ad8553ea0cd3e3dfdc792
+ADR_BODY_SHA256: 32abf78d55d33f371dd8a926b055100d7d12ab098ffe66ed87dc98d8d3ec4412
 ### Changes (operator-facing)
 - Substrate gains an always-on host router that can trigger policy-gated actions from trace events (including cross-workspace)
   - Existing: Substrate records trace events (`~/.substrate/trace.jsonl`), but there is no always-on host service that can “listen” for specific events and route them into follow-on work.
