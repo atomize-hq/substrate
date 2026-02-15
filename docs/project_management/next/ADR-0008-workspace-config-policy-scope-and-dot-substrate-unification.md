@@ -26,12 +26,10 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: a0e0da9f20a579189aee520872e2093c343d52323835f5191e87688643515fd2
-ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md` after drafting>
-
+ADR_BODY_SHA256: 8fa337b54ee1c23bad34e31ee47fc1ba4eb1811c136a92890fa517408237ab12
 ### Changes (operator-facing)
 - Config and policy commands become explicit about scope and effective views
-  - Existing: `config show` vs `config global show` can disagree because `config show` is an effective/merged view and can be overridden by persistent `SUBSTRATE_OVERRIDE_*` env exports from install/dev scripts.
+  - Existing: `config show` vs `config global show` can disagree because `config show` is an effective/merged view and can be affected by persistent `SUBSTRATE_OVERRIDE_*` env exports from install/dev scripts in directories with no enabled workspace.
   - New: `current show` is the effective/merged view; `global|workspace show` shows exactly what is set at that scope (patch file). Install/dev scripts do not export `SUBSTRATE_OVERRIDE_*` by default.
   - Why: Eliminate “why didn’t my global set take effect?” confusion and make config and policy semantics symmetric.
   - Links:
@@ -361,14 +359,23 @@ Policy patch header template (global/workspace):
 ### Config
 
 #### Files and locations (precedence for effective config)
+When an enabled workspace exists:
+1. CLI flags (subset of keys with CLI flags)
+2. Workspace config patch: `<workspace_root>/.substrate/workspace.yaml`
+3. Global config patch: `$SUBSTRATE_HOME/config.yaml`
+4. Built-in defaults
+
+In this case, `SUBSTRATE_OVERRIDE_*` override inputs MUST be ignored for effective config resolution.
+
+When no enabled workspace exists:
 1. CLI flags (subset of keys with CLI flags)
 2. `SUBSTRATE_OVERRIDE_*` override inputs (one-off operator input; never exported by install/dev scripts)
-3. Workspace config patch: `<workspace_root>/.substrate/workspace.yaml` (when a workspace exists and is enabled)
-4. Global config patch: `$SUBSTRATE_HOME/config.yaml`
-5. Built-in defaults
-6. Protected exclude injection (always applied):
-   - `.git/**`
-   - `.substrate/**`
+3. Global config patch: `$SUBSTRATE_HOME/config.yaml`
+4. Built-in defaults
+
+Protected exclude injection (always applied):
+- `.git/**`
+- `.substrate/**`
 
 #### Schema (config patch keys)
 The config patch is a YAML mapping where keys may be omitted to inherit. Unknown keys are a hard error.
@@ -464,8 +471,8 @@ Policy validation invariants are enforced on the effective merged policy:
 ### End-to-end flow (effective config)
 - Inputs:
   - CLI flags
-  - `SUBSTRATE_OVERRIDE_*` env inputs (if set explicitly by the operator)
-  - workspace config patch (if workspace enabled)
+  - workspace config patch (when a workspace exists and is enabled)
+  - `SUBSTRATE_OVERRIDE_*` env inputs (when no enabled workspace exists and set explicitly by the operator)
   - global config patch
   - defaults
 - Derived state:

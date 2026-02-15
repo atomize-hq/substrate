@@ -43,6 +43,22 @@ Keep concise, actionable, and security-focused.
     - Update references across docs and standards (`docs/WORLD.md`, `docs/CONFIGURATION.md`, `docs/reference/env/contract.md`, `docs/internals/env/inventory.md`, planning pack templates/smoke scripts) and ensure error messages/warnings use the new name.
   - Acceptance: operators can understand intent from the name alone; docs explain fallback vs fail-closed semantics unambiguously; caged-required policy override is explicit; CI/tests are updated; old names are rejected (hard error) with no aliasing.
 
+- **P1 – Make `SUBSTRATE_OVERRIDE_*` override workspace config (behavior change)**
+  - Problem: operators expect `SUBSTRATE_OVERRIDE_*` to support one-off runs that override workspace config; today, when a workspace is enabled, `SUBSTRATE_OVERRIDE_*` is ignored for effective config resolution.
+  - Desired contract: when a workspace is enabled, `SUBSTRATE_OVERRIDE_*` override inputs (documented subset) override the workspace config patch, but remain below CLI flags.
+  - Implementation sketch:
+    - Change the ordering in `crates/shell/src/execution/config_model.rs` `resolve_replace()` so override env is consulted after CLI flags and before workspace patch values.
+    - Update/replace tests that currently enforce “workspace wins over override env”:
+      - `crates/shell/tests/ev0_override_split.rs` (rename or invert expectations)
+      - `crates/shell/tests/config_show.rs` precedence assertions
+  - Risk/notes:
+    - This is a behavior change; docs/ADRs/operator contract must be updated in lockstep with the code and tests.
+    - Keep override env limited to the documented subset of config-shaped `SUBSTRATE_OVERRIDE_*` variables; do not introduce a generic “arbitrary env patch” surface.
+    - Install/dev scripts MUST NOT export override inputs by default (they remain explicit one-off operator/test inputs).
+  - Acceptance:
+    - New/updated tests prove that when a workspace is enabled and `SUBSTRATE_OVERRIDE_*` is set, override env beats the workspace patch (and remains below CLI flags where flags exist).
+    - `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md`, `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, and `docs/reference/env/contract.md` reflect the updated precedence contract.
+
 - **P1 – Warn on `config global show` when workspace config overrides**
   - Problem: `substrate policy global show` emits a clear note when a workspace policy overrides the global policy for the current directory, but `substrate config global show` does not emit an equivalent warning when `.substrate/workspace.yaml` overrides global config. This is confusing and makes it easy to misdiagnose “why does my config not match behavior?”
   - Work: when a workspace is active for the current directory, have `substrate config global show` print a note that workspace config overrides global config here and point users at the effective view (`substrate config show`).

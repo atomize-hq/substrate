@@ -35,7 +35,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: a0d89fbe77ca7c9d1d696899c1ba818e2602e1cf196636e0a0dfb082a996fa62
+ADR_BODY_SHA256: 78bcf1fea06814f364e4b87eec73ba300c437403f33f3b843bd555a31e07cc2a
 ### Changes (operator-facing)
 - Split exported state from override inputs
   - Existing: `SUBSTRATE_*` values can be present in the environment because they are exported by `$SUBSTRATE_HOME/env.sh` (stable exports), but some of those same variables are also treated as operator overrides by config resolution. This creates “stale export” surprises where config edits appear not to take effect without re-sourcing.
@@ -95,13 +95,13 @@ ADR_BODY_SHA256: a0d89fbe77ca7c9d1d696899c1ba818e2602e1cf196636e0a0dfb082a996fa6
 - Effective config precedence (highest to lowest) when `<workspace_root>` exists:
   1. CLI flags (subset)
   2. `<workspace_root>/.substrate/workspace.yaml`
-  3. `SUBSTRATE_OVERRIDE_*` environment variables (subset)
-  4. `$SUBSTRATE_HOME/config.yaml` (or built-in defaults)
-  5. Built-in defaults
-- Effective config precedence (highest to lowest) when no workspace exists:
+  3. `$SUBSTRATE_HOME/config.yaml`
+  4. Built-in defaults
+  - `SUBSTRATE_OVERRIDE_*` override inputs MUST be ignored when an enabled workspace exists.
+- Effective config precedence (highest to lowest) when no enabled workspace exists:
   1. CLI flags (subset)
   2. `SUBSTRATE_OVERRIDE_*` environment variables (subset)
-  3. `$SUBSTRATE_HOME/config.yaml` (or built-in defaults)
+  3. `$SUBSTRATE_HOME/config.yaml`
   4. Built-in defaults
 - Exported state variables (`SUBSTRATE_*`) are output-only for config resolution:
   - They MUST NOT be consulted as override inputs for effective config.
@@ -163,8 +163,8 @@ ADR_BODY_SHA256: a0d89fbe77ca7c9d1d696899c1ba818e2602e1cf196636e0a0dfb082a996fa6
 ### Tests
 - Update/add tests to ensure:
   - Exported state variables in `env.sh` do not influence effective config resolution.
-  - `SUBSTRATE_OVERRIDE_*` values do influence effective config resolution per precedence rules.
-  - Workspace config still wins over override env vars where applicable.
+  - `SUBSTRATE_OVERRIDE_*` values influence effective config resolution when no enabled workspace exists.
+  - When a workspace is enabled, `SUBSTRATE_OVERRIDE_*` values do not affect effective config resolution.
   - At least one non-policy key is covered (ex: `world.caged` and/or `world.anchor_mode`) so partial implementations can’t pass by only wiring policy mode.
 
 ### Exhaustive repo audit (required)

@@ -32,12 +32,21 @@ Variables used for internal coordination, tests, harnesses, and experiments. Set
 ### Substrate CLI effective config (`substrate`)
 Substrate resolves an “effective config” for each invocation:
 
-1. **Defaults** (built in)
-2. **Global config file** at `$SUBSTRATE_HOME/config.yaml` (or `~/.substrate/config.yaml` if `SUBSTRATE_HOME` is unset)
-3. **Environment overrides** via `SUBSTRATE_OVERRIDE_*` config variables (listed below)
-4. **Workspace config file** at `<workspace_root>/.substrate/workspace.yaml` if a workspace root is detected
-   - This workspace config **replaces** the effective config and discards global+env values.
-5. **CLI flags** (when a flag exists for the setting) override the resolved config
+Precedence depends on whether an enabled workspace is discovered from `cwd`:
+
+When an enabled workspace exists:
+1. **CLI flags** (when a flag exists for the setting)
+2. **Workspace config patch** at `<workspace_root>/.substrate/workspace.yaml`
+3. **Global config patch** at `$SUBSTRATE_HOME/config.yaml` (or `~/.substrate/config.yaml` if `SUBSTRATE_HOME` is unset)
+4. **Defaults** (built in)
+
+In this case, `SUBSTRATE_OVERRIDE_*` override inputs MUST be ignored for effective config resolution.
+
+When no enabled workspace exists:
+1. **CLI flags** (when a flag exists for the setting)
+2. **Override env inputs** via `SUBSTRATE_OVERRIDE_*` config variables (listed below)
+3. **Global config patch** at `$SUBSTRATE_HOME/config.yaml` (or `~/.substrate/config.yaml` if `SUBSTRATE_HOME` is unset)
+4. **Defaults** (built in)
 
 Failure behavior for config-shaped env vars:
 - Invalid values raise a user-facing error (printed to stderr).
@@ -71,7 +80,7 @@ Each entry below is a stability promise: the variable name, parsing rules, and s
 | Bucket | Config override input |
 | Type / allowed values | Case-insensitive string enum: `enabled` or `disabled` (empty after trim is ignored) |
 | Default if unset | Enabled (subject to config/policy and `--no-world`) |
-| Precedence | `--world` / `--no-world` flags override; workspace config overrides env; env overrides global config when no workspace config exists |
+| Precedence | `--world` / `--no-world` flags override; when no enabled workspace exists this env var overrides global config and defaults; when a workspace is enabled this env var is ignored for effective config |
 | Scope | Run-only |
 | Examples | `SUBSTRATE_OVERRIDE_WORLD=disabled substrate -c 'echo host-only'` |
 | Security notes | Not sensitive. |
@@ -82,7 +91,7 @@ Each entry below is a stability promise: the variable name, parsing rules, and s
 | Bucket | Config override input |
 | Type / allowed values | Case-insensitive string enum parsed by `WorldRootMode`: `workspace`, `follow-cwd`, `custom` (empty after trim is ignored) |
 | Default if unset | `workspace` |
-| Precedence | `--anchor-mode` flag overrides; workspace config overrides env; env overrides global config when no workspace config exists |
+| Precedence | `--anchor-mode` flag overrides; when no enabled workspace exists this env var overrides global config and defaults; when a workspace is enabled this env var is ignored for effective config |
 | Scope | Run-only |
 | Examples | `SUBSTRATE_OVERRIDE_ANCHOR_MODE=follow-cwd substrate` |
 | Security notes | Not sensitive. |
@@ -93,7 +102,7 @@ Each entry below is a stability promise: the variable name, parsing rules, and s
 | Bucket | Config override input |
 | Type / allowed values | String path (no validation at parse time); when `SUBSTRATE_OVERRIDE_ANCHOR_MODE=custom`, the resolved path must exist and be a directory |
 | Default if unset | Empty string in config; runtime resolution uses the launch directory when not in `custom` mode |
-| Precedence | `--anchor-path` flag overrides; workspace config overrides env; env overrides global config when no workspace config exists |
+| Precedence | `--anchor-path` flag overrides; when no enabled workspace exists this env var overrides global config and defaults; when a workspace is enabled this env var is ignored for effective config |
 | Scope | Run-only |
 | Examples | `SUBSTRATE_OVERRIDE_ANCHOR_MODE=custom SUBSTRATE_OVERRIDE_ANCHOR_PATH=/srv/project substrate` |
 | Security notes | Not sensitive. |
@@ -104,7 +113,7 @@ Each entry below is a stability promise: the variable name, parsing rules, and s
 | Bucket | Config override input |
 | Type / allowed values | Boolean parsed by `parse_bool_flag`: `true|false|1|0|yes|no|on|off` (case-insensitive) |
 | Default if unset | `true` |
-| Precedence | `--caged` / `--uncaged` flags override; workspace config overrides env; env overrides global config when no workspace config exists |
+| Precedence | `--caged` / `--uncaged` flags override; when no enabled workspace exists this env var overrides global config and defaults; when a workspace is enabled this env var is ignored for effective config |
 | Scope | Run-only |
 | Examples | `SUBSTRATE_OVERRIDE_CAGED=0 substrate` |
 | Security notes | Not sensitive. |
@@ -115,7 +124,7 @@ Each entry below is a stability promise: the variable name, parsing rules, and s
 | Bucket | Config override input |
 | Type / allowed values | Case-insensitive string enum: `disabled`, `observe`, `enforce` (empty after trim is ignored) |
 | Default if unset | `observe` |
-| Precedence | Workspace config overrides env; env overrides global config when no workspace config exists; no CLI flag exists |
+| Precedence | When no enabled workspace exists this env var overrides global config and defaults; when a workspace is enabled this env var is ignored for effective config; no CLI flag exists |
 | Scope | Run-only |
 | Examples | `SUBSTRATE_OVERRIDE_POLICY_MODE=enforce substrate -c 'rm -rf /tmp/deny-me'` |
 | Security notes | Not sensitive. |
@@ -126,7 +135,7 @@ Each entry below is a stability promise: the variable name, parsing rules, and s
 | Bucket | Config override input |
 | Type / allowed values | Boolean parsed by `parse_bool_flag`: `true|false|1|0|yes|no|on|off` (case-insensitive) |
 | Default if unset | `false` |
-| Precedence | Workspace config overrides env; env overrides global config when no workspace config exists; no CLI flag exists |
+| Precedence | When no enabled workspace exists this env var overrides global config and defaults; when a workspace is enabled this env var is ignored for effective config; no CLI flag exists |
 | Scope | Run-only |
 | Examples | `SUBSTRATE_OVERRIDE_SYNC_AUTO_SYNC=1 substrate` |
 | Security notes | Not sensitive. |
@@ -137,7 +146,7 @@ Each entry below is a stability promise: the variable name, parsing rules, and s
 | Bucket | Config override input |
 | Type / allowed values | Case-insensitive string enum: `from_world`, `from_host`, `both` (empty after trim is ignored) |
 | Default if unset | `from_world` |
-| Precedence | Workspace config overrides env; env overrides global config when no workspace config exists; no CLI flag exists |
+| Precedence | When no enabled workspace exists this env var overrides global config and defaults; when a workspace is enabled this env var is ignored for effective config; no CLI flag exists |
 | Scope | Run-only |
 | Examples | `SUBSTRATE_OVERRIDE_SYNC_DIRECTION=both substrate` |
 | Security notes | Not sensitive. |
@@ -148,7 +157,7 @@ Each entry below is a stability promise: the variable name, parsing rules, and s
 | Bucket | Config override input |
 | Type / allowed values | Case-insensitive string enum: `prefer_host`, `prefer_world`, `abort` (empty after trim is ignored) |
 | Default if unset | `prefer_host` |
-| Precedence | Workspace config overrides env; env overrides global config when no workspace config exists; no CLI flag exists |
+| Precedence | When no enabled workspace exists this env var overrides global config and defaults; when a workspace is enabled this env var is ignored for effective config; no CLI flag exists |
 | Scope | Run-only |
 | Examples | `SUBSTRATE_OVERRIDE_SYNC_CONFLICT_POLICY=abort substrate` |
 | Security notes | Not sensitive. |
@@ -159,7 +168,7 @@ Each entry below is a stability promise: the variable name, parsing rules, and s
 | Bucket | Config override input |
 | Type / allowed values | Comma-separated list; split on `,`, trimmed; empty items are dropped |
 | Default if unset | No user excludes; Substrate always injects protected excludes: `.git/**`, `.substrate/**`, `.substrate-git/**` |
-| Precedence | Workspace config overrides env; env overrides global config when no workspace config exists; no CLI flag exists |
+| Precedence | When no enabled workspace exists this env var overrides global config and defaults; when a workspace is enabled this env var is ignored for effective config; no CLI flag exists |
 | Scope | Run-only |
 | Examples | `SUBSTRATE_OVERRIDE_SYNC_EXCLUDE='node_modules,dist' substrate` |
 | Security notes | Values are recorded in trace metadata when tracing is enabled; access to trace logs reveals the configured patterns. |
