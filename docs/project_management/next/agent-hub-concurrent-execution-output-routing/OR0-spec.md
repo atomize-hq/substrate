@@ -47,6 +47,10 @@ For shell-internal structured event producers:
 - `run_id` is generated once per `:demo-agent` invocation (UUIDv7).
 - `agent_id="demo-agent"` and `role="member"` are emitted.
 
+Clarification (Phase 8; non-negotiable):
+- This “once per shell session” scoping is a `:demo-agent` implementation convenience only and MUST NOT be treated as a global invariant.
+- Real Agent Hub orchestration MAY mint multiple `orchestration_session_id` values within a single `session_id`, and consumers MUST NOT assume or derive a 1:1 mapping (see ADR-0028 correlation vocabulary).
+
 ## Acceptance criteria (testable)
 
 1) Schema correctness:
