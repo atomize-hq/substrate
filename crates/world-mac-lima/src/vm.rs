@@ -1,8 +1,8 @@
 //! Lima VM lifecycle management.
 
+use crate::limactl;
 use anyhow::{Context, Result};
 use serde::Deserialize;
-use std::process::Command;
 use std::process::Stdio;
 use std::time::{Duration, Instant};
 
@@ -18,8 +18,7 @@ impl LimaVM {
 
     /// Check if Lima is installed and available.
     pub fn check_lima_available() -> Result<()> {
-        which::which("limactl")
-            .context("limactl not found. Install Lima with: brew install lima")?;
+        limactl::path().context("limactl not found. Install Lima with: brew install lima")?;
         Ok(())
     }
 
@@ -181,7 +180,8 @@ impl LimaVM {
 }
 
 fn run_limactl<const N: usize>(args: [&str; N], timeout: Duration) -> Result<std::process::Output> {
-    let mut child = Command::new("limactl")
+    let mut child = limactl::command()
+        .with_context(|| format!("failed to spawn limactl {:?}", args))?
         .args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
