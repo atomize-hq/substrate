@@ -512,7 +512,7 @@
       "start_checklist": [
         "Ensure world backend is healthy: substrate world doctor"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "integration",
       "worktree": "wt/world-deps-host-visible-hardening-wdh2-integ"
     },
