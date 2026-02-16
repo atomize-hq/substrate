@@ -26,7 +26,7 @@ Make `--world` execution deterministic and hardened in **host-visible worlds** (
 
 ## Cross-platform posture
 - Behavior platforms (smoke required): `linux`, `macos`
-- CI parity platforms (compile parity required): `linux`, `macos`
+- CI parity platforms (compile parity required): `linux`, `macos`, `windows`
 - WSL coverage: required (bundled via Linux smoke where applicable)
 
 ## Execution gates
@@ -47,4 +47,3 @@ Slices:
 
 Authoritative task graph:
 - `docs/project_management/next/world-deps-host-visible-hardening/tasks.json`
-

@@ -14,7 +14,8 @@
     ],
     "ci_parity_platforms_required": [
       "linux",
-      "macos"
+      "macos",
+      "windows"
     ],
     "cross_platform": true,
     "execution_gates": false,
@@ -255,7 +256,7 @@
       "git_branch": "world-deps-host-visible-hardening-wdh1-integ-core",
       "id": "WDH1-integ-core",
       "integration_task": "WDH1-integ-core",
-      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH1-integ.md",
+      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH1-integ-core.md",
       "merge_to_orchestration": false,
       "name": "WDH1 \u2014 CP1 integration core",
       "phase": "WDH1",
@@ -290,7 +291,7 @@
       "git_branch": "world-deps-host-visible-hardening-wdh1-integ-linux",
       "id": "WDH1-integ-linux",
       "integration_task": "WDH1-integ-linux",
-      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH1-integ.md",
+      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH1-integ-linux.md",
       "merge_to_orchestration": false,
       "name": "WDH1 \u2014 CP1 integration Linux",
       "phase": "WDH1",
@@ -324,7 +325,7 @@
       "git_branch": "world-deps-host-visible-hardening-wdh1-integ-macos",
       "id": "WDH1-integ-macos",
       "integration_task": "WDH1-integ-macos",
-      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH1-integ.md",
+      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH1-integ-macos.md",
       "merge_to_orchestration": false,
       "name": "WDH1 \u2014 CP1 integration macOS",
       "phase": "WDH1",
@@ -344,6 +345,40 @@
     },
     {
       "acceptance_criteria": [
+        "Windows builds without errors (CI parity)"
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "WDH1-integ-core"
+      ],
+      "description": "Windows CI parity fixes for CP1 (no feature smoke required).",
+      "end_checklist": [
+        "Ensure Windows build/clippy parity is green (no feature smoke required)",
+        "Record results in session_log.md"
+      ],
+      "git_branch": "world-deps-host-visible-hardening-wdh1-integ-windows",
+      "id": "WDH1-integ-windows",
+      "integration_task": "WDH1-integ-windows",
+      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH1-integ-windows.md",
+      "merge_to_orchestration": false,
+      "name": "WDH1 \u2014 CP1 integration Windows",
+      "phase": "WDH1",
+      "platform": "windows",
+      "references": [
+        "docs/project_management/next/world-deps-host-visible-hardening/WDH1-spec.md"
+      ],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "start_checklist": [
+        "Fix Windows-only build/test parity issues surfaced by checkpoint CI"
+      ],
+      "status": "pending",
+      "type": "integration",
+      "worktree": "wt/world-deps-host-visible-hardening-wdh1-integ-windows"
+    },
+    {
+      "acceptance_criteria": [
         "CP1 parity evidence recorded in session_log.md"
       ],
       "concurrent_with": [],
@@ -351,7 +386,8 @@
         "WDH1-integ-core",
         "CP1-ci-checkpoint",
         "WDH1-integ-linux",
-        "WDH1-integ-macos"
+        "WDH1-integ-macos",
+        "WDH1-integ-windows"
       ],
       "description": "Finalize CP1 parity evidence and ensure smoke is green on required platforms.",
       "end_checklist": [
@@ -565,7 +601,7 @@
       "git_branch": "world-deps-host-visible-hardening-wdh3-integ-core",
       "id": "WDH3-integ-core",
       "integration_task": "WDH3-integ-core",
-      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH3-integ.md",
+      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH3-integ-core.md",
       "merge_to_orchestration": false,
       "name": "WDH3 \u2014 CP2 integration core",
       "phase": "WDH3",
@@ -600,7 +636,7 @@
       "git_branch": "world-deps-host-visible-hardening-wdh3-integ-linux",
       "id": "WDH3-integ-linux",
       "integration_task": "WDH3-integ-linux",
-      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH3-integ.md",
+      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH3-integ-linux.md",
       "merge_to_orchestration": false,
       "name": "WDH3 \u2014 CP2 integration Linux",
       "phase": "WDH3",
@@ -634,7 +670,7 @@
       "git_branch": "world-deps-host-visible-hardening-wdh3-integ-macos",
       "id": "WDH3-integ-macos",
       "integration_task": "WDH3-integ-macos",
-      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH3-integ.md",
+      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH3-integ-macos.md",
       "merge_to_orchestration": false,
       "name": "WDH3 \u2014 CP2 integration macOS",
       "phase": "WDH3",
@@ -654,6 +690,40 @@
     },
     {
       "acceptance_criteria": [
+        "Windows builds without errors (CI parity)"
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "WDH3-integ-core"
+      ],
+      "description": "Windows CI parity fixes for CP2 (no feature smoke required).",
+      "end_checklist": [
+        "Ensure Windows build/clippy parity is green (no feature smoke required)",
+        "Record results in session_log.md"
+      ],
+      "git_branch": "world-deps-host-visible-hardening-wdh3-integ-windows",
+      "id": "WDH3-integ-windows",
+      "integration_task": "WDH3-integ-windows",
+      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH3-integ-windows.md",
+      "merge_to_orchestration": false,
+      "name": "WDH3 \u2014 CP2 integration Windows",
+      "phase": "WDH3",
+      "platform": "windows",
+      "references": [
+        "docs/project_management/next/world-deps-host-visible-hardening/WDH3-spec.md"
+      ],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "start_checklist": [
+        "Fix Windows-only build/test parity issues surfaced by checkpoint CI"
+      ],
+      "status": "pending",
+      "type": "integration",
+      "worktree": "wt/world-deps-host-visible-hardening-wdh3-integ-windows"
+    },
+    {
+      "acceptance_criteria": [
         "CP2 parity evidence recorded in session_log.md"
       ],
       "concurrent_with": [],
@@ -661,7 +731,8 @@
         "WDH3-integ-core",
         "CP2-ci-checkpoint",
         "WDH3-integ-linux",
-        "WDH3-integ-macos"
+        "WDH3-integ-macos",
+        "WDH3-integ-windows"
       ],
       "description": "Finalize CP2 parity evidence and ensure smoke is green on required platforms.",
       "end_checklist": [
