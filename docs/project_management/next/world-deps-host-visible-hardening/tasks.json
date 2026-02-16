@@ -684,7 +684,7 @@
       "start_checklist": [
         "Run: bash smoke/macos-smoke.sh"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "integration",
       "worktree": "wt/world-deps-host-visible-hardening-wdh3-integ-macos"
     },

@@ -337,3 +337,7 @@ Append START/END entries only (no mid-stream commentary) using the template stan
   - `make ci-testing CI_WORKFLOW_REF="feat/world-deps-host-visible-hardening" CI_CHECKOUT_REF="32f87e0a254e2d336506d071ee87468351e8dd0a" CI_REMOTE=origin CI_CLEANUP=1 CI_MODE=full`
   - `make feature-smoke FEATURE_DIR="docs/project_management/next/world-deps-host-visible-hardening" PLATFORM=linux RUN_WSL=1 SMOKE_SLICE_ID=WDH3 SMOKE_CHECKOUT_REF="32f87e0a254e2d336506d071ee87468351e8dd0a" WORKFLOW_REF="feat/world-deps-host-visible-hardening" REMOTE=origin CLEANUP=1`
   - `make feature-smoke FEATURE_DIR="docs/project_management/next/world-deps-host-visible-hardening" PLATFORM=macos SMOKE_SLICE_ID=WDH3 SMOKE_CHECKOUT_REF="32f87e0a254e2d336506d071ee87468351e8dd0a" WORKFLOW_REF="feat/world-deps-host-visible-hardening" REMOTE=origin CLEANUP=1`
+
+## START — 2026-02-16T22:14:44Z — integration — WDH3-integ-macos
+- Dispatch:
+  - `make triad-task-start-platform-fixes FEATURE_DIR="docs/project_management/next/world-deps-host-visible-hardening" SLICE_ID="WDH3" PLATFORMS="macos" LAUNCH_CODEX=1`
