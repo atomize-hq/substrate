@@ -3,7 +3,7 @@
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[allow(dead_code)]
 mod imp {
-    use super::super::shim_ops::build_world_env_map;
+    use super::super::shim_ops::build_world_env_map_for_cwd;
     use crate::execution::policy_snapshot;
     use crate::execution::pty;
     #[cfg(target_os = "macos")]
@@ -14,6 +14,7 @@ mod imp {
     use futures::{SinkExt, StreamExt};
     use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
+    use std::path::Path;
     use std::sync::Arc;
     use tokio::sync::{Mutex, OnceCell};
     use tokio_tungstenite as tungs;
@@ -93,17 +94,21 @@ mod imp {
     impl ReplSessionStartParams {
         pub(crate) fn for_cwd_and_snapshot(
             cwd: String,
+            cwd_path: &Path,
             policy_snapshot: agent_api_types::PolicySnapshotV3,
-        ) -> Self {
-            let env = build_world_env_map();
+        ) -> Result<(Self, bool)> {
+            let (env, inherit_from_host) = build_world_env_map_for_cwd(cwd_path)?;
             let (cols, rows) = terminal_size_or_default();
-            Self {
-                cwd,
-                env,
-                policy_snapshot,
-                cols,
-                rows,
-            }
+            Ok((
+                Self {
+                    cwd,
+                    env,
+                    policy_snapshot,
+                    cols,
+                    rows,
+                },
+                inherit_from_host,
+            ))
         }
     }
 
@@ -178,13 +183,16 @@ mod imp {
                 std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
             let cwd = cwd_path.display().to_string();
             #[cfg(target_os = "macos")]
-            let env_map = {
-                let mut env_map = build_world_env_map();
+            let (env_map, inherit_from_host) = {
+                let (mut env_map, inherit_from_host) = build_world_env_map_for_cwd(&cwd_path)?;
                 super::super::world_ops::normalize_env_for_linux_guest(&mut env_map);
-                env_map
+                (env_map, inherit_from_host)
             };
             #[cfg(not(target_os = "macos"))]
-            let env_map = build_world_env_map();
+            let (env_map, inherit_from_host) = build_world_env_map_for_cwd(&cwd_path)?;
+            if inherit_from_host {
+                eprintln!("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
+            }
             let policy_snapshot =
                 policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
             let (cols, rows) = terminal_size_or_default();

@@ -151,6 +151,7 @@ pub(crate) struct WorldConfig {
     pub anchor_mode: WorldRootMode,
     pub anchor_path: String,
     pub caged: bool,
+    pub env: WorldEnvConfig,
     pub deps: WorldDepsConfig,
 }
 
@@ -161,9 +162,16 @@ impl Default for WorldConfig {
             anchor_mode: WorldRootMode::Project,
             anchor_path: String::new(),
             caged: true,
+            env: WorldEnvConfig::default(),
             deps: WorldDepsConfig::default(),
         }
     }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct WorldEnvConfig {
+    pub inherit_from_host: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -359,6 +367,8 @@ pub(crate) struct WorldConfigPatch {
     pub anchor_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub caged: Option<bool>,
+    #[serde(skip_serializing_if = "WorldEnvConfigPatch::is_empty")]
+    pub env: WorldEnvConfigPatch,
     #[serde(skip_serializing_if = "WorldDepsConfigPatch::is_empty")]
     pub deps: WorldDepsConfigPatch,
 }
@@ -369,7 +379,21 @@ impl WorldConfigPatch {
             && self.anchor_mode.is_none()
             && self.anchor_path.is_none()
             && self.caged.is_none()
+            && self.env.is_empty()
             && self.deps.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct WorldEnvConfigPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inherit_from_host: Option<bool>,
+}
+
+impl WorldEnvConfigPatch {
+    fn is_empty(&self) -> bool {
+        self.inherit_from_host.is_none()
     }
 }
 
@@ -883,6 +907,32 @@ fn resolve_effective_from_layers(
         );
     }
 
+    // world.env.inherit_from_host
+    let (inherit_from_host, inherit_from_host_src) = resolve_replace(
+        effective.world.env.inherit_from_host,
+        global_patch.world.env.inherit_from_host,
+        workspace_patch
+            .map(|(p, _)| p.world.env.inherit_from_host)
+            .unwrap_or(None),
+        None,
+        None,
+        workspace_enabled,
+    );
+    effective.world.env.inherit_from_host = inherit_from_host;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "world.env.inherit_from_host".to_string(),
+            ConfigExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    inherit_from_host_src,
+                    global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
     // repl.exit_cwd
     let (exit_cwd, exit_cwd_src) = resolve_replace(
         effective.repl.exit_cwd,
@@ -1330,6 +1380,11 @@ fn apply_update_to_patch(patch: &mut SubstrateConfigPatch, update: &ConfigUpdate
             apply_string_opt(&mut patch.world.anchor_path, &update.op, &update.value)
         }
         "world.caged" => apply_bool_opt(&mut patch.world.caged, &update.op, &update.value),
+        "world.env.inherit_from_host" => apply_bool_opt(
+            &mut patch.world.env.inherit_from_host,
+            &update.op,
+            &update.value,
+        ),
 
         "world.deps.enabled" => apply_string_list_opt(&mut patch.world.deps.enabled, update),
         "world.deps.inventory_mode" => apply_enum_inventory_mode_opt(
@@ -1373,6 +1428,7 @@ fn reset_patch_key(patch: &mut SubstrateConfigPatch, key: &str) -> Result<bool> 
         "world.anchor_mode" => reset_opt(&mut patch.world.anchor_mode),
         "world.anchor_path" => reset_opt(&mut patch.world.anchor_path),
         "world.caged" => reset_opt(&mut patch.world.caged),
+        "world.env.inherit_from_host" => reset_opt(&mut patch.world.env.inherit_from_host),
 
         "world.deps.enabled" => reset_opt(&mut patch.world.deps.enabled),
         "world.deps.inventory_mode" => reset_opt(&mut patch.world.deps.inventory_mode),
