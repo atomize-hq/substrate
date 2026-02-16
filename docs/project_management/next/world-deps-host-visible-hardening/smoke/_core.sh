@@ -18,9 +18,21 @@ if ! command -v "$SUBSTRATE_BIN" >/dev/null 2>&1; then
   exit 3
 fi
 
+# Resolve SUBSTRATE_BIN to an absolute path so later PATH manipulations in this script
+# (used to simulate host toolchain leakage) do not break invoking substrate itself.
+SUBSTRATE_BIN="$(command -v "$SUBSTRATE_BIN")"
+
+# Default the request profile to the non-login-shell execution path so smoke assertions about
+# sanitized PATH do not depend on runner world-agent provisioning/version drift.
+export SUBSTRATE_WORLD_REQUEST_PROFILE="${SUBSTRATE_WORLD_REQUEST_PROFILE:-world-deps-provision}"
+
 tmp_root="${SUBSTRATE_SMOKE_ROOT:-}"
 if [[ -z "${tmp_root}" ]]; then
-  tmp_root="$(mktemp -d)"
+  if [[ "${OSTYPE:-}" == darwin* ]]; then
+    tmp_root="$(mktemp -d "${HOME}/.substrate-smoke.XXXXXX")"
+  else
+    tmp_root="$(mktemp -d)"
+  fi
 fi
 
 cleanup() {
