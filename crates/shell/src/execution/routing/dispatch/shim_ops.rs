@@ -49,6 +49,24 @@ pub(crate) fn build_world_env_map_for_cwd(
     env_map.insert("XDG_CACHE_HOME".to_string(), "/root/.cache".to_string());
     env_map.insert("TERM".to_string(), "xterm-256color".to_string());
 
+    // Preserve Substrate/WORLD control-plane env so policy/config state is visible to world-agent
+    // and downstream shims, without inheriting arbitrary host user environment.
+    for (key, value) in std::env::vars() {
+        let keep = key.starts_with("SUBSTRATE_") || key.starts_with("WORLD_");
+        if !keep || value.is_empty() {
+            continue;
+        }
+        match key.as_str() {
+            // Reserved keys are owned by the deterministic world env contract above.
+            "PATH" | "HOME" | "TERM" | "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR" => continue,
+            _ if key.starts_with("XDG_") => continue,
+            // Shim bookkeeping must never leak into the world environment.
+            "SHIM_ACTIVE" | "SHIM_CALLER" | "SHIM_CALL_STACK" | "SHIM_DEPTH" => continue,
+            _ => {}
+        }
+        env_map.insert(key, value);
+    }
+
     if inherit_from_host {
         for (key, value) in std::env::vars() {
             let forward =
