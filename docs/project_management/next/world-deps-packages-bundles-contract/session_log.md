@@ -340,3 +340,16 @@ Policy:
 ## END — 2026-02-14T21:49:17Z — integration — WDP5-integ
 - HEAD: `3fac2e4c02ae7e8b8e14ebcd084e15e448ed9a9e`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-deps-packages-bundles-contract/logs/WDP5/integ/last_message.md`
+
+## END — 2026-02-16T02:38:28Z — maintenance — FZ-feature-cleanup
+- Feature: `docs/project_management/next/world-deps-packages-bundles-contract`
+- Branch: `feat/world-deps-packages-bundles-contract`
+- Commands run (verbatim) + exit codes:
+  - `make triad-feature-cleanup FEATURE_DIR="docs/project_management/next/world-deps-packages-bundles-contract" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1 FORCE=1` (exit 0)
+  - `make triad-feature-cleanup FEATURE_DIR="docs/project_management/next/world-deps-packages-bundles-contract" REMOVE_WORKTREES=1 PRUNE_LOCAL=1 FORCE=1` (exit 0)
+- Stdout summary block:
+  ```
+  REMOVED_WORKTREES=20
+  PRUNED_LOCAL_BRANCHES=24
+  PRUNED_REMOTE_BRANCHES=0
+  ```
