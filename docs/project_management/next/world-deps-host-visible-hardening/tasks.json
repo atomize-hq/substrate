@@ -373,7 +373,7 @@
       "start_checklist": [
         "Fix Windows-only build/test parity issues surfaced by checkpoint CI"
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/world-deps-host-visible-hardening-wdh1-integ-windows"
     },
