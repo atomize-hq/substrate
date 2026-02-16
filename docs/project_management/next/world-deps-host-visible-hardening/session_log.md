@@ -243,3 +243,19 @@ Append START/END entries only (no mid-stream commentary) using the template stan
 ## START — 2026-02-16T17:20:16Z — integration — WDH1-integ-linux
 - Dispatch:
   - `make triad-task-start-platform-fixes FEATURE_DIR="docs/project_management/next/world-deps-host-visible-hardening" SLICE_ID="WDH1" PLATFORMS="linux" LAUNCH_CODEX=1`
+
+## END — 2026-02-16T18:44:08Z — integration — WDH1-integ-linux
+- HEAD: `3915c55d80e9f0a84f14e054d44993ffa5dc4d7b`
+- Notes:
+  - Fixed CP1 Linux+WSL Feature Smoke failure by reconciling world-deps wrappers during `world deps current sync` (prunes stale wrappers not in the effective enabled plan).
+  - Fixed CI `world deps` tests on GitHub-hosted runners by switching the host-execute stub to `bash -c` (non-login) to avoid `/root/.bash_profile` permission errors when `HOME=/root`.
+- Task log: `docs/project_management/next/world-deps-host-visible-hardening/logs/WDH1/integ-linux/last_message.md`
+
+## END — 2026-02-16T18:44:33Z — ops — CP1-ci-checkpoint
+- Candidate SHA validated (CI_CHECKOUT_REF / SMOKE_CHECKOUT_REF): `69c447b2134951faa22042b678d4577ea61e1d63`
+- Workflow ref: `feat/world-deps-host-visible-hardening`
+- Evidence (final passing runs):
+  - CI compile parity: `22073935776` (success) — https://github.com/atomize-hq/substrate/actions/runs/22073935776
+  - CI testing (quick): `22073727756` (success) — https://github.com/atomize-hq/substrate/actions/runs/22073727756
+  - Feature Smoke (linux + bundled wsl): `22073988561` (success) — https://github.com/atomize-hq/substrate/actions/runs/22073988561
+  - Feature Smoke (macos): `22074014263` (success) — https://github.com/atomize-hq/substrate/actions/runs/22074014263
