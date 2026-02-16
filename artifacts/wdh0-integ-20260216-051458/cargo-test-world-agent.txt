@@ -1,0 +1,242 @@
+   Compiling serde_core v1.0.228
+   Compiling tracing-core v0.1.36
+   Compiling futures-util v0.3.31
+   Compiling serde_json v1.0.146
+   Compiling bitflags v2.10.0
+   Compiling percent-encoding v2.3.2
+   Compiling regex-automata v0.4.13
+   Compiling tower-layer v0.3.3
+   Compiling futures-channel v0.3.31
+   Compiling rustix v1.1.3
+   Compiling mime v0.3.17
+   Compiling nix v0.30.1
+   Compiling rustix v0.38.44
+   Compiling sync_wrapper v1.0.2
+   Compiling axum-core v0.3.4
+   Compiling matchit v0.7.3
+   Compiling uuid v1.19.0
+   Compiling axum v0.6.20
+   Compiling either v1.15.0
+   Compiling sharded-slab v0.1.7
+   Compiling thread_local v1.1.9
+   Compiling form_urlencoded v1.2.2
+   Compiling hyper v1.8.1
+   Compiling nix v0.27.1
+   Compiling base64 v0.21.7
+   Compiling sync_wrapper v0.1.2
+   Compiling tokio-stream v0.1.17
+   Compiling tokio-util v0.7.17
+   Compiling tracing v0.1.44
+   Compiling tracing-log v0.2.0
+   Compiling prctl v1.0.0
+   Compiling hyper-util v0.1.19
+   Compiling serde v1.0.228
+   Compiling serde_path_to_error v0.1.20
+   Compiling which v6.0.3
+   Compiling axum-core v0.4.5
+   Compiling tower v0.5.2
+   Compiling tower v0.4.13
+   Compiling hyper v0.14.32
+   Compiling tempfile v3.23.0
+   Compiling dialoguer v0.11.0
+   Compiling chrono v0.4.42
+   Compiling serde_yaml v0.9.34+deprecated
+   Compiling url v2.5.7
+   Compiling serde_urlencoded v0.7.1
+   Compiling regex v1.12.2
+   Compiling matchers v0.2.0
+   Compiling tracing-subscriber v0.3.22
+   Compiling tungstenite v0.20.1
+   Compiling tungstenite v0.21.0
+   Compiling substrate-common v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ/crates/common)
+   Compiling tokio-tungstenite v0.21.0
+   Compiling tokio-tungstenite v0.20.1
+   Compiling agent-api-types v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ/crates/agent-api-types)
+   Compiling world-api v0.1.1 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ/crates/world-api)
+   Compiling substrate-broker v0.1.0 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ/crates/broker)
+   Compiling axum v0.7.9
+   Compiling world v0.1.1 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ/crates/world)
+   Compiling agent-api-core v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ/crates/agent-api-core)
+   Compiling world-agent v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ/crates/world-agent)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 10.55s
+     Running unittests src/lib.rs (target/debug/deps/world_agent-6bfcf942fe2ac56c)
+
+running 32 tests
+test enforcement_plan::tests::encode_returns_none_when_no_deny_lists ... ok
+test gc::tests::test_extract_world_id ... ok
+test enforcement_plan::tests::encode_does_not_default_discover_deny_when_discover_present ... ok
+test enforcement_plan::tests::encode_defaults_discover_deny_to_read_deny ... ok
+test enforcement_plan::tests::read_from_env_rejects_unknown_fields ... ok
+test gc::integration_tests::test_gc_sweep_removes_empty_netns ... ok
+test gc::tests::test_gc_report_serialization ... ok
+test pty::session_nonce_tests::generate_session_nonce_is_hex32_lower ... ok
+test pty::session_nonce_tests::hex32_renders_32_lowercase_hex_chars ... ok
+test gc::integration_tests::test_gc_sweep_keeps_netns_with_process ... ok
+test handlers::tests::test_capabilities_handler ... ok
+test pty::tests::ensure_xdg_dirs_creates_explicit_xdg_data_home ... ok
+test pty::tests::ensure_xdg_dirs_falls_back_when_data_home_uncreatable ... ok
+test pty::tests::test_client_message_start_serialization ... ok
+test pty::tests::ensure_xdg_dirs_creates_default_data_home_under_home ... ok
+test pty::tests::test_server_message_stdout_serialization ... ok
+test service::pending_diff_id_tests::diff_id_for_diff_is_stable_across_fs_diff_writes_mods_flip ... ok
+test pty::wfgad2_tests::pty_full_isolation_env_includes_enforcement_plan_and_helper_src ... ok
+test service::pending_diff_id_tests::diff_id_changes_when_updates_or_deletes_change ... ok
+test service::pending_diff_id_tests::diff_id_is_stable_across_writes_vs_mods_reclassification ... ok
+test service::tests::test_budget_tracker ... ok
+test service::tests::landlock_helper_src_accepts_substrate_world_agent_name ... ok
+test socket_activation::tests::parse_fd_names_emits_none_for_empty_segments ... ok
+test service::tests::test_resolve_helper_src_prefers_sibling_world_agent_over_test_harness ... ok
+test service::tests::test_execute_response_serde_fs_diff_roundtrip ... ok
+test socket_activation::tests::parse_fd_names_handles_escapes ... ok
+test service::tests::test_service_creation ... ok
+test tests::listener_mode::logs_socket_activation_mode ... ok
+test tests::listener_mode::logs_direct_bind_mode ... ok
+test tests::read_tcp_port_parses_value ... ok
+test tests::read_tcp_port_rejects_invalid ... ok
+test tests::read_tcp_port_returns_none_when_unset ... ok
+
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/debug/deps/world_agent-d735aa68e5cd67ec)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/entrypoint.rs (target/debug/deps/entrypoint-58af8e0479d7db75)
+
+running 1 test
+test world_agent_main_delegates_to_library_entrypoint ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/fs_mode.rs (target/debug/deps/fs_mode-84301ec4dae8a369)
+
+running 6 tests
+test non_pty_read_only_mode_blocks_absolute_project_writes ... ok
+test non_pty_read_only_mode_blocks_writes ... ok
+test non_pty_writable_mode_records_diffs_for_writes ... ok
+test pty_writable_mode_keeps_writes_in_overlay ... ok
+test pty_and_non_pty_share_overlay_state_across_mode_switch ... ok
+test pty_read_only_mode_returns_clear_error ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/full_isolation_nonpty.rs (target/debug/deps/full_isolation_nonpty-0a0f52d75f7c1733)
+
+running 7 tests
+test landlock_exec_subprocess_entry ... ok
+test non_pty_full_isolation_blocks_outside_host_reads_and_writes ... ok
+test non_pty_full_isolation_honors_write_allowlist_prefix_globs ... ok
+test non_pty_full_isolation_prevents_host_tmp_reads ... ok
+test non_pty_full_isolation_prevents_host_tmp_writes ... ok
+test non_pty_full_isolation_runs_from_tmp_rooted_project ... ok
+test landlock_exec_fails_closed_with_actionable_error_when_overlay_backing_dirs_missing ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/full_isolation_pty.rs (target/debug/deps/full_isolation_pty-5863152c6d5289c0)
+
+running 4 tests
+test pty_full_isolation_runs_from_tmp_rooted_project ... ok
+test pty_full_isolation_prevents_host_tmp_writes ... ok
+test pty_full_isolation_read_only_blocks_project_writes ... ok
+test pty_full_isolation_prevents_host_tmp_reads ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/overlayfs_enumeration.rs (target/debug/deps/overlayfs_enumeration-ab7350853c7926cd)
+
+running 1 test
+test world_overlay_directory_enumeration_includes_created_file ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/repl_persistent_session_bootstrap_v1.rs (target/debug/deps/repl_persistent_session_bootstrap_v1-8589ed39c1ae419d)
+
+running 8 tests
+test start_session_requires_policy_snapshot_fail_closed ... ok
+test start_session_fails_closed_when_fionread_watermark_is_unavailable ... ok
+test persistent_session_enforces_first_frame_start_session ... ok
+test start_session_rejects_policy_snapshot_with_unknown_fields_fail_closed ... ok
+test legacy_one_shot_start_remains_accepted ... ok
+test start_session_yields_ready_with_fresh_hex32_session_nonce ... ok
+test session_nonce_is_unique_per_session_restart ... ok
+test start_session_is_robust_to_inheritable_non_stdio_fds ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/repl_persistent_session_exec_v1.rs (target/debug/deps/repl_persistent_session_exec_v1-d8fae1e6f476f56c)
+
+running 13 tests
+test incomplete_construct_does_not_hang_and_session_returns_to_idle ... ok
+test stdin_is_dropped_unless_passthrough_and_never_leaks_across_commands ... ok
+test program_text_sent_over_stdin_is_not_executed ... ok
+test stdout_is_drained_before_command_complete ... ok
+test exec_rejects_invalid_base64_fail_closed ... ok
+test exec_while_busy_is_fatal_protocol_error ... ok
+test evaluator_cannot_see_inherited_socket_fds_dr22_smoke ... ok
+test exec_rejects_nul_fail_closed ... ok
+test persists_physical_cwd_and_exported_env_across_execs ... ok
+test exec_rejects_invalid_utf8_fail_closed ... ok
+test caged_session_prevents_escape_from_anchor ... ok
+test evaluator_is_bash_noprofile_norc_and_prompts_suppressed ... ok
+test signal_targets_foreground_process_group_and_session_survives ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/socket_activation.rs (target/debug/deps/socket_activation-f205b09a2f7313e2)
+
+running 3 tests
+test direct_bind_mode_when_listen_fds_unset ... ok
+test honors_custom_fd_start_offsets ... ok
+test socket_activation_mode_exposes_inherited_unix_sockets ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/wfgad1_policy_snapshot_v2_rejection.rs (target/debug/deps/wfgad1_policy_snapshot_v2_rejection-1685e3fe7e0b52fa)
+
+running 10 tests
+test http_execute_rejects_missing_policy_snapshot ... ok
+test http_execute_rejects_policy_snapshot_unknown_fields ... ok
+test http_execute_rejects_policy_snapshot_invalid_allow_list_patterns ... ok
+test http_execute_rejects_policy_snapshot_schema_version_1_and_2 ... ok
+test ws_start_session_rejects_missing_policy_snapshot_and_closes ... ok
+test ws_start_session_rejects_write_disabled_without_fail_closed_routing_and_closes ... ok
+test http_execute_rejects_write_disabled_without_fail_closed_routing ... ok
+test ws_start_session_rejects_policy_snapshot_invalid_allow_list_patterns_and_closes ... ok
+test ws_start_session_rejects_policy_snapshot_schema_version_1_and_2_and_closes ... ok
+test ws_start_session_rejects_policy_snapshot_unknown_fields_and_closes ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/wfgad2_enforcement_plan_fail_closed_exit4.rs (target/debug/deps/wfgad2_enforcement_plan_fail_closed_exit4-b0688020df4a939e)
+
+running 1 test
+test helper_fails_closed_with_exit_4_on_invalid_enforcement_plan ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/wfgad3_wildcard_deny_symlink_handling.rs (target/debug/deps/wfgad3_wildcard_deny_symlink_handling-568b4ecbef814e43)
+
+running 2 tests
+test write_deny_returns_read_only_file_system ... ok
+test wildcard_deny_snapshot_scan_does_not_follow_symlinked_directories ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/wfgad4_discover_allowlist.rs (target/debug/deps/wfgad4_discover_allowlist-1a27d937086fcba1)
+
+running 2 tests
+test discover_allowlist_allows_listing_but_blocks_reading_files ... ok
+test landlock_exec_subprocess_entry ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/wfgad5_strict_deny_lockdown.rs (target/debug/deps/wfgad5_strict_deny_lockdown-507c8592e8044941)
+
+running 1 test
+test strict_mode_blocks_mount_syscalls_with_eperm_and_denies_remain_enforced ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
