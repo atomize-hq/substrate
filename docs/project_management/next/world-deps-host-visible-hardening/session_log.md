@@ -165,3 +165,11 @@ Append START/END entries only (no mid-stream commentary) using the template stan
   - `docs/project_management/next/world-deps-host-visible-hardening/session_log.md` (this END entry)
 - Blockers:
   - `NONE`
+
+## START — 2026-02-16T04:49:18Z — code — WDH0-code
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-deps-host-visible-hardening" SLICE_ID="WDH0"`
+
+## START — 2026-02-16T04:49:18Z — test — WDH0-test
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-deps-host-visible-hardening" SLICE_ID="WDH0"`
