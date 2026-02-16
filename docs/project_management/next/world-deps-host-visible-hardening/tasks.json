@@ -20,7 +20,7 @@
       "name": "Execution preflight gate (feature start)",
       "type": "ops",
       "phase": "Ops",
-      "status": "pending",
+      "status": "completed",
       "description": "Run the planning quality gate lint and validate tasks.json + smoke scaffolding before any execution triads begin.",
       "references": [
         "docs/project_management/next/world-deps-host-visible-hardening/plan.md",
