@@ -311,7 +311,7 @@ def code_task(task_id: str, other_id: str) -> dict:
         "description": f"Implement {slice_id} spec (production code only).",
         "references": refs(),
         "ac_ids": seed_ac_ids,
-        "acceptance_criteria": [f"Meets all acceptance criteria in {slice_spec}"],
+        "acceptance_criteria": [f"Implements the behaviors required by ac_ids (see {slice_spec})"],
         "start_checklist": [
             f"git checkout feat/{feature} && git pull --ff-only",
             f"Read plan.md, tasks.json, session_log.md, {slice_spec}, kickoff prompt",
@@ -358,7 +358,7 @@ def test_task(task_id: str, other_id: str) -> dict:
         "description": f"Add/modify tests for {slice_id} spec (tests only).",
         "references": refs(),
         "ac_ids": seed_ac_ids,
-        "acceptance_criteria": [f"Tests enforce {slice_id} acceptance criteria"],
+        "acceptance_criteria": [f"Tests enforce the behaviors required by ac_ids (see {slice_spec})"],
         "start_checklist": [
             f"git checkout feat/{feature} && git pull --ff-only",
             f"Read plan.md, tasks.json, session_log.md, {slice_spec}, kickoff prompt",
@@ -590,7 +590,7 @@ def integ_final_task(platform_tasks: list) -> dict:
         "description": "Final integration: merge any platform fixes, complete slice closeout, and confirm checkpoint evidence is recorded.",
         "references": refs(*smoke_refs, slice_closeout),
         "ac_ids": seed_ac_ids,
-        "acceptance_criteria": ["Slice closeout report completed and local integration gates are green"],
+        "acceptance_criteria": [f"Slice closeout report completed and local integration gates are green (implements behaviors required by ac_ids; see {slice_spec})"],
         "start_checklist": [
             f"git checkout feat/{feature} && git pull --ff-only",
             f"Read plan.md, tasks.json, session_log.md, {slice_spec}, kickoff prompt",
@@ -625,7 +625,7 @@ def integ_single_task() -> dict:
         "description": f"Integrate {slice_id} code+tests, reconcile to spec, and run integration gate.",
         "references": refs(slice_closeout),
         "ac_ids": seed_ac_ids,
-        "acceptance_criteria": ["Slice is green under make integ-checks and matches the spec"],
+        "acceptance_criteria": [f"Slice is green under make integ-checks and implements behaviors required by ac_ids (see {slice_spec})"],
         "start_checklist": [
             f"git checkout feat/{feature} && git pull --ff-only",
             f"Read plan.md, tasks.json, session_log.md, {slice_spec}, kickoff prompt",

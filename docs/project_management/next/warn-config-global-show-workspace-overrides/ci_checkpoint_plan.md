@@ -22,8 +22,8 @@ Standard:
 {
   "version": 1,
   "defaults": {
-    "min_triads_per_checkpoint": 2,
-    "max_triads_per_checkpoint": 4
+    "min_triads_per_checkpoint": 4,
+    "max_triads_per_checkpoint": 8
   },
   "checkpoints": [
     {
@@ -48,4 +48,3 @@ CP1 is the only checkpoint for this feature because the feature has one slice (`
 Boundary rationale:
 - The checkpoint validates the end-to-end CLI contract for `substrate config global show` (stderr-only note, stdout invariants, unchanged exit codes) across Linux/macOS/Windows.
 - The checkpoint is executed after `C0-integ-core` is green on the primary platform, and before any platform-fix tasks are started.
-

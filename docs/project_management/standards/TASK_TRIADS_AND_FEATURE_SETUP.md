@@ -72,12 +72,13 @@ When tasks are started via triad automation (preferred) and agents run inside an
 - Required fields per task:
   - `id`, `name`, `type` (code/test/integration), `phase`, `status`, `description`
   - `references` (array of files/docs to read)
-  - `ac_ids` (array of slice acceptance criteria IDs; required when using Slice Spec v2 via `tasks.json` `meta.slice_spec_version >= 2`)
   - `acceptance_criteria` (array of concrete outcomes)
   - `start_checklist` (array of steps)
   - `end_checklist` (array of steps)
   - `worktree`, `integration_task`, `kickoff_prompt`
   - `depends_on` (list), `concurrent_with` (list)
+- Slice Spec v2 traceability:
+  - `ac_ids` is required for slice triad tasks (`<SLICE_ID>-code`, `<SLICE_ID>-test`, `<SLICE_ID>-integ`) when `tasks.json` `meta.slice_spec_version >= 2`.
 - Optional (required when triad automation is enabled; schema v3):
   - `git_branch` (deterministic task branch name)
   - `required_make_targets` (array of make targets for `task_finish`)

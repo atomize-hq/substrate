@@ -246,7 +246,7 @@ $seedAcIds = @("AC-$($script:SliceId)-01", "AC-$($script:SliceId)-02", "AC-$($sc
 
 $code = New-TaskBase $codeId "$($script:SliceId) slice (code)" "code" "Implement $($script:SliceId) spec (production code only)."
 $code.ac_ids = $seedAcIds
-$code.acceptance_criteria = @("Meets all acceptance criteria in $($script:SliceSpecFile)")
+$code.acceptance_criteria = @("Implements the behaviors required by ac_ids (see $($script:SliceSpecFile))")
 $code.start_checklist = @(
     "git checkout feat/$Feature && git pull --ff-only",
     "Read plan.md, tasks.json, session_log.md, $($script:SliceSpecFile), kickoff prompt",
@@ -270,7 +270,7 @@ $tasks += $code
 
 $test = New-TaskBase $testId "$($script:SliceId) slice (test)" "test" "Add/modify tests for $($script:SliceId) spec (tests only)."
 $test.ac_ids = $seedAcIds
-$test.acceptance_criteria = @("Tests enforce $($script:SliceId) acceptance criteria")
+$test.acceptance_criteria = @("Tests enforce the behaviors required by ac_ids (see $($script:SliceSpecFile))")
 $test.start_checklist = @(
     "git checkout feat/$Feature && git pull --ff-only",
     "Read plan.md, tasks.json, session_log.md, $($script:SliceSpecFile), kickoff prompt",
@@ -403,7 +403,7 @@ if ($CrossPlatform.IsPresent) {
     $final = New-TaskBase $integId "$($script:SliceId) slice (integration final)" "integration" "Final integration: merge any platform fixes, complete slice closeout, and confirm checkpoint evidence is recorded."
     $final.integration_task = $integId
     $final.ac_ids = $seedAcIds
-    $final.acceptance_criteria = @("Slice closeout report completed and local integration gates are green")
+    $final.acceptance_criteria = @("Slice closeout report completed and local integration gates are green (implements behaviors required by ac_ids; see $($script:SliceSpecFile))")
     foreach ($p in $behaviorPlatformsList) {
         switch ($p) {
             "linux" { $final.references += @("$featureDir/smoke/linux-smoke.sh") }
@@ -474,7 +474,7 @@ if ($CrossPlatform.IsPresent) {
     $integ = New-TaskBase $integId "$($script:SliceId) slice (integration)" "integration" "Integrate $($script:SliceId) code+tests, reconcile to spec, and run integration gate."
     $integ.integration_task = $integId
     $integ.ac_ids = $seedAcIds
-    $integ.acceptance_criteria = @("Slice is green under make integ-checks and matches the spec")
+    $integ.acceptance_criteria = @("Slice is green under make integ-checks and implements behaviors required by ac_ids (see $($script:SliceSpecFile))")
     $integ.references += @("$featureDir/$($script:SliceCloseoutFile)")
     $integ.start_checklist = @(
         "git checkout feat/$Feature && git pull --ff-only",

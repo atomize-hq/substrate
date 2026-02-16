@@ -1,2 +1,7 @@
-[]
-
+{
+  "meta": {
+    "schema_version": 1,
+    "feature": "llm_cli_backend_engine"
+  },
+  "tasks": []
+}

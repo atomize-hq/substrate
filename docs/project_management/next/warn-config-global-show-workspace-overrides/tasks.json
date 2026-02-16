@@ -1,6 +1,7 @@
 {
   "meta": {
     "schema_version": 4,
+    "slice_spec_version": 2,
     "feature": "warn-config-global-show-workspace-overrides",
     "cross_platform": true,
     "execution_gates": true,
@@ -86,6 +87,15 @@
         "`substrate config global show` does not fail due to invalid/unreadable workspace config; it still prints the global patch.",
         "If the workspace-override note is emitted, the existing global-empty note is suppressed for that invocation (per DR-0003)."
       ],
+      "ac_ids": [
+        "AC-C0-01",
+        "AC-C0-02",
+        "AC-C0-03",
+        "AC-C0-04",
+        "AC-C0-05",
+        "AC-C0-06",
+        "AC-C0-07"
+      ],
       "start_checklist": [
         "git checkout feat/warn-config-global-show-workspace-overrides && git pull --ff-only",
         "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
@@ -133,6 +143,15 @@
         "Tests cover: outside workspace (no note), empty workspace patch (no note), non-empty workspace patch (note), invalid YAML workspace patch (note + success).",
         "`--json` mode is covered: stdout parses as JSON even when stderr note is present.",
         "Tests are deterministic and do not rely on global machine state (use temp dirs and scoped env vars)."
+      ],
+      "ac_ids": [
+        "AC-C0-01",
+        "AC-C0-02",
+        "AC-C0-03",
+        "AC-C0-04",
+        "AC-C0-05",
+        "AC-C0-06",
+        "AC-C0-07"
       ],
       "start_checklist": [
         "git checkout feat/warn-config-global-show-workspace-overrides && git pull --ff-only",
@@ -444,6 +463,15 @@
         "All required CI parity runs for C0 are green.",
         "All required feature smoke runs for C0 are green.",
         "Any platform-specific follow-ups are merged and reflected in closeout report."
+      ],
+      "ac_ids": [
+        "AC-C0-01",
+        "AC-C0-02",
+        "AC-C0-03",
+        "AC-C0-04",
+        "AC-C0-05",
+        "AC-C0-06",
+        "AC-C0-07"
       ],
       "start_checklist": [
         "git checkout feat/warn-config-global-show-workspace-overrides && git pull --ff-only",

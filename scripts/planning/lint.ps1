@@ -5,6 +5,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+if (-not (Get-Command rg -ErrorAction SilentlyContinue)) {
+    throw "FAIL: ripgrep (rg) is required for planning lint (install ripgrep and retry)"
+}
+
 function Require-Path([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path)) {
         throw "Missing required path: $Path"

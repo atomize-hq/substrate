@@ -213,6 +213,16 @@ def _scan_forbidden_placeholders(
                     )
 
 
+def _scan_forbidden_placeholders_whole_doc(lines: list[str], path: Path, slice_id: str) -> None:
+    """
+    v2 tightening: forbid placeholders anywhere in the spec, not only inside required sections.
+
+    This closes a loophole where a placeholder like '[[FILL]]' in the title line could pass.
+    """
+    non_fenced = [(lineno, line) for (lineno, line) in _iter_non_fenced_lines(lines)]
+    _scan_forbidden_placeholders("whole document", non_fenced, path, slice_id)
+
+
 def _validate_behavior_delta(section_lines: list[tuple[int, str]], path: Path, slice_id: str) -> None:
     patterns = {
         "Existing": re.compile(r"^\s*[-*]\s+Existing:"),
@@ -348,6 +358,8 @@ def main() -> int:
 
         lines = text.splitlines(keepends=False)
 
+        _scan_forbidden_placeholders_whole_doc(lines, spec_path, slice_id)
+
         sections: dict[str, list[tuple[int, str]]] = {}
         for header in V2_REQUIRED_HEADERS:
             section_lines, header_line = _extract_section(lines, header)
@@ -377,4 +389,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

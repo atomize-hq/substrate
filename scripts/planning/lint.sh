@@ -45,6 +45,11 @@ fi
 
 echo "== Planning lint: ${FEATURE_DIR} =="
 
+if ! command -v rg >/dev/null 2>&1; then
+    echo "FAIL: ripgrep (rg) is required for planning lint (install ripgrep and retry)" >&2
+    exit 2
+fi
+
 require_path() {
     local p="$1"
     if [[ ! -e "$p" ]]; then
