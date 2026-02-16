@@ -86,6 +86,10 @@ Write-Host "-- spec_manifest.md required-doc existence"
 & python scripts/planning/validate_spec_manifest.py --feature-dir $FeatureDir
 if ($LASTEXITCODE -ne 0) { throw "FAIL: spec_manifest.md required-doc existence failed" }
 
+Write-Host "-- slice spec invariants (gated by meta.slice_spec_version)"
+& python scripts/planning/validate_slice_specs.py --feature-dir $FeatureDir
+if ($LASTEXITCODE -ne 0) { throw "FAIL: slice spec invariants failed" }
+
 if ([int]$schemaVersion -ge 3 -and $automationEnabled -eq "true" -and $crossPlatformEnabled -eq "true") {
     Write-Host "-- ci_checkpoint_plan.md invariants"
     & python scripts/planning/validate_ci_checkpoint_plan.py --feature-dir $FeatureDir

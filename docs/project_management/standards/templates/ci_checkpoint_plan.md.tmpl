@@ -22,8 +22,8 @@ Standard:
 {
   "version": 1,
   "defaults": {
-    "min_triads_per_checkpoint": 2,
-    "max_triads_per_checkpoint": 4
+    "min_triads_per_checkpoint": 4,
+    "max_triads_per_checkpoint": 8
   },
   "checkpoints": [
     {
@@ -35,7 +35,7 @@ Standard:
         "feature_smoke": true,
         "ci_testing": "full"
       },
-      "rationale": "Initial scaffold: single-slice checkpoint. When additional slices are added, regroup slices into checkpoints using code-grounded seams; keep checkpoint sizes within defaults (min=2, max=4) unless explicitly justified."
+      "rationale": "Initial scaffold: single-slice checkpoint. When additional slices are added, regroup slices into checkpoints using code-grounded seams; keep checkpoint sizes within defaults (min=4, max=8) unless explicitly justified."
     }
   ]
 }

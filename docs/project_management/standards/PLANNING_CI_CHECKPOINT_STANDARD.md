@@ -40,8 +40,8 @@ Template:
 ## Default bounds (required unless explicitly justified)
 
 Defaults:
-- `min_triads_per_checkpoint = 2`
-- `max_triads_per_checkpoint = 4`
+- `min_triads_per_checkpoint = 4`
+- `max_triads_per_checkpoint = 8`
 
 Exceptions:
 - If the total slice count is `< min_triads_per_checkpoint`, a single checkpoint may cover the entire feature.

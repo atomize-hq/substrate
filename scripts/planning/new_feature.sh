@@ -215,21 +215,7 @@ if [[ "${CROSS_PLATFORM}" -eq 1 && "${AUTOMATION}" -eq 1 ]]; then
     render "${TEMPLATES_DIR}/ci_checkpoint_plan.md.tmpl" "${FEATURE_DIR}/ci_checkpoint_plan.md"
 fi
 
-cat >"${FEATURE_DIR}/${SLICE_ID}-spec.md" <<MD
-# ${SLICE_ID}-spec
-
-## Scope
-- None yet.
-
-## Behavior
-- None yet.
-
-## Acceptance criteria
-- None yet.
-
-## Out of scope
-- None yet.
-MD
+render "${TEMPLATES_DIR}/slice_spec.v2.md.tmpl" "${FEATURE_DIR}/${SLICE_ID}-spec.md"
 
 render "${TEMPLATES_DIR}/execution_preflight_report.md.tmpl" "${FEATURE_DIR}/execution_preflight_report.md"
 render "${TEMPLATES_DIR}/slice_closeout_report.md.tmpl" "${FEATURE_DIR}/${SLICE_ID}-closeout_report.md" "" "${SLICE_ID}-spec.md" "" "" "" "${SLICE_ID}"
@@ -259,6 +245,7 @@ ci_parity_platforms_csv = os.environ.get("CI_PARITY_PLATFORMS", "")
 wsl_required = os.environ["WSL_REQUIRED"] == "1"
 wsl_separate = os.environ["WSL_SEPARATE"] == "1"
 automation = os.environ.get("AUTOMATION", "0") == "1"
+seed_ac_ids = [f"AC-{slice_id}-01", f"AC-{slice_id}-02", f"AC-{slice_id}-03"]
 
 tasks_path = os.path.join(feature_dir, "tasks.json")
 
@@ -323,6 +310,7 @@ def code_task(task_id: str, other_id: str) -> dict:
         "status": "pending",
         "description": f"Implement {slice_id} spec (production code only).",
         "references": refs(),
+        "ac_ids": seed_ac_ids,
         "acceptance_criteria": [f"Meets all acceptance criteria in {slice_spec}"],
         "start_checklist": [
             f"git checkout feat/{feature} && git pull --ff-only",
@@ -369,6 +357,7 @@ def test_task(task_id: str, other_id: str) -> dict:
         "status": "pending",
         "description": f"Add/modify tests for {slice_id} spec (tests only).",
         "references": refs(),
+        "ac_ids": seed_ac_ids,
         "acceptance_criteria": [f"Tests enforce {slice_id} acceptance criteria"],
         "start_checklist": [
             f"git checkout feat/{feature} && git pull --ff-only",
@@ -600,6 +589,7 @@ def integ_final_task(platform_tasks: list) -> dict:
         "status": "pending",
         "description": "Final integration: merge any platform fixes, complete slice closeout, and confirm checkpoint evidence is recorded.",
         "references": refs(*smoke_refs, slice_closeout),
+        "ac_ids": seed_ac_ids,
         "acceptance_criteria": ["Slice closeout report completed and local integration gates are green"],
         "start_checklist": [
             f"git checkout feat/{feature} && git pull --ff-only",
@@ -634,6 +624,7 @@ def integ_single_task() -> dict:
         "status": "pending",
         "description": f"Integrate {slice_id} code+tests, reconcile to spec, and run integration gate.",
         "references": refs(slice_closeout),
+        "ac_ids": seed_ac_ids,
         "acceptance_criteria": ["Slice is green under make integ-checks and matches the spec"],
         "start_checklist": [
             f"git checkout feat/{feature} && git pull --ff-only",
@@ -680,6 +671,7 @@ meta = {
     "feature": feature,
     "cross_platform": cross_platform,
     "execution_gates": True,
+    "slice_spec_version": 2,
 }
 if automation:
     meta["automation"] = {"enabled": True, "orchestration_branch": f"feat/{feature}"}

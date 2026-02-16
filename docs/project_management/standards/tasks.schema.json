@@ -25,6 +25,11 @@
                         "orchestration_branch": { "type": "string" }
                     }
                 },
+                "slice_spec_version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Slice spec format version for this Planning Pack. When >= 2, planning lint may enforce Slice Spec v2 invariants (headers, AC IDs, and ac_ids traceability). When missing, treated as legacy v1 (no v2 enforcement)."
+                },
                 "notes": { "type": "string" },
                 "external_task_ids": { "type": "array", "items": { "type": "string" } }
             }
@@ -70,6 +75,11 @@
                     "kickoff_prompt": { "type": ["string", "null"], "minLength": 1 },
                     "depends_on": { "type": "array", "items": { "type": "string" } },
                     "concurrent_with": { "type": "array", "items": { "type": "string" } },
+                    "ac_ids": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Acceptance criteria IDs for the slice contract (e.g., AC-WS0-01). For v2 slice packs (meta.slice_spec_version >= 2), triad tasks should include the full set from the slice spec."
+                    },
                     "platform": { "type": "string", "enum": ["linux", "macos", "windows", "wsl"] },
                     "runner": { "type": "string", "enum": ["local", "github-actions", "manual"] },
                     "workflow": { "type": "string" },

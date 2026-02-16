@@ -114,21 +114,7 @@ if ($CrossPlatform.IsPresent -and $Automation.IsPresent) {
     Render-Template (Join-Path $templatesDir "kickoff_ci_checkpoint.md.tmpl") (Join-Path $featureDir "kickoff_prompts/CP1-ci-checkpoint.md") $varsCp1
 }
 
-@"
-# $($script:SliceId)-spec
-
-## Scope
-- None yet.
-
-## Behavior
-- None yet.
-
-## Acceptance criteria
-- None yet.
-
-## Out of scope
-- None yet.
-"@ | Set-Content -LiteralPath (Join-Path $featureDir $script:SliceSpecFile)
+Render-Template (Join-Path $templatesDir "slice_spec.v2.md.tmpl") (Join-Path $featureDir $script:SliceSpecFile) $vars
 
 function New-TaskBase([string]$Id, [string]$Name, [string]$Type, [string]$Description) {
     $refs = @("$featureDir/plan.md", "$featureDir/spec_manifest.md", "$featureDir/impact_map.md", "$featureDir/$($script:SliceSpecFile)")
@@ -194,6 +180,7 @@ $meta = @{
     feature        = $Feature
     cross_platform = [bool]$CrossPlatform.IsPresent
     execution_gates = $true
+    slice_spec_version = 2
 }
 
 if ($Automation.IsPresent) {
@@ -255,8 +242,10 @@ $codeId = "$($script:SliceId)-code"
 $testId = "$($script:SliceId)-test"
 $integId = "$($script:SliceId)-integ"
 $integCoreId = "$($script:SliceId)-integ-core"
+$seedAcIds = @("AC-$($script:SliceId)-01", "AC-$($script:SliceId)-02", "AC-$($script:SliceId)-03")
 
 $code = New-TaskBase $codeId "$($script:SliceId) slice (code)" "code" "Implement $($script:SliceId) spec (production code only)."
+$code.ac_ids = $seedAcIds
 $code.acceptance_criteria = @("Meets all acceptance criteria in $($script:SliceSpecFile)")
 $code.start_checklist = @(
     "git checkout feat/$Feature && git pull --ff-only",
@@ -280,6 +269,7 @@ $code.concurrent_with = @($testId)
 $tasks += $code
 
 $test = New-TaskBase $testId "$($script:SliceId) slice (test)" "test" "Add/modify tests for $($script:SliceId) spec (tests only)."
+$test.ac_ids = $seedAcIds
 $test.acceptance_criteria = @("Tests enforce $($script:SliceId) acceptance criteria")
 $test.start_checklist = @(
     "git checkout feat/$Feature && git pull --ff-only",
@@ -412,6 +402,7 @@ if ($CrossPlatform.IsPresent) {
 
     $final = New-TaskBase $integId "$($script:SliceId) slice (integration final)" "integration" "Final integration: merge any platform fixes, complete slice closeout, and confirm checkpoint evidence is recorded."
     $final.integration_task = $integId
+    $final.ac_ids = $seedAcIds
     $final.acceptance_criteria = @("Slice closeout report completed and local integration gates are green")
     foreach ($p in $behaviorPlatformsList) {
         switch ($p) {
@@ -482,6 +473,7 @@ if ($CrossPlatform.IsPresent) {
 } else {
     $integ = New-TaskBase $integId "$($script:SliceId) slice (integration)" "integration" "Integrate $($script:SliceId) code+tests, reconcile to spec, and run integration gate."
     $integ.integration_task = $integId
+    $integ.ac_ids = $seedAcIds
     $integ.acceptance_criteria = @("Slice is green under make integ-checks and matches the spec")
     $integ.references += @("$featureDir/$($script:SliceCloseoutFile)")
     $integ.start_checklist = @(

@@ -165,7 +165,7 @@ Required interoperability rules:
 - Every task must have a kickoff prompt file and must include the exact rule: `Do not edit planning docs inside the worktree.`
 - For cross-platform automation packs (schema v3+ + `meta.automation.enabled=true` + `meta.cross_platform=true`):
   - `ci_checkpoint_plan.md` is required and authoritative for CI cadence.
-  - Cross-platform CI dispatch (compile parity / Feature Smoke / CI Testing) must occur only at the bounded checkpoints defined by `ci_checkpoint_plan.md` (default checkpoint size bounds: min=2 triads, max=4 triads unless explicitly justified).
+  - Cross-platform CI dispatch (compile parity / Feature Smoke / CI Testing) must occur only at the bounded checkpoints defined by `ci_checkpoint_plan.md` (default checkpoint size bounds: min=4 triads, max=8 triads unless explicitly justified).
   - `ci_checkpoint_plan.md` must be wired into `tasks.json` via checkpoint tasks (see `docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md`).
 - Integration tasks must include the required validation gates and record results in `session_log.md`:
   - **Behavior platforms**: run the feature-local smoke script via CI (`make feature-smoke`) when `FEATURE_DIR/smoke/` exists.

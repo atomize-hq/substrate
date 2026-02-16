@@ -72,6 +72,7 @@ When tasks are started via triad automation (preferred) and agents run inside an
 - Required fields per task:
   - `id`, `name`, `type` (code/test/integration), `phase`, `status`, `description`
   - `references` (array of files/docs to read)
+  - `ac_ids` (array of slice acceptance criteria IDs; required when using Slice Spec v2 via `tasks.json` `meta.slice_spec_version >= 2`)
   - `acceptance_criteria` (array of concrete outcomes)
   - `start_checklist` (array of steps)
   - `end_checklist` (array of steps)
@@ -91,8 +92,9 @@ When tasks are started via triad automation (preferred) and agents run inside an
   "status": "pending",
   "description": "Implement <SLICE_ID> spec (production code only).",
   "references": ["docs/project_management/next/<feature>/<SLICE_ID>-spec.md"],
+  "ac_ids": ["AC-<SLICE_ID>-01", "AC-<SLICE_ID>-02", "AC-<SLICE_ID>-03"],
   "acceptance_criteria": [
-    "Meets all acceptance criteria in <SLICE_ID>-spec.md"
+    "Implements the behaviors required by ac_ids (see <SLICE_ID>-spec.md)"
   ],
   "start_checklist": [
     "Checkout feat/<feature>, pull ff-only",
