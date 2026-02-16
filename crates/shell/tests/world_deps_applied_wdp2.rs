@@ -119,6 +119,9 @@ fn test_current_list_applied_with_healthy_backend_exits_0_and_reports_world_stat
 
     let output = substrate_command_for_home(&fixture)
         .current_dir(&ws_root)
+        // WDH0 hardening overwrites PATH for world execution. Provide the test-owned "world deps"
+        // bin directory via the contract env var instead.
+        .env("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR", &world_bin)
         .env("PATH", new_path)
         .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
         .env("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE", "manual")

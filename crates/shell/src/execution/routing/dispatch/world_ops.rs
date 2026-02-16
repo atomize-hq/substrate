@@ -1,6 +1,6 @@
 //! World and agent routing helpers.
 
-use super::shim_ops::build_world_env_map;
+use super::shim_ops::build_world_env_map_for_cwd;
 use crate::execution::agent_events::publish_agent_event;
 #[cfg(target_os = "macos")]
 use crate::execution::pw;
@@ -205,7 +205,10 @@ pub(super) fn execute_world_pty_over_ws(
         let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
         let policy_snapshot =
             crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd)?.snapshot;
-        let mut env_map = build_world_env_map();
+        let (mut env_map, inherit_from_host) = build_world_env_map_for_cwd(&cwd)?;
+        if inherit_from_host {
+            eprintln!("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
+        }
         crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
             &policy_snapshot,
             &mut env_map,
@@ -654,7 +657,10 @@ pub(super) fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyho
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
             let policy_snapshot =
                 crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd)?.snapshot;
-            let mut env_map = build_world_env_map();
+            let (mut env_map, inherit_from_host) = build_world_env_map_for_cwd(&cwd_path)?;
+            if inherit_from_host {
+                eprintln!("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
+            }
             normalize_env_for_linux_guest(&mut env_map);
             crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
                 &policy_snapshot,
@@ -910,7 +916,10 @@ fn build_agent_client_and_request_impl(
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
     let policy_snapshot =
         crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
-    let mut env_map = build_world_env_map();
+    let (mut env_map, inherit_from_host) = build_world_env_map_for_cwd(&cwd_path)?;
+    if inherit_from_host {
+        eprintln!("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
+    }
     crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
         &policy_snapshot,
         &mut env_map,
@@ -950,7 +959,7 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
     let policy_snapshot =
         crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
-    let mut env_map = build_world_env_map();
+    let (mut env_map, _inherit_from_host) = build_world_env_map_for_cwd(&cwd_path)?;
     crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
         &policy_snapshot,
         &mut env_map,
@@ -983,7 +992,10 @@ fn build_agent_client_and_request_impl(
         let client = AgentClient::unix_socket(&socket_path)?;
         let cwd_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
         let cwd = cwd_path.display().to_string();
-        let mut env_map = build_world_env_map();
+        let (mut env_map, inherit_from_host) = build_world_env_map_for_cwd(&cwd_path)?;
+        if inherit_from_host {
+            eprintln!("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
+        }
         normalize_env_for_linux_guest(&mut env_map);
         ensure_world_deps_bin_on_path(&mut env_map);
         let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
@@ -1030,7 +1042,10 @@ fn build_agent_client_and_request_impl(
 
     let cwd_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     let cwd = cwd_path.display().to_string();
-    let mut env_map = build_world_env_map();
+    let (mut env_map, inherit_from_host) = build_world_env_map_for_cwd(&cwd_path)?;
+    if inherit_from_host {
+        eprintln!("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
+    }
     normalize_env_for_linux_guest(&mut env_map);
     ensure_world_deps_bin_on_path(&mut env_map);
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
@@ -1069,7 +1084,7 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
         let client = AgentClient::unix_socket(&socket_path)?;
         let cwd_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
         let cwd = cwd_path.display().to_string();
-        let mut env_map = build_world_env_map();
+        let (mut env_map, _inherit_from_host) = build_world_env_map_for_cwd(&cwd_path)?;
         normalize_env_for_linux_guest(&mut env_map);
         ensure_world_deps_bin_on_path(&mut env_map);
         let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
@@ -1110,7 +1125,7 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
 
     let cwd_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     let cwd = cwd_path.display().to_string();
-    let mut env_map = build_world_env_map();
+    let (mut env_map, _inherit_from_host) = build_world_env_map_for_cwd(&cwd_path)?;
     normalize_env_for_linux_guest(&mut env_map);
     ensure_world_deps_bin_on_path(&mut env_map);
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
@@ -1154,7 +1169,10 @@ fn build_agent_client_and_request_impl(
     let cwd = windows::current_dir_wsl()?;
     let host_cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     let profile = current_world_request_profile();
-    let mut env_map = build_world_env_map();
+    let (mut env_map, inherit_from_host) = build_world_env_map_for_cwd(&host_cwd)?;
+    if inherit_from_host {
+        eprintln!("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
+    }
     normalize_env_for_linux_guest(&mut env_map);
     if profile.as_deref() == Some("world-deps-provision") {
         env_map.retain(|k, _| {
@@ -1208,7 +1226,7 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
     let cwd = windows::current_dir_wsl()?;
     let host_cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     let profile = current_world_request_profile();
-    let mut env_map = build_world_env_map();
+    let (mut env_map, _inherit_from_host) = build_world_env_map_for_cwd(&host_cwd)?;
     normalize_env_for_linux_guest(&mut env_map);
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
     let policy_snapshot =
