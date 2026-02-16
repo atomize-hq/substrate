@@ -94,7 +94,7 @@
         "Create worktree and branch per triad standard",
         "Do not edit planning docs inside the worktree"
       ],
-      "status": "in_progress",
+      "status": "completed",
       "type": "code",
       "worktree": "wt/world-deps-host-visible-hardening-wdh0-code"
     },
@@ -128,7 +128,7 @@
         "Create worktree and branch per triad standard",
         "Do not edit planning docs inside the worktree"
       ],
-      "status": "in_progress",
+      "status": "completed",
       "type": "test",
       "worktree": "wt/world-deps-host-visible-hardening-wdh0-test"
     },
