@@ -297,3 +297,11 @@ Append START/END entries only (no mid-stream commentary) using the template stan
 - Notes:
   - Ran `make integ-checks` in `wt/world-deps-host-visible-hardening-wdh2-integ` → `0`.
   - Ran Linux feature smoke: `SUBSTRATE_SMOKE_SLICE_ID=WDH2 bash docs/project_management/next/world-deps-host-visible-hardening/smoke/linux-smoke.sh` → `0` (passed; includes Case D exec-guard exit=5).
+
+## START — 2026-02-16T21:17:26Z — code — WDH3-code
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-deps-host-visible-hardening" SLICE_ID="WDH3"`
+
+## START — 2026-02-16T21:17:26Z — test — WDH3-test
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-deps-host-visible-hardening" SLICE_ID="WDH3"`
