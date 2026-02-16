@@ -233,10 +233,27 @@ pub(crate) fn handle_shim_command(cmd: &ShimCmd, cli: &Cli) -> ! {
 }
 
 pub fn run_shell() -> Result<i32> {
-    run_shell_with_cli(Cli::parse())
+    match Cli::try_parse() {
+        Ok(cli) => run_shell_with_cli(cli),
+        Err(err) => {
+            if let Err(init_err) = super::home_bootstrap::ensure_substrate_home_deps_scaffold() {
+                eprintln!("{init_err}");
+                return Ok(init_err.exit_code());
+            }
+
+            let exit_code = err.exit_code();
+            let _ = err.print();
+            Ok(exit_code)
+        }
+    }
 }
 
 pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
+    if let Err(err) = super::home_bootstrap::ensure_substrate_home_deps_scaffold() {
+        eprintln!("{err}");
+        return Ok(err.exit_code());
+    }
+
     let mut config = match ShellConfig::from_cli(cli) {
         Ok(config) => config,
         Err(err) if config_model::is_user_error(&err) => {

@@ -4,6 +4,7 @@ mod cli;
 mod config_cmd;
 pub(crate) mod config_model;
 mod env_scripts;
+mod home_bootstrap;
 mod invocation;
 pub mod lock;
 mod manager;
