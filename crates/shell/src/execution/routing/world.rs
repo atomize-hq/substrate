@@ -35,6 +35,13 @@ fn init_windows_world(config: &ShellConfig) {
     #[cfg(test)]
     let _env_guard = world_env_guard();
 
+    // If the caller explicitly overrides the world socket, do not attempt platform detection
+    // (which may provision/boot WSL). Downstream call-sites already honor the override.
+    if std::env::var_os("SUBSTRATE_WORLD_SOCKET").is_some() {
+        std::env::set_var("SUBSTRATE_WORLD", "enabled");
+        return;
+    }
+
     match pw::detect() {
         Ok(ctx) => {
             if (ctx.ensure_ready)().is_ok() {
@@ -60,6 +67,14 @@ fn init_macos_world(config: &ShellConfig) {
 
     #[cfg(test)]
     let _env_guard = world_env_guard();
+
+    // If the caller explicitly overrides the world socket, do not attempt Lima detection/startup.
+    // This keeps tests/fixtures hermetic and prevents accidental VM provisioning when users point
+    // at a custom agent socket.
+    if std::env::var_os("SUBSTRATE_WORLD_SOCKET").is_some() {
+        std::env::set_var("SUBSTRATE_WORLD", "enabled");
+        return;
+    }
 
     match pw::detect() {
         Ok(ctx) => {

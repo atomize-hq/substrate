@@ -110,13 +110,12 @@ fn test_current_list_applied_with_healthy_backend_exits_0_and_reports_world_stat
         SocketResponse::CapabilitiesAndHostExecute { scopes: vec![] },
     );
 
-    let current_path = std::env::var("PATH").unwrap_or_default();
+    // On macOS, the shell normalizes PATH for Linux guests unless it already looks Linux-ish.
+    // Keep this test deterministic and compatible with that normalization by starting from a
+    // stable guest PATH.
+    const GUEST_BASE_PATH: &str = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
     let prefix = world_bin.display().to_string();
-    let new_path = if current_path.is_empty() {
-        prefix
-    } else {
-        format!("{prefix}:{current_path}")
-    };
+    let new_path = format!("{prefix}:{GUEST_BASE_PATH}");
 
     let output = substrate_command_for_home(&fixture)
         .current_dir(&ws_root)
