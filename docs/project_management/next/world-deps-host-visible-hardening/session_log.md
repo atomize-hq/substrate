@@ -270,3 +270,11 @@ Append START/END entries only (no mid-stream commentary) using the template stan
 - Notes:
   - Merged `WDH1-integ-core` + platform-fix branches (`WDH1-integ-macos`, `WDH1-integ-linux`) and ran `make integ-checks`.
   - Finished via `make triad-task-finish TASK_ID="WDH1-integ"` (merged back to orchestration).
+
+## START — 2026-02-16T19:09:41Z — code — WDH2-code
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-deps-host-visible-hardening" SLICE_ID="WDH2"`
+
+## START — 2026-02-16T19:09:41Z — test — WDH2-test
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-deps-host-visible-hardening" SLICE_ID="WDH2"`
