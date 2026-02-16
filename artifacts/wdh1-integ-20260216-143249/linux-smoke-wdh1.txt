@@ -1,0 +1,3 @@
+== Setup: smoke inventory override (no network) ==
+== Preflight: world doctor ==
+world-deps-host-visible-hardening: world backend not healthy; run 'substrate world doctor' remediation and retry
