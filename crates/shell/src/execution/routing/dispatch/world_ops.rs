@@ -1249,6 +1249,28 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
 
 pub(crate) fn stream_non_pty_via_agent(command: &str) -> anyhow::Result<AgentStreamOutcome> {
     let (client, request, agent_id) = build_agent_client_and_request(command)?;
+
+    let host_visible = request.policy_snapshot.world_fs.host_visible;
+    let empty_env: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let env_map = request.env.as_ref().unwrap_or(&empty_env);
+    let cwd = request
+        .cwd
+        .as_deref()
+        .map(std::path::Path::new)
+        .unwrap_or_else(|| std::path::Path::new("."));
+    if let Some(deny) =
+        substrate_common::world_exec_guard::check_command(&request.cmd, cwd, env_map, host_visible)
+    {
+        let message = substrate_common::world_exec_guard::deny_message(&deny);
+        emit_stream_chunk(&agent_id, message.as_bytes(), true);
+        return Ok(AgentStreamOutcome {
+            exit_code: 5,
+            scopes_used: Vec::new(),
+            fs_diff: None,
+            fs_strategy: None,
+        });
+    }
+
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(async move {
         #[cfg(target_os = "windows")]
