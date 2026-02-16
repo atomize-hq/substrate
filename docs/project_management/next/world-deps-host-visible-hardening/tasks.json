@@ -824,7 +824,7 @@
         "Read ci_checkpoint_plan.md and confirm which slice id this checkpoint validates",
         "Set status to in_progress; add START entry; commit docs"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "ops",
       "worktree": null
     },
