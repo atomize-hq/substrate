@@ -189,3 +189,11 @@ Append START/END entries only (no mid-stream commentary) using the template stan
 ## END — 2026-02-16T05:25:51Z — integration — WDH0-integ
 - HEAD: `1d9dbae826ee1461a1da4817c5b8e467067ea43d`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-deps-host-visible-hardening/logs/WDH0/integ/last_message.md`
+
+## START — 2026-02-16T13:34:50Z — code — WDH1-code
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-deps-host-visible-hardening" SLICE_ID="WDH1"`
+
+## START — 2026-02-16T13:34:50Z — test — WDH1-test
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-deps-host-visible-hardening" SLICE_ID="WDH1"`
