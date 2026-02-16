@@ -270,7 +270,7 @@
       "start_checklist": [
         "Ensure world backend is healthy on the host platform"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "integration",
       "worktree": "wt/world-deps-host-visible-hardening-wdh1-integ-core"
     },
