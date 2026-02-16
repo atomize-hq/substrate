@@ -132,6 +132,32 @@ Keep concise, actionable, and security-focused.
   - Work: persist `caged` (bool) and `anchor_cwd` (string) in the span/replay_context, thread into replay reconstruction, and print in `--replay-verbose` with a warning when the replayed environment can’t honor the recorded caging/anchor.
   - Acceptance: trace entries include the new fields for caged sessions; replay verbose shows caging/anchor and warns on mismatch; docs/tests updated to cover the fields.
 
+- **P1 – Policy/config lever for world exec-guard denylist (host-visible hardening)**
+  - Problem: host-visible hardening needs an exec-time guard that denies host toolchain binaries (e.g., `~/.nvm/.../npm`). Today the denylist is easiest to prototype via env vars, but operators need a persistent **policy/config** lever to tune the denylist per org/workspace without per-invocation env overrides.
+  - Work:
+    - Add a broker-recognized policy surface (global + workspace patchable) that configures:
+      - guard enabled/disabled (default: enabled when `world_fs.host_visible=true`)
+      - denylist of path substrings to match against the resolved executable path
+      - optional allowlist/override mechanism for exceptional cases
+    - Define precedence and provenance in `--json` explain/doctor output (effective values + source).
+    - Keep env vars as a diagnostics-only override (explicitly documented as weakening hardening).
+  - Acceptance:
+    - Operators can configure the denylist via policy/config files (no env vars required).
+    - Effective config is visible in `--json` explain/doctor output with provenance.
+    - Default behavior remains “deny common host toolchains” in host-visible worlds unless policy explicitly relaxes it.
+
+- **P1 – Configurable world env forward allowlist (host-visible hardening)**
+  - Problem: host-visible hardening needs a strict env-forwarding posture by default (avoid ambient host coupling), but some environments require forwarding a small set of host env vars (locale/terminal/timezone) and may need to extend that set explicitly.
+  - Current direction:
+    - Introduce a config lever `world.env.inherit_from_host=true|false` (default `false`) for forwarding a small built-in safe set.
+    - Add a configurable extension `world.env.allow_list=[...]` to extend the forwarded set in a controlled way.
+  - Work:
+    - Define exact precedence (workspace over global) and provenance in `config explain` / doctor JSON.
+    - Ensure forwarded keys are allowlist-only and do not include toolchain/secrets vars by default.
+  - Acceptance:
+    - Operators can extend the forwarded env keys without per-invocation env overrides.
+    - Default remains strict (no host env forwarded unless explicitly enabled).
+
 - **P1 - TCP bridge for agent (Cross-platform: Linux/macOS/Windows)**
   - Goal: Provide an optional loopback TCP endpoint that bridges to the agent UDS for environments/tools requiring TCP.
   - Current state:

@@ -1,0 +1,408 @@
+{
+  "meta": {
+    "schema_version": 4,
+    "feature": "world-deps-host-visible-hardening",
+    "cross_platform": true,
+    "behavior_platforms_required": ["linux", "macos"],
+    "ci_parity_platforms_required": ["linux", "macos"],
+    "checkpoint_boundaries": ["WDH1", "WDH3"],
+    "wsl_required": true,
+    "wsl_task_mode": "bundled",
+    "execution_gates": false,
+    "automation": {
+      "enabled": true,
+      "orchestration_branch": "feat/world-deps-host-visible-hardening"
+    }
+  },
+  "tasks": [
+    {
+      "id": "F0-exec-preflight",
+      "name": "Execution preflight gate (feature start)",
+      "type": "ops",
+      "phase": "Ops",
+      "status": "pending",
+      "description": "Run the planning quality gate lint and validate tasks.json + smoke scaffolding before any execution triads begin.",
+      "references": [
+        "docs/project_management/next/world-deps-host-visible-hardening/plan.md",
+        "docs/project_management/next/world-deps-host-visible-hardening/spec_manifest.md",
+        "docs/project_management/next/world-deps-host-visible-hardening/impact_map.md",
+        "docs/project_management/next/world-deps-host-visible-hardening/manual_testing_playbook.md",
+        "docs/project_management/next/world-deps-host-visible-hardening/decision_register.md",
+        "docs/project_management/next/world-deps-host-visible-hardening/quality_gate_report.md",
+        "docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md"
+      ],
+      "acceptance_criteria": [
+        "quality_gate_report.md exists and is ACCEPT",
+        "tasks.json validates as JSON and contains required fields",
+        "smoke scripts exist under smoke/"
+      ],
+      "start_checklist": [
+        "Read plan.md, tasks.json, and spec_manifest.md end-to-end",
+        "Run planning lint checklist and record evidence in quality_gate_report.md"
+      ],
+      "end_checklist": [
+        "Update quality_gate_report.md and session_log.md with evidence"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/F0-exec-preflight.md",
+      "depends_on": [],
+      "concurrent_with": []
+    },
+
+    {
+      "id": "WDH0-code",
+      "name": "WDH0 — Env normalization (code)",
+      "type": "code",
+      "phase": "WDH0",
+      "status": "pending",
+      "description": "Implement WDH0 spec (production code only).",
+      "references": [
+        "docs/project_management/next/world-deps-host-visible-hardening/WDH0-spec.md",
+        "docs/project_management/next/world-deps-host-visible-hardening/decision_register.md (DR-0001)",
+        "docs/project_management/next/world-deps-host-visible-hardening/decision_register.md (DR-0002)",
+        "docs/project_management/next/world-deps-host-visible-hardening/decision_register.md (DR-0007)",
+        "docs/project_management/next/world-deps-host-visible-hardening/decision_register.md (DR-0008)"
+      ],
+      "acceptance_criteria": ["Meets all acceptance criteria in WDH0-spec.md"],
+      "start_checklist": [
+        "Create worktree and branch per triad standard",
+        "Do not edit planning docs inside the worktree"
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run targeted tests for modified crates"
+      ],
+      "worktree": "wt/world-deps-host-visible-hardening-wdh0-code",
+      "integration_task": "WDH0-integ",
+      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH0-code.md",
+      "depends_on": ["F0-exec-preflight"],
+      "concurrent_with": ["WDH0-test"]
+    },
+    {
+      "id": "WDH0-test",
+      "name": "WDH0 — Env normalization (tests)",
+      "type": "test",
+      "phase": "WDH0",
+      "status": "pending",
+      "description": "Add/adjust tests required by WDH0.",
+      "references": ["docs/project_management/next/world-deps-host-visible-hardening/WDH0-spec.md"],
+      "acceptance_criteria": ["All WDH0 tests pass locally on Linux"],
+      "start_checklist": [
+        "Create worktree and branch per triad standard",
+        "Do not edit planning docs inside the worktree"
+      ],
+      "end_checklist": ["cargo test -p shell -- --nocapture (or targeted equivalent)"],
+      "worktree": "wt/world-deps-host-visible-hardening-wdh0-test",
+      "integration_task": "WDH0-integ",
+      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH0-test.md",
+      "depends_on": ["F0-exec-preflight"],
+      "concurrent_with": ["WDH0-code"]
+    },
+    {
+      "id": "WDH0-integ",
+      "name": "WDH0 — Env normalization (integration)",
+      "type": "integration",
+      "phase": "WDH0",
+      "status": "pending",
+      "description": "Run WDH0 smoke and validate behavior-level acceptance criteria.",
+      "references": [
+        "docs/project_management/next/world-deps-host-visible-hardening/manual_testing_playbook.md",
+        "docs/project_management/next/world-deps-host-visible-hardening/smoke/_core.sh"
+      ],
+      "acceptance_criteria": ["WDH0 acceptance criteria validated via smoke"],
+      "start_checklist": ["Ensure world backend is healthy: substrate world doctor"],
+      "end_checklist": [
+        "Run platform smoke with SUBSTRATE_SMOKE_SLICE_ID=WDH0 and record results in session_log.md"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH0-integ.md",
+      "depends_on": ["WDH0-code", "WDH0-test"],
+      "concurrent_with": []
+    },
+
+    {
+      "id": "WDH1-code",
+      "name": "WDH1 — Apt wrappers + present semantics (code)",
+      "type": "code",
+      "phase": "WDH1",
+      "status": "pending",
+      "description": "Implement WDH1 spec (production code only).",
+      "references": [
+        "docs/project_management/next/world-deps-host-visible-hardening/WDH1-spec.md",
+        "docs/project_management/next/world-deps-host-visible-hardening/decision_register.md (DR-0003)",
+        "docs/project_management/next/world-deps-host-visible-hardening/decision_register.md (DR-0004)",
+        "docs/project_management/next/world-deps-host-visible-hardening/decision_register.md (DR-0009)"
+      ],
+      "acceptance_criteria": ["Meets all acceptance criteria in WDH1-spec.md"],
+      "start_checklist": [
+        "Create worktree and branch per triad standard",
+        "Do not edit planning docs inside the worktree"
+      ],
+      "end_checklist": ["cargo fmt", "cargo clippy --workspace --all-targets -- -D warnings"],
+      "worktree": "wt/world-deps-host-visible-hardening-wdh1-code",
+      "integration_task": "WDH1-integ",
+      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH1-code.md",
+      "depends_on": ["WDH0-integ"],
+      "concurrent_with": ["WDH1-test"]
+    },
+    {
+      "id": "WDH1-test",
+      "name": "WDH1 — Apt wrappers + present semantics (tests)",
+      "type": "test",
+      "phase": "WDH1",
+      "status": "pending",
+      "description": "Add/adjust tests required by WDH1.",
+      "references": ["docs/project_management/next/world-deps-host-visible-hardening/WDH1-spec.md"],
+      "acceptance_criteria": ["All WDH1 tests pass locally on Linux"],
+      "start_checklist": [
+        "Create worktree and branch per triad standard",
+        "Do not edit planning docs inside the worktree"
+      ],
+      "end_checklist": ["cargo test -p shell -- --nocapture (or targeted equivalent)"],
+      "worktree": "wt/world-deps-host-visible-hardening-wdh1-test",
+      "integration_task": "WDH1-integ",
+      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH1-test.md",
+      "depends_on": ["WDH0-integ"],
+      "concurrent_with": ["WDH1-code"]
+    },
+    {
+      "id": "WDH1-integ-core",
+      "name": "WDH1 — CP1 integration core",
+      "type": "integration",
+      "phase": "WDH1",
+      "status": "pending",
+      "description": "Integration core for checkpoint boundary CP1 (runs shared smoke and prepares parity notes).",
+      "references": [
+        "docs/project_management/next/world-deps-host-visible-hardening/manual_testing_playbook.md",
+        "docs/project_management/next/world-deps-host-visible-hardening/smoke/_core.sh"
+      ],
+      "acceptance_criteria": ["Core smoke passes on at least one platform"],
+      "start_checklist": ["Ensure world backend is healthy on the host platform"],
+      "end_checklist": ["Run platform smoke with SUBSTRATE_SMOKE_SLICE_ID=WDH1 and record results in session_log.md"],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH1-integ.md",
+      "depends_on": ["WDH1-code", "WDH1-test"],
+      "concurrent_with": []
+    },
+    {
+      "id": "WDH1-integ-linux",
+      "name": "WDH1 — CP1 integration Linux",
+      "type": "integration",
+      "phase": "WDH1",
+      "status": "pending",
+      "description": "Linux parity smoke for CP1.",
+      "references": ["docs/project_management/next/world-deps-host-visible-hardening/smoke/linux-smoke.sh"],
+      "acceptance_criteria": ["Linux smoke passes"],
+      "start_checklist": ["Run: bash smoke/linux-smoke.sh"],
+      "end_checklist": ["Run: SUBSTRATE_SMOKE_SLICE_ID=WDH1 bash smoke/linux-smoke.sh", "Record results in session_log.md"],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH1-integ.md",
+      "depends_on": ["WDH1-integ-core"],
+      "concurrent_with": []
+    },
+    {
+      "id": "WDH1-integ-macos",
+      "name": "WDH1 — CP1 integration macOS",
+      "type": "integration",
+      "phase": "WDH1",
+      "status": "pending",
+      "description": "macOS parity smoke for CP1.",
+      "references": ["docs/project_management/next/world-deps-host-visible-hardening/smoke/macos-smoke.sh"],
+      "acceptance_criteria": ["macOS smoke passes"],
+      "start_checklist": ["Run: bash smoke/macos-smoke.sh"],
+      "end_checklist": ["Run: SUBSTRATE_SMOKE_SLICE_ID=WDH1 bash smoke/macos-smoke.sh", "Record results in session_log.md"],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH1-integ.md",
+      "depends_on": ["WDH1-integ-core"],
+      "concurrent_with": []
+    },
+    {
+      "id": "WDH1-integ",
+      "name": "WDH1 — CP1 integration final",
+      "type": "integration",
+      "phase": "WDH1",
+      "status": "pending",
+      "description": "Finalize CP1 parity evidence and ensure smoke is green on required platforms.",
+      "references": ["docs/project_management/next/world-deps-host-visible-hardening/session_log.md"],
+      "acceptance_criteria": ["CP1 parity evidence recorded in session_log.md"],
+      "start_checklist": ["Confirm required platform smokes have been run"],
+      "end_checklist": ["Append END entry describing CP1 results"],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH1-integ.md",
+      "depends_on": ["WDH1-integ-linux", "WDH1-integ-macos"],
+      "concurrent_with": []
+    },
+
+    {
+      "id": "WDH2-code",
+      "name": "WDH2 — Exec-time host-binary guard (code)",
+      "type": "code",
+      "phase": "WDH2",
+      "status": "pending",
+      "description": "Implement WDH2 spec (production code only).",
+      "references": [
+        "docs/project_management/next/world-deps-host-visible-hardening/WDH2-spec.md",
+        "docs/project_management/next/world-deps-host-visible-hardening/decision_register.md (DR-0005)"
+      ],
+      "acceptance_criteria": ["Meets all acceptance criteria in WDH2-spec.md"],
+      "start_checklist": ["Create worktree and branch per triad standard"],
+      "end_checklist": ["cargo fmt", "cargo clippy --workspace --all-targets -- -D warnings"],
+      "worktree": "wt/world-deps-host-visible-hardening-wdh2-code",
+      "integration_task": "WDH2-integ",
+      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH2-code.md",
+      "depends_on": ["WDH1-integ"],
+      "concurrent_with": ["WDH2-test"]
+    },
+    {
+      "id": "WDH2-test",
+      "name": "WDH2 — Exec-time host-binary guard (tests)",
+      "type": "test",
+      "phase": "WDH2",
+      "status": "pending",
+      "description": "Add/adjust tests required by WDH2.",
+      "references": ["docs/project_management/next/world-deps-host-visible-hardening/WDH2-spec.md"],
+      "acceptance_criteria": ["All WDH2 tests pass locally on Linux"],
+      "start_checklist": ["Create worktree and branch per triad standard"],
+      "end_checklist": ["cargo test -p shell -- --nocapture (or targeted equivalent)"],
+      "worktree": "wt/world-deps-host-visible-hardening-wdh2-test",
+      "integration_task": "WDH2-integ",
+      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH2-test.md",
+      "depends_on": ["WDH1-integ"],
+      "concurrent_with": ["WDH2-code"]
+    },
+    {
+      "id": "WDH2-integ",
+      "name": "WDH2 — Exec-time host-binary guard (integration)",
+      "type": "integration",
+      "phase": "WDH2",
+      "status": "pending",
+      "description": "Validate WDH2 behavior-level acceptance criteria.",
+      "references": ["docs/project_management/next/world-deps-host-visible-hardening/manual_testing_playbook.md"],
+      "acceptance_criteria": ["WDH2 acceptance criteria validated"],
+      "start_checklist": ["Ensure world backend is healthy: substrate world doctor"],
+      "end_checklist": ["Run platform smoke with SUBSTRATE_SMOKE_SLICE_ID=WDH2 (where applicable) and record results in session_log.md"],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH2-integ.md",
+      "depends_on": ["WDH2-code", "WDH2-test"],
+      "concurrent_with": []
+    },
+
+    {
+      "id": "WDH3-code",
+      "name": "WDH3 — Installer deps scaffolding (code)",
+      "type": "code",
+      "phase": "WDH3",
+      "status": "pending",
+      "description": "Implement WDH3 spec (production code only).",
+      "references": [
+        "docs/project_management/next/world-deps-host-visible-hardening/WDH3-spec.md",
+        "docs/project_management/next/world-deps-host-visible-hardening/decision_register.md (DR-0006)",
+        "docs/project_management/next/world-deps-host-visible-hardening/decision_register.md (DR-0010)"
+      ],
+      "acceptance_criteria": ["Meets all acceptance criteria in WDH3-spec.md"],
+      "start_checklist": ["Create worktree and branch per triad standard"],
+      "end_checklist": ["cargo fmt", "cargo clippy --workspace --all-targets -- -D warnings"],
+      "worktree": "wt/world-deps-host-visible-hardening-wdh3-code",
+      "integration_task": "WDH3-integ",
+      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH3-code.md",
+      "depends_on": ["WDH2-integ"],
+      "concurrent_with": ["WDH3-test"]
+    },
+    {
+      "id": "WDH3-test",
+      "name": "WDH3 — Installer deps scaffolding (tests)",
+      "type": "test",
+      "phase": "WDH3",
+      "status": "pending",
+      "description": "Add/adjust tests required by WDH3.",
+      "references": ["docs/project_management/next/world-deps-host-visible-hardening/WDH3-spec.md"],
+      "acceptance_criteria": ["All WDH3 tests pass locally on Linux"],
+      "start_checklist": ["Create worktree and branch per triad standard"],
+      "end_checklist": ["cargo test --workspace -- --nocapture (or targeted equivalent)"],
+      "worktree": "wt/world-deps-host-visible-hardening-wdh3-test",
+      "integration_task": "WDH3-integ",
+      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH3-test.md",
+      "depends_on": ["WDH2-integ"],
+      "concurrent_with": ["WDH3-code"]
+    },
+    {
+      "id": "WDH3-integ-core",
+      "name": "WDH3 — CP2 integration core",
+      "type": "integration",
+      "phase": "WDH3",
+      "status": "pending",
+      "description": "Integration core for checkpoint boundary CP2.",
+      "references": [
+        "docs/project_management/next/world-deps-host-visible-hardening/manual_testing_playbook.md",
+        "docs/project_management/next/world-deps-host-visible-hardening/smoke/_core.sh"
+      ],
+      "acceptance_criteria": ["Core smoke passes on at least one platform"],
+      "start_checklist": ["Ensure world backend is healthy on the host platform"],
+      "end_checklist": ["Run platform smoke with SUBSTRATE_SMOKE_SLICE_ID=WDH3 and record results in session_log.md"],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH3-integ.md",
+      "depends_on": ["WDH3-code", "WDH3-test"],
+      "concurrent_with": []
+    },
+    {
+      "id": "WDH3-integ-linux",
+      "name": "WDH3 — CP2 integration Linux",
+      "type": "integration",
+      "phase": "WDH3",
+      "status": "pending",
+      "description": "Linux parity smoke for CP2.",
+      "references": ["docs/project_management/next/world-deps-host-visible-hardening/smoke/linux-smoke.sh"],
+      "acceptance_criteria": ["Linux smoke passes"],
+      "start_checklist": ["Run: bash smoke/linux-smoke.sh"],
+      "end_checklist": ["Run: SUBSTRATE_SMOKE_SLICE_ID=WDH3 bash smoke/linux-smoke.sh", "Record results in session_log.md"],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH3-integ.md",
+      "depends_on": ["WDH3-integ-core"],
+      "concurrent_with": []
+    },
+    {
+      "id": "WDH3-integ-macos",
+      "name": "WDH3 — CP2 integration macOS",
+      "type": "integration",
+      "phase": "WDH3",
+      "status": "pending",
+      "description": "macOS parity smoke for CP2.",
+      "references": ["docs/project_management/next/world-deps-host-visible-hardening/smoke/macos-smoke.sh"],
+      "acceptance_criteria": ["macOS smoke passes"],
+      "start_checklist": ["Run: bash smoke/macos-smoke.sh"],
+      "end_checklist": ["Run: SUBSTRATE_SMOKE_SLICE_ID=WDH3 bash smoke/macos-smoke.sh", "Record results in session_log.md"],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH3-integ.md",
+      "depends_on": ["WDH3-integ-core"],
+      "concurrent_with": []
+    },
+    {
+      "id": "WDH3-integ",
+      "name": "WDH3 — CP2 integration final",
+      "type": "integration",
+      "phase": "WDH3",
+      "status": "pending",
+      "description": "Finalize CP2 parity evidence and ensure smoke is green on required platforms.",
+      "references": ["docs/project_management/next/world-deps-host-visible-hardening/session_log.md"],
+      "acceptance_criteria": ["CP2 parity evidence recorded in session_log.md"],
+      "start_checklist": ["Confirm required platform smokes have been run"],
+      "end_checklist": ["Append END entry describing CP2 results"],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH3-integ.md",
+      "depends_on": ["WDH3-integ-linux", "WDH3-integ-macos"],
+      "concurrent_with": []
+    }
+  ]
+}

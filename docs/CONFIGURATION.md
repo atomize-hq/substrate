@@ -47,10 +47,12 @@ Environment variables and advanced configuration options for Substrate.
 | `SUBSTRATE_POLICY_GIT_CACHE` | Cache policy repo git hash across commands (`0`/`false` disables caching per process) | `1` | `0` |
 
 Release bundles place the manager inventory under
-`<prefix>/versions/<version>/config/manager_hooks.yaml`, plus a `world deps`
-overlay manifest at `<prefix>/versions/<version>/config/world-deps.yaml`.
-Workspace builds fall back to `config/manager_hooks.yaml` and
-`scripts/substrate/world-deps.yaml` in the repository root.
+`<prefix>/versions/<version>/config/manager_hooks.yaml` (used by manager init / shim hints).
+
+`substrate world deps` (packages/bundles contract) does **not** read legacy `world-deps.yaml`
+overlay plumbing. World deps now uses:
+- Inventory directories: `$SUBSTRATE_HOME/deps/` (global) and `<workspace_root>/.substrate/deps/` (workspace chain)
+- Enabled patches: `$SUBSTRATE_HOME/config.yaml` (global) and `<workspace_root>/.substrate/workspace.yaml` (workspace)
 
 ## World Configuration
 
@@ -124,6 +126,11 @@ Both the global config and workspace config use the same schema:
 world:
   anchor_mode: workspace
   anchor_path: ""
+  env:
+    # When false (default), the world environment does not forward host env vars beyond Substrate's
+    # deterministic baseline (PATH/HOME/XDG/etc). When true, Substrate may forward a small safe
+    # allowlist of host env vars (locale/terminal/timezone), as defined by the world env contract.
+    inherit_from_host: false
   # Legacy keys are still parsed for compatibility:
   root_mode: workspace
   root_path: ""

@@ -357,8 +357,9 @@ On Windows, wrap each assignment in quotes so PowerShell keeps the backslashes:
 PS> substrate config set "world.anchor_mode=custom" "world.anchor_path=C:\Workspaces\repo" "world.caged=true"
 ```
 
-Use `SUBSTRATE_WORLD_ENABLED=0` to force pass-through mode temporarily and
-`SUBSTRATE_WORLD_DEPS_MANIFEST` to point world-deps at a custom definition file.
+Use `--no-world` (or `SUBSTRATE_OVERRIDE_WORLD=disabled`) to force pass-through mode temporarily.
+`SUBSTRATE_WORLD_ENABLED` is exported state (output-only) and should not be set by users.
+Legacy `SUBSTRATE_WORLD_DEPS_MANIFEST` is ignored by `substrate world deps` (packages/bundles contract).
 Flags beat config/env: `--world` overrides disabled metadata/env, while
 `--no-world` always opts out.
 ## Log Analysis

@@ -39,8 +39,10 @@ The installer will:
 3. Link `~/.substrate/bin/*` and stage shims in `~/.substrate/shims/`
    (host shells remain untouched—Substrate injects the shim directory at runtime)
 4. Stage bundled manifests under
-   `~/.substrate/versions/<version>/config/` (`manager_hooks.yaml` +
-   `world-deps.yaml`) so `substrate health` and `world deps` work immediately
+   `~/.substrate/versions/<version>/config/` (`manager_hooks.yaml` plus a legacy
+   `world-deps.yaml` kept for backwards compatibility). `substrate world deps`
+   (packages/bundles contract) reads inventory from `$SUBSTRATE_HOME/deps/` and
+   `<workspace_root>/.substrate/deps/` and ignores legacy `world-deps.yaml` overlays.
 5. Generate the runtime manager files (`~/.substrate/manager_init.sh`,
    `~/.substrate/manager_env.sh`) so Substrate-owned shells can source managers
    on demand. The manager env script also exports `SUBSTRATE_WORLD` and

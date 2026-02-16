@@ -185,7 +185,7 @@ Each entry below is a stability promise: the variable name, parsing rules, and s
 | Default if unset | N/A |
 | Precedence | Ignored |
 | Scope | Run-only |
-| Examples | `SUBSTRATE_WORLD_DEPS_MANIFEST=/srv/world-deps.yaml substrate world deps current list available --json` |
+| Examples | (ignored; setting this has no effect on `substrate world deps`) |
 | Security notes | Not sensitive. |
 
 ### Config Override Inputs (world backend endpoints)

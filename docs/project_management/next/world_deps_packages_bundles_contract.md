@@ -354,6 +354,8 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 - `available` (default):
   - Prints the **current inventory view** visible from `cwd` (after inventory merge + `world.deps.inventory_mode`).
   - Output SHOULD be a table.
+  - Table columns MUST include: `source`, `kind`, `name`, `runnable`, `method`, `entrypoints`, `platforms`, `description`.
+    - `source` MUST be one of: `builtin`, `global`, `workspace` and indicates which scope contributed the **effective definition** after inventory merge + platform filtering + `world.deps.inventory_mode` (full-replace by item name).
   - It MUST NOT make world-agent calls.
   - Hints (stderr, only if empty):
     - `substrate: note: no deps inventory items visible for this directory; add definitions under $SUBSTRATE_HOME/deps/ or <workspace_root>/.substrate/deps/`
@@ -375,6 +377,7 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
     - `substrate: note: showing current world deps status for this directory`
 - Output MUST include, for each item (view-dependent):
   - Always: `name` (string) and `kind=package|bundle`
+  - For `available`: `source=builtin|global|workspace` (effective inventory provenance after merge; required in table output and `--json`)
   - For `enabled`: list items are ordered and MUST match the effective `world.deps.enabled` list; `enabled=true` is implied.
   - For `applied`: `enabled=true|false` (enabled in the effective enabled closure; bundle-expanded packages count as enabled)
   - For `applied`: `world=present|missing|blocked`

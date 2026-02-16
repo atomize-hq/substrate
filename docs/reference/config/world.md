@@ -64,6 +64,17 @@ That means changing `world.anchor_mode` can change what a given relative allowli
 If you use restrictive allowlists (recommended), prefer `anchor_mode=workspace` or `custom` unless you explicitly want the
 root to roam.
 
+### `world.env.inherit_from_host`
+
+Controls whether Substrate forwards a small allowlist of host environment variables into `--world` executions.
+
+- `false` (default): do not forward host env vars beyond Substrate’s deterministic baseline.
+- `true`: forward a small safe allowlist (terminal/locale/timezone) as defined by the world env contract for this release.
+
+See:
+- Full configuration reference (including env forwarding contract): `docs/CONFIGURATION.md`
+- Planning contract (host-visible hardening): `docs/project_management/next/world-deps-host-visible-hardening/WDH0-spec.md`
+
 ## Related documentation
 
 - Config file locations and precedence: `docs/reference/config/contract.md`
@@ -72,4 +83,3 @@ root to roam.
   - `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md`
   - `docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md`
 - World filesystem isolation and policy model: `docs/WORLD.md`
-
