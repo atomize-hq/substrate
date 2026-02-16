@@ -686,4 +686,7 @@ jobs:
         run: echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
 
       - name: Run WSL (Linux) smoke
+        env:
+          SUBSTRATE_BIN: ${{ github.workspace }}/target/debug/substrate
+          SUBSTRATE_WORLD_REQUEST_PROFILE: world-deps-provision
         run: bash "${{ inputs.feature_dir }}/smoke/linux-smoke.sh"
