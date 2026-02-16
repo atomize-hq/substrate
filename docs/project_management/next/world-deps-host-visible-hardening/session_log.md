@@ -214,6 +214,10 @@ Append START/END entries only (no mid-stream commentary) using the template stan
   - `make feature-smoke FEATURE_DIR="docs/project_management/next/world-deps-host-visible-hardening" PLATFORM=linux RUN_WSL=1 SMOKE_SLICE_ID=WDH1 SMOKE_CHECKOUT_REF="51472165dfffda3716bf2a3a339b30d94a92eeb2" WORKFLOW_REF="feat/world-deps-host-visible-hardening" REMOTE=origin CLEANUP=1`
   - `make feature-smoke FEATURE_DIR="docs/project_management/next/world-deps-host-visible-hardening" PLATFORM=macos SMOKE_SLICE_ID=WDH1 SMOKE_CHECKOUT_REF="51472165dfffda3716bf2a3a339b30d94a92eeb2" WORKFLOW_REF="feat/world-deps-host-visible-hardening" REMOTE=origin CLEANUP=1`
 
+## START — 2026-02-16T15:14:47Z — integration — WDH1-integ-macos
+- Dispatch:
+  - `make triad-task-start-platform-fixes FEATURE_DIR="docs/project_management/next/world-deps-host-visible-hardening" SLICE_ID="WDH1" PLATFORMS="macos" LAUNCH_CODEX=1`
+
 ## END — 2026-02-16T14:02:32Z — code — WDH1-code
 - HEAD: `57d81c8f2e79890d3a0039384eedfea41a948278`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-deps-host-visible-hardening/logs/WDH1/code/last_message.md`
