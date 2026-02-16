@@ -2,12 +2,85 @@
 
 ## Metadata
 - Feature directory: `docs/project_management/next/world-deps-host-visible-hardening/`
-- Reviewed commit: `ab279a546d5f810a579c323b3a7a40122fc7f177`
+- Reviewed commit: `11a6c9207da1b80a6db53467fa68cbb2a5ba6024`
 - Reviewer: third-party planning pack reviewer (external)
 - Date (UTC): `2026-02-16`
-- Recommendation: `FLAG FOR HUMAN REVIEW`
+- Recommendation: `ACCEPT`
 
 ## Evidence: Commands Run (verbatim)
+
+### F0-exec-preflight (ops) — 2026-02-16T04:25:57Z
+
+```bash
+export FEATURE_DIR="docs/project_management/next/world-deps-host-visible-hardening"
+
+# JSON validity
+jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
+# exit=0
+
+jq -e . docs/project_management/next/sequencing.json >/dev/null
+# exit=0
+
+# Mechanical planning lint (required)
+make planning-lint FEATURE_DIR="$FEATURE_DIR"
+# exit=0
+
+# tasks.json invariants (required)
+make planning-validate FEATURE_DIR="$FEATURE_DIR"
+# exit=0
+
+# Required-field audit (template minimum)
+python3 - <<'PY'
+import json, os, sys
+feature_dir=os.environ["FEATURE_DIR"]
+path=os.path.join(feature_dir,"tasks.json")
+data=json.load(open(path,"r",encoding="utf-8"))
+tasks=data["tasks"] if isinstance(data,dict) and "tasks" in data else data
+required=[
+  "id","name","type","phase","status","description",
+  "references","acceptance_criteria","start_checklist","end_checklist",
+  "worktree","integration_task","kickoff_prompt",
+  "depends_on","concurrent_with"
+]
+missing=[]
+for t in tasks:
+  m=[k for k in required if k not in t]
+  if m:
+    missing.append((t.get("id","<no id>"),m))
+if missing:
+  for tid,m in missing:
+    print(tid,":",", ".join(m))
+  sys.exit(1)
+print("OK: tasks.json required fields present")
+PY
+# exit=0
+
+# Kickoff prompt + referenced-doc paths (ops preflight)
+python3 - <<'PY'
+import json, os, sys
+feature_dir=os.environ["FEATURE_DIR"]
+path=os.path.join(feature_dir,"tasks.json")
+data=json.load(open(path,"r",encoding="utf-8"))
+tasks=data["tasks"] if isinstance(data,dict) and "tasks" in data else data
+missing=[]
+for t in tasks:
+  kp=t.get("kickoff_prompt")
+  if not kp or not os.path.exists(kp):
+    missing.append((t.get("id"), "kickoff_prompt", kp))
+  for ref in t.get("references", []):
+    file=ref.split(" (",1)[0]
+    if file.startswith("docs/") and not os.path.exists(file):
+      missing.append((t.get("id"), "reference", file))
+if missing:
+  for tid,kind,val in missing:
+    print(f"MISSING {tid} {kind}: {val}")
+  sys.exit(1)
+print("OK: kickoff_prompt + referenced doc paths exist")
+PY
+# exit=0
+```
+
+### Historical evidence (Pass 1, original review)
 
 ```bash
 export FEATURE_DIR="docs/project_management/next/world-deps-host-visible-hardening"

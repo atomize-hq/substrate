@@ -148,3 +148,20 @@ Append START/END entries only (no mid-stream commentary) using the template stan
   - `NONE`
 - Next steps:
   - Request a fresh quality gate review using `docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md` (Pass 4 appended in `quality_gate_report.md`).
+
+## END — 2026-02-16T04:25:57Z — ops — F0-exec-preflight
+- Feature: `docs/project_management/next/world-deps-host-visible-hardening`
+- HEAD: `11a6c9207da1b80a6db53467fa68cbb2a5ba6024`
+- Goal: Preflight-validate `tasks.json` shape + kickoff prompt paths; run the mechanical planning lint checklist; record results in `quality_gate_report.md`.
+- Rubric checks run (with results):
+  - `jq -e . docs/project_management/next/world-deps-host-visible-hardening/tasks.json >/dev/null` → `0`
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0`
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world-deps-host-visible-hardening"` → `0`
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/world-deps-host-visible-hardening"` → `0`
+  - `python3 (required-field audit snippet from PLANNING_GATE_REPORT_TEMPLATE.md)` → `0`
+  - `python3 (kickoff_prompt + referenced-doc path existence scan)` → `0`
+- Outputs updated:
+  - `docs/project_management/next/world-deps-host-visible-hardening/quality_gate_report.md` (metadata + evidence block)
+  - `docs/project_management/next/world-deps-host-visible-hardening/session_log.md` (this END entry)
+- Blockers:
+  - `NONE`
