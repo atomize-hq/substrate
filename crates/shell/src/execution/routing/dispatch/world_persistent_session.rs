@@ -799,6 +799,7 @@ mod imp {
 mod imp {
     use anyhow::{anyhow, Result};
     use std::collections::HashMap;
+    use std::path::Path;
     use std::sync::Arc;
 
     type StdoutCallback = Arc<dyn Fn(&[u8]) + Send + Sync>;
@@ -834,15 +835,19 @@ mod imp {
     impl ReplSessionStartParams {
         pub(crate) fn for_cwd_and_snapshot(
             cwd: String,
+            _cwd_path: &Path,
             policy_snapshot: agent_api_types::PolicySnapshotV3,
-        ) -> Self {
-            Self {
-                cwd,
-                env: HashMap::new(),
-                policy_snapshot,
-                cols: 80,
-                rows: 24,
-            }
+        ) -> Result<(Self, bool)> {
+            Ok((
+                Self {
+                    cwd,
+                    env: HashMap::new(),
+                    policy_snapshot,
+                    cols: 80,
+                    rows: 24,
+                },
+                false,
+            ))
         }
     }
 

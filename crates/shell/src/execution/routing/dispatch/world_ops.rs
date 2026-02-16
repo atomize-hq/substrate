@@ -657,7 +657,7 @@ pub(super) fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyho
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
             let policy_snapshot =
                 crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd)?.snapshot;
-            let (mut env_map, inherit_from_host) = build_world_env_map_for_cwd(&cwd_path)?;
+            let (mut env_map, inherit_from_host) = build_world_env_map_for_cwd(&cwd)?;
             if inherit_from_host {
                 eprintln!("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
             }

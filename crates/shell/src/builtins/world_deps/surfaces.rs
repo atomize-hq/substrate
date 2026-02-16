@@ -2402,7 +2402,23 @@ fn run_world_presence_check_v1(check: &PackageWorldCheck) -> Result<bool> {
         PackageCheckKind::Probe { command } => {
             // Match the bulk probe script semantics: treat the probe string as a shell snippet.
             // Redirect output so the caller can rely on the exit code only.
-            format!("sh -c {} >/dev/null 2>&1", sh_quote(command))
+            //
+            // Defensive: force the sanitized PATH contract so "present" does not depend on any
+            // host-inherited PATH (even when the backend executes under a login shell).
+            let mut snippet = String::new();
+            snippet.push_str(
+                "world_deps_bin=\"${SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR:-/var/lib/substrate/world-deps/bin}\"\n",
+            );
+            snippet.push_str("world_deps_bin=\"${world_deps_bin%/}\"\n");
+            snippet.push_str("export SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR=\"$world_deps_bin\"\n");
+            snippet.push_str(
+                "export PATH=\"$world_deps_bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\"\n",
+            );
+            snippet.push_str("sh -c ");
+            snippet.push_str(&sh_quote(command));
+            snippet.push_str(" >/dev/null 2>&1\n");
+            snippet.push_str("exit $?\n");
+            format!("sh -c {} >/dev/null 2>&1", sh_quote(&snippet))
         }
         PackageCheckKind::Entrypoints { entrypoints } => {
             let mut snippet = String::new();
@@ -2410,6 +2426,10 @@ fn run_world_presence_check_v1(check: &PackageWorldCheck) -> Result<bool> {
                 "world_deps_bin=\"${SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR:-/var/lib/substrate/world-deps/bin}\"\n",
             );
             snippet.push_str("world_deps_bin=\"${world_deps_bin%/}\"\n");
+            snippet.push_str("export SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR=\"$world_deps_bin\"\n");
+            snippet.push_str(
+                "export PATH=\"$world_deps_bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\"\n",
+            );
             snippet.push_str("for ep in");
             for ep in entrypoints {
                 snippet.push(' ');
@@ -2451,6 +2471,10 @@ fn build_world_probe_script(checks: &[PackageWorldCheck]) -> String {
         "world_deps_bin=\"${SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR:-/var/lib/substrate/world-deps/bin}\"\n",
     );
     script.push_str("world_deps_bin=\"${world_deps_bin%/}\"\n");
+    script.push_str("export SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR=\"$world_deps_bin\"\n");
+    script.push_str(
+        "export PATH=\"$world_deps_bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\"\n",
+    );
     script.push_str("check_probe() {\n");
     script.push_str("  name=\"$1\"; kind=\"$2\"; shift 2\n");
     script.push_str("  rc=1\n");
