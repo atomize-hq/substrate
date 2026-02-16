@@ -91,6 +91,43 @@ echo "{script_token}"
     );
 }
 
+fn seed_two_script_packages_for_ordering(
+    fixture: &ShellEnvFixture,
+    first: (&str, &str),
+    second: (&str, &str),
+) {
+    let (first_name, first_token) = first;
+    let (second_name, second_token) = second;
+
+    for (name, token) in [(first_name, first_token), (second_name, second_token)] {
+        write_file(
+            &global_deps_dir(fixture).join(format!("packages/{name}.yaml")),
+            &format!(
+                r#"version: 1
+name: {name}
+description: {name} via script
+runnable: true
+entrypoints: ["{name}"]
+install:
+  method: script
+  script_path: ../scripts/{name}.sh
+probe:
+  command: "true"
+"#,
+            ),
+        );
+        write_file(
+            &global_deps_dir(fixture).join(format!("scripts/{name}.sh")),
+            &format!(
+                r#"#!/bin/sh
+set -eu
+echo "{token}"
+"#,
+            ),
+        );
+    }
+}
+
 fn seed_manual_package(fixture: &ShellEnvFixture) {
     write_file(
         &global_deps_dir(fixture).join("packages/asdf-node.yaml"),
@@ -380,4 +417,44 @@ fn test_current_install_hardening_violation_exits_5_with_actionable_message() {
         .assert()
         .code(5)
         .stderr(predicate::str::contains("blocked by hardening/cage"));
+}
+
+#[test]
+fn test_current_sync_preserves_enabled_order_for_script_packages() {
+    let fixture = ShellEnvFixture::new();
+    let ws_root = workspace_root(&fixture);
+    fs::create_dir_all(ws_root.join(".substrate")).expect("create workspace .substrate");
+
+    let token_first = "SCRIPT_TOKEN_FIRST";
+    let token_second = "SCRIPT_TOKEN_SECOND";
+    seed_two_script_packages_for_ordering(
+        &fixture,
+        ("first", token_first),
+        ("second", token_second),
+    );
+    write_global_config_builtins_disabled(&fixture, "[\"first\", \"second\"]");
+    write_workspace_config(&ws_root, "[]");
+
+    let (_sock_tmp, socket_path, _socket, records) =
+        start_world_socket_execute_record("substrate-wdp5-script-order-", "", "", 0);
+
+    substrate_command_for_home(&fixture)
+        .current_dir(&ws_root)
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+        .env("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE", "manual")
+        .args(["world", "deps", "current", "sync"])
+        .assert()
+        .success();
+
+    let cmds = recorded_cmds(&records);
+    let first_idx = first_index_containing(&cmds, token_first);
+    let second_idx = first_index_containing(&cmds, token_second);
+    assert!(
+        first_idx.is_some() && second_idx.is_some(),
+        "expected both script tokens to appear in execute cmd payloads; cmds={cmds:?}"
+    );
+    assert!(
+        first_idx.unwrap() < second_idx.unwrap(),
+        "expected script installs to preserve enabled order (first before second); cmds={cmds:?}"
+    );
 }

@@ -449,8 +449,7 @@ fn compute_install_plan_v1(view: &InventoryViewV1, item_names: &[String]) -> Res
         .collect();
     apt.sort_by(|a, b| a.name.cmp(&b.name));
 
-    script_packages.sort();
-    script_packages.dedup();
+    let script_packages = dedupe_ordered(&script_packages);
 
     manual_packages.sort_by(|a, b| a.name.cmp(&b.name));
     manual_packages.dedup_by(|a, b| a.name == b.name);
