@@ -259,3 +259,7 @@ Append START/END entries only (no mid-stream commentary) using the template stan
   - CI testing (quick): `22073727756` (success) — https://github.com/atomize-hq/substrate/actions/runs/22073727756
   - Feature Smoke (linux + bundled wsl): `22073988561` (success) — https://github.com/atomize-hq/substrate/actions/runs/22073988561
   - Feature Smoke (macos): `22074014263` (success) — https://github.com/atomize-hq/substrate/actions/runs/22074014263
+
+## START — 2026-02-16T18:45:58Z — integration — WDH1-integ
+- Dispatch:
+  - `LAUNCH_CODEX=1 make triad-task-start-integ-final FEATURE_DIR="docs/project_management/next/world-deps-host-visible-hardening" SLICE_ID="WDH1"`
