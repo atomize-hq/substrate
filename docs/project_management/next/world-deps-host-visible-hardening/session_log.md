@@ -294,3 +294,6 @@ Append START/END entries only (no mid-stream commentary) using the template stan
 ## END — 2026-02-16T20:51:40Z — integration — WDH2-integ
 - HEAD: `0691acbb8ce4348115d80b69185b34793af2411d`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-deps-host-visible-hardening/logs/WDH2/integ/last_message.md`
+- Notes:
+  - Ran `make integ-checks` in `wt/world-deps-host-visible-hardening-wdh2-integ` → `0`.
+  - Ran Linux feature smoke: `SUBSTRATE_SMOKE_SLICE_ID=WDH2 bash docs/project_management/next/world-deps-host-visible-hardening/smoke/linux-smoke.sh` → `0` (passed; includes Case D exec-guard exit=5).
