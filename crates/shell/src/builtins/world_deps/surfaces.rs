@@ -355,7 +355,7 @@ fn run_current_install(args: &WorldDepsCurrentInstallArgs) -> Result<()> {
         return Ok(());
     }
 
-    apply_install_plan_v1(&view, &plan)?;
+    apply_install_plan_v1(&view, &plan, ApplyInstallMode::InstallOnly)?;
     println!(
         "World deps applied: image(apt)={}, prefix(script)={}",
         plan.apt.len(),
@@ -394,11 +394,17 @@ fn run_current_sync(args: &WorldDepsCurrentSyncArgs) -> Result<()> {
         return Ok(());
     }
 
-    apply_install_plan_v1(&view, &plan)?;
+    apply_install_plan_v1(&view, &plan, ApplyInstallMode::SyncEnabled)?;
     println!("World deps synced");
     println!("substrate: note: applied effective enabled deps list for this directory (sources: workspace, global, defaults as applicable)");
     println!("substrate: hint: run 'substrate world deps current list applied' to verify");
     Ok(())
+}
+
+#[derive(Copy, Clone, Debug)]
+enum ApplyInstallMode {
+    InstallOnly,
+    SyncEnabled,
 }
 
 fn compute_install_plan_v1(view: &InventoryViewV1, item_names: &[String]) -> Result<InstallPlanV1> {
@@ -471,7 +477,11 @@ fn compute_install_plan_v1(view: &InventoryViewV1, item_names: &[String]) -> Res
     })
 }
 
-fn apply_install_plan_v1(view: &InventoryViewV1, plan: &InstallPlanV1) -> Result<()> {
+fn apply_install_plan_v1(
+    view: &InventoryViewV1,
+    plan: &InstallPlanV1,
+    mode: ApplyInstallMode,
+) -> Result<()> {
     if !plan.manual_packages.is_empty() {
         eprintln!("MANUAL (blocked):");
         for pkg in &plan.manual_packages {
@@ -495,6 +505,12 @@ fn apply_install_plan_v1(view: &InventoryViewV1, plan: &InstallPlanV1) -> Result
     ensure_no_entrypoint_collisions_v1(view, &packages)?;
 
     ensure_world_backend_available()?;
+
+    if matches!(mode, ApplyInstallMode::SyncEnabled) {
+        let keep_names = collect_world_deps_bin_keep_names_v1(view, &packages)?;
+        reconcile_world_deps_bin_v1(&keep_names)
+            .context("failed to reconcile world-deps wrappers")?;
+    }
 
     if !plan.apt.is_empty() {
         apply_apt_install_plan_v1(&plan.apt)?;
@@ -528,6 +544,90 @@ fn apply_install_plan_v1(view: &InventoryViewV1, plan: &InstallPlanV1) -> Result
     }
 
     Ok(())
+}
+
+fn collect_world_deps_bin_keep_names_v1(
+    view: &InventoryViewV1,
+    package_names: &[String],
+) -> Result<Vec<String>> {
+    let mut keep: Vec<String> = Vec::new();
+
+    for pkg_name in package_names {
+        let pkg = view.packages.get(pkg_name).ok_or_else(|| {
+            config_model::user_error(format!(
+                "invalid deps inventory: referenced package '{pkg_name}' is not visible for this platform"
+            ))
+        })?;
+
+        if pkg.runnable && !pkg.entrypoints.is_empty() {
+            for entrypoint in &pkg.entrypoints {
+                validate_world_deps_entrypoint_filename(entrypoint)?;
+                keep.push(entrypoint.clone());
+            }
+        }
+
+        for wrapper in &pkg.wrappers {
+            validate_world_deps_bin_filename(&wrapper.name)?;
+            keep.push(wrapper.name.clone());
+        }
+    }
+
+    keep.sort();
+    keep.dedup();
+    Ok(keep)
+}
+
+fn reconcile_world_deps_bin_v1(keep_names: &[String]) -> Result<()> {
+    let cmd = build_world_deps_bin_reconcile_command_v1(keep_names);
+    run_world_command_checked_for_deps(&cmd, Some("/tmp"))?;
+    Ok(())
+}
+
+fn build_world_deps_bin_reconcile_command_v1(keep_names: &[String]) -> String {
+    let mut cmd = String::new();
+    cmd.push_str("set -eu\n");
+    cmd.push_str("world_deps_bin=\"${SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR:-/var/lib/substrate/world-deps/bin}\"\n");
+    cmd.push_str("world_deps_bin=\"${world_deps_bin%/}\"\n");
+    cmd.push_str("mkdir -p \"$world_deps_bin\"\n");
+    cmd.push_str("should_keep() {\n");
+    if keep_names.is_empty() {
+        cmd.push_str("  return 1\n");
+    } else {
+        cmd.push_str("  name=\"$1\"\n");
+        cmd.push_str("  for keep in");
+        for keep in keep_names {
+            cmd.push(' ');
+            cmd.push_str(&sh_quote(keep));
+        }
+        cmd.push_str("; do\n");
+        cmd.push_str("    [ \"$name\" = \"$keep\" ] && return 0\n");
+        cmd.push_str("  done\n");
+        cmd.push_str("  return 1\n");
+    }
+    cmd.push_str("}\n");
+    cmd.push_str("for path in \"$world_deps_bin\"/*; do\n");
+    cmd.push_str("  [ -e \"$path\" ] || continue\n");
+    cmd.push_str("  name=\"${path##*/}\"\n");
+    cmd.push_str("  case \"$name\" in\n");
+    cmd.push_str("    .*) continue ;;\n");
+    cmd.push_str("  esac\n");
+    cmd.push_str("  if should_keep \"$name\"; then\n");
+    cmd.push_str("    continue\n");
+    cmd.push_str("  fi\n");
+    cmd.push_str("  if [ -L \"$path\" ]; then\n");
+    cmd.push_str("    rm -f \"$path\"\n");
+    cmd.push_str("    continue\n");
+    cmd.push_str("  fi\n");
+    cmd.push_str("  if [ -d \"$path\" ]; then\n");
+    cmd.push_str(
+        "    echo \"substrate: world deps wrapper collision: $path is a directory\" >&2\n",
+    );
+    cmd.push_str("    exit 5\n");
+    cmd.push_str("  fi\n");
+    cmd.push_str("  rm -f \"$path\"\n");
+    cmd.push_str("done\n");
+    cmd.push_str("exit 0\n");
+    cmd
 }
 
 fn ensure_no_entrypoint_collisions_v1(

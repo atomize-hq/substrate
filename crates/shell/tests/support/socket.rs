@@ -1017,13 +1017,14 @@ fn run_host_command(request: &ExecuteRequestStub) -> anyhow::Result<HostCommandO
     use std::process::Command;
 
     let mut cmd = Command::new("bash");
-    cmd.arg("-lc").arg(&request.cmd);
+    cmd.arg("-c").arg(&request.cmd);
     if let Some(cwd) = &request.cwd {
         cmd.current_dir(cwd);
     }
     if let Some(env) = &request.env {
         cmd.envs(env);
     }
+    cmd.env_remove("BASH_ENV");
 
     let output = cmd.output()?;
     Ok(HostCommandOutput {
