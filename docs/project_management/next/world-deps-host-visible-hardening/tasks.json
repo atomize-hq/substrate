@@ -754,7 +754,7 @@
       "start_checklist": [
         "Confirm required platform smokes have been run"
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/world-deps-host-visible-hardening-wdh3-integ"
     },

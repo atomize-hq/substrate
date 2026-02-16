@@ -367,3 +367,14 @@ Append START/END entries only (no mid-stream commentary) using the template stan
   - CI testing (full): `22080015683` (success) — https://github.com/atomize-hq/substrate/actions/runs/22080015683
   - Feature Smoke (linux + bundled wsl): `22080092469` (success) — https://github.com/atomize-hq/substrate/actions/runs/22080092469
   - Feature Smoke (macos): `22080094736` (success) — https://github.com/atomize-hq/substrate/actions/runs/22080094736
+
+## START — 2026-02-16T23:21:05Z — integration — WDH3-integ
+- Dispatch:
+  - `LAUNCH_CODEX=1 make triad-task-start-integ-final FEATURE_DIR="docs/project_management/next/world-deps-host-visible-hardening" SLICE_ID="WDH3"`
+
+## END — 2026-02-16T23:30:37Z — integration — WDH3-integ
+- HEAD: `3427811df4f098ec59b33a93e1189a3674a7a118`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-deps-host-visible-hardening/logs/WDH3/integ/last_message.md`
+- Notes:
+  - Merged `world-deps-host-visible-hardening-wdh3-integ-macos` (includes `WDH3-integ-core`) into `WDH3-integ`.
+  - Ran `make integ-checks` and `make triad-task-finish TASK_ID="WDH3-integ"` (merged back to orchestration).
