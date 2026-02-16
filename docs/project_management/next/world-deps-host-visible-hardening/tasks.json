@@ -548,7 +548,7 @@
       "start_checklist": [
         "Create worktree and branch per triad standard"
       ],
-      "status": "in_progress",
+      "status": "completed",
       "type": "code",
       "worktree": "wt/world-deps-host-visible-hardening-wdh3-code"
     },
@@ -581,7 +581,7 @@
       "start_checklist": [
         "Create worktree and branch per triad standard"
       ],
-      "status": "in_progress",
+      "status": "completed",
       "type": "test",
       "worktree": "wt/world-deps-host-visible-hardening-wdh3-test"
     },
