@@ -684,7 +684,7 @@
       "start_checklist": [
         "Run: bash smoke/macos-smoke.sh"
       ],
-      "status": "in_progress",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/world-deps-host-visible-hardening-wdh3-integ-macos"
     },
@@ -824,7 +824,7 @@
         "Read ci_checkpoint_plan.md and confirm which slice id this checkpoint validates",
         "Set status to in_progress; add START entry; commit docs"
       ],
-      "status": "in_progress",
+      "status": "completed",
       "type": "ops",
       "worktree": null
     },

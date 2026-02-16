@@ -350,3 +350,20 @@ Append START/END entries only (no mid-stream commentary) using the template stan
 
 ## START — 2026-02-16T22:45:52Z — integration — WDH3-integ-macos (retry)
 - Reason: CP2 Feature Smoke (macOS) failed with `Failed to execute limactl` on self-hosted runner (run `22079550642`).
+
+## END — 2026-02-16T23:18:00Z — integration — WDH3-integ-macos (retry)
+- HEAD: `4fac4ccc0ad8aa868cad9e66a146d2a556f755cd`
+- Notes:
+  - Fixed Feature Smoke (macOS) `Failed to execute limactl` by making `world-mac-lima` discover `limactl` even when Homebrew is not on `PATH` (fallbacks: `/opt/homebrew/bin/limactl`, `/usr/local/bin/limactl`).
+- Evidence:
+  - Feature Smoke (macos): `22080094736` (success) — https://github.com/atomize-hq/substrate/actions/runs/22080094736
+- Task log: `docs/project_management/next/world-deps-host-visible-hardening/logs/WDH3/integ-macos/stderr.log`
+
+## END — 2026-02-16T23:18:00Z — ops — CP2-ci-checkpoint
+- Candidate SHA validated (CI_CHECKOUT_REF / SMOKE_CHECKOUT_REF): `4fac4ccc0ad8aa868cad9e66a146d2a556f755cd`
+- Workflow ref: `feat/world-deps-host-visible-hardening`
+- Evidence (final passing runs):
+  - CI compile parity: `22079970060` (success) — https://github.com/atomize-hq/substrate/actions/runs/22079970060
+  - CI testing (full): `22080015683` (success) — https://github.com/atomize-hq/substrate/actions/runs/22080015683
+  - Feature Smoke (linux + bundled wsl): `22080092469` (success) — https://github.com/atomize-hq/substrate/actions/runs/22080092469
+  - Feature Smoke (macos): `22080094736` (success) — https://github.com/atomize-hq/substrate/actions/runs/22080094736
