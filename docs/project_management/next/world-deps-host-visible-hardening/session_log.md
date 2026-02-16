@@ -198,6 +198,22 @@ Append START/END entries only (no mid-stream commentary) using the template stan
 - Dispatch:
   - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/next/world-deps-host-visible-hardening" SLICE_ID="WDH1"`
 
+## START — 2026-02-16T15:02:32Z — ops — CP1-ci-checkpoint
+- Feature: `docs/project_management/next/world-deps-host-visible-hardening/`
+- Branch: `feat/world-deps-host-visible-hardening`
+- Goal: Dispatch CP1 bounded CI gates for `WDH0..WDH1` and record evidence for candidate `51472165dfffda3716bf2a3a339b30d94a92eeb2`.
+- Inputs:
+  - `docs/project_management/next/world-deps-host-visible-hardening/ci_checkpoint_plan.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/CP1-ci-checkpoint.md`
+  - Wrapper summary: `docs/project_management/next/world-deps-host-visible-hardening/logs/WDH1/wrapper/triad-task-start-complete.20260216T133449Z.summary.json`
+- Commands planned:
+  - `scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch feat/world-deps-host-visible-hardening --feature-dir docs/project_management/next/world-deps-host-visible-hardening --head-sha 51472165dfffda3716bf2a3a339b30d94a92eeb2`
+  - `scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch feat/world-deps-host-visible-hardening --head-sha 51472165dfffda3716bf2a3a339b30d94a92eeb2`
+  - `make ci-compile-parity CI_WORKFLOW_REF="feat/world-deps-host-visible-hardening" CI_CHECKOUT_REF="51472165dfffda3716bf2a3a339b30d94a92eeb2" CI_REMOTE=origin CI_CLEANUP=1`
+  - `make ci-testing CI_WORKFLOW_REF="feat/world-deps-host-visible-hardening" CI_CHECKOUT_REF="51472165dfffda3716bf2a3a339b30d94a92eeb2" CI_REMOTE=origin CI_CLEANUP=1 CI_MODE=quick`
+  - `make feature-smoke FEATURE_DIR="docs/project_management/next/world-deps-host-visible-hardening" PLATFORM=linux RUN_WSL=1 SMOKE_SLICE_ID=WDH1 SMOKE_CHECKOUT_REF="51472165dfffda3716bf2a3a339b30d94a92eeb2" WORKFLOW_REF="feat/world-deps-host-visible-hardening" REMOTE=origin CLEANUP=1`
+  - `make feature-smoke FEATURE_DIR="docs/project_management/next/world-deps-host-visible-hardening" PLATFORM=macos SMOKE_SLICE_ID=WDH1 SMOKE_CHECKOUT_REF="51472165dfffda3716bf2a3a339b30d94a92eeb2" WORKFLOW_REF="feat/world-deps-host-visible-hardening" REMOTE=origin CLEANUP=1`
+
 ## END — 2026-02-16T14:02:32Z — code — WDH1-code
 - HEAD: `57d81c8f2e79890d3a0039384eedfea41a948278`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-deps-host-visible-hardening/logs/WDH1/code/last_message.md`
