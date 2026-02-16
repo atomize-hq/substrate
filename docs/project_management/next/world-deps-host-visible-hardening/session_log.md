@@ -341,3 +341,9 @@ Append START/END entries only (no mid-stream commentary) using the template stan
 ## START — 2026-02-16T22:14:44Z — integration — WDH3-integ-macos
 - Dispatch:
   - `make triad-task-start-platform-fixes FEATURE_DIR="docs/project_management/next/world-deps-host-visible-hardening" SLICE_ID="WDH3" PLATFORMS="macos" LAUNCH_CODEX=1`
+
+## END — 2026-02-16T22:21:04Z — integration — WDH3-integ-macos
+- HEAD: `9e700294b89d33b8dc3afae427193536e57c8252`
+- Notes:
+  - Fixed CP2 CI macOS failure in `c4_pty_passthrough_forwards_raw_bytes_and_buffers_structured_events` by delaying `:demo-agent` event scheduling so event #1 reliably fires during PTY passthrough.
+  - Verified locally (Linux): `cargo test -p shell --test repl_world_first_rendering_v1 c4_pty_passthrough_forwards_raw_bytes_and_buffers_structured_events`.
