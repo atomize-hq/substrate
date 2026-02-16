@@ -218,6 +218,12 @@ Append START/END entries only (no mid-stream commentary) using the template stan
 - Dispatch:
   - `make triad-task-start-platform-fixes FEATURE_DIR="docs/project_management/next/world-deps-host-visible-hardening" SLICE_ID="WDH1" PLATFORMS="macos" LAUNCH_CODEX=1`
 
+## END — 2026-02-16T15:17:21Z — integration — WDH1-integ-macos
+- HEAD: `d1c1d3aae9142f48718585c272500b2bce5dc27a`
+- Notes:
+  - Fixed CP1 compile-parity failure on macOS by correcting `cwd_path` -> `cwd` in `execute_world_pty_over_ws_macos` (`crates/shell/src/execution/routing/dispatch/world_ops.rs`).
+  - This task branch also merges WDH1 integration-core candidate `51472165dfffda3716bf2a3a339b30d94a92eeb2` so CI can validate the full CP1 surface.
+
 ## END — 2026-02-16T14:02:32Z — code — WDH1-code
 - HEAD: `57d81c8f2e79890d3a0039384eedfea41a948278`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/next/world-deps-host-visible-hardening/logs/WDH1/code/last_message.md`
