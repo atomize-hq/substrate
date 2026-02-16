@@ -13,12 +13,12 @@ use agent_api_types::{
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::path::PathBuf;
-use std::process::Command;
 use substrate_common::FsDiff;
 use tokio::runtime::Runtime;
 use world_api::{ExecRequest, ExecResult, WorldBackend, WorldHandle, WorldSpec};
 
 pub mod forwarding;
+mod limactl;
 pub mod transport;
 pub mod vm;
 
@@ -95,7 +95,8 @@ impl MacLimaBackend {
         tracing::debug!("Checking if Lima VM '{}' is running", self.vm_name);
 
         // Check if VM exists and is running (robust JSON check)
-        let output = Command::new("limactl")
+        let output = limactl::command()
+            .context("Failed to execute limactl")?
             .args(["list", "--json"])
             .output()
             .context("Failed to execute limactl")?;
@@ -128,7 +129,8 @@ impl MacLimaBackend {
         if !running {
             // Start VM (idempotent)
             tracing::info!("Starting Lima VM '{}'...", self.vm_name);
-            let status = Command::new("limactl")
+            let status = limactl::command()
+                .context("Failed to start Lima VM")?
                 .args(["start", &self.vm_name, "--tty=false"])
                 .status()
                 .context("Failed to start Lima VM")?;
@@ -211,7 +213,8 @@ impl MacLimaBackend {
     }
 
     fn check_agent_socket_in_vm(&self) -> Result<()> {
-        let output = Command::new("limactl")
+        let output = limactl::command()
+            .context("Failed to check agent socket in VM")?
             .args([
                 "shell",
                 &self.vm_name,
