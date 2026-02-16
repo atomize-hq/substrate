@@ -50,6 +50,40 @@ pub fn wrap_with_anchor_guard(command: &str, anchor_root: &Path) -> String {
     guarded
 }
 
+/// Wrap a shell command with the deterministic world environment contract.
+///
+/// This is defense-in-depth against shells or service environments that mutate PATH/HOME/XDG/TERM
+/// despite the caller providing an explicit env map. The contract is owned by the WDH0 spec:
+/// `docs/project_management/next/world-deps-host-visible-hardening/WDH0-spec.md`.
+pub fn wrap_with_world_env_contract(command: &str, env: &HashMap<String, String>) -> String {
+    const DEFAULT_WORLD_DEPS_BIN: &str = "/var/lib/substrate/world-deps/bin";
+    const BASELINE_PATH: &str = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+
+    let world_deps_bin = env
+        .get("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR")
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| DEFAULT_WORLD_DEPS_BIN.to_string());
+    let world_deps_bin_norm = world_deps_bin.trim_end_matches('/').to_string();
+    let path = format!("{world_deps_bin_norm}:{BASELINE_PATH}");
+
+    // Keep this as plain POSIX sh so it works uniformly across backends.
+    let mut guarded = String::new();
+    guarded.push_str("export SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR=");
+    guarded.push_str(&shell_escape_literal(&world_deps_bin_norm));
+    guarded.push_str("; ");
+    guarded.push_str("export PATH=");
+    guarded.push_str(&shell_escape_literal(&path));
+    guarded.push_str("; ");
+    guarded.push_str("export HOME='/root'; ");
+    guarded.push_str("export XDG_CONFIG_HOME='/root/.config'; ");
+    guarded.push_str("export XDG_DATA_HOME='/root/.local/share'; ");
+    guarded.push_str("export XDG_CACHE_HOME='/root/.cache'; ");
+    guarded.push_str("export TERM='xterm-256color'; ");
+    guarded.push_str(command);
+    guarded
+}
+
 fn canonicalize_or(path: &Path) -> PathBuf {
     fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }

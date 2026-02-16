@@ -583,6 +583,7 @@ pub fn execute_with_overlay(
     if should_guard_anchor(env) {
         command_to_run = wrap_with_anchor_guard(cmd, project_dir);
     }
+    command_to_run = crate::guard::wrap_with_world_env_contract(&command_to_run, env);
     let desired_cwd = if cwd.starts_with(project_dir) {
         cwd.to_path_buf()
     } else {
@@ -597,7 +598,7 @@ pub fn execute_with_overlay(
             fs_mode: WorldFsMode::Writable,
         },
         env,
-        true,
+        false,
         None,
     ) {
         Ok(output) => output,
@@ -613,7 +614,7 @@ pub fn execute_with_overlay(
                 rel = PathBuf::from(".");
             }
             let target_dir = merged_dir.join(&rel);
-            crate::exec::execute_shell_command(&command_to_run, &target_dir, env, true)
+            crate::exec::execute_shell_command(&command_to_run, &target_dir, env, false)
                 .with_context(|| {
                     format!(
                         "Failed to execute command in overlay after mount-namespace bind failed: {err:#}"
@@ -644,6 +645,7 @@ pub fn execute_read_only(
     if should_guard_anchor(env) {
         command_to_run = wrap_with_anchor_guard(cmd, project_dir);
     }
+    command_to_run = crate::guard::wrap_with_world_env_contract(&command_to_run, env);
     let desired_cwd = if cwd.starts_with(project_dir) {
         cwd.to_path_buf()
     } else {
@@ -658,7 +660,7 @@ pub fn execute_read_only(
             fs_mode: WorldFsMode::ReadOnly,
         },
         env,
-        true,
+        false,
         None,
     ) {
         Ok(output) => output,

@@ -114,3 +114,17 @@ This file records smoke + targeted integration validation results for WDH0 witho
 
 - Result: exit_code=0
 - Output: artifacts/wdh0-integ-20260216-051458/substrate-shim-doctor.json
+
+
+## Run 2026-02-16 12:53:00 UTC (WDH0 merge + env determinism follow-up)
+
+- Goal: Diagnose why WDH0 PATH/HOME/XDG/TERM contract failed in the earlier run and make behavior operational under the default world-agent execution mode.
+- Summary:
+  - The WDH0 request builder now sends a deterministic env map (validated by `cargo test -p shell --test world_env_path_sanitization_wdh0`).
+  - The earlier smoke failure was caused by the **installed** world-agent’s default `always_isolate` execution path running the workload via a login shell (`sh -lc`), which sources system profile scripts and mutates `PATH` (e.g. prepending `/root/.local/bin` and appending host PATH segments).
+  - As a proof of diagnosis: forcing `SUBSTRATE_WORLD_REQUEST_PROFILE=world-deps-provision` (which opts out of `always_isolate`) yields the expected baseline `PATH` inside `--world` runs.
+  - Implemented fix (code changes):
+    - World backend: run workloads under non-login shells for overlay/caged execution, clear inherited env, and apply the deterministic env contract defensively.
+    - World-agent: honor `SUBSTRATE_WORLD_SOCKET` env var for direct-bind dev runs (useful for local testing; systemd still binds `/run/substrate.sock` by default).
+- Status:
+  - Full end-to-end validation of the fixed `always_isolate` path requires rebuilding/reprovisioning the system world-agent service (root/systemd) and rerunning `docs/project_management/next/world-deps-host-visible-hardening/smoke/linux-smoke.sh` with `SUBSTRATE_SMOKE_SLICE_ID=WDH0`.

@@ -161,6 +161,13 @@ impl SessionWorld {
         let mut diff_opt: Option<FsDiff> = None;
         let mut fs_strategy_meta: Option<crate::overlayfs::WorldFsStrategyMeta> = None;
 
+        let mut command_to_run = cmd.to_string();
+        if crate::guard::should_guard_anchor(&env) {
+            command_to_run =
+                crate::guard::wrap_with_anchor_guard(&command_to_run, &self.project_dir);
+        }
+        command_to_run = crate::guard::wrap_with_world_env_contract(&command_to_run, &env);
+
         let force_direct_exec = env
             .get("SUBSTRATE_WORLD_EXEC_FORCE_DIRECT")
             .is_some_and(|value| is_truthy(value));
@@ -179,10 +186,6 @@ impl SessionWorld {
             } else {
                 self.project_dir.clone()
             };
-            let mut command_to_run = cmd.to_string();
-            if crate::guard::should_guard_anchor(&env) {
-                command_to_run = crate::guard::wrap_with_anchor_guard(cmd, &self.project_dir);
-            }
             output = match crate::exec::execute_shell_command_with_project_bind_mount(
                 &command_to_run,
                 crate::exec::ProjectBindMount {
@@ -192,7 +195,7 @@ impl SessionWorld {
                     fs_mode: self.spec.fs_mode,
                 },
                 &env,
-                true,
+                false,
                 Some(self.cgroup_path.as_path()),
             ) {
                 Ok(output) => output,
@@ -220,7 +223,7 @@ impl SessionWorld {
                         rel = PathBuf::from(".");
                     }
                     let target_dir = merged_dir.join(&rel);
-                    crate::exec::execute_shell_command(&command_to_run, &target_dir, &env, true)
+                    crate::exec::execute_shell_command(&command_to_run, &target_dir, &env, false)
                         .with_context(|| format!("Failed to execute command in overlay after mount-namespace bind failed: {err:#}"))?
                 }
             };
@@ -235,7 +238,7 @@ impl SessionWorld {
                 }
             }
         } else {
-            output = crate::exec::execute_shell_command(cmd, cwd, &env, false)
+            output = crate::exec::execute_shell_command(&command_to_run, cwd, &env, false)
                 .context("Failed to execute command")?;
         }
 

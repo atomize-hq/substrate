@@ -27,6 +27,10 @@ pub fn execute_shell_command(
     }
     command.arg(cmd);
     command.current_dir(cwd);
+    // Ensure the child process environment is fully determined by the caller-provided env map.
+    // This prevents leaking the world-agent service environment (and any host-derived PATH fragments)
+    // into `--world` executions, which must be deterministic under host-visible worlds.
+    command.env_clear();
     command.envs(env);
     command.stdout(Stdio::piped());
     command.stderr(Stdio::piped());
@@ -395,6 +399,9 @@ pub fn execute_shell_command_with_project_bind_mount(
         command.arg("-c");
         command.arg(script);
         command.current_dir("/");
+        // Ensure the unshare wrapper and its child workload do not inherit the host/world-agent
+        // service environment. The caller must fully specify the desired environment.
+        command.env_clear();
         command.envs(env_map);
         command.stdout(Stdio::piped());
         command.stderr(Stdio::piped());
