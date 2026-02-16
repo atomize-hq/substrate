@@ -31,7 +31,7 @@ The wrapper MUST NOT resolve targets via PATH (to avoid recursion back into `/va
 ### “present” semantics (runnable)
 Default rule:
 - If `probe.command` exists: present iff the probe succeeds under the sanitized env.
-- Else: present iff `/var/lib/substrate/world-deps/bin/<entrypoint>` exists, is executable, and executing it under the sanitized env succeeds.
+- Else: present iff for every `entrypoints[]` name, `command -v <entrypoint>` under the sanitized env resolves to `/var/lib/substrate/world-deps/bin/<entrypoint>`.
 
 “present” MUST NOT be computed by searching an inherited PATH.
 

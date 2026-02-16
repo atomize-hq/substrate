@@ -102,3 +102,49 @@ Append START/END entries only (no mid-stream commentary) using the template stan
   - `NONE`
 - Next steps:
   - Request fresh quality gate review using `docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md` (Pass 2 appended in `quality_gate_report.md`).
+
+## START — 2026-02-16T02:14:53Z — planning — planning-pack remediation (quality gate defects, Pass 3)
+- Defects addressed (Finding IDs):
+  - Pass 3 Finding 002: `spec_manifest.md` missing explicit ownership for new config/env-var surfaces
+  - Pass 3 Finding 003: WDH1 runnable “present” semantics inconsistent with upstream contract
+- Files planned:
+  - `docs/project_management/next/world-deps-host-visible-hardening/spec_manifest.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/WDH1-spec.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/quality_gate_report.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/session_log.md`
+- Standards read:
+  - `docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md`
+  - `docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md`
+  - `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`
+  - `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
+- Commands planned:
+  - `make planning-lint FEATURE_DIR="$FEATURE_DIR"`
+  - `make planning-validate FEATURE_DIR="$FEATURE_DIR"`
+  - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null`
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null`
+
+## END — 2026-02-16T02:18:48Z — planning — planning-pack remediation (quality gate defects, Pass 3)
+- Defects addressed (Finding IDs):
+  - Pass 3 Finding 002: updated `spec_manifest.md` coverage matrix to enumerate `world.env.inherit_from_host`, `SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR`, and `SUBSTRATE_OVERRIDE_WORLD_EXEC_GUARD*`
+  - Pass 3 Finding 003: updated WDH1 default runnable “present” semantics to use `command -v`-based wrapper resolution
+- Files created/modified:
+  - `docs/project_management/next/world-deps-host-visible-hardening/spec_manifest.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/WDH1-spec.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/quality_gate_report.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/session_log.md`
+- Rubric checks run (with results):
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world-deps-host-visible-hardening"` → `0`
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/world-deps-host-visible-hardening"` → `0`
+  - `jq -e . docs/project_management/next/world-deps-host-visible-hardening/tasks.json >/dev/null` → `0`
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0`
+- Additional evidence commands run (with results):
+  - `python3 - <<'PY' ... PY ; echo "required-field audit exit=$?"` → `2` (shell syntax error)
+  - `python3 - <<'PY' ... PY` → `0`
+  - `rg -n 'world\\.env\\.inherit_from_host' docs/project_management/next/world-deps-host-visible-hardening/spec_manifest.md` → `0`
+  - `rg -n 'SUBSTRATE_OVERRIDE_WORLD_EXEC_GUARD' docs/project_management/next/world-deps-host-visible-hardening/spec_manifest.md` → `0`
+  - `rg -n 'SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR' docs/project_management/next/world-deps-host-visible-hardening/spec_manifest.md` → `0`
+  - `rg -n 'command -v <entrypoint>' docs/project_management/next/world-deps-host-visible-hardening/WDH1-spec.md` → `0`
+- Blockers:
+  - `NONE`
+- Next steps:
+  - Request a fresh quality gate review using `docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md` (Pass 4 appended in `quality_gate_report.md`).
