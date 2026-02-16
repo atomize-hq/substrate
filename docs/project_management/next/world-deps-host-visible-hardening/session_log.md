@@ -347,3 +347,6 @@ Append START/END entries only (no mid-stream commentary) using the template stan
 - Notes:
   - Fixed CP2 CI macOS failure in `c4_pty_passthrough_forwards_raw_bytes_and_buffers_structured_events` by delaying `:demo-agent` event scheduling so event #1 reliably fires during PTY passthrough.
   - Verified locally (Linux): `cargo test -p shell --test repl_world_first_rendering_v1 c4_pty_passthrough_forwards_raw_bytes_and_buffers_structured_events`.
+
+## START — 2026-02-16T22:45:52Z — integration — WDH3-integ-macos (retry)
+- Reason: CP2 Feature Smoke (macOS) failed with `Failed to execute limactl` on self-hosted runner (run `22079550642`).
