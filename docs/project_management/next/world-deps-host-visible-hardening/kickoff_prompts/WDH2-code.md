@@ -5,4 +5,5 @@
 - Spec: `docs/project_management/next/world-deps-host-visible-hardening/WDH2-spec.md`
 
 ## Requirements
-- Implement exec-time host-binary guardrails and env var plumbing (`SUBSTRATE_WORLD_EXEC_GUARD*`).
+- Implement exec-time host-binary guardrails and override-input plumbing (`SUBSTRATE_OVERRIDE_WORLD_EXEC_GUARD*`).
+- Do not edit planning docs inside the worktree.

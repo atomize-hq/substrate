@@ -45,7 +45,7 @@ Execution triads under this Planning Pack are expected to edit:
   - the install/init path that creates `$SUBSTRATE_HOME` (to scaffold `$SUBSTRATE_HOME/deps/`)
 
 ### Edit (docs scope; expected follow-up)
-- `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md` (link this Planning Pack; tighten Appendix A from “should” to “must” as implemented)
+- `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md` (link this Planning Pack; tighten Appendix A to MUST-level language where implemented)
 - User-facing docs that explain inventory vs enabled/applied and the scaffolded deps directory (if those docs are considered authoritative outside `docs/project_management/next/`)
 - `docs/CONFIGURATION.md` and `docs/reference/config/world.md` — document the new config key `world.env.inherit_from_host` and its default posture
 
@@ -68,7 +68,7 @@ Execution triads under this Planning Pack are expected to edit:
 
 ### Hardened posture vs explicit host path execution
 - Change:
-  - Optional exec-time guard denies explicit execution of host-mounted binaries (exit `5`) unless allowed by policy.
+  - Optional exec-time guard denies explicit execution of host-mounted binaries (exit `5`) unless allowed by override inputs.
 - Direct impact:
   - “Host-visible” stays filesystem-only; toolchains remain world-deps-controlled.
 
@@ -89,5 +89,5 @@ Execution triads under this Planning Pack are expected to edit:
 - Resolution: Treat host-visible as filesystem visibility only; do not inherit host toolchain env by default.
 
 ## Sequencing alignment
-- `docs/project_management/next/sequencing.json` reviewed: NO
-- Follow-up: add this Planning Pack as a sequencing entry when ready to schedule execution.
+- `docs/project_management/next/sequencing.json` reviewed: YES
+- Sequencing entry: `world_deps_host_visible_hardening` (WDH0..WDH3)

@@ -6,4 +6,4 @@
 
 ## Requirements
 - Add tests asserting explicit host binary paths are denied with exit code `5` when guard enabled.
-
+- Do not edit planning docs inside the worktree.

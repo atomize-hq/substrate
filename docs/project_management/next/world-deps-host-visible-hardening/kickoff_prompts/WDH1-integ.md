@@ -6,4 +6,4 @@
 
 ## Requirements
 - Run the smoke scripts and record results in `session_log.md`.
-
+- Do not edit planning docs inside the worktree.

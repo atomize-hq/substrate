@@ -1,7 +1,7 @@
 # WDH2 — Exec-time guardrails for host-mounted binaries in host-visible worlds
 
 ## Goal
-Prevent explicit execution of host-mounted toolchain binaries inside the world when `world_fs.host_visible=true`, unless explicitly allowed by policy.
+Prevent explicit execution of host-mounted toolchain binaries inside the world when `world_fs.host_visible=true`, unless explicitly allowed by override inputs.
 
 ## Inputs (authoritative)
 - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` (host_visible)
@@ -26,10 +26,10 @@ The guard MUST apply to:
 - explicit absolute paths (the primary bypass it is intended to close).
 
 ### Overrides (required)
-Support explicit env var overrides:
-- `SUBSTRATE_WORLD_EXEC_GUARD=0|1`
+Support explicit override-input env vars (ADR-0006 taxonomy):
+- `SUBSTRATE_OVERRIDE_WORLD_EXEC_GUARD=0|1`
   - default: `1` when `world_fs.host_visible=true`
-- `SUBSTRATE_WORLD_EXEC_GUARD_DENY_CONTAINS="<substr1>,<substr2>,..."`
+- `SUBSTRATE_OVERRIDE_WORLD_EXEC_GUARD_DENY_CONTAINS="<substr1>,<substr2>,..."`
   - when set, replaces the default denylist entirely (comma-separated substrings)
 
 Backlog (policy/config):
@@ -38,7 +38,7 @@ Backlog (policy/config):
 ### Error behavior
 When execution is denied:
 - exit code MUST be `5`
-- stderr MUST include an actionable remediation: “enable a world-deps package instead” and/or “adjust `SUBSTRATE_WORLD_EXEC_GUARD_DENY_CONTAINS` / disable the guard explicitly if you accept the risk”.
+- stderr MUST include an actionable remediation: “enable a world-deps package instead” and/or “adjust `SUBSTRATE_OVERRIDE_WORLD_EXEC_GUARD_DENY_CONTAINS` / disable the guard explicitly if you accept the risk”.
 
 ## Exit codes
 - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`

@@ -6,4 +6,4 @@
 
 ## Requirements
 - Implement wrapper reconciliation for runnable apt entrypoints and update “present” semantics to wrapper/probe based under sanitized env.
-
+- Do not edit planning docs inside the worktree.

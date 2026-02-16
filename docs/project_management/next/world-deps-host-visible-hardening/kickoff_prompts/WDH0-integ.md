@@ -6,4 +6,4 @@
 
 ## Requirements
 - Run platform smoke (where applicable) and record results in `session_log.md`.
-
+- Do not edit planning docs inside the worktree.

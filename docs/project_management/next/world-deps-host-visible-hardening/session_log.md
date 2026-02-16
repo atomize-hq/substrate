@@ -4,3 +4,101 @@ Standard:
 - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
 
 Append START/END entries only (no mid-stream commentary) using the template standard above.
+
+## START — 2026-02-16T01:15:13Z — planning — planning-pack remediation (quality gate defects)
+- Feature: `docs/project_management/next/world-deps-host-visible-hardening/`
+- Branch: `feat/world-deps-host-visible-hardening`
+- Goal: Resolve all DEFECT findings in quality_gate_report.md so the Planning Pack is implementation-ready.
+- Inputs to read end-to-end:
+  - `docs/project_management/next/world-deps-host-visible-hardening/quality_gate_report.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/decision_register.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/impact_map.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/plan.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/tasks.json`
+  - `docs/project_management/next/world-deps-host-visible-hardening/session_log.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/spec_manifest.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/manual_testing_playbook.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/WDH0-spec.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/WDH1-spec.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/WDH2-spec.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/WDH3-spec.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/*.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/smoke/_core.sh`
+  - `docs/project_management/next/world-deps-host-visible-hardening/smoke/linux-smoke.sh`
+  - `docs/project_management/next/world-deps-host-visible-hardening/smoke/macos-smoke.sh`
+  - `docs/project_management/next/world-deps-host-visible-hardening/smoke/windows-smoke.ps1`
+  - ADRs:
+    - `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md`
+    - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+    - `docs/project_management/next/world_deps_packages_bundles_contract.md`
+  - Sequencing:
+    - `docs/project_management/next/sequencing.json`
+  - Standards:
+    - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+    - `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
+    - `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`
+    - `docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md`
+    - `docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md`
+    - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+    - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+    - `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`
+    - `docs/project_management/standards/TRIAD_WORKFLOW_CROSS_PLATFORM_INTEG.md`
+    - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+    - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
+- Commands planned (if any):
+  - `make adr-fix ADR=docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md`
+  - `make planning-lint FEATURE_DIR="$FEATURE_DIR"`
+  - `make planning-validate FEATURE_DIR="$FEATURE_DIR"`
+  - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null`
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null`
+
+## END — 2026-02-16T01:18:35Z — planning — planning-pack remediation (quality gate defects)
+- Defects addressed (Finding IDs):
+  - Finding 001: added `ci_checkpoint_plan.md` and wired checkpoint ops tasks
+  - Finding 002: updated `tasks.json` to pass schema v4 automation validation, added missing ops task `FZ-feature-cleanup`, and fixed WSL bundled coverage representation
+  - Finding 003: added feature sequencing entry
+  - Finding 004: fixed ADR-0011 exec-summary drift guard (`ADR_BODY_SHA256`)
+  - Finding 005: removed ambiguity-word matches (`should`) in feature directory
+  - Finding 006: added kickoff prompt sentinel to every kickoff prompt
+  - Finding 007: rewrote Decision Register Option B entries as viable alternatives (DR-0001..DR-0005)
+  - Finding 008: aligned WDH2 override inputs to `SUBSTRATE_OVERRIDE_*` taxonomy and removed unspecified policy-allow claims
+- Files created/modified:
+  - `docs/project_management/next/world-deps-host-visible-hardening/ci_checkpoint_plan.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/tasks.json`
+  - `docs/project_management/next/world-deps-host-visible-hardening/spec_manifest.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/decision_register.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/WDH2-spec.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/impact_map.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/manual_testing_playbook.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/smoke/_core.sh`
+  - `docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/F0-exec-preflight.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH0-integ.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH1-code.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH1-integ.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH1-test.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH2-code.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH2-integ.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH2-test.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH3-code.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH3-integ.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/WDH3-test.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/CP1-ci-checkpoint.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/CP2-ci-checkpoint.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/FZ-feature-cleanup.md`
+  - `docs/project_management/next/world-deps-host-visible-hardening/quality_gate_report.md`
+  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md`
+- Rubric checks run (with results):
+  - `make adr-fix ADR=docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md` → `0`
+  - `make adr-check ADR=docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md` → `0`
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world-deps-host-visible-hardening"` → `0`
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/world-deps-host-visible-hardening"` → `0`
+  - `jq -e . docs/project_management/next/world-deps-host-visible-hardening/tasks.json >/dev/null` → `0`
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0`
+- Sequencing alignment:
+  - `sequencing.json` reviewed: `YES`
+  - Changes required: added `world_deps_host_visible_hardening` entry (WDH0..WDH3)
+- Blockers:
+  - `NONE`
+- Next steps:
+  - Request fresh quality gate review using `docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md` (Pass 2 appended in `quality_gate_report.md`).

@@ -60,7 +60,8 @@ fi
 
 echo "== Setup: smoke inventory override (no network) =="
 # Override the built-in `npm` package with a deterministic script-installed fixture so this smoke is
-# offline and repeatable. Inventory merge semantics should full-replace by name.
+# offline and repeatable. Inventory merge semantics MUST full-replace by name.
+#
 mkdir -p "$SUBSTRATE_HOME/deps/packages"
 cat >"$SUBSTRATE_HOME/deps/packages/npm.yaml" <<'YAML'
 version: 1

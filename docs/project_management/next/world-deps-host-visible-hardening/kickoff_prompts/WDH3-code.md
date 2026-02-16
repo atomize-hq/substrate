@@ -6,4 +6,4 @@
 
 ## Requirements
 - Implement `$SUBSTRATE_HOME/deps/` scaffolding during install/first-run init.
-
+- Do not edit planning docs inside the worktree.

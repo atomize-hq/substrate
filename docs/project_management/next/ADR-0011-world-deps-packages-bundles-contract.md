@@ -45,7 +45,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 9f5a5ead04247401589648d3f25852c89defdf29ffe290c2a9971ae684ddec3c
+ADR_BODY_SHA256: eea9a06b6271e4490a51f7c847845b33c8e416c71d9e726fd2c7995f9919d77f
 ### Changes (operator-facing)
 - World deps becomes “inventory + enabled patches”
   - Existing: world-deps behavior is anchored on legacy manifest/overlay/selection files (`manager_hooks.yaml`, `world-deps.yaml`, `world-deps.selection.yaml`) with semantics that are easy to misread and hard to reason about across scopes.

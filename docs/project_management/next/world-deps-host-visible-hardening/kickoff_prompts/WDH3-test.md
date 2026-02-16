@@ -6,4 +6,4 @@
 
 ## Requirements
 - Add tests verifying scaffolding idempotency and non-overwrite semantics.
-
+- Do not edit planning docs inside the worktree.

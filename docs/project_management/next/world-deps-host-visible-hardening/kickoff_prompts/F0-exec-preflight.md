@@ -7,8 +7,8 @@
 ## Requirements
 - Validate `tasks.json` shape and kickoff prompt paths.
 - Run planning lint checklist and record results in `quality_gate_report.md`.
+- Do not edit planning docs inside the worktree.
 
 ## End Checklist
 - Update: `docs/project_management/next/world-deps-host-visible-hardening/quality_gate_report.md`
 - Append an END entry to: `docs/project_management/next/world-deps-host-visible-hardening/session_log.md`
-

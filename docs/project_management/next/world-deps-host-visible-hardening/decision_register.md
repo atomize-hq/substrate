@@ -22,13 +22,13 @@ Template standard:
 - **Unlocks:** host-visible behavior matches host-hidden behavior for PATH-based resolution.
 - **Quick wins / low-hanging fruit:** implement in request/env builders first; add tests that assert no `$HOME/.nvm` etc in PATH.
 
-**Option B — Inherit host env and only prepend `/var/lib/substrate/world-deps/bin`**
-- **Pros:** minimal change; preserves legacy behavior for existing workflows.
-- **Cons:** does not solve the problem; host toolchains remain discoverable and can satisfy probes/entrypoints.
-- **Cascading implications:** forces complicated “present” logic to distinguish host vs world tools; brittle.
-- **Risks:** security drift in host-visible; continued operator confusion.
-- **Unlocks:** none for the hardening goal.
-- **Quick wins / low-hanging fruit:** none (doesn’t meet desired behavior).
+**Option B — Inherit host env with deterministic filtering + reserved-key overwrite**
+- **Pros:** preserves host env compatibility for non-toolchain variables (proxy settings, locale, CI-provided env) while still preventing PATH-based host toolchain satisfaction.
+- **Cons:** more moving parts; requires maintaining explicit filters for toolchain-coupling variables and PATH segments; isolation posture is weaker than a baseline-only model.
+- **Cascading implications:** requires deterministic PATH normalization (strip toolchain segments, prepend `/var/lib/substrate/world-deps/bin`) plus an env forwarding allowlist/denylist for toolchain variables.
+- **Risks:** missed toolchain segments or variables reintroduce coupling; mitigated by tests that assert known leak vectors are absent and by a strict default filter.
+- **Unlocks:** reduces breaking changes for environments that rely on host env variables that are not toolchain-related.
+- **Quick wins / low-hanging fruit:** implement PATH segment filtering for the known host-toolchain locations and keep HOME/XDG deterministic as in Option A.
 
 **Recommendation**
 - **Selected:** Option A — Construct a sanitized in-world env (default)
@@ -56,13 +56,13 @@ Template standard:
 - **Unlocks:** stable “command -v” semantics for wrappers/probes.
 - **Quick wins / low-hanging fruit:** define once and reuse across request builders and probes.
 
-**Option B — Discover baseline PATH dynamically inside the world (e.g., run a shell to print PATH)**
-- **Pros:** adapts to the image/distro.
-- **Cons:** depends on shell behavior and init files; can reintroduce non-determinism; becomes a circular dependency for early bootstrapping.
-- **Cascading implications:** requires a “bootstrap PATH” anyway to run the discovery command; hard to test.
-- **Risks:** PATH discovery differs between non-PTY and PTY evaluators; hard-to-debug parity issues.
-- **Unlocks:** none that outweigh determinism costs.
-- **Quick wins / low-hanging fruit:** none.
+**Option B — Compute a baseline PATH inside the world once and pin it**
+- **Pros:** adapts to the world image layout while keeping the effective PATH deterministic for a given Substrate/world-agent release.
+- **Cons:** adds an extra bootstrap step and caching; requires a strict rule that no rcfiles are sourced and that the computed value is stable.
+- **Cascading implications:** requires a minimal bootstrap PATH to run a single deterministic PATH query (for example, `getconf PATH`), then caching the result and using it for both PTY and non-PTY env construction.
+- **Risks:** backend variance produces different baselines across machines; mitigated by pinning the computed baseline to the world image version and treating mismatches as test failures for that release.
+- **Unlocks:** supports non-standard world images without expanding the default baseline PATH list.
+- **Quick wins / low-hanging fruit:** prototype on Linux world backend first; use the pinned value as the baseline for all subsequent executions.
 
 **Recommendation**
 - **Selected:** Option A — Fixed canonical baseline PATH per platform/backend
@@ -89,13 +89,13 @@ Template standard:
 - **Unlocks:** host-visible behaves like host-hidden for PATH lookup.
 - **Quick wins / low-hanging fruit:** implement wrappers for the built-in node/npm/bun packages as first coverage.
 
-**Option B — No wrappers; rely on baseline PATH to find `/usr/bin/<tool>`**
-- **Pros:** less mutation; closer to “normal” system behavior.
-- **Cons:** presence becomes ambiguous; PATH ordering still matters; cannot ensure toolchain comes from enabled deps.
-- **Cascading implications:** “present” needs ad-hoc probe rules; operator confusion continues.
-- **Risks:** reintroduces accidental host toolchain usage if PATH ever includes host segments.
-- **Unlocks:** none for hardening.
-- **Quick wins / low-hanging fruit:** none.
+**Option B — Symlink entrypoints under `/var/lib/substrate/world-deps/bin` to stable system paths**
+- **Pros:** minimal wrapper surface area; preserves a clear “entrypoint exists under world-deps bin” anchor while avoiding script wrappers when a stable target path exists.
+- **Cons:** requires the target executable path to be stable and known (for example `/usr/bin/<entrypoint>`); provides no room for additional logic or diagnostics on failure.
+- **Cascading implications:** inventory must restrict runnable apt entrypoints to those with stable target paths; sync must validate the target exists and fail closed when it does not.
+- **Risks:** symlinks break on images where the binary is not at the expected path; mitigated by treating such packages as script-installed wrappers instead.
+- **Unlocks:** simpler apply logic for the subset of apt packages with stable binary locations.
+- **Quick wins / low-hanging fruit:** start with apt entrypoints that are known-stable in supported images and fail closed for others.
 
 **Recommendation**
 - **Selected:** Option A — Mandatory wrappers/symlinks for runnable `apt` entrypoints
@@ -123,13 +123,13 @@ Template standard:
 - **Unlocks:** accurate `present/missing/blocked` in host-visible.
 - **Quick wins / low-hanging fruit:** use `probe.command` when provided; otherwise default to wrapper execution check for runnable packages.
 
-**Option B — Define “present” as “command exists somewhere on PATH”**
-- **Pros:** simple.
-- **Cons:** fails the contract; host toolchains can satisfy presence; makes “applied” meaningless.
-- **Cascading implications:** forces special cases for every toolchain.
-- **Risks:** incorrect applied views; security posture drift.
-- **Unlocks:** none.
-- **Quick wins / low-hanging fruit:** none.
+**Option B — Define “present” via in-world install state plus wrapper existence (no PATH search)**
+- **Pros:** host-path-independent; avoids executing the entrypoint to determine presence; deterministic when the underlying install-state query is deterministic.
+- **Cons:** requires install-method-specific checks (apt vs script) and a clear fallback story when install state cannot be queried.
+- **Cascading implications:** apt-installed runnable packages use deterministic package-manager state (for example `dpkg -s` for the declared package names) plus wrapper existence; script packages use wrapper existence plus optional probe.command when declared.
+- **Risks:** install state can be incomplete for multi-binary packages; mitigated by requiring wrapper existence per entrypoint and keeping `probe.command` available as the authoritative check when needed.
+- **Unlocks:** separates “installed” from “runnable” in a deterministic way without relying on PATH.
+- **Quick wins / low-hanging fruit:** implement for apt packages first and keep wrapper execution as the fallback when no probe exists.
 
 **Recommendation**
 - **Selected:** Option A — Wrapper/probe semantics under sanitized env
@@ -158,16 +158,16 @@ Template standard:
 - **Unlocks:** host-visible behavior matches host-hidden for the practical toolchain leak vectors observed (nvm/pyenv/cargo/bun).
 - **Quick wins / low-hanging fruit:** ship a conservative default denylist (`/.nvm/`, `/.config/nvm/`, `/.pyenv/`, `/.cargo/bin/`, `/.local/bin/`, `/.bun/bin/`).
 
-**Option B — Do not guard explicit paths; only harden PATH-based resolution**
-- **Pros:** less complexity; fewer surprises.
-- **Cons:** does not meet the “no host deps” posture; explicit host toolchains remain runnable in-world.
-- **Cascading implications:** policy claims are weaker than observed behavior.
-- **Risks:** users (or agents) bypass world-deps by calling host binaries directly.
-- **Unlocks:** none for the hardened posture.
-- **Quick wins / low-hanging fruit:** none.
+**Option B — Enforce an execution-time allowlist keyed by permitted prefixes**
+- **Pros:** minimizes denylist maintenance; makes the policy intent explicit (“only these host-visible prefixes are runnable”) and fails closed for everything else.
+- **Cons:** requires correct prefix derivation (workspace roots, explicitly allowed host dirs); can block legitimate workflows until the allowlist is extended.
+- **Cascading implications:** define an allowlist of permitted executable path prefixes (workspace root, `/usr/bin`, and any explicitly configured additions) and reject execution outside that set when `world_fs.host_visible=true`.
+- **Risks:** overly restrictive defaults cause friction; mitigated by a documented override input and clear diagnostics explaining which prefix was rejected.
+- **Unlocks:** a simpler long-term model that remains stable even as new toolchain managers appear on hosts.
+- **Quick wins / low-hanging fruit:** start with a minimal allowlist and a targeted override input for emergency unblocks.
 
 **Recommendation**
--- **Selected:** Option A — Execution-time guard with deterministic toolchain-path denylist (default deny)
+- **Selected:** Option A — Execution-time guard with deterministic toolchain-path denylist (default deny)
 - **Rationale (crisp):** closes the explicit-path bypass while avoiding collateral damage to normal workspace execution.
 
 **Follow-up tasks (explicit)**

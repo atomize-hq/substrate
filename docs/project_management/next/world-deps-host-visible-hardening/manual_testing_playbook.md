@@ -12,7 +12,7 @@ Validates the host-visible hardening contract described in ADR-0011 Appendix A a
 - Host toolchains do not satisfy runnable deps via PATH resolution.
 - Runnable `apt` packages produce deterministic wrappers under `/var/lib/substrate/world-deps/bin`.
 - “present” is computed under the sanitized env and is host-path-independent.
-- Exec-time guardrails deny explicit execution of host-mounted toolchain binaries (policy-controlled).
+- Exec-time guardrails deny explicit execution of host-mounted toolchain binaries (override-input controlled).
 - Installer scaffolds `$SUBSTRATE_HOME/deps/` with examples (non-enabling).
 
 ## Prerequisites

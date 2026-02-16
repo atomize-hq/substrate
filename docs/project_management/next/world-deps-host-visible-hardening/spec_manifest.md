@@ -16,6 +16,7 @@ Authoring standard:
 - `docs/project_management/next/world-deps-host-visible-hardening/impact_map.md` — touch set + cascading implications + cross-queue conflicts
 - `docs/project_management/next/world-deps-host-visible-hardening/plan.md` — execution runbook + slicing
 - `docs/project_management/next/world-deps-host-visible-hardening/tasks.json` — triad task graph + checkpoints
+- `docs/project_management/next/world-deps-host-visible-hardening/ci_checkpoint_plan.md` — bounded CI checkpoint groups + wiring (schema v4+)
 - `docs/project_management/next/world-deps-host-visible-hardening/session_log.md` — planning/execution evidence log
 - `docs/project_management/next/world-deps-host-visible-hardening/decision_register.md` — decisions required to execute Appendix A without ambiguity
 - `docs/project_management/next/world-deps-host-visible-hardening/manual_testing_playbook.md` — human validation workflow (authoritative)
@@ -51,4 +52,3 @@ For every selected spec document, confirm it explicitly defines:
 - Error model (exit codes; messages where applicable) and failure posture
 - Ordering/atomicity/concurrency rules (wrapper updates; install/sync)
 - Platform guarantees (Linux/macOS/WSL)
-

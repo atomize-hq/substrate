@@ -6,4 +6,4 @@
 
 ## Requirements
 - Add tests that `command -v <entrypoint>` resolves to `/var/lib/substrate/world-deps/bin/<entrypoint>` only when enabled/applied.
-
+- Do not edit planning docs inside the worktree.

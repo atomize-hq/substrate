@@ -6,4 +6,4 @@
 
 ## Requirements
 - Run smoke scripts and verify scaffold existence assertions.
-
+- Do not edit planning docs inside the worktree.

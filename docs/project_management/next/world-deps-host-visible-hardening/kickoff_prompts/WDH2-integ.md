@@ -6,4 +6,4 @@
 
 ## Requirements
 - Run targeted command(s) that attempt explicit host binary execution and assert denial.
-
+- Do not edit planning docs inside the worktree.
