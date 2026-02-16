@@ -47,10 +47,12 @@ Environment variables and advanced configuration options for Substrate.
 | `SUBSTRATE_POLICY_GIT_CACHE` | Cache policy repo git hash across commands (`0`/`false` disables caching per process) | `1` | `0` |
 
 Release bundles place the manager inventory under
-`<prefix>/versions/<version>/config/manager_hooks.yaml`, plus a `world deps`
-overlay manifest at `<prefix>/versions/<version>/config/world-deps.yaml`.
-Workspace builds fall back to `config/manager_hooks.yaml` and
-`scripts/substrate/world-deps.yaml` in the repository root.
+`<prefix>/versions/<version>/config/manager_hooks.yaml` (used by manager init / shim hints).
+
+`substrate world deps` (packages/bundles contract) does **not** read legacy `world-deps.yaml`
+overlay plumbing. World deps now uses:
+- Inventory directories: `$SUBSTRATE_HOME/deps/` (global) and `<workspace_root>/.substrate/deps/` (workspace chain)
+- Enabled patches: `$SUBSTRATE_HOME/config.yaml` (global) and `<workspace_root>/.substrate/workspace.yaml` (workspace)
 
 ## World Configuration
 
@@ -93,7 +95,6 @@ Other world-adjacent variables:
 
 | Variable | Purpose | Default | Example |
 |----------|---------|---------|---------|
-| `SUBSTRATE_WORLD_DEPS_MANIFEST` | Override manifest for `world deps` | `<prefix>/versions/<version>/config/world-deps.yaml` | `/tmp/world_deps.yaml` |
 | `SUBSTRATE_WORLD_REQUEST_PROFILE` | Sets the Agent API request `profile` for world-agent executions (advanced/testing) | *unset* | `world-deps-provision` |
 | `SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE` | Force socket activation mode reporting (`socket_activation`, `manual`, or `unknown`) for diagnostics/tests | auto-detect via systemd | `socket_activation` |
 | `SUBSTRATE_SYSTEMCTL_TIMEOUT_MS` | Timeout (ms) for `systemctl show …` probes used by Linux socket-activation detection; prevents hangs when systemd/dbus is unhealthy | `2000` | `250` |
@@ -125,6 +126,11 @@ Both the global config and workspace config use the same schema:
 world:
   anchor_mode: workspace
   anchor_path: ""
+  env:
+    # When false (default), the world environment does not forward host env vars beyond Substrate's
+    # deterministic baseline (PATH/HOME/XDG/etc). When true, Substrate may forward a small safe
+    # allowlist of host env vars (locale/terminal/timezone), as defined by the world env contract.
+    inherit_from_host: false
   # Legacy keys are still parsed for compatibility:
   root_mode: workspace
   root_path: ""
@@ -505,11 +511,12 @@ substrate health --json > artifacts/substrate_health.json
 substrate world doctor --json > artifacts/world_doctor.json
 ```
 
-Surface the new parity signals when archiving these artifacts:
+Key health fields to capture alongside these artifacts:
 
-- `summary.attention_required_managers` lists host-only managers that require a world sync.
-- `summary.world_only_managers` lists tools present in the guest but missing locally.
-- `summary.manager_states[].{name, parity, recommendation}` provides per-manager status plus the suggested remediation.
+- `summary.missing_managers` lists managers not detected on the host.
+- `summary.world_ok` / `summary.world_error` describe world backend health.
+- `summary.world_deps_missing` / `summary.world_deps_blocked` describe enabled deps that are missing or require manual install.
+- `summary.world_deps_error` is set when the world deps snapshot cannot be collected.
 
 Example (macOS Sonoma / zsh, temp HOME):
 
@@ -518,7 +525,7 @@ TMP=$PWD/target/tests-tmp/macos-health
 mkdir -p "$TMP/.substrate"
 HOME=$TMP SUBSTRATE_MANAGER_MANIFEST=$TMP/manager_hooks.yaml \
   substrate health --json \
-  | jq '.summary | {\n      attention_required_managers,\n      world_only_managers,\n      manager_states: [.manager_states[] | {name, parity, recommendation}]\n    }'
+  | jq '.summary | {ok, missing_managers, world_ok, world_deps_missing, world_deps_blocked, world_deps_error}'
 ```
 
 Need a legacy pipeline to inject snippets automatically? Run `substrate shim repair`
@@ -531,8 +538,9 @@ To stub the expensive world checks, drop JSON fixtures under
 
 - `world_doctor.json` – consumed by `substrate shim doctor` and
   `substrate health` before falling back to `substrate world doctor --json`.
-- `world_deps.json` – matches the `WorldDepsStatusReport` schema. Leave the
-  file out to exercise the live `substrate world deps status --json` path.
+- `world_deps.json` – matches the world deps doctor snapshot schema used by
+  `substrate shim doctor` / `substrate health` (leave it out to exercise the
+  live world backend probes).
 
 These overrides keep CI sandboxes deterministic while still exercising the same
 code paths as production builds.

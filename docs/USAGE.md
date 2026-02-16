@@ -147,16 +147,17 @@ real dotfiles. Repair writes `~/.substrate_bashenv` (creating
 Capture full host/guest readiness with the aggregated health command:
 
 ```bash
-substrate health                # text summary (managers + world doctor + world deps)
+substrate health             # text summary (shim doctor + world backend + world deps)
 substrate health --json | jq '.summary'
-substrate shim doctor --json    # detailed shim-centric payload
+substrate shim doctor --json # detailed shim-centric payload
 ```
 
-The health summary now highlights three manager parity buckets:
-
-- `summary.attention_required_managers` – host-only managers (present on the host, missing/unavailable in the world).
-- `summary.world_only_managers` – world-only managers (guest present, host missing).
-- `summary.manager_states[].parity` – per-manager status (`synced`, `host_only`, `world_only`, `absent`, or `unknown`) plus an optional `recommendation`.
+`substrate health` is a thin summary over `substrate shim doctor`:
+- `summary.missing_managers` – managers not detected on the host.
+- `summary.world_ok` / `summary.world_error` – world backend health.
+- `summary.world_deps_missing` – enabled deps missing in the world.
+- `summary.world_deps_blocked` – enabled deps that require manual install (blocked).
+- `summary.world_deps_error` – world deps snapshot unavailable (world backend down, etc).
 
 Example (Linux, bash):
 
@@ -166,38 +167,17 @@ $ substrate health
 Managers detected: 4/5
   Not detected on host (info): bun
 World backend: healthy
-Guest tool sync: missing 1 (asdf)
-Manager parity:
-  Host-only (world sync required): asdf
-    Next steps: Enable the world backend (`substrate world enable`) and run `substrate world deps sync` to mirror these managers into the guest.
-  World-only (host missing): bun
-    Next steps: Install the listed managers on the host (for example `substrate shim repair --manager <name>`) so shells can load the same snippets.
-  Missing everywhere (info): direnv
-    Next steps: Install these managers on the host first; the next `substrate world deps sync` run will copy them into the guest once they exist.
+World deps: missing (1): asdf
+  Next: run `substrate world deps current sync` then `substrate world deps current list applied`
 Hints recorded: 0
 Overall status: attention required
-  - managers require world sync: asdf
+  - world deps missing (enabled): asdf
 ```
 
-Machine-readable parity lives under `summary.manager_states`:
+Machine-readable summary:
 
 ```bash
-$ substrate health --json | jq '.summary.manager_states[] | {name, parity, recommendation}'
-{
-  "name": "asdf",
-  "parity": "host_only",
-  "recommendation": "Enable the world backend (`substrate world enable`) then run `substrate world deps sync` so asdf exists inside the guest."
-}
-{
-  "name": "bun",
-  "parity": "world_only",
-  "recommendation": "Install bun on the host (for example `substrate shim repair --manager bun`) so both environments stay in sync."
-}
-{
-  "name": "direnv",
-  "parity": "absent",
-  "recommendation": "Install direnv on the host first, then rerun `substrate world deps sync` after provisioning to copy it into the guest."
-}
+$ substrate health --json | jq '.summary | {ok, missing_managers, world_ok, world_deps_missing, world_deps_blocked, world_deps_error}'
 ```
 
 Both commands honor the same overrides (`HOME`, `SUBSTRATE_MANAGER_MANIFEST`,
@@ -254,13 +234,10 @@ manager and point `BASH_ENV` at `~/.substrate_bashenv` explicitly.
 
 - `substrate world enable` – provision the backend later if `--no-world` was
   used at install time
-- `substrate world deps status [--all] [TOOL...]` – inspect host/guest tool availability.
-  - With no tool arguments, defaults to host-present inventory entries; use `--all` to include host-missing entries.
-  - Provide explicit tool names to override the filter.
-- `substrate world deps sync [--all] [--verbose]` – install missing tools inside the guest.
-  - Default behavior installs tools that are detected on the host (safe first-run behavior).
-  - Use `--all` to force guest installs even when a tool is missing on the host.
-- `substrate world deps install <TOOL...> [--dry-run] [--verbose]` – install specific tools inside the guest.
+- `substrate world deps current list [available|enabled|applied] [--json]` – inspect the effective inventory/enabled/applied views for the current directory.
+- `substrate world deps current sync [--dry-run] [--verbose]` – apply the effective enabled deps list into the world.
+- `substrate world deps current install <ITEM...> [--dry-run] [--verbose]` – apply specific deps immediately without changing enabled config.
+- `substrate world deps global|workspace add|remove|reset` – edit enabled patches only (no install/uninstall).
 
 World root (anchor) precedence, highest wins: CLI flags
 (`--anchor-mode/--anchor-path`, legacy `--world-root-mode/--world-root-path`),
@@ -380,8 +357,9 @@ On Windows, wrap each assignment in quotes so PowerShell keeps the backslashes:
 PS> substrate config set "world.anchor_mode=custom" "world.anchor_path=C:\Workspaces\repo" "world.caged=true"
 ```
 
-Use `SUBSTRATE_WORLD_ENABLED=0` to force pass-through mode temporarily and
-`SUBSTRATE_WORLD_DEPS_MANIFEST` to point world-deps at a custom definition file.
+Use `--no-world` (or `SUBSTRATE_OVERRIDE_WORLD=disabled`) to force pass-through mode temporarily.
+`SUBSTRATE_WORLD_ENABLED` is exported state (output-only) and should not be set by users.
+Legacy `SUBSTRATE_WORLD_DEPS_MANIFEST` is ignored by `substrate world deps` (packages/bundles contract).
 Flags beat config/env: `--world` overrides disabled metadata/env, while
 `--no-world` always opts out.
 ## Log Analysis

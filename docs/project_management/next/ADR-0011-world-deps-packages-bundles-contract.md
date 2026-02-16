@@ -45,7 +45,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 9f5a5ead04247401589648d3f25852c89defdf29ffe290c2a9971ae684ddec3c
+ADR_BODY_SHA256: eea9a06b6271e4490a51f7c847845b33c8e416c71d9e726fd2c7995f9919d77f
 ### Changes (operator-facing)
 - World deps becomes “inventory + enabled patches”
   - Existing: world-deps behavior is anchored on legacy manifest/overlay/selection files (`manager_hooks.yaml`, `world-deps.yaml`, `world-deps.selection.yaml`) with semantics that are easy to misread and hard to reason about across scopes.
@@ -433,8 +433,10 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 - `available` (default):
   - Prints the **current inventory view** visible from `cwd` (after inventory merge + `world.deps.inventory_mode`).
   - Output SHOULD be a table.
+  - Table columns MUST include: `source`, `kind`, `name`, `runnable`, `method`, `entrypoints`, `platforms`, `description`.
+    - `source` MUST be one of: `builtin`, `global`, `workspace` and indicates which scope contributed the **effective definition** after inventory merge + platform filtering + `world.deps.inventory_mode` (full-replace by item name).
   - It MUST NOT make world-agent calls.
-- Hints (stderr, only if empty):
+  - Hints (stderr, only if empty):
     - `substrate: note: no deps inventory items visible for this directory; add definitions under $SUBSTRATE_HOME/deps/ or <workspace_root>/.substrate/deps/`
 - `enabled`:
   - Prints the **current enabled list** (effective merged enabled list for `cwd`) without querying world-agent.
@@ -451,6 +453,7 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
     - `substrate: note: showing current world deps status for this directory`
 - Output MUST include, for each item (view-dependent):
   - Always: `name` (string) and `kind=package|bundle`
+  - For `available`: `source=builtin|global|workspace` (effective inventory provenance after merge; required in table output and `--json`)
   - For `enabled`: list items are ordered and MUST match the effective `world.deps.enabled` list; `enabled=true` is implied.
   - For `applied`: `enabled=true|false` (enabled in the effective enabled list)
   - For `applied`: `world=present|missing|blocked`
@@ -657,3 +660,146 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 ## Decision Summary
 - Decision register:
   - `docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md`
+
+## Appendix A — Host-visible worlds: preventing “host deps” from satisfying world-deps
+
+This ADR’s core contract assumes that “runnable” package entrypoints are deterministically resolved in-world via the world-deps prefix (`/var/lib/substrate/world-deps/bin`) and that host toolchains do not “accidentally” become usable just because the workspace is visible.
+
+In practice, `world_fs.host_visible=true` (see ADR-0018) makes the host filesystem nameable from within the world. If the in-world `PATH` contains host user toolchain directories (e.g. `$HOME/.config/nvm/.../bin`), then `which npm` (and normal command resolution) can find host-provided tools even when no world-deps are enabled/applied. This violates the intended “no host deps” property for host-visible worlds.
+
+This appendix tightens the contract and enumerates the additional work required to make host-visible worlds behave like host-hidden worlds with respect to toolchain availability.
+
+### A.1 Clarifications (what is and is not a host leak)
+
+- `substrate world deps current list available` MAY show items even when `$SUBSTRATE_HOME/deps/` does not exist. Those “available” items can come from **built-in inventory defaults** shipped with Substrate (compiled-in / embedded), not from the host.
+- To make provenance obvious, `substrate world deps current list available` MUST include a `source` column (and `--json` field) with one of: `builtin`, `global`, `workspace` indicating where the **effective** definition came from after inventory merge + platform filtering + `world.deps.inventory_mode`.
+- The **shim** remains a host-side interception layer. It MUST NOT be assumed to be “the first PATH entry” inside the world:
+  - World execution is performed by the world backend/world-agent, and the in-world environment must be built explicitly.
+  - The hardening lever inside the world is **environment construction** (especially `PATH`) plus **world-deps wrappers** under `/var/lib/substrate/world-deps/bin`, not the host shim.
+
+### A.2 Contract tightening: command resolution must not depend on host PATH
+
+When running with `--world`, Substrate MUST ensure that:
+
+1. `/var/lib/substrate/world-deps/bin` is the first `PATH` entry (already required by this ADR).
+2. Host user toolchain PATH segments (e.g. anything under a host-mounted `$HOME`, `~/.nvm`, `~/.pyenv`, `~/.cargo`, `~/.local/bin`, etc.) MUST NOT be allowed to satisfy:
+   - “runnable” entrypoint presence checks (`present/missing/blocked`), or
+   - user invocations that rely on PATH lookup (e.g. `npm`, `node`, `bun`).
+3. If a runnable dep is **not enabled/applied**, invoking its entrypoint in-world SHOULD fail with “command not found” even if a host-provided binary would otherwise be discoverable.
+
+Stated differently: “host-visible” is a filesystem capability, not a toolchain capability. Toolchain resolution remains a world-deps-controlled surface.
+
+### A.3 Required implementation work (to achieve the hardened behavior)
+
+This is the additional work that must be implemented beyond the base packages/bundles contract to ensure no host toolchain leakage in host-visible worlds.
+
+#### A.3.1 Normalize the in-world execution environment (especially `PATH`)
+
+For all `--world` executions (PTY and non-PTY), Substrate should construct a deterministic in-world environment rather than inheriting the host environment:
+
+- Build `PATH` from a known-safe baseline (platform/world-backend specific) plus the world-deps bin dir first, for example:
+  - `/var/lib/substrate/world-deps/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`
+- Do not include host user toolchain segments by default.
+- Ensure `SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR=/var/lib/substrate/world-deps/bin` is set in-world to make the chosen prefix explicit and debuggable.
+
+Notes:
+- This normalization is required even when `world_fs.host_visible=true`; visibility of the workspace does not imply inheriting the host process environment.
+- Any “opt-in” to inheriting host PATH should be an explicit, audited toggle (policy/config), not a default.
+
+#### A.3.2 Generate entrypoint wrappers for *all runnable packages*, including `apt` installs
+
+This ADR already requires that runnable packages be invokable in-world. To make that property robust in host-visible worlds, the resolution must be anchored in the world-deps prefix:
+
+- For each runnable package, for each `entrypoints[]` name, Substrate MUST ensure there is an executable at:
+  - `/var/lib/substrate/world-deps/bin/<entrypoint>`
+- For `install.method=script`, the script installer already owns wrapper/entrypoint creation.
+- For `install.method=apt`, additional work is required:
+  - After `apt` install completes, generate a wrapper (or symlink, where safe) under `/var/lib/substrate/world-deps/bin/` for each entrypoint.
+  - The wrapper MUST exec the world-provided binary (typically under `/usr/bin/...`) resolved using the normalized PATH (not the inherited host PATH).
+
+This makes `which npm` deterministic: if `npm` is enabled/applied, it resolves to `/var/lib/substrate/world-deps/bin/npm`; if not, it does not resolve via host PATH.
+
+#### A.3.3 Redefine “present” probes to be host-path-independent
+
+For `present/missing/blocked` to be meaningful in host-visible worlds:
+
+- For runnable packages, default “present” SHOULD be determined by:
+  - wrapper existence + executability under `/var/lib/substrate/world-deps/bin`, or
+  - an explicit `probe.command` executed with the normalized environment (sanitized PATH).
+- The presence logic MUST NOT accept “it is somewhere on PATH” if that PATH can include host user toolchains.
+
+#### A.3.4 Optional but recommended: execution-time guardrails against explicit host binary execution
+
+The measures above prevent *accidental* host toolchain usage via PATH lookup. They do not prevent an actor from explicitly executing a host-visible binary path (e.g. `/home/<user>/.config/nvm/.../npm`).
+
+If the desired security posture is “no host deps may execute inside the world”, then add explicit guardrails:
+
+- World-agent (or the world backend) SHOULD reject process execution when the resolved executable path is under host-mounted locations (e.g. host `$HOME`) unless explicitly allowed by policy.
+- Provide an actionable error indicating that host toolchains are disallowed and that the user should enable/install a world-deps package instead.
+
+This should be treated as a policy-controlled hardening feature to avoid surprising advanced workflows.
+
+### A.4 Installer scaffolding: create `$SUBSTRATE_HOME/deps/` with examples
+
+To reduce confusion and make customization discoverable, the installer (or first-run init) SHOULD scaffold the global deps inventory directory under `$SUBSTRATE_HOME` even if the user has not created any custom deps yet.
+
+Recommended global layout:
+```text
+~/.substrate/
+  deps/
+    README.md
+    packages/
+      example-manual.yaml
+      example-script.yaml
+      example-apt.yaml
+    bundles/
+      example-bundle.yaml
+    scripts/
+      example-install.sh
+```
+
+Example `packages/example-apt.yaml` (shape only; names illustrative):
+```yaml
+version: 1
+name: example-apt
+description: Example apt package that provides a runnable CLI.
+runnable: true
+entrypoints: ["example"]
+install:
+  method: apt
+  apt:
+    - name: example
+```
+
+Example `packages/example-script.yaml`:
+```yaml
+version: 1
+name: example-script
+description: Example script-installed package.
+runnable: true
+entrypoints: ["example-script"]
+install:
+  method: script
+  script_path: deps/scripts/example-install.sh
+```
+
+Example `bundles/example-bundle.yaml`:
+```yaml
+version: 1
+name: example-bundle
+description: Example bundle of packages.
+packages: ["example-apt", "example-script"]
+```
+
+Scaffolding notes:
+- These examples MUST NOT auto-enable anything; they are purely illustrative.
+- The scaffold should clearly explain precedence/merge behavior (built-ins + global inventory + workspace inventory) and point users to `substrate world deps current ...` to see the effective view.
+- If a legacy world-deps file is still installed for backwards reasons (e.g. `world-deps.yaml`), the scaffold should explicitly note that this contract ignores it.
+
+### A.5 Acceptance criteria for host-visible hardening
+
+The following scenarios should be added to the authoritative validation plan once the above work is implemented:
+
+- With `world_fs.host_visible=true` and with no deps enabled/applied, `substrate --world -c 'which npm'` MUST fail (no host PATH satisfaction).
+- After enabling and syncing `node`/`npm`, `substrate --world -c 'which npm'` MUST return `/var/lib/substrate/world-deps/bin/npm` and invoking `npm` must execute the world-provided toolchain.
+- For any runnable package, `present` MUST reflect the wrapper/probe outcome under the normalized environment, independent of host PATH.

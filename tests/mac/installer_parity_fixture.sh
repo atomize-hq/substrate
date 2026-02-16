@@ -13,7 +13,7 @@ Scenarios:
   prod-copy         Production installer with bundled Linux agent (copy-first path).
   prod-build        Production installer fallback when Linux agent missing (build in Lima).
   dev-build         Dev installer (host cargo stub + in-guest build path).
-  sync-deps         Production installer with --sync-deps (world deps sync wired).
+  sync-deps         Production installer with --sync-deps (world deps current sync wired).
   cleanup-guidance  Uninstaller cleanup-state guidance on mac hosts.
   all               Run every scenario (default).
 
@@ -497,10 +497,10 @@ run_sync_deps_scenario() {
     cat "${log}" >&2 || true
     fatal "install-substrate failed for ${label}"
   fi
-  assert_contains "${log}" "Syncing guest dependencies via 'substrate world deps sync'" \
-    "sync-deps should announce world deps sync"
-  assert_contains "${substrate_log}" "world deps sync" \
-    "sync-deps should invoke world deps sync"
+  assert_contains "${log}" "Syncing world dependencies via 'substrate world deps current sync'" \
+    "sync-deps should announce world deps current sync"
+  assert_contains "${substrate_log}" "world deps current sync" \
+    "sync-deps should invoke world deps current sync"
   unset SUBSTRATE_TEST_SUBSTRATE_LOG
   info "Scenario ${label} complete:"
   info "  install log: ${log}"

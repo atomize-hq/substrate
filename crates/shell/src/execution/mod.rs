@@ -42,7 +42,7 @@ pub(crate) use workspace_cmd::handle_workspace_command;
 
 pub(crate) use manager::{
     configure_child_shell_env, configure_manager_init, current_platform, log_manager_init_event,
-    manager_manifest_base_path, write_manager_env_script, write_manager_env_script_at,
+    manager_manifest_base_path, write_manager_env_script,
 };
 pub(crate) use platform::{
     handle_health_command, handle_host_command, handle_world_command, update_world_env,

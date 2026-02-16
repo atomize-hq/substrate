@@ -7,7 +7,5 @@ pub use execution::{lock, manager_init, shim_deploy};
 pub use execution::{
     needs_shell, run_shell, run_shell_with_cli, AnchorModeArg, Cli, GraphAction, GraphCmd,
     HealthCmd, HostAction, HostCmd, ShellConfig, ShellMode, ShimAction, ShimCmd, WorldAction,
-    WorldCleanupArgs, WorldCmd, WorldDepsAction, WorldDepsCmd, WorldDepsInitArgs,
-    WorldDepsInstallArgs, WorldDepsProvisionArgs, WorldDepsSelectArgs, WorldDepsStatusArgs,
-    WorldDepsSyncArgs, WorldEnableArgs, WorldVerifyArgs,
+    WorldCleanupArgs, WorldCmd, WorldDepsAction, WorldDepsCmd, WorldEnableArgs, WorldVerifyArgs,
 };

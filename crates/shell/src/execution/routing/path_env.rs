@@ -2,8 +2,6 @@
 
 use crate::execution::settings;
 use anyhow::{Context, Result};
-use std::env;
-use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
@@ -61,68 +59,11 @@ pub(crate) fn path_within_root(anchor: &Path, candidate: &Path) -> bool {
     candidate == anchor || candidate.starts_with(anchor)
 }
 
-pub(crate) fn world_deps_manifest_base_path() -> PathBuf {
-    if let Ok(override_path) = env::var("SUBSTRATE_WORLD_DEPS_MANIFEST") {
-        return PathBuf::from(override_path);
-    }
-
-    if let Some(path) = installed_world_deps_manifest_base_path() {
-        return canonicalize_or(&path);
-    }
-
-    repo_world_deps_manifest_base_path()
-}
-
-fn installed_world_deps_manifest_base_path() -> Option<PathBuf> {
-    let exe_path = env::current_exe().ok()?;
-    let canonical = canonicalize_or(&exe_path);
-
-    let bin_dir = canonical.parent()?;
-    if bin_dir.file_name() != Some(OsStr::new("bin")) {
-        return None;
-    }
-
-    let version_dir = bin_dir.parent()?;
-    let versions_dir = version_dir.parent()?;
-    if versions_dir.file_name() != Some(OsStr::new("versions")) {
-        return None;
-    }
-
-    Some(version_dir.join("config").join("world-deps.yaml"))
-}
-
-fn repo_world_deps_manifest_base_path() -> PathBuf {
-    let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    crate_dir
-        .parent()
-        .and_then(|dir| dir.parent())
-        .map(|root| {
-            root.join("scripts")
-                .join("substrate")
-                .join("world-deps.yaml")
-        })
-        .unwrap_or_else(|| PathBuf::from("scripts/substrate/world-deps.yaml"))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use serial_test::serial;
     use tempfile::tempdir;
-
-    fn set_env(key: &str, value: &str) -> Option<String> {
-        let previous = env::var(key).ok();
-        env::set_var(key, value);
-        previous
-    }
-
-    fn restore_env(key: &str, previous: Option<String>) {
-        if let Some(value) = previous {
-            env::set_var(key, value);
-        } else {
-            env::remove_var(key);
-        }
-    }
 
     #[test]
     #[serial]
@@ -145,35 +86,5 @@ mod tests {
         let message = warning.expect("expected caged warning");
         assert!(message.contains("caged root guard"));
         assert!(message.contains(settings.path.to_str().unwrap()));
-    }
-
-    #[test]
-    #[serial]
-    fn world_deps_manifest_base_path_prefers_env_override() {
-        let temp = tempdir().unwrap();
-        let override_path = temp.path().join("deps.yaml");
-        let previous = set_env(
-            "SUBSTRATE_WORLD_DEPS_MANIFEST",
-            &override_path.display().to_string(),
-        );
-        let resolved = world_deps_manifest_base_path();
-        assert_eq!(resolved, override_path);
-        restore_env("SUBSTRATE_WORLD_DEPS_MANIFEST", previous);
-    }
-
-    #[test]
-    #[serial]
-    fn world_deps_manifest_base_path_defaults_to_repo_location() {
-        let previous = env::var("SUBSTRATE_WORLD_DEPS_MANIFEST").ok();
-        env::remove_var("SUBSTRATE_WORLD_DEPS_MANIFEST");
-        let resolved = world_deps_manifest_base_path();
-        assert!(
-            resolved
-                .components()
-                .any(|c| c.as_os_str() == "world-deps.yaml"),
-            "path should point to scripts/substrate/world-deps.yaml (found {})",
-            resolved.display()
-        );
-        restore_env("SUBSTRATE_WORLD_DEPS_MANIFEST", previous);
     }
 }

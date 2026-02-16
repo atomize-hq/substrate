@@ -42,10 +42,39 @@ pub(super) fn normalize_env_for_linux_guest(
     // run inside the Linux VM. Prefer a stable Linux guest PATH.
     const GUEST_BASE_PATH: &str = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
     const WORLD_DEPS_BIN: &str = "/var/lib/substrate/world-deps/bin";
+    let world_deps_bin = env_map
+        .get("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR")
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| WORLD_DEPS_BIN.to_string());
     env_map.insert(
-        "PATH".to_string(),
-        format!("{WORLD_DEPS_BIN}:{GUEST_BASE_PATH}"),
+        "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR".to_string(),
+        world_deps_bin.clone(),
     );
+    let world_deps_bin_str = world_deps_bin.as_str();
+    let current_path = env_map.get("PATH").map(String::as_str).unwrap_or("");
+    // If the caller already provided a Linux-ish PATH (common in tests/fixtures and advanced
+    // setups), don't clobber it; just ensure the world-deps bin is present.
+    if current_path.contains(GUEST_BASE_PATH) {
+        let has_world_deps_bin = current_path
+            .split(':')
+            .any(|segment| segment.trim_end_matches('/') == world_deps_bin_str);
+        if !has_world_deps_bin {
+            if current_path.trim().is_empty() {
+                env_map.insert("PATH".to_string(), world_deps_bin.clone());
+            } else {
+                env_map.insert(
+                    "PATH".to_string(),
+                    format!("{world_deps_bin}:{current_path}"),
+                );
+            }
+        }
+    } else {
+        env_map.insert(
+            "PATH".to_string(),
+            format!("{world_deps_bin_str}:{GUEST_BASE_PATH}"),
+        );
+    }
 
     // Avoid leaking host HOME into the Linux guest. This both reduces accidental use of host
     // toolchains and keeps guest-only state in a predictable location.
@@ -57,9 +86,37 @@ pub(super) fn normalize_env_for_linux_guest(
         env_map.insert("HOME".to_string(), "/root".to_string());
     }
 
-    env_map
-        .entry("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR".to_string())
-        .or_insert_with(|| WORLD_DEPS_BIN.to_string());
+    // Note: SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR is set above and may be overridden by tests/fixtures
+    // that use a host-exec world-agent stub.
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn ensure_world_deps_bin_on_path(env_map: &mut std::collections::HashMap<String, String>) {
+    const DEFAULT_WORLD_DEPS_BIN: &str = "/var/lib/substrate/world-deps/bin";
+    let bin = env_map
+        .get("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR")
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| DEFAULT_WORLD_DEPS_BIN.to_string());
+
+    env_map.insert(
+        "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR".to_string(),
+        bin.clone(),
+    );
+
+    let current = env_map.get("PATH").map(String::as_str).unwrap_or("");
+    let bin_norm = bin.trim_end_matches('/');
+    let has = current
+        .split(':')
+        .any(|segment| segment.trim_end_matches('/') == bin_norm);
+    if has {
+        return;
+    }
+    if current.trim().is_empty() {
+        env_map.insert("PATH".to_string(), bin);
+    } else {
+        env_map.insert("PATH".to_string(), format!("{bin}:{current}"));
+    }
 }
 
 /// Collect filesystem diff and network scopes from world backend
@@ -148,11 +205,12 @@ pub(super) fn execute_world_pty_over_ws(
         let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
         let policy_snapshot =
             crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd)?.snapshot;
-        let mut env_map: std::collections::HashMap<String, String> = std::env::vars().collect();
+        let mut env_map = build_world_env_map();
         crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
             &policy_snapshot,
             &mut env_map,
         )?;
+        ensure_world_deps_bin_on_path(&mut env_map);
         #[cfg(target_os = "linux")]
         let (cols, rows) = get_term_size();
         #[cfg(not(target_os = "linux"))]
@@ -857,6 +915,7 @@ fn build_agent_client_and_request_impl(
         &policy_snapshot,
         &mut env_map,
     )?;
+    ensure_world_deps_bin_on_path(&mut env_map);
 
     let request = ExecuteRequest {
         profile: current_world_request_profile(),
@@ -896,6 +955,7 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
         &policy_snapshot,
         &mut env_map,
     )?;
+    ensure_world_deps_bin_on_path(&mut env_map);
 
     let request = agent_api_types::PendingDiffRequestV1 {
         profile: current_world_request_profile(),
@@ -925,6 +985,7 @@ fn build_agent_client_and_request_impl(
         let cwd = cwd_path.display().to_string();
         let mut env_map = build_world_env_map();
         normalize_env_for_linux_guest(&mut env_map);
+        ensure_world_deps_bin_on_path(&mut env_map);
         let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
         let policy_snapshot =
             crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
@@ -971,6 +1032,7 @@ fn build_agent_client_and_request_impl(
     let cwd = cwd_path.display().to_string();
     let mut env_map = build_world_env_map();
     normalize_env_for_linux_guest(&mut env_map);
+    ensure_world_deps_bin_on_path(&mut env_map);
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
     let policy_snapshot =
         crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
@@ -1009,6 +1071,7 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
         let cwd = cwd_path.display().to_string();
         let mut env_map = build_world_env_map();
         normalize_env_for_linux_guest(&mut env_map);
+        ensure_world_deps_bin_on_path(&mut env_map);
         let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
         let policy_snapshot =
             crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
@@ -1049,6 +1112,7 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
     let cwd = cwd_path.display().to_string();
     let mut env_map = build_world_env_map();
     normalize_env_for_linux_guest(&mut env_map);
+    ensure_world_deps_bin_on_path(&mut env_map);
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
     let policy_snapshot =
         crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
@@ -1424,4 +1488,54 @@ pub(super) fn emit_stream_chunk(agent_label: &str, data: &[u8], is_stderr: bool)
         is_stderr,
         text.to_string(),
     ));
+}
+
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+mod tests {
+    use super::ensure_world_deps_bin_on_path;
+
+    #[test]
+    fn ensure_world_deps_bin_sets_default_and_prepends_path() {
+        let mut env_map = std::collections::HashMap::<String, String>::new();
+        env_map.insert("PATH".to_string(), "/usr/bin:/bin".to_string());
+
+        ensure_world_deps_bin_on_path(&mut env_map);
+
+        assert_eq!(
+            env_map
+                .get("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR")
+                .map(String::as_str),
+            Some("/var/lib/substrate/world-deps/bin")
+        );
+        assert_eq!(
+            env_map.get("PATH").map(String::as_str),
+            Some("/var/lib/substrate/world-deps/bin:/usr/bin:/bin")
+        );
+    }
+
+    #[test]
+    fn ensure_world_deps_bin_respects_override_and_avoids_duplicates() {
+        let mut env_map = std::collections::HashMap::<String, String>::new();
+        env_map.insert(
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR".to_string(),
+            "/tmp/custom-bin/".to_string(),
+        );
+        env_map.insert(
+            "PATH".to_string(),
+            "/tmp/custom-bin:/usr/local/bin:/usr/bin".to_string(),
+        );
+
+        ensure_world_deps_bin_on_path(&mut env_map);
+
+        assert_eq!(
+            env_map
+                .get("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR")
+                .map(String::as_str),
+            Some("/tmp/custom-bin/")
+        );
+        assert_eq!(
+            env_map.get("PATH").map(String::as_str),
+            Some("/tmp/custom-bin:/usr/local/bin:/usr/bin")
+        );
+    }
 }

@@ -34,6 +34,7 @@ In this end state, `world deps` MUST NOT read (or be influenced by) any of:
 - `$SUBSTRATE_HOME/world-deps.local.yaml`
 - `.substrate/world-deps.selection.yaml`
 - `$SUBSTRATE_HOME/world-deps.selection.yaml`
+- `SUBSTRATE_WORLD_DEPS_MANIFEST` (legacy env override)
 Replacement completeness requirement:
 - Tests that previously validated legacy file loading MUST be updated to validate the new inventory/enabled files, and MUST fail if `world deps` still reads any legacy file paths.
 
@@ -353,11 +354,14 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 - `available` (default):
   - Prints the **current inventory view** visible from `cwd` (after inventory merge + `world.deps.inventory_mode`).
   - Output SHOULD be a table.
+  - Table columns MUST include: `source`, `kind`, `name`, `runnable`, `method`, `entrypoints`, `platforms`, `description`.
+    - `source` MUST be one of: `builtin`, `global`, `workspace` and indicates which scope contributed the **effective definition** after inventory merge + platform filtering + `world.deps.inventory_mode` (full-replace by item name).
   - It MUST NOT make world-agent calls.
   - Hints (stderr, only if empty):
     - `substrate: note: no deps inventory items visible for this directory; add definitions under $SUBSTRATE_HOME/deps/ or <workspace_root>/.substrate/deps/`
 - `enabled`:
   - Prints the **current enabled list** (effective merged enabled list for `cwd`) without querying world-agent.
+  - It MUST NOT expand bundles; it prints exactly what the effective enabled list contains (packages and bundles).
   - If any enabled name does not exist in the effective available inventory view, it MUST fail with exit `2` and list the unknown names.
   - Stderr (always):
     - `substrate: note: showing current effective enabled deps list for this directory`
@@ -365,14 +369,17 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
     - `substrate: hint: add deps with 'substrate world deps workspace add ...' (or '... global add ...') then apply with 'substrate world deps current sync'`
 - `applied`:
   - Prints world-agent-backed status for items.
-  - Default scope: the current enabled set.
+  - Default scope: the **effective enabled closure** for the current directory:
+    - Start from the effective enabled list.
+    - For each enabled bundle, include the bundle row and each of its constituent packages (that exist in the effective inventory) as additional rows, in-order, de-duplicated.
   - `--all`: include every currently available inventory item (debug/bring-up only). Valid only with `applied`.
   - Stderr (always):
     - `substrate: note: showing current world deps status for this directory`
 - Output MUST include, for each item (view-dependent):
   - Always: `name` (string) and `kind=package|bundle`
+  - For `available`: `source=builtin|global|workspace` (effective inventory provenance after merge; required in table output and `--json`)
   - For `enabled`: list items are ordered and MUST match the effective `world.deps.enabled` list; `enabled=true` is implied.
-  - For `applied`: `enabled=true|false` (enabled in the effective enabled list)
+  - For `applied`: `enabled=true|false` (enabled in the effective enabled closure; bundle-expanded packages count as enabled)
   - For `applied`: `world=present|missing|blocked`
   - Optional (only for `applied`): `remediation=<one-line remediation or empty>`
 - Exit codes:

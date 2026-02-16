@@ -597,96 +597,170 @@ pub struct WorldDepsCmd {
 
 #[derive(Subcommand, Debug)]
 pub enum WorldDepsAction {
-    Status(WorldDepsStatusArgs),
-    Install(WorldDepsInstallArgs),
-    Sync(WorldDepsSyncArgs),
-    /// Provision system packages required by selected tools (or the full inventory with --all)
-    Provision(WorldDepsProvisionArgs),
-    /// Initialize a world-deps selection file (required before status/sync/install do anything)
-    Init(WorldDepsInitArgs),
-    /// Add tools to the world-deps selection file
-    Select(WorldDepsSelectArgs),
+    /// Current effective deps views for this directory.
+    Current(WorldDepsCurrentCmd),
+    /// Global patch-scoped deps surfaces ($SUBSTRATE_HOME).
+    Global(WorldDepsGlobalCmd),
+    /// Workspace patch-scoped deps surfaces (<workspace_root>/.substrate).
+    Workspace(WorldDepsWorkspaceCmd),
 }
 
 #[derive(Args, Debug, Clone)]
-pub struct WorldDepsStatusArgs {
-    /// Specific tools to inspect (defaults to selected tools; use --all to ignore selection)
-    #[arg(value_name = "TOOL")]
-    pub tools: Vec<String>,
-    /// Ignore selection and use the full inventory scope
+pub struct WorldDepsCurrentCmd {
+    #[command(subcommand)]
+    pub action: WorldDepsCurrentAction,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum WorldDepsCurrentAction {
+    /// Show the effective deps views for this directory.
+    List(WorldDepsCurrentListArgs),
+    /// Show the effective (merged) definition for a single item.
+    Show(WorldDepsCurrentShowArgs),
+    /// Compute and apply an install plan immediately (does not modify enabled list).
+    Install(WorldDepsCurrentInstallArgs),
+    /// Apply the current effective enabled list for this directory.
+    Sync(WorldDepsCurrentSyncArgs),
+}
+
+#[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq)]
+#[value(rename_all = "kebab-case")]
+pub enum WorldDepsCurrentListViewArg {
+    Available,
+    Enabled,
+    Applied,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct WorldDepsCurrentListArgs {
+    /// View to show (default: available).
+    #[arg(value_name = "VIEW", default_value = "available")]
+    pub view: WorldDepsCurrentListViewArg,
+
+    /// Include every visible inventory item (valid only for applied; debug/bring-up only).
     #[arg(long = "all")]
     pub all: bool,
-    /// Emit JSON summary for automation
+
+    /// Output machine-readable JSON.
     #[arg(long)]
     pub json: bool,
 }
 
 #[derive(Args, Debug, Clone)]
-pub struct WorldDepsInstallArgs {
-    /// Tool names to install inside the guest
-    #[arg(value_name = "TOOL", required = true)]
-    pub tools: Vec<String>,
-    /// Ignore selection and allow installing tools not present in the selection file
-    #[arg(long = "all")]
-    pub all: bool,
-    /// Show planned actions without executing them
-    #[arg(long = "dry-run")]
-    pub dry_run: bool,
-    /// Stream guest logs while running installers
-    #[arg(long = "verbose")]
-    pub verbose: bool,
-}
+pub struct WorldDepsCurrentShowArgs {
+    /// Inventory item name (package or bundle).
+    #[arg(value_name = "ITEM")]
+    pub item_name: String,
 
-#[derive(Args, Debug, Clone)]
-pub struct WorldDepsSyncArgs {
-    /// Ignore selection and use the full inventory scope
-    #[arg(long = "all")]
-    pub all: bool,
-    /// Show planned actions without executing them
-    #[arg(long = "dry-run")]
-    pub dry_run: bool,
-    /// Stream guest logs while running installers
-    #[arg(long = "verbose")]
-    pub verbose: bool,
-}
-
-#[derive(Args, Debug, Clone)]
-pub struct WorldDepsProvisionArgs {
-    /// Ignore selection and use the full inventory scope
-    #[arg(long = "all")]
-    pub all: bool,
-    /// Show planned actions without executing them
-    #[arg(long = "dry-run")]
-    pub dry_run: bool,
-    /// Stream guest logs while running provisioning commands
-    #[arg(long = "verbose")]
-    pub verbose: bool,
-}
-
-#[derive(Args, Debug, Clone)]
-pub struct WorldDepsInitArgs {
-    /// Write `.substrate/world-deps.selection.yaml` (creates `.substrate/` if missing)
-    #[arg(long, conflicts_with = "global")]
-    pub workspace: bool,
-    /// Write `$SUBSTRATE_HOME/world-deps.selection.yaml` (or `~/.substrate/world-deps.selection.yaml`)
-    #[arg(long, conflicts_with = "workspace")]
-    pub global: bool,
-    /// Overwrite an existing selection file
+    /// Output machine-readable JSON.
     #[arg(long)]
-    pub force: bool,
+    pub json: bool,
+
+    /// Show provenance and world-backed status.
+    #[arg(long)]
+    pub explain: bool,
 }
 
 #[derive(Args, Debug, Clone)]
-pub struct WorldDepsSelectArgs {
-    /// Tool names to add to the selection file
-    #[arg(value_name = "TOOL", required = true)]
-    pub tools: Vec<String>,
-    /// Write `.substrate/world-deps.selection.yaml` (creates `.substrate/` if missing)
-    #[arg(long, conflicts_with = "global")]
-    pub workspace: bool,
-    /// Write `$SUBSTRATE_HOME/world-deps.selection.yaml` (or `~/.substrate/world-deps.selection.yaml`)
-    #[arg(long, conflicts_with = "workspace")]
-    pub global: bool,
+pub struct WorldDepsCurrentInstallArgs {
+    /// Inventory item name(s) (package or bundle).
+    #[arg(value_name = "ITEM", required = true)]
+    pub item_names: Vec<String>,
+
+    /// Print a dry-run preview (no mutations).
+    #[arg(long = "dry-run")]
+    pub dry_run: bool,
+
+    /// Include additional debug output.
+    #[arg(long = "verbose")]
+    pub verbose: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct WorldDepsCurrentSyncArgs {
+    /// Print a dry-run preview (no mutations).
+    #[arg(long = "dry-run")]
+    pub dry_run: bool,
+
+    /// Include additional debug output.
+    #[arg(long = "verbose")]
+    pub verbose: bool,
+
+    /// Ignore enabled list and use the full inventory scope (debug/bring-up only).
+    #[arg(long = "all")]
+    pub all: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct WorldDepsGlobalCmd {
+    #[command(subcommand)]
+    pub action: WorldDepsGlobalAction,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum WorldDepsGlobalAction {
+    /// Show the global patch-scoped deps views.
+    List(WorldDepsScopedListArgs),
+    /// Add items to the global enabled patch (does not install).
+    Add(WorldDepsScopedMutateArgs),
+    /// Remove items from the global enabled patch (does not uninstall).
+    Remove(WorldDepsScopedMutateArgs),
+    /// Reset the global enabled patch to inherited defaults.
+    Reset(WorldDepsScopedResetArgs),
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct WorldDepsWorkspaceCmd {
+    #[command(subcommand)]
+    pub action: WorldDepsWorkspaceAction,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum WorldDepsWorkspaceAction {
+    /// Show the workspace patch-scoped deps views.
+    List(WorldDepsScopedListArgs),
+    /// Add items to the workspace enabled patch (does not install).
+    Add(WorldDepsScopedMutateArgs),
+    /// Remove items from the workspace enabled patch (does not uninstall).
+    Remove(WorldDepsScopedMutateArgs),
+    /// Reset the workspace enabled patch to inherited defaults.
+    Reset(WorldDepsScopedResetArgs),
+}
+
+#[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq)]
+#[value(rename_all = "kebab-case")]
+pub enum WorldDepsScopedListViewArg {
+    Available,
+    Enabled,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct WorldDepsScopedListArgs {
+    /// View to show (default: available).
+    #[arg(value_name = "VIEW", default_value = "available")]
+    pub view: WorldDepsScopedListViewArg,
+
+    /// Output machine-readable JSON.
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct WorldDepsScopedMutateArgs {
+    /// Inventory item name(s) (package or bundle).
+    #[arg(value_name = "ITEM", required = true)]
+    pub item_names: Vec<String>,
+
+    /// Output machine-readable JSON.
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct WorldDepsScopedResetArgs {
+    /// Output machine-readable JSON.
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Args, Debug)]

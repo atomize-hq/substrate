@@ -162,27 +162,14 @@ pub mod doctor_fixture {
                 }
             }));
             self.write_world_deps_fixture(json!({
-                "manifest": {
-                    "inventory": {
-                        "base": self.home.join("manager_hooks.yaml"),
-                        "overlay": self.home.join(".substrate/manager_hooks.local.yaml"),
-                        "overlay_exists": false
-                    },
-                    "overlays": {
-                        "installed": self.home.join(".substrate/world-deps.yaml"),
-                        "installed_exists": false,
-                        "user": self.home.join(".substrate/world-deps.local.yaml"),
-                        "user_exists": false
-                    },
-                    "layers": [
-                        self.home.join("manager_hooks.yaml"),
-                        self.home.join(".substrate/manager_hooks.local.yaml"),
-                        self.home.join(".substrate/world-deps.yaml"),
-                        self.home.join(".substrate/world-deps.local.yaml")
-                    ]
-                },
-                "world_disabled_reason": null,
-                "tools": []
+                "schema_version": 1,
+                "cwd": self.home,
+                "inventory_packages": 0,
+                "inventory_bundles": 0,
+                "inventory_mode": "merged",
+                "builtins": "enabled",
+                "enabled": [],
+                "applied": []
             }));
         }
 

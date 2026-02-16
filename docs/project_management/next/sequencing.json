@@ -413,6 +413,37 @@
       ]
     },
     {
+      "order": 30.35,
+      "id": "world_deps_host_visible_hardening",
+      "title": "World deps host-visible hardening",
+      "branch": "feat/world-deps-host-visible-hardening",
+      "directory": "docs/project_management/next/world-deps-host-visible-hardening",
+      "plan": "docs/project_management/next/world-deps-host-visible-hardening/plan.md",
+      "status": "not_started",
+      "sequence": [
+        {
+          "id": "WDH0",
+          "spec": "docs/project_management/next/world-deps-host-visible-hardening/WDH0-spec.md"
+        },
+        {
+          "id": "WDH1",
+          "spec": "docs/project_management/next/world-deps-host-visible-hardening/WDH1-spec.md"
+        },
+        {
+          "id": "WDH2",
+          "spec": "docs/project_management/next/world-deps-host-visible-hardening/WDH2-spec.md"
+        },
+        {
+          "id": "WDH3",
+          "spec": "docs/project_management/next/world-deps-host-visible-hardening/WDH3-spec.md"
+        }
+      ],
+      "notes": [
+        "Hardens host-visible worlds for deterministic toolchain resolution: sanitized world env, wrapper-anchored runnable entrypoints, host-path-independent present semantics, optional exec guard, and deps scaffold UX.",
+        "Sequenced after world_deps_packages_bundles_contract so the inventory/enabled contract surfaces are stable before host-visible hardening is implemented."
+      ]
+    },
+    {
       "order": 31,
       "id": "full_isolation_landlock_overlayfs_compat",
       "title": "Full isolation Landlock ↔ overlayfs backing dirs compat",

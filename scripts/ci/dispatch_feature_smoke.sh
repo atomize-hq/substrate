@@ -7,6 +7,7 @@ Usage:
   scripts/ci/dispatch_feature_smoke.sh \
     --feature-dir docs/project_management/next/<feature> \
     [--runner-kind github-hosted|self-hosted] \
+    [--macos-runner-kind github-hosted|self-hosted] \
     --platform behavior|linux|macos|windows|wsl|all \
     [--checkout-ref <git-ref>] \
     [--smoke-slice-id <slice>] \
@@ -106,6 +107,7 @@ PY
 FEATURE_DIR=""
 PLATFORM=""
 RUNNER_KIND="self-hosted"
+MACOS_RUNNER_KIND=""
 RUN_WSL=0
 RUN_INTEG_CHECKS=0
 CHECKOUT_REF=""
@@ -174,6 +176,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --runner-kind)
             RUNNER_KIND="${2:-}"
+            shift 2
+            ;;
+        --macos-runner-kind)
+            MACOS_RUNNER_KIND="${2:-}"
             shift 2
             ;;
         --platform)
@@ -251,6 +257,18 @@ case "${RUNNER_KIND}" in
         ;;
 esac
 
+if [[ -n "${MACOS_RUNNER_KIND}" ]]; then
+    case "${MACOS_RUNNER_KIND}" in
+        github-hosted|self-hosted) ;;
+        *)
+            echo "Invalid --macos-runner-kind: ${MACOS_RUNNER_KIND}" >&2
+            usage >&2
+            ERROR_KIND="usage"
+            exit 2
+            ;;
+    esac
+fi
+
 require_cmd git
 require_cmd gh
 require_cmd python3
@@ -306,11 +324,15 @@ echo "Workflow ref: ${WORKFLOW_REF}" >&2
 dispatch_started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 run_wsl_flag="false"
 run_integ_checks_flag="false"
+macos_runner_kind_arg=()
 if [[ "${RUN_WSL}" -eq 1 ]]; then
     run_wsl_flag="true"
 fi
 if [[ "${RUN_INTEG_CHECKS}" -eq 1 ]]; then
     run_integ_checks_flag="true"
+fi
+if [[ -n "${MACOS_RUNNER_KIND}" ]]; then
+    macos_runner_kind_arg=(-f "macos_runner_kind=${MACOS_RUNNER_KIND}")
 fi
 if ! run_with_timeout "${GH_TIMEOUT_SECS}" gh workflow run "${WORKFLOW}" --ref "${WORKFLOW_REF}" \
     -f feature_dir="${FEATURE_DIR}" \
@@ -319,7 +341,8 @@ if ! run_with_timeout "${GH_TIMEOUT_SECS}" gh workflow run "${WORKFLOW}" --ref "
     -f platform="${PLATFORM}" \
     -f smoke_slice_id="${SMOKE_SLICE_ID}" \
     -f run_wsl="${run_wsl_flag}" \
-    -f run_integ_checks="${run_integ_checks_flag}"; then
+    -f run_integ_checks="${run_integ_checks_flag}" \
+    "${macos_runner_kind_arg[@]}"; then
     ERROR_KIND="dispatch_failed"
     die "failed to dispatch workflow via gh (workflow=${WORKFLOW} ref=${WORKFLOW_REF})"
 fi

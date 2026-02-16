@@ -189,12 +189,12 @@ Each entry below is a stability promise: the variable name, parsing rules, and s
 #### `SUBSTRATE_WORLD_DEPS_MANIFEST`
 | Field | Value |
 | --- | --- |
-| Bucket | Config override input |
-| Type / allowed values | String path; when set (even to an empty string), `substrate world deps …` treats the override as required |
-| Default if unset | Installed path `<prefix>/versions/<version>/config/world-deps.yaml` when installed; otherwise repo `scripts/substrate/world-deps.yaml` |
-| Precedence | Env overrides built-in path detection; no CLI flag exists |
+| Bucket | Legacy input (ignored) |
+| Type / allowed values | String path; ignored by `substrate world deps` (packages/bundles contract) |
+| Default if unset | N/A |
+| Precedence | Ignored |
 | Scope | Run-only |
-| Examples | `SUBSTRATE_WORLD_DEPS_MANIFEST=/srv/world-deps.yaml substrate world deps status --json` |
+| Examples | (ignored; setting this has no effect on `substrate world deps`) |
 | Security notes | Not sensitive. |
 
 ### Config Override Inputs (world backend endpoints)

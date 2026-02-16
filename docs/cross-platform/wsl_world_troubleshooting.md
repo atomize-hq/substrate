@@ -19,42 +19,23 @@ apply one of these fixes.
 - [T-010 Forwarder log stale](#t-010-forwarder-log-stale)
 - [T-011 Pipe name already in use](#t-011-pipe-name-already-in-use)
 
-## Manager parity quick check
+## World deps quick check
 
-Run the aggregated health command whenever the guest tools diverge from the
-Windows host. The text output calls out host-only vs world-only managers, while
-the JSON payload exposes explicit lists for telemetry.
-
-```powershell
-PS C:\> substrate.exe health --json `
-  | ConvertFrom-Json `
-  | Select-Object -ExpandProperty summary `
-  | Select-Object attention_required_managers, world_only_managers
-
-attention_required_managers : {asdf}
-world_only_managers        : {bun}
-```
-
-`attention_required_managers` lists host-present/world-missing managers (fix by
-running `substrate world deps sync` once WSL is healthy; add `--all` only if you
-want to force guest installs for tools missing on the host). `world_only_managers`
-shows tools that exist only in the guest (install them on Windows via
-`substrate shim repair --manager <name> --yes` or your preferred package
-manager).
-
-Inspect per-manager guidance with:
+Run the aggregated health command whenever world-backed tooling appears missing
+inside WSL. The JSON payload exposes the world backend status plus any enabled
+deps that are `missing` or `blocked/manual`.
 
 ```powershell
 PS C:\> substrate.exe health --json `
   | ConvertFrom-Json `
   | Select-Object -ExpandProperty summary `
-  | Select-Object -ExpandProperty manager_states `
-  | Format-Table name, parity, recommendation -AutoSize
+  | Select-Object missing_managers, world_ok, world_deps_missing, world_deps_blocked, world_deps_error
 ```
 
-`parity` values (`host_only`, `world_only`, `absent`, `synced`, `unknown`) help
-pin down whether the fix belongs on Windows or inside the guest. Keep the JSON
-snippet in evidence logs whenever you close a catalogue entry.
+Typical next steps:
+- If `world_ok` is false/unknown, start with `substrate.exe world doctor --json`.
+- If `world_deps_missing` is non-empty, run `substrate.exe world deps current sync` then verify with `substrate.exe world deps current list applied`.
+- If `world_deps_blocked` is non-empty, inspect with `substrate.exe world deps current show <name> --explain` and follow the manual instructions.
 
 ### T-001 Virtualization disabled
 
