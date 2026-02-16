@@ -1,0 +1,1 @@
+pwsh not found on this Linux host; windows smoke not runnable here

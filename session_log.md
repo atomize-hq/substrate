@@ -128,3 +128,87 @@ This file records smoke + targeted integration validation results for WDH0 witho
     - World-agent: honor `SUBSTRATE_WORLD_SOCKET` env var for direct-bind dev runs (useful for local testing; systemd still binds `/run/substrate.sock` by default).
 - Status:
   - Full end-to-end validation of the fixed `always_isolate` path requires rebuilding/reprovisioning the system world-agent service (root/systemd) and rerunning `docs/project_management/next/world-deps-host-visible-hardening/smoke/linux-smoke.sh` with `SUBSTRATE_SMOKE_SLICE_ID=WDH0`.
+
+
+## Run 2026-02-16 14:32:49 UTC (WDH1-integ kickoff)
+
+- Git HEAD: 599c3ca7868fc8ea3802c3600506852420303623
+- Git branch: world-deps-host-visible-hardening-wdh1-integ-core
+- Platform: Linux spenser-linux 6.16.8-1-MANJARO #1 SMP PREEMPT_DYNAMIC Fri, 19 Sep 2025 16:09:36 +0000 x86_64 GNU/Linux
+- Worktree: `/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh1-integ-core`
+- Spec: `docs/project_management/next/world-deps-host-visible-hardening/WDH1-spec.md`
+- Artifacts: artifacts/wdh1-integ-20260216-143249
+
+### Platform smoke: scripts/check-container-prereqs.sh
+
+- Result: exit_code=0
+- Output: artifacts/wdh1-integ-20260216-143249/check-container-prereqs.txt
+
+
+### Build: cargo build -p substrate --bins
+
+- Result: exit_code=0
+- Output: artifacts/wdh1-integ-20260216-143249/cargo-build-substrate.txt
+
+
+### Tests: cargo test -p shell --tests
+
+- Result: exit_code=0
+- Output: artifacts/wdh1-integ-20260216-143249/cargo-test-shell.txt
+
+
+### CLI smoke: target/debug/substrate --version
+
+- Result: exit_code=0
+- Output: artifacts/wdh1-integ-20260216-143249/substrate-version.txt
+
+
+### Platform smoke: substrate health --json
+
+- Result: exit_code=0
+- Output: artifacts/wdh1-integ-20260216-143249/substrate-health.json
+
+
+### Platform smoke: substrate world doctor --json
+
+- Result: exit_code=0
+- Output: artifacts/wdh1-integ-20260216-143249/substrate-world-doctor.json
+
+
+### Platform smoke: substrate shim doctor --json
+
+- Result: exit_code=0
+- Output: artifacts/wdh1-integ-20260216-143249/substrate-shim-doctor.json
+
+
+### WDH smoke: linux-smoke.sh (slice=WDH1)
+
+- Default request profile result: exit_code=1
+- Output: artifacts/wdh1-integ-20260216-143249/linux-smoke-wdh1.abs.txt
+- Evidence (Case A PATH): artifacts/wdh1-integ-20260216-143249/linux-smoke-caseA-path.txt
+- Workaround (`SUBSTRATE_WORLD_REQUEST_PROFILE=world-deps-provision`) result: exit_code=0
+- Output: artifacts/wdh1-integ-20260216-143249/linux-smoke-wdh1.abs.world-deps-provision.txt
+
+
+### WDH smoke: macos-smoke.sh (slice=WDH1)
+
+- Result: exit_code=4 (not supported on this Linux host)
+- Output: artifacts/wdh1-integ-20260216-143249/macos-smoke-wdh1.abs.txt
+
+
+### WDH smoke: windows-smoke.ps1 (slice=WDH1)
+
+- Result: exit_code=4 (`pwsh` not installed on this Linux host)
+- Output: artifacts/wdh1-integ-20260216-143249/windows-smoke-wdh1.abs.txt
+
+
+### WDH1 acceptance probe: apt npm wrappers
+
+- Setup:
+  - Policy set: world_fs.host_visible=true
+  - Cleaned wrappers: `rm -f /var/lib/substrate/world-deps/bin/npm /var/lib/substrate/world-deps/bin/npx`
+- Baseline: `substrate --world -c 'command -v npm >/dev/null'` exits 1
+  - Output: artifacts/wdh1-integ-20260216-143249/wdh1-accept-npm-not-enabled.txt
+- Attempted apply: `substrate world deps current sync` exits 4
+  - Output: artifacts/wdh1-integ-20260216-143249/wdh1-accept-current-sync.txt
+  - Reason: `apt-get` not found in this world (host is Manjaro/Arch), so `install.method=apt` cannot be applied end-to-end on this machine.
