@@ -115,6 +115,7 @@ printf "%s\n" "$path" | grep -qv '/\\.local/bin'
 echo "== Case B: no enabled deps => npm not routed to host PATH or world wrapper =="
 "$SUBSTRATE_BIN" world deps global reset >/dev/null 2>&1 || true
 "$SUBSTRATE_BIN" world deps workspace reset >/dev/null 2>&1 || true
+"$SUBSTRATE_BIN" world deps current sync >/dev/null
 
 fake_nvm_bin="$workspace/fake-home/.config/nvm/versions/node/v0.0.0/bin"
 mkdir -p "$fake_nvm_bin"
