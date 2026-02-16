@@ -1,0 +1,1 @@
+world-deps-host-visible-hardening: macos smoke is supported only on macOS (OSTYPE=linux-gnu)
