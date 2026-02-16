@@ -90,6 +90,7 @@ pub(super) fn normalize_env_for_linux_guest(
     // that use a host-exec world-agent stub.
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn ensure_world_deps_bin_on_path(env_map: &mut std::collections::HashMap<String, String>) {
     const DEFAULT_WORLD_DEPS_BIN: &str = "/var/lib/substrate/world-deps/bin";
     let bin = env_map
@@ -1489,7 +1490,7 @@ pub(super) fn emit_stream_chunk(agent_label: &str, data: &[u8], is_stderr: bool)
     ));
 }
 
-#[cfg(test)]
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
 mod tests {
     use super::ensure_world_deps_bin_on_path;
 

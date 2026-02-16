@@ -98,6 +98,24 @@ struct PtyRepl {
     stop_reader: Arc<AtomicBool>,
 }
 
+impl Drop for PtyRepl {
+    fn drop(&mut self) {
+        self.stop_reader.store(true, Ordering::Relaxed);
+        self.master.take();
+
+        if self.waited.is_none() {
+            let _ = self.child.kill();
+            let _ = self.child.try_wait().ok().flatten().map(|s| {
+                self.waited = Some(s);
+            });
+        }
+
+        if let Some(handle) = self.reader_handle.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
 impl PtyRepl {
     fn spawn(
         project_dir: &Path,
@@ -360,7 +378,9 @@ fn c4_repl_renders_non_utf8_bytes_and_continues() {
         .expect("banner");
 
     repl.send_line(&format!("echo {marker}"));
-    repl.wait_for_output(marker, Duration::from_secs(3))
+    // Avoid matching the echoed input line (`echo __C4_RENDER__`) and instead wait for the actual
+    // command output.
+    repl.wait_for_output(&format!("{marker} bin="), Duration::from_secs(3))
         .expect("marker output");
 
     repl.send_line("echo after");
