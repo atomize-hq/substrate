@@ -991,6 +991,47 @@ async fn handle_persistent_session(
                                     }
                                 };
 
+                                let host_visible = !world
+                                    .base_env
+                                    .get("SUBSTRATE_WORLD_FS_ISOLATION")
+                                    .is_some_and(|value| value.trim().eq_ignore_ascii_case("full"));
+
+                                let mut guard_env = session_env.clone();
+                                for (k, v) in world.base_env.iter() {
+                                    guard_env.insert(k.clone(), v.clone());
+                                }
+
+                                let anchor_guard_enabled = should_guard_anchor(&guard_env);
+                                let desired_cwd = if session_cwd.is_absolute()
+                                    && (!anchor_guard_enabled
+                                        || session_cwd.starts_with(&world.project_dir))
+                                {
+                                    session_cwd.to_path_buf()
+                                } else {
+                                    world.project_dir.clone()
+                                };
+
+                                if let Some(deny) = crate::world_exec_guard::check_command(
+                                    &program,
+                                    &desired_cwd,
+                                    &guard_env,
+                                    host_visible,
+                                ) {
+                                    let message = crate::world_exec_guard::deny_message(&deny);
+                                    let data_b64 = BASE64.encode(message.as_bytes());
+                                    let _ =
+                                        ws_write_tx.send(PersistentServerMessage::Stdout { data_b64 });
+                                    let _ =
+                                        ws_write_tx.send(PersistentServerMessage::CommandComplete {
+                                            seq,
+                                            token_hex,
+                                            exit: 5,
+                                            cwd: desired_cwd.clone(),
+                                        });
+                                    session_cwd = desired_cwd;
+                                    continue;
+                                }
+
                                 let (child_events, pgid) = match spawn_persistent_exec(
                                     &world,
                                     &pty,
@@ -2062,6 +2103,7 @@ async fn handle_legacy_start(
                 )
             };
 
+        let host_visible = !isolation_full;
         service.set_last_policy_resolution_mode(policy_resolution_mode);
 
         if isolation_full {
@@ -2158,6 +2200,17 @@ async fn handle_legacy_start(
         } else {
             project_dir.clone()
         };
+
+        if let Some(deny) =
+            crate::world_exec_guard::check_command(&cmd, &desired_cwd, &env, host_visible)
+        {
+            let message = crate::world_exec_guard::deny_message(&deny);
+            let data_b64 = BASE64.encode(message.as_bytes());
+            let _ = send_ws_message(&tx, &ServerMessage::Stdout { data_b64 }).await;
+            let _ = send_ws_message(&tx, &ServerMessage::Exit { code: 5 }).await;
+            return;
+        }
+
         env.insert(
             "SUBSTRATE_MOUNT_MERGED_DIR".to_string(),
             merged_dir.display().to_string(),

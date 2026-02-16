@@ -434,6 +434,24 @@ impl WorldAgentService {
             enforcement_plan_b64,
         } = policy_inputs;
 
+        let host_visible = !isolation_full;
+        let empty_env: HashMap<String, String> = HashMap::new();
+        let guard_env = req.env.as_ref().unwrap_or(&empty_env);
+        if let Some(deny) =
+            crate::world_exec_guard::check_command(&req.cmd, &cwd, guard_env, host_visible)
+        {
+            let span_id = format!("spn_{}", uuid::Uuid::now_v7());
+            let message = crate::world_exec_guard::deny_message(&deny);
+            return Ok(ExecuteResponse {
+                exit: 5,
+                span_id,
+                stdout_b64: BASE64.encode(b""),
+                stderr_b64: BASE64.encode(message.as_bytes()),
+                scopes_used: Vec::new(),
+                fs_diff: None,
+            });
+        }
+
         // Create world spec from request
         let spec = WorldSpec {
             reuse_session: true,
@@ -1027,6 +1045,44 @@ impl WorldAgentService {
             enforcement_plan_b64,
         } = policy_inputs;
         let always_isolate = should_always_isolate(&req);
+
+        let host_visible = !isolation_full;
+        let empty_env: HashMap<String, String> = HashMap::new();
+        let guard_env = req.env.as_ref().unwrap_or(&empty_env);
+        if let Some(deny) =
+            crate::world_exec_guard::check_command(&req.cmd, &cwd, guard_env, host_visible)
+        {
+            let span_id = format!("spn_{}", uuid::Uuid::now_v7());
+            let message = crate::world_exec_guard::deny_message(&deny);
+            let frames = vec![
+                ExecuteStreamFrame::Start {
+                    span_id: span_id.clone(),
+                },
+                ExecuteStreamFrame::Stderr {
+                    chunk_b64: BASE64.encode(message.as_bytes()),
+                },
+                ExecuteStreamFrame::Exit {
+                    exit: 5,
+                    span_id,
+                    scopes_used: Vec::new(),
+                    fs_diff: None,
+                },
+            ];
+
+            let stream = futures_util::stream::iter(frames.into_iter().map(|frame| {
+                let mut payload = serde_json::to_vec(&frame).expect("serialize frame");
+                payload.push(b'\n');
+                Ok::<Bytes, Infallible>(Bytes::from(payload))
+            }));
+
+            let body = boxed(StreamBody::new(stream));
+            let response = Response::builder()
+                .status(StatusCode::OK)
+                .header("content-type", "application/x-ndjson")
+                .body(body)
+                .map_err(|e| anyhow!("failed to build stream response: {e}"))?;
+            return Ok(response);
+        }
 
         let spec = WorldSpec {
             reuse_session: true,

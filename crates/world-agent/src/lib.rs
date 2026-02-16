@@ -8,6 +8,7 @@ pub mod pty;
 pub mod service;
 #[cfg(unix)]
 mod socket_activation;
+mod world_exec_guard;
 #[cfg(unix)]
 pub use crate::socket_activation::test_support as socket_activation_test_support;
 
