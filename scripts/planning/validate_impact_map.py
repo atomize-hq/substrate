@@ -92,7 +92,7 @@ def _repo_root_strict() -> Path:
 
 def _iter_region_lines(lines: list[str], start_lineno: int, end_lineno: int) -> Iterable[tuple[int, str]]:
     for idx in range(start_lineno, end_lineno + 1):
-        yield (idx, lines[idx - 1].rstrip("\n"))
+        yield (idx, lines[idx - 1].rstrip("\r\n"))
 
 
 def _find_touch_set_region(lines: list[str]) -> tuple[int, int] | None:

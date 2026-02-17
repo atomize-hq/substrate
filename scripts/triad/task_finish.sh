@@ -204,7 +204,7 @@ fi
 TASK_TYPE="$(jq -r '.type' <<<"${TASK_JSON}")"
 REQUIRED_TARGETS="$(jq -r '.required_make_targets // [] | join(" ")' <<<"${TASK_JSON}")"
 TASK_PLATFORM="$(jq -r '.platform // empty' <<<"${TASK_JSON}")"
-    MERGE_TO_ORCH="$(jq -r 'if has("merge_to_orchestration") then .merge_to_orchestration else empty end' <<<"${TASK_JSON}")"
+MERGE_TO_ORCH="$(jq -r 'if has("merge_to_orchestration") then .merge_to_orchestration else empty end' <<<"${TASK_JSON}")"
 FEATURE_NAME="$(jq -r '.meta.feature // empty' "${TASKS_JSON}")"
 if [[ -z "${FEATURE_NAME}" ]]; then
     die "tasks.json meta.feature is required for automation packs"
@@ -241,9 +241,14 @@ guard_no_planning_doc_edits() {
     if git diff --name-only --cached | rg -q "^docs/project_management/next/"; then
         die "Worktree contains staged changes under docs/project_management/next/ (do not edit planning docs inside the worktree)"
     fi
+    if git ls-files --others --exclude-standard | rg -q "^docs/project_management/next/"; then
+        die "Worktree contains untracked files under docs/project_management/next/ (do not edit planning docs inside the worktree; move these edits to the orchestration branch)"
+    fi
 }
 
 impact_map_touchset_status="unknown"
+impact_map_source="unknown"
+impact_map_source_worktree=""
 impact_map_override_reason=""
 
 collect_touched_paths() {
@@ -252,6 +257,8 @@ collect_touched_paths() {
     mb="$(git merge-base "${base_sha}" HEAD 2>/dev/null)" || die "Could not compute merge-base for created_from_sha=${base_sha}"
 
     python3 - "${mb}" <<'PY'
+from __future__ import annotations
+
 import subprocess
 import sys
 
@@ -335,13 +342,19 @@ PY
 enforce_impact_map_touchset() {
     if [[ "${SLICE_SPEC_VERSION}" -lt 2 ]]; then
         impact_map_touchset_status="skipped"
+        impact_map_source="legacy"
+        impact_map_source_worktree=""
         log "WARN: impact_map touch-set enforcement disabled (meta.slice_spec_version < 2)."
         return 0
     fi
 
+    orch_wt="$(find_single_orch_worktree_or_die)"
+    impact_map_source="orchestration"
+    impact_map_source_worktree="${orch_wt}"
+
     local allow_json
-    if ! allow_json="$(python3 scripts/planning/validate_impact_map.py --feature-dir "${FEATURE_DIR_ABS}" --emit-json)"; then
-        die "impact_map Touch Set validation failed; fix ${FEATURE_DIR_RELPATH}/impact_map.md before completing the task"
+    if ! allow_json="$(cd "${orch_wt}" && python3 scripts/planning/validate_impact_map.py --feature-dir "${FEATURE_DIR_RELPATH}" --emit-json)"; then
+        die "impact_map Touch Set validation failed on orchestration branch; fix ${FEATURE_DIR_RELPATH}/impact_map.md in ${ORCH_BRANCH} before completing the task"
     fi
 
     declare -A allow_exact=()
@@ -402,7 +415,7 @@ enforce_impact_map_touchset() {
     done
     echo "" >&2
     echo "To proceed:" >&2
-    echo "1) On orchestration branch: update ${FEATURE_DIR_RELPATH}/impact_map.md to include these paths (Create/Edit/Deprecate/Delete)." >&2
+    echo "1) In orchestration worktree (${orch_wt}) on branch ${ORCH_BRANCH}: update ${FEATURE_DIR_RELPATH}/impact_map.md to include these paths (Create/Edit/Deprecate/Delete)." >&2
     echo "2) Commit planning docs update." >&2
     echo "3) Re-run: scripts/triad/task_finish.sh --task-id ${TASK_ID}" >&2
 
@@ -461,6 +474,17 @@ find_orch_worktree() {
     '
 }
 
+find_single_orch_worktree_or_die() {
+    mapfile -t orch_matches < <(find_orch_worktree)
+    if [[ "${#orch_matches[@]}" -gt 1 ]]; then
+        die "Multiple worktrees have orchestration branch checked out (${ORCH_BRANCH}); cannot safely determine orchestration worktree"
+    fi
+    if [[ "${#orch_matches[@]}" -eq 0 ]]; then
+        die "Could not find an orchestration worktree with branch ${ORCH_BRANCH} checked out (run triad-orch-ensure or check out ${ORCH_BRANCH} in a worktree)"
+    fi
+    printf '%s\n' "${orch_matches[0]}"
+}
+
 merge_to_orchestration_ff_only() {
     if [[ "${TASK_TYPE}" != "integration" ]]; then
         return 0
@@ -470,14 +494,7 @@ merge_to_orchestration_ff_only() {
         return 0
     fi
 
-    mapfile -t orch_matches < <(find_orch_worktree)
-    if [[ "${#orch_matches[@]}" -gt 1 ]]; then
-        die "Multiple worktrees have orchestration branch checked out (${ORCH_BRANCH}); cannot safely merge"
-    fi
-    if [[ "${#orch_matches[@]}" -eq 0 ]]; then
-        die "Could not find an orchestration worktree for branch ${ORCH_BRANCH} (run from a repo where ${ORCH_BRANCH} is checked out)"
-    fi
-    orch_wt="${orch_matches[0]}"
+    orch_wt="$(find_single_orch_worktree_or_die)"
 
     log "Merging ${TASK_BRANCH} -> ${ORCH_BRANCH} in orchestration worktree: ${orch_wt}"
     if [[ "${DRY_RUN}" -eq 1 ]]; then
@@ -634,7 +651,28 @@ else
     run_make_targets
 fi
 
+guard_no_planning_doc_edits
 enforce_impact_map_touchset
+
+    if [[ "${VERIFY_ONLY}" -eq 1 ]]; then
+        HEAD_SHA="$(git rev-parse HEAD)"
+        COMMITS_COUNT="$(git rev-list --count "${CREATED_FROM_SHA}..HEAD" || echo 0)"
+        smoke_run_id="skipped"
+
+        printf 'TASK_BRANCH=%s\n' "${TASK_BRANCH}"
+        printf 'WORKTREE=%s\n' "${WORKTREE_ROOT}"
+        printf 'HEAD=%s\n' "${HEAD_SHA}"
+        printf 'COMMITS=%s\n' "${COMMITS_COUNT}"
+        printf 'CHECKS=%s; impact_map_touchset:%s; impact_map_source:%s\n' "${checks_summary}" "${impact_map_touchset_status}" "${impact_map_source}"
+        printf 'IMPACT_MAP_SOURCE_WORKTREE=%s\n' "${impact_map_source_worktree}"
+        if [[ "${impact_map_touchset_status}" == "overridden" ]]; then
+            printf 'IMPACT_MAP_OVERRIDE_REASON=%s\n' "${impact_map_override_reason}"
+        fi
+        printf 'SMOKE_RUN=%s\n' "${smoke_run_id}"
+        printf 'MERGED_TO_ORCH=%s\n' "${MERGE_TO_ORCH}"
+    exit 0
+fi
+
 commit_changes
 merge_to_orchestration_ff_only
 
@@ -649,7 +687,8 @@ printf 'TASK_BRANCH=%s\n' "${TASK_BRANCH}"
 printf 'WORKTREE=%s\n' "${WORKTREE_ROOT}"
 printf 'HEAD=%s\n' "${HEAD_SHA}"
 printf 'COMMITS=%s\n' "${COMMITS_COUNT}"
-printf 'CHECKS=%s; impact_map_touchset:%s\n' "${checks_summary}" "${impact_map_touchset_status}"
+printf 'CHECKS=%s; impact_map_touchset:%s; impact_map_source:%s\n' "${checks_summary}" "${impact_map_touchset_status}" "${impact_map_source}"
+printf 'IMPACT_MAP_SOURCE_WORKTREE=%s\n' "${impact_map_source_worktree}"
 if [[ "${impact_map_touchset_status}" == "overridden" ]]; then
     printf 'IMPACT_MAP_OVERRIDE_REASON=%s\n' "${impact_map_override_reason}"
 fi
