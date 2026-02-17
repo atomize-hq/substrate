@@ -97,6 +97,28 @@ The impact map must include:
 
 ---
 
+## Touch set validation (gated strict)
+
+Planning-time validation of the Touch Set is gated by the Planning Pack version:
+- Read `<feature_dir>/tasks.json`
+- If `meta.slice_spec_version >= 2`: STRICT validation
+- Else: LEGACY (warn-only; never blocks)
+
+STRICT Touch Set rules (for `## Touch set (explicit)` only):
+- Required subsections: `### Create`, `### Edit`, `### Deprecate`, `### Delete`
+- Each subsection content is either:
+  - exactly `- None`, OR
+  - one or more top-level bullets (no indentation)
+- Each bullet must contain **exactly one** backticked repo-relative path token (`` `...` ``).
+- Placeholder tokens are forbidden (e.g., `<path>`, `TBD`, `TODO`, `WIP`, `None yet.`).
+- Path rules: POSIX `/` separators, no `..` segments, no globs, no backslashes, no absolute/`~`/drive-letter paths; leading `./` is allowed but normalized away; directory allow entries must end with `/`.
+- Strict Touch Set must include at least one non-None entry total across all sections.
+
+Downstream consumers:
+- Execution-time enforcement (triad `task_finish`) consumes the validator’s `--emit-json` output (see Initiative 2 S2).
+
+---
+
 ## Prompt (copy/paste)
 
 Use this prompt to generate `impact_map.md`.
@@ -144,4 +166,3 @@ Output requirements:
 - The touch set must have concrete repo-relative file paths (no vague “update some files”).
 - If you discover a missing surface or ownership gap, update `spec_manifest.md` before proceeding.
 ```
-

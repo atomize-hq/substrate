@@ -139,6 +139,9 @@ python3 scripts/planning/validate_spec_manifest.py --feature-dir "${FEATURE_DIR}
 echo "-- slice spec invariants (gated by meta.slice_spec_version)"
 python3 scripts/planning/validate_slice_specs.py --feature-dir "${FEATURE_DIR}"
 
+echo "-- impact_map.md Touch Set validation (gated by meta.slice_spec_version)"
+python3 scripts/planning/validate_impact_map.py --feature-dir "${FEATURE_DIR}"
+
 if [[ "${schema_version}" -ge 3 && "${automation_enabled}" == "true" && "${cross_platform_enabled}" == "true" ]]; then
     echo "-- ci_checkpoint_plan.md invariants"
     python3 scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "${FEATURE_DIR}"

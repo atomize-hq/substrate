@@ -23,18 +23,18 @@ Authoring standards:
 - `crates/shell/tests/config_global_show_workspace_override_note.rs` — focused integration test for stderr note + stdout invariants
 
 ### Edit
-- `crates/shell/src/execution/config_cmd.rs` — emit stderr note for `config global show` when workspace override is active
+- `crates/shell/src/execution/config_cmd.rs` — emit stderr note for config global show when workspace override is active
 - `docs/project_management/next/warn-config-global-show-workspace-overrides/tasks.json` — schema v4 + checkpoint wiring
 - `docs/project_management/next/warn-config-global-show-workspace-overrides/plan.md` — update artifact index and v4 references
 - `docs/project_management/next/warn-config-global-show-workspace-overrides/manual_testing_playbook.md` — ensure smoke linkage and explicit cases
-- `docs/project_management/next/warn-config-global-show-workspace-overrides/smoke/*` — keep smoke aligned with manual playbook and contract invariants
+- `docs/project_management/next/warn-config-global-show-workspace-overrides/smoke/` — keep smoke aligned with manual playbook and contract invariants
 - `docs/project_management/next/warn-config-global-show-workspace-overrides/execution_preflight_report.md` — update required artifact list and checkpoint references
 
 ### Deprecate
-- `docs/project_management/next/warn-config-global-show-workspace-overrides/integration_map.md` — replaced by `impact_map.md`
+- `docs/project_management/next/warn-config-global-show-workspace-overrides/integration_map.md` — replaced by impact_map.md
 
 ### Delete
-- None.
+- None
 
 ## Cascading implications (behavior/UX)
 

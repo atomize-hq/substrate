@@ -17,17 +17,22 @@ Authoring standards:
 
 List every file expected to be created/edited/deprecated/removed. Use repo-relative paths.
 
+Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
+- Each entry is a top-level bullet containing exactly one backticked path token.
+- Empty section is exactly `- None` (case-sensitive, no extra text).
+- The Touch Set must include at least one non-None entry total across all sections.
+
 ### Create
-- <path> — <why>
+- None
 
 ### Edit
-- <path> — <what changes and why>
+- None
 
 ### Deprecate
-- <path> — <replacement + deprecation policy>
+- None
 
 ### Delete
-- <path> — <why it is safe to delete>
+- None
 
 ## Cascading implications (behavior/UX)
 
@@ -77,4 +82,3 @@ List overlaps/conflicts with other in-flight work and resolve them deterministic
 - Spec updates required (if any):
   - `{{FEATURE_DIR}}/spec_manifest.md` — <change>
   - <spec doc> — <change>
-
