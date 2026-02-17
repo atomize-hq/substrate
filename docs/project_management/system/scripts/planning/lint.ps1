@@ -108,9 +108,23 @@ Write-Host "-- JSON validity"
 & jq -e . (Join-Path $FeatureDir "tasks.json") *> $null
 if ($LASTEXITCODE -ne 0) { throw "FAIL: tasks.json is not valid JSON" }
 
-$sequencingJson = Join-Path $pmRoot "packs/sequencing.json"
+$sequencingCanonical = Join-Path $pmPacksRoot "sequencing.json"
+$sequencingLegacy = Join-Path $pmRoot "next/sequencing.json"
+
+$sequencingJson = $sequencingCanonical
 if (-not (Test-Path -LiteralPath $sequencingJson)) {
-    $sequencingJson = Join-Path $pmRoot "next/sequencing.json"
+    Write-Host "WARN: canonical sequencing.json not found; falling back to legacy mirror: $sequencingLegacy"
+    $sequencingJson = $sequencingLegacy
+}
+
+if ((Test-Path -LiteralPath $sequencingCanonical) -and (Test-Path -LiteralPath $sequencingLegacy)) {
+    $canon = & jq -S . $sequencingCanonical | Out-String
+    if ($LASTEXITCODE -ne 0) { throw "FAIL: sequencing.json is not valid JSON: $sequencingCanonical" }
+    $legacy = & jq -S . $sequencingLegacy | Out-String
+    if ($LASTEXITCODE -ne 0) { throw "FAIL: sequencing.json is not valid JSON: $sequencingLegacy" }
+    if ($canon -ne $legacy) {
+        throw "FAIL: sequencing.json drift (canonical packs != legacy next). Fix: run `make pm-sync-sequencing` and commit the updated mirror."
+    }
 }
 
 & jq -e . $sequencingJson *> $null
@@ -206,7 +220,7 @@ if ($featureDirRel.StartsWith($pmNextPrefix)) {
     & jq -e --arg dir $featureDirRel '.sprints[] | select(.directory==$dir) | .id' $sequencingJson *> $null
     if ($LASTEXITCODE -ne 0) { throw "FAIL: sequencing.json missing sprint entry for $featureDirRel" }
 } elseif ($featureDirRel.StartsWith($pmPacksPrefix)) {
-    if ($sequencingJson -eq (Join-Path $pmRoot "packs/sequencing.json")) {
+    if ($sequencingJson -eq $sequencingCanonical) {
         & jq -e --arg dir $featureDirRel '.sprints[] | select(.directory==$dir) | .id' $sequencingJson *> $null
         if ($LASTEXITCODE -ne 0) { throw "FAIL: sequencing.json missing sprint entry for $featureDirRel" }
     } else {

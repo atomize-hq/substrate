@@ -78,7 +78,7 @@ Planning agents must read end-to-end:
 - `docs/project_management/system/templates/planning_pack/PLANNING_SESSION_LOG_TEMPLATE.md`
 - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
 - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
-- `docs/project_management/next/sequencing.json`
+- `docs/project_management/packs/sequencing.json` (legacy mirror during migration: `docs/project_management/next/sequencing.json`)
 
 ## Quality gate (required)
 
@@ -103,4 +103,3 @@ Then create the impact map:
 Copy/paste the following prompt to start a planning pass:
 
 Canonical prompt: docs/project_management/system/prompts/planning/planning_kickoff_prompt.md
-

@@ -24,7 +24,7 @@ Required reading (end-to-end):
 - `docs/project_management/system/standards/adr/ADR_STANDARD_AND_TEMPLATE.md`
 - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 - `docs/project_management/system/templates/planning_pack/PLANNING_SESSION_LOG_TEMPLATE.md`
-- `docs/project_management/next/sequencing.json`
+- `docs/project_management/packs/sequencing.json` (legacy mirror during migration: `docs/project_management/next/sequencing.json`)
 - `docs/project_management/next/<feature>/spec_manifest.md`
 - `docs/project_management/next/<feature>/impact_map.md`
 - All existing planning docs relevant to <FEATURE> (if any).
@@ -94,7 +94,7 @@ Required interoperability rules:
     - WSL-only (separate WSL task): `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=wsl WORKFLOW_REF="feat/<feature>" SMOKE_CHECKOUT_REF="<sha>"`
 
 Sequencing rules:
-- Align `docs/project_management/next/sequencing.json` with task dependencies.
+- Align `docs/project_management/packs/sequencing.json` with task dependencies.
 - If you introduce a dependency not represented in `sequencing.json`, update `sequencing.json` or remove the dependency and fix the plan/specs.
 
 Output requirements:

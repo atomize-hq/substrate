@@ -119,6 +119,11 @@ pm-run-planning-agent:
 	if [ "$(CODEX_JSONL)" = "1" ]; then cmd="$$cmd --codex-jsonl"; fi; \
 	eval "$$cmd"
 
+.PHONY: pm-sync-sequencing
+pm-sync-sequencing:
+	@set -euo pipefail; \
+	scripts/planning/sync_sequencing_json.sh
+
 .PHONY: planning-lint-ps
 planning-lint-ps:
 	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/(next|packs/<bucket>)/<feature>"; exit 2; fi

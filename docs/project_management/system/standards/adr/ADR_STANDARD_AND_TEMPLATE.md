@@ -99,7 +99,7 @@ Every ADR must include all sections below. Every behavior statement must be sing
 - End-to-end flow: inputs → derived state → actions → outputs.
 
 6) Sequencing / Dependencies
-- Alignment to `docs/project_management/next/sequencing.json`.
+- Alignment to `docs/project_management/packs/sequencing.json` (legacy mirror during migration: `docs/project_management/next/sequencing.json`).
 - Dependencies on other sprints/triads (must reference integration task IDs).
 
 7) Security / Safety Posture
@@ -147,7 +147,7 @@ If both a cross-cutting ADR and a feature-local ADR exist, the cross-cutting ADR
 
 ## Scope
 - Feature directory: `docs/project_management/next/<feature>/`
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Sequencing spine: `docs/project_management/packs/sequencing.json` (legacy mirror during migration: `docs/project_management/next/sequencing.json`)
 - Standards:
   - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
   - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
@@ -222,7 +222,7 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
   - Outputs: <list>
 
 ## Sequencing / Dependencies
-- Sequencing entry: `docs/project_management/next/sequencing.json` → `<sprint id>`
+- Sequencing entry: `docs/project_management/packs/sequencing.json` → `<sprint id>`
 - Prerequisite integration task IDs:
   - `<X-integ>` before `<Y-code>`
 

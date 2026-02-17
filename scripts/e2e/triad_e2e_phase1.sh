@@ -28,7 +28,7 @@ Options:
 
   --skip-planning-lint        Skip `make planning-lint` (still runs JSON validation unless skipped)
   --skip-planning-validate    Skip `make planning-validate`
-  --skip-sequencing-update    Do not add a temporary entry to docs/project_management/next/sequencing.json
+  --skip-sequencing-update    Do not add a temporary entry to the sequencing spine (packs; falls back to next)
 
   --push-orch                 Push orchestration branch to remote (recommended if you will run Phase 2 CI)
 
@@ -528,22 +528,29 @@ PS1
 fi
 
 if [[ "${SKIP_SEQUENCING_UPDATE}" -eq 0 ]]; then
-    log "Adding temporary sequencing.json entry (required for planning-lint)"
+    sequencing_canonical="docs/project_management/packs/sequencing.json"
+    sequencing_legacy="docs/project_management/next/sequencing.json"
+    sequencing_target="${sequencing_legacy}"
+    if [[ -f "${sequencing_canonical}" ]]; then
+        sequencing_target="${sequencing_canonical}"
+    fi
+
+    log "Adding temporary sequencing.json entry (required for planning-lint): ${sequencing_target}"
     if [[ "${DRY_RUN}" -eq 1 ]]; then
-        echo "+ update docs/project_management/next/sequencing.json" >&2
+        echo "+ update ${sequencing_target}" >&2
     else
-        python3 - "${FEATURE_DIR}" "${FEATURE}" "${ORCH_BRANCH}" "${SLICE_ID}" <<'PY'
+        python3 - "${sequencing_target}" "${FEATURE_DIR}" "${FEATURE}" "${ORCH_BRANCH}" "${SLICE_ID}" <<'PY'
 import json
 import sys
 from pathlib import Path
 
-path = Path("docs/project_management/next/sequencing.json")
+path = Path(sys.argv[1])
 data = json.loads(path.read_text(encoding="utf-8"))
 sprints = data.get("sprints", [])
-feat_dir = sys.argv[1]
-feat_id = f"e2e_{sys.argv[2]}"
-branch = sys.argv[3]
-slice_id = sys.argv[4]
+feat_dir = sys.argv[2]
+feat_id = f"e2e_{sys.argv[3]}"
+branch = sys.argv[4]
+slice_id = sys.argv[5]
 
 if any(s.get("directory") == feat_dir for s in sprints if isinstance(s, dict)):
     raise SystemExit("sequencing.json already has an entry for this directory")
@@ -564,6 +571,10 @@ sprints.append(
 data["sprints"] = sprints
 path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 PY
+
+        if [[ "${sequencing_target}" == "${sequencing_canonical}" ]]; then
+            run make pm-sync-sequencing
+        fi
     fi
 fi
 
@@ -576,7 +587,14 @@ if [[ "${SKIP_PLANNING_LINT}" -eq 0 ]]; then
 fi
 
 log "Committing Planning Pack on orchestration branch"
-run git add "${FEATURE_DIR}" docs/project_management/next/sequencing.json || true
+add_paths=("${FEATURE_DIR}")
+if [[ -f "docs/project_management/packs/sequencing.json" ]]; then
+    add_paths+=("docs/project_management/packs/sequencing.json")
+fi
+if [[ -f "docs/project_management/next/sequencing.json" ]]; then
+    add_paths+=("docs/project_management/next/sequencing.json")
+fi
+run git add "${add_paths[@]}" || true
 run git commit -m "docs: scaffold e2e triad smoke (${FEATURE})"
 
 if [[ "${PUSH_ORCH}" -eq 1 ]]; then

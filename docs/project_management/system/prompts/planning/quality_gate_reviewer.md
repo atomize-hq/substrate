@@ -22,7 +22,7 @@ Inputs (must read end-to-end):
 - `spec_manifest.md` for the feature/track
 - The feature’s `decision_register.md`, `impact_map.md`, `plan.md`, `tasks.json`, `session_log.md`
 - All specs in the track
-- `docs/project_management/next/sequencing.json`
+- `docs/project_management/packs/sequencing.json` (legacy mirror during migration: `docs/project_management/next/sequencing.json`)
 - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
 - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
 - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`

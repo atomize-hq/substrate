@@ -115,6 +115,32 @@ def cmd_resolve_feature_dir(feature_dir: str) -> int:
     return 0
 
 
+def cmd_resolve_sequencing_json() -> int:
+    repo_root = _repo_root()
+    roots = _compute_roots(repo_root)
+
+    pm_root = roots["pm_root"].rstrip("/")
+    pm_packs_root = roots["pm_packs_root"].rstrip("/")
+
+    canonical = Path(repo_root) / pm_packs_root / "sequencing.json"
+    legacy = Path(repo_root) / pm_root / "next" / "sequencing.json"
+
+    if canonical.exists():
+        print(_relposix(repo_root, canonical))
+        return 0
+
+    if legacy.exists():
+        _eprint(f"WARN: canonical sequencing.json not found; falling back to legacy mirror: {legacy}")
+        print(_relposix(repo_root, legacy))
+        return 0
+
+    _usage_error(
+        "sequencing.json not found in either location: "
+        f"{_relposix(repo_root, canonical)} or {_relposix(repo_root, legacy)}"
+    )
+    return 2
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(
         description="Resolve project_management roots and normalize feature dirs (repo-relative POSIX paths)."
@@ -126,12 +152,19 @@ def main(argv: list[str]) -> int:
     ap_resolve = sub.add_parser("resolve-feature-dir", help="Normalize a feature dir to repo-relative POSIX path.")
     ap_resolve.add_argument("--feature-dir", required=True)
 
+    sub.add_parser(
+        "resolve-sequencing-json",
+        help="Print the preferred sequencing.json path (canonical packs when present; legacy next mirror otherwise).",
+    )
+
     args = ap.parse_args(argv)
 
     if args.cmd == "print-roots":
         return cmd_print_roots()
     if args.cmd == "resolve-feature-dir":
         return cmd_resolve_feature_dir(args.feature_dir)
+    if args.cmd == "resolve-sequencing-json":
+        return cmd_resolve_sequencing_json()
 
     _usage_error(f"unknown command: {args.cmd}")
     return 2
@@ -139,4 +172,3 @@ def main(argv: list[str]) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv[1:]))
-

@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
     cat <<'USAGE'
 Usage:
-  scripts/planning/lint.sh --feature-dir docs/project_management/next/<feature>
+  scripts/planning/lint.sh --feature-dir docs/project_management/(next|packs/<bucket>)/<feature>
 
 Notes:
   - This is the mechanical Planning Pack lint runner used by the quality gate reviewer.
@@ -158,9 +158,21 @@ fi
 echo "-- JSON validity"
 jq -e . "${FEATURE_DIR}/tasks.json" >/dev/null
 
-sequencing_json="${PM_ROOT%/}/packs/sequencing.json"
+sequencing_canonical="${PM_PACKS_ROOT%/}/sequencing.json"
+sequencing_legacy="${PM_ROOT%/}/next/sequencing.json"
+
+sequencing_json="${sequencing_canonical}"
 if [[ ! -f "${sequencing_json}" ]]; then
-    sequencing_json="${PM_ROOT%/}/next/sequencing.json"
+    echo "WARN: canonical sequencing.json not found; falling back to legacy mirror: ${sequencing_legacy}" >&2
+    sequencing_json="${sequencing_legacy}"
+fi
+
+if [[ -f "${sequencing_canonical}" && -f "${sequencing_legacy}" ]]; then
+    if ! diff -u <(jq -S . "${sequencing_canonical}") <(jq -S . "${sequencing_legacy}") >/dev/null; then
+        echo "FAIL: sequencing.json drift (canonical packs != legacy next)." >&2
+        echo "Fix: run \`make pm-sync-sequencing\` and commit the updated mirror." >&2
+        exit 1
+    fi
 fi
 
 jq -e . "${sequencing_json}" >/dev/null
@@ -249,7 +261,7 @@ echo "-- Sequencing alignment"
 if [[ "${FEATURE_DIR_RELPATH}" == "${PM_NEXT_PREFIX}"* ]]; then
     jq -e --arg dir "${FEATURE_DIR_RELPATH}" '.sprints[] | select(.directory==$dir) | .id' "${sequencing_json}" >/dev/null
 elif [[ "${FEATURE_DIR_RELPATH}" == "${PM_PACKS_PREFIX}"* ]]; then
-    if [[ "${sequencing_json}" == "${PM_ROOT%/}/packs/sequencing.json" ]]; then
+    if [[ "${sequencing_json}" == "${sequencing_canonical}" ]]; then
         jq -e --arg dir "${FEATURE_DIR_RELPATH}" '.sprints[] | select(.directory==$dir) | .id' "${sequencing_json}" >/dev/null
     else
         echo "SKIP: sequencing alignment (packs sequencing.json not present yet)"

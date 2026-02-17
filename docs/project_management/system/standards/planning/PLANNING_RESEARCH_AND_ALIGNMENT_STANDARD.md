@@ -132,7 +132,7 @@ If the scope spans multiple tracks (or you are reconciling a backlog), produce:
 1) `docs/project_management/next/final_alignment_report.md`
 - An auditable report of what was reviewed, what was changed, and what remains (must be “0 unresolved misalignments”).
 
-2) Update `docs/project_management/next/sequencing.json` if needed
+2) Update `docs/project_management/packs/sequencing.json` if needed (legacy mirror during migration: `docs/project_management/next/sequencing.json`)
 - Sequencing is the execution spine; if tasks and sequencing disagree, fix one and record it.
 
 ---
@@ -274,7 +274,7 @@ Encouraged:
 ## 7) Sequencing and Dependency Alignment
 
 You must reconcile three sources of truth:
-1) `docs/project_management/next/sequencing.json` (macro-level order)
+1) `docs/project_management/packs/sequencing.json` (macro-level order) (legacy mirror during migration: `docs/project_management/next/sequencing.json`)
 2) each triad `tasks.json` (micro-level dependencies)
 3) the specs (prerequisites and invariants)
 
@@ -342,7 +342,7 @@ rg -n "\\b(should|could|might|maybe|optionally)\\b" docs/project_management/next
 For JSON validity:
 
 ```bash
-jq . docs/project_management/next/sequencing.json >/dev/null
+jq . docs/project_management/packs/sequencing.json >/dev/null
 jq . docs/project_management/next/<feature>/tasks.json >/dev/null
 ```
 

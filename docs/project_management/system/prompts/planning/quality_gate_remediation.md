@@ -28,7 +28,7 @@ Inputs (must read end-to-end):
   - all specs in the feature/track
   - `manual_testing_playbook.md` and feature `smoke/*` scripts (if present)
 - ADR(s) referenced by the pack
-- `docs/project_management/next/sequencing.json`
+- `docs/project_management/packs/sequencing.json` (legacy mirror during migration: `docs/project_management/next/sequencing.json`)
 - Standards (read end-to-end):
   - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
   - `docs/project_management/system/standards/planning/PLANNING_LINT_CHECKLIST.md`
@@ -76,7 +76,7 @@ Remediation workflow (required):
      - `make planning-lint FEATURE_DIR="$FEATURE_DIR"`
      - `make planning-validate FEATURE_DIR="$FEATURE_DIR"`
      - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null`
-     - `jq -e . docs/project_management/next/sequencing.json >/dev/null`
+     - `jq -e . docs/project_management/packs/sequencing.json >/dev/null`
    - If any check fails, fix and re-run until all pass.
 
 4) Audit trail

@@ -27,7 +27,7 @@ These are the minimum commands that must appear in this report (or an explicit e
 ```bash
 # JSON validity
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 
 # tasks.json required-field audit
 python - <<'PY'
@@ -77,7 +77,7 @@ Mark `YES` only if read end-to-end.
 - `impact_map.md` (if present/required): `YES|NO|N/A`
 - `manual_testing_playbook.md` (if present/required): `YES|NO|N/A`
 - Feature smoke scripts under `smoke/` (if required): `YES|NO|N/A`
-- `docs/project_management/next/sequencing.json`: `YES|NO`
+- `docs/project_management/packs/sequencing.json`: `YES|NO` (legacy mirror during migration: `docs/project_management/next/sequencing.json`)
 - Standards:
   - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES|NO`
   - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES|NO`
@@ -103,7 +103,7 @@ Mark `YES` only if read end-to-end.
 ### 4) Sequencing and dependency alignment
 - Result: `PASS|FAIL`
 - Evidence:
-  - `docs/project_management/next/sequencing.json` entries: `<ids>`
+  - `docs/project_management/packs/sequencing.json` entries: `<ids>`
   - `docs/project_management/next/<feature>/tasks.json` deps: `<ids>`
 - Notes:
 
