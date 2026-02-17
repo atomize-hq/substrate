@@ -439,7 +439,10 @@ impl PromptWorker {
         let (command_tx, command_rx) = mpsc::unbounded_channel();
         let (response_tx, response_rx) = mpsc::unbounded_channel();
 
-        let editor::EditorSetup { line_editor, printer } = editor::build_editor(&config)?;
+        let editor::EditorSetup {
+            line_editor,
+            printer,
+        } = editor::build_editor(&config)?;
         let prompt = editor::make_prompt(config.ci_mode);
 
         let join_handle = thread::spawn(move || {

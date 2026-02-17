@@ -4,10 +4,9 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use reedline::{
-    default_emacs_keybindings, ColumnarMenu, Completer, Emacs, ExampleHighlighter,
-    ExternalPrinter, FileBackedHistory, MenuBuilder, Prompt, PromptEditMode,
-    PromptHistorySearch, PromptHistorySearchStatus, Reedline, ReedlineMenu, Suggestion,
-    ValidationResult, Validator,
+    default_emacs_keybindings, ColumnarMenu, Completer, Emacs, ExampleHighlighter, ExternalPrinter,
+    FileBackedHistory, MenuBuilder, Prompt, PromptEditMode, PromptHistorySearch,
+    PromptHistorySearchStatus, Reedline, ReedlineMenu, Suggestion, ValidationResult, Validator,
 };
 
 use crate::ShellConfig;
