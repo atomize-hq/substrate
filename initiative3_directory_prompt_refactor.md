@@ -37,6 +37,33 @@ This initiative makes the structure intentional and portable:
 
 ---
 
+## 0.1 Compatibility contract (bake in immediately)
+
+This initiative moves directories that are currently relied on by enforcement and triad orchestration. To avoid destabilizing the system mid-flight, **define and preserve a compatibility surface before moving any directories**.
+
+**Recommended approach:** preserve old entrypoints with thin wrappers and add path resolution so callers can use either old or new pack roots during the transition.
+
+### Compatibility surface (guarantees during the refactor)
+- **Stable script entrypoints remain callable** (even if implementation moves):
+  - `scripts/planning/*` (including `scripts/planning/validate_impact_map.py`)
+  - `scripts/triad/*` (including orchestration worktree discovery logic used by `task_*`)
+  - (If you introduce `pm-run-planning-agent`, provide a stable wrapper entrypoint as well.)
+- **Planning Pack locations are accepted in both forms during migration**:
+  - legacy: `docs/project_management/next/<feature>`
+  - new: `docs/project_management/packs/<bucket>/<feature>`
+  - Implement a shared “feature dir resolver” used by:
+    - planning lint + all planning validators (`--feature-dir` consumers), and
+    - triad scripts that read `feature_dir` from `.taskmeta.json`.
+- **In-flight worktrees must not break when packs move**:
+  - `.taskmeta.json` stores `feature_dir` (repo-relative) and triad registries store a `feature_dir` as well.
+  - Before moving `docs/project_management/next/<feature>` to `packs/...`, either:
+    - require **zero active worktrees** for that feature, or
+    - ship a mechanical migration that updates `.taskmeta.json` + the triad registry entries to the new pack path.
+
+If you skip this compatibility contract, the refactor becomes “all callers + all docs + all prompts in one change”, which is riskier and harder to review.
+
+---
+
 ## 1. Goals
 
 ### 1.1 Goals (must achieve)
@@ -214,14 +241,26 @@ If the agent discovers it needs additional docs, it must write a “Follow-ups�
 
 ### 3.3 Planning agent dispatcher (script)
 
-**Add script:**
+**Add script (implementation):**
 - `docs/project_management/system/scripts/planning/run_planning_agent.sh`
 - (and optional `run_planning_agent.ps1`)
 
-Command:
+**Expose via Make (recommended):**
+- Add a `make` target named `pm-run-planning-agent` (or `planning-run-agent` if you prefer the existing `planning-*` naming).
+
+Suggested Make usage:
 
 ```bash
-pm-run-planning-agent \
+make pm-run-planning-agent \
+  FEATURE_DIR=docs/project_management/packs/active/<feature> \
+  AGENT=spec_manifest \
+  [CODEX_PROFILE=<p>] [CODEX_MODEL=<m>] [CODEX_JSONL=1]
+```
+
+Direct script usage (optional, for non-Make contexts):
+
+```bash
+docs/project_management/system/scripts/planning/run_planning_agent.sh \
   --feature-dir docs/project_management/packs/active/<feature> \
   --agent spec_manifest \
   [--codex-profile <p>] [--codex-model <m>] [--codex-jsonl]
@@ -259,7 +298,10 @@ Add a thin compatibility shim (temporary) in old locations to avoid breaking mus
 
 ```bash
 #!/usr/bin/env bash
-exec docs/project_management/system/scripts/planning/new_feature.sh "$@"
+set -euo pipefail
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "${script_dir}/../.." && pwd)"
+exec "${repo_root}/docs/project_management/system/scripts/planning/new_feature.sh" "$@"
 ```
 
 Same for `scripts/triad/*`.
@@ -274,7 +316,7 @@ Introduce environment variables with defaults:
 
 - `PM_ROOT` default: `docs/project_management`
 - `PM_SYSTEM_ROOT` default: `${PM_ROOT}/system`
-- `PM_PACKS_ROOT` default: `${PM_ROOT}/packs/active` (or passed explicitly)
+- `PM_PACKS_ROOT` default: `${PM_ROOT}/packs` (and default bucket: `active`)
 - `PM_ADRS_ROOT` default: `${PM_ROOT}/adrs`
 
 Update scripts to use these instead of hardcoding:
@@ -285,6 +327,9 @@ Update scripts to use these instead of hardcoding:
 Examples of scripts that currently hardcode:
 - `new_feature.sh` / `new_feature.ps1`
 - `lint.sh` / `lint.ps1` (references `docs/project_management/next/sequencing.json`)
+- triad runners (`task_start*`, `task_finish`, `feature_cleanup`, `codex_pidfiles`, `dispatch_feature_smoke`) that:
+  - hardcode `docs/project_management/next` in invariants (e.g., “no planning docs edits inside worktree”), and/or
+  - print help text that implies `next/<feature>` is the only supported pack layout
 - `ensure_kickoff_prompt_sentinel.py` default root
 - any regex in validators that references `docs/project_management/(next|adrs/...)`
 
@@ -323,7 +368,7 @@ Examples of scripts that currently hardcode:
 **Phase A — introduce packs/ without moving anything**
 1) Create `docs/project_management/packs/*` buckets.
 2) Copy `docs/project_management/next/sequencing.json` → `docs/project_management/packs/sequencing.json`.
-3) Update planning lint scripts to reference the new `sequential.json` location via `${PM_ROOT}`.
+3) Update planning lint scripts to reference the new `sequencing.json` location via `${PM_ROOT}`.
 
 **Phase B — move active packs**
 1) Move directories:
@@ -506,4 +551,3 @@ Because this refactor is large, do it in phases that keep the repo buildable.
   - `impact_map.md`
   independently.
 - CI checkpoint templates and standards preserve default sizing **4–8**.
-
