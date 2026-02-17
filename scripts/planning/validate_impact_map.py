@@ -261,6 +261,9 @@ def _validate_sections_strict(sections: dict[str, list[tuple[int, str]]], repo_r
             fs_path = repo_root / token
             is_dir_entry = token.endswith("/")
 
+            if fs_path.exists() and fs_path.is_dir() and not is_dir_entry:
+                _fail(f"declared directory token must end with '/': {token!r} ({section}, impact_map.md:{lineno})")
+
             if section in ("edit", "deprecate", "delete"):
                 if not fs_path.exists():
                     _fail(f"declared path does not exist: {token!r} ({section}, impact_map.md:{lineno})")

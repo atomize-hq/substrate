@@ -12,6 +12,8 @@ Required:
 Options:
   --verify-only          Do not run checks; only validate invariants and print summary
   --no-commit            Do not create a commit (for investigation-only runs)
+  --allow-unplanned-touch Allow completion even if unplanned touches exist (STRICT packs only; requires --reason)
+  --reason "<text>"      Required when --allow-unplanned-touch is set; auditable justification
   --platform <p>         linux|macos|windows|wsl (optional; used for smoke if requested)
   --smoke                Run `make feature-smoke` for platform-fix tasks (requires gh auth)
   --dry-run              Print what would happen; do not mutate git/worktrees
@@ -74,6 +76,8 @@ PY
 TASK_ID=""
 VERIFY_ONLY=0
 NO_COMMIT=0
+ALLOW_UNPLANNED_TOUCH=0
+OVERRIDE_REASON=""
 PLATFORM=""
 SMOKE=0
 DRY_RUN=0
@@ -91,6 +95,14 @@ while [[ $# -gt 0 ]]; do
         --no-commit)
             NO_COMMIT=1
             shift 1
+            ;;
+        --allow-unplanned-touch)
+            ALLOW_UNPLANNED_TOUCH=1
+            shift 1
+            ;;
+        --reason)
+            OVERRIDE_REASON="${2:-}"
+            shift 2
             ;;
         --platform)
             PLATFORM="${2:-}"
@@ -117,6 +129,15 @@ done
 if [[ -z "${TASK_ID}" ]]; then
     usage >&2
     die "Missing --task-id"
+fi
+
+if [[ "${ALLOW_UNPLANNED_TOUCH}" -eq 1 ]]; then
+    if [[ -z "${OVERRIDE_REASON}" ]]; then
+        die "--allow-unplanned-touch requires --reason \"<text>\""
+    fi
+    if rg -nq '[\r\n]' <<<"${OVERRIDE_REASON}"; then
+        die "--reason must be a single line (no newlines)"
+    fi
 fi
 
 case "${PLATFORM}" in
@@ -173,6 +194,8 @@ if [[ "${SCHEMA_VERSION}" -lt 3 || "${AUTOMATION_ENABLED}" != "true" ]]; then
     die "task_finish requires automation-enabled planning pack (meta.schema_version>=3 and meta.automation.enabled=true)"
 fi
 
+SLICE_SPEC_VERSION="$(jq -r '.meta.slice_spec_version | tonumber? // 0' "${TASKS_JSON}")"
+
 TASK_JSON="$(jq -c --arg id "${TASK_ID}" '.tasks[] | select(.id==$id)' "${TASKS_JSON}")" || true
 if [[ -z "${TASK_JSON}" ]]; then
     die "Task not found in tasks.json: ${TASK_ID}"
@@ -218,6 +241,179 @@ guard_no_planning_doc_edits() {
     if git diff --name-only --cached | rg -q "^docs/project_management/next/"; then
         die "Worktree contains staged changes under docs/project_management/next/ (do not edit planning docs inside the worktree)"
     fi
+}
+
+impact_map_touchset_status="unknown"
+impact_map_override_reason=""
+
+collect_touched_paths() {
+    local base_sha="$1"
+    local mb
+    mb="$(git merge-base "${base_sha}" HEAD 2>/dev/null)" || die "Could not compute merge-base for created_from_sha=${base_sha}"
+
+    python3 - "${mb}" <<'PY'
+import subprocess
+import sys
+
+mb = sys.argv[1]
+
+
+def run_bytes(args: list[str]) -> bytes:
+    p = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if p.returncode != 0:
+        msg = p.stderr.decode("utf-8", errors="replace").strip()
+        raise SystemExit(f"FAIL: git command failed: {' '.join(args)}: {msg}")
+    return p.stdout
+
+
+def parse_name_status_z(payload: bytes) -> set[str]:
+    tokens = payload.split(b"\0")
+    if tokens and tokens[-1] == b"":
+        tokens.pop()
+
+    touched: set[str] = set()
+    i = 0
+    while i < len(tokens):
+        status = tokens[i].decode("utf-8", errors="replace")
+        i += 1
+
+        if not status:
+            continue
+
+        if status.startswith("R"):
+            if i + 1 >= len(tokens):
+                raise SystemExit("FAIL: unexpected rename record shape in git --name-status -z output")
+            old = tokens[i].decode("utf-8", errors="replace")
+            new = tokens[i + 1].decode("utf-8", errors="replace")
+            i += 2
+            if old:
+                touched.add(old)
+            if new:
+                touched.add(new)
+            continue
+
+        if status.startswith("C"):
+            if i + 1 >= len(tokens):
+                raise SystemExit("FAIL: unexpected copy record shape in git --name-status -z output")
+            _old = tokens[i].decode("utf-8", errors="replace")
+            new = tokens[i + 1].decode("utf-8", errors="replace")
+            i += 2
+            if new:
+                touched.add(new)
+            continue
+
+        if i >= len(tokens):
+            raise SystemExit("FAIL: unexpected record shape in git --name-status -z output")
+        path = tokens[i].decode("utf-8", errors="replace")
+        i += 1
+        if path:
+            touched.add(path)
+
+    return touched
+
+
+def parse_paths_z(payload: bytes) -> set[str]:
+    tokens = payload.split(b"\0")
+    if tokens and tokens[-1] == b"":
+        tokens.pop()
+    return {t.decode("utf-8", errors="replace") for t in tokens if t}
+
+
+touched: set[str] = set()
+touched |= parse_name_status_z(run_bytes(["git", "diff", "--name-status", "-z", "-M", f"{mb}..HEAD"]))
+touched |= parse_name_status_z(run_bytes(["git", "diff", "--name-status", "-z", "-M", "--cached"]))
+touched |= parse_name_status_z(run_bytes(["git", "diff", "--name-status", "-z", "-M"]))
+touched |= parse_paths_z(run_bytes(["git", "ls-files", "-z", "--others", "--exclude-standard"]))
+
+touched.discard(".taskmeta.json")
+
+for p in sorted(touched):
+    print(p)
+PY
+}
+
+enforce_impact_map_touchset() {
+    if [[ "${SLICE_SPEC_VERSION}" -lt 2 ]]; then
+        impact_map_touchset_status="skipped"
+        log "WARN: impact_map touch-set enforcement disabled (meta.slice_spec_version < 2)."
+        return 0
+    fi
+
+    local allow_json
+    if ! allow_json="$(python3 scripts/planning/validate_impact_map.py --feature-dir "${FEATURE_DIR_ABS}" --emit-json)"; then
+        die "impact_map Touch Set validation failed; fix ${FEATURE_DIR_RELPATH}/impact_map.md before completing the task"
+    fi
+
+    declare -A allow_exact=()
+    while IFS= read -r p; do
+        [[ -z "${p}" ]] && continue
+        allow_exact["${p}"]=1
+    done < <(jq -r '.create[]?, .edit[]?, .deprecate[]?, .delete[]?' <<<"${allow_json}")
+
+    mapfile -t allow_prefixes < <(jq -r '.dir_prefixes[]?' <<<"${allow_json}")
+
+    declare -A touched=()
+    while IFS= read -r p; do
+        [[ -z "${p}" ]] && continue
+        touched["${p}"]=1
+    done < <(collect_touched_paths "${CREATED_FROM_SHA}")
+
+    if [[ "${SUBSTRATE_TASK_FINISH_TOUCH_DEBUG:-0}" == "1" ]]; then
+        log "DEBUG: touched paths since created_from_sha=${CREATED_FROM_SHA} (deduped):"
+        for p in "${!touched[@]}"; do
+            printf '%s\n' "${p}" >&2
+        done | sort >&2
+    fi
+
+    allow_path() {
+        local p="$1"
+        if [[ -n "${allow_exact[$p]:-}" ]]; then
+            return 0
+        fi
+        local prefix
+        for prefix in "${allow_prefixes[@]}"; do
+            [[ -z "${prefix}" ]] && continue
+            if [[ "${p}" == "${prefix}"* ]]; then
+                return 0
+            fi
+        done
+        return 1
+    }
+
+    unplanned=()
+    local p
+    for p in "${!touched[@]}"; do
+        if ! allow_path "${p}"; then
+            unplanned+=("${p}")
+        fi
+    done
+
+    if [[ "${#unplanned[@]}" -eq 0 ]]; then
+        impact_map_touchset_status="enforced"
+        return 0
+    fi
+
+    IFS=$'\n' unplanned_sorted=($(printf '%s\n' "${unplanned[@]}" | sort -u))
+    unset IFS
+
+    echo "FAIL: unplanned file touches detected (${#unplanned_sorted[@]})" >&2
+    for p in "${unplanned_sorted[@]}"; do
+        echo "- ${p}" >&2
+    done
+    echo "" >&2
+    echo "To proceed:" >&2
+    echo "1) On orchestration branch: update ${FEATURE_DIR_RELPATH}/impact_map.md to include these paths (Create/Edit/Deprecate/Delete)." >&2
+    echo "2) Commit planning docs update." >&2
+    echo "3) Re-run: scripts/triad/task_finish.sh --task-id ${TASK_ID}" >&2
+
+    if [[ "${ALLOW_UNPLANNED_TOUCH}" -eq 1 ]]; then
+        impact_map_touchset_status="overridden"
+        impact_map_override_reason="${OVERRIDE_REASON}"
+        log "WARN: proceeding due to --allow-unplanned-touch (reason: ${OVERRIDE_REASON})"
+        return 0
+    fi
+
+    exit 1
 }
 
 run_make_targets() {
@@ -438,6 +634,7 @@ else
     run_make_targets
 fi
 
+enforce_impact_map_touchset
 commit_changes
 merge_to_orchestration_ff_only
 
@@ -452,6 +649,9 @@ printf 'TASK_BRANCH=%s\n' "${TASK_BRANCH}"
 printf 'WORKTREE=%s\n' "${WORKTREE_ROOT}"
 printf 'HEAD=%s\n' "${HEAD_SHA}"
 printf 'COMMITS=%s\n' "${COMMITS_COUNT}"
-printf 'CHECKS=%s\n' "${checks_summary}"
+printf 'CHECKS=%s; impact_map_touchset:%s\n' "${checks_summary}" "${impact_map_touchset_status}"
+if [[ "${impact_map_touchset_status}" == "overridden" ]]; then
+    printf 'IMPACT_MAP_OVERRIDE_REASON=%s\n' "${impact_map_override_reason}"
+fi
 printf 'SMOKE_RUN=%s\n' "${smoke_run_id}"
 printf 'MERGED_TO_ORCH=%s\n' "${MERGE_TO_ORCH}"
