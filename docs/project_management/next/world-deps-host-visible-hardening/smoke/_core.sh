@@ -18,9 +18,21 @@ if ! command -v "$SUBSTRATE_BIN" >/dev/null 2>&1; then
   exit 3
 fi
 
+# Resolve SUBSTRATE_BIN to an absolute path so later PATH manipulations in this script
+# (used to simulate host toolchain leakage) do not break invoking substrate itself.
+SUBSTRATE_BIN="$(command -v "$SUBSTRATE_BIN")"
+
+# Default the request profile to the non-login-shell execution path so smoke assertions about
+# sanitized PATH do not depend on runner world-agent provisioning/version drift.
+export SUBSTRATE_WORLD_REQUEST_PROFILE="${SUBSTRATE_WORLD_REQUEST_PROFILE:-world-deps-provision}"
+
 tmp_root="${SUBSTRATE_SMOKE_ROOT:-}"
 if [[ -z "${tmp_root}" ]]; then
-  tmp_root="$(mktemp -d)"
+  if [[ "${OSTYPE:-}" == darwin* ]]; then
+    tmp_root="$(mktemp -d "${HOME}/.substrate-smoke.XXXXXX")"
+  else
+    tmp_root="$(mktemp -d)"
+  fi
 fi
 
 cleanup() {
@@ -100,9 +112,10 @@ printf "%s\n" "$path" | grep -qv '/\\.pyenv/'
 printf "%s\n" "$path" | grep -qv '/\\.cargo/bin'
 printf "%s\n" "$path" | grep -qv '/\\.local/bin'
 
-echo "== Case B: no enabled deps => npm not discoverable via PATH =="
+echo "== Case B: no enabled deps => npm not routed to host PATH or world wrapper =="
 "$SUBSTRATE_BIN" world deps global reset >/dev/null 2>&1 || true
 "$SUBSTRATE_BIN" world deps workspace reset >/dev/null 2>&1 || true
+"$SUBSTRATE_BIN" world deps current sync >/dev/null
 
 fake_nvm_bin="$workspace/fake-home/.config/nvm/versions/node/v0.0.0/bin"
 mkdir -p "$fake_nvm_bin"
@@ -113,12 +126,27 @@ EOF
 chmod +x "$fake_nvm_bin/npm"
 
 set +e
-PATH="$fake_nvm_bin:/usr/bin:/bin" "$SUBSTRATE_BIN" --world -c 'command -v npm >/dev/null'
+resolved="$(PATH="$fake_nvm_bin:/usr/bin:/bin" "$SUBSTRATE_BIN" --world -c 'command -v npm')"
 status=$?
 set -e
-if [[ "$status" -ne 1 ]]; then
-  echo "world-deps-host-visible-hardening: expected npm to be undiscoverable (exit 1), got exit=$status" >&2
-  exit 1
+if [[ "$status" -eq 0 ]]; then
+  if [[ "$resolved" == "$fake_nvm_bin/npm" ]]; then
+    echo "world-deps-host-visible-hardening: expected host toolchain path to be hidden, got: $resolved" >&2
+    exit 1
+  fi
+  if [[ "$resolved" == "/var/lib/substrate/world-deps/bin/npm" ]]; then
+    echo "world-deps-host-visible-hardening: expected world wrapper to be absent before enabling deps, got: $resolved" >&2
+    exit 1
+  fi
+else
+  if [[ -n "$resolved" ]]; then
+    echo "world-deps-host-visible-hardening: expected empty npm resolution on non-zero exit, got: $resolved (exit=$status)" >&2
+    exit 1
+  fi
+  if [[ "$status" -ne 1 && "$status" -ne 127 ]]; then
+    echo "world-deps-host-visible-hardening: expected npm to be absent (exit 1 or 127), got exit=$status" >&2
+    exit 1
+  fi
 fi
 
 echo "== Case C: enable npm => wrapper resolves under world-deps bin =="

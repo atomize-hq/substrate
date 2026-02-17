@@ -12,7 +12,7 @@ Standard:
 - Slice specs: `docs/project_management/next/world-deps-host-visible-hardening/*-spec*.md`
 - Required platforms (authoritative):
   - Behavior smoke platforms: `tasks.json` → `meta.behavior_platforms_required` (`linux`, `macos`)
-  - CI parity platforms: `tasks.json` → `meta.ci_parity_platforms_required` (`linux`, `macos`)
+  - CI parity platforms: `tasks.json` → `meta.ci_parity_platforms_required` (`linux`, `macos`, `windows`)
   - WSL coverage: `tasks.json` → `meta.wsl_required=true` (`bundled` via Linux smoke)
 
 ## Operator rules
@@ -75,4 +75,3 @@ Standard:
   - `docs/project_management/next/world-deps-host-visible-hardening/WDH3-spec.md`
 - Risk reduced:
   - Validates the hardened posture and the discovery scaffolding across required platforms before feature completion.
-

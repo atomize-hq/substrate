@@ -777,10 +777,17 @@ async fn start_world_session(
     let start_hash = resolved_start.snapshot_hash.clone();
     let start_workspace_root = find_workspace_root(requested_path);
 
-    let mut start_params = ReplSessionStartParams::for_cwd_and_snapshot(
+    let (mut start_params, inherit_from_host) = ReplSessionStartParams::for_cwd_and_snapshot(
         requested_cwd.clone(),
+        requested_path,
         resolved_start.snapshot,
-    );
+    )?;
+    if inherit_from_host {
+        let _ = agent_printer.print(
+            "substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)"
+                .to_string(),
+        );
+    }
     apply_anchor_env_for_cwd(&mut start_params.env, requested_path)?;
     let client = ReplPersistentSessionClient::start_with(start_params, on_stdout.clone()).await?;
     let ready = client.ready().clone();
@@ -804,10 +811,17 @@ async fn start_world_session(
         );
         client.close().await?;
 
-        let mut restart_params = ReplSessionStartParams::for_cwd_and_snapshot(
+        let (mut restart_params, inherit_from_host) = ReplSessionStartParams::for_cwd_and_snapshot(
             ready.cwd.clone(),
+            Path::new(&ready.cwd),
             resolved_ready.snapshot,
-        );
+        )?;
+        if inherit_from_host {
+            let _ = agent_printer.print(
+                "substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)"
+                    .to_string(),
+            );
+        }
         apply_anchor_env_for_cwd(&mut restart_params.env, Path::new(&ready.cwd))?;
         let client =
             ReplPersistentSessionClient::start_with(restart_params, on_stdout.clone()).await?;

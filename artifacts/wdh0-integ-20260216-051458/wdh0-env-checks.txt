@@ -1,0 +1,6 @@
+Checks (non-PTY):
+FAIL: PATH prefix expected /var/lib/substrate/world-deps/bin:, got: /tmp/substrate-wdh0-0eFfKw/home/.local/bin:/var/lib/substrate/world-deps/bin:/home/spenser/.cargo/bin:/home/spenser/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/var/lib/flatpak/exports/bin:/usr/lib/jvm/default/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl:/var/lib/snapd/snap/bin
+FAIL: PATH contains host toolchain segment
+FAIL: HOME expected /root, got: /tmp/substrate-wdh0-0eFfKw/home
+FAIL: XDG_CONFIG_HOME expected /root/.config, got: /home/spenser/.config
+FAIL: TERM expected xterm-256color, got: dumb

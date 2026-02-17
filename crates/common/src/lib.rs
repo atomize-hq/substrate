@@ -7,6 +7,7 @@ pub mod fs_diff;
 pub mod manager_manifest;
 pub mod paths;
 pub mod settings;
+pub mod world_exec_guard;
 
 pub use agent_events::{AgentEvent, AgentEventKind};
 pub use fs_diff::FsDiff;

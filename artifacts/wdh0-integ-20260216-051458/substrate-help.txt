@@ -1,0 +1,43 @@
+Substrate shell wrapper with comprehensive tracing
+
+Usage: substrate [OPTIONS] [COMMAND]
+
+Commands:
+  graph      
+  host       
+  world      
+  config     
+  policy     
+  workspace  
+  shim       
+  health     
+  help       Print this message or the help of the given subcommand(s)
+
+Options:
+  -c, --command <CMD>       Execute a single command
+  -f, --file <SCRIPT>       Execute a script file
+      --ci                  Enable CI mode with strict error handling
+      --no-exit-on-error    Continue execution after errors (overrides CI mode behavior)
+      --pty                 Use PTY for full terminal emulation in interactive mode (Unix only)
+      --shell <PATH>        Specify shell to use (defaults to $SHELL or /bin/bash)
+      --version-json        Output version information as JSON
+      --shim-status         Show shim deployment status
+      --shim-status-json    Show shim deployment status as JSON (CI-friendly)
+      --shim-skip           Skip shim deployment check
+      --shim-deploy         Force deployment of command shims
+      --shim-remove         Remove all deployed shims
+      --async-repl          Force the async REPL loop (default)
+      --legacy-repl         Use the legacy synchronous REPL implementation
+      --repl-host-escape    Enable the `:host <command>` escape hatch in the interactive REPL (disabled by default)
+      --trace <SPAN_ID>     Show trace information for a span ID
+      --replay <SPAN_ID>    Replay a traced command by span ID (agent-first on Linux with a single agent-to-local fallback warning; use --no-world or SUBSTRATE_REPLAY_USE_WORLD=disabled for host-only)
+      --replay-verbose      Verbose replay diagnostics (command/cwd/mode, world toggles, capability warnings, world strategy + scopes)
+      --flip-world          Flip the recorded execution origin (host/world) before applying other world toggles [aliases: --flip]
+      --caged               Keep the shell anchored to the resolved root
+      --uncaged             Allow leaving the resolved root anchor
+      --anchor-mode <MODE>  Control how the anchor root is selected (workspace, follow-cwd, or custom) [possible values: workspace, follow-cwd, custom]
+      --anchor-path <PATH>  Explicit anchor path (used when --anchor-mode=custom)
+      --world               Force world isolation for this run (overrides disabled install/config/env)
+      --no-world            Disable world isolation (host pass-through)
+  -h, --help                Print help
+  -V, --version             Print version

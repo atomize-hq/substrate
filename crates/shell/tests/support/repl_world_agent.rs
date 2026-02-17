@@ -37,6 +37,7 @@ pub struct PersistentExecRecord {
 pub struct LegacyPtyStartRecord {
     pub cmd: String,
     pub cwd: String,
+    pub env: HashMap<String, String>,
     pub span_id: String,
     pub cols: u16,
     pub rows: u16,
@@ -432,6 +433,40 @@ impl ReplWorldAgentStub {
                             .and_then(|v| v.as_str())
                             .unwrap_or("")
                             .to_string();
+                        let env = first_json
+                            .get("env")
+                            .and_then(|v| v.as_object())
+                            .map(|m| {
+                                m.iter()
+                                    .filter_map(|(k, v)| Some((k.clone(), v.as_str()?.to_string())))
+                                    .collect::<HashMap<String, String>>()
+                            })
+                            .unwrap_or_default();
+                        // Avoid leaking host secrets into test failure output: keep a small allowlist
+                        // of routing/env keys, redact everything else.
+                        let env = env
+                            .into_iter()
+                            .map(|(k, v)| {
+                                let keep = matches!(
+                                    k.as_str(),
+                                    "SUBSTRATE_ANCHOR_MODE"
+                                        | "SUBSTRATE_ANCHOR_PATH"
+                                        | "SUBSTRATE_CAGED"
+                                        | "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR"
+                                        | "PATH"
+                                        | "HOME"
+                                        | "TERM"
+                                        | "XDG_CACHE_HOME"
+                                        | "XDG_CONFIG_HOME"
+                                        | "XDG_DATA_HOME"
+                                );
+                                if keep {
+                                    (k, v)
+                                } else {
+                                    (k, "<redacted>".to_string())
+                                }
+                            })
+                            .collect::<HashMap<String, String>>();
                         let span_id = first_json
                             .get("span_id")
                             .and_then(|v| v.as_str())
@@ -444,6 +479,7 @@ impl ReplWorldAgentStub {
                             guard.legacy_pty_starts.push(LegacyPtyStartRecord {
                                 cmd: cmd.clone(),
                                 cwd,
+                                env,
                                 span_id,
                                 cols,
                                 rows,
@@ -504,7 +540,16 @@ impl ReplWorldAgentStub {
                         .map(|(k, v)| {
                             let keep = matches!(
                                 k.as_str(),
-                                "SUBSTRATE_ANCHOR_MODE" | "SUBSTRATE_ANCHOR_PATH" | "SUBSTRATE_CAGED"
+                                "SUBSTRATE_ANCHOR_MODE"
+                                    | "SUBSTRATE_ANCHOR_PATH"
+                                    | "SUBSTRATE_CAGED"
+                                    | "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR"
+                                    | "PATH"
+                                    | "HOME"
+                                    | "TERM"
+                                    | "XDG_CACHE_HOME"
+                                    | "XDG_CONFIG_HOME"
+                                    | "XDG_DATA_HOME"
                             );
                             if keep {
                                 (k, v)

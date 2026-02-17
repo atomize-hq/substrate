@@ -1,0 +1,9 @@
+SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR=/var/lib/substrate/world-deps/bin
+PATH=/tmp/substrate-wdh0-0eFfKw/home/.local/bin:/var/lib/substrate/world-deps/bin:/home/spenser/.cargo/bin:/home/spenser/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/var/lib/flatpak/exports/bin:/usr/lib/jvm/default/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl:/var/lib/snapd/snap/bin
+HOME=/tmp/substrate-wdh0-0eFfKw/home
+XDG_CONFIG_HOME=/home/spenser/.config
+XDG_DATA_HOME=/home/spenser/.local/share
+XDG_CACHE_HOME=/home/spenser/.cache
+TERM=dumb
+LANG=en_US.UTF-8
+TZ=UTC

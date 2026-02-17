@@ -135,15 +135,15 @@ pub(crate) fn schedule_demo_events() {
 
     let events = vec![
         (
-            Duration::from_millis(300),
+            Duration::from_millis(1200),
             "Demo agent event #1".to_string(),
         ),
         (
-            Duration::from_millis(820),
+            Duration::from_millis(400),
             "Demo agent event #2".to_string(),
         ),
         (
-            Duration::from_millis(1350),
+            Duration::from_millis(400),
             "Demo agent event #3".to_string(),
         ),
     ];

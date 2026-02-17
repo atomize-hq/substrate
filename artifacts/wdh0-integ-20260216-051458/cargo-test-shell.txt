@@ -1,0 +1,868 @@
+   Compiling getrandom v0.3.4
+   Compiling num-traits v0.2.19
+   Compiling regex-automata v0.4.13
+   Compiling wait-timeout v0.2.1
+   Compiling predicates-core v1.0.9
+   Compiling difflib v0.4.0
+   Compiling normalize-line-endings v0.3.0
+   Compiling bit-vec v0.8.0
+   Compiling sdd v3.0.10
+   Compiling assert_cmd v2.1.1
+   Compiling termtree v0.5.1
+   Compiling quick-error v1.2.3
+   Compiling serial_test_derive v3.2.0
+   Compiling unarray v0.1.4
+   Compiling predicates-tree v1.0.12
+   Compiling bit-set v0.8.0
+   Compiling scc v2.4.0
+   Compiling tempfile v3.23.0
+   Compiling uuid v1.19.0
+   Compiling rand_core v0.9.3
+   Compiling rand_xorshift v0.4.0
+   Compiling rand v0.9.2
+   Compiling rand_chacha v0.9.0
+   Compiling dialoguer v0.11.0
+   Compiling rusty-fork v0.3.1
+   Compiling chrono v0.4.42
+   Compiling float-cmp v0.10.0
+   Compiling proptest v1.9.0
+   Compiling serial_test v3.2.0
+   Compiling regex v1.12.2
+   Compiling bstr v1.12.1
+   Compiling env_filter v0.1.4
+   Compiling predicates v3.1.3
+   Compiling substrate-common v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ/crates/common)
+   Compiling reedline v0.43.0 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ/vendor/reedline)
+   Compiling env_logger v0.11.8
+   Compiling world-api v0.1.1 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ/crates/world-api)
+   Compiling substrate-trace v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ/crates/trace)
+   Compiling agent-api-types v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ/crates/agent-api-types)
+   Compiling substrate-broker v0.1.0 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ/crates/broker)
+   Compiling world v0.1.1 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ/crates/world)
+   Compiling substrate-graph v0.1.0 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ/crates/substrate-graph)
+   Compiling agent-api-client v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ/crates/agent-api-client)
+   Compiling world-backend-factory v0.1.0 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ/crates/world-backend-factory)
+   Compiling substrate-replay v0.1.0 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ/crates/replay)
+   Compiling shell v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ/crates/shell)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 16.80s
+     Running unittests src/lib.rs (target/debug/deps/substrate_shell-47fe56e4313e3247)
+
+running 145 tests
+test builtins::shim_doctor::repair::tests::upsert_block_replaces_existing ... ok
+test builtins::shim_doctor::repair::tests::upsert_block_appends_when_missing ... ok
+test builtins::shim_doctor::report::tests::normalize_path_trims_trailing_separators ... ok
+test builtins::world_enable::config::tests::load_install_config_defaults_when_file_missing ... ok
+test builtins::world_enable::runner::log_ops::tests::write_world_doctor_output_appends_labeled_section ... ok
+test builtins::world_enable::runner::log_ops::tests::initialize_log_file_writes_header_and_timestamp ... ok
+test builtins::world_enable::runner::log_ops::tests::append_log_line_extends_existing_log ... ok
+test builtins::world_enable::runner::log_ops::tests::print_dry_run_plan_creates_log_directory ... ok
+test builtins::world_enable::runner::paths::tests::next_log_path_is_namespaced_under_logs_dir ... ok
+test builtins::world_enable::runner::paths::tests::locate_helper_script_prefers_version_dir ... ok
+test builtins::world_enable::config::tests::load_install_config_errors_on_invalid_types ... ok
+test execution::config_model::tests::test_enum_validation_rejects_invalid_values_without_mutation ... ok
+test builtins::world_enable::runner::manager_env::tests::update_manager_env_exports_writes_env_sh_format ... ok
+test execution::lock::tests::test_invalid_path_handling ... ok
+test execution::lock::tests::test_lock_info_serialization ... ok
+test execution::lock::tests::test_lock_directory_creation ... ok
+test execution::lock::tests::test_lock_info_written_correctly ... ok
+test execution::lock::tests::test_zero_timeout ... ok
+test execution::config_model::tests::test_phase_a_explicit_empty_list_counts_as_source ... ok
+test builtins::world_enable::config::tests::save_install_config_creates_or_updates_world_enabled ... ok
+test execution::manager_init::tests::detect_and_generate_respects_skip_list_entries ... ok
+test execution::manager_init::tests::detect_and_generate_collects_detected_managers_and_snippet ... ok
+test execution::manager_init::tests::detect_and_generate_skips_all_when_flag_set ... ok
+test execution::manager_init::tests::detect_commands_handles_absolute_paths ... ok
+test execution::manager_init::tests::detect_env_matches_expected_values ... ok
+test execution::manager_init::tests::detect_files_returns_first_match ... ok
+test execution::manager_init::tests::skip_list_parser_handles_commas_and_spaces ... ok
+test execution::manager_init::tests::telemetry_payload_marks_snippet_presence ... ok
+test execution::manager_init::tests::truthy_check_parses_common_values ... ok
+test execution::manager_init::tests::write_snippet_creates_parent_dirs ... ok
+test execution::agent_events::tests::schedule_demo_burst_emits_expected_events ... ok
+test execution::manager_init::tests::write_snippet_replaces_existing_content ... ok
+test execution::policy_model::tests::policy_patch_accepts_world_fs_v3_keys_and_dimension_lists ... ok
+test execution::policy_model::tests::policy_patch_rejects_legacy_world_fs_allowlist_keys ... ok
+test execution::pty::control::tests::active_control_dispatches_commands_and_clears_on_drop ... ok
+test execution::pty::io::manager::tests::exits_when_channel_sender_drops ... ok
+test execution::pty::io::manager::tests::processes_resize_write_and_close_commands ... ok
+test execution::pty::io::manager::tests::stops_after_write_failure ... ok
+test execution::config_cmd::tests::test_invalid_enum_builtins_is_exit_2_and_no_workspace_writes ... ok
+test execution::pty::io::types::tests::active_guard_resets_flag_on_drop ... ok
+test execution::pty::io::types::tests::exit_status_reports_signal_on_unix ... ok
+test execution::pty::io::types::tests::exit_status_reports_success_and_code ... ok
+test execution::pty::io::types::tests::minimal_terminal_guard_handles_creation ... ok
+test execution::repl_persistent_session::tests::test_command_complete_seq_token_mismatch_fails_closed ... ok
+test execution::repl_persistent_session::tests::test_exit_expected_vs_unexpected ... ok
+test execution::repl_persistent_session::tests::test_no_pipelining_rejected_by_client_core ... ok
+test execution::repl_persistent_session::tests::test_ready_version_mismatch_fails_closed ... ok
+test execution::repl_persistent_session::tests::test_stdout_base64_invalid_is_fatal ... ok
+test execution::repl_persistent_session::tests::test_unknown_server_frame_is_fatal ... ok
+test execution::manager_init::tests::detect_script_runs_shell_commands ... ok
+test execution::config_cmd::tests::test_invalid_enum_inventory_mode_is_exit_2_and_no_workspace_writes ... ok
+test execution::config_cmd::tests::test_unknown_key_is_exit_2_and_no_workspace_writes ... ok
+test execution::config_model::tests::test_explain_json_bytes_are_deterministic_for_identical_inputs ... ok
+test execution::config_model::tests::test_phase_a_concat_dedupe_and_replace_provenance ... ok
+test builtins::world_enable::runner::paths::tests::resolve_world_socket_path_normalizes_relative_components ... ok
+test execution::invocation::tests::skip_shims_and_no_world_disable_shimmed_path ... ok
+test execution::invocation::tests::wrap_mode_uses_cli_shell_and_shimmed_path ... ok
+test execution::config_model::tests::test_phase_a_workspace_disabled_ignores_workspace_patch ... ok
+test execution::manager::tests::configure_manager_init_generates_snippet_and_exports_env ... ok
+test execution::manager::tests::configure_manager_init_honors_overlay_file ... ok
+test execution::manager::tests::manager_env_script_sources_manager_and_legacy_snippets ... ok
+test execution::manager::tests::manager_manifest_base_path_prefers_env_override ... ok
+test execution::manager_init::tests::config_from_env_respects_skip_and_debug_flags ... ok
+test execution::routing::dispatch::tests::host_replay::async_repl_host_commands_record_replay_context ... ok
+test execution::routing::dispatch::tests::linux_world::linux_world_tests::agent_probe_enables_world ... ok
+test execution::pty::io::types::tests::terminal_size_uses_non_zero_dimensions ... ok
+test execution::routing::dispatch::tests::linux_world::linux_world_tests::fallback_uses_local_backend_stub ... ok
+test execution::routing::dispatch::tests::pty::test_container_wants_pty ... ok
+test execution::routing::dispatch::tests::pty::test_force_vs_disable_precedence ... ok
+test execution::routing::dispatch::tests::pty::test_container_k8s_pty ... ok
+test execution::routing::dispatch::tests::pty::test_git_wants_pty ... ok
+test execution::routing::dispatch::tests::pty::test_has_top_level_shell_meta ... ok
+test execution::routing::dispatch::tests::pty::test_debugger_pty ... ok
+test execution::routing::dispatch::tests::pty::test_git_commit_edit_flag ... ok
+test execution::routing::dispatch::tests::pty::test_is_force_pty_command ... ok
+test execution::routing::dispatch::tests::pty::test_is_interactive_shell ... ok
+test execution::routing::dispatch::tests::pty::test_is_pty_disabled ... ok
+test execution::routing::dispatch::tests::pty::test_looks_like_repl ... ok
+test execution::routing::dispatch::tests::pty::test_needs_pty_integration ... ok
+test execution::routing::dispatch::tests::pty::test_needs_pty_known_tuis ... ok
+test execution::routing::dispatch::tests::pty::test_needs_pty_pipes_redirects ... ok
+test execution::routing::dispatch::tests::pty::test_needs_pty_quoted_args ... ok
+test execution::routing::dispatch::tests::pty::test_needs_pty_shell_meta ... ok
+test execution::routing::dispatch::tests::pty::test_peel_wrappers ... ok
+test execution::routing::dispatch::tests::pty::test_needs_pty_ssh ... ok
+test execution::routing::builtin::tests::anchor_guard_bounces_chained_cd_when_world_disabled ... ok
+test execution::routing::dispatch::tests::pty::test_needs_pty_ssh_variations ... ok
+test execution::routing::dispatch::tests::pty::test_stdin_nonblock_roundtrip ... ok
+test execution::routing::dispatch::tests::pty::test_sudo_wants_pty ... ok
+test execution::routing::dispatch::tests::pty::test_wants_debugger_pty ... ok
+test execution::routing::dispatch::tests::pty::test_pipeline_last_tui ... ok
+test execution::routing::dispatch::tests::pty::test_repl_heuristic ... ok
+test execution::routing::dispatch::tests::registry::parse_demo_burst_command_defaults ... ok
+test execution::routing::dispatch::tests::repl_persistent_session_client_fail_closed::command_complete_seq_mismatch_is_fatal_protocol_error ... ok
+test execution::routing::dispatch::tests::repl_persistent_session_client_fail_closed::command_complete_token_mismatch_is_fatal_and_redacts_token ... ok
+test execution::routing::dispatch::tests::repl_persistent_session_client_fail_closed::exit_after_shutdown_is_expected_and_not_an_error ... ok
+test execution::routing::dispatch::tests::repl_persistent_session_client_fail_closed::ready_protocol_version_mismatch_is_fatal_and_latches_fail_closed ... ok
+test execution::routing::dispatch::tests::pty::test_ssh_spacing_edge_cases ... ok
+test execution::routing::dispatch::tests::repl_persistent_session_client_fail_closed::unexpected_exit_is_fatal_protocol_error ... ok
+test execution::routing::dispatch::tests::repl_persistent_session_client_fail_closed::unknown_server_frame_type_is_fatal_protocol_error ... ok
+test execution::routing::dispatch::tests::telemetry::parse_fs_diff_from_agent_json ... ok
+test execution::routing::dispatch::world_ops::tests::ensure_world_deps_bin_respects_override_and_avoids_duplicates ... ok
+test execution::routing::dispatch::world_ops::tests::ensure_world_deps_bin_sets_default_and_prepends_path ... ok
+test execution::routing::dispatch::tests::pty::test_windows_exe_handling ... ok
+hellooopstest execution::routing::dispatch::tests::pty::test_wrapper_commands ... ok
+test execution::routing::dispatch::tests::telemetry::consume_agent_stream_buffer_emits_agent_events ... ok
+test execution::routing::builtin::tests::anchor_guard_bounces_chained_cd_when_world_enabled ... ok
+test execution::routing::builtin::tests::cd_allows_uncaged_escape_from_anchor ... ok
+test execution::routing::builtin::tests::cd_bounces_when_caged_with_world_enabled ... ok
+test execution::routing::builtin::tests::cd_bounces_when_caged_without_world ... ok
+test execution::routing::builtin::tests::export_builtin_defers_when_value_needs_shell ... ok
+test execution::routing::builtin::tests::export_builtin_sets_plain_pairs ... ok
+test execution::shim_deploy::tests::test_deployment_status_enum ... ok
+test execution::shim_deploy::tests::test_get_commands_to_shim ... ok
+test execution::shim_deploy::tests::test_skip_deployment ... ok
+test execution::routing::builtin::tests::no_world_flag_disables_world_and_sets_root_exports ... ok
+test repl::async_repl::caged_prediction_tests::apply_caged_predicted_cwd_allows_inside_anchor ... ok
+test repl::async_repl::caged_prediction_tests::apply_caged_predicted_cwd_bounces_outside_anchor ... ok
+test repl::async_repl::caged_prediction_tests::suppress_redundant_caged_prediction_warning_drops_when_cwd_unchanged ... ok
+test repl::async_repl::tests::parse_demo_burst_custom ... ok
+test repl::async_repl::tests::parse_demo_burst_defaults ... ok
+test repl::editor::tests::completes_valid_command ... ok
+test repl::editor::tests::detects_pending_pipeline_operator ... ok
+test repl::editor::tests::detects_trailing_backslash ... ok
+test repl::editor::tests::detects_unclosed_double_quote ... ok
+test repl::editor::tests::detects_unclosed_single_quote ... ok
+test execution::routing::builtin::tests::unset_builtin_clears_variables ... ok
+test execution::routing::builtin::tests::world_flag_honors_directory_world_root_settings ... ok
+test execution::routing::builtin::tests::world_flag_overrides_disabled_config_and_env ... ok
+test execution::platform::tests::world_enable_exports_policy_fs_mode ... ok
+test execution::routing::dispatch::tests::linux_world::linux_world_tests::disabled_skips_initialization ... ok
+test execution::routing::builtin::tests::anchor_flags_override_configs_and_export_anchor_env ... ok
+test execution::routing::path_env::tests::enforce_caged_destination_bounces_outside_anchor ... ok
+test execution::settings::tests::effective_root_uses_current_directory_for_follow_mode ... ok
+test execution::settings::tests::resolve_world_root_defaults_to_launch_dir_project ... ok
+test execution::settings::tests::resolve_world_root_env_overrides_global_config ... ok
+test execution::settings::tests::resolve_world_root_prefers_cli_over_all_other_sources ... ok
+test execution::settings::tests::resolve_world_root_prefers_workspace_config_over_global_when_env_unset ... ok
+test execution::settings::tests::resolve_world_root_refuses_legacy_workspace_settings_yaml ... ok
+test execution::settings::tests::resolve_world_root_requires_anchor_path_for_custom_mode ... ok
+test execution::settings::tests::resolve_world_root_respects_env_when_no_configs ... ok
+test execution::lock::tests::test_lock_acquisition_and_release ... ok
+test execution::lock::tests::test_lock_timeout_behavior ... ok
+test execution::socket_activation::tests::systemctl_timeout_is_fail_fast ... ok
+test execution::lock::tests::test_concurrent_lock_attempts ... ok
+
+test result: ok. 145 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
+
+     Running tests/cmd_denied_host_only.rs (target/debug/deps/cmd_denied_host_only-8f7f168407f2b939)
+
+running 1 test
+   Compiling ring v0.17.14
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+   Compiling rustls v0.22.4
+   Compiling rustls-webpki v0.102.8
+   Compiling tungstenite v0.21.0
+   Compiling tokio-rustls v0.25.0
+   Compiling tokio-tungstenite v0.21.0
+   Compiling shell v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ/crates/shell)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 5.80s
+test cmd_denied_enforcement_is_host_only_even_when_world_enabled ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.92s
+
+     Running tests/command_mode_world_consistency_v1.rs (target/debug/deps/command_mode_world_consistency_v1-7391c0d364c24c4e)
+
+running 4 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.09s
+test command_mode_world_consistency_v1_c_mode_does_not_host_canonicalize_cd_pwd ... ok
+test command_mode_world_consistency_v1_pipe_mode_does_not_host_canonicalize_cd_pwd ... ok
+test command_mode_world_consistency_v1_colon_host_is_literal_in_c_mode_and_pipe_mode ... ok
+test command_mode_world_consistency_v1_routes_both_c_and_pipe_via_world_socket ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.79s
+
+     Running tests/common.rs (target/debug/deps/common-d841d32115cae8ad)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/config_init.rs (target/debug/deps/config_init-215ad0baf656035b)
+
+running 6 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.11s
+test config_global_set_rejects_unknown_keys_without_writing ... ok
+test config_global_init_does_not_overwrite_without_force ... ok
+test config_global_show_prints_empty_patch_when_missing ... ok
+test config_global_init_writes_empty_patch_yaml ... ok
+test config_global_set_creates_file_and_applies_updates ... ok
+test config_global_init_force_overwrites_existing_config ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.16s
+
+     Running tests/config_set.rs (target/debug/deps/config_set-6958eff27e9991cd)
+
+running 7 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.12s
+test config_set_requires_workspace ... ok
+test config_set_rejects_unknown_key_without_mutation ... ok
+test config_set_accepts_boolean_synonyms ... ok
+test config_set_rejects_invalid_list_literal_without_mutation ... ok
+test protected_excludes_are_always_present_in_effective_config ... ok
+test config_set_supports_list_append_and_remove ... ok
+test config_set_updates_workspace_and_prints_effective_config ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.17s
+
+     Running tests/config_show.rs (target/debug/deps/config_show-3b1682a0cc34e81a)
+
+running 6 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.10s
+test config_show_resolves_without_workspace ... ok
+test config_show_rejects_legacy_workspace_settings_yaml ... ok
+test config_show_resolves_effective_config_with_precedence ... ok
+test config_show_strictly_rejects_type_mismatches ... ok
+test config_show_emits_yaml_by_default ... ok
+test config_show_strictly_rejects_unknown_keys ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.15s
+
+     Running tests/config_world_deps_phase_b.rs (target/debug/deps/config_world_deps_phase_b-cacb30ea256daf29)
+
+running 9 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.08s
+test config_workspace_reset_removes_world_deps_enabled_key_from_workspace_patch_mapping ... ok
+test config_global_reset_removes_world_deps_keys_from_global_patch_mapping ... ok
+test config_world_deps_invalid_enum_values_exit_2_and_do_not_mutate_patch_bytes ... ok
+test config_world_deps_enabled_merges_across_scopes_and_explains_multi_source_provenance ... ok
+test config_world_deps_enabled_supports_remove_and_persists_explicit_empty_list ... ok
+test config_current_show_ignores_workspace_patch_when_workspace_is_disabled ... ok
+test config_world_deps_enabled_explain_reports_only_contributing_layers ... ok
+test config_world_deps_enum_keys_use_replace_precedence_with_single_source_provenance ... ok
+test config_current_show_outputs_are_deterministic_without_changes ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.15s
+
+     Running tests/doctor_scopes_ds0.rs (target/debug/deps/doctor_scopes_ds0-96f19d7808547489)
+
+running 3 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.13s
+test host_doctor_help_wiring_is_present ... ok
+test host_doctor_json_matches_envelope_v1_when_available ... ok
+test world_doctor_json_matches_envelope_v1_when_available ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.23s
+
+     Running tests/ev0_override_split.rs (target/debug/deps/ev0_override_split-4f9366c549634161)
+
+running 3 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.12s
+test ev0_workspace_config_wins_over_override_env ... ok
+test ev0_override_env_overrides_effective_config_when_no_workspace_exists ... ok
+test ev0_legacy_substrate_env_does_not_override_effective_config ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.21s
+
+     Running tests/fail_closed_semantics.rs (target/debug/deps/fail_closed_semantics-0c8ccd2e4e928612)
+
+running 2 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.15s
+test fail_closed_routing_true_exits_3_when_world_socket_unavailable ... ok
+test require_world_false_warns_once_and_falls_back_to_host_when_world_socket_unavailable ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.48s
+
+     Running tests/installer_env_wcu4.rs (target/debug/deps/installer_env_wcu4-010c22683ce161f0)
+
+running 2 tests
+test installer_scripts_do_not_export_substrate_override_by_default ... ok
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.12s
+test config_current_show_is_not_affected_without_override_inputs ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.17s
+
+     Running tests/logging.rs (target/debug/deps/logging-30d0970aac13e6b2)
+
+running 8 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.13s
+test command_logs_mark_manual_mode_without_socket_activation ... ok
+test command_logs_include_socket_activation_flag ... ok
+test test_pty_field_in_logs ... ok
+test test_log_rotation ... ok
+test test_pipe_mode_detection ... ok
+test test_log_directory_creation ... ok
+test test_command_start_finish_json_roundtrip ... ok
+test test_process_group_signal_handling ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.33s
+
+     Running tests/manager_init.rs (target/debug/deps/manager_init-cf2fa1c181c12b08)
+
+running 1 test
+test tier2_managers_generate_snippets ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/needs_shell.rs (target/debug/deps/needs_shell-e22ca362b7c89ec3)
+
+running 8 tests
+test stderr_redirections_need_shell ... ok
+test pipes_always_need_shell ... ok
+test background_processes_need_shell ... ok
+test logical_operators_need_shell ... ok
+test command_substitution_needs_shell ... ok
+test redirections_need_shell ... ok
+test simple_commands_dont_need_shell ... ok
+test needs_shell_never_panics ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/next_command_visibility_waps_0008.rs (target/debug/deps/next_command_visibility_waps_0008-0ad0d82d497c0bc7)
+
+running 2 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.10s
+test waps_0008_config_edits_visible_to_next_command ... ok
+test waps_0008_policy_patch_edits_visible_to_next_command ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.29s
+
+     Running tests/persistent_session_client_v1.rs (target/debug/deps/persistent_session_client_v1-91bd1e3ab4721d4e)
+
+running 1 test
+test persistent_session_client_v1_fail_closed_core_contract ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/playbook_alignment.rs (target/debug/deps/playbook_alignment-4c92dcceb6b7175f)
+
+running 1 test
+test manual_testing_playbook_substrate_profile_snippets_include_required_id_and_name ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/policy_discovery.rs (target/debug/deps/policy_discovery-c24706a2c52b3945)
+
+running 5 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.11s
+test policy_workspace_scope_requires_workspace_root ... ok
+test policy_show_yaml_is_v3_shaped_and_renders_empty_deny_lists_for_full_isolation ... ok
+test policy_show_json_is_v3_shaped_and_renders_empty_deny_lists_for_full_isolation ... ok
+test policy_discovery_prefers_workspace_policy_over_global ... ok
+test policy_discovery_falls_back_to_global_then_default ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.16s
+
+     Running tests/policy_routing_semantics.rs (target/debug/deps/policy_routing_semantics-7348f9c9163ba994)
+
+running 4 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.10s
+test pcm2_enforce_denies_cmd_denied ... ok
+test pcm2_observe_allows_execution_and_records_would_deny ... ok
+test pcm2_disabled_does_not_evaluate_policy_decisions ... ok
+test pcm2_enforce_fails_closed_when_world_required_and_unavailable ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.22s
+
+     Running tests/profile_guardrails.rs (target/debug/deps/profile_guardrails-dfcc42bc0c8896e8)
+
+running 1 test
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.12s
+test invalid_substrate_profile_fails_fast ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.18s
+
+     Running tests/redaction.rs (target/debug/deps/redaction-66ffabcdd06a1fea)
+
+running 3 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.08s
+test test_raw_mode_no_redaction ... ok
+test test_redaction_header_values ... ok
+test test_redaction_user_pass ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.17s
+
+     Running tests/repl_world_first_rendering_v1.rs (target/debug/deps/repl_world_first_rendering_v1-d16ea4f6d2ec4310)
+
+running 3 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.09s
+test c4_repl_renders_non_utf8_bytes_and_continues ... ok
+test c4_pty_passthrough_forwards_raw_bytes_and_buffers_structured_events ... ok
+test c4_out_of_band_stdout_renders_while_idle_and_input_submission_survives ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.91s
+
+     Running tests/repl_world_first_routing_v1.rs (target/debug/deps/repl_world_first_routing_v1-b6c3fcb20a9ea707)
+
+running 6 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.08s
+test c3_drift_restart_restarts_session_and_emits_message ... ok
+test c3_host_directive_executes_on_host_when_enabled ... ok
+test c3_host_directive_is_gated_disabled_by_default ... ok
+test c3_drift_restart_refreshes_anchor_env_for_new_cwd ... ok
+test c3_startup_fail_closed_when_persistent_session_cannot_reach_ready ... ok
+test c3_pty_directive_routes_to_persistent_session_when_world_enabled ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.81s
+
+     Running tests/replay_world.rs (target/debug/deps/replay_world-22da01f820a379cb)
+
+running 15 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.09s
+test replay_no_world_flag_reports_world_toggle ... ok
+test replay_flip_world_to_host_reports_reason ... ok
+test replay_defaults_to_recorded_host_origin ... ok
+test replay_env_override_reports_world_toggle ... ok
+test replay_host_span_respects_env_opt_out_without_agent_probe ... ok
+test replay_prefers_agent_when_socket_healthy ... ok
+test replay_flip_host_to_world_prefers_agent_and_reports_origin ... ok
+test replay_emits_single_agent_warning_and_retries_copydiff_on_enospc ... ok
+test replay_logs_copydiff_override_root_and_telemetry ... ok
+test replay_agent_fallback_uses_caged_project_dir ... ok
+test replay_host_span_warns_once_when_forced_to_world ... ok
+test replay_retries_copydiff_roots_and_dedupes_warnings ... ok
+test replay_keeps_standard_path_when_nft_succeeds ... ok
+test replay_warns_when_nft_unavailable ... ok
+test host_commands_emit_replayable_spans ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.56s
+
+     Running tests/scripts.rs (target/debug/deps/scripts-94684fab65006cba)
+
+running 2 tests
+test bash_preexec_script_contains_hooks ... ok
+test write_bash_preexec_script_writes_constant ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/shell_behavior.rs (target/debug/deps/shell_behavior-56fbeaa914e8effc)
+
+running 7 tests
+test test_needs_shell_redirections ... ok
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.10s
+test test_builtin_cd_side_effects ... ok
+test test_cd_minus_behavior ... ok
+test test_script_mode_single_process ... ok
+test test_export_complex_values_deferred ... ok
+test test_ci_flag_strict_mode_ordering ... ok
+test test_sigterm_exit_code ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.36s
+
+     Running tests/shell_env.rs (target/debug/deps/shell_env-c8f310de2d555331)
+
+running 3 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.12s
+test shell_env_no_world_skips_manager_env ... ok
+test shell_env_injects_manager_snippets ... ok
+test shell_env_applies_overlay_manifest ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.40s
+
+     Running tests/shim_deployment.rs (target/debug/deps/shim_deployment-684bf18a64375539)
+
+running 11 tests
+test tests::test_corrupted_version_file_recovery ... ok
+test tests::test_deployment_with_existing_substrate_dir ... ok
+test tests::test_clean_deployment ... ok
+test tests::test_migration_from_old_directory ... ok
+test tests::test_deployment_with_env_var ... ok
+test tests::test_multi_instance_locking ... ok
+test tests::test_no_redeployment_when_current ... ok
+test tests::test_shim_permissions ... ok
+test tests::test_skip_deployment ... ok
+test tests::test_version_file_content ... ok
+test tests::test_symlink_creation ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/shim_doctor.rs (target/debug/deps/shim_doctor-6b57e698deb06e76)
+
+running 8 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.11s
+test shim_doctor_json_surfaces_world_socket_and_landlock_details ... ok
+test shim_doctor_json_surfaces_world_fs_mode_details ... ok
+test shim_doctor_marks_world_deps_skipped_when_no_world_requested ... ok
+test shim_doctor_human_mode_reports_status_and_path_diagnostics ... ok
+test shim_doctor_json_mode_surfaces_states_hints_and_path_details ... ok
+test shim_doctor_json_reports_tier2_managers ... ok
+test shim_doctor_repair_appends_snippet_and_creates_backup_files ... ok
+test shim_doctor_reports_world_backend_and_deps_errors ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.16s
+
+     Running tests/shim_health.rs (target/debug/deps/shim_health-a90f324a19664ba8)
+
+running 3 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.09s
+test health_json_reports_world_deps_missing_and_world_backend_status ... ok
+test health_human_summary_reports_world_deps_unavailable ... ok
+test health_json_is_valid_when_world_deps_fixture_is_invalid ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.13s
+
+     Running tests/shim_status_fs_mode.rs (target/debug/deps/shim_status_fs_mode-5cd0d894a9f706a6)
+
+running 2 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.11s
+test shim_status_text_includes_world_fs_mode ... ok
+test shim_status_json_reports_world_fs_mode ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.18s
+
+     Running tests/socket_activation.rs (target/debug/deps/socket_activation-42281d06d2791715)
+
+running 6 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.17s
+test shim_status_text_includes_socket_activation_details ... ok
+test shim_status_json_marks_manual_mode_when_socket_absent ... ok
+test shim_status_json_reports_socket_activation_mode ... ok
+test world_doctor_text_reports_socket_activation_summary ... ok
+test world_doctor_reports_socket_activation_in_json ... ok
+test world_doctor_fails_when_socket_activation_unresponsive ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.27s
+
+     Running tests/wfgadax1_routing_fail_closed.rs (target/debug/deps/wfgadax1_routing_fail_closed-ab6ca9b34f6fd558)
+
+running 5 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.09s
+test wfgadax1_fail_closed_routing_true_world_disabled_hard_errors_exit_2 ... ok
+test wfgadax1_runtime_routing_fail_closed_missing_socket_maps_to_exit_3 ... ok
+test wfgadax1_runtime_routing_fail_closed_strategy_unavailable_maps_to_exit_4 ... ok
+test wfgadax1_exports_fail_closed_routing_state_false_is_0_and_output_only ... ok
+test wfgadax1_exports_fail_closed_routing_state_env_var_and_deletes_require_world ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.23s
+
+     Running tests/wfgadax2_caging_required.rs (target/debug/deps/wfgadax2_caging_required-ea3be8ec52f981cb)
+
+running 3 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.08s
+test wfgadax2_caged_required_rejects_world_caged_false_exit_2 ... ok
+test wfgadax2_caged_required_rejects_anchor_mode_follow_cwd_exit_2 ... ok
+test wfgadax2_control_caged_required_allows_caged_workspace_execution ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.25s
+
+     Running tests/wfgadax3_repl_exit_transparency.rs (target/debug/deps/wfgadax3_repl_exit_transparency-b0ba7bccb9a9978e)
+
+running 3 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.08s
+test wfgadax3_repl_exit_cwd_rejects_invalid_modes_as_hard_error_exit_2 ... ok
+test wfgadax3_repl_exit_cwd_last_world_selects_world_cwd_as_exit_target_when_representable ... ok
+test wfgadax3_prints_exit_note_when_world_cwd_differs_default_target_is_entered_cwd ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.60s
+
+     Running tests/workspace_auto_sync_ws3.rs (target/debug/deps/workspace_auto_sync_ws3-39da86533d23d9f8)
+
+running 4 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.10s
+test auto_sync_noops_when_effective_direction_is_from_host ... ok
+test auto_sync_does_not_run_when_non_pty_world_command_exits_nonzero ... ok
+test auto_sync_failure_propagates_exit_code_and_prefixes_error ... ok
+test auto_sync_runs_after_successful_non_pty_world_command_and_applies_pending_diff ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.32s
+
+     Running tests/workspace_checkpoint_ws6.rs (target/debug/deps/workspace_checkpoint_ws6-10c81b29c991564e)
+
+running 4 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.09s
+test workspace_checkpoint_exits_3_when_git_missing ... ok
+test workspace_checkpoint_includes_gitignored_files_and_excludes_protected_paths ... ok
+test workspace_checkpoint_initializes_internal_repo_creates_tag_and_prints_id ... ok
+test workspace_checkpoint_is_noop_when_no_changes_and_does_not_create_new_tag ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.16s
+
+     Running tests/workspace_init.rs (target/debug/deps/workspace_init-591b25b416de26f0)
+
+running 6 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.10s
+test workspace_init_rejects_non_directory_paths ... ok
+test workspace_init_creates_expected_inventory_and_gitignore ... ok
+test workspace_disabled_marker_causes_discovery_to_ignore_workspace ... ok
+test workspace_init_refuses_nested_workspaces_without_writes ... ok
+test workspace_init_force_repairs_missing_files_without_overwriting_existing ... ok
+test workspace_discovery_walks_up_to_marker ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.15s
+
+     Running tests/workspace_rollback_ws7.rs (target/debug/deps/workspace_rollback_ws7-8ac4925f8d056485)
+
+running 6 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.13s
+test workspace_rollback_exits_3_when_git_is_unavailable ... ok
+test workspace_rollback_invalid_target_exits_2 ... ok
+test workspace_rollback_requires_force_for_noncheckpointed_paths_deletion_and_preserves_protected_paths ... ok
+test workspace_rollback_by_explicit_checkpoint_id_restores_files_and_does_not_create_new_tags ... ok
+test workspace_rollback_requires_force_when_user_repo_is_dirty ... ok
+test workspace_rollback_last_resolves_to_most_recent_checkpoint ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.21s
+
+     Running tests/workspace_sync_ws0.rs (target/debug/deps/workspace_sync_ws0-c3ce6d8031552347)
+
+running 11 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.09s
+test workspace_checkpoint_requires_workspace_and_is_single_actionable_line ... ok
+test workspace_rollback_requires_workspace_and_is_single_actionable_line ... ok
+test workspace_sync_dry_run_requires_world_and_rejects_no_world_flag ... ok
+test workspace_sync_requires_workspace_and_is_single_actionable_line ... ok
+test workspace_checkpoint_does_not_require_world_backend ... ok
+test workspace_sync_dry_run_exits_4_when_backend_lacks_pending_diff_discovery ... ok
+test workspace_sync_dry_run_exits_3_when_pending_diff_fails_after_capabilities_succeeds ... ok
+test workspace_sync_dry_run_from_world_prints_pending_diff_summary_and_preview ... ok
+test workspace_sync_dry_run_supports_from_host_and_both_directions_in_ws5 ... ok
+test workspace_sync_without_dry_run_requires_world_backend_in_ws2 ... ok
+test workspace_sync_dry_run_exits_3_when_world_backend_unavailable ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.16s
+
+     Running tests/workspace_sync_ws2.rs (target/debug/deps/workspace_sync_ws2-a08b704aefa531ba)
+
+running 6 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.11s
+test workspace_sync_apply_refuses_when_pending_diff_contains_protected_paths_and_does_not_mutate ... ok
+test workspace_sync_apply_conflict_policy_abort_refuses_and_does_not_clear_pending_diff ... ok
+test workspace_sync_apply_refuses_when_max_paths_guard_exceeded_and_includes_threshold_and_observed_values ... ok
+test workspace_sync_apply_exits_1_when_applied_but_pending_diffs_not_cleared_and_does_not_clear_whatever_is_current ... ok
+test workspace_sync_apply_from_world_applies_deletes_respects_excludes_and_clears_pending_diff ... ok
+test workspace_sync_apply_conflict_policy_prefer_host_skips_conflicts_exits_0_and_clears_pending_diff ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.24s
+
+     Running tests/workspace_sync_ws4.rs (target/debug/deps/workspace_sync_ws4-5e040bb7df43b3bd)
+
+running 2 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.14s
+test workspace_sync_dry_run_reports_pty_and_non_pty_pending_diff_summaries_when_supported ... ok
+test workspace_sync_dry_run_reports_pty_pending_diffs_unsupported_explicitly ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.23s
+
+     Running tests/workspace_sync_ws5.rs (target/debug/deps/workspace_sync_ws5-bb226741aef51bf7)
+
+running 4 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.08s
+test workspace_sync_apply_from_world_includes_pty_deletes ... ok
+test workspace_sync_from_host_mutates_world_but_not_host ... ok
+test workspace_sync_direction_both_applies_non_pty_and_pty_deletes ... ok
+test workspace_sync_dry_run_from_host_reports_conflicts_and_per_path_decisions ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.17s
+
+     Running tests/world_deps_applied_wdp2.rs (target/debug/deps/world_deps_applied_wdp2-e75093c7d1863e3e)
+
+running 4 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.13s
+test test_current_show_explain_unknown_item_exits_2_not_3_even_if_backend_unavailable ... ok
+test test_current_show_explain_backend_unavailable_exits_3_for_known_item ... ok
+test test_current_list_applied_backend_unavailable_exits_3_with_actionable_remediation ... ok
+test test_current_list_applied_with_healthy_backend_exits_0_and_reports_world_status ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.21s
+
+     Running tests/world_deps_apt_install_wdp5.rs (target/debug/deps/world_deps_apt_install_wdp5-3ea641bdd5f7699b)
+
+running 6 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.08s
+test test_current_list_available_ignores_legacy_world_deps_paths ... ok
+test test_current_install_manual_exits_4_and_does_not_call_world_agent ... ok
+test test_current_install_hardening_violation_exits_5_with_actionable_message ... ok
+test test_current_install_executes_apt_before_scripts_and_does_not_mutate_enabled_patches ... ok
+test test_current_sync_applies_effective_enabled_set_and_does_not_mutate_patches ... ok
+test test_current_sync_preserves_enabled_order_for_script_packages ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.26s
+
+     Running tests/world_deps_bin_path_routing.rs (target/debug/deps/world_deps_bin_path_routing-b7c54340f40c8a27)
+
+running 2 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.09s
+test test_world_execute_respects_world_deps_bin_override ... ok
+test test_world_execute_injects_world_deps_bin_dir_and_prepends_path ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.23s
+
+     Running tests/world_deps_current_dry_run_wdp3.rs (target/debug/deps/world_deps_current_dry_run_wdp3-b3e755c0c35462ac)
+
+running 3 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.11s
+test test_current_install_dry_run_surfaces_manual_items_as_blocked ... ok
+test test_current_sync_dry_run_prints_plan_for_effective_enabled_set ... ok
+test test_current_install_dry_run_prints_deterministic_plan_and_orders_apt_before_scripts ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.17s
+
+     Running tests/world_deps_enabled_wdp1.rs (target/debug/deps/world_deps_enabled_wdp1-f97a1aa09425a4bd)
+
+running 9 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.13s
+test test_current_list_enabled_exits_2_when_enabled_not_in_inventory ... ok
+test test_global_add_validates_against_global_inventory_only ... ok
+test test_global_add_preserves_comment_header_and_only_updates_global_patch ... ok
+test test_workspace_remove_warns_if_still_enabled_via_global ... ok
+test test_global_remove_does_not_validate_inventory_preserves_header_and_warns_if_still_enabled_via_workspace ... ok
+test test_current_list_enabled_merges_scopes_and_does_not_call_world_agent ... ok
+test test_scoped_list_enabled_is_patch_view_not_effective_merged ... ok
+test test_global_and_workspace_reset_remove_enabled_key_and_preserve_comment_headers ... ok
+test test_workspace_add_respects_inventory_mode_workspace_only ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.18s
+
+     Running tests/world_deps_inventory_validation_wdp0.rs (target/debug/deps/world_deps_inventory_validation_wdp0-6158ece31818822c)
+
+running 2 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.10s
+test test_sh_env_exec_requires_env ... ok
+test test_wrapper_name_must_be_listed_in_entrypoints ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.16s
+
+     Running tests/world_deps_inventory_views.rs (target/debug/deps/world_deps_inventory_views-87e82a71b8712e3a)
+
+running 8 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.08s
+test test_merge_workspace_overrides_global_definition ... ok
+test test_inventory_mode_workspace_only_hides_builtins_and_global ... ok
+test test_current_list_available_includes_builtins_global_and_workspace ... ok
+test test_current_show_unknown_item_is_exit_2 ... ok
+test test_package_bundle_name_collision_is_exit_2 ... ok
+test test_builtins_disabled_hides_builtins ... ok
+test test_invalid_yaml_exits_2_for_global_list_available ... ok
+test test_invalid_yaml_exits_2_for_workspace_list_available ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.14s
+
+     Running tests/world_deps_script_install_wdp4.rs (target/debug/deps/world_deps_script_install_wdp4-253e4f5ad07f2678)
+
+running 4 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.11s
+test test_current_install_script_creates_entrypoint_and_probe_command_runs_under_sh ... ok
+test test_current_sync_script_only_installs_entrypoints_detectable_via_probe_or_entrypoints ... ok
+test test_generated_bash_source_exec_wrapper_missing_source_prints_actionable_stderr ... ok
+test test_current_sync_generates_sh_env_exec_wrapper_deterministic_and_invokable ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.54s
+
+     Running tests/world_enable.rs (target/debug/deps/world_enable-9f9edd8b7326b52b)
+
+running 6 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.08s
+test world_enable_rejects_prefix_flag ... ok
+test world_enable_dry_run_skips_all_mutations ... ok
+test world_enable_fails_when_helper_exits_non_zero ... ok
+test world_enable_provisions_and_sets_config_and_env_state ... ok
+test world_enable_recovers_from_invalid_config_file ... ok
+test world_enable_fails_when_socket_missing ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.19s
+
+     Running tests/world_overlayfs_enumeration_wo0.rs (target/debug/deps/world_overlayfs_enumeration_wo0-28cc22614e30e43c)
+
+running 2 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.09s
+test trace_command_complete_includes_world_fs_strategy_fields_and_enums ... ok
+test world_doctor_json_includes_strategy_keys_per_adr_0004 ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.18s
+
+     Running tests/world_verify.rs (target/debug/deps/world_verify-2aa128e77035ae0b)
+
+running 2 tests
+   Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.10s
+test world_verify_help_mentions_json_flag ... ok
+test world_verify_json_is_stable_when_world_backend_unavailable ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.17s
+

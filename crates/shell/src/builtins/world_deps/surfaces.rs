@@ -1,5 +1,5 @@
 use super::errors::{
-    WorldDepsBackendRequiredError, WorldDepsBackendUnavailableError,
+    WorldDepsBackendRequiredError, WorldDepsBackendUnavailableError, WorldDepsSafetyViolationError,
     WorldDepsUnmetPrerequisiteError,
 };
 use super::inventory::{
@@ -85,11 +85,13 @@ pub fn run(cmd: &WorldDepsCmd, cli_no_world: bool, _cli_force_world: bool) -> i3
         Ok(()) => 0,
         Err(err) => {
             let code = world_deps_exit_code(&err);
-            if code == 5 {
+            if code == 5 && looks_like_world_deps_hardening_violation(&err) {
                 eprintln!(
                     "substrate: world deps blocked by hardening/cage: required writes to `/var/lib/substrate/world-deps` are not permitted.\nHint: ensure `/var/lib/substrate/world-deps` is bind-mounted read-write inside the world and retry."
                 );
                 eprintln!("Underlying error: {:#}", err);
+            } else if code == 5 {
+                eprintln!("{:#}", err);
             } else if code == 3 {
                 if cfg!(target_os = "macos") {
                     eprintln!("Remediation:\n  - Run: scripts/mac/lima-warm.sh");
@@ -129,6 +131,9 @@ fn world_deps_exit_code(err: &anyhow::Error) -> i32 {
     }
     if err.is::<WorldDepsBackendRequiredError>() {
         return 3;
+    }
+    if err.is::<WorldDepsSafetyViolationError>() {
+        return 5;
     }
     // Hardening conflicts should win even when surfaced through backend-unavailable wrappers.
     if looks_like_world_deps_hardening_violation(err) {
@@ -321,6 +326,7 @@ fn run_current_show(args: &WorldDepsCurrentShowArgs) -> Result<()> {
 #[derive(Debug)]
 struct InstallPlanV1 {
     apt: Vec<AptSpecV1>,
+    apt_packages: Vec<String>,
     script_packages: Vec<String>,
     manual_packages: Vec<ManualPackagePlanV1>,
 }
@@ -349,7 +355,7 @@ fn run_current_install(args: &WorldDepsCurrentInstallArgs) -> Result<()> {
         return Ok(());
     }
 
-    apply_install_plan_v1(&view, &plan)?;
+    apply_install_plan_v1(&view, &plan, ApplyInstallMode::InstallOnly)?;
     println!(
         "World deps applied: image(apt)={}, prefix(script)={}",
         plan.apt.len(),
@@ -388,17 +394,24 @@ fn run_current_sync(args: &WorldDepsCurrentSyncArgs) -> Result<()> {
         return Ok(());
     }
 
-    apply_install_plan_v1(&view, &plan)?;
+    apply_install_plan_v1(&view, &plan, ApplyInstallMode::SyncEnabled)?;
     println!("World deps synced");
     println!("substrate: note: applied effective enabled deps list for this directory (sources: workspace, global, defaults as applicable)");
     println!("substrate: hint: run 'substrate world deps current list applied' to verify");
     Ok(())
 }
 
+#[derive(Copy, Clone, Debug)]
+enum ApplyInstallMode {
+    InstallOnly,
+    SyncEnabled,
+}
+
 fn compute_install_plan_v1(view: &InventoryViewV1, item_names: &[String]) -> Result<InstallPlanV1> {
     let package_names = expand_items_to_packages_v1(view, item_names)?;
 
     let mut apt_versions: HashMap<String, Option<String>> = HashMap::new();
+    let mut apt_packages: Vec<String> = Vec::new();
     let mut script_packages: Vec<String> = Vec::new();
     let mut manual_packages: Vec<ManualPackagePlanV1> = Vec::new();
 
@@ -411,6 +424,7 @@ fn compute_install_plan_v1(view: &InventoryViewV1, item_names: &[String]) -> Res
 
         match pkg.install.method {
             InstallMethodV1::Apt => {
+                apt_packages.push(pkg.name.clone());
                 for spec in &pkg.install.apt {
                     match apt_versions.get(&spec.name) {
                         None => {
@@ -449,6 +463,7 @@ fn compute_install_plan_v1(view: &InventoryViewV1, item_names: &[String]) -> Res
         .collect();
     apt.sort_by(|a, b| a.name.cmp(&b.name));
 
+    let apt_packages = dedupe_ordered(&apt_packages);
     let script_packages = dedupe_ordered(&script_packages);
 
     manual_packages.sort_by(|a, b| a.name.cmp(&b.name));
@@ -456,12 +471,17 @@ fn compute_install_plan_v1(view: &InventoryViewV1, item_names: &[String]) -> Res
 
     Ok(InstallPlanV1 {
         apt,
+        apt_packages,
         script_packages,
         manual_packages,
     })
 }
 
-fn apply_install_plan_v1(view: &InventoryViewV1, plan: &InstallPlanV1) -> Result<()> {
+fn apply_install_plan_v1(
+    view: &InventoryViewV1,
+    plan: &InstallPlanV1,
+    mode: ApplyInstallMode,
+) -> Result<()> {
     if !plan.manual_packages.is_empty() {
         eprintln!("MANUAL (blocked):");
         for pkg in &plan.manual_packages {
@@ -479,11 +499,23 @@ fn apply_install_plan_v1(view: &InventoryViewV1, plan: &InstallPlanV1) -> Result
         )));
     }
 
+    let mut packages: Vec<String> = Vec::new();
+    packages.extend(plan.apt_packages.iter().cloned());
+    packages.extend(plan.script_packages.iter().cloned());
+    ensure_no_entrypoint_collisions_v1(view, &packages)?;
+
     ensure_world_backend_available()?;
+
+    if matches!(mode, ApplyInstallMode::SyncEnabled) {
+        let keep_names = collect_world_deps_bin_keep_names_v1(view, &packages)?;
+        reconcile_world_deps_bin_v1(&keep_names)
+            .context("failed to reconcile world-deps wrappers")?;
+    }
 
     if !plan.apt.is_empty() {
         apply_apt_install_plan_v1(&plan.apt)?;
     }
+    apply_apt_entrypoint_wrappers_v1(view, &plan.apt_packages)?;
 
     for pkg_name in &plan.script_packages {
         let pkg = view.packages.get(pkg_name).ok_or_else(|| {
@@ -512,6 +544,230 @@ fn apply_install_plan_v1(view: &InventoryViewV1, plan: &InstallPlanV1) -> Result
     }
 
     Ok(())
+}
+
+fn collect_world_deps_bin_keep_names_v1(
+    view: &InventoryViewV1,
+    package_names: &[String],
+) -> Result<Vec<String>> {
+    let mut keep: Vec<String> = Vec::new();
+
+    for pkg_name in package_names {
+        let pkg = view.packages.get(pkg_name).ok_or_else(|| {
+            config_model::user_error(format!(
+                "invalid deps inventory: referenced package '{pkg_name}' is not visible for this platform"
+            ))
+        })?;
+
+        if pkg.runnable && !pkg.entrypoints.is_empty() {
+            for entrypoint in &pkg.entrypoints {
+                validate_world_deps_entrypoint_filename(entrypoint)?;
+                keep.push(entrypoint.clone());
+            }
+        }
+
+        for wrapper in &pkg.wrappers {
+            validate_world_deps_bin_filename(&wrapper.name)?;
+            keep.push(wrapper.name.clone());
+        }
+    }
+
+    keep.sort();
+    keep.dedup();
+    Ok(keep)
+}
+
+fn reconcile_world_deps_bin_v1(keep_names: &[String]) -> Result<()> {
+    let cmd = build_world_deps_bin_reconcile_command_v1(keep_names);
+    run_world_command_checked_for_deps(&cmd, Some("/tmp"))?;
+    Ok(())
+}
+
+fn build_world_deps_bin_reconcile_command_v1(keep_names: &[String]) -> String {
+    let mut cmd = String::new();
+    cmd.push_str("set -eu\n");
+    cmd.push_str("world_deps_bin=\"${SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR:-/var/lib/substrate/world-deps/bin}\"\n");
+    cmd.push_str("world_deps_bin=\"${world_deps_bin%/}\"\n");
+    cmd.push_str("mkdir -p \"$world_deps_bin\"\n");
+    cmd.push_str("should_keep() {\n");
+    if keep_names.is_empty() {
+        cmd.push_str("  return 1\n");
+    } else {
+        cmd.push_str("  name=\"$1\"\n");
+        cmd.push_str("  for keep in");
+        for keep in keep_names {
+            cmd.push(' ');
+            cmd.push_str(&sh_quote(keep));
+        }
+        cmd.push_str("; do\n");
+        cmd.push_str("    [ \"$name\" = \"$keep\" ] && return 0\n");
+        cmd.push_str("  done\n");
+        cmd.push_str("  return 1\n");
+    }
+    cmd.push_str("}\n");
+    cmd.push_str("for path in \"$world_deps_bin\"/*; do\n");
+    cmd.push_str("  [ -e \"$path\" ] || continue\n");
+    cmd.push_str("  name=\"${path##*/}\"\n");
+    cmd.push_str("  case \"$name\" in\n");
+    cmd.push_str("    .*) continue ;;\n");
+    cmd.push_str("  esac\n");
+    cmd.push_str("  if should_keep \"$name\"; then\n");
+    cmd.push_str("    continue\n");
+    cmd.push_str("  fi\n");
+    cmd.push_str("  if [ -L \"$path\" ]; then\n");
+    cmd.push_str("    rm -f \"$path\"\n");
+    cmd.push_str("    continue\n");
+    cmd.push_str("  fi\n");
+    cmd.push_str("  if [ -d \"$path\" ]; then\n");
+    cmd.push_str(
+        "    echo \"substrate: world deps wrapper collision: $path is a directory\" >&2\n",
+    );
+    cmd.push_str("    exit 5\n");
+    cmd.push_str("  fi\n");
+    cmd.push_str("  rm -f \"$path\"\n");
+    cmd.push_str("done\n");
+    cmd.push_str("exit 0\n");
+    cmd
+}
+
+fn ensure_no_entrypoint_collisions_v1(
+    view: &InventoryViewV1,
+    package_names: &[String],
+) -> Result<()> {
+    let mut owners: HashMap<String, HashSet<String>> = HashMap::new();
+
+    for name in package_names {
+        let pkg = view.packages.get(name).ok_or_else(|| {
+            config_model::user_error(format!(
+                "invalid deps inventory: referenced package '{name}' is not visible for this platform"
+            ))
+        })?;
+        if !pkg.runnable || pkg.entrypoints.is_empty() {
+            continue;
+        }
+
+        let mut seen: HashSet<&str> = HashSet::new();
+        for entrypoint in &pkg.entrypoints {
+            if !seen.insert(entrypoint.as_str()) {
+                continue;
+            }
+            owners
+                .entry(entrypoint.clone())
+                .or_default()
+                .insert(pkg.name.clone());
+        }
+    }
+
+    let mut collisions: Vec<(String, Vec<String>)> = Vec::new();
+    for (entrypoint, pkgs) in owners {
+        if pkgs.len() <= 1 {
+            continue;
+        }
+        let mut pkgs: Vec<String> = pkgs.into_iter().collect();
+        pkgs.sort();
+        collisions.push((entrypoint, pkgs));
+    }
+
+    if collisions.is_empty() {
+        return Ok(());
+    }
+    collisions.sort_by(|a, b| a.0.cmp(&b.0));
+
+    let mut lines: Vec<String> = Vec::new();
+    for (entrypoint, pkgs) in collisions {
+        lines.push(format!(
+            "entrypoint '{entrypoint}' is claimed by multiple packages: {}",
+            pkgs.join(",")
+        ));
+    }
+
+    let message = if lines.len() == 1 {
+        format!("world deps wrapper collision: {}", lines[0])
+    } else {
+        format!(
+            "world deps wrapper collisions:\n  - {}",
+            lines.join("\n  - ")
+        )
+    };
+    Err(anyhow!(WorldDepsSafetyViolationError::new(message)))
+}
+
+fn apply_apt_entrypoint_wrappers_v1(view: &InventoryViewV1, apt_packages: &[String]) -> Result<()> {
+    if apt_packages.is_empty() {
+        return Ok(());
+    }
+
+    let mut entrypoints: Vec<String> = Vec::new();
+    for pkg_name in apt_packages {
+        let pkg = view.packages.get(pkg_name).ok_or_else(|| {
+            config_model::user_error(format!(
+                "invalid deps inventory: referenced package '{pkg_name}' is not visible for this platform"
+            ))
+        })?;
+        if pkg.install.method != InstallMethodV1::Apt {
+            continue;
+        }
+        if !pkg.runnable || pkg.entrypoints.is_empty() {
+            continue;
+        }
+        for entrypoint in &pkg.entrypoints {
+            validate_world_deps_entrypoint_filename(entrypoint)?;
+            entrypoints.push(entrypoint.clone());
+        }
+    }
+
+    entrypoints.sort();
+    entrypoints.dedup();
+    if entrypoints.is_empty() {
+        return Ok(());
+    }
+
+    let cmd = build_world_apt_entrypoint_wrapper_command_v1(&entrypoints);
+    run_world_command_checked_for_deps(&cmd, Some("/tmp"))
+        .context("failed to create apt entrypoint wrappers")?;
+    Ok(())
+}
+
+fn build_world_apt_entrypoint_wrapper_command_v1(entrypoints: &[String]) -> String {
+    let mut cmd = String::new();
+    cmd.push_str("set -eu\n");
+    cmd.push_str("world_deps_bin=\"${SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR:-/var/lib/substrate/world-deps/bin}\"\n");
+    cmd.push_str("world_deps_bin=\"${world_deps_bin%/}\"\n");
+    cmd.push_str("mkdir -p \"$world_deps_bin\"\n");
+
+    for (idx, entrypoint) in entrypoints.iter().enumerate() {
+        let delimiter = format!("__SUBSTRATE_WDH1_APT_WRAPPER_{idx}__");
+
+        cmd.push_str("wrapper=\"$world_deps_bin/");
+        cmd.push_str(entrypoint);
+        cmd.push_str("\"\n");
+        cmd.push_str("if [ -L \"$wrapper\" ]; then\n");
+        cmd.push_str(
+            "  echo \"substrate: world deps wrapper collision: $wrapper is a symlink\" >&2\n",
+        );
+        cmd.push_str("  exit 5\n");
+        cmd.push_str("fi\n");
+        cmd.push_str("if [ -d \"$wrapper\" ]; then\n");
+        cmd.push_str(
+            "  echo \"substrate: world deps wrapper collision: $wrapper is a directory\" >&2\n",
+        );
+        cmd.push_str("  exit 5\n");
+        cmd.push_str("fi\n");
+        cmd.push_str("tmp=\"$(mktemp \\\"$world_deps_bin/.substrate-wdh1-wrapper.XXXXXX\\\")\"\n");
+        cmd.push_str("cat > \"$tmp\" <<'");
+        cmd.push_str(&delimiter);
+        cmd.push_str("'\n");
+        cmd.push_str("#!/bin/sh\n");
+        cmd.push_str("exec /usr/bin/");
+        cmd.push_str(entrypoint);
+        cmd.push_str(" \"$@\"\n");
+        cmd.push_str(&delimiter);
+        cmd.push('\n');
+        cmd.push_str("chmod 0755 \"$tmp\"\n");
+        cmd.push_str("mv -f \"$tmp\" \"$wrapper\"\n");
+    }
+
+    cmd
 }
 
 struct WorldCommandOutputV1 {
@@ -574,6 +830,11 @@ fn apply_apt_install_plan_v1(apt: &[AptSpecV1]) -> Result<()> {
     }
 
     let snippet = output_snippet_for_error(&out);
+    if out.exit == 5 {
+        return Err(anyhow!(WorldDepsSafetyViolationError::new(format!(
+            "world apt install blocked (exit=5): {snippet}"
+        ))));
+    }
     if looks_like_hardening_violation_message(&snippet) {
         return Err(anyhow!(
             "world apt install failed (exit={}): {}",
@@ -871,6 +1132,21 @@ fn validate_world_deps_bin_filename(name: &str) -> Result<()> {
     Ok(())
 }
 
+fn validate_world_deps_entrypoint_filename(name: &str) -> Result<()> {
+    let trimmed = name.trim();
+    if trimmed.is_empty()
+        || trimmed == "."
+        || trimmed == ".."
+        || trimmed.contains('/')
+        || trimmed.contains('\\')
+    {
+        return Err(config_model::user_error(format!(
+            "invalid deps inventory: entrypoint name '{name}' is not a valid filename"
+        )));
+    }
+    Ok(())
+}
+
 fn build_world_script_install_command_v1(
     installer_script: &str,
     wrappers: &[WrapperFileV1],
@@ -943,6 +1219,11 @@ fn run_world_command_checked_for_deps(cmd: &str, cwd_override: Option<&str>) -> 
     } else {
         stdout_text.trim().to_string()
     };
+    if response.exit == 5 {
+        return Err(anyhow!(WorldDepsSafetyViolationError::new(format!(
+            "world command blocked (exit=5): {snippet}"
+        ))));
+    }
     Err(anyhow!(
         "world command failed (exit={}): {}",
         response.exit,
@@ -2221,13 +2502,46 @@ fn run_world_presence_check_v1(check: &PackageWorldCheck) -> Result<bool> {
         PackageCheckKind::Probe { command } => {
             // Match the bulk probe script semantics: treat the probe string as a shell snippet.
             // Redirect output so the caller can rely on the exit code only.
-            format!("sh -c {} >/dev/null 2>&1", sh_quote(command))
+            //
+            // Defensive: force the sanitized PATH contract so "present" does not depend on any
+            // host-inherited PATH (even when the backend executes under a login shell).
+            let mut snippet = String::new();
+            snippet.push_str(
+                "world_deps_bin=\"${SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR:-/var/lib/substrate/world-deps/bin}\"\n",
+            );
+            snippet.push_str("world_deps_bin=\"${world_deps_bin%/}\"\n");
+            snippet.push_str("export SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR=\"$world_deps_bin\"\n");
+            snippet.push_str(
+                "export PATH=\"$world_deps_bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\"\n",
+            );
+            snippet.push_str("sh -c ");
+            snippet.push_str(&sh_quote(command));
+            snippet.push_str(" >/dev/null 2>&1\n");
+            snippet.push_str("exit $?\n");
+            format!("sh -c {} >/dev/null 2>&1", sh_quote(&snippet))
         }
-        PackageCheckKind::Entrypoints { entrypoints } => entrypoints
-            .iter()
-            .map(|ep| format!("command -v {} >/dev/null 2>&1", sh_quote(ep)))
-            .collect::<Vec<_>>()
-            .join(" && "),
+        PackageCheckKind::Entrypoints { entrypoints } => {
+            let mut snippet = String::new();
+            snippet.push_str(
+                "world_deps_bin=\"${SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR:-/var/lib/substrate/world-deps/bin}\"\n",
+            );
+            snippet.push_str("world_deps_bin=\"${world_deps_bin%/}\"\n");
+            snippet.push_str("export SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR=\"$world_deps_bin\"\n");
+            snippet.push_str(
+                "export PATH=\"$world_deps_bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\"\n",
+            );
+            snippet.push_str("for ep in");
+            for ep in entrypoints {
+                snippet.push(' ');
+                snippet.push_str(&sh_quote(ep));
+            }
+            snippet.push_str("; do\n");
+            snippet.push_str("  resolved=\"$(command -v \"$ep\" 2>/dev/null || true)\"\n");
+            snippet.push_str("  [ \"$resolved\" = \"$world_deps_bin/$ep\" ] || exit 1\n");
+            snippet.push_str("done\n");
+            snippet.push_str("exit 0\n");
+            format!("sh -c {} >/dev/null 2>&1", sh_quote(&snippet))
+        }
     };
 
     let response = run_world_command_for_deps(&cmd).map_err(classify_world_backend_error)?;
@@ -2253,6 +2567,14 @@ fn ensure_world_backend_available() -> Result<()> {
 fn build_world_probe_script(checks: &[PackageWorldCheck]) -> String {
     let mut script = String::new();
     script.push_str("set +e\n");
+    script.push_str(
+        "world_deps_bin=\"${SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR:-/var/lib/substrate/world-deps/bin}\"\n",
+    );
+    script.push_str("world_deps_bin=\"${world_deps_bin%/}\"\n");
+    script.push_str("export SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR=\"$world_deps_bin\"\n");
+    script.push_str(
+        "export PATH=\"$world_deps_bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\"\n",
+    );
     script.push_str("check_probe() {\n");
     script.push_str("  name=\"$1\"; kind=\"$2\"; shift 2\n");
     script.push_str("  rc=1\n");
@@ -2263,7 +2585,10 @@ fn build_world_probe_script(checks: &[PackageWorldCheck]) -> String {
     script.push_str("  else\n");
     script.push_str("    rc=0\n");
     script.push_str("    for ep in \"$@\"; do\n");
-    script.push_str("      command -v \"$ep\" >/dev/null 2>&1 || rc=1\n");
+    script.push_str("      resolved=\"$(command -v \"$ep\" 2>/dev/null || true)\"\n");
+    script.push_str("      if [ \"$resolved\" != \"$world_deps_bin/$ep\" ]; then\n");
+    script.push_str("        rc=1\n");
+    script.push_str("      fi\n");
     script.push_str("    done\n");
     script.push_str("  fi\n");
     script.push_str("  if [ \"$rc\" -eq 0 ]; then\n");
@@ -2329,19 +2654,30 @@ fn run_world_command_for_deps_at(
 }
 
 fn ensure_world_deps_bin_on_path(env: &mut HashMap<String, String>) {
-    const BIN: &str = "/var/lib/substrate/world-deps/bin";
-    let current = env.get("PATH").cloned().unwrap_or_default();
-    let sep = ':';
+    const DEFAULT_WORLD_DEPS_BIN: &str = "/var/lib/substrate/world-deps/bin";
+    let bin = env
+        .get("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR")
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| DEFAULT_WORLD_DEPS_BIN.to_string());
+
+    env.insert(
+        "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR".to_string(),
+        bin.clone(),
+    );
+
+    let current = env.get("PATH").map(String::as_str).unwrap_or("");
+    let bin_norm = bin.trim_end_matches('/');
     let has = current
-        .split(sep)
-        .any(|segment| segment.trim_end_matches('/') == BIN);
+        .split(':')
+        .any(|segment| segment.trim_end_matches('/') == bin_norm);
     if has {
         return;
     }
     if current.trim().is_empty() {
-        env.insert("PATH".to_string(), BIN.to_string());
+        env.insert("PATH".to_string(), bin);
     } else {
-        env.insert("PATH".to_string(), format!("{BIN}:{current}"));
+        env.insert("PATH".to_string(), format!("{bin}:{current}"));
     }
 }
 

@@ -8,6 +8,7 @@ pub mod pty;
 pub mod service;
 #[cfg(unix)]
 mod socket_activation;
+mod world_exec_guard;
 #[cfg(unix)]
 pub use crate::socket_activation::test_support as socket_activation_test_support;
 
@@ -42,6 +43,7 @@ use tracing_subscriber::{fmt, EnvFilter};
 
 const SOCKET_PATH: &str = "/run/substrate.sock";
 const TCP_ENV_VAR: &str = "SUBSTRATE_AGENT_TCP_PORT";
+const SOCKET_ENV_VAR: &str = "SUBSTRATE_WORLD_SOCKET";
 
 pub async fn run_world_agent() -> Result<()> {
     fmt().with_env_filter(EnvFilter::from_default_env()).init();
@@ -50,7 +52,9 @@ pub async fn run_world_agent() -> Result<()> {
 
     info!("Starting Substrate World Agent");
 
-    let socket_path = PathBuf::from(SOCKET_PATH);
+    let socket_path = std::env::var_os(SOCKET_ENV_VAR)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(SOCKET_PATH));
     #[cfg(unix)]
     let mut socket_activation = collect_socket_activation()?;
     #[cfg(unix)]

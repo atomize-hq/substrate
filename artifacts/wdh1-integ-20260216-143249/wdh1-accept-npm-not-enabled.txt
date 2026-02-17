@@ -1,0 +1,1 @@
+substrate: info: no config file at /tmp/substrate-wdh1-accept-zFNThr/substrate-home/config.yaml; run `substrate config global init` to create defaults

@@ -1,0 +1,2 @@
+substrate: note: showing effective merged config; use --explain to view per-key sources
+invalid YAML in /tmp/substrate-wdh0-0eFfKw/substrate_home/config.yaml: unknown field `env`, expected one of `enabled`, `anchor_mode`, `anchor_path`, `caged`, `deps`

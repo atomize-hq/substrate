@@ -598,18 +598,29 @@ jobs:
     if: inputs.runner_kind == 'self-hosted' && (inputs.run_wsl || inputs.platform == 'wsl')
     runs-on: [self-hosted, Linux, wsl]
     steps:
-      - name: Checkout repository (override ref)
+      - name: Checkout repository (workflow ref)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Checkout repository (candidate ref)
         if: inputs.checkout_ref != ''
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.checkout_ref }}
           submodules: recursive
+          path: candidate
 
-      - name: Checkout repository
-        if: inputs.checkout_ref == ''
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - name: Select build checkout
+        id: checkout_dir
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -d "$GITHUB_WORKSPACE/candidate" ]]; then
+            echo "dir=candidate" >> "$GITHUB_OUTPUT"
+          else
+            echo "dir=." >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Preflight substrate world socket (WSL runner)
         shell: bash
@@ -674,16 +685,36 @@ jobs:
 
       - name: Run integration checks (WSL runner)
         if: inputs.run_integ_checks
+        working-directory: ${{ steps.checkout_dir.outputs.dir }}
         run: |
           cargo fmt --all -- --check
           cargo clippy --workspace --all-targets -- -D warnings
           cargo test --workspace --all-targets
 
       - name: Build substrate (debug)
+        working-directory: ${{ steps.checkout_dir.outputs.dir }}
         run: cargo build --bin substrate --bin substrate-shim
 
       - name: Add substrate to PATH
-        run: echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
+        shell: bash
+        run: |
+          set -euo pipefail
+          dir="${{ steps.checkout_dir.outputs.dir }}"
+          if [[ "${dir}" == "candidate" ]]; then
+            echo "$GITHUB_WORKSPACE/candidate/target/debug" >> "$GITHUB_PATH"
+          else
+            echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
+          fi
 
       - name: Run WSL (Linux) smoke
-        run: bash "${{ inputs.feature_dir }}/smoke/linux-smoke.sh"
+        shell: bash
+        run: |
+          set -euo pipefail
+          dir="${{ steps.checkout_dir.outputs.dir }}"
+          if [[ "${dir}" == "candidate" ]]; then
+            export SUBSTRATE_BIN="$GITHUB_WORKSPACE/candidate/target/debug/substrate"
+          else
+            export SUBSTRATE_BIN="$GITHUB_WORKSPACE/target/debug/substrate"
+          fi
+          export SUBSTRATE_WORLD_REQUEST_PROFILE="world-deps-provision"
+          bash "${{ inputs.feature_dir }}/smoke/linux-smoke.sh"
