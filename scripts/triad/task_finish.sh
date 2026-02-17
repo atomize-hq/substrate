@@ -670,6 +670,7 @@ enforce_impact_map_touchset
         printf 'HEAD=%s\n' "${HEAD_SHA}"
         printf 'COMMITS=%s\n' "${COMMITS_COUNT}"
         printf 'CHECKS=%s; impact_map_touchset:%s; impact_map_source:%s\n' "${checks_summary}" "${impact_map_touchset_status}" "${impact_map_source}"
+        printf 'IMPACT_MAP_SOURCE=%s\n' "${impact_map_source}"
         printf 'IMPACT_MAP_SOURCE_WORKTREE=%s\n' "${impact_map_source_worktree}"
         if [[ "${impact_map_touchset_status}" == "overridden" ]]; then
             printf 'IMPACT_MAP_OVERRIDE_REASON=%s\n' "${impact_map_override_reason}"
@@ -694,6 +695,7 @@ printf 'WORKTREE=%s\n' "${WORKTREE_ROOT}"
 printf 'HEAD=%s\n' "${HEAD_SHA}"
 printf 'COMMITS=%s\n' "${COMMITS_COUNT}"
 printf 'CHECKS=%s; impact_map_touchset:%s; impact_map_source:%s\n' "${checks_summary}" "${impact_map_touchset_status}" "${impact_map_source}"
+printf 'IMPACT_MAP_SOURCE=%s\n' "${impact_map_source}"
 printf 'IMPACT_MAP_SOURCE_WORKTREE=%s\n' "${impact_map_source_worktree}"
 if [[ "${impact_map_touchset_status}" == "overridden" ]]; then
     printf 'IMPACT_MAP_OVERRIDE_REASON=%s\n' "${impact_map_override_reason}"
