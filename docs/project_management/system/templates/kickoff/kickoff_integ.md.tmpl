@@ -1,0 +1,33 @@
+# Kickoff: {{TASK_ID}} (integration)
+
+## Scope
+- Merge code + tests, resolve drift to spec, and make the slice green.
+- Spec: `{{FEATURE_DIR}}/{{SPEC_FILE}}`
+- Execution workflow standard: `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+
+## Start Checklist
+Do not edit planning docs inside the worktree.
+
+1. Verify you are in the task worktree `{{WORKTREE}}` on branch `{{BRANCH}}` and that `.taskmeta.json` exists at the worktree root.
+2. Read: `{{FEATURE_DIR}}/plan.md`, `{{FEATURE_DIR}}/tasks.json`, `{{FEATURE_DIR}}/session_log.md`, spec, this prompt.
+3. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run:
+   - `make triad-task-start FEATURE_DIR="{{FEATURE_DIR}}" TASK_ID="{{TASK_ID}}"`
+
+## Requirements
+- Reconcile code/tests to spec (spec wins).
+- If completing this task requires more than 108,800 tokens of context (40% of a 272k token window), stop and ask the operator to split the slice before proceeding.
+- Run: `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, then `make integ-checks`.
+- Complete the slice closeout gate report:
+  - `{{FEATURE_DIR}}/<SLICE>-closeout_report.md` (e.g., `{{FEATURE_DIR}}/{{SLICE_ID}}-closeout_report.md`)
+
+### CI checkpoints (when applicable)
+
+If this is a cross-platform automation pack (and `{{FEATURE_DIR}}/ci_checkpoint_plan.md` exists):
+- Do not dispatch cross-platform CI (compile parity / Feature Smoke / CI Testing) from this task.
+- Cross-platform CI runs only at the planned checkpoint ops tasks (`CPk-ci-checkpoint`) defined by `ci_checkpoint_plan.md`.
+
+## End Checklist
+1. Run required commands; capture outputs.
+2. From inside the worktree, run: `make triad-task-finish TASK_ID="{{TASK_ID}}"`
+3. Hand off closeout report completion and any key outputs to the operator (do not edit planning docs inside the worktree).
+4. Do not delete the worktree (feature cleanup removes worktrees at feature end).

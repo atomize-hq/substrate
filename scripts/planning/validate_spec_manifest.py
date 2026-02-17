@@ -1,97 +1,36 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import argparse
-import re
+import os
+import subprocess
 import sys
-from pathlib import Path
 
 
-def _fail(msg: str) -> None:
-    print(f"FAIL: {msg}", file=sys.stderr)
-    raise SystemExit(1)
+def _repo_root() -> str:
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--show-toplevel"],
+            text=True,
+            stderr=subprocess.STDOUT,
+        ).strip()
+    except Exception as e:
+        print(f"ERROR: failed to locate repo root via git: {e}", file=sys.stderr)
+        raise SystemExit(2)
 
 
-def _extract_required_doc_paths(spec_manifest_text: str) -> list[str]:
-    """
-    Extract backticked paths from the 'Required spec documents (authoritative)' section.
-
-    This is intentionally strict:
-    - Only considers backticked strings in that section.
-    - Fails if placeholder tokens appear where paths should be.
-    """
-    section_header = "## Required spec documents (authoritative)"
-    start = spec_manifest_text.find(section_header)
-    if start < 0:
-        _fail(f"spec_manifest.md missing required section header: {section_header!r}")
-
-    after_header = spec_manifest_text.find("\n", start)
-    if after_header < 0:
-        _fail("spec_manifest.md is malformed (no newline after section header)")
-
-    remainder = spec_manifest_text[after_header + 1 :]
-    # Stop at the next H2 (## ...) header.
-    next_h2 = re.search(r"(?m)^##\s+", remainder)
-    section_body = remainder[: next_h2.start()] if next_h2 else remainder
-
-    tokens = re.findall(r"`([^`]+)`", section_body)
-    if not tokens:
-        _fail("spec_manifest.md required-docs section contains no backticked paths")
-
-    for t in tokens:
-        if any(x in t for x in ("{{", "}}", "<", ">")):
-            _fail(f"spec_manifest.md required-docs section contains placeholder token: `{t}`")
-
-    return tokens
+def _pm_system_root(repo_root: str) -> str:
+    raw = os.environ.get("PM_SYSTEM_ROOT") or "docs/project_management/system"
+    if os.path.isabs(raw):
+        return raw
+    return os.path.join(repo_root, raw)
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description="Validate spec_manifest.md required docs exist.")
-    ap.add_argument("--feature-dir", required=True, help="docs/project_management/next/<feature>")
-    ap.add_argument(
-        "--spec-manifest",
-        default="spec_manifest.md",
-        help="Path to spec_manifest.md (absolute or feature-dir-relative). Default: spec_manifest.md",
-    )
-    args = ap.parse_args()
-
-    feature_dir = Path(args.feature_dir)
-    if not feature_dir.exists():
-        _fail(f"feature dir does not exist: {feature_dir}")
-
-    spec_manifest_path = Path(args.spec_manifest)
-    if not spec_manifest_path.is_absolute():
-        spec_manifest_path = feature_dir / spec_manifest_path
-
-    if not spec_manifest_path.exists():
-        _fail(f"missing spec manifest: {spec_manifest_path}")
-
-    text = spec_manifest_path.read_text(encoding="utf-8")
-    raw_paths = _extract_required_doc_paths(text)
-
-    missing: list[str] = []
-    feature_dir_prefix = feature_dir.as_posix().rstrip("/") + "/"
-    for raw in raw_paths:
-        p = Path(raw)
-        if not p.is_absolute():
-            raw_norm = raw.replace("\\", "/").lstrip("./")
-            # If the manifest lists repo-root-relative paths (common in this repo),
-            # treat them as relative to CWD (repo root when invoked via make).
-            if raw_norm.startswith("docs/") or raw_norm.startswith(feature_dir_prefix) or raw_norm == feature_dir.as_posix():
-                p = Path(raw_norm)
-            else:
-                p = feature_dir / raw_norm
-
-        if not p.exists():
-            missing.append(str(p.resolve() if not p.is_absolute() else p))
-
-    if missing:
-        for p in missing:
-            print(f"Missing required spec-manifest path: {p}", file=sys.stderr)
-        return 1
-
-    return 0
+def main() -> None:
+    repo_root = _repo_root()
+    pm_system_root = _pm_system_root(repo_root)
+    target = os.path.join(pm_system_root, "scripts/planning/validate_spec_manifest.py")
+    os.execv(sys.executable, [sys.executable, target, *sys.argv[1:]])
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

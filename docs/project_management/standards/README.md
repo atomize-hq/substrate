@@ -25,7 +25,7 @@ The system is designed for:
 - `docs/project_management/standards/PLANNING_README.md`
 - `docs/project_management/standards/PLANNING_WORKFLOW_OVERVIEW.md`
 - `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
-- `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`
+- `docs/project_management/system/templates/planning_pack/PLANNING_GATE_REPORT_TEMPLATE.md`
 - `docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md`
 - `docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md`
 
@@ -37,7 +37,7 @@ The system is designed for:
 - `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`
 
 **Tooling and schema**
-- `docs/project_management/standards/tasks.schema.json`
+- `docs/project_management/system/schemas/tasks.schema.json`
 - `scripts/planning/validate_tasks_json.py`
 - Advisory CI reuse tooling (recommended; reduces redundant multi-OS CI):
   - `scripts/ci-audit/ci_audit.sh` (audit before dispatch; may recommend skip for docs-only changes)
@@ -109,7 +109,7 @@ Orchestration branch bootstrap (used by the opening gate):
 #### Code + test (always parallel)
 
 	Start both worktrees:
-	- Preferred (post-preflight): use `docs/project_management/standards/TRIAD_WRAPPER_PROMPT.md` (runs start-pair with `LAUNCH_CODEX=1` and reports exit codes + last messages + artifact paths).
+	- Preferred (post-preflight): use `docs/project_management/system/prompts/triad_wrappers/triad_wrapper.md` (runs start-pair with `LAUNCH_CODEX=1` and reports exit codes + last messages + artifact paths).
 	- Preferred (fully automated): `make triad-task-start-complete FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<SLICE_ID>"` (runs code+test in parallel, then runs the slice’s integration task as wired in `tasks.json` (`<slice>-code.integration_task`), and writes a wrapper summary under `FEATURE_DIR/logs/<slice>/wrapper/`).
 	  - For schema v4+ checkpointed cross-platform packs: on checkpoint-boundary slices, `<slice>-code.integration_task` is expected to be `<slice>-integ-core`. This command does not run `CPk-ci-checkpoint`, does not start any `*-integ-<platform>` platform-fix tasks, and does not start `<slice>-integ` final aggregation.
 	- `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<SLICE_ID>" LAUNCH_CODEX=1`
@@ -131,9 +131,9 @@ Integration tasks should set `merge_to_orchestration` in `tasks.json`:
 	  - `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="$INTEG_TASK_ID"`
 
 Optional: run an end-to-end integration orchestration wrapper for a CI checkpoint boundary slice (integ-core -> checkpoint CI -> platform-fix -> final) with artifact reporting:
-- `docs/project_management/standards/TRIAD_INTEGRATION_WRAPPER_PROMPT.md`
+- `docs/project_management/system/prompts/triad_wrappers/triad_integration_wrapper.md`
 Optional: use a single unified wrapper prompt that covers both normal slices and checkpoint-boundary slices:
-- `docs/project_management/standards/TRIAD_WRAPPER_PROMPT_UNIFIED.md`
+- `docs/project_management/system/prompts/triad_wrappers/triad_unified_wrapper_checkpoint_aware.md`
 
 Run the planned CI checkpoint (bounded; only at checkpoint boundaries):
 - Read: `docs/project_management/next/<feature>/ci_checkpoint_plan.md`

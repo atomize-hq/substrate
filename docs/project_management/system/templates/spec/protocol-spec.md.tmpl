@@ -1,0 +1,65 @@
+# {{FEATURE}} — <topic> protocol spec
+
+Owner standard:
+- `docs/project_management/system/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`
+
+## Scope
+- This spec is authoritative for the <topic> wire/API protocol.
+
+## Non-goals
+- <explicit>
+
+## Definitions
+- <terms>
+
+## Compatibility / versioning (explicit)
+- Version field(s):
+- Backwards/forwards handling policy:
+- Deprecation policy (if any):
+
+## Protocol overview
+- Parties: <client/server/host/agent/shim/etc>
+- Transport: <HTTP/WS/IPC/etc>
+- Authentication/identity (if any):
+
+## Message contract (authoritative)
+
+### Request(s)
+- `<name>`
+  - Schema: <inline or link to schema spec>
+  - Required fields:
+  - Optional fields (allowed only if absence semantics are explicit):
+  - Defaults:
+
+### Response(s)
+- `<name>`
+  - Schema:
+  - Success semantics:
+  - Failure semantics:
+
+## Error model (explicit)
+- Error categories:
+- Mapping to exit codes (if applicable):
+- Retryability rules (explicit):
+
+## Timeouts / retries / idempotency (explicit)
+- Client timeouts:
+- Server timeouts:
+- Retry policy:
+- Idempotency key/semantics (if any):
+
+## Ordering / concurrency (explicit)
+- Ordering guarantees:
+- Concurrency limits:
+
+## Observability (explicit)
+- Required logs/trace fields:
+- Redaction requirements:
+
+## Security / safety posture (explicit)
+- Fail-closed vs degrade rules:
+- Input validation rules:
+
+## Acceptance criteria (testable)
+- <integration assertions>
+

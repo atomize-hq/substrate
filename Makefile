@@ -88,8 +88,15 @@ pre-ci:
 # Feature directory under docs/project_management/(next|packs/<bucket>)/<feature>
 FEATURE_DIR ?=
 
+# Planning agent id for pm-run-planning-agent
+AGENT ?=
+
 # ADR path under docs/project_management/(next|packs/<bucket>|adrs/<bucket>)/...
 ADR ?=
+
+CODEX_PROFILE ?=
+CODEX_MODEL ?=
+CODEX_JSONL ?= 0
 
 .PHONY: planning-validate
 planning-validate:
@@ -100,6 +107,17 @@ planning-validate:
 planning-lint:
 	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/(next|packs/<bucket>)/<feature>"; exit 2; fi
 	scripts/planning/lint.sh --feature-dir "$(FEATURE_DIR)"
+
+.PHONY: pm-run-planning-agent
+pm-run-planning-agent:
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/(next|packs/<bucket>)/<feature>"; exit 2; fi
+	@if [ -z "$(AGENT)" ]; then echo "ERROR: set AGENT=spec_manifest|impact_map"; exit 2; fi
+	@set -euo pipefail; \
+	cmd="docs/project_management/system/scripts/planning/run_planning_agent.sh --feature-dir \"$(FEATURE_DIR)\" --agent \"$(AGENT)\""; \
+	if [ -n "$(CODEX_PROFILE)" ]; then cmd="$$cmd --codex-profile \"$(CODEX_PROFILE)\""; fi; \
+	if [ -n "$(CODEX_MODEL)" ]; then cmd="$$cmd --codex-model \"$(CODEX_MODEL)\""; fi; \
+	if [ "$(CODEX_JSONL)" = "1" ]; then cmd="$$cmd --codex-jsonl"; fi; \
+	eval "$$cmd"
 
 .PHONY: planning-lint-ps
 planning-lint-ps:

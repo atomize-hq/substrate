@@ -1,0 +1,41 @@
+# {{FEATURE}} — env vars spec
+
+Owner standard:
+- `docs/project_management/system/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`
+
+## Scope
+- This spec is authoritative for environment variable behavior for this feature.
+
+## Precedence model (explicit)
+State the total precedence order across:
+- CLI flags
+- Config files
+- Environment variables
+- Defaults
+
+## Variable catalog (authoritative)
+
+For each variable:
+- Name: `SUBSTRATE_*` | `SHIM_*` | `WORLD_*`
+- Type: string|int|bool|enum
+- Allowed values (explicit):
+- Default (explicit):
+- Absence semantics (explicit):
+- Precedence vs other sources (explicit):
+- Security/redaction rules (explicit):
+
+### <VAR_NAME>
+- Description:
+- Type:
+- Allowed:
+- Default:
+- Precedence:
+- Redaction:
+
+## Error model (explicit)
+- Invalid values:
+- Conflicting inputs:
+
+## Acceptance criteria (testable)
+- <concrete tests/commands asserting precedence and errors>
+

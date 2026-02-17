@@ -1,0 +1,84 @@
+version: 1
+standards:
+  - id: planning_readme
+    category: planning
+    path: docs/project_management/system/standards/planning/PLANNING_README.md
+    description: "Planning entrypoint and quality gate overview."
+  - id: planning_workflow_overview
+    category: planning
+    path: docs/project_management/system/standards/planning/PLANNING_WORKFLOW_OVERVIEW.md
+    description: "Planning workflow overview and flow diagram."
+  - id: planning_lint_checklist
+    category: planning
+    path: docs/project_management/system/standards/planning/PLANNING_LINT_CHECKLIST.md
+    description: "Mechanical lint checks for Planning Packs."
+  - id: planning_impact_map_standard
+    category: planning
+    path: docs/project_management/system/standards/planning/PLANNING_IMPACT_MAP_STANDARD.md
+    description: "Standard for producing impact_map.md."
+  - id: planning_spec_determination_standard
+    category: planning
+    path: docs/project_management/system/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md
+    description: "Standard for producing spec_manifest.md and selecting spec docs."
+  - id: planning_research_and_alignment_standard
+    category: planning
+    path: docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md
+    description: "Research planning rubric and alignment standard."
+
+  - id: execution_preflight_gate_standard
+    category: execution
+    path: docs/project_management/system/standards/execution/EXECUTION_PREFLIGHT_GATE_STANDARD.md
+    description: "Execution preflight gate standard."
+  - id: slice_closeout_gate_standard
+    category: execution
+    path: docs/project_management/system/standards/execution/SLICE_CLOSEOUT_GATE_STANDARD.md
+    description: "Slice closeout gate standard."
+
+  - id: task_triads_and_feature_setup
+    category: triad
+    path: docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md
+    description: "Triad task model and feature setup rules."
+  - id: task_triads_worktree_execution_standard
+    category: triad
+    path: docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md
+    description: "Worktree execution standard for triads."
+  - id: triad_workflow_cross_platform_integ
+    category: triad
+    path: docs/project_management/system/standards/triad/TRIAD_WORKFLOW_CROSS_PLATFORM_INTEG.md
+    description: "Cross-platform integration and checkpoint workflow standard."
+
+  - id: planning_ci_checkpoint_standard
+    category: ci
+    path: docs/project_management/system/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md
+    description: "Bounded CI checkpoint planning standard."
+  - id: platform_integration_and_ci
+    category: ci
+    path: docs/project_management/system/standards/ci/PLATFORM_INTEGRATION_AND_CI.md
+    description: "Platform integration and CI parity standards."
+
+  - id: adr_standard_and_template
+    category: adr
+    path: docs/project_management/system/standards/adr/ADR_STANDARD_AND_TEMPLATE.md
+    description: "ADR standard and template."
+  - id: executive_summary_standard
+    category: adr
+    path: docs/project_management/system/standards/adr/EXECUTIVE_SUMMARY_STANDARD.md
+    description: "Executive summary standard."
+
+  - id: contract_surface_standard
+    category: shared
+    path: docs/project_management/system/standards/shared/CONTRACT_SURFACE_STANDARD.md
+    description: "Contract surface standard for durable interfaces."
+  - id: exit_code_taxonomy
+    category: shared
+    path: docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md
+    description: "Exit code taxonomy for automation and tooling."
+  - id: secrets_delivery_channel_rubric
+    category: shared
+    path: docs/project_management/system/standards/shared/SECRETS_DELIVERY_CHANNEL_RUBRIC.md
+    description: "Rubric for secrets delivery channels."
+  - id: rust_standards
+    category: shared
+    path: docs/project_management/system/standards/shared/rustStandards.md
+    description: "Rust coding and style standards."
+

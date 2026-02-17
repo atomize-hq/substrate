@@ -66,4 +66,4 @@ Smoke scripts must be a runnable, minimal version of how a careful human would v
   - Any required fixes before starting the first slice.
   - If `REVISE`: do not start triads until the issues are fixed and the preflight is re-run.
 
-If the recommendation is `ACCEPT`, prefer starting the first slice via `docs/project_management/standards/TRIAD_WRAPPER_PROMPT.md` (runs `make triad-task-start-pair ... LAUNCH_CODEX=1` and reports Codex artifacts deterministically).
+If the recommendation is `ACCEPT`, prefer starting the first slice via `docs/project_management/system/prompts/triad_wrappers/triad_wrapper.md` (runs `make triad-task-start-pair ... LAUNCH_CODEX=1` and reports Codex artifacts deterministically).

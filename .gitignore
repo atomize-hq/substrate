@@ -20,3 +20,4 @@ __pycache__/
 
 # Triad/Codex artifacts (store under feature planning packs to survive `cargo clean`)
 docs/project_management/next/**/logs/
+docs/project_management/packs/**/logs/

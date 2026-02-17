@@ -49,10 +49,10 @@ When you run a docs-first planning pass for a feature/track, you must produce a 
 
 Planning work must use these standards:
 - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
-- `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
+- `docs/project_management/system/templates/planning_pack/PLANNING_SESSION_LOG_TEMPLATE.md`
 - `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
-- `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`
-- `docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md`
+- `docs/project_management/system/templates/planning_pack/PLANNING_GATE_REPORT_TEMPLATE.md`
+- `docs/project_management/system/prompts/planning/quality_gate_reviewer.md`
 
 ### 3.1 Always required (minimum)
 
@@ -143,7 +143,7 @@ Before any execution triad begins, a third-party quality gate reviewer must revi
 
 Required output:
 - `docs/project_management/next/<feature>/quality_gate_report.md`
-  - must follow `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`
+  - must follow `docs/project_management/system/templates/planning_pack/PLANNING_GATE_REPORT_TEMPLATE.md`
   - must include evidence that `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md` was run
 
 Gating rule:
@@ -354,47 +354,17 @@ These templates are intended to be pasted into agent kickoff prompts.
 
 ### 9.1 Research / Planning Prompt Template (feature-local)
 
-```md
-You are the maintainer and program lead for <FEATURE>. Your job is to produce an implementation-ready Planning Pack
-with zero ambiguity and full cross-track alignment.
+Canonical prompt: docs/project_management/system/prompts/planning/research_planning_prompt_template.md
 
-Constraints:
-- No production code.
-- No TBD/optional/open questions; every decision is final and recorded.
-- Greenfield: do not plan migrations/back-compat unless explicitly required by an ADR.
-
-Required reading:
-- <list ADRs/specs/standards/sequencing.json>
-
-Deliverables (must create files):
-- plan.md, tasks.json, session_log.md
-- specs: <list>
-- kickoff_prompts: <list>
-- decision_register.md, impact_map.md, manual_testing_playbook.md (required for UX/provisioning work; legacy: integration_map.md is deprecated)
-
-Decision rule:
-- Every architectural decision must be recorded as exactly two options with pros/cons/implications/risks/unlocks/quick wins,
-  followed by a single selected option and rationale.
-```
 
 ### 9.2 Final Alignment Pass Prompt Template (multi-track)
 
-```md
-You are performing a final “zero-misalignment” pass across the queued planning docs for:
-- <list directories>
+Canonical prompt: docs/project_management/system/prompts/planning/final_alignment_pass_prompt_template.md
 
-Do not write production code. Fix docs only.
-Enforce the Planning Rubric (lint-like rules). Output must contain 0 unresolved misalignments.
-
-Deliverables:
-- docs/project_management/next/final_alignment_report.md
-- missing manual_testing_playbook.md files for any triads that affect UX/provisioning
-- updated tasks.json dependencies and/or sequencing.json as required (final, no placeholders)
-```
 
 ### 9.3 Planning Quality Gate Prompt (third-party reviewer)
 
-See `docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md`.
+See `docs/project_management/system/prompts/planning/quality_gate_reviewer.md`.
 
 ---
 

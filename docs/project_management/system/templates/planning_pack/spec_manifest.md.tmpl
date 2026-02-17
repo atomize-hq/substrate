@@ -1,0 +1,57 @@
+# {{FEATURE}} — spec manifest
+
+This file enumerates every contract/protocol/schema/env-var surface for this feature and assigns each surface to exactly one authoritative document.
+
+Authoring standard:
+- `docs/project_management/system/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`
+
+## Inputs
+- Feature directory: `{{FEATURE_DIR}}`
+- ADR(s):
+  - <add exact ADR path(s)>
+
+## Required spec documents (authoritative)
+
+List the exact spec documents that must exist under `{{FEATURE_DIR}}/`.
+
+Each entry must include:
+- path
+- what surfaces it owns (authoritative)
+- what it links to (non-authoritative)
+
+Spec templates:
+- `docs/project_management/system/templates/spec/`
+
+- `{{FEATURE_DIR}}/spec_manifest.md` — spec selection + ownership map (this file)
+- `{{FEATURE_DIR}}/impact_map.md` — touch set + cascading implications + cross-queue conflicts
+- `{{FEATURE_DIR}}/plan.md` — execution runbook + sequencing overview
+- `{{FEATURE_DIR}}/tasks.json` — triad task graph + acceptance criteria
+- `{{FEATURE_DIR}}/{{SLICE_ID}}-spec.md` — slice behavior + acceptance criteria
+- <add additional specs derived from the ADR (canonical filenames)>
+
+## Coverage matrix (surface → authoritative doc)
+
+Every surface that the ADR touches must appear here.
+
+| Surface | Authoritative doc | What must be explicitly defined |
+| --- | --- | --- |
+| CLI commands/flags/defaults | `{{FEATURE_DIR}}/contract.md` | names, defaults, exit codes, examples |
+| Config file paths/precedence/schema | `{{FEATURE_DIR}}/contract.md` | paths, precedence, schema constraints |
+| Exit code meanings | `{{FEATURE_DIR}}/contract.md` | mapping to taxonomy, overrides (if any) |
+| Environment variables | `<doc>` | name, type, allowed values, default, precedence |
+| Protocol surface | `<doc>` | message shapes, errors, timeouts, ordering |
+| Data schema / file format | `<doc>` | schema, constraints, canonicalization |
+| Telemetry/log fields | `<doc>` | field names/types, redaction rules |
+| Filesystem semantics | `<doc>` | invariants, path rules, failure modes |
+| Platform parity | `<doc>` | guarantees/divergences, validation evidence |
+
+## Determinism checklist (must be satisfied before quality gate)
+
+For every selected spec document, confirm it explicitly defines:
+- Inputs (all) + precedence order (if multiple inputs exist)
+- Defaults (all) + absence semantics
+- Data model (types/constraints) for every serialized boundary
+- Error model (exit codes, error messages where applicable) and failure posture
+- Ordering/atomicity/concurrency rules (if any)
+- Security/redaction invariants (if any)
+- Platform guarantees (Linux/macOS/Windows/WSL as applicable)

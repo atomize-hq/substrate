@@ -10,7 +10,7 @@ This document explains, step by step, how to create a new feature directory, def
 - Test agent: tests only (plus minimal test-only helpers/fixtures/mocks if absolutely needed). No production code. Runs `cargo fmt` and the targeted tests they add/touch; not responsible for full suite.
   - Passing is owned by integration; test-only branches may be red until the code branch lands, but tests must compile and fail deterministically for spec-driven reasons.
 - Integration agent: merges code+tests, resolves drift to the spec, ensures behavior matches the spec, runs `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, all relevant tests, and finishes with `make integ-checks` (required). They own the final green state.
-- Execution triads must not begin until the Planning Pack has a quality gate report with `RECOMMENDATION: ACCEPT` at `docs/project_management/next/<feature>/quality_gate_report.md` (see `docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md`).
+- Execution triads must not begin until the Planning Pack has a quality gate report with `RECOMMENDATION: ACCEPT` at `docs/project_management/next/<feature>/quality_gate_report.md` (see `docs/project_management/system/prompts/planning/quality_gate_reviewer.md`).
 - If the feature opts into execution gates (`tasks.json` meta: `execution_gates: true`), triads must not begin until the execution preflight gate is completed (see `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`).
 - Docs/tasks/session log edits happen **only** on the orchestration branch (never in worktrees).
 - Specs are the single source of truth; integration reconciles code/tests to the spec.
@@ -180,7 +180,7 @@ Start (all tasks):
 6. Do not edit planning docs inside the worktree.
 
 Optional: also launch Codex headless for both code+test tasks:
-- Preferred (for reliable artifact reporting): `docs/project_management/standards/TRIAD_WRAPPER_PROMPT.md`
+- Preferred (for reliable artifact reporting): `docs/project_management/system/prompts/triad_wrappers/triad_wrapper.md`
 - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1`
 
 Optional: start only the failing platform-fix integration tasks (after smoke results are known):
@@ -266,9 +266,9 @@ For cross-platform Planning Packs (`tasks.json` meta: `cross_platform: true`), t
   - Checkpoint-boundary slices only (listed in `meta.checkpoint_boundaries`, must match `ci_checkpoint_plan.md` boundaries): `B-integ-core`, `B-integ-<platform>`, `B-integ`.
 
 Kickoff prompt templates for this model:
-- Core integration: `docs/project_management/standards/templates/kickoff_integ_core.md.tmpl`
-- Platform-fix integration: `docs/project_management/standards/templates/kickoff_integ_platform.md.tmpl`
-- Final aggregator integration: `docs/project_management/standards/templates/kickoff_integ_final.md.tmpl`
+- Core integration: `docs/project_management/system/templates/kickoff/kickoff_integ_core.md.tmpl`
+- Platform-fix integration: `docs/project_management/system/templates/kickoff/kickoff_integ_platform.md.tmpl`
+- Final aggregator integration: `docs/project_management/system/templates/kickoff/kickoff_integ_final.md.tmpl`
 
 ## Context Budget & Triad Sizing
 - Agents typically have a 272k token context window. Every triad task (code/test/integ) MUST be scoped so a single agent can execute it within 40% of that window (≤ 108,800 tokens) while holding the spec, plan, and relevant code/tests and history in-context.
