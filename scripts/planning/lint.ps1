@@ -9,6 +9,10 @@ if (-not (Get-Command rg -ErrorAction SilentlyContinue)) {
     throw "FAIL: ripgrep (rg) is required for planning lint (install ripgrep and retry)"
 }
 
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    throw "FAIL: git is required for planning lint"
+}
+
 function Require-Path([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path)) {
         throw "Missing required path: $Path"
@@ -24,6 +28,18 @@ Require-Path (Join-Path $FeatureDir "session_log.md")
 Require-Path (Join-Path $FeatureDir "kickoff_prompts")
 Require-Path (Join-Path $FeatureDir "spec_manifest.md")
 Require-Path (Join-Path $FeatureDir "impact_map.md")
+
+$featureDirRel = & python scripts/planning/pm_paths.py resolve-feature-dir --feature-dir $FeatureDir
+if ($LASTEXITCODE -ne 0) { throw "FAIL: could not normalize feature dir via pm_paths.py" }
+
+$rootsJson = & python scripts/planning/pm_paths.py print-roots
+if ($LASTEXITCODE -ne 0) { throw "FAIL: could not resolve PM roots via pm_paths.py" }
+$roots = $rootsJson | ConvertFrom-Json
+$pmRoot = [string]$roots.pm_root
+$pmPacksRoot = [string]$roots.pm_packs_root
+
+$pmNextPrefix = ($pmRoot.TrimEnd("/", "\\") + "/next/")
+$pmPacksPrefix = ($pmPacksRoot.TrimEnd("/", "\\") + "/")
 
 $schemaVersion = & jq -r '.meta.schema_version // 1' (Join-Path $FeatureDir "tasks.json")
 $automationEnabled = & jq -r '.meta.automation.enabled // false' (Join-Path $FeatureDir "tasks.json")
@@ -79,8 +95,14 @@ if ($LASTEXITCODE -ne 1) { throw "rg failed with exit code $LASTEXITCODE" }
 Write-Host "-- JSON validity"
 & jq -e . (Join-Path $FeatureDir "tasks.json") *> $null
 if ($LASTEXITCODE -ne 0) { throw "FAIL: tasks.json is not valid JSON" }
-& jq -e . "docs/project_management/next/sequencing.json" *> $null
-if ($LASTEXITCODE -ne 0) { throw "FAIL: sequencing.json is not valid JSON" }
+
+$sequencingJson = Join-Path $pmRoot "packs/sequencing.json"
+if (-not (Test-Path -LiteralPath $sequencingJson)) {
+    $sequencingJson = Join-Path $pmRoot "next/sequencing.json"
+}
+
+& jq -e . $sequencingJson *> $null
+if ($LASTEXITCODE -ne 0) { throw "FAIL: sequencing.json is not valid JSON: $sequencingJson" }
 
 Write-Host "-- tasks.json invariants"
 & python scripts/planning/validate_tasks_json.py --feature-dir $FeatureDir
@@ -168,7 +190,18 @@ if (Test-Path -LiteralPath $playbook) {
 }
 
 Write-Host "-- Sequencing alignment"
-& jq -e --arg dir $FeatureDir '.sprints[] | select(.directory==$dir) | .id' "docs/project_management/next/sequencing.json" *> $null
-if ($LASTEXITCODE -ne 0) { throw "FAIL: sequencing.json missing sprint entry for $FeatureDir" }
+if ($featureDirRel.StartsWith($pmNextPrefix)) {
+    & jq -e --arg dir $featureDirRel '.sprints[] | select(.directory==$dir) | .id' $sequencingJson *> $null
+    if ($LASTEXITCODE -ne 0) { throw "FAIL: sequencing.json missing sprint entry for $featureDirRel" }
+} elseif ($featureDirRel.StartsWith($pmPacksPrefix)) {
+    if ($sequencingJson -eq (Join-Path $pmRoot "packs/sequencing.json")) {
+        & jq -e --arg dir $featureDirRel '.sprints[] | select(.directory==$dir) | .id' $sequencingJson *> $null
+        if ($LASTEXITCODE -ne 0) { throw "FAIL: sequencing.json missing sprint entry for $featureDirRel" }
+    } else {
+        Write-Host "SKIP: sequencing alignment (packs sequencing.json not present yet)"
+    }
+} else {
+    Write-Host "SKIP: sequencing alignment (feature dir not under PM roots)"
+}
 
 Write-Host "OK: planning lint passed"

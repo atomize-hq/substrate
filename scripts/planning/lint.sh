@@ -50,6 +50,11 @@ if ! command -v rg >/dev/null 2>&1; then
     exit 2
 fi
 
+if ! command -v git >/dev/null 2>&1; then
+    echo "FAIL: git is required for planning lint" >&2
+    exit 2
+fi
+
 require_path() {
     local p="$1"
     if [[ ! -e "$p" ]]; then
@@ -64,6 +69,14 @@ require_path "${FEATURE_DIR}/session_log.md"
 require_path "${FEATURE_DIR}/kickoff_prompts"
 require_path "${FEATURE_DIR}/spec_manifest.md"
 require_path "${FEATURE_DIR}/impact_map.md"
+
+FEATURE_DIR_RELPATH="$(python3 scripts/planning/pm_paths.py resolve-feature-dir --feature-dir "${FEATURE_DIR}")"
+pm_roots_json="$(python3 scripts/planning/pm_paths.py print-roots)"
+PM_ROOT="$(jq -r '.pm_root' <<<"${pm_roots_json}")"
+PM_PACKS_ROOT="$(jq -r '.pm_packs_root' <<<"${pm_roots_json}")"
+
+PM_NEXT_PREFIX="${PM_ROOT%/}/next/"
+PM_PACKS_PREFIX="${PM_PACKS_ROOT%/}/"
 
 schema_version="$(jq -r '.meta.schema_version // 1' "${FEATURE_DIR}/tasks.json")"
 automation_enabled="$(jq -r '.meta.automation.enabled // false' "${FEATURE_DIR}/tasks.json")"
@@ -128,7 +141,13 @@ fi
 
 echo "-- JSON validity"
 jq -e . "${FEATURE_DIR}/tasks.json" >/dev/null
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+
+sequencing_json="${PM_ROOT%/}/packs/sequencing.json"
+if [[ ! -f "${sequencing_json}" ]]; then
+    sequencing_json="${PM_ROOT%/}/next/sequencing.json"
+fi
+
+jq -e . "${sequencing_json}" >/dev/null
 
 echo "-- tasks.json invariants"
 python3 scripts/planning/validate_tasks_json.py --feature-dir "${FEATURE_DIR}"
@@ -211,14 +230,25 @@ if [[ -f "${FEATURE_DIR}/manual_testing_playbook.md" ]]; then
 fi
 
 echo "-- Sequencing alignment"
-jq -e --arg dir "${FEATURE_DIR}" '.sprints[] | select(.directory==$dir) | .id' docs/project_management/next/sequencing.json >/dev/null
+if [[ "${FEATURE_DIR_RELPATH}" == "${PM_NEXT_PREFIX}"* ]]; then
+    jq -e --arg dir "${FEATURE_DIR_RELPATH}" '.sprints[] | select(.directory==$dir) | .id' "${sequencing_json}" >/dev/null
+elif [[ "${FEATURE_DIR_RELPATH}" == "${PM_PACKS_PREFIX}"* ]]; then
+    if [[ "${sequencing_json}" == "${PM_ROOT%/}/packs/sequencing.json" ]]; then
+        jq -e --arg dir "${FEATURE_DIR_RELPATH}" '.sprints[] | select(.directory==$dir) | .id' "${sequencing_json}" >/dev/null
+    else
+        echo "SKIP: sequencing alignment (packs sequencing.json not present yet)"
+    fi
+else
+    echo "SKIP: sequencing alignment (feature dir not under PM roots)"
+fi
 
 echo "-- Sequencing spine validity (completed sprints)"
-python3 - <<'PY'
+python3 - "${sequencing_json}" <<'PY'
 import json
+import sys
 from pathlib import Path
 
-path = Path("docs/project_management/next/sequencing.json")
+path = Path(sys.argv[1])
 data = json.loads(path.read_text(encoding="utf-8"))
 
 missing = []

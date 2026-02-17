@@ -85,25 +85,25 @@ pre-ci:
 # Planning-system automation
 # =========================
 
-# Feature directory under docs/project_management/next/<feature>
+# Feature directory under docs/project_management/(next|packs/<bucket>)/<feature>
 FEATURE_DIR ?=
 
-# ADR path under docs/project_management/next/...
+# ADR path under docs/project_management/(next|packs/<bucket>|adrs/<bucket>)/...
 ADR ?=
 
 .PHONY: planning-validate
 planning-validate:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/(next|packs/<bucket>)/<feature>"; exit 2; fi
 	python3 scripts/planning/validate_tasks_json.py --feature-dir "$(FEATURE_DIR)"
 
 .PHONY: planning-lint
 planning-lint:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/(next|packs/<bucket>)/<feature>"; exit 2; fi
 	scripts/planning/lint.sh --feature-dir "$(FEATURE_DIR)"
 
 .PHONY: planning-lint-ps
 planning-lint-ps:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/(next|packs/<bucket>)/<feature>"; exit 2; fi
 	@if ! command -v pwsh >/dev/null 2>&1; then echo "ERROR: pwsh not found on PATH"; exit 2; fi
 	pwsh -File scripts/planning/lint.ps1 -FeatureDir "$(FEATURE_DIR)"
 
@@ -161,7 +161,7 @@ CLEANUP ?= 1
 
 .PHONY: feature-smoke
 feature-smoke:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/(next|packs/<bucket>)/<feature>"; exit 2; fi
 	@if [ -z "$(WORKFLOW_REF)" ]; then echo "ERROR: set WORKFLOW_REF=<ref> (ref must not be main/testing; use the orchestration/task ref)"; exit 2; fi
 	@if [ "$(PLATFORM)" = "wsl" ] && [ "$(RUNNER_KIND)" != "self-hosted" ]; then echo "ERROR: PLATFORM=wsl requires RUNNER_KIND=self-hosted"; exit 2; fi
 	@if [ "$(RUN_WSL)" = "1" ] && [ "$(RUNNER_KIND)" != "self-hosted" ]; then echo "ERROR: RUN_WSL=1 requires RUNNER_KIND=self-hosted"; exit 2; fi
@@ -191,7 +191,7 @@ feature-smoke-wsl:
 # Planning pack scaffolding
 # =========================
 
-# New feature directory name under docs/project_management/next/<feature>
+# New feature directory name under docs/project_management/next/<feature> (until Initiative 3 migrates new_feature)
 FEATURE ?=
 DECISION_HEAVY ?= 0
 CROSS_PLATFORM ?= 0

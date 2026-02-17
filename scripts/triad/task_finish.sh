@@ -234,16 +234,44 @@ if [[ "${current_branch}" != "${TASK_BRANCH}" ]]; then
     die "Expected to be on task branch ${TASK_BRANCH}, but current branch is ${current_branch}"
 fi
 
+pm_roots_json="$(python3 scripts/planning/pm_paths.py print-roots 2>/dev/null)" || die "Failed to resolve PM roots (pm_paths.py print-roots)"
+PM_ROOT="$(jq -r '.pm_root' <<<"${pm_roots_json}")"
+PM_PACKS_ROOT="$(jq -r '.pm_packs_root' <<<"${pm_roots_json}")"
+
+PM_NEXT_PREFIX="${PM_ROOT%/}/next/"
+PM_PACKS_PREFIX="${PM_PACKS_ROOT%/}/"
+
+is_planning_path() {
+    local p="$1"
+    [[ -z "${p}" ]] && return 1
+    if [[ "${p}" == "${PM_NEXT_PREFIX}"* ]]; then
+        return 0
+    fi
+    if [[ "${p}" == "${PM_PACKS_PREFIX}"* ]]; then
+        return 0
+    fi
+    return 1
+}
+
 guard_no_planning_doc_edits() {
-    if git diff --name-only | rg -q "^docs/project_management/next/"; then
-        die "Worktree contains changes under docs/project_management/next/ (do not edit planning docs inside the worktree; move these edits to the orchestration branch)"
-    fi
-    if git diff --name-only --cached | rg -q "^docs/project_management/next/"; then
-        die "Worktree contains staged changes under docs/project_management/next/ (do not edit planning docs inside the worktree)"
-    fi
-    if git ls-files --others --exclude-standard | rg -q "^docs/project_management/next/"; then
-        die "Worktree contains untracked files under docs/project_management/next/ (do not edit planning docs inside the worktree; move these edits to the orchestration branch)"
-    fi
+    local p
+    while IFS= read -r p; do
+        if is_planning_path "${p}"; then
+            die "Worktree contains changes under planning roots (${PM_NEXT_PREFIX} or ${PM_PACKS_PREFIX}): ${p} (do not edit planning docs inside the worktree; move these edits to the orchestration branch)"
+        fi
+    done < <(git diff --name-only)
+
+    while IFS= read -r p; do
+        if is_planning_path "${p}"; then
+            die "Worktree contains staged changes under planning roots (${PM_NEXT_PREFIX} or ${PM_PACKS_PREFIX}): ${p} (do not edit planning docs inside the worktree)"
+        fi
+    done < <(git diff --name-only --cached)
+
+    while IFS= read -r p; do
+        if is_planning_path "${p}"; then
+            die "Worktree contains untracked files under planning roots (${PM_NEXT_PREFIX} or ${PM_PACKS_PREFIX}): ${p} (do not edit planning docs inside the worktree; move these edits to the orchestration branch)"
+        fi
+    done < <(git ls-files --others --exclude-standard)
 }
 
 impact_map_touchset_status="unknown"
