@@ -357,30 +357,30 @@ enforce_impact_map_touchset() {
         die "impact_map Touch Set validation failed on orchestration branch; fix ${FEATURE_DIR_RELPATH}/impact_map.md in ${ORCH_BRANCH} before completing the task"
     fi
 
-    declare -A allow_exact=()
+    allow_exact_text="$(jq -r '.create[]?, .edit[]?, .deprecate[]?, .delete[]?' <<<"${allow_json}")"
+
+    allow_prefixes=()
+    while IFS= read -r prefix; do
+        [[ -z "${prefix}" ]] && continue
+        allow_prefixes+=("${prefix}")
+    done < <(jq -r '.dir_prefixes[]?' <<<"${allow_json}")
+
+    touched_paths=()
     while IFS= read -r p; do
         [[ -z "${p}" ]] && continue
-        allow_exact["${p}"]=1
-    done < <(jq -r '.create[]?, .edit[]?, .deprecate[]?, .delete[]?' <<<"${allow_json}")
-
-    mapfile -t allow_prefixes < <(jq -r '.dir_prefixes[]?' <<<"${allow_json}")
-
-    declare -A touched=()
-    while IFS= read -r p; do
-        [[ -z "${p}" ]] && continue
-        touched["${p}"]=1
+        touched_paths+=("${p}")
     done < <(collect_touched_paths "${CREATED_FROM_SHA}")
 
     if [[ "${SUBSTRATE_TASK_FINISH_TOUCH_DEBUG:-0}" == "1" ]]; then
         log "DEBUG: touched paths since created_from_sha=${CREATED_FROM_SHA} (deduped):"
-        for p in "${!touched[@]}"; do
+        for p in "${touched_paths[@]}"; do
             printf '%s\n' "${p}" >&2
-        done | sort >&2
+        done
     fi
 
     allow_path() {
         local p="$1"
-        if [[ -n "${allow_exact[$p]:-}" ]]; then
+        if grep -Fxq "${p}" <<<"${allow_exact_text}"; then
             return 0
         fi
         local prefix
@@ -395,7 +395,7 @@ enforce_impact_map_touchset() {
 
     unplanned=()
     local p
-    for p in "${!touched[@]}"; do
+    for p in "${touched_paths[@]}"; do
         if ! allow_path "${p}"; then
             unplanned+=("${p}")
         fi
@@ -406,8 +406,7 @@ enforce_impact_map_touchset() {
         return 0
     fi
 
-    IFS=$'\n' unplanned_sorted=($(printf '%s\n' "${unplanned[@]}" | sort -u))
-    unset IFS
+    unplanned_sorted=("${unplanned[@]}")
 
     echo "FAIL: unplanned file touches detected (${#unplanned_sorted[@]})" >&2
     for p in "${unplanned_sorted[@]}"; do
@@ -475,14 +474,21 @@ find_orch_worktree() {
 }
 
 find_single_orch_worktree_or_die() {
-    mapfile -t orch_matches < <(find_orch_worktree)
-    if [[ "${#orch_matches[@]}" -gt 1 ]]; then
-        die "Multiple worktrees have orchestration branch checked out (${ORCH_BRANCH}); cannot safely determine orchestration worktree"
-    fi
-    if [[ "${#orch_matches[@]}" -eq 0 ]]; then
+    local orch_wt=""
+    local count=0
+    while IFS= read -r wt; do
+        [[ -z "${wt}" ]] && continue
+        count=$((count + 1))
+        if [[ "${count}" -eq 1 ]]; then
+            orch_wt="${wt}"
+        else
+            die "Multiple worktrees have orchestration branch checked out (${ORCH_BRANCH}); cannot safely determine orchestration worktree"
+        fi
+    done < <(find_orch_worktree)
+    if [[ "${count}" -eq 0 ]]; then
         die "Could not find an orchestration worktree with branch ${ORCH_BRANCH} checked out (run triad-orch-ensure or check out ${ORCH_BRANCH} in a worktree)"
     fi
-    printf '%s\n' "${orch_matches[0]}"
+    printf '%s\n' "${orch_wt}"
 }
 
 merge_to_orchestration_ff_only() {
