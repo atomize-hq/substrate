@@ -78,6 +78,3 @@ rustdoc-args = ["--cfg", "docsrs"]
 [profile.dist]
 inherits = "release"
 lto = "thin"
-
-[patch.crates-io]
-reedline = { path = "vendor/reedline" }
