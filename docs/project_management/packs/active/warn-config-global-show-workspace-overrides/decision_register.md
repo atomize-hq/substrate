@@ -30,7 +30,7 @@ Decision:
 - **Choose Option B**.
 
 Links:
-- Spec: `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/C0-spec.md`
+- Spec: `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/C0-spec.md`
 - Contract: `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/contract.md`
 
 ## DR-0002 — What the note should contain (path + guidance)
@@ -58,7 +58,7 @@ Decision:
 - **Choose Option A**.
 
 Links:
-- Spec: `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/C0-spec.md#note-text-exact-template`
+- Spec: `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/C0-spec.md#note-text-exact-template`
 
 ## DR-0003 — Interaction with the existing “global patch is empty” note
 
@@ -83,7 +83,7 @@ Decision:
 - **Choose Option B**.
 
 Links:
-- Spec: `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/C0-spec.md#interaction-with-existing-notes`
+- Spec: `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/C0-spec.md#interaction-with-existing-notes`
 
 ## DR-0004 — Explicit write-target note for implicit `substrate config set`
 

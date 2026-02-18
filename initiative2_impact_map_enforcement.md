@@ -143,7 +143,7 @@ Place it near other planning validators (after spec_manifest validation is fine)
 ### 3.3 Update impact map template + standard docs
 
 **Modify:**
-- `docs/project_management/standards/templates/impact_map.md.tmpl`
+- `docs/project_management/system/templates/planning_pack/impact_map.md.tmpl`
   - Replace `<path>` with `` `<path>` `` in the template bullets and include a note that paths MUST be backticked.
 
 **Modify:**
@@ -298,4 +298,3 @@ Do this as a mechanical-only commit.
 - `scripts/triad/task_finish.sh` blocks completion if unplanned file touches occur.
 - Override exists but requires explicit acknowledgement and reason.
 - At least one active Planning Pack successfully uses the enforcement without excessive friction.
-

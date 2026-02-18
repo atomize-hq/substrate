@@ -17,6 +17,9 @@ Creates:
     contract.md
     spec_manifest.md
     impact_map.md
+    slices/<SLICE_ID>/
+      <SLICE_ID>-spec.md
+      <SLICE_ID>-closeout_report.md
     kickoff_prompts/
 USAGE
 }
@@ -30,6 +33,7 @@ WSL_SEPARATE=0
 AUTOMATION=0
 BEHAVIOR_PLATFORMS=""
 CI_PARITY_PLATFORMS=""
+SLICE_DIRS=1
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -40,6 +44,14 @@ while [[ $# -gt 0 ]]; do
         --slice-prefix)
             SLICE_PREFIX="${2:-}"
             shift 2
+            ;;
+        --slice-dirs)
+            SLICE_DIRS=1
+            shift 1
+            ;;
+        --flat-slice-files)
+            SLICE_DIRS=0
+            shift 1
             ;;
         --decision-heavy)
             DECISION_HEAVY=1
@@ -199,15 +211,25 @@ fi
 
 NOW_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
+SLICE_SPEC_REL="${SLICE_ID}-spec.md"
+SLICE_CLOSEOUT_REL="${SLICE_ID}-closeout_report.md"
+SLICE_KICKOFF_DIR_REL="kickoff_prompts"
+if [[ "${SLICE_DIRS}" -eq 1 ]]; then
+    SLICE_SPEC_REL="slices/${SLICE_ID}/${SLICE_ID}-spec.md"
+    SLICE_CLOSEOUT_REL="slices/${SLICE_ID}/${SLICE_ID}-closeout_report.md"
+    SLICE_KICKOFF_DIR_REL="slices/${SLICE_ID}/kickoff_prompts"
+fi
+
 render() {
     local tmpl="$1"
     local out="$2"
     local task_id="${3:-}"
-    local spec_file="${4:-${SLICE_ID}-spec.md}"
+    local spec_file="${4:-${SLICE_SPEC_REL}}"
     local branch="${5:-}"
     local worktree="${6:-}"
     local platform="${7:-}"
     local slice_id="${8:-${SLICE_ID}}"
+    local closeout_file="${9:-${SLICE_CLOSEOUT_REL}}"
 
     sed \
         -e "s|{{FEATURE}}|${FEATURE}|g" \
@@ -217,6 +239,7 @@ render() {
         -e "s|{{SLICE_PREFIX}}|${SLICE_PREFIX}|g" \
         -e "s|{{TASK_ID}}|${task_id}|g" \
         -e "s|{{SPEC_FILE}}|${spec_file}|g" \
+        -e "s|{{CLOSEOUT_FILE}}|${closeout_file}|g" \
         -e "s|{{BRANCH}}|${branch}|g" \
         -e "s|{{WORKTREE}}|${worktree}|g" \
         -e "s|{{PLATFORM}}|${platform}|g" \
@@ -225,6 +248,10 @@ render() {
 }
 
 mkdir -p "${FEATURE_DIR}/kickoff_prompts"
+if [[ "${SLICE_DIRS}" -eq 1 ]]; then
+    mkdir -p "${FEATURE_DIR}/slices/${SLICE_ID}"
+fi
+mkdir -p "${FEATURE_DIR}/${SLICE_KICKOFF_DIR_REL}"
 
 render "${PLANNING_TEMPLATES_DIR}/plan.md.tmpl" "${FEATURE_DIR}/plan.md"
 render "${PLANNING_TEMPLATES_DIR}/session_log.md.tmpl" "${FEATURE_DIR}/session_log.md"
@@ -235,10 +262,10 @@ if [[ "${CROSS_PLATFORM}" -eq 1 && "${AUTOMATION}" -eq 1 ]]; then
     render "${PLANNING_TEMPLATES_DIR}/ci_checkpoint_plan.md.tmpl" "${FEATURE_DIR}/ci_checkpoint_plan.md"
 fi
 
-render "${PLANNING_TEMPLATES_DIR}/slice_spec.v2.md.tmpl" "${FEATURE_DIR}/${SLICE_ID}-spec.md"
+render "${PLANNING_TEMPLATES_DIR}/slice_spec.v2.md.tmpl" "${FEATURE_DIR}/${SLICE_SPEC_REL}"
 
 render "${PLANNING_TEMPLATES_DIR}/execution_preflight_report.md.tmpl" "${FEATURE_DIR}/execution_preflight_report.md"
-render "${PLANNING_TEMPLATES_DIR}/slice_closeout_report.md.tmpl" "${FEATURE_DIR}/${SLICE_ID}-closeout_report.md" "" "${SLICE_ID}-spec.md" "" "" "" "${SLICE_ID}"
+render "${PLANNING_TEMPLATES_DIR}/slice_closeout_report.md.tmpl" "${FEATURE_DIR}/${SLICE_CLOSEOUT_REL}" "" "${SLICE_SPEC_REL}" "" "" "" "${SLICE_ID}"
 
 render "${KICKOFF_TEMPLATES_DIR}/kickoff_exec_preflight.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/F0-exec-preflight.md" "F0-exec-preflight"
 if [[ "${AUTOMATION}" -eq 1 ]]; then
@@ -248,7 +275,7 @@ if [[ "${CROSS_PLATFORM}" -eq 1 && "${AUTOMATION}" -eq 1 ]]; then
     render "${KICKOFF_TEMPLATES_DIR}/kickoff_ci_checkpoint.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/CP1-ci-checkpoint.md" "CP1-ci-checkpoint"
 fi
 
-FEATURE="${FEATURE}" FEATURE_DIR="${FEATURE_DIR}" SLICE_ID="${SLICE_ID}" SLICE_ID_LOWER="${SLICE_ID_LOWER}" CROSS_PLATFORM="${CROSS_PLATFORM}" BEHAVIOR_PLATFORMS="${BEHAVIOR_PLATFORMS}" CI_PARITY_PLATFORMS="${CI_PARITY_PLATFORMS}" WSL_REQUIRED="${WSL_REQUIRED}" WSL_SEPARATE="${WSL_SEPARATE}" AUTOMATION="${AUTOMATION}" \
+FEATURE="${FEATURE}" FEATURE_DIR="${FEATURE_DIR}" SLICE_ID="${SLICE_ID}" SLICE_ID_LOWER="${SLICE_ID_LOWER}" SLICE_SPEC_REL="${SLICE_SPEC_REL}" SLICE_CLOSEOUT_REL="${SLICE_CLOSEOUT_REL}" SLICE_KICKOFF_DIR_REL="${SLICE_KICKOFF_DIR_REL}" CROSS_PLATFORM="${CROSS_PLATFORM}" BEHAVIOR_PLATFORMS="${BEHAVIOR_PLATFORMS}" CI_PARITY_PLATFORMS="${CI_PARITY_PLATFORMS}" WSL_REQUIRED="${WSL_REQUIRED}" WSL_SEPARATE="${WSL_SEPARATE}" AUTOMATION="${AUTOMATION}" \
 python3 - <<'PY'
 import json
 import os
@@ -257,8 +284,9 @@ feature = os.environ["FEATURE"]
 feature_dir = os.environ["FEATURE_DIR"]
 slice_id = os.environ["SLICE_ID"]
 slice_id_lower = os.environ.get("SLICE_ID_LOWER", slice_id.lower())
-slice_spec = f"{slice_id}-spec.md"
-slice_closeout = f"{slice_id}-closeout_report.md"
+slice_spec = os.environ.get("SLICE_SPEC_REL") or f"{slice_id}-spec.md"
+slice_closeout = os.environ.get("SLICE_CLOSEOUT_REL") or f"{slice_id}-closeout_report.md"
+slice_kickoff_dir_rel = os.environ.get("SLICE_KICKOFF_DIR_REL") or "kickoff_prompts"
 cross_platform = os.environ["CROSS_PLATFORM"] == "1"
 behavior_platforms_csv = os.environ.get("BEHAVIOR_PLATFORMS", "")
 ci_parity_platforms_csv = os.environ.get("CI_PARITY_PLATFORMS", "")
@@ -301,8 +329,12 @@ if wsl_required and "linux" not in behavior_platforms:
     raise SystemExit("ERROR: --wsl-required requires linux in behavior_platforms_required")
 
 
-def kickoff(task_id: str) -> str:
+def kickoff_feature(task_id: str) -> str:
     return os.path.join(feature_dir, "kickoff_prompts", f"{task_id}.md")
+
+
+def kickoff_slice(task_id: str) -> str:
+    return os.path.join(feature_dir, slice_kickoff_dir_rel, f"{task_id}.md")
 
 
 def refs(*extra: str) -> list:
@@ -358,7 +390,7 @@ def code_task(task_id: str, other_id: str) -> dict:
         ],
         "worktree": f"wt/{feature}-{slice_id_lower}-code",
         "integration_task": f"{slice_id}-integ-core" if cross_platform else f"{slice_id}-integ",
-        "kickoff_prompt": os.path.join(feature_dir, "kickoff_prompts", f"{task_id}.md"),
+        "kickoff_prompt": os.path.join(feature_dir, slice_kickoff_dir_rel, f"{task_id}.md"),
         "depends_on": ["F0-exec-preflight"],
         "concurrent_with": [other_id],
     }
@@ -405,7 +437,7 @@ def test_task(task_id: str, other_id: str) -> dict:
         ],
         "worktree": f"wt/{feature}-{slice_id_lower}-test",
         "integration_task": f"{slice_id}-integ-core" if cross_platform else f"{slice_id}-integ",
-        "kickoff_prompt": os.path.join(feature_dir, "kickoff_prompts", f"{task_id}.md"),
+        "kickoff_prompt": os.path.join(feature_dir, slice_kickoff_dir_rel, f"{task_id}.md"),
         "depends_on": ["F0-exec-preflight"],
         "concurrent_with": [other_id],
     }
@@ -469,7 +501,7 @@ def integ_core_task() -> dict:
         "end_checklist": end_checklist,
         "worktree": f"wt/{feature}-{slice_id_lower}-integ-core",
         "integration_task": f"{slice_id}-integ-core",
-        "kickoff_prompt": kickoff(f"{slice_id}-integ-core"),
+        "kickoff_prompt": kickoff_slice(f"{slice_id}-integ-core"),
         "depends_on": [f"{slice_id}-code", f"{slice_id}-test"],
         "concurrent_with": [],
     }
@@ -554,7 +586,7 @@ def integ_platform_task(platform: str) -> dict:
         ],
         "worktree": f"wt/{feature}-{slice_id_lower}-integ-{platform}",
         "integration_task": task_id,
-        "kickoff_prompt": kickoff(task_id),
+        "kickoff_prompt": kickoff_slice(task_id),
         "depends_on": [f"{slice_id}-integ-core"],
         "concurrent_with": [],
         "platform": platform,
@@ -624,7 +656,7 @@ def integ_final_task(platform_tasks: list) -> dict:
         "end_checklist": end_checklist,
         "worktree": f"wt/{feature}-{slice_id_lower}-integ",
         "integration_task": f"{slice_id}-integ",
-        "kickoff_prompt": kickoff(f"{slice_id}-integ"),
+        "kickoff_prompt": kickoff_slice(f"{slice_id}-integ"),
         "depends_on": [f"{slice_id}-integ-core"] + [f"{slice_id}-integ-{p}" for p in platform_tasks],
         "concurrent_with": [],
     }
@@ -675,7 +707,7 @@ def integ_single_task() -> dict:
         ],
         "worktree": f"wt/{feature}-{slice_id_lower}-integ",
         "integration_task": f"{slice_id}-integ",
-        "kickoff_prompt": kickoff(f"{slice_id}-integ"),
+        "kickoff_prompt": kickoff_slice(f"{slice_id}-integ"),
         "depends_on": [f"{slice_id}-code", f"{slice_id}-test"],
         "concurrent_with": [],
     }
@@ -853,30 +885,30 @@ else
     SLICE_INTEG_CORE_BRANCH="${SLICE_ID_LOWER}-integ-core"
 fi
 
-render "${TEMPLATES_DIR}/kickoff_code.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/${SLICE_ID}-code.md" "${SLICE_ID}-code" "${SLICE_ID}-spec.md" "${SLICE_CODE_BRANCH}" "wt/${FEATURE}-${SLICE_ID_LOWER}-code" "" "${SLICE_ID}"
-render "${TEMPLATES_DIR}/kickoff_test.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/${SLICE_ID}-test.md" "${SLICE_ID}-test" "${SLICE_ID}-spec.md" "${SLICE_TEST_BRANCH}" "wt/${FEATURE}-${SLICE_ID_LOWER}-test" "" "${SLICE_ID}"
+render "${KICKOFF_TEMPLATES_DIR}/kickoff_code.md.tmpl" "${FEATURE_DIR}/${SLICE_KICKOFF_DIR_REL}/${SLICE_ID}-code.md" "${SLICE_ID}-code" "${SLICE_SPEC_REL}" "${SLICE_CODE_BRANCH}" "wt/${FEATURE}-${SLICE_ID_LOWER}-code" "" "${SLICE_ID}"
+render "${KICKOFF_TEMPLATES_DIR}/kickoff_test.md.tmpl" "${FEATURE_DIR}/${SLICE_KICKOFF_DIR_REL}/${SLICE_ID}-test.md" "${SLICE_ID}-test" "${SLICE_SPEC_REL}" "${SLICE_TEST_BRANCH}" "wt/${FEATURE}-${SLICE_ID_LOWER}-test" "" "${SLICE_ID}"
 if [[ "${CROSS_PLATFORM}" -eq 1 ]]; then
-    render "${TEMPLATES_DIR}/kickoff_integ_core.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/${SLICE_ID}-integ-core.md" "${SLICE_ID}-integ-core" "${SLICE_ID}-spec.md" "${SLICE_INTEG_CORE_BRANCH}" "wt/${FEATURE}-${SLICE_ID_LOWER}-integ-core" "" "${SLICE_ID}"
+    render "${KICKOFF_TEMPLATES_DIR}/kickoff_integ_core.md.tmpl" "${FEATURE_DIR}/${SLICE_KICKOFF_DIR_REL}/${SLICE_ID}-integ-core.md" "${SLICE_ID}-integ-core" "${SLICE_SPEC_REL}" "${SLICE_INTEG_CORE_BRANCH}" "wt/${FEATURE}-${SLICE_ID_LOWER}-integ-core" "" "${SLICE_ID}"
     IFS=',' read -r -a ci_platforms <<<"${CI_PARITY_PLATFORMS}"
     for p in "${ci_platforms[@]}"; do
         p="$(echo "${p}" | xargs)"
         [[ -z "${p}" ]] && continue
-        render "${TEMPLATES_DIR}/kickoff_integ_platform.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/${SLICE_ID}-integ-${p}.md" "${SLICE_ID}-integ-${p}" "${SLICE_ID}-spec.md" "${FEATURE}-${SLICE_ID_LOWER}-integ-${p}" "wt/${FEATURE}-${SLICE_ID_LOWER}-integ-${p}" "${p}" "${SLICE_ID}"
+        render "${KICKOFF_TEMPLATES_DIR}/kickoff_integ_platform.md.tmpl" "${FEATURE_DIR}/${SLICE_KICKOFF_DIR_REL}/${SLICE_ID}-integ-${p}.md" "${SLICE_ID}-integ-${p}" "${SLICE_SPEC_REL}" "${FEATURE}-${SLICE_ID_LOWER}-integ-${p}" "wt/${FEATURE}-${SLICE_ID_LOWER}-integ-${p}" "${p}" "${SLICE_ID}"
     done
     if [[ "${WSL_REQUIRED}" -eq 1 && "${WSL_SEPARATE}" -eq 1 ]]; then
-        render "${TEMPLATES_DIR}/kickoff_integ_platform.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/${SLICE_ID}-integ-wsl.md" "${SLICE_ID}-integ-wsl" "${SLICE_ID}-spec.md" "${FEATURE}-${SLICE_ID_LOWER}-integ-wsl" "wt/${FEATURE}-${SLICE_ID_LOWER}-integ-wsl" "wsl" "${SLICE_ID}"
+        render "${KICKOFF_TEMPLATES_DIR}/kickoff_integ_platform.md.tmpl" "${FEATURE_DIR}/${SLICE_KICKOFF_DIR_REL}/${SLICE_ID}-integ-wsl.md" "${SLICE_ID}-integ-wsl" "${SLICE_SPEC_REL}" "${FEATURE}-${SLICE_ID_LOWER}-integ-wsl" "wt/${FEATURE}-${SLICE_ID_LOWER}-integ-wsl" "wsl" "${SLICE_ID}"
     fi
-    render "${TEMPLATES_DIR}/kickoff_integ_final.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/${SLICE_ID}-integ.md" "${SLICE_ID}-integ" "${SLICE_ID}-spec.md" "${SLICE_INTEG_BRANCH}" "wt/${FEATURE}-${SLICE_ID_LOWER}-integ" "" "${SLICE_ID}"
+    render "${KICKOFF_TEMPLATES_DIR}/kickoff_integ_final.md.tmpl" "${FEATURE_DIR}/${SLICE_KICKOFF_DIR_REL}/${SLICE_ID}-integ.md" "${SLICE_ID}-integ" "${SLICE_SPEC_REL}" "${SLICE_INTEG_BRANCH}" "wt/${FEATURE}-${SLICE_ID_LOWER}-integ" "" "${SLICE_ID}"
 else
-    render "${TEMPLATES_DIR}/kickoff_integ.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/${SLICE_ID}-integ.md" "${SLICE_ID}-integ" "${SLICE_ID}-spec.md" "${SLICE_INTEG_BRANCH}" "wt/${FEATURE}-${SLICE_ID_LOWER}-integ" "" "${SLICE_ID}"
+    render "${KICKOFF_TEMPLATES_DIR}/kickoff_integ.md.tmpl" "${FEATURE_DIR}/${SLICE_KICKOFF_DIR_REL}/${SLICE_ID}-integ.md" "${SLICE_ID}-integ" "${SLICE_SPEC_REL}" "${SLICE_INTEG_BRANCH}" "wt/${FEATURE}-${SLICE_ID_LOWER}-integ" "" "${SLICE_ID}"
 fi
 
 if [[ "${DECISION_HEAVY}" -eq 1 || "${CROSS_PLATFORM}" -eq 1 ]]; then
-    cat >"${FEATURE_DIR}/decision_register.md" <<'MD'
+	    cat >"${FEATURE_DIR}/decision_register.md" <<'MD'
 # Decision Register
 
 Use the template in:
-- `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+- `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
 MD
 
     if [[ "${CROSS_PLATFORM}" -eq 1 ]]; then

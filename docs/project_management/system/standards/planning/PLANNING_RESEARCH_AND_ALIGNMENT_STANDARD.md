@@ -73,7 +73,11 @@ Planning work must use these standards:
 5) Specs (`<slice>-spec*.md`)
 - One or more spec slices with: scope, exact behavior, error handling, platform rules, acceptance criteria, out-of-scope.
 
-6) Kickoff prompts (`kickoff_prompts/<task>-{code,test,integ}.md`)
+6) Kickoff prompts (one per task)
+- Source of truth: each task’s `kickoff_prompt` field in `tasks.json`.
+- Canonical locations:
+  - Slice tasks: `slices/<SLICE_ID>/kickoff_prompts/<task-id>.md`
+  - Feature/ops tasks: `kickoff_prompts/<task-id>.md`
 - Each prompt must clearly bound role responsibilities and required commands.
 
 ### 3.1.1 Strict task-triad interoperability (required)

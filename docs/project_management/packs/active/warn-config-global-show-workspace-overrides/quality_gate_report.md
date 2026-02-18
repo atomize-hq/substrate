@@ -56,9 +56,9 @@ Exit codes:
 - Feature smoke scripts under `smoke/`: `YES`
 - `docs/project_management/packs/sequencing.json`: `YES`
 - Standards:
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
-  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`: `YES`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`: `YES`
 
 ## Gate Results (PASS/FAIL with evidence)
 
@@ -74,7 +74,7 @@ Exit codes:
 - Result: `PASS`
 - Evidence:
   - `docs/project_management/adrs/draft/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md`
-  - `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/C0-spec.md`
+  - `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/C0-spec.md`
   - `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/contract.md`
 
 ### 4) Sequencing and dependency alignment

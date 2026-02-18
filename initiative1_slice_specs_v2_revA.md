@@ -183,7 +183,7 @@ Exceptions:
 ### 4.1 Add a v2 slice spec template
 
 **Add file:**
-- `docs/project_management/standards/templates/slice_spec.v2.md.tmpl`
+- `docs/project_management/system/templates/planning_pack/slice_spec.v2.md.tmpl`
 
 Template contents (example):
 
@@ -394,7 +394,7 @@ Because the validator is gated, this will not break existing packs that do not o
 ### 4.6 Update CI checkpoint defaults everywhere they are documented
 
 **Modify:**
-- `docs/project_management/standards/templates/ci_checkpoint_plan.md.tmpl`
+- `docs/project_management/system/templates/planning_pack/ci_checkpoint_plan.md.tmpl`
   - `"min_triads_per_checkpoint": 2` → `4`
   - `"max_triads_per_checkpoint": 4` → `8`
 

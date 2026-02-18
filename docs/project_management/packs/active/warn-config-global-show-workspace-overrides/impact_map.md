@@ -3,8 +3,8 @@
 This file replaces the legacy `integration_map.md`.
 
 Authoring standards:
-- `docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md`
-- `docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md`
+- `docs/project_management/system/standards/planning/PLANNING_IMPACT_MAP_STANDARD.md`
+- `docs/project_management/system/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`
 
 ## Inputs
 - Feature directory: `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/`

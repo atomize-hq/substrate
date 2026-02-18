@@ -8,7 +8,7 @@ Owners: Substrate maintainers
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 6b8c510ead88e391788963e6bd8b965273c4aaa8312d91df9ea245126c78ad2b
+ADR_BODY_SHA256: 5ba8ddfe1acc5eee1ce41582e50bac5f2501cfd3734f47aa5a40c02b9b0a9ca5
 ### Changes (operator-facing)
 - Workspace override note for `substrate config global show`
   - Existing: `substrate config global show` prints the global config patch, which can be misinterpreted as the effective config when run inside a workspace.
@@ -27,7 +27,7 @@ Links:
 - Plan: `docs/project_management/_archived/next/warn-config-global-show-workspace-overrides/plan.md`
 - Tasks: `docs/project_management/_archived/next/warn-config-global-show-workspace-overrides/tasks.json`
 - Spec manifest: `docs/project_management/_archived/next/warn-config-global-show-workspace-overrides/spec_manifest.md`
-- Spec: `docs/project_management/_archived/next/warn-config-global-show-workspace-overrides/C0-spec.md`
+- Spec: `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/C0-spec.md`
 - Contract: `docs/project_management/_archived/next/warn-config-global-show-workspace-overrides/contract.md`
 - Impact map: `docs/project_management/_archived/next/warn-config-global-show-workspace-overrides/impact_map.md`
 - CI checkpoint plan: `docs/project_management/_archived/next/warn-config-global-show-workspace-overrides/ci_checkpoint_plan.md`

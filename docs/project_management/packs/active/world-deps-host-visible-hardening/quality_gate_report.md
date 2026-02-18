@@ -241,7 +241,7 @@ rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' '\\b(shoul
 - Evidence:
   - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → `Missing required path: docs/project_management/packs/active/world-deps-host-visible-hardening/ci_checkpoint_plan.md`
 - Impact: Mechanical quality gate fails immediately; checkpoint boundaries (`WDH1`, `WDH3`) are not defined/wired in an auditable way.
-- Fix required (exact): Add `docs/project_management/packs/active/world-deps-host-visible-hardening/ci_checkpoint_plan.md` using `docs/project_management/standards/templates/ci_checkpoint_plan.md.tmpl`, defining bounded checkpoint groups and the required ops checkpoint task ids.
+- Fix required (exact): Add `docs/project_management/packs/active/world-deps-host-visible-hardening/ci_checkpoint_plan.md` using `docs/project_management/system/templates/planning_pack/ci_checkpoint_plan.md.tmpl`, defining bounded checkpoint groups and the required ops checkpoint task ids.
 - If DEFECT: Alternative (one viable): Disable checkpoints/automation by setting `tasks.json` `meta.automation.enabled=false` (and aligning schema/validation expectations accordingly), accepting higher manual orchestration cost.
 
 ### Finding 002 — `tasks.json` fails mechanical validation for schema v4 + automation

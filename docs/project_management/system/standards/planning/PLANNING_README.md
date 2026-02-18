@@ -50,7 +50,7 @@ Minimum required:
 - `session_log.md`
 - `spec_manifest.md`
 - Specs (`*-spec*.md`)
-- `kickoff_prompts/*-{code,test,integ}.md` for every task
+- Kickoff prompts must exist for every task (as referenced by `tasks.json` `kickoff_prompt`). Slice task prompts live under `slices/<SLICE_ID>/kickoff_prompts/`; feature/ops prompts live under `kickoff_prompts/`.
 
 Decision-heavy or cross-platform work must also include:
 - `decision_register.md`

@@ -1,6 +1,6 @@
 # world-sync — internal git spec
 
-Template reference: `docs/project_management/standards/templates/spec/schema-spec.md.tmpl` (adapted; internal git is a filesystem+workflow contract).
+Template reference: `docs/project_management/system/templates/spec/schema-spec.md.tmpl` (adapted; internal git is a filesystem+workflow contract).
 
 ## Scope
 This spec defines the deterministic contract for Substrate’s internal checkpoint/rollback store.

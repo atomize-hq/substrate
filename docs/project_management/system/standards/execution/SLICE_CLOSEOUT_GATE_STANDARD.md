@@ -12,7 +12,8 @@ This gate runs after `X-integ` (or after `X-integ` final in the platform-fix mod
 ## Required artifacts
 For features that opt in (`tasks.json` meta: `execution_gates: true`):
 - A closeout report per slice:
-  - `docs/project_management/packs/active/<feature>/<SLICE_ID>-closeout_report.md` (e.g., `WCU0-closeout_report.md`)
+  - Canonical: `docs/project_management/packs/active/<feature>/slices/<SLICE_ID>/<SLICE_ID>-closeout_report.md` (e.g., `slices/WCU0/WCU0-closeout_report.md`)
+  - Legacy (flat; only when explicitly chosen): `docs/project_management/packs/active/<feature>/<SLICE_ID>-closeout_report.md`
 - The slice final integration task (`<SLICE>-integ`) must reference the closeout report and require completing it.
 
 ## What it checks (no ambiguity)
@@ -39,7 +40,7 @@ For features that opt in (`tasks.json` meta: `execution_gates: true`):
   - references to the slice spec + any relevant ADR/contract sections.
 
 ## Output and rules
-- Fill `<SLICE>-closeout_report.md` and treat it as required evidence for moving on.
+- Fill the slice closeout report (canonical: `slices/<SLICE_ID>/<SLICE_ID>-closeout_report.md`) and treat it as required evidence for moving on.
 - If drift is discovered:
   - fix the implementation/tests/spec first,
   - then re-run the relevant checks and update the closeout report.

@@ -1,6 +1,6 @@
 # world-sync — filesystem semantics spec
 
-Template: `docs/project_management/standards/templates/spec/filesystem-semantics-spec.md.tmpl`
+Template: `docs/project_management/system/templates/spec/filesystem-semantics-spec.md.tmpl`
 
 ## Scope
 This spec defines the authoritative filesystem/path semantics for:

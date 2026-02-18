@@ -121,7 +121,7 @@ Exceptions (unchanged conceptually):
 
 **Files impacted:**
 - `docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md`
-- `docs/project_management/standards/templates/ci_checkpoint_plan.md.tmpl`
+- `docs/project_management/system/templates/planning_pack/ci_checkpoint_plan.md.tmpl`
 
 ---
 
@@ -130,7 +130,7 @@ Exceptions (unchanged conceptually):
 ### 4.1 Add a slice spec template
 
 **Add file:**
-- `docs/project_management/standards/templates/slice_spec.md.tmpl`
+- `docs/project_management/system/templates/planning_pack/slice_spec.v2.md.tmpl`
 
 Template contents (example):
 
@@ -292,7 +292,7 @@ PowerShell equivalent.
 ### 4.6 Update CI checkpoint default sizing (templates + standard)
 
 **Modify:**
-- `docs/project_management/standards/templates/ci_checkpoint_plan.md.tmpl`
+- `docs/project_management/system/templates/planning_pack/ci_checkpoint_plan.md.tmpl`
   - Change:
     - `"min_triads_per_checkpoint": 2` → `4`
     - `"max_triads_per_checkpoint": 4` → `8`
@@ -366,4 +366,3 @@ Validator must fail with actionable messages.
 - Slice specs must have AC IDs and ≤ 8 AC items, otherwise lint fails.
 - `ci_checkpoint_plan.md.tmpl` defaults updated to **4–8** and `PLANNING_CI_CHECKPOINT_STANDARD.md` reflects it.
 - At least one existing Planning Pack is migrated end-to-end as a proof point.
-

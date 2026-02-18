@@ -13,7 +13,7 @@ Authoring standard:
 ## Required spec documents (authoritative)
 
 Spec templates:
-- `docs/project_management/standards/templates/spec/`
+- `docs/project_management/system/templates/spec/`
 
 - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/spec_manifest.md` — spec selection + ownership map (this file)
 - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/impact_map.md` — touch set + cascading implications + cross-queue scan

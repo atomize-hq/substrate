@@ -67,8 +67,8 @@ The plan must include a machine-readable section, and lint should validate:
 
 The following items are implemented in the repo:
 - `docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md`
-- `docs/project_management/standards/templates/ci_checkpoint_plan.md.tmpl`
-- `docs/project_management/standards/templates/kickoff_ci_checkpoint.md.tmpl`
+- `docs/project_management/system/templates/planning_pack/ci_checkpoint_plan.md.tmpl`
+- `docs/project_management/system/templates/kickoff/kickoff_ci_checkpoint.md.tmpl`
 - `docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py`
 - Planning lint requires and validates `ci_checkpoint_plan.md` for automation-enabled cross-platform packs.
 - Integration kickoff templates explicitly remove “run cross-platform CI per slice” defaults (CI is a checkpoint-only activity).

@@ -238,7 +238,7 @@ The validator itself is responsible for gating (strict vs legacy) by reading `ta
 ### 4.3 Update impact map template + standard docs
 
 **Modify:**
-- `docs/project_management/standards/templates/impact_map.md.tmpl`
+- `docs/project_management/system/templates/planning_pack/impact_map.md.tmpl`
 
 Change the Touch Set scaffolding from `<path>` placeholders to a valid legacy-safe skeleton:
 

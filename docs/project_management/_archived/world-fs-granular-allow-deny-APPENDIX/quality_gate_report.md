@@ -566,7 +566,7 @@ Observed results:
 - Status: `DEFECT`
 - Evidence:
   - Standard/template requires `CI_CHECKOUT_REF` / `SMOKE_CHECKOUT_REF` to validate the boundary slice’s `*-integ-core` HEAD:
-    - `docs/project_management/standards/templates/kickoff_ci_checkpoint.md.tmpl` (Start Checklist step 4; required gates)
+    - `docs/project_management/system/templates/kickoff/kickoff_ci_checkpoint.md.tmpl` (Start Checklist step 4; required gates)
     - `docs/project_management/standards/TRIAD_WORKFLOW_CROSS_PLATFORM_INTEG.md` (Diagram A; “validate X-integ-core HEAD via checkout_ref”)
   - Current checkpoint prompts do not compute/pin checkout SHA:
     - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/CP1-ci-checkpoint.md` (lines 10–20)
@@ -618,7 +618,7 @@ Observed results:
   - Whether checkpoints validate `*-integ-core` (preferred; requires `*_CHECKOUT_REF` pinning) or validate orchestration HEAD (requires rewiring merge_to_orchestration + checkpoint deps).
   - Which runner_kind is authoritative for `feature_smoke` in this pack (self-hosted vs GitHub-hosted), and how that is represented in `ci_checkpoint_plan.md`.
 - Blockers to execution:
-  - Update CP1/CP2 (kickoff prompts + acceptance criteria) and boundary final integration `depends_on` to align with the checkpoint model in `docs/project_management/standards/TRIAD_WORKFLOW_CROSS_PLATFORM_INTEG.md` and `docs/project_management/standards/templates/kickoff_ci_checkpoint.md.tmpl`.
+  - Update CP1/CP2 (kickoff prompts + acceptance criteria) and boundary final integration `depends_on` to align with the checkpoint model in `docs/project_management/standards/TRIAD_WORKFLOW_CROSS_PLATFORM_INTEG.md` and `docs/project_management/system/templates/kickoff/kickoff_ci_checkpoint.md.tmpl`.
 
 ---
 

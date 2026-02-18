@@ -3,14 +3,14 @@
 Date (UTC): 2026-01-30T00:01:01Z
 
 Standards:
-- `docs/project_management/standards/SLICE_CLOSEOUT_GATE_STANDARD.md`
-- `docs/project_management/standards/EXECUTIVE_SUMMARY_STANDARD.md` (behavior delta format)
+- `docs/project_management/system/standards/execution/SLICE_CLOSEOUT_GATE_STANDARD.md`
+- `docs/project_management/system/standards/adr/EXECUTIVE_SUMMARY_STANDARD.md` (behavior delta format)
 
 Feature directory:
 - `docs/project_management/packs/active/warn-config-global-show-workspace-overrides`
 
 Slice spec:
-- `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/C0-spec.md`
+- `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/C0-spec.md`
 
 ## Behavior Delta (Existing → New → Why)
 

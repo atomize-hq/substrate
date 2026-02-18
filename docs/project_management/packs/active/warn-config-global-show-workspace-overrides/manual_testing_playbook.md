@@ -2,7 +2,7 @@
 
 This playbook is authoritative for the manual validation described in:
 - `docs/project_management/adrs/draft/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md`
-- `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/C0-spec.md`
+- `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/C0-spec.md`
 
 ## Preconditions
 

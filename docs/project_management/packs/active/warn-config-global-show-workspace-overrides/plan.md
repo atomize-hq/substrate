@@ -38,7 +38,7 @@ that states the write target (workspace scope + path).
 - `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/tasks.json`
 - `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/session_log.md`
 - `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/spec_manifest.md`
-- Spec (slice-level): `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/C0-spec.md`
+- Spec (slice-level): `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/C0-spec.md`
 - Contract: `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/contract.md`
 - Decision Register: `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/decision_register.md`
 - Impact Map: `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/impact_map.md`

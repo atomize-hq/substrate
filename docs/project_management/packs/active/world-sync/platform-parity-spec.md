@@ -1,6 +1,6 @@
 # world-sync — platform parity spec
 
-Template: `docs/project_management/standards/templates/spec/platform-parity-spec.md.tmpl`
+Template: `docs/project_management/system/templates/spec/platform-parity-spec.md.tmpl`
 
 ## Scope
 This spec defines the authoritative supported/unsupported contract for world-sync by platform.

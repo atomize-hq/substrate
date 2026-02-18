@@ -35,13 +35,30 @@ Rules:
 - Slice ID format: `<SLICE_PREFIX><N>` (e.g., `WCU0`, `WCU1`, `WCU2`).
 - The prefix must be derived from the feature name (or explicitly chosen to match it). Do not use generic `C0/C1/...` for new features.
 - All artifacts must use the same slice id:
-  - spec: `<SLICE_ID>-spec.md`
+  - spec (canonical): `slices/<SLICE_ID>/<SLICE_ID>-spec.md`
+    - legacy (flat; only when explicitly chosen): `<SLICE_ID>-spec.md`
+  - closeout report (canonical): `slices/<SLICE_ID>/<SLICE_ID>-closeout_report.md`
+    - legacy (flat; only when explicitly chosen): `<SLICE_ID>-closeout_report.md`
   - tasks: `<SLICE_ID>-code`, `<SLICE_ID>-test`, `<SLICE_ID>-integ-*`
-  - kickoff prompts: `kickoff_prompts/<task-id>.md`
+  - kickoff prompts (slice tasks; canonical): `slices/<SLICE_ID>/kickoff_prompts/<task-id>.md`
+    - legacy (flat): `kickoff_prompts/<task-id>.md`
+  - kickoff prompts (feature/ops tasks; always feature-level): `kickoff_prompts/<task-id>.md` (e.g., `F0-exec-preflight.md`, `CP1-ci-checkpoint.md`)
 
 Scaffolding:
 - `make planning-new-feature FEATURE=<feature>` auto-derives a prefix from `<feature>` and uses the first slice `<prefix>0`.
 - To force a specific prefix: `make planning-new-feature FEATURE=<feature> SLICE_PREFIX=<prefix>`.
+
+## Layouts (canonical vs legacy)
+
+Default (canonical; slice directories):
+- `slices/<SLICE_ID>/<SLICE_ID>-spec.md`
+- `slices/<SLICE_ID>/<SLICE_ID>-closeout_report.md`
+- `slices/<SLICE_ID>/kickoff_prompts/<SLICE_ID>-{code,test,integ}.md` (plus any `-integ-core` / `-integ-<platform>` / `-integ-wsl` prompts when applicable)
+
+Legacy / optional (flat slice files; only when explicitly chosen):
+- `<SLICE_ID>-spec.md`
+- `<SLICE_ID>-closeout_report.md`
+- `kickoff_prompts/<SLICE_ID>-{code,test,integ}.md`
 
 ## Worktree execution (automation mode)
 
@@ -55,11 +72,12 @@ When tasks are started via triad automation (preferred) and agents run inside an
    - `plan.md` (runbook/guardrails/triad overview).
    - `tasks.json` (all tasks with ids, worktrees, deps, prompts).
    - `session_log.md` (START/END entries only).
-   - Specs: `<SLICE_ID>-spec.md`, ... (one per slice/triad).
-   - `kickoff_prompts/` directory with `<task-id>.md` (e.g., `<SLICE_ID>-code.md`, `<SLICE_ID>-test.md`, `<SLICE_ID>-integ.md`).
+   - Specs: `slices/<SLICE_ID>/<SLICE_ID>-spec.md`, ... (one per slice/triad).
+   - Slice kickoff prompts under `slices/<SLICE_ID>/kickoff_prompts/<task-id>.md` (e.g., `<SLICE_ID>-code.md`, `<SLICE_ID>-test.md`, `<SLICE_ID>-integ.md`).
+   - Feature/ops kickoff prompts under `kickoff_prompts/<task-id>.md` (e.g., `F0-exec-preflight.md`, `CP1-ci-checkpoint.md`).
    - Execution gates (when used):
      - `execution_preflight_report.md`
-     - `<SLICE_ID>-closeout_report.md` (e.g., `WCU0-closeout_report.md`)
+     - `slices/<SLICE_ID>/<SLICE_ID>-closeout_report.md` (e.g., `slices/WCU0/WCU0-closeout_report.md`)
    - Optional user-facing drafts (e.g., `DRAFT_*.md`).
 4. Update `plan.md` triad overview to list all triads.
 5. Commit the scaffolding on the orchestration branch.
@@ -92,10 +110,10 @@ When tasks are started via triad automation (preferred) and agents run inside an
   "phase": "<SLICE_ID>",
   "status": "pending",
   "description": "Implement <SLICE_ID> spec (production code only).",
-  "references": ["docs/project_management/packs/active/<feature>/<SLICE_ID>-spec.md"],
+  "references": ["docs/project_management/packs/active/<feature>/slices/<SLICE_ID>/<SLICE_ID>-spec.md"],
   "ac_ids": ["AC-<SLICE_ID>-01", "AC-<SLICE_ID>-02", "AC-<SLICE_ID>-03"],
   "acceptance_criteria": [
-    "Implements the behaviors required by ac_ids (see <SLICE_ID>-spec.md)"
+    "Implements the behaviors required by ac_ids (see slices/<SLICE_ID>/<SLICE_ID>-spec.md)"
   ],
   "start_checklist": [
     "Checkout feat/<feature>, pull ff-only",
@@ -111,13 +129,19 @@ When tasks are started via triad automation (preferred) and agents run inside an
   "git_branch": "<feature>-<slice>-code",
   "required_make_targets": ["triad-code-checks"],
   "integration_task": "<SLICE_ID>-integ",
-  "kickoff_prompt": "docs/project_management/packs/active/<feature>/kickoff_prompts/<SLICE_ID>-code.md",
+  "kickoff_prompt": "docs/project_management/packs/active/<feature>/slices/<SLICE_ID>/kickoff_prompts/<SLICE_ID>-code.md",
   "depends_on": ["<PREV_SLICE_ID>-integ"],
   "concurrent_with": ["<SLICE_ID>-test"]
 }
 ```
 
-### Specs (`<SLICE_ID>-spec.md`)
+### Slice specs
+Canonical path:
+- `slices/<SLICE_ID>/<SLICE_ID>-spec.md`
+
+Legacy/flat path (only when explicitly chosen):
+- `<SLICE_ID>-spec.md`
+
 Must include:
 - Scope (explicit behaviors, defaults, error handling, platform guards, protected paths).
 - Acceptance (observable outcomes).
@@ -150,7 +174,7 @@ Purpose:
 
 Mechanics:
 - At the end of `<triad>-integ`, fill:
-  - `docs/project_management/packs/active/<feature>/<triad>-closeout_report.md`
+  - `docs/project_management/packs/active/<feature>/slices/<SLICE_ID>/<SLICE_ID>-closeout_report.md`
 - Standard:
   - `docs/project_management/system/standards/execution/SLICE_CLOSEOUT_GATE_STANDARD.md`
 
@@ -318,7 +342,7 @@ Adjust counts to keep each triad task (code/test/integ) ≤ 40% of a 272k contex
 - Use a consistent template (can copy the settings-stack template) and do not edit from worktrees.
 
 ## Adding New Triads (step-by-step)
-1. Create spec file (`<SLICE_ID>-spec.md`) with scope/acceptance/out-of-scope.
+1. Create spec file (`slices/<SLICE_ID>/<SLICE_ID>-spec.md`) with scope/acceptance/out-of-scope.
 2. Add tasks (code/test/integ) to tasks.json with worktrees/branches/deps/prompts.
 3. Create kickoff prompts for code/test/integ.
 4. Update plan.md triad overview.

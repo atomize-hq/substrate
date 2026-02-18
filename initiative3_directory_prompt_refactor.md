@@ -321,7 +321,7 @@ Introduce environment variables with defaults:
 
 Update scripts to use these instead of hardcoding:
 - `docs/project_management/_archived/next`
-- `docs/project_management/standards/templates`
+- `docs/project_management/system/templates`
 - etc.
 
 Examples of scripts that currently hardcode:
@@ -435,7 +435,7 @@ For feature `<feature_dir>`:
 
 ### 8.1 Move templates out of standards
 Move:
-- `docs/project_management/standards/templates/*` → `docs/project_management/system/templates/*`
+- `docs/project_management/system/templates/*` (canonical)
 
 Update:
 - `new_feature.*` scripts to point at the new templates root.

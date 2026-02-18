@@ -5,8 +5,8 @@
   - If `macos` is in `tasks.json` meta `behavior_platforms_required`: this is a **behavioral** platform-fix task (smoke required).
   - Otherwise: this is a **CI parity** platform-fix task (compile/test/lint parity required; smoke not required).
 - This task is allowed to make production-code and/or test changes as needed to achieve the required platform green state, but must not edit planning docs inside the worktree.
-- Spec: `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/C0-spec.md`
-- Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+- Spec: `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/C0-spec.md`
+- Execution workflow standard: `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 - This task must not merge back to the orchestration branch; the final aggregator integration task performs the merge once all platforms are green.
 
 ## Start Checklist

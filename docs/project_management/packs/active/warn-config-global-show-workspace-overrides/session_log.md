@@ -5,7 +5,7 @@
 - Branch: `feat/warn-config-global-show-workspace-overrides`
 - Goal: Establish Planning Pack scaffolding
 - Inputs to read end-to-end:
-  - `docs/project_management/standards/PLANNING_README.md`
+  - `docs/project_management/system/standards/planning/PLANNING_README.md`
 - Commands planned (if any):
   - `make planning-lint FEATURE_DIR="docs/project_management/packs/active/warn-config-global-show-workspace-overrides"`
 

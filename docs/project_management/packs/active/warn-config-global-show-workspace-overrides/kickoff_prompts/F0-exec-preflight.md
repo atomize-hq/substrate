@@ -3,7 +3,7 @@
 ## Scope
 - Run the feature-level start gate before any triad work begins.
 - This task is **docs-only** and must be performed on the orchestration branch (no worktrees).
-- Standard: `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
+- Standard: `docs/project_management/system/standards/execution/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
 - Report: `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/execution_preflight_report.md`
 
 ## Start Checklist

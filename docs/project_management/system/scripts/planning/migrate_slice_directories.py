@@ -119,10 +119,28 @@ def _build_rewrite_map(feature_dir_rel: str, moves: list[Move]) -> dict[str, str
 
 def _rewrite_strings(value: Any, mapping: dict[str, str], changed: list[dict[str, Any]], pointer: str) -> Any:
     if isinstance(value, str):
-        if value in mapping:
-            changed.append({"pointer": pointer, "from": value, "to": mapping[value]})
-            return mapping[value]
-        return value
+        updated = value
+        replacements: list[dict[str, str]] = []
+
+        # Rewrite repo-relative path substrings inside string values.
+        #
+        # This is necessary for checklist items like:
+        #   "Complete ...: docs/.../C0-closeout_report.md"
+        #
+        # Sort by descending key length to avoid partial rewrites when keys overlap.
+        for src, dst in sorted(mapping.items(), key=lambda kv: len(kv[0]), reverse=True):
+            if src not in updated:
+                continue
+            updated = updated.replace(src, dst)
+            replacements.append({"from": src, "to": dst})
+
+        if updated != value:
+            entry: dict[str, Any] = {"pointer": pointer, "from": value, "to": updated}
+            if len(replacements) > 1:
+                entry["replacements"] = replacements
+            changed.append(entry)
+
+        return updated
     if isinstance(value, list):
         out: list[Any] = []
         for i, item in enumerate(value):
@@ -169,6 +187,68 @@ def _rewrite_spec_manifest(spec_manifest: Path, mapping: dict[str, str], dry_run
 
     if not dry_run and updated != text:
         spec_manifest.write_text(updated, encoding="utf-8")
+    return changes
+
+
+def _rewrite_markdown_tree(feature_dir: Path, mapping: dict[str, str], dry_run: bool) -> list[dict[str, str]]:
+    """
+    Rewrite repo-relative path strings in markdown files under the feature directory.
+
+    This intentionally operates on raw text (not a markdown AST). We only replace exact repo-relative
+    paths (e.g. docs/project_management/packs/.../<slice>-spec.md) using the mapping keys.
+
+    Excludes feature logs to avoid mutating large/generated artifacts.
+    """
+    changes: list[dict[str, str]] = []
+
+    for path in sorted(feature_dir.rglob("*.md")):
+        if not path.is_file():
+            continue
+        if "logs" in path.parts:
+            continue
+
+        text = path.read_text(encoding="utf-8")
+        updated = text
+        file_changes: list[dict[str, str]] = []
+
+        for src, dst in sorted(mapping.items()):
+            if src not in updated:
+                continue
+            updated = updated.replace(src, dst)
+            file_changes.append({"from": src, "to": dst})
+
+        if updated != text:
+            for c in file_changes:
+                changes.append({"path": str(path), **c})
+            if not dry_run:
+                path.write_text(updated, encoding="utf-8")
+
+    return changes
+
+
+def _rewrite_sequencing_json(repo_root: Path, mapping: dict[str, str], dry_run: bool) -> list[dict[str, str]]:
+    """
+    Best-effort rewrite of spec paths in docs/project_management/packs/sequencing.json.
+
+    This prevents latent drift when a slice spec is moved into slices/<SLICE_ID>/ but the sequencing
+    entry still points at the old flat file location.
+    """
+    sequencing = repo_root / "docs/project_management/packs/sequencing.json"
+    if not sequencing.exists():
+        return []
+
+    text = sequencing.read_text(encoding="utf-8")
+    updated = text
+    changes: list[dict[str, str]] = []
+
+    spec_mapping = {k: v for k, v in mapping.items() if k.endswith("-spec.md")}
+    for src, dst in sorted(spec_mapping.items()):
+        if src in updated:
+            updated = updated.replace(src, dst)
+            changes.append({"from": src, "to": dst})
+
+    if not dry_run and updated != text:
+        sequencing.write_text(updated, encoding="utf-8")
     return changes
 
 
@@ -221,6 +301,8 @@ def main(argv: list[str]) -> int:
         "missing_sources": missing_sources,
         "tasks_json_rewrites": [],
         "spec_manifest_rewrites": [],
+        "markdown_rewrites": [],
+        "sequencing_rewrites": [],
         "applied_moves": [],
     }
 
@@ -243,6 +325,9 @@ def main(argv: list[str]) -> int:
 
     spec_manifest = feature_dir / "spec_manifest.md"
     report["spec_manifest_rewrites"] = _rewrite_spec_manifest(spec_manifest, mapping, dry_run=False)
+
+    report["markdown_rewrites"] = _rewrite_markdown_tree(feature_dir, mapping, dry_run=False)
+    report["sequencing_rewrites"] = _rewrite_sequencing_json(repo_root, mapping, dry_run=False)
 
     if args.report_json:
         Path(args.report_json).write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")

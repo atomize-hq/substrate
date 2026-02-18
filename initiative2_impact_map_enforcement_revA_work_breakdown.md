@@ -23,7 +23,7 @@ Engineers and agents running triads need a deterministic “unplanned touches”
 ### In scope
 - `docs/project_management/system/scripts/planning/validate_impact_map.py` (strict + legacy gating) with `--emit-json`.
 - Wire validator into planning lint (`docs/project_management/system/scripts/planning/lint.sh`, `docs/project_management/system/scripts/planning/lint.ps1`) via a single call.
-- Update `docs/project_management/standards/templates/impact_map.md.tmpl` to a legacy-safe skeleton using `- None`.
+- Update `docs/project_management/system/templates/planning_pack/impact_map.md.tmpl` to a legacy-safe skeleton using `- None`.
 - Update `docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md` to document strict format + enforcement behavior.
 - Enforce Touch Set at `scripts/triad/task_finish.sh` (strict only), using:
   - `.taskmeta.json created_from_sha` baseline,
@@ -170,7 +170,7 @@ Engineers and agents running triads need a deterministic “unplanned touches”
   - `docs/project_management/system/scripts/planning/lint.ps1`
   - add a step: `python3 docs/project_management/system/scripts/planning/validate_impact_map.py --feature-dir ...`
   - validator is responsible for gating strict vs legacy via tasks.json
-- Modify template: `docs/project_management/standards/templates/impact_map.md.tmpl`
+- Modify template: `docs/project_management/system/templates/planning_pack/impact_map.md.tmpl`
   - Touch Set sections become:
     - `- None` in each of the four sections
   - Add note: strict packs require ≥1 non-None entry and backticked paths
@@ -388,7 +388,7 @@ Tasks:
 
 ### WS-DOC — Standards + templates
 Touch surface:
-- `docs/project_management/standards/templates/impact_map.md.tmpl`
+- `docs/project_management/system/templates/planning_pack/impact_map.md.tmpl`
 - `docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md`
 
 Tasks:

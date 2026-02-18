@@ -136,7 +136,7 @@ Developer / planning-pack author + quality gate reviewer — wants planning lint
 **Outcome**: Canonical v2 template exists.
 
 **Inputs/outputs**
-- Outputs: `docs/project_management/standards/templates/slice_spec.v2.md.tmpl`
+- Outputs: `docs/project_management/system/templates/planning_pack/slice_spec.v2.md.tmpl`
 
 **Acceptance criteria**
 - [ ] Contains required v2 headers and `[[FILL]]` markers.
@@ -192,7 +192,7 @@ Developer / planning-pack author + quality gate reviewer — wants planning lint
 
 **Inputs/outputs**
 - Outputs:
-  - `docs/project_management/standards/templates/ci_checkpoint_plan.md.tmpl`
+  - `docs/project_management/system/templates/planning_pack/ci_checkpoint_plan.md.tmpl`
   - `docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md`
   - `docs/project_management/standards/PLANNING_README.md`
   - `docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md`
@@ -305,4 +305,3 @@ Developer / planning-pack author + quality gate reviewer — wants planning lint
 
 **Touch surface**
 - Cross-cutting verification: run `make planning-lint` on (a) legacy pack, (b) new v2 pack, (c) migrated pack; final grep for stale 2–4 references.
-

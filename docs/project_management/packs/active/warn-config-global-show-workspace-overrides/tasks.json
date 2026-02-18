@@ -42,7 +42,7 @@
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/ci_checkpoint_plan.md",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/manual_testing_playbook.md",
         "docs/project_management/adrs/draft/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md",
-        "docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md"
+        "docs/project_management/system/standards/execution/EXECUTION_PREFLIGHT_GATE_STANDARD.md"
       ],
       "acceptance_criteria": [
         "Execution preflight gate report is completed with a clear recommendation.",
@@ -248,7 +248,7 @@
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/smoke/linux-smoke.sh",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/smoke/macos-smoke.sh",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/smoke/windows-smoke.ps1",
-        "docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md"
+        "docs/project_management/system/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md"
       ],
       "acceptance_criteria": [
         "CI audit ledger is created/updated for the checkpoint.",
@@ -486,7 +486,7 @@
         "Run relevant tests",
         "make integ-checks",
         "Re-run behavioral smoke via CI: scripts/ci/dispatch_feature_smoke.sh --feature-dir \"docs/project_management/packs/active/warn-config-global-show-workspace-overrides\" --runner-kind self-hosted --workflow-ref \"feat/warn-config-global-show-workspace-overrides\" --platform all --cleanup",
-        "Complete slice closeout gate report: docs/project_management/packs/active/warn-config-global-show-workspace-overrides/C0-closeout_report.md",
+        "Complete slice closeout gate report: docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/C0-closeout_report.md",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C0-integ\"",
         "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
       ],

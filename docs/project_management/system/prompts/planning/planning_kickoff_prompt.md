@@ -38,10 +38,12 @@ Required deliverables (must create or update):
    - `<FEATURE_DIR>/tasks.json`
    - `<FEATURE_DIR>/session_log.md` (START/END entries only)
    - Specs: the exact spec docs listed in `spec_manifest.md` (no extras, no missing docs)
-   - Kickoff prompts: `<FEATURE_DIR>/kickoff_prompts/*-{code,test,integ}.md`
+   - Kickoff prompts:
+     - Slice tasks: `<FEATURE_DIR>/slices/<SLICE_ID>/kickoff_prompts/<task-id>.md`
+     - Feature/ops tasks: `<FEATURE_DIR>/kickoff_prompts/<task-id>.md` (e.g., `F0-exec-preflight.md`, `CP1-ci-checkpoint.md`)
 	   - Execution gates (recommended; scaffolded by `make planning-new-feature` / `make planning-new-feature-ps`):
 	     - `<FEATURE_DIR>/execution_preflight_report.md`
-	     - `<FEATURE_DIR>/<SLICE_ID>-closeout_report.md` (e.g., `WCU0-closeout_report.md`)
+	     - `<FEATURE_DIR>/slices/<SLICE_ID>/<SLICE_ID>-closeout_report.md`
 		   - If you want to use triad execution automation (task runner/finisher + feature cleanup), scaffold with `AUTOMATION=1`:
 		     - `make planning-new-feature FEATURE=<feature> AUTOMATION=1`
 		     - `make planning-new-feature-ps FEATURE=<feature> AUTOMATION=1`

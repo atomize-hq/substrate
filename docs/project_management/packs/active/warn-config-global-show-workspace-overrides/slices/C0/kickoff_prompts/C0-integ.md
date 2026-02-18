@@ -2,8 +2,8 @@
 
 ## Scope
 - Merge platform-fix branches (if any) and finalize the slice with a clean, auditable cross-platform green state.
-- Spec: `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/C0-spec.md`
-- Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+- Spec: `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/C0-spec.md`
+- Execution workflow standard: `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 - This task is responsible for merging back to the orchestration branch after all platforms are green (fast-forward when possible; otherwise a merge commit, preserving the orchestration branch’s Planning Pack files under the feature dir).
 
 ## Start Checklist
@@ -55,7 +55,7 @@ After any CI dispatch completes, record evidence (recommended):
       - `SMOKE_SLICE_ID` is optional; when provided, the workflow exports `SUBSTRATE_SMOKE_SLICE_ID` for slice-scoped smoke scripts.
       - If WSL coverage is required for this feature, add `RUN_WSL=1`.
 - Complete the slice closeout gate report:
-  - `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/<SLICE>-closeout_report.md` (e.g., `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/C0-closeout_report.md`)
+  - `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/C0-closeout_report.md`
 
 ## End Checklist
 1. Ensure all required platforms are green (include run ids/URLs).

@@ -3,7 +3,7 @@
 This file enumerates every contract surface for this feature and assigns each surface to exactly one authoritative document.
 
 Authoring standard:
-- `docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md`
+- `docs/project_management/system/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`
 
 ## Inputs
 - Feature directory: `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/`
@@ -13,7 +13,7 @@ Authoring standard:
 ## Required spec documents (authoritative)
 
 Spec templates:
-- `docs/project_management/standards/templates/spec/`
+- `docs/project_management/system/templates/spec/`
 
 - `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/spec_manifest.md` — spec selection + ownership map (this file)
 - `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/impact_map.md` — touch set + cascading implications + cross-queue scan

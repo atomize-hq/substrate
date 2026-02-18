@@ -1,12 +1,14 @@
-param(
-    [Parameter(Mandatory = $true)]
-    [string]$Feature,
-    [string]$SlicePrefix = "",
-    [switch]$DecisionHeavy,
-    [switch]$CrossPlatform,
-    [string]$BehaviorPlatforms = "",
-    [string]$CiParityPlatforms = "",
-    [switch]$WslRequired,
+	param(
+	    [Parameter(Mandatory = $true)]
+	    [string]$Feature,
+	    [string]$SlicePrefix = "",
+	    [switch]$SliceDirs,
+	    [switch]$FlatSliceFiles,
+	    [switch]$DecisionHeavy,
+	    [switch]$CrossPlatform,
+	    [string]$BehaviorPlatforms = "",
+	    [string]$CiParityPlatforms = "",
+	    [switch]$WslRequired,
     [switch]$WslSeparate,
     [switch]$Automation
 )
@@ -81,11 +83,27 @@ if ($slicePrefixResolved -notmatch '^[A-Za-z][A-Za-z0-9]*$') {
     throw "Invalid -SlicePrefix: $slicePrefixResolved (expected alnum, starting with a letter)"
 }
 
-$script:SlicePrefix = $slicePrefixResolved
-$script:SliceId = "$slicePrefixResolved" + "0"
-$script:SliceIdLower = $script:SliceId.ToLowerInvariant()
-$script:SliceSpecFile = "$($script:SliceId)-spec.md"
-$script:SliceCloseoutFile = "$($script:SliceId)-closeout_report.md"
+	$script:SlicePrefix = $slicePrefixResolved
+	$script:SliceId = "$slicePrefixResolved" + "0"
+	$script:SliceIdLower = $script:SliceId.ToLowerInvariant()
+
+	$useSliceDirs = $true
+	if ($FlatSliceFiles.IsPresent) { $useSliceDirs = $false }
+	if ($SliceDirs.IsPresent) { $useSliceDirs = $true }
+
+		$sliceSpecRelFs = if ($useSliceDirs) { Join-Path (Join-Path "slices" $script:SliceId) "$($script:SliceId)-spec.md" } else { "$($script:SliceId)-spec.md" }
+		$sliceCloseoutRelFs = if ($useSliceDirs) { Join-Path (Join-Path "slices" $script:SliceId) "$($script:SliceId)-closeout_report.md" } else { "$($script:SliceId)-closeout_report.md" }
+		$script:SliceSpecRel = ($sliceSpecRelFs -replace '\\', '/')
+		$script:SliceCloseoutRel = ($sliceCloseoutRelFs -replace '\\', '/')
+		$script:SliceSpecPath = "$featureDir/$($script:SliceSpecRel)"
+		$script:SliceCloseoutPath = "$featureDir/$($script:SliceCloseoutRel)"
+		$script:UseSliceDirs = $useSliceDirs
+		$sliceKickoffRelFs = if ($useSliceDirs) { Join-Path (Join-Path "slices" $script:SliceId) "kickoff_prompts" } else { "kickoff_prompts" }
+		$script:SliceKickoffRel = ($sliceKickoffRelFs -replace '\\', '/')
+		$script:SliceKickoffDir = (Join-Path $featureDir $sliceKickoffRelFs)
+		$script:SliceKickoffPath = "$featureDir/$($script:SliceKickoffRel)"
+		$script:FeatureKickoffDir = (Join-Path $featureDir "kickoff_prompts")
+		$script:FeatureKickoffPath = "$featureDir/kickoff_prompts"
 
 function Render-Template([string]$TemplatePath, [string]$OutPath, [hashtable]$Vars) {
     $text = Get-Content -LiteralPath $TemplatePath -Raw
@@ -96,22 +114,27 @@ function Render-Template([string]$TemplatePath, [string]$OutPath, [hashtable]$Va
     Set-Content -LiteralPath $OutPath -Value $text -NoNewline
 }
 
-$vars = @{
-    FEATURE     = $Feature
-    FEATURE_DIR = $featureDir
-    NOW_UTC     = $nowUtc
-    ORCH_BRANCH = "feat/$Feature"
-    SLICE_PREFIX = $script:SlicePrefix
-    SLICE_ID     = $script:SliceId
-}
+		$vars = @{
+		    FEATURE     = $Feature
+		    FEATURE_DIR = $featureDir
+		    NOW_UTC     = $nowUtc
+		    ORCH_BRANCH = "feat/$Feature"
+		    SLICE_PREFIX = $script:SlicePrefix
+		    SLICE_ID     = $script:SliceId
+		    SPEC_FILE    = $script:SliceSpecRel
+		    CLOSEOUT_FILE = $script:SliceCloseoutRel
+		}
 
-New-Item -ItemType Directory -Force -Path (Join-Path $featureDir "kickoff_prompts") | Out-Null
+	New-Item -ItemType Directory -Force -Path (Join-Path $featureDir "kickoff_prompts") | Out-Null
+	if ($useSliceDirs) {
+	    New-Item -ItemType Directory -Force -Path $script:SliceKickoffDir | Out-Null
+	}
 
 Render-Template (Join-Path $planningTemplatesDir "plan.md.tmpl") (Join-Path $featureDir "plan.md") $vars
 Render-Template (Join-Path $planningTemplatesDir "session_log.md.tmpl") (Join-Path $featureDir "session_log.md") $vars
 Render-Template (Join-Path $planningTemplatesDir "contract.md.tmpl") (Join-Path $featureDir "contract.md") $vars
-Render-Template (Join-Path $planningTemplatesDir "spec_manifest.md.tmpl") (Join-Path $featureDir "spec_manifest.md") $vars
-Render-Template (Join-Path $planningTemplatesDir "impact_map.md.tmpl") (Join-Path $featureDir "impact_map.md") $vars
+	Render-Template (Join-Path $planningTemplatesDir "spec_manifest.md.tmpl") (Join-Path $featureDir "spec_manifest.md") $vars
+	Render-Template (Join-Path $planningTemplatesDir "impact_map.md.tmpl") (Join-Path $featureDir "impact_map.md") $vars
 if ($CrossPlatform.IsPresent -and $Automation.IsPresent) {
     Render-Template (Join-Path $planningTemplatesDir "ci_checkpoint_plan.md.tmpl") (Join-Path $featureDir "ci_checkpoint_plan.md") $vars
 }
@@ -122,12 +145,12 @@ if ($CrossPlatform.IsPresent -and $Automation.IsPresent) {
     Render-Template (Join-Path $kickoffTemplatesDir "kickoff_ci_checkpoint.md.tmpl") (Join-Path $featureDir "kickoff_prompts/CP1-ci-checkpoint.md") $varsCp1
 }
 
-Render-Template (Join-Path $planningTemplatesDir "slice_spec.v2.md.tmpl") (Join-Path $featureDir $script:SliceSpecFile) $vars
+	Render-Template (Join-Path $planningTemplatesDir "slice_spec.v2.md.tmpl") (Join-Path $featureDir $sliceSpecRelFs) $vars
 
-function New-TaskBase([string]$Id, [string]$Name, [string]$Type, [string]$Description) {
-    $refs = @("$featureDir/plan.md", "$featureDir/spec_manifest.md", "$featureDir/impact_map.md", "$featureDir/$($script:SliceSpecFile)")
+	function New-TaskBase([string]$Id, [string]$Name, [string]$Type, [string]$Description) {
+		    $refs = @("$featureDir/plan.md", "$featureDir/spec_manifest.md", "$featureDir/impact_map.md", $script:SliceSpecPath)
     if ($CrossPlatform.IsPresent -and $Automation.IsPresent) {
-        $refs = @("$featureDir/plan.md", "$featureDir/spec_manifest.md", "$featureDir/impact_map.md", "$featureDir/ci_checkpoint_plan.md", "$featureDir/$($script:SliceSpecFile)")
+	        $refs = @("$featureDir/plan.md", "$featureDir/spec_manifest.md", "$featureDir/impact_map.md", "$featureDir/ci_checkpoint_plan.md", $script:SliceSpecPath)
     }
     return @{
         id                 = $Id
@@ -139,16 +162,16 @@ function New-TaskBase([string]$Id, [string]$Name, [string]$Type, [string]$Descri
         references         = $refs
         acceptance_criteria = @()
         start_checklist    = @()
-        end_checklist      = @()
-        worktree           = $null
-        integration_task   = $null
-        kickoff_prompt     = "$featureDir/kickoff_prompts/$Id.md"
-        depends_on         = @()
-        concurrent_with    = @()
-        git_branch         = $null
-        required_make_targets = $null
-    }
-}
+	        end_checklist      = @()
+	        worktree           = $null
+	        integration_task   = $null
+	        kickoff_prompt     = "$($script:SliceKickoffPath)/$Id.md"
+	        depends_on         = @()
+	        concurrent_with    = @()
+	        git_branch         = $null
+	        required_make_targets = $null
+	    }
+	}
 
 $allowedRequiredPlatforms = @("linux", "macos", "windows")
 
@@ -254,10 +277,10 @@ $seedAcIds = @("AC-$($script:SliceId)-01", "AC-$($script:SliceId)-02", "AC-$($sc
 
 $code = New-TaskBase $codeId "$($script:SliceId) slice (code)" "code" "Implement $($script:SliceId) spec (production code only)."
 $code.ac_ids = $seedAcIds
-$code.acceptance_criteria = @("Implements the behaviors required by ac_ids (see $($script:SliceSpecFile))")
+	$code.acceptance_criteria = @("Implements the behaviors required by ac_ids (see $($script:SliceSpecRel))")
 $code.start_checklist = @(
     "git checkout feat/$Feature && git pull --ff-only",
-    "Read plan.md, tasks.json, session_log.md, $($script:SliceSpecFile), kickoff prompt",
+	    "Read plan.md, tasks.json, session_log.md, $($script:SliceSpecRel), kickoff prompt",
     "Set status to in_progress; add START entry; commit docs",
     $(if ($Automation.IsPresent) { "Run: make triad-task-start-pair FEATURE_DIR=`"$featureDir`" SLICE_ID=`"$($script:SliceId)`"" } else { "Run: git worktree add -b $($script:SliceIdLower)-code wt/$Feature-$($script:SliceIdLower)-code feat/$Feature" })
 )
@@ -271,17 +294,17 @@ $code.worktree = "wt/$Feature-$($script:SliceIdLower)-code"
 $code.git_branch = if ($Automation.IsPresent) { "$Feature-$($script:SliceIdLower)-code" } else { "$($script:SliceIdLower)-code" }
 $code.required_make_targets = if ($Automation.IsPresent) { @("triad-code-checks") } else { $null }
 $code.integration_task = if ($CrossPlatform.IsPresent) { $integCoreId } else { $integId }
-$code.kickoff_prompt = "$featureDir/kickoff_prompts/$codeId.md"
+	$code.kickoff_prompt = "$($script:SliceKickoffPath)/$codeId.md"
 $code.depends_on = @("F0-exec-preflight")
 $code.concurrent_with = @($testId)
 $tasks += $code
 
 $test = New-TaskBase $testId "$($script:SliceId) slice (test)" "test" "Add/modify tests for $($script:SliceId) spec (tests only)."
 $test.ac_ids = $seedAcIds
-$test.acceptance_criteria = @("Tests enforce the behaviors required by ac_ids (see $($script:SliceSpecFile))")
+	$test.acceptance_criteria = @("Tests enforce the behaviors required by ac_ids (see $($script:SliceSpecRel))")
 $test.start_checklist = @(
     "git checkout feat/$Feature && git pull --ff-only",
-    "Read plan.md, tasks.json, session_log.md, $($script:SliceSpecFile), kickoff prompt",
+	    "Read plan.md, tasks.json, session_log.md, $($script:SliceSpecRel), kickoff prompt",
     "Set status to in_progress; add START entry; commit docs",
     $(if ($Automation.IsPresent) { "Run: make triad-task-start-pair FEATURE_DIR=`"$featureDir`" SLICE_ID=`"$($script:SliceId)`"" } else { "Run: git worktree add -b $($script:SliceIdLower)-test wt/$Feature-$($script:SliceIdLower)-test feat/$Feature" })
 )
@@ -295,7 +318,7 @@ $test.worktree = "wt/$Feature-$($script:SliceIdLower)-test"
 $test.git_branch = if ($Automation.IsPresent) { "$Feature-$($script:SliceIdLower)-test" } else { "$($script:SliceIdLower)-test" }
 $test.required_make_targets = if ($Automation.IsPresent) { @("triad-test-checks") } else { $null }
 $test.integration_task = if ($CrossPlatform.IsPresent) { $integCoreId } else { $integId }
-$test.kickoff_prompt = "$featureDir/kickoff_prompts/$testId.md"
+	$test.kickoff_prompt = "$($script:SliceKickoffPath)/$testId.md"
 $test.depends_on = @("F0-exec-preflight")
 $test.concurrent_with = @($codeId)
 $tasks += $test
@@ -313,7 +336,7 @@ if ($CrossPlatform.IsPresent) {
     }
     $core.start_checklist = @(
         "git checkout feat/$Feature && git pull --ff-only",
-        "Read plan.md, tasks.json, session_log.md, $($script:SliceSpecFile), kickoff prompt",
+	        "Read plan.md, tasks.json, session_log.md, $($script:SliceSpecRel), kickoff prompt",
         "Set status to in_progress; add START entry; commit docs",
         $(if ($Automation.IsPresent) { "Run: make triad-task-start FEATURE_DIR=`"$featureDir`" TASK_ID=`"$integCoreId`"" } else { "Run: git worktree add -b $($script:SliceIdLower)-integ-core wt/$Feature-$($script:SliceIdLower)-integ-core feat/$Feature" })
     )
@@ -331,7 +354,7 @@ if ($CrossPlatform.IsPresent) {
     $core.git_branch = if ($Automation.IsPresent) { "$Feature-$($script:SliceIdLower)-integ-core" } else { "$($script:SliceIdLower)-integ-core" }
     $core.required_make_targets = if ($Automation.IsPresent) { @("integ-checks") } else { $null }
     $core.merge_to_orchestration = if ($Automation.IsPresent) { $false } else { $null }
-    $core.kickoff_prompt = "$featureDir/kickoff_prompts/$integCoreId.md"
+	    $core.kickoff_prompt = "$($script:SliceKickoffPath)/$integCoreId.md"
     $core.depends_on = @($codeId, $testId)
     $tasks += $core
 
@@ -385,7 +408,7 @@ if ($CrossPlatform.IsPresent) {
         $t.start_checklist = @(
             "Run on $platform host if possible",
             "git checkout feat/$Feature && git pull --ff-only",
-            "Read plan.md, tasks.json, session_log.md, $($script:SliceSpecFile), kickoff prompt",
+	            "Read plan.md, tasks.json, session_log.md, $($script:SliceSpecRel), kickoff prompt",
             "Set status to in_progress; add START entry; commit docs",
             $(if ($Automation.IsPresent) { "Run: make triad-task-start FEATURE_DIR=`"$featureDir`" TASK_ID=`"$id`"" } else { "Run: git worktree add -b $($script:SliceIdLower)-integ-$platform wt/$Feature-$($script:SliceIdLower)-integ-$platform feat/$Feature" })
         )
@@ -400,7 +423,7 @@ if ($CrossPlatform.IsPresent) {
         $t.git_branch = if ($Automation.IsPresent) { "$Feature-$($script:SliceIdLower)-integ-$platform" } else { "$($script:SliceIdLower)-integ-$platform" }
         $t.required_make_targets = if ($Automation.IsPresent) { @("triad-code-checks") } else { $null }
         $t.merge_to_orchestration = if ($Automation.IsPresent) { $false } else { $null }
-        $t.kickoff_prompt = "$featureDir/kickoff_prompts/$id.md"
+	        $t.kickoff_prompt = "$($script:SliceKickoffPath)/$id.md"
         $t.depends_on = @($integCoreId)
         $t.platform = $platform
         $t.runner = "github-actions"
@@ -411,7 +434,7 @@ if ($CrossPlatform.IsPresent) {
     $final = New-TaskBase $integId "$($script:SliceId) slice (integration final)" "integration" "Final integration: merge any platform fixes, complete slice closeout, and confirm checkpoint evidence is recorded."
     $final.integration_task = $integId
     $final.ac_ids = $seedAcIds
-    $final.acceptance_criteria = @("Slice closeout report completed and local integration gates are green (implements behaviors required by ac_ids; see $($script:SliceSpecFile))")
+	    $final.acceptance_criteria = @("Slice closeout report completed and local integration gates are green (implements behaviors required by ac_ids; see $($script:SliceSpecRel))")
     foreach ($p in $behaviorPlatformsList) {
         switch ($p) {
             "linux" { $final.references += @("$featureDir/smoke/linux-smoke.sh") }
@@ -419,10 +442,10 @@ if ($CrossPlatform.IsPresent) {
             "windows" { $final.references += @("$featureDir/smoke/windows-smoke.ps1") }
         }
     }
-    $final.references += @("$featureDir/$($script:SliceCloseoutFile)")
+	    $final.references += @($script:SliceCloseoutPath)
     $final.start_checklist = @(
         "git checkout feat/$Feature && git pull --ff-only",
-        "Read plan.md, tasks.json, session_log.md, $($script:SliceSpecFile), kickoff prompt",
+	        "Read plan.md, tasks.json, session_log.md, $($script:SliceSpecRel), kickoff prompt",
         "Set status to in_progress; add START entry; commit docs",
         $(if ($Automation.IsPresent) { "Run: make triad-task-start FEATURE_DIR=`"$featureDir`" TASK_ID=`"$integId`"" } else { "Run: git worktree add -b $($script:SliceIdLower)-integ wt/$Feature-$($script:SliceIdLower)-integ feat/$Feature" })
     )
@@ -434,7 +457,7 @@ if ($CrossPlatform.IsPresent) {
         "make integ-checks"
     ) + @(
         "Confirm required CI checkpoint tasks that cover this slice are completed and recorded in $featureDir/session_log.md",
-        "Complete slice closeout gate report: $featureDir/$($script:SliceCloseoutFile)",
+	        "Complete slice closeout gate report: $($script:SliceCloseoutPath)",
         $(if ($Automation.IsPresent) { "From inside the worktree: make triad-task-finish TASK_ID=`"$integId`"" } else { "From inside the worktree: git add -A && git commit -m `"integ: $Feature $integId`"" }),
         $(if ($Automation.IsPresent) { "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)" } else { "Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/$Feature-$($script:SliceIdLower)-integ (per plan.md)" })
     )
@@ -442,7 +465,7 @@ if ($CrossPlatform.IsPresent) {
     $final.git_branch = if ($Automation.IsPresent) { "$Feature-$($script:SliceIdLower)-integ" } else { "$($script:SliceIdLower)-integ" }
     $final.required_make_targets = if ($Automation.IsPresent) { @("integ-checks") } else { $null }
     $final.merge_to_orchestration = if ($Automation.IsPresent) { $true } else { $null }
-    $final.kickoff_prompt = "$featureDir/kickoff_prompts/$integId.md"
+	    $final.kickoff_prompt = "$($script:SliceKickoffPath)/$integId.md"
     $final.depends_on = @($integCoreId) + ($platforms | ForEach-Object { "$($script:SliceId)-integ-$_" })
     $tasks += $final
 
@@ -482,11 +505,11 @@ if ($CrossPlatform.IsPresent) {
     $integ = New-TaskBase $integId "$($script:SliceId) slice (integration)" "integration" "Integrate $($script:SliceId) code+tests, reconcile to spec, and run integration gate."
     $integ.integration_task = $integId
     $integ.ac_ids = $seedAcIds
-    $integ.acceptance_criteria = @("Slice is green under make integ-checks and implements behaviors required by ac_ids (see $($script:SliceSpecFile))")
-    $integ.references += @("$featureDir/$($script:SliceCloseoutFile)")
+	    $integ.acceptance_criteria = @("Slice is green under make integ-checks and implements behaviors required by ac_ids (see $($script:SliceSpecRel))")
+	    $integ.references += @($script:SliceCloseoutPath)
     $integ.start_checklist = @(
         "git checkout feat/$Feature && git pull --ff-only",
-        "Read plan.md, tasks.json, session_log.md, $($script:SliceSpecFile), kickoff prompt",
+	        "Read plan.md, tasks.json, session_log.md, $($script:SliceSpecRel), kickoff prompt",
         "Set status to in_progress; add START entry; commit docs",
         $(if ($Automation.IsPresent) { "Run: make triad-task-start FEATURE_DIR=`"$featureDir`" TASK_ID=`"$integId`"" } else { "Run: git worktree add -b $($script:SliceIdLower)-integ wt/$Feature-$($script:SliceIdLower)-integ feat/$Feature" })
     )
@@ -495,7 +518,7 @@ if ($CrossPlatform.IsPresent) {
         "cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant tests",
         "make integ-checks",
-        "Complete slice closeout gate report: $featureDir/$($script:SliceCloseoutFile)",
+	        "Complete slice closeout gate report: $($script:SliceCloseoutPath)",
         $(if ($Automation.IsPresent) { "From inside the worktree: make triad-task-finish TASK_ID=`"$integId`"" } else { "From inside the worktree: git add -A && git commit -m `"integ: $Feature $integId`"" }),
         $(if ($Automation.IsPresent) { "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)" } else { "Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/$Feature-$($script:SliceIdLower)-integ (per plan.md)" })
     )
@@ -503,7 +526,7 @@ if ($CrossPlatform.IsPresent) {
     $integ.git_branch = if ($Automation.IsPresent) { "$Feature-$($script:SliceIdLower)-integ" } else { "$($script:SliceIdLower)-integ" }
     $integ.required_make_targets = if ($Automation.IsPresent) { @("integ-checks") } else { $null }
     $integ.merge_to_orchestration = if ($Automation.IsPresent) { $true } else { $null }
-    $integ.kickoff_prompt = "$featureDir/kickoff_prompts/$integId.md"
+	    $integ.kickoff_prompt = "$($script:SliceKickoffPath)/$integId.md"
     $integ.depends_on = @($codeId, $testId)
     $tasks += $integ
 }
@@ -549,54 +572,56 @@ Render-Template (Join-Path $planningTemplatesDir "execution_preflight_report.md.
 
 $varsCloseout = $vars.Clone()
 $varsCloseout["SLICE_ID"] = $script:SliceId
-$varsCloseout["SPEC_FILE"] = $script:SliceSpecFile
-Render-Template (Join-Path $planningTemplatesDir "slice_closeout_report.md.tmpl") (Join-Path $featureDir $script:SliceCloseoutFile) $varsCloseout
+	$varsCloseout["SPEC_FILE"] = $script:SliceSpecRel
+	Render-Template (Join-Path $planningTemplatesDir "slice_closeout_report.md.tmpl") (Join-Path $featureDir $sliceCloseoutRelFs) $varsCloseout
 
 <# Legacy tasks.json generator removed (kept for history). #>
 
-function Render-Kickoff([string]$Template, [string]$OutFile, [string]$TaskId, [string]$Branch, [string]$Worktree, [string]$Platform = "") {
-    $vars2 = $vars.Clone()
-    $vars2["TASK_ID"] = $TaskId
-    $vars2["SPEC_FILE"] = $script:SliceSpecFile
-    $vars2["BRANCH"] = $Branch
-    $vars2["WORKTREE"] = $Worktree
-    $vars2["PLATFORM"] = $Platform
-    Render-Template (Join-Path $kickoffTemplatesDir $Template) (Join-Path $featureDir "kickoff_prompts/$OutFile") $vars2
-}
+		function Render-Kickoff([string]$Template, [string]$OutFile, [string]$TaskId, [string]$Branch, [string]$Worktree, [string]$Platform = "", [switch]$SliceLocal) {
+		    $vars2 = $vars.Clone()
+		    $vars2["TASK_ID"] = $TaskId
+			    $vars2["SPEC_FILE"] = $script:SliceSpecRel
+		    $vars2["CLOSEOUT_FILE"] = $script:SliceCloseoutRel
+		    $vars2["BRANCH"] = $Branch
+		    $vars2["WORKTREE"] = $Worktree
+		    $vars2["PLATFORM"] = $Platform
+		    $destDir = if ($SliceLocal.IsPresent -and $script:UseSliceDirs) { $script:SliceKickoffDir } else { $script:FeatureKickoffDir }
+		    Render-Template (Join-Path $kickoffTemplatesDir $Template) (Join-Path $destDir $OutFile) $vars2
+		}
 
 $sliceCodeBranch = if ($Automation.IsPresent) { "$Feature-$($script:SliceIdLower)-code" } else { "$($script:SliceIdLower)-code" }
 $sliceTestBranch = if ($Automation.IsPresent) { "$Feature-$($script:SliceIdLower)-test" } else { "$($script:SliceIdLower)-test" }
 $sliceIntegBranch = if ($Automation.IsPresent) { "$Feature-$($script:SliceIdLower)-integ" } else { "$($script:SliceIdLower)-integ" }
 $sliceIntegCoreBranch = if ($Automation.IsPresent) { "$Feature-$($script:SliceIdLower)-integ-core" } else { "$($script:SliceIdLower)-integ-core" }
 
-Render-Kickoff "kickoff_code.md.tmpl" "$codeId.md" $codeId $sliceCodeBranch "wt/$Feature-$($script:SliceIdLower)-code"
-Render-Kickoff "kickoff_test.md.tmpl" "$testId.md" $testId $sliceTestBranch "wt/$Feature-$($script:SliceIdLower)-test"
-Render-Kickoff "kickoff_exec_preflight.md.tmpl" "F0-exec-preflight.md" "F0-exec-preflight" "" "" ""
-if ($Automation.IsPresent) {
-    Render-Kickoff "kickoff_feature_cleanup.md.tmpl" "FZ-feature-cleanup.md" "FZ-feature-cleanup" "" "" ""
-}
-if ($CrossPlatform.IsPresent) {
-    Render-Kickoff "kickoff_integ_core.md.tmpl" "$integCoreId.md" $integCoreId $sliceIntegCoreBranch "wt/$Feature-$($script:SliceIdLower)-integ-core"
-    foreach ($p in $ciParityPlatformsList) {
-        $p = $p.Trim()
-        if (-not $p) { continue }
-        $branch = if ($Automation.IsPresent) { "$Feature-$($script:SliceIdLower)-integ-$p" } else { "$($script:SliceIdLower)-integ-$p" }
-        $taskId = "$($script:SliceId)-integ-$p"
-        Render-Kickoff "kickoff_integ_platform.md.tmpl" "$taskId.md" $taskId $branch "wt/$Feature-$($script:SliceIdLower)-integ-$p" $p
-    }
-    if ($WslRequired.IsPresent -and $WslSeparate.IsPresent) {
-        $wslBranch = if ($Automation.IsPresent) { "$Feature-$($script:SliceIdLower)-integ-wsl" } else { "$($script:SliceIdLower)-integ-wsl" }
-        $wslTaskId = "$($script:SliceId)-integ-wsl"
-        Render-Kickoff "kickoff_integ_platform.md.tmpl" "$wslTaskId.md" $wslTaskId $wslBranch "wt/$Feature-$($script:SliceIdLower)-integ-wsl" "wsl"
-    }
-    Render-Kickoff "kickoff_integ_final.md.tmpl" "$integId.md" $integId $sliceIntegBranch "wt/$Feature-$($script:SliceIdLower)-integ"
-} else {
-    Render-Kickoff "kickoff_integ.md.tmpl" "$integId.md" $integId $sliceIntegBranch "wt/$Feature-$($script:SliceIdLower)-integ"
-}
+	Render-Kickoff "kickoff_code.md.tmpl" "$codeId.md" $codeId $sliceCodeBranch "wt/$Feature-$($script:SliceIdLower)-code" -SliceLocal
+	Render-Kickoff "kickoff_test.md.tmpl" "$testId.md" $testId $sliceTestBranch "wt/$Feature-$($script:SliceIdLower)-test" -SliceLocal
+	Render-Kickoff "kickoff_exec_preflight.md.tmpl" "F0-exec-preflight.md" "F0-exec-preflight" "" "" ""
+	if ($Automation.IsPresent) {
+	    Render-Kickoff "kickoff_feature_cleanup.md.tmpl" "FZ-feature-cleanup.md" "FZ-feature-cleanup" "" "" ""
+	}
+	if ($CrossPlatform.IsPresent) {
+	    Render-Kickoff "kickoff_integ_core.md.tmpl" "$integCoreId.md" $integCoreId $sliceIntegCoreBranch "wt/$Feature-$($script:SliceIdLower)-integ-core" -SliceLocal
+	    foreach ($p in $ciParityPlatformsList) {
+	        $p = $p.Trim()
+	        if (-not $p) { continue }
+	        $branch = if ($Automation.IsPresent) { "$Feature-$($script:SliceIdLower)-integ-$p" } else { "$($script:SliceIdLower)-integ-$p" }
+	        $taskId = "$($script:SliceId)-integ-$p"
+	        Render-Kickoff "kickoff_integ_platform.md.tmpl" "$taskId.md" $taskId $branch "wt/$Feature-$($script:SliceIdLower)-integ-$p" $p -SliceLocal
+	    }
+	    if ($WslRequired.IsPresent -and $WslSeparate.IsPresent) {
+	        $wslBranch = if ($Automation.IsPresent) { "$Feature-$($script:SliceIdLower)-integ-wsl" } else { "$($script:SliceIdLower)-integ-wsl" }
+	        $wslTaskId = "$($script:SliceId)-integ-wsl"
+	        Render-Kickoff "kickoff_integ_platform.md.tmpl" "$wslTaskId.md" $wslTaskId $wslBranch "wt/$Feature-$($script:SliceIdLower)-integ-wsl" "wsl" -SliceLocal
+	    }
+	    Render-Kickoff "kickoff_integ_final.md.tmpl" "$integId.md" $integId $sliceIntegBranch "wt/$Feature-$($script:SliceIdLower)-integ" -SliceLocal
+	} else {
+	    Render-Kickoff "kickoff_integ.md.tmpl" "$integId.md" $integId $sliceIntegBranch "wt/$Feature-$($script:SliceIdLower)-integ" -SliceLocal
+	}
 
-		if ($DecisionHeavy.IsPresent -or $CrossPlatform.IsPresent) {
-		    "# Decision Register`n`nUse the template in:`n- `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`" |
-		        Set-Content -LiteralPath (Join-Path $featureDir "decision_register.md")
+			if ($DecisionHeavy.IsPresent -or $CrossPlatform.IsPresent) {
+			    "# Decision Register`n`nUse the template in:`n- `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`" |
+			        Set-Content -LiteralPath (Join-Path $featureDir "decision_register.md")
 
 		    if ($CrossPlatform.IsPresent) {
 		        $lines = @()

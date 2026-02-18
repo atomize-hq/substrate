@@ -634,7 +634,7 @@
       "sequence": [
         {
           "id": "C0",
-          "spec": "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/C0-spec.md"
+          "spec": "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/C0-spec.md"
         }
       ],
       "notes": [

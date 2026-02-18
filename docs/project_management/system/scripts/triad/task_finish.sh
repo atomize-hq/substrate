@@ -268,7 +268,7 @@ guard_no_planning_doc_edits() {
 
     while IFS= read -r p; do
         if is_planning_path "${p}"; then
-            die "Worktree contains untracked files under planning roots (${PM_NEXT_PREFIX} or ${PM_PACKS_PREFIX}): ${p} (do not edit planning docs inside the worktree; move these edits to the orchestration branch)"
+            die "Worktree contains untracked files under planning roots (${PM_PACKS_PREFIX}): ${p} (do not edit planning docs inside the worktree; move these edits to the orchestration branch)"
         fi
     done < <(git ls-files --others --exclude-standard)
 }

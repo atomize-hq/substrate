@@ -3,7 +3,7 @@
 Date (UTC): 2026-01-30T00:01:01Z
 
 Standard:
-- `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
+- `docs/project_management/system/standards/execution/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
 
 Feature directory:
 - `docs/project_management/packs/active/warn-config-global-show-workspace-overrides`

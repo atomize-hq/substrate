@@ -3,7 +3,7 @@
 This file defines when cross-platform CI gates run for this feature.
 
 Standard:
-- `docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md`
+- `docs/project_management/system/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md`
 
 ## Inputs
 - Feature directory: `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/`

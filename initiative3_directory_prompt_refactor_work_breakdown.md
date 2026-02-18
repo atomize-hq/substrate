@@ -231,7 +231,7 @@ Repo maintainers + engineers/agents running the planning/triad automation via `m
 - Outputs:
   - Copies of:
     - `docs/project_management/standards/**` → `docs/project_management/system/standards/**` (structure may change)
-    - `docs/project_management/standards/templates/**` → `docs/project_management/system/templates/**`
+    - `docs/project_management/system/templates/**` (canonical)
     - prompt files → `docs/project_management/system/prompts/**`
   - Link-only stubs left behind where appropriate (exact files listed in the spec).
 
