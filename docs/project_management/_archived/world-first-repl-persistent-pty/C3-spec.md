@@ -3,7 +3,7 @@
 This slice wires the interactive REPL to the persistent world session client and implements directive routing and lifecycle behavior. It does not implement the byte-safe Reedline rendering requirements; that is C4.
 
 Authoritative specs (do not diverge):
-- `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md` (interactive REPL user contract)
+- `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md` (interactive REPL user contract)
 - `docs/project_management/_archived/world-first-repl-persistent-pty/STATE_MACHINE.md` (host behavior, authoritative)
 - `docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md` (wire protocol, authoritative)
 - `docs/project_management/_archived/world-first-repl-persistent-pty/decision_register.md` (DR-04, DR-10, DR-11, DR-12, DR-13, DR-18, DR-19, DR-20)

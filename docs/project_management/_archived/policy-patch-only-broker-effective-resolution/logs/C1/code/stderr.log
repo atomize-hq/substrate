@@ -115,7 +115,7 @@ exec
 # C1-spec — Fail-closed Policy Resolution Across Execution Paths + Docs Alignment
 
 Authoritative ADR:
-- `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+- `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
 
 Exit codes:
 - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
@@ -139,7 +139,7 @@ exec
 ## Scope
 - Feature directory: `docs/project_management/next/policy-patch-only-broker-effective-resolution/`
 - Orchestration branch: `feat/policy-patch-only-broker-effective-resolution`
-- ADR: `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+- ADR: `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
 
 ## Goal
 - Make `policy.yaml` patch-only everywhere and make the broker the canonical resolver for the effective policy used by shell, shim, and world-agent execution paths.
@@ -161,9 +161,9 @@ exec
 - Branch: `testing`
 - Goal: Produce an execution-ready Planning Pack for ADR-0013 with zero ambiguity.
 - Inputs to read end-to-end:
-  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
-  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-  - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`

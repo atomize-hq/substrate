@@ -13,6 +13,15 @@ We want a macOS-first backend that:
 - Preserves *isolation strength comparable to our Linux setup* (at least VM-level isolation).
 - Enables **macOS guest worlds** (Apple Silicon only) for macOS tooling.
 - Preserves Substrate’s policy model: **command denies**, **read/write/discover** filesystem visibility, and **network egress controls**.
+
+## Executive Summary (Operator)
+
+ADR_BODY_SHA256: cda04e55d60fd283d44c13d7e21a0935b6b236047adfcaa90441360d653edd60
+
+- Existing: On macOS, Substrate worlds run inside a Linux VM via Lima; macOS-native toolchains cannot run in-world and macOS support depends on the Lima stack.
+- New: Add a macOS world backend based on Apple Virtualization.framework (VF), supporting VF-Linux and VF-macOS (Apple Silicon), with VF preferred on Apple Silicon and Lima retained as a fallback during rollout.
+- Why: Enables macOS toolchains inside Substrate worlds while reducing operational complexity and keeping isolation VM-backed.
+
 ## Decision
 Implement a new macOS backend based on **Apple Virtualization.framework** (“VF backend”) and make it the preferred backend on Apple Silicon. This backend supports two world “OS flavors”:
 1. **Linux guest world (VF-Linux):** Equivalent to today’s Lima approach, but using Virtualization.framework directly (reduces dependency on Lima).

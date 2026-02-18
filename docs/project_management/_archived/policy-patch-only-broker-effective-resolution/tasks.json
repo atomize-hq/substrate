@@ -63,7 +63,7 @@
       "status": "completed",
       "description": "Implement broker-canonical patch-only policy resolution and CLI delegation per C0 (production code only).",
       "references": [
-        "docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md",
+        "docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md",
         "docs/project_management/_archived/policy-patch-only-broker-effective-resolution/plan.md",
         "docs/project_management/_archived/policy-patch-only-broker-effective-resolution/tasks.json",
         "docs/project_management/_archived/policy-patch-only-broker-effective-resolution/session_log.md",
@@ -111,7 +111,7 @@
       "status": "completed",
       "description": "Add/modify tests for broker-canonical patch-only policy resolution and CLI delegation per C0 (tests only).",
       "references": [
-        "docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md",
+        "docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md",
         "docs/project_management/_archived/policy-patch-only-broker-effective-resolution/plan.md",
         "docs/project_management/_archived/policy-patch-only-broker-effective-resolution/tasks.json",
         "docs/project_management/_archived/policy-patch-only-broker-effective-resolution/session_log.md",
@@ -409,7 +409,7 @@
       "status": "completed",
       "description": "Implement fail-closed policy resolution across broker-dependent execution paths per C1 (production code only).",
       "references": [
-        "docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md",
+        "docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md",
         "docs/project_management/_archived/policy-patch-only-broker-effective-resolution/plan.md",
         "docs/project_management/_archived/policy-patch-only-broker-effective-resolution/tasks.json",
         "docs/project_management/_archived/policy-patch-only-broker-effective-resolution/session_log.md",
@@ -455,7 +455,7 @@
       "status": "completed",
       "description": "Add/modify tests for fail-closed policy resolution behavior per C1 (tests only).",
       "references": [
-        "docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md",
+        "docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md",
         "docs/project_management/_archived/policy-patch-only-broker-effective-resolution/plan.md",
         "docs/project_management/_archived/policy-patch-only-broker-effective-resolution/tasks.json",
         "docs/project_management/_archived/policy-patch-only-broker-effective-resolution/session_log.md",

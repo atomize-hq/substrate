@@ -67,7 +67,7 @@ jq -r '.sprints[] | select(.directory=="docs/project_management/_archived/policy
 ```
 
 ## Required Inputs Read End-to-End (checklist)
-- ADR(s): `YES` (`docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`, `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`)
+- ADR(s): `YES` (`docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`, `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`)
 - `plan.md`: `YES`
 - `tasks.json`: `YES`
 - `session_log.md`: `YES`
@@ -97,7 +97,7 @@ jq -r '.sprints[] | select(.directory=="docs/project_management/_archived/policy
 ### 3) Cross-doc consistency (CLI/config/exit codes/paths)
 - Result: `FAIL`
 - Evidence:
-  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md` (“Manual validation” section points to a different playbook/smoke location)
+  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md` (“Manual validation” section points to a different playbook/smoke location)
   - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md` (feature-local playbook + smoke list)
 - Notes: Validation pointers disagree (ADR vs feature pack), increasing the risk of running the wrong validation set.
 
@@ -177,10 +177,10 @@ jq -r '.sprints[] | select(.directory=="docs/project_management/_archived/policy
 ### Finding 006 — ADR-0013 validation pointers disagree with this feature’s playbook/smoke locations
 - Status: `DEFECT`
 - Evidence:
-  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md` (“Manual validation” / “Smoke scripts” point to `workspace-config-policy-unification/*`)
+  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md` (“Manual validation” / “Smoke scripts” point to `workspace-config-policy-unification/*`)
   - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md` (points to this feature’s `smoke/*`)
 - Impact: Validators may run the wrong smoke scripts, undermining cross-platform parity confidence and CI automation.
-- Fix required (exact): Update `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md` to reference this feature’s `manual_testing_playbook.md` and `smoke/*` paths (or explicitly state both are required and why).
+- Fix required (exact): Update `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md` to reference this feature’s `manual_testing_playbook.md` and `smoke/*` paths (or explicitly state both are required and why).
 - Alternative (one viable): If the intention is to centralize validation in the ADR-0008 feature directory, remove/redirect this feature’s playbook/smoke paths and point tasks.json to the centralized ones.
 
 ## Decision: ACCEPT or FLAG
@@ -246,7 +246,7 @@ make planning-lint FEATURE_DIR="$FEATURE_DIR"
 
 ### Finding 006 — ADR validation pointers match this feature’s playbook/smoke scripts
 - Status: `VERIFIED`
-- Evidence: `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md` (Validation Plan references this feature’s `manual_testing_playbook.md` and `smoke/*`)
+- Evidence: `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md` (Validation Plan references this feature’s `manual_testing_playbook.md` and `smoke/*`)
 - Impact: Operators/CI are pointed at the correct validation assets.
 - Fix required (exact): none
 

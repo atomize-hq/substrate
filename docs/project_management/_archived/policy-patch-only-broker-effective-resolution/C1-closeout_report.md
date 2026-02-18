@@ -19,7 +19,7 @@ Slice spec:
 - Why: ensure the broker is the single canonical resolver and prevent unsafe “defaults/host fallback” behavior when policy patches are malformed or unreadable.
 - Links:
   - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/C1-spec.md`
-  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
 
 ## Spec Parity (No Drift)
 

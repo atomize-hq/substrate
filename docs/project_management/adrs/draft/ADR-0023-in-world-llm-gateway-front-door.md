@@ -25,8 +25,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: f97329869256e14f8e3fc8594732d5a0d6d50085088baa59f116cdee2f67e0c9
-
+ADR_BODY_SHA256: e4484d14e3cfad79300a982b445f3dbbb04375c34023000505221aede57fa6da
 ### Changes (operator-facing)
 - Substrate-owned LLM gateway runs inside the world boundary
   - Existing: CLI agents and tooling may egress directly, or egress may transit a host-level proxy with unclear policy boundary.
@@ -116,7 +115,7 @@ Operational parameters (bind endpoints, logging destinations, metrics) are inten
 
 This ADR intentionally does not re-define correlation vocabulary or envelope semantics. All persisted records MUST explicitly defer to the Phase 8 spines:
 - Canonical correlation vocabulary + required/optional matrix: ADR-0028 (`docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`)
-- Structured event framing/routing attribution (envelope) when applicable: ADR-0017 (`docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`)
+- Structured event framing/routing attribution (envelope) when applicable: ADR-0017 (`docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`)
 
 Non-negotiable rules (Phase 8):
 - No heuristic correlation joins: the gateway/manager/engines MUST NOT guess or derive join keys from request bodies, prompt content, or transport details; they MUST either mint correlation ids or accept them from a trusted integration boundary (and otherwise omit them).

@@ -98,7 +98,7 @@ exec
 ## Scope
 - Feature directory: `docs/project_management/next/full-isolation-landlock-overlayfs-compat/`
 - Orchestration branch: `feat/full-isolation-landlock-overlayfs-compat`
-- ADR: `docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
+- ADR: `docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
 
 ## Goal
 - Restore `world_fs.write_allowlist` correctness in `world_fs.isolation=full` + `world_fs.mode=writable` on Linux when Landlock is supported and overlayfs is the active filesystem strategy.
@@ -152,7 +152,7 @@ exec
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
   - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
   - `docs/project_management/next/sequencing.json`
-  - `docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
+  - `docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
 - Commands planned (if any):
   - `make planning-new-feature FEATURE=full-isolation-landlock-overlayfs-compat DECISION_HEAVY=1 CROSS_PLATFORM=1 AUTOMATION=1 BEHAVIOR_PLATFORMS=linux CI_PARITY_PLATFORMS=linux,macos,windows`
   - `python3 scripts/planning/validate_tasks_json.py --feature-dir "docs/project_management/next/full-isolation-landlock-overlayfs-compat"`
@@ -162,7 +162,7 @@ exec
 # C0-spec — Full isolation Landlock ↔ OverlayFS backing dirs allowlist
 
 Authoritative ADR:
-- `docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
+- `docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
 
 Exit codes:
 - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`

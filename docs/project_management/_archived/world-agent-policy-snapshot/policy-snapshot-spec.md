@@ -4,8 +4,8 @@ Related decisions (authoritative):
 - `docs/project_management/_archived/world-agent-policy-snapshot/decision_register.md` (DR-0001..DR-0011)
 
 Related architecture docs:
-- `docs/project_management/next/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
-- `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md`
+- `docs/project_management/adrs/implemented/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
+- `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
 - `docs/WORLD.md`
 - `docs/TRACE.md`
 

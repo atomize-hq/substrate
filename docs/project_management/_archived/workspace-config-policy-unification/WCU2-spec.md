@@ -1,8 +1,8 @@
 # WCU2 Spec — Patch parsing + merge (ADR-0008) + per-key merge strategies (ADR-0012 Phase A)
 
 References:
-- `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-- `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+- `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 - `docs/project_management/_archived/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
 - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 

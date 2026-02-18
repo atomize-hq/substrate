@@ -344,11 +344,11 @@ Examples of scripts that currently hardcode:
 ### 5.2 Migration steps
 1) Create any missing bucket dirs (`draft/queued/implemented/superseded` already exist).
 2) Move legacy ADRs:
-   - `docs/project_management/next/ADR-000*-*.md` → `docs/project_management/adrs/implemented/` (or `superseded/` if applicable)
+   - legacy ADRs under `docs/project_management/next/**` → `docs/project_management/adrs/<bucket>/` (`implemented/` or `superseded/` as applicable)
    - `docs/project_management/next/<feature>/ADR-000*-*.md` → appropriate bucket
 3) Update references:
    - Use a mechanical search/replace in Planning Packs:
-     - `docs/project_management/next/ADR-000X...` → `docs/project_management/adrs/implemented/ADR-000X...`
+     - legacy ADR paths under `docs/project_management/next/**` → canonical ADR registry paths under `docs/project_management/adrs/<bucket>/`
 4) Update `docs/project_management/adrs/README.md`:
    - Remove “legacy locations still supported” after migration is complete, OR keep but mark deprecated.
 

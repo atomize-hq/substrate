@@ -28,8 +28,8 @@ Append START/END entries only (no mid-stream commentary) using the template stan
   - `docs/project_management/next/world-deps-host-visible-hardening/smoke/macos-smoke.sh`
   - `docs/project_management/next/world-deps-host-visible-hardening/smoke/windows-smoke.ps1`
   - ADRs:
-    - `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md`
-    - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+    - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
+    - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
     - `docs/project_management/next/world_deps_packages_bundles_contract.md`
   - Sequencing:
     - `docs/project_management/next/sequencing.json`
@@ -46,7 +46,7 @@ Append START/END entries only (no mid-stream commentary) using the template stan
     - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
     - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
 - Commands planned (if any):
-  - `make adr-fix ADR=docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md`
+  - `make adr-fix ADR=docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
   - `make planning-lint FEATURE_DIR="$FEATURE_DIR"`
   - `make planning-validate FEATURE_DIR="$FEATURE_DIR"`
   - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null`
@@ -87,10 +87,10 @@ Append START/END entries only (no mid-stream commentary) using the template stan
   - `docs/project_management/next/world-deps-host-visible-hardening/kickoff_prompts/FZ-feature-cleanup.md`
   - `docs/project_management/next/world-deps-host-visible-hardening/quality_gate_report.md`
   - `docs/project_management/next/sequencing.json`
-  - `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md`
+  - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
 - Rubric checks run (with results):
-  - `make adr-fix ADR=docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md` → `0`
-  - `make adr-check ADR=docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md` → `0`
+  - `make adr-fix ADR=docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md` → `0`
+  - `make adr-check ADR=docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md` → `0`
   - `make planning-lint FEATURE_DIR="docs/project_management/next/world-deps-host-visible-hardening"` → `0`
   - `make planning-validate FEATURE_DIR="docs/project_management/next/world-deps-host-visible-hardening"` → `0`
   - `jq -e . docs/project_management/next/world-deps-host-visible-hardening/tasks.json >/dev/null` → `0`

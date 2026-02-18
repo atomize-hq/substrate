@@ -9,7 +9,7 @@ Authoring standards:
 ## Inputs
 - Feature directory: `docs/project_management/next/world-deps-packages-bundles-contract`
 - ADR(s):
-  - `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md`
+  - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
 - Contract:
   - `docs/project_management/next/world_deps_packages_bundles_contract.md`
 - Spec manifest:
@@ -36,7 +36,7 @@ Authoring standards:
 
 ### Edit
 - `docs/project_management/next/sequencing.json` — add this feature directory as a sprint entry
-- `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md` — link to this Planning Pack (spec manifest + tasks + decision register)
+- `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md` — link to this Planning Pack (spec manifest + tasks + decision register)
 - `docs/project_management/next/world_deps_packages_bundles_contract.md` — align “World Shell Contract” wording with ADR-0016 and implemented REPL evaluator behavior
 
 ### Edit (execution scope; non-doc)
@@ -90,32 +90,32 @@ When execution completes, delete legacy world-deps selection/overlay plumbing so
 ## Cross-queue scan (ADRs + Planning Packs)
 
 ### Relevant ADRs (cross-cutting constraints)
-- ADR: `docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
+- ADR: `docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
   - Overlap surfaces: world-deps install/provision semantics, install classes
   - Conflict: yes
   - Resolution (explicit): ADR-0011 is the authoritative end-state contract; execution removes legacy selection/manifest paths and replaces the CLI surface
 
-- ADR: `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+- ADR: `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
   - Overlap surfaces: patch-only YAML semantics, broker-canonical effective resolution, workspace disable marker
   - Conflict: no
   - Resolution (explicit): `world deps` patch editing and effective views use the broker-owned patch merge rules and do not implement a bespoke merge/precedence engine
 
-- ADR: `docs/project_management/next/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
+- ADR: `docs/project_management/adrs/implemented/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
   - Overlap surfaces: world-agent concurrency safety, policy snapshot inputs to world-agent enforcement
   - Conflict: no
   - Resolution (explicit): world-backed `world deps` operations execute via host-provided policy snapshots (`PolicySnapshotV3`); legacy local policy resolution inside world-agent is not in scope for this Planning Pack
 
-- ADR: `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
+- ADR: `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
   - Overlap surfaces: interactive REPL evaluator shell contract
   - Conflict: no
   - Resolution (explicit): world-deps runnable entrypoints must remain compatible with REPL evaluator semantics (no rcfiles)
 
-- ADR: `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+- ADR: `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
   - Overlap surfaces: REPL output routing, PTY passthrough vs structured output
   - Conflict: no
   - Resolution (explicit): `world deps` user-visible output respects the REPL output routing contract and does not inject structured host output into PTY byte streams during passthrough
 
-- ADR: `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+- ADR: `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
   - Overlap surfaces: policy schema invariants for full isolation, fail-closed posture on invalid policy inputs
   - Conflict: no
   - Resolution (explicit): `world deps` world-backed behavior remains compatible with policy snapshot + full-isolation enforcement posture and does not introduce any policy-bypass execution path
@@ -128,4 +128,4 @@ When execution completes, delete legacy world-deps selection/overlay plumbing so
 
 ## Follow-ups (explicit)
 - ADR cross-link update required:
-  - `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md` related docs list includes this Planning Pack entrypoints
+  - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md` related docs list includes this Planning Pack entrypoints

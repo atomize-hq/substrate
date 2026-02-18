@@ -27,7 +27,7 @@
       "status": "completed",
       "description": "Run the execution preflight gate to confirm smoke/manual/CI plans are adequate before starting triads.",
       "references": [
-        "docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md",
+        "docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md",
         "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/plan.md",
         "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/tasks.json",
         "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/session_log.md",
@@ -65,7 +65,7 @@
       "status": "completed",
       "description": "Implement C0 spec (production code only).",
       "references": [
-        "docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md",
+        "docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md",
         "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/plan.md",
         "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/tasks.json",
         "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/session_log.md",
@@ -111,7 +111,7 @@
       "status": "completed",
       "description": "Add/modify tests for C0 spec (tests only).",
       "references": [
-        "docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md",
+        "docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md",
         "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/plan.md",
         "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/tasks.json",
         "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/session_log.md",
@@ -157,7 +157,7 @@
       "status": "completed",
       "description": "Merge C0 code+tests and make the slice green on the primary dev platform.",
       "references": [
-        "docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md",
+        "docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md",
         "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/plan.md",
         "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/tasks.json",
         "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/session_log.md",
@@ -215,7 +215,7 @@
       "status": "completed",
       "description": "Linux platform-fix integration task (may be a no-op if already green).",
       "references": [
-        "docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md",
+        "docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md",
         "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/plan.md",
         "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/tasks.json",
         "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/session_log.md",
@@ -265,7 +265,7 @@
       "status": "completed",
       "description": "macOS platform-fix integration task (smoke-gated when macOS is a behavior platform).",
       "references": [
-        "docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md",
+        "docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md",
         "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/plan.md",
         "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/tasks.json",
         "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/session_log.md",
@@ -315,7 +315,7 @@
       "status": "completed",
       "description": "windows CI parity fix task (compile/test/lint only; no behavioral smoke required for this platform).",
       "references": [
-        "docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md",
+        "docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md",
         "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/plan.md",
         "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/tasks.json",
         "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/session_log.md",
@@ -364,7 +364,7 @@
       "status": "completed",
       "description": "Final integration: merge any platform fixes and confirm behavioral smoke + CI parity are green.",
       "references": [
-        "docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md",
+        "docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md",
         "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/plan.md",
         "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/tasks.json",
         "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/session_log.md",

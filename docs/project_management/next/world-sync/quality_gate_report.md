@@ -62,7 +62,7 @@ git show HEAD:"$FEATURE_DIR/tasks.json" | rg -n "DR-"
 ### Finding 004 — Effective config precedence is inconsistent with ADR-0008 (override env layer missing)
 - Status: `DEFECT`
 - Evidence:
-  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md` (effective precedence includes `SUBSTRATE_OVERRIDE_*`)
+  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md` (effective precedence includes `SUBSTRATE_OVERRIDE_*`)
   - `docs/project_management/next/world-sync/contract.md` (precedence omits override layer)
 - Impact: Ambiguity about what input wins for `sync.*` keys.
 - Fix required (exact): Update `docs/project_management/next/world-sync/contract.md` precedence to include `SUBSTRATE_OVERRIDE_*` override inputs.
@@ -240,10 +240,10 @@ jq -e . docs/project_management/next/sequencing.json >/dev/null
 ## Required Inputs Read End-to-End (checklist)
 
 - ADR(s): `YES`
-  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-  - `docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
-  - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
-  - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/adrs/implemented/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
+  - `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
+  - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 - `spec_manifest.md`: `YES`
 - `plan.md`: `YES`
 - `tasks.json`: `YES`

@@ -4,7 +4,7 @@
 Prevent explicit execution of host-mounted toolchain binaries inside the world when `world_fs.host_visible=true`, unless explicitly allowed by override inputs.
 
 ## Inputs (authoritative)
-- `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` (host_visible)
+- `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` (host_visible)
 - `docs/project_management/next/world-deps-host-visible-hardening/decision_register.md` (DR-0005, DR-0007)
 
 ## Contract

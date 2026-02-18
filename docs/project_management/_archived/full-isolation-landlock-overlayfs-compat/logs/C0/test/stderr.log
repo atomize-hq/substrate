@@ -106,7 +106,7 @@ exec
 # C0-spec — Full isolation Landlock ↔ OverlayFS backing dirs allowlist
 
 Authoritative ADR:
-- `docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
+- `docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
 
 Exit codes:
 - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
@@ -130,7 +130,7 @@ exec
 ## Scope
 - Feature directory: `docs/project_management/next/full-isolation-landlock-overlayfs-compat/`
 - Orchestration branch: `feat/full-isolation-landlock-overlayfs-compat`
-- ADR: `docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
+- ADR: `docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
 
 ## Goal
 - Restore `world_fs.write_allowlist` correctness in `world_fs.isolation=full` + `world_fs.mode=writable` on Linux when Landlock is supported and overlayfs is the active filesystem strategy.
@@ -184,7 +184,7 @@ exec
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
   - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
   - `docs/project_management/next/sequencing.json`
-  - `docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
+  - `docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
 - Commands planned (if any):
   - `make planning-new-feature FEATURE=full-isolation-landlock-overlayfs-compat DECISION_HEAVY=1 CROSS_PLATFORM=1 AUTOMATION=1 BEHAVIOR_PLATFORMS=linux CI_PARITY_PLATFORMS=linux,macos,windows`
   - `python3 scripts/planning/validate_tasks_json.py --feature-dir "docs/project_management/next/full-isolation-landlock-overlayfs-compat"`
@@ -641,7 +641,7 @@ PY" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayf
  'kickoff_prompt': 'docs/project_management/next/full-isolation-landlock-overlayfs-compat/kickoff_prompts/C0-test.md',
  'name': 'C0 slice (test)',
  'phase': 'C0',
- 'references': ['docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md',
+ 'references': ['docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md',
                 'docs/project_management/next/full-isolation-landlock-overlayfs-compat/plan.md',
                 'docs/project_management/next/full-isolation-landlock-overlayfs-compat/tasks.json',
 
@@ -796,8 +796,8 @@ thinking
 If a code agent is required for implementing the parser, maybe we could consider an exception since adding parsing code is minimal and closely related to tests. But the user explicitly mentioned no production code, so we can't do that. Instead, we need an alternative approach to implement tests without introducing new production code while still testing relevant aspects, like the logic in `crates/world/src/exec.rs`. I should check if there's already a module for parsing "mountinfo" in `crates/common` and search the repo for "MountOption."
 exec
 /bin/bash -lc 'rg -n "mountinfo" -S . | head -n 50' in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-test succeeded in 65ms:
-./docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md:83:  - `crates/world` (new helper module or existing procfs utilities): provides a Linux-only helper that inspects `/proc/self/mountinfo` (preferred) to resolve the backing dirs for the project mountpoint.
-./docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md:115:  - Add Linux-only tests for the mountinfo parsing helper using fixture mountinfo text.
+./docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md:83:  - `crates/world` (new helper module or existing procfs utilities): provides a Linux-only helper that inspects `/proc/self/mountinfo` (preferred) to resolve the backing dirs for the project mountpoint.
+./docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md:115:  - Add Linux-only tests for the mountinfo parsing helper using fixture mountinfo text.
 ./docs/project_management/next/full-isolation-landlock-overlayfs-compat/C0-spec.md:21:- Add fixture-based unit tests for mountinfo parsing in `crates/world`.
 ./docs/project_management/next/full-isolation-landlock-overlayfs-compat/C0-spec.md:33:  - `/proc/self/mountinfo` (preferred and required for this slice).
 ./docs/project_management/next/full-isolation-landlock-overlayfs-compat/C0-spec.md:40:### Runtime derivation: overlayfs backing dirs from mountinfo

@@ -17,19 +17,19 @@
 - Decision Register: `docs/project_management/next/host_event_bus_router_daemon/decision_register.md`
 - Trace/event foundations:
   - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
-  - `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+  - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 - FS path semantics & allow/deny matching:
-  - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+  - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 - Config/policy layering model:
-  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-  - `docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md`
-  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md`
+  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
 - Future alignment (not required to land this ADR):
   - `docs/project_management/next/world-sync/` (internal git support; not yet landed)
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 32abf78d55d33f371dd8a926b055100d7d12ab098ffe66ed87dc98d8d3ec4412
+ADR_BODY_SHA256: 86af8acb4a4b7843b575b3738e111e54212356be41b3e0709b4ae82d3d506e48
 ### Changes (operator-facing)
 - Substrate gains an always-on host router that can trigger policy-gated actions from trace events (including cross-workspace)
   - Existing: Substrate records trace events (`~/.substrate/trace.jsonl`), but there is no always-on host service that can “listen” for specific events and route them into follow-on work.
@@ -39,7 +39,7 @@ ADR_BODY_SHA256: 32abf78d55d33f371dd8a926b055100d7d12ab098ffe66ed87dc98d8d3ec441
     - `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md#L1`
     - `docs/project_management/next/host_event_bus_router_daemon/decision_register.md`
     - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md#L1`
-    - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md#L1`
+    - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md#L1`
 
 ## Problem / Context
 - Substrate is moving toward multi-agent, multi-workspace orchestration. We need a reliable host-side mechanism to:

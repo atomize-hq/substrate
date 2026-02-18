@@ -16,23 +16,22 @@
 
 ## Related Docs
 - Patch files + scope model:
-  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 - World-deps consumer contract:
   - `docs/project_management/next/world_deps_packages_bundles_contract.md`
 - World-deps ADR (consumer workstream; not modified by this ADR):
-  - `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md`
+  - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: e4244dcbb53f6fde6b0fd7987b2750f545ec226b4192cbdb1dccc0112c55af3d
-
+ADR_BODY_SHA256: c02625b896f88c310c67463006646740ce9fda7ef726f034262d2b67a74ec722
 ### Changes (operator-facing)
 - Config “effective/current” views can explain multi-layer keys
   - Existing: `current show --explain` assumes each effective key comes from exactly one source layer.
   - New: `current show --explain` supports keys whose effective value is derived from multiple layers (e.g. global + workspace), and reports those contributing sources deterministically.
   - Why: enables additive config keys (like `world.deps.enabled`) without creating a second parallel config system or confusing precedence.
   - Links:
-    - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+    - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
     - `docs/project_management/next/world_deps_packages_bundles_contract.md`
 
 - Schema defines merge behavior per key
@@ -40,7 +39,7 @@ ADR_BODY_SHA256: e4244dcbb53f6fde6b0fd7987b2750f545ec226b4192cbdb1dccc0112c55af3
   - New: patch files remain the container format, but the schema defines the effective merge strategy per key; most keys remain “replace”, while selected keys are explicitly “merge”.
   - Why: keeps patch files simple while allowing a small number of keys to be intentionally additive and still explainable.
   - Links:
-    - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+    - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 
 ## Problem / Context
 - ADR-0008 establishes:

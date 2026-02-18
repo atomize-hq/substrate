@@ -17,9 +17,9 @@
 
 ## Related Docs
 - Baseline scope/file contract:
-  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 - Provenance + per-key merge strategy semantics (add-on to ADR-0008):
-  - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+  - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 - Decision Register (this body of work):
   - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/decision_register.md`
 - Current (stale) operator docs that must be updated as part of this work:
@@ -27,8 +27,8 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: e76fefd1ad5675cbb847765c919492bf69eabc7689548035d1710ee51cd39b45
-Run `make adr-fix ADR=docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md` after drafting.
+ADR_BODY_SHA256: f0b4c723a9a5beaec2917380e50321c6e9df75a7d8d35aaa4b004e8c1d7a2dd1
+Run `make adr-fix ADR=docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md` after drafting.
 
 ### Changes (operator-facing)
 - Policy resolution becomes consistent across CLI + runtime execution
@@ -40,7 +40,7 @@ Run `make adr-fix ADR=docs/project_management/next/ADR-0013-policy-patch-only-br
     - `crates/broker/src/policy.rs#L401`
     - `crates/shell/src/execution/policy_model.rs#L243`
     - `crates/shell/src/execution/routing/dispatch/exec.rs#L111`
-    - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+    - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
     - `docs/CONFIGURATION.md#L174`
 
 - Workspace disable marker is honored by the broker

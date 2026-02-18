@@ -2,7 +2,7 @@
 
 ## Scope
 - Merge `WO0-code` + `WO0-test`, reconcile drift to spec, and make the slice green.
-- ADR: `docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
+- ADR: `docs/project_management/adrs/implemented/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
 - Spec: `docs/project_management/_archived/world-overlayfs-enumeration/WO0-spec.md`
 - Closeout gate report: `docs/project_management/_archived/world-overlayfs-enumeration/WO0-closeout_report.md`
 

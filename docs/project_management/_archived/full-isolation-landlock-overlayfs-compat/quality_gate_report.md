@@ -70,7 +70,7 @@ make planning-lint FEATURE_DIR="$FEATURE_DIR"
 
 ## Required Inputs Read End-to-End (checklist)
 
-- ADR(s): `YES` (`docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`)
+- ADR(s): `YES` (`docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`)
 - `plan.md`: `YES` (`docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/plan.md`)
 - `tasks.json`: `YES` (`docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/tasks.json`)
 - `session_log.md`: `YES` (`docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/session_log.md`)
@@ -102,7 +102,7 @@ make planning-lint FEATURE_DIR="$FEATURE_DIR"
 ### 3) Cross-doc consistency (CLI/config/exit codes/paths)
 - Result: `PASS`
 - Evidence:
-  - `docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md` (User Contract)
+  - `docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md` (User Contract)
   - `docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/C0-spec.md` (exit code `4` for missing prerequisites)
   - `docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/manual_testing_playbook.md` (explicit commands + expected output)
 - Notes: Exit codes align with `docs/project_management/standards/EXIT_CODE_TAXONOMY.md` (no override declared).

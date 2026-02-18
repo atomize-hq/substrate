@@ -173,7 +173,7 @@ Scope:
 **Decision owner(s):** Shell + World + Agent Hub maintainers  
 **Date:** 2026-02-09  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`, `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+**Related docs:** `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`, `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 
 **Problem / Context**
 - Multi-agent operation needs an explicit statement about whether concurrently running in-world agents share a filesystem/isolation boundary (`world_id`).
@@ -227,7 +227,7 @@ Scope:
 **Decision owner(s):** Agent Hub maintainers  
 **Date:** 2026-02-09  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`, `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+**Related docs:** `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`, `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 
 **Problem / Context**
 - The hub must ingest structured events from multiple backends concurrently and route them deterministically.
@@ -456,7 +456,7 @@ Scope:
 **Decision owner(s):** Shell + World + Agent Hub maintainers  
 **Date:** 2026-02-11  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`, `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`, `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003, DR-0008)
+**Related docs:** `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`, `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`, `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003, DR-0008)
 
 **Problem / Context**
 - DR-0008 requires that when drift is detected and `agents.hub.world_restart.on_drift=fail_closed`, the hub must:
@@ -529,7 +529,7 @@ Scope:
 **Decision owner(s):** Shell + World + Agent Hub maintainers  
 **Date:** 2026-02-11  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`, `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`, `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003, DR-0008)
+**Related docs:** `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`, `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`, `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003, DR-0008)
 
 **Problem / Context**
 - DR-0008 requires that when drift is detected and `agents.hub.world_restart.on_drift=auto_restart`, the hub MUST:

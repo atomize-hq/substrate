@@ -1,7 +1,7 @@
 # Integration Map — World-First REPL With Persistent World PTY
 
 This integration map is anchored by:
-- `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
+- `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
 - `docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md`
 - `docs/project_management/_archived/world-first-repl-persistent-pty/STATE_MACHINE.md`
 - `docs/project_management/_archived/world-first-repl-persistent-pty/decision_register.md`
@@ -76,7 +76,7 @@ Shared/types (as needed):
 - `crates/common` for redaction/log schema if new log fields are added (token redaction requirement).
 
 ## Cross-track dependencies
-- Concurrent host output routing: `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md` (structured events MUST NOT be injected into PTY bytes; buffering during passthrough).
+- Concurrent host output routing: `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md` (structured events MUST NOT be injected into PTY bytes; buffering during passthrough).
 - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md` (no overrides declared for this feature).
 
 ## Engineering pivots (non-runtime; aligned with DR-06)

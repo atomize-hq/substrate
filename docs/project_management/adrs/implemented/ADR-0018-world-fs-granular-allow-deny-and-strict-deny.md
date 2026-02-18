@@ -11,7 +11,7 @@
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
-  - `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md`
+  - `docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md`
 
 ## Related Docs
 - Plan: `docs/project_management/_archived/world-fs-granular-allow-deny/plan.md`
@@ -34,15 +34,15 @@
   - Tasks: `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/tasks.json`
   - Manual playbook: `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/manual_testing_playbook.md`
 - Related ADRs / grounding:
-  - Policy snapshot direction and threat model: `docs/project_management/next/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
+  - Policy snapshot direction and threat model: `docs/project_management/adrs/implemented/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
   - Full isolation mount/exec chokepoint: `crates/world/src/exec.rs`
   - Landlock exec wrapper: `crates/world-agent/src/internal_exec.rs`
   - Snapshot resolution on host + drift handling (REPL): `crates/shell/src/execution/policy_snapshot.rs`, `crates/shell/src/repl/async_repl.rs`
-  - Full isolation Landlock overlayfs compatibility: `docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
+  - Full isolation Landlock overlayfs compatibility: `docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: b55446895a09a70a6e931e71926d399e118c019cc8d0009e2d69270393a930fb
+ADR_BODY_SHA256: e0b9e817d5d14f073052b485b9f87a329bec59d449ebfcbc8caa3842b558d1d9
 ### Changes (operator-facing)
 - Add granular `allow_list` + `deny_list` for world filesystem reads/writes (and optional directory visibility)
   - Existing: `world_fs.read_allowlist` / `world_fs.write_allowlist` are allowlist-only; invalid patterns (e.g., `..`) can be accepted but ignored; there is no deny list; “allow all except secrets” cannot be expressed.

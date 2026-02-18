@@ -1,6 +1,6 @@
 # Decision Register — Doctor scope split (host vs world)
 
-This decision register supports `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`.
+This decision register supports `docs/project_management/adrs/implemented/ADR-0007-host-and-world-doctor-scopes.md`.
 
 ## Format note
 
@@ -12,7 +12,7 @@ Each decision entry follows the required template in:
 **Decision owner(s):** Substrate CLI maintainers  
 **Date:** 2026-01-08  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`, `docs/project_management/_archived/doctor_scopes/DS0-spec.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0007-host-and-world-doctor-scopes.md`, `docs/project_management/_archived/doctor_scopes/DS0-spec.md`
 
 **Problem / Context**
 - DS0 adds a host-scoped doctor surface and requires a single, unambiguous CLI name that is discoverable and consistent with existing nouns (`world`, `shim`, `health`).
@@ -47,7 +47,7 @@ Each decision entry follows the required template in:
 **Decision owner(s):** Substrate CLI maintainers  
 **Date:** 2026-01-08  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`, `docs/project_management/_archived/doctor_scopes/DS0-spec.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0007-host-and-world-doctor-scopes.md`, `docs/project_management/_archived/doctor_scopes/DS0-spec.md`
 
 **Problem / Context**
 - `substrate world doctor` must report world readiness, while operators still need host readiness context when the world is down.
@@ -82,7 +82,7 @@ Each decision entry follows the required template in:
 **Decision owner(s):** Substrate world backend maintainers  
 **Date:** 2026-01-08  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`, `docs/project_management/_archived/doctor_scopes/DS0-spec.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0007-host-and-world-doctor-scopes.md`, `docs/project_management/_archived/doctor_scopes/DS0-spec.md`
 
 **Problem / Context**
 - On macOS, correctness/security facts for enforcement (Landlock ABI/support, world filesystem probe result) are properties of the Lima guest kernel and the world-agent service privileges.
@@ -118,7 +118,7 @@ Each decision entry follows the required template in:
 **Decision owner(s):** Substrate project maintainers  
 **Date:** 2026-01-08  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/sequencing.json`, `docs/project_management/_archived/doctor_scopes/tasks.json`, `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`
+**Related docs:** `docs/project_management/next/sequencing.json`, `docs/project_management/_archived/doctor_scopes/tasks.json`, `docs/project_management/adrs/implemented/ADR-0007-host-and-world-doctor-scopes.md`
 
 **Problem / Context**
 - The planning pack declares an orchestration branch used by triad automation and CI dispatch commands; the branch name must match the sequencing entry and the integration workflow refs.
@@ -153,7 +153,7 @@ Each decision entry follows the required template in:
 **Decision owner(s):** Substrate agent API maintainers  
 **Date:** 2026-01-08  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`, `docs/project_management/_archived/doctor_scopes/DS0-spec.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0007-host-and-world-doctor-scopes.md`, `docs/project_management/_archived/doctor_scopes/DS0-spec.md`
 
 **Problem / Context**
 - DS0 introduces an agent endpoint for world doctor. The path must be stable, descriptive, and extensible for future doctor endpoints.

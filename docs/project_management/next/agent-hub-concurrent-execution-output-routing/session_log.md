@@ -5,7 +5,7 @@
 - Branch: `testing`
 - Goal: Produce an execution-ready Planning Pack (schema v4, cross-platform, automation-enabled) with zero ambiguity.
 - Inputs to read end-to-end:
-  - `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+  - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
   - `docs/project_management/next/sequencing.json`
   - `docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md`
   - `docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md`
@@ -48,7 +48,7 @@
   - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/execution_preflight_report.md`
   - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/OR0-closeout_report.md`
   - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/OR1-closeout_report.md`
-  - `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+  - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
   - `docs/project_management/next/sequencing.json`
 - Rubric checks run (with results):
   - `make planning-validate FEATURE_DIR="docs/project_management/next/agent-hub-concurrent-execution-output-routing"` → exit `0` → tasks.json validator passed
@@ -57,7 +57,7 @@
   - `jq -e . docs/project_management/next/sequencing.json` → exit `0`
   - `bash -n docs/project_management/next/agent-hub-concurrent-execution-output-routing/smoke/linux-smoke.sh` → exit `0`
   - `bash -n docs/project_management/next/agent-hub-concurrent-execution-output-routing/smoke/macos-smoke.sh` → exit `0`
-  - `make adr-fix ADR="docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md"` → exit `0` → ADR_BODY_SHA256 updated
+  - `make adr-fix ADR="docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md"` → exit `0` → ADR_BODY_SHA256 updated
 - Sequencing alignment:
   - `sequencing.json` reviewed: `YES`
   - Changes required: added sprint `agent_hub_concurrent_execution_output_routing` (order `41`) with sequence `OR0`, `OR1`

@@ -13,7 +13,7 @@
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
   - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
   - `docs/project_management/next/sequencing.json`
-  - `docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
+  - `docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
   - Planning Pack (existing): `docs/project_management/_archived/world_deps_selection_layer/plan.md`, `docs/project_management/_archived/world_deps_selection_layer/tasks.json`, `docs/project_management/_archived/world_deps_selection_layer/decision_register.md`, `docs/project_management/_archived/world_deps_selection_layer/integration_map.md`, `docs/project_management/_archived/world_deps_selection_layer/manual_testing_playbook.md`, `docs/project_management/_archived/world_deps_selection_layer/S0-spec-selection-config-and-ux.md`, `docs/project_management/_archived/world_deps_selection_layer/S1-spec-install-classes.md`, `docs/project_management/_archived/world_deps_selection_layer/S2-spec-system-packages-provisioning.md`
 - Commands planned (if any):
   - `make planning-validate FEATURE_DIR="docs/project_management/_archived/world_deps_selection_layer"`
@@ -66,7 +66,7 @@
 - Standard: `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
 - Goal: Confirm the Planning Pack is runnable (smoke is non-toy; CI dispatch commands are valid) before starting any triads.
 - Inputs read end-to-end:
-  - ADR: `docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
+  - ADR: `docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
   - Planning Pack: `plan.md`, `tasks.json`, `session_log.md`, `decision_register.md`, `integration_map.md`, `manual_testing_playbook.md`, `S0`, `S1`, `S2`, smoke scripts, kickoff prompt
 - Orchestration branch ensured via: `make triad-orch-ensure FEATURE_DIR="docs/project_management/_archived/world_deps_selection_layer"`
 

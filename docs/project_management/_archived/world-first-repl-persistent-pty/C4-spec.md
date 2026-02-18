@@ -5,7 +5,7 @@ This slice implements the interactive REPL rendering invariants that require a b
 Authoritative specs (do not diverge):
 - `docs/project_management/_archived/world-first-repl-persistent-pty/STATE_MACHINE.md` (host behavior, authoritative)
 - `docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md` (stdout frames are raw bytes, authoritative)
-- `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md` (structured output routing, authoritative)
+- `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md` (structured output routing, authoritative)
 
 Depends on:
 - `C3` (interactive REPL lifecycle/routing wired to persistent session).

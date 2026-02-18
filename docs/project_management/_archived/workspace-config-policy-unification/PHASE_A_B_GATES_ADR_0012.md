@@ -9,8 +9,8 @@ It layers on top of all repo planning standards and must be treated as **non-neg
 `ADR-0012` introduces per-key merge strategies and multi-source provenance. `ADR-0008` is the queued body of work that will implement the config plumbing and CLI surfaces; therefore, this Planning Pack must explicitly include and complete the Phase A/B work defined here so downstream work (notably world-deps) can safely depend on it.
 
 Authoritative ADRs:
-- `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-- `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+- `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 
 Primary downstream consumer contract:
 - `docs/project_management/next/world_deps_packages_bundles_contract.md`

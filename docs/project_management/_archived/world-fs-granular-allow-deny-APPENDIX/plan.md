@@ -4,7 +4,7 @@
 - Feature directory: `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX`
 - Orchestration branch: `feat/world-fs-granular-allow-deny-appendix`
 - ADR (Appendix A + B are authoritative inputs):
-  - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+  - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 - Spec ownership map: `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/spec_manifest.md`
 - Impact map: `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/impact_map.md`
 - CI checkpoint plan: `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/ci_checkpoint_plan.md`

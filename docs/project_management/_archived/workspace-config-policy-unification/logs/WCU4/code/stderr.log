@@ -15,7 +15,7 @@ user
 ## Scope
 - Production code only; no new tests.
 - Spec: `docs/project_management/next/workspace-config-policy-unification/WCU4-spec.md`
-- ADR: `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- ADR: `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 - Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 Do not edit planning docs inside the worktree.
@@ -83,7 +83,7 @@ exec
 # WCU4 Spec — Installer/dev env cleanup (stop exporting `SUBSTRATE_OVERRIDE_*` by default)
 
 References:
-- `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 
 ## Scope
@@ -101,7 +101,7 @@ References:
   - a clean environment has no `SUBSTRATE_OVERRIDE_*` exports after running the relevant dev/install scripts, and
   - `config current show` behavior is not silently affected by unintended override exports.
 exec
-/bin/bash -lc "sed -n '1,220p' docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-code succeeded in 45ms:
+/bin/bash -lc "sed -n '1,220p' docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-code succeeded in 45ms:
 # ADR-0008 — Workspace Config/Policy Scopes + `.substrate/` Unification (Patch Files)
 
 ## Status
@@ -121,7 +121,7 @@ exec
 
 ## Related Docs
 - Prior ADRs:
-  - `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md`
+  - `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`
 exec
 /bin/bash -lc "ls -la docs/project_management/next/workspace-config-policy-unification | rg -n \"(plan|task|session|log|tasks\\.json|WCU4)\" || true" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-code succeeded in 60ms:
 10:-rw-r--r-- 1 spenser spenser   5537 Jan 16 09:19 plan.md
@@ -170,10 +170,10 @@ exec
 
 ## Context (why this exists)
 This Planning Pack implements the operator-facing contract defined by:
-- `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 
 This body of work also **must** implement the cross-cutting refinement defined by:
-- `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+- `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 
 Non-negotiable additional gating for this pack:
 - `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
@@ -197,8 +197,8 @@ exec
 - Inputs to read end-to-end:
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-  - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 - Commands planned (if any):
   - `make planning-lint FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification"`
 
@@ -895,7 +895,7 @@ exec
 ## Scope
 - Production code only; no new tests.
 - Spec: `docs/project_management/next/workspace-config-policy-unification/WCU4-spec.md`
-- ADR: `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- ADR: `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 - Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 Do not edit planning docs inside the worktree.

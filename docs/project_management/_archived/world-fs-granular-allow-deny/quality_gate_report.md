@@ -53,10 +53,10 @@ Reference: `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
 - `make planning-lint FEATURE_DIR="docs/project_management/_archived/world-fs-granular-allow-deny"` → `0` → `PASS`
 
 ### ADR exec summary drift (explicit)
-- `python3 scripts/planning/check_adr_exec_summary.py --adr docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md --fix` → `0` → `PASS`
+- `python3 scripts/planning/check_adr_exec_summary.py --adr docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md --fix` → `0` → `PASS`
 
 ## Required Inputs Read End-to-End (checklist)
-- ADR(s): `YES` (`docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`)
+- ADR(s): `YES` (`docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`)
 - `spec_manifest.md`: `YES`
 - `plan.md`: `YES`
 - `tasks.json`: `YES`
@@ -96,7 +96,7 @@ Reference: `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
 - Result: `PASS`
 - Evidence:
   - `docs/project_management/_archived/world-fs-granular-allow-deny/decision_register.md` (DR-0001..DR-0008)
-  - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` (authoritative decision detail for enforcement posture)
+  - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` (authoritative decision detail for enforcement posture)
 - Notes: Decisions are recorded as A/B with explicit tradeoffs and a single selected option. The outcome “support both `strict` and `best_effort` as an operator lever” is represented as selecting the lever option (not as selecting both A and B).
 
 ### 3) Cross-doc consistency (CLI/config/exit codes/paths)
@@ -148,7 +148,7 @@ Reference: `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
 - Status: `VERIFIED`
 - Evidence:
   - `docs/project_management/_archived/world-fs-granular-allow-deny/decision_register.md` (DR-0001..DR-0008)
-  - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` (enforcement posture decision detail)
+  - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` (enforcement posture decision detail)
 - Impact: Decisions are auditable and map to the planned execution tasks without losing the “strict|best_effort lever” outcome.
 - Fix required (exact): none
 

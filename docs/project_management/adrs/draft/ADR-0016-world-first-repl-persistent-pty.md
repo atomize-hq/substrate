@@ -38,22 +38,22 @@ ADR_BODY_SHA256: b695a30f0ae29abcda629bf32a771fc67c717c9808c222694fdd09337d70b0b
 - New: The default REPL command path executes inside a persistent world Session PTY (driver-managed; per-submission evaluator shells), so `cd`/`pwd`/`export`/`unset` behave like a normal shell within the same in-world filesystem view the user sees.
   - Why: Align REPL ergonomics with the isolation model and user expectations: a “world REPL” should be internally consistent and not require users to know which tokens are host-only.
   - Links:
-    - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md#user-contract-authoritative`
-    - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md#architecture-shape`
+    - `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md#user-contract-authoritative`
+    - `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md#architecture-shape`
 
 - Add explicit host escape hatch for interactive sessions (`:host ...`)
   - Existing: Host-only semantics are implicit via builtins and routing, and are not obvious when the overlay view diverges from the host filesystem.
   - New: `:host <command>` runs on the host (current behavior), while unprefixed commands run in the persistent world PTY session.
   - Why: Preserve operator access to host tooling while making the default path world-first and predictable.
   - Links:
-    - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md#cli`
+    - `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md#cli`
 
 - Ensure `-c/--command` is world-consistent when world is enabled
   - Existing: `-c/--command` uses the same “lightweight builtin” fast-path as the REPL, so `cd`/`pwd`/`export`/`unset` can be executed on the host even when the command is otherwise world-backed.
   - New: When world is enabled, `-c/--command` MUST interpret `cd`/`pwd`/`export`/`unset` in-world (shell semantics) and MUST NOT execute them as host-only builtins; `:host` is never recognized in `-c/--command`.
   - Why: Prevent “mixed-context” surprises and avoid accidental host-path evaluation when the operator expects world semantics.
   - Links:
-    - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md#cli`
+    - `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md#cli`
 
 ## Problem / Context
 - The current interactive REPL mixes execution contexts:

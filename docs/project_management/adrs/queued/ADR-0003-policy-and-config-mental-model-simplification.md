@@ -30,14 +30,14 @@
 - Integration map: `docs/project_management/next/policy_and_config_mental_model_simplification/integration_map.md`
 - Manual playbook: `docs/project_management/next/policy_and_config_mental_model_simplification/manual_testing_playbook.md`
 - Prior (untemplated) ADR content preserved verbatim:
-  - `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification_OG.md`
+  - `docs/project_management/adrs/draft/ADR-0003-policy-and-config-mental-model-simplification_OG.md`
 - World-sync specs that MUST be updated to align with this ADR before `world_sync` implementation:
   - `docs/project_management/next/world-sync/C0-spec.md`
   - `docs/project_management/next/world-sync/C1-spec.md`
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: c480dfd2cb3b686172cfd0476304215bd45b284bb181754dfc069afe9d66cf20
+ADR_BODY_SHA256: 6599e2c4c0c757e864a3e06076dd6abc9ec206b06cb6664159c0c23edcf36c52
 ADR_BODY_SHA256: <run `python3 scripts/planning/check_adr_exec_summary.py --adr <this-file> --fix` after editing>
 
 - Existing: Config/policy discovery and naming is ambiguous (multiple file names, “settings vs config vs policy”, and colliding terms like `cage/caged` and `root/anchor`).

@@ -3,7 +3,7 @@
 ## Scope
 - Feature directory: `docs/project_management/_archived/world-overlayfs-enumeration/`
 - Orchestration branch: `feat/world-overlayfs-enumeration`
-- ADR: `docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
+- ADR: `docs/project_management/adrs/implemented/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
 
 ## Goal
 - Ensure Linux world overlay mounts support correct directory enumeration and a deterministic fallback strategy for overlayfs health failures.

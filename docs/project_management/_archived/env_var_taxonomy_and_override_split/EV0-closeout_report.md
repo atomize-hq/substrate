@@ -19,7 +19,7 @@ Slice spec:
 - Why: prevent “stale exports” from bypassing the resolver and make env inputs vs exported state unambiguous across platforms.
 - Links:
   - `docs/project_management/_archived/env_var_taxonomy_and_override_split/EV0-spec.md`
-  - `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md`
+  - `docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md`
 
 ## Spec Parity (No Drift)
 

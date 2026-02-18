@@ -12,8 +12,8 @@ Do not edit planning docs inside the worktree.
 1. Ensure the orchestration branch exists and is checked out:
    - `make triad-orch-ensure FEATURE_DIR="docs/project_management/_archived/workspace-config-policy-unification"`
 2. Read end-to-end:
-   - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-   - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+   - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+   - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
    - `docs/project_management/_archived/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
    - `docs/project_management/_archived/workspace-config-policy-unification/plan.md`
    - `docs/project_management/_archived/workspace-config-policy-unification/tasks.json`

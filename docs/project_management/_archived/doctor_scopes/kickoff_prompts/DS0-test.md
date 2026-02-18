@@ -2,7 +2,7 @@
 
 ## Scope
 - Tests only; no production code.
-- ADR: `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`
+- ADR: `docs/project_management/adrs/implemented/ADR-0007-host-and-world-doctor-scopes.md`
 - Spec: `docs/project_management/_archived/doctor_scopes/DS0-spec.md`
 
 ## Start Checklist

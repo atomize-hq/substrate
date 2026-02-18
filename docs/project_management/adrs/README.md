@@ -24,16 +24,7 @@ It exists to make cross-queue discovery deterministic for planning steps like:
 
 ## Legacy locations (still supported)
 
-- `docs/project_management/next/ADR-000X-*.md`
-- `docs/project_management/next/<feature>/ADR-000X-*.md`
-
 New ADRs should prefer `docs/project_management/adrs/` unless there is a strong reason to keep an ADR feature-local.
 
-*** Add File: docs/project_management/adrs/draft/.gitkeep
-
-*** Add File: docs/project_management/adrs/queued/.gitkeep
-
-*** Add File: docs/project_management/adrs/implemented/.gitkeep
-
-*** Add File: docs/project_management/adrs/superseded/.gitkeep
-
+Legacy ADR locations may still be referenced by older planning artifacts. Use the migration tooling to move them into
+this registry so repo-wide scans can be strict and deterministic.

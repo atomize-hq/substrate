@@ -1,7 +1,7 @@
 # Protocol — World-First REPL Persistent Session (Authoritative)
 
 This document is authoritative for:
-- `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
+- `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
 
 It specifies the host↔world-agent protocol for the world-first interactive REPL, including:
 - a long-lived in-world PTY session,
@@ -70,7 +70,7 @@ Important separation (host concurrent output vs PTY bytes):
 - This protocol’s `stdout` stream is the **session PTY byte stream** only.
 - Substrate-managed concurrent output on the host (e.g., `:demo-agent`, future AgentHub events) MUST NOT be injected into the PTY byte stream.
   - In PTY passthrough mode, the host SHOULD buffer structured events and render them only after the foreground PTY command completes, so TUIs/REPLs are not corrupted by interleaved host text.
-  - See `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`.
+  - See `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`.
 
 Compatibility note:
 - Existing one-shot PTY execution over `/v1/stream` is not replaced by this ADR.
@@ -95,7 +95,7 @@ Evaluation model (v1):
 - To satisfy the control-plane handle privacy requirements in this protocol (DR-22), world-agent MUST evaluate each `exec` in an untrusted evaluator context that does not have access to session control-plane endpoints or other session infrastructure.
 - In v1, the trusted driver component MUST evaluate each `exec` by spawning a fresh evaluator shell process attached to the Session PTY.
   - The trusted driver component MUST persist and re-apply the ADR-0016 guaranteed state across submissions (at minimum: physical cwd + exported env).
-  - Persistence scope note (v1): no other shell-local state is guaranteed to persist across submissions (e.g., aliases, functions, traps, `set -o` / `shopt`, non-exported vars, history, or job control). See `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md` (“Persistence guarantees”) and `docs/project_management/_archived/world-first-repl-persistent-pty/decision_register.md` (DR-07).
+  - Persistence scope note (v1): no other shell-local state is guaranteed to persist across submissions (e.g., aliases, functions, traps, `set -o` / `shopt`, non-exported vars, history, or job control). See `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md` (“Persistence guarantees”) and `docs/project_management/_archived/world-first-repl-persistent-pty/decision_register.md` (DR-07).
 
 ## Key Design Invariant: Separate Command Channel vs User Stdin
 Persistent sessions must support auto-PTY (interactive stdin forwarding) without allowing interactive programs to consume REPL control bytes.

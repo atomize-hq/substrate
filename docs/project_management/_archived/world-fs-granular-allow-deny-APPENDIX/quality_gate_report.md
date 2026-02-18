@@ -75,7 +75,7 @@ Observed results:
 - `make planning-validate ...` → `exit:0` (tasks.json validation passed)
 
 ## Required Inputs Read End-to-End (checklist)
-- ADR(s): `YES` (`docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`)
+- ADR(s): `YES` (`docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`)
 - `spec_manifest.md`: `YES`
 - `plan.md`: `YES`
 - `tasks.json`: `YES`
@@ -117,7 +117,7 @@ Observed results:
 - Result: `PASS (with defects noted below for spec coverage/testability)`
 - Evidence:
   - Exit codes `2/3/4` are consistently referenced across:
-    - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+    - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
     - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/contract.md`
     - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/manual_testing_playbook.md`
 - Notes: Key names (`host_visible`, `fail_closed.routing`, `caged_required`, `repl.exit_cwd`) are consistent with ADR Appendix A/B.
@@ -349,7 +349,7 @@ Observed results:
 ### Finding 003 — `spec_manifest.md` does not enumerate ADR Appendix A.6 “policy show” output contract surface
 - Status: `DEFECT`
 - Evidence:
-  - ADR requirement: `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` (Appendix A.6, “Output contract (effective policy display)”).
+  - ADR requirement: `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` (Appendix A.6, “Output contract (effective policy display)”).
   - Ownership gap: `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/spec_manifest.md` coverage matrix lists no surface for `substrate policy show` output requirements.
 - Impact: The plan is not implementation-ready because an ADR-mandated operator-visible contract surface is unowned; implementers may omit it or implement inconsistently.
 - Fix required (exact):
@@ -360,7 +360,7 @@ Observed results:
 ### Finding 004 — Missing authored contract/validation for ADR Appendix B.2.1 “routing fallback warning substrings”
 - Status: `DEFECT`
 - Evidence:
-  - ADR requirement: `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` Appendix B.2.1 requires a stderr warning with specific substrings when `world_fs.host_visible=false` + `world_fs.fail_closed.routing=false` and routing fails.
+  - ADR requirement: `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` Appendix B.2.1 requires a stderr warning with specific substrings when `world_fs.host_visible=false` + `world_fs.fail_closed.routing=false` and routing fails.
   - No authoritative ownership: `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/spec_manifest.md` lists no surface row for warning contract requirements.
   - No authored acceptance: `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/manual_testing_playbook.md` contains no case asserting the required substrings.
 - Impact: Operators cannot rely on the warning contract and integration/tests cannot validate it, risking a silent safety posture downgrade in the most confusing configuration state.
@@ -501,7 +501,7 @@ Observed results:
 - `checkpoint wiring check` → `exit:2` (issues detected; see Findings)
 
 ## Required Inputs Read End-to-End (checklist)
-- ADR(s): `YES` (`docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`)
+- ADR(s): `YES` (`docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`)
 - `spec_manifest.md`: `YES`
 - `plan.md`: `YES`
 - `tasks.json`: `YES`
@@ -685,7 +685,7 @@ Observed results:
 - `make planning-lint ...` → `exit:0` (planning lint passed)
 
 ## Required Inputs Read End-to-End (checklist)
-- ADR(s): `YES` (`docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`)
+- ADR(s): `YES` (`docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`)
 - `spec_manifest.md`: `YES`
 - `plan.md`: `YES`
 - `tasks.json`: `YES`
@@ -726,7 +726,7 @@ Observed results:
 - Result: `PASS`
 - Evidence:
   - Exit codes `2/3/4` are consistent across:
-    - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` (Appendix B.2.3 + B.3.4 + B.3.5)
+    - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` (Appendix B.2.3 + B.3.4 + B.3.5)
     - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/contract.md` (sections 2.1–2.2)
     - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/manual_testing_playbook.md` (Cases 2–3)
 

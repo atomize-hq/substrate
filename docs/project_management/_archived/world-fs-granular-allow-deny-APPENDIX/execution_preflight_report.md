@@ -37,8 +37,8 @@ OK: tasks.json validation passed: docs/project_management/_archived/world-fs-gra
 -- spec_manifest.md required-doc existence
 -- ci_checkpoint_plan.md invariants
 -- ADR Executive Summary drift (if ADRs found/referenced)
-OK: docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md executive summary hash matches
-OK: docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md executive summary hash matches
+OK: docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md executive summary hash matches
+OK: docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md executive summary hash matches
 -- Kickoff prompt sentinel
 -- Manual playbook smoke linkage (if present)
 -- Sequencing alignment

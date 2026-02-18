@@ -67,7 +67,7 @@
   - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
   - `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
   - `docs/project_management/next/sequencing.json`
-  - `docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
+  - `docs/project_management/adrs/implemented/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
   - `docs/project_management/_archived/world-overlayfs-enumeration/plan.md`
   - `docs/project_management/_archived/world-overlayfs-enumeration/tasks.json`
   - `docs/project_management/_archived/world-overlayfs-enumeration/session_log.md`
@@ -79,7 +79,7 @@
   - `docs/project_management/_archived/world-overlayfs-enumeration/smoke/macos-smoke.sh`
   - `docs/project_management/_archived/world-overlayfs-enumeration/smoke/windows-smoke.ps1`
 - Commands planned:
-  - `make adr-fix ADR="docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md"`
+  - `make adr-fix ADR="docs/project_management/adrs/implemented/ADR-0004-world-overlayfs-directory-enumeration-reliability.md"`
   - `make planning-validate FEATURE_DIR="docs/project_management/_archived/world-overlayfs-enumeration"`
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/world-overlayfs-enumeration"`
 
@@ -93,7 +93,7 @@
   - Updated the execution preflight gate report to `ACCEPT` with concrete notes
   - Added a planning quality gate report artifact for the feature directory
 - Files created/modified:
-  - `docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
+  - `docs/project_management/adrs/implemented/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
   - `docs/project_management/_archived/world-overlayfs-enumeration/WO0-spec.md`
   - `docs/project_management/_archived/world-overlayfs-enumeration/tasks.json`
   - `docs/project_management/_archived/world-overlayfs-enumeration/decision_register.md`
@@ -104,7 +104,7 @@
   - `docs/project_management/_archived/world-overlayfs-enumeration/quality_gate_report.md`
   - `docs/project_management/_archived/world-overlayfs-enumeration/session_log.md`
 - Rubric checks run (with results):
-  - `make adr-fix ADR="docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md"` → `0` → `FIXED` (updated ADR_BODY_SHA256)
+  - `make adr-fix ADR="docs/project_management/adrs/implemented/ADR-0004-world-overlayfs-directory-enumeration-reliability.md"` → `0` → `FIXED` (updated ADR_BODY_SHA256)
   - `make planning-validate FEATURE_DIR="docs/project_management/_archived/world-overlayfs-enumeration"` → `0` → `PASS`
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/world-overlayfs-enumeration"` → `0` → `PASS`
 - Sequencing alignment:
@@ -121,7 +121,7 @@
 - Goal: Run the execution preflight gate and produce a concrete `ACCEPT`/`REVISE` recommendation before starting WO0.
 - Inputs to review end-to-end:
   - `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
-  - `docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
+  - `docs/project_management/adrs/implemented/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
   - `docs/project_management/_archived/world-overlayfs-enumeration/plan.md`
   - `docs/project_management/_archived/world-overlayfs-enumeration/tasks.json`
   - `docs/project_management/_archived/world-overlayfs-enumeration/session_log.md`
@@ -149,7 +149,7 @@
 - Worktree: `wt/woe-wo0-code`
 - Goal: Implement ADR-0004 Linux overlayfs strategy selection + enumeration probe + observability, plus mount topology fix.
 - References (authoritative):
-  - `docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
+  - `docs/project_management/adrs/implemented/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
   - `docs/project_management/_archived/world-overlayfs-enumeration/WO0-spec.md`
   - `docs/project_management/_archived/world-overlayfs-enumeration/decision_register.md`
   - `docs/project_management/_archived/world-overlayfs-enumeration/integration_map.md`
@@ -160,7 +160,7 @@
 - Worktree: `wt/woe-wo0-test`
 - Goal: Add tests for enumeration probe contract, fuse fallback selection, and required doctor/trace metadata.
 - References (authoritative):
-  - `docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
+  - `docs/project_management/adrs/implemented/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
   - `docs/project_management/_archived/world-overlayfs-enumeration/WO0-spec.md`
 
 ## END — 2026-01-06T15:25:04Z — test — WO0-test
@@ -203,7 +203,7 @@
   - `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`
   - `docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md`
   - `docs/project_management/next/sequencing.json`
-  - `docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
+  - `docs/project_management/adrs/implemented/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
   - `docs/project_management/_archived/world-overlayfs-enumeration/plan.md`
   - `docs/project_management/_archived/world-overlayfs-enumeration/tasks.json`
   - `docs/project_management/_archived/world-overlayfs-enumeration/session_log.md`

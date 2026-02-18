@@ -3,7 +3,7 @@
 ## Scope
 - Feature directory: `docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/`
 - Orchestration branch: `feat/full-isolation-landlock-overlayfs-compat`
-- ADR: `docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
+- ADR: `docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
 
 ## Goal
 - Restore `world_fs.write_allowlist` correctness in `world_fs.isolation=full` + `world_fs.mode=writable` on Linux when Landlock is supported and overlayfs is the active filesystem strategy.

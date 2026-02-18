@@ -33,19 +33,19 @@
   - `docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md`
   - `docs/project_management/next/world-deps-packages-bundles-contract/manual_testing_playbook.md`
 - Existing world-deps work (may be superseded / requires reconciliation if this ADR is Accepted):
-  - `docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
+  - `docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
   - `docs/project_management/_archived/world_deps_selection_layer/plan.md`
   - `docs/project_management/_archived/world_deps_selection_layer/decision_register.md`
 - Patch-file (scope/current/global/workspace) mental model:
-  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 - Per-key merge strategies + multi-source provenance (for `world.deps.*` keys):
-  - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+  - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 - Exit codes:
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: eea9a06b6271e4490a51f7c847845b33c8e416c71d9e726fd2c7995f9919d77f
+ADR_BODY_SHA256: 2b1783166231cc55d91de12770705f87fd3ea92737d1611e9a6e39a1fa3cdb15
 ### Changes (operator-facing)
 - World deps becomes “inventory + enabled patches”
   - Existing: world-deps behavior is anchored on legacy manifest/overlay/selection files (`manager_hooks.yaml`, `world-deps.yaml`, `world-deps.selection.yaml`) with semantics that are easy to misread and hard to reason about across scopes.
@@ -53,8 +53,8 @@ ADR_BODY_SHA256: eea9a06b6271e4490a51f7c847845b33c8e416c71d9e726fd2c7995f9919d77
   - Why: makes “what exists / what you want / what is applied” explicit and scriptable; removes misleading “looks like a CLI but isn’t” cases.
   - Links:
     - `docs/project_management/next/world_deps_packages_bundles_contract.md`
-    - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-    - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+    - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+    - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 
 - Legacy file paths are removed from world-deps plumbing
   - Existing: world-deps behavior can be influenced by multiple historical file locations (including overlay and selection files).
@@ -77,7 +77,7 @@ ADR_BODY_SHA256: eea9a06b6271e4490a51f7c847845b33c8e416c71d9e726fd2c7995f9919d77
 ## Non-Goals
 - Designing a general multi-distro package manager abstraction (beyond the `apt` contract explicitly specified here).
 - Introducing migrations/back-compat layers for legacy world-deps files (default policy is greenfield/breaking unless explicitly required).
-- Defining Substrate’s full world backend capability contract (see `docs/project_management/next/ADR-0010-world-backend-contract-and-capability-divergence.md`).
+- Defining Substrate’s full world backend capability contract (see `docs/project_management/adrs/draft/ADR-0010-world-backend-contract-and-capability-divergence.md`).
 - Guaranteeing that every package/bundle is supported on every platform; platform filtering and “unsupported/manual” flows are explicit parts of the contract.
 
 ## User Contract (Authoritative)
@@ -623,7 +623,7 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 ## Sequencing / Dependencies
 - Alignment target: `docs/project_management/next/sequencing.json` (this ADR introduces a contract that is not yet represented as a sprint entry).
 - Hard dependencies (contract-level):
-  - Patch-file scope semantics from `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md` (global/workspace patch files; preserve comment headers).
+  - Patch-file scope semantics from `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md` (global/workspace patch files; preserve comment headers).
   - World backend availability semantics for commands that query/apply in-world state (exit `3` when backend is unavailable).
 - Coexistence note (separate bodies of work):
   - `docs/project_management/_archived/world_deps_selection_layer/` defines a selection-file-driven contract that conflicts with this ADR’s “enabled patch” model and “legacy selection file paths removed” requirement.

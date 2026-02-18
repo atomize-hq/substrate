@@ -22,7 +22,7 @@
       "references": [
         "docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md",
         "docs/project_management/_archived/policy_and_config_precedence/execution_preflight_report.md",
-        "docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md",
+        "docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md",
         "docs/project_management/_archived/policy_and_config_precedence/plan.md",
         "docs/project_management/_archived/policy_and_config_precedence/tasks.json",
         "docs/project_management/_archived/policy_and_config_precedence/session_log.md",
@@ -60,7 +60,7 @@
       "status": "completed",
       "description": "Implement workspace-over-env precedence in the effective config resolver (production code only).",
       "references": [
-        "docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md",
+        "docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md",
         "docs/project_management/_archived/policy_and_config_precedence/plan.md",
         "docs/project_management/_archived/policy_and_config_precedence/PCP0-spec.md",
         "docs/project_management/_archived/policy_and_config_precedence/decision_register.md (DR-0001)",

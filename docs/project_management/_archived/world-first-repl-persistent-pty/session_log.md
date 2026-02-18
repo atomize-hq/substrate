@@ -3,7 +3,7 @@
 - Branch: `testing`
 - Goal: Produce a complete Planning Pack per PLANNING_README with full MUST/SHOULD traceability to tasks and validation.
 - Inputs to read end-to-end:
-  - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
+  - `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
   - `docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md`
   - `docs/project_management/_archived/world-first-repl-persistent-pty/STATE_MACHINE.md`
   - `docs/project_management/_archived/world-first-repl-persistent-pty/decision_register.md`
@@ -22,7 +22,7 @@
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
   - `docs/project_management/next/sequencing.json`
 - Commands planned (if any):
-  - `make adr-check ADR=docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
+  - `make adr-check ADR=docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
   - `FEATURE_DIR="docs/project_management/_archived/world-first-repl-persistent-pty"; jq -e . "$FEATURE_DIR/tasks.json" >/dev/null`
   - `jq -e . docs/project_management/next/sequencing.json >/dev/null`
   - `python - <<'PY' ... PY` (tasks.json required-field audit)
@@ -33,11 +33,11 @@
 - Summary of changes (exhaustive):
   - Added full Planning Pack artifacts under `docs/project_management/_archived/world-first-repl-persistent-pty/` (spec slices, tasks.json, integration map, manual playbook, smoke scripts, kickoff prompts, traceability map, and quality gate report).
   - Updated `docs/project_management/next/sequencing.json` to register the sprint (`world_first_repl_persistent_pty`, order `32`) and align slice specs (`C0`/`C1`/`C2`).
-  - Fixed ADR executive summary drift marker by updating `ADR_BODY_SHA256` in `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`.
+  - Fixed ADR executive summary drift marker by updating `ADR_BODY_SHA256` in `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`.
   - Applied planning-lint-safe editorial tightening (no behavior drift) in the authoritative spec pack docs under the feature directory.
   - Removed a hard-ban lint violation caused by embedding a hard-ban scan pattern string in planning artifacts.
 - Files created/modified:
-  - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
+  - `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
   - `docs/project_management/next/sequencing.json`
   - `docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md`
   - `docs/project_management/_archived/world-first-repl-persistent-pty/STATE_MACHINE.md`
@@ -81,7 +81,7 @@
   - `docs/project_management/_archived/world-first-repl-persistent-pty/kickoff_prompts/C2-integ.md`
   - `docs/project_management/_archived/world-first-repl-persistent-pty/kickoff_prompts/FZ-feature-cleanup.md`
 - Rubric checks run (with results):
-  - `make adr-check ADR=docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md` → `0` → executive summary hash matches
+  - `make adr-check ADR=docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md` → `0` → executive summary hash matches
   - `FEATURE_DIR="docs/project_management/_archived/world-first-repl-persistent-pty"; jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` → `0` → valid JSON
   - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0` → valid JSON
   - `python - <<'PY' ... PY` (tasks.json required-field audit) → `0` → required fields present
@@ -100,7 +100,7 @@
 - Branch: `testing`
 - Goal: Replace the 3-slice plan with a 6-slice execution plan (C0–C5) while preserving all locked decisions and keeping planning-lint/validate green.
 - Inputs to read end-to-end:
-  - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
+  - `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
   - `docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md`
   - `docs/project_management/_archived/world-first-repl-persistent-pty/STATE_MACHINE.md`
   - `docs/project_management/_archived/world-first-repl-persistent-pty/decision_register.md`
@@ -124,7 +124,7 @@
 - Commands planned (if any):
   - `jq -e . docs/project_management/next/sequencing.json >/dev/null`
   - `FEATURE_DIR="docs/project_management/_archived/world-first-repl-persistent-pty"; jq -e . "$FEATURE_DIR/tasks.json" >/dev/null`
-  - `make adr-check ADR=docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
+  - `make adr-check ADR=docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
   - `make planning-validate FEATURE_DIR="docs/project_management/_archived/world-first-repl-persistent-pty"`
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/world-first-repl-persistent-pty"`
 
@@ -184,7 +184,7 @@
 - Rubric checks run (with results):
   - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0` → valid JSON
   - `FEATURE_DIR="docs/project_management/_archived/world-first-repl-persistent-pty"; jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` → `0` → valid JSON
-  - `make adr-check ADR=docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md` → `0` → executive summary hash matches
+  - `make adr-check ADR=docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md` → `0` → executive summary hash matches
   - `make planning-validate FEATURE_DIR="docs/project_management/_archived/world-first-repl-persistent-pty"` → `0` → tasks.json validation passed
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/world-first-repl-persistent-pty"` → `0` → planning lint passed
 - Sequencing alignment:
@@ -200,7 +200,7 @@
 - Branch: `feat/world-first-repl-persistent-pty`
 - Goal: Run execution preflight gate per standard and record exactly one recommendation (`ACCEPT` or `REVISE`) in `execution_preflight_report.md`.
 - Inputs read end-to-end (authoritative set + supporting proofs):
-  - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
+  - `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
   - `docs/project_management/_archived/world-first-repl-persistent-pty/plan.md`
   - `docs/project_management/_archived/world-first-repl-persistent-pty/tasks.json`
   - `docs/project_management/_archived/world-first-repl-persistent-pty/session_log.md`

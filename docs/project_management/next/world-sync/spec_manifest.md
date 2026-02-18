@@ -8,10 +8,10 @@ Authoring standard:
 ## Inputs
 - Feature directory: `docs/project_management/next/world-sync`
 - ADR(s) / upstream contracts (inputs; not owned by this feature pack):
-  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-  - `docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
-  - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
-  - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/adrs/implemented/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
+  - `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
+  - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
   - `docs/project_management/future/INTERNAL_GIT.md` (PRD input; not an ADR)
 
 ## Required spec documents (authoritative)

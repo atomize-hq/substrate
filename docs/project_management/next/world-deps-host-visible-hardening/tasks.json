@@ -49,7 +49,7 @@
         "docs/project_management/next/world-deps-host-visible-hardening/manual_testing_playbook.md",
         "docs/project_management/next/world-deps-host-visible-hardening/decision_register.md",
         "docs/project_management/next/world-deps-host-visible-hardening/quality_gate_report.md",
-        "docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md"
+        "docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md"
       ],
       "start_checklist": [
         "Read plan.md, tasks.json, and spec_manifest.md end-to-end",

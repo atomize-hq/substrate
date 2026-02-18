@@ -22,7 +22,7 @@ COMPLETED.
 - New behavior: introduce `substrate host doctor`; redefine `substrate world doctor` to include `host` + `world` blocks with world facts sourced from the world-agent endpoint `GET /v1/doctor/world`.
 - Why: operators need a single, authoritative answer for “is isolation enforceable right now?” across Linux and macOS, including guest-kernel facts on macOS.
 - Links:
-  - `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`
+  - `docs/project_management/adrs/implemented/ADR-0007-host-and-world-doctor-scopes.md`
   - `docs/project_management/_archived/doctor_scopes/DS0-spec.md`
 
 ## Spec Parity (No Drift)

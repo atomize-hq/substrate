@@ -1,7 +1,7 @@
 # Plan — World-First REPL With Persistent World PTY
 
 This plan is anchored by:
-- `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
+- `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
 - `docs/project_management/_archived/world-first-repl-persistent-pty/decision_register.md`
 
 ## Guardrails (non-negotiable)
@@ -39,7 +39,7 @@ This plan is anchored by:
 - `docs/project_management/_archived/world-first-repl-persistent-pty/session_log.md`
 - Specs (slice-level): `docs/project_management/_archived/world-first-repl-persistent-pty/C0-spec.md`, `docs/project_management/_archived/world-first-repl-persistent-pty/C1-spec.md`, `docs/project_management/_archived/world-first-repl-persistent-pty/C2-spec.md`, `docs/project_management/_archived/world-first-repl-persistent-pty/C3-spec.md`, `docs/project_management/_archived/world-first-repl-persistent-pty/C4-spec.md`, `docs/project_management/_archived/world-first-repl-persistent-pty/C5-spec.md`
 - Authoritative spec pack:
-  - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
+  - `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
   - `docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md`
   - `docs/project_management/_archived/world-first-repl-persistent-pty/STATE_MACHINE.md`
   - `docs/project_management/_archived/world-first-repl-persistent-pty/decision_register.md`

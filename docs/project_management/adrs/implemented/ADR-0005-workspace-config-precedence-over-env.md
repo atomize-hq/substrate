@@ -15,7 +15,7 @@
   - `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`
 
 ## Related Docs
-- Prior ADR (baseline semantics): `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md`
+- Prior ADR (baseline semantics): `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`
 - Plan: `docs/project_management/_archived/policy_and_config_precedence/plan.md`
 - Tasks: `docs/project_management/_archived/policy_and_config_precedence/tasks.json`
 - Specs:
@@ -28,15 +28,15 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: f08a3eac55efed865813161d1b57a08363635c960fa843dfa8210a75f7a23a30
+ADR_BODY_SHA256: ecc4a4318c96d87f9b3d83884402d5768455c417828a6fd7d4c8addfb916fd3d
 ### Changes (operator-facing)
 - Workspace config always wins over sourced exports
   - Existing: If your shell environment contains `SUBSTRATE_*` values (often because `$SUBSTRATE_HOME/env.sh` is sourced), those env vars override `.substrate/workspace.yaml`, so workspace settings like `world.caged: false` can appear “ignored”.
   - New: When a workspace exists, `.substrate/workspace.yaml` takes precedence over `SUBSTRATE_*` env exports for all config keys; env vars still apply when not in a workspace (and CLI flags remain highest precedence).
   - Why: Prevent “global config → env.sh → env overrides workspace config” confusion and eliminate the effective-precedence footgun caused by stable export scripts.
   - Links:
-    - `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md#L255` (effective config precedence in ADR-0003)
-    - `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md#L605` (env scripts and `env.sh` purpose)
+    - `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md#L255` (effective config precedence in ADR-0003)
+    - `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md#L605` (env scripts and `env.sh` purpose)
     - `crates/shell/src/execution/config_model.rs#L220` (current effective-config merge order)
     - `docs/project_management/_archived/policy_and_config_precedence/PCP0-spec.md` (implementation slice; authoritative acceptance criteria)
 

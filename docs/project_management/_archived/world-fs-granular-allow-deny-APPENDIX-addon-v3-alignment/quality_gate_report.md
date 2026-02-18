@@ -28,7 +28,7 @@ Smoke script syntax checks (required for cross-platform packs):
 - `python -c 'import json; json.load(open(\"docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/tasks.json\",\"r\",encoding=\"utf-8\")); print(\"OK\")'` → `0` → `PASS`
 
 ## Required Inputs Read End-to-End (checklist)
-- ADR(s): `YES` (`docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`)
+- ADR(s): `YES` (`docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`)
 - Appendix authoritative docs (inputs):
   - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/contract.md`: `YES`
   - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/SCHEMA.md`: `YES`

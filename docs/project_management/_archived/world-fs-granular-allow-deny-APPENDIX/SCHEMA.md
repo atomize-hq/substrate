@@ -1,7 +1,7 @@
 # Schema — World FS Allow/Deny Appendix (V3) (Authoritative)
 
 This document is authoritative for Appendix A + B of:
-- `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+- `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 
 It defines:
 - the V3 policy patch schema for `world_fs` (policy patch files), and

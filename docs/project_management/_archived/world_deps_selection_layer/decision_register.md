@@ -8,7 +8,7 @@ This is the single source of truth for **all** architectural decisions required 
 - Each option includes: pros, cons, cascading implications, risks, unlocks, and quick wins.
 
 Related docs (authoritative inputs):
-- `docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
+- `docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
 - `docs/project_management/_archived/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md` (D1/D2)
 - `docs/project_management/_archived/yaml-settings-migration/Y0-spec.md`
 - `docs/project_management/next/world-sync/C0-spec.md` (workspace init/gating)

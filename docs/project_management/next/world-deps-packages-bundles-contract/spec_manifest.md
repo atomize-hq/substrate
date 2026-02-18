@@ -8,15 +8,15 @@ Authoring standard:
 ## Inputs
 - Feature directory: `docs/project_management/next/world-deps-packages-bundles-contract`
 - ADR(s) / upstream contracts (inputs; not owned by this Planning Pack):
-  - `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md`
+  - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
   - `docs/project_management/next/world_deps_packages_bundles_contract.md`
-  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-  - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
-  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
-  - `docs/project_management/next/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
-  - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
-  - `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
-  - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+  - `docs/project_management/adrs/implemented/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
+  - `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
+  - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+  - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 
 ## Required spec documents (authoritative)
 

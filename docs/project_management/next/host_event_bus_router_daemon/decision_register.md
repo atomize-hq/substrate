@@ -404,7 +404,7 @@ Scope:
 **Decision owner(s):** Shell + World-Agent maintainers  
 **Date:** 2026-02-11  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`, `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`, `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md`
 
 **Problem / Context**
 - We want file-change triggers without expanding the threat surface via host filesystem watching or introducing git as a hard dependency.
@@ -903,7 +903,7 @@ Scope:
 **Decision owner(s):** Broker + Shell maintainers  
 **Date:** 2026-02-11  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`, `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`, `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md`
 
 **Problem / Context**
 - The router introduces a new “indirect execution” pathway (event → request → action). This must be explicitly policy-gated, fail-closed, and explainable.
@@ -1017,7 +1017,7 @@ Scope:
 **Decision owner(s):** Broker + Shell maintainers  
 **Date:** 2026-02-11  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`, `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`, `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md`
 
 **Problem / Context**
 - The ADR states: “If policy requires approval, record pending approval (approval mechanism defined elsewhere).”

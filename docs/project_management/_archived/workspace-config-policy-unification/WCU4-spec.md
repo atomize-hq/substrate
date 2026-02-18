@@ -1,7 +1,7 @@
 # WCU4 Spec — Installer/dev env cleanup (stop exporting `SUBSTRATE_OVERRIDE_*` by default)
 
 References:
-- `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 
 ## Scope

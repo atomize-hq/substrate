@@ -123,7 +123,7 @@
 - Feature: `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment`
 - Goal: Align ADR-related-doc links so the add-on Planning Pack is traceable from ADR-0018 (operator review workflow).
 - Commands run:
-  - `make adr-fix ADR=docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` → exit `0`
+  - `make adr-fix ADR=docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` → exit `0`
   - `make planning-validate FEATURE_DIR="docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment"` → exit `0`
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment"` → exit `0`
 
@@ -132,7 +132,7 @@
   - Updated ADR-0018 `## Related Docs` to include the add-on Planning Pack directory and its primary artifacts.
   - Updated ADR-0018 `ADR_BODY_SHA256` drift guard via `make adr-fix`.
 - Files created/modified:
-  - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+  - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 - Rubric checks run (with results):
   - `make planning-validate FEATURE_DIR="docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment"` → `0` → `PASS`
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment"` → `0` → `PASS`

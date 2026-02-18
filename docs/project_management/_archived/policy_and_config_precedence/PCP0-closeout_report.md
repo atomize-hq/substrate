@@ -18,7 +18,7 @@ Slice spec:
 - New behavior: When a workspace exists, `<workspace_root>/.substrate/workspace.yaml` overrides conflicting `SUBSTRATE_*` environment variables (CLI flags remain highest precedence).
 - Why: Workspace-local configuration should be the authoritative source for workspace behavior, preventing ambient environment from unexpectedly changing behavior inside an initialized workspace.
 - Links:
-  - `docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md`
+  - `docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md`
   - `docs/project_management/_archived/policy_and_config_precedence/PCP0-spec.md`
 
 ## Spec Parity (No Drift)

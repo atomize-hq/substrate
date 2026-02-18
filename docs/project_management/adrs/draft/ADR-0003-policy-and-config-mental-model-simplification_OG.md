@@ -6,15 +6,14 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 0801aaa72bd5dd0e79a543af28da127b62159cdb3ddcb5e5558227708f3d3682
-
+ADR_BODY_SHA256: 693dfb346c0cf6caa6a83cf63917a112bf551b2bbe7ceab008f089126e416f3d
 ADR_BODY_SHA256: <run `python3 scripts/planning/check_adr_exec_summary.py --adr <this-file> --fix` after editing>
 
 - Existing: This file preserves the original (untemplated) ADR draft content that motivated the stricter, templated ADR.
 - New: Operator review should use the templated ADR’s `## Executive Summary (Operator)` and treat this file as archival context only.
 - Why: Keeps the authoritative contract in one place while preserving original rationale for reference.
 - Links:
-  - `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md`
+  - `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`
 
 ## Summary (Normative)
 

@@ -60,7 +60,7 @@
       "status": "completed",
       "description": "Implement the Linux project-isolation mount topology fix (mount --move), add an overlayfs enumeration health probe that drives retry-with-fuse behavior, and emit required trace/doctor metadata per ADR-0004 + WO0-spec.",
       "references": [
-        "docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md",
+        "docs/project_management/adrs/implemented/ADR-0004-world-overlayfs-directory-enumeration-reliability.md",
         "docs/project_management/_archived/world-overlayfs-enumeration/WO0-spec.md",
         "docs/project_management/_archived/world-overlayfs-enumeration/decision_register.md (DR-0001, DR-0002)",
         "docs/project_management/_archived/world-overlayfs-enumeration/integration_map.md"
@@ -107,7 +107,7 @@
       "status": "completed",
       "description": "Add unit/integration tests that validate enumeration probe behavior, fallback selection, and trace/doctor metadata for the Linux world filesystem strategies defined by ADR-0004 + WO0-spec.",
       "references": [
-        "docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md",
+        "docs/project_management/adrs/implemented/ADR-0004-world-overlayfs-directory-enumeration-reliability.md",
         "docs/project_management/_archived/world-overlayfs-enumeration/WO0-spec.md"
       ],
       "acceptance_criteria": [
@@ -149,7 +149,7 @@
       "status": "completed",
       "description": "Core integration: merge WO0-code + WO0-test, reconcile to spec, run integration gates on primary dev platform, then dispatch cross-platform Feature Smoke and report run ids/URLs for platform selection.",
       "references": [
-        "docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md",
+        "docs/project_management/adrs/implemented/ADR-0004-world-overlayfs-directory-enumeration-reliability.md",
         "docs/project_management/_archived/world-overlayfs-enumeration/WO0-spec.md",
         "docs/project_management/_archived/world-overlayfs-enumeration/manual_testing_playbook.md",
         "docs/project_management/_archived/world-overlayfs-enumeration/smoke/linux-smoke.sh",
@@ -324,7 +324,7 @@
       "status": "pending",
       "description": "Final cross-platform integration: merge any platform fixes and confirm all required platforms are green.",
       "references": [
-        "docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md",
+        "docs/project_management/adrs/implemented/ADR-0004-world-overlayfs-directory-enumeration-reliability.md",
         "docs/project_management/_archived/world-overlayfs-enumeration/WO0-spec.md",
         "docs/project_management/_archived/world-overlayfs-enumeration/manual_testing_playbook.md",
         "docs/project_management/_archived/world-overlayfs-enumeration/smoke/linux-smoke.sh",

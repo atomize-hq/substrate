@@ -16,9 +16,9 @@ RECOMMENDATION: ACCEPT
 
 - [x] Planning quality gate is `ACCEPT` (`docs/project_management/_archived/workspace-config-policy-unification/quality_gate_report.md`)
 - [x] ADR-0008 still matches intent:
-  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 - [x] ADR-0012 still matches intent:
-  - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+  - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 - [x] Phase A/B gate file reviewed:
   - `docs/project_management/_archived/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
 - [x] Planning Pack complete (`plan.md`, `tasks.json`, `session_log.md`, specs, kickoff prompts)

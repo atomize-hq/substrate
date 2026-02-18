@@ -13,7 +13,7 @@
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
   - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
   - `docs/project_management/next/sequencing.json`
-  - `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`
+  - `docs/project_management/adrs/implemented/ADR-0007-host-and-world-doctor-scopes.md`
   - `docs/project_management/_archived/doctor_scopes/plan.md` (pre-existing stub)
   - `docs/project_management/_archived/doctor_scopes/decision_register.md` (pre-existing stub)
 - Additional repo context read (non-exhaustive, but all referenced by the spec/plan):
@@ -33,7 +33,7 @@
   - `rg -n "doctor_scopes" -S .`
   - `rg -n "substrate world doctor" docs/WORLD.md`
   - `git rev-parse HEAD`
-  - `make adr-fix ADR=docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`
+  - `make adr-fix ADR=docs/project_management/adrs/implemented/ADR-0007-host-and-world-doctor-scopes.md`
   - `make planning-validate FEATURE_DIR="docs/project_management/_archived/doctor_scopes"`
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/doctor_scopes"`
 
@@ -44,7 +44,7 @@
   - Updated ADR-0007 status and aligned its contract text to the decision register and exit code taxonomy.
   - Added unambiguous specs, tasks, kickoff prompts, integration map, manual testing playbook, and smoke scripts.
 - Files created/modified:
-  - `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`
+  - `docs/project_management/adrs/implemented/ADR-0007-host-and-world-doctor-scopes.md`
   - `docs/project_management/_archived/doctor_scopes/plan.md`
   - `docs/project_management/_archived/doctor_scopes/tasks.json`
   - `docs/project_management/_archived/doctor_scopes/session_log.md`
@@ -58,7 +58,7 @@
   - `docs/project_management/_archived/doctor_scopes/kickoff_prompts/`
   - `docs/project_management/_archived/doctor_scopes/smoke/`
 - Rubric checks run (with results):
-  - `make adr-fix ADR=docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md` → `PASS`
+  - `make adr-fix ADR=docs/project_management/adrs/implemented/ADR-0007-host-and-world-doctor-scopes.md` → `PASS`
   - `make planning-validate FEATURE_DIR="docs/project_management/_archived/doctor_scopes"` → `PASS`
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/doctor_scopes"` → `PASS`
 - Sequencing alignment:
@@ -82,7 +82,7 @@
   - `docs/project_management/_archived/doctor_scopes/tasks.json`
   - `docs/project_management/_archived/doctor_scopes/DS0-spec.md`
   - `docs/project_management/_archived/doctor_scopes/manual_testing_playbook.md`
-  - `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`
+  - `docs/project_management/adrs/implemented/ADR-0007-host-and-world-doctor-scopes.md`
 
 ## END — 2026-01-09T02:00:23Z — remediation — Planning Quality Gate remediation
 - Summary:
@@ -95,10 +95,10 @@
   - `docs/project_management/_archived/doctor_scopes/tasks.json`
   - `docs/project_management/_archived/doctor_scopes/DS0-spec.md`
   - `docs/project_management/_archived/doctor_scopes/manual_testing_playbook.md`
-  - `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`
+  - `docs/project_management/adrs/implemented/ADR-0007-host-and-world-doctor-scopes.md`
 - Commands run (with exit codes):
   - `git checkout -b feat/doctor-scopes` → exit `0`
-  - `make adr-fix ADR=docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md` → exit `0`
+  - `make adr-fix ADR=docs/project_management/adrs/implemented/ADR-0007-host-and-world-doctor-scopes.md` → exit `0`
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/doctor_scopes"` → exit `0`
   - `make planning-validate FEATURE_DIR="docs/project_management/_archived/doctor_scopes"` → exit `0`
   - `jq -e . "docs/project_management/_archived/doctor_scopes/tasks.json" >/dev/null` → exit `0`
@@ -110,7 +110,7 @@
 - Goal: Run the execution preflight gate and produce a concrete ACCEPT/REVISE recommendation before any DS0 triad work begins.
 - Inputs reviewed (required set):
   - `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
-  - `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`
+  - `docs/project_management/adrs/implemented/ADR-0007-host-and-world-doctor-scopes.md`
   - `docs/project_management/_archived/doctor_scopes/plan.md`
   - `docs/project_management/_archived/doctor_scopes/tasks.json`
   - `docs/project_management/_archived/doctor_scopes/session_log.md`

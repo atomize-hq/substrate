@@ -250,7 +250,7 @@ exec
 # C0-spec — Full isolation Landlock ↔ OverlayFS backing dirs allowlist
 
 Authoritative ADR:
-- `docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
+- `docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
 
 Exit codes:
 - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
@@ -291,7 +291,7 @@ exec
 ## Scope
 - Feature directory: `docs/project_management/next/full-isolation-landlock-overlayfs-compat/`
 - Orchestration branch: `feat/full-isolation-landlock-overlayfs-compat`
-- ADR: `docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
+- ADR: `docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
 
 ## Goal
 - Restore `world_fs.write_allowlist` correctness in `world_fs.isolation=full` + `world_fs.mode=writable` on Linux when Landlock is supported and overlayfs is the active filesystem strategy.
@@ -316,7 +316,7 @@ exec
   "status": "pending",
   "description": "Merge C0 code+tests and make the slice green on the primary dev platform.",
   "references": [
-    "docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md",
+    "docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md",
     "docs/project_management/next/full-isolation-landlock-overlayfs-compat/plan.md",
     "docs/project_management/next/full-isolation-landlock-overlayfs-compat/tasks.json",
     "docs/project_management/next/full-isolation-landlock-overlayfs-compat/session_log.md",

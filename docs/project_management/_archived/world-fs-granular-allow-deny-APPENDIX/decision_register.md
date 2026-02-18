@@ -11,7 +11,7 @@ Authoring standard:
 **Date:** 2026-02-06  
 **Status:** Accepted  
 **Related docs:**
-- `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` (Appendix A)
+- `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` (Appendix A)
 - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/SCHEMA.md`
 - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/contract.md`
 - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX0-spec.md`
@@ -50,7 +50,7 @@ Authoring standard:
 **Date:** 2026-02-06  
 **Status:** Accepted  
 **Related docs:**
-- `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` (Appendix B.2)
+- `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` (Appendix B.2)
 - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/contract.md`
 - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/ENV.md`
 - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX1-spec.md`
@@ -89,7 +89,7 @@ Authoring standard:
 **Date:** 2026-02-06  
 **Status:** Accepted  
 **Related docs:**
-- `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` (Appendix A)
+- `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` (Appendix A)
 - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/SCHEMA.md`
 - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/SECURITY.md`
 
@@ -127,7 +127,7 @@ Authoring standard:
 **Date:** 2026-02-06  
 **Status:** Accepted  
 **Related docs:**
-- `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` (Appendix B.3)
+- `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` (Appendix B.3)
 - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/contract.md`
 - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX2-spec.md`
 
@@ -166,7 +166,7 @@ Authoring standard:
 **Date:** 2026-02-06  
 **Status:** Accepted  
 **Related docs:**
-- `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` (Appendix B.4)
+- `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` (Appendix B.4)
 - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/contract.md`
 - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/WFGADAX3-spec.md`
 

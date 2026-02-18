@@ -130,8 +130,7 @@ Preferred ADR registry location (canonical):
   - Superseded: `docs/project_management/adrs/superseded/ADR-000X-<kebab-title>.md`
 
 Legacy locations (still supported):
-- `docs/project_management/next/ADR-000X-<kebab-title>.md` (cross-cutting ADR), and/or
-- `docs/project_management/next/<feature>/ADR-000X-<kebab-title>.md` (feature-local ADR).
+- `docs/project_management/adrs/<bucket>/ADR-000X-<kebab-title>.md` (canonical ADR registry path).
 
 If both a cross-cutting ADR and a feature-local ADR exist, the cross-cutting ADR is authoritative and the feature-local ADR must defer to it.
 

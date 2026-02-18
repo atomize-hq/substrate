@@ -9,7 +9,7 @@ Feature directory:
 - `docs/project_management/_archived/workspace-config-policy-unification/`
 
 Slice spec:
-- `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 
 ## Behavior Delta (Existing → New → Why)
 - Existing behavior: dev/install scripts could export `SUBSTRATE_OVERRIDE_*` by default, making overrides unintentionally “sticky” across sessions.

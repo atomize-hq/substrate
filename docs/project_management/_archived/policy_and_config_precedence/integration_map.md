@@ -43,7 +43,7 @@
 
 ## Composition with adjacent tracks
 - Baseline config/policy model comes from ADR-0003:
-  - `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md`
+  - `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`
 - This change is a narrow correction that does not introduce new config keys and does not change workspace discovery.
 
 ## Sequencing alignment

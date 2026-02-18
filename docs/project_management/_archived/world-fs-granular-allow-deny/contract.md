@@ -3,7 +3,7 @@
 This file is the single place to consolidate the user-facing contract for this feature (CLI/config/exit codes/paths).
 
 Authoritative references:
-- ADR: `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+- ADR: `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 - Schema: `docs/project_management/_archived/world-fs-granular-allow-deny/SCHEMA.md`
 - Protocol: `docs/project_management/_archived/world-fs-granular-allow-deny/PROTOCOL.md`
 - Env: `docs/project_management/_archived/world-fs-granular-allow-deny/ENV.md`

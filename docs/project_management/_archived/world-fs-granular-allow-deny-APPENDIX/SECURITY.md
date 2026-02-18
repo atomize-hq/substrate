@@ -1,7 +1,7 @@
 # Security — World FS Appendix (Authoritative)
 
 This document is authoritative for Appendix A + B of:
-- `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+- `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 
 ## 1) Routing fail-closed is a safety boundary
 - When `world_fs.fail_closed.routing=true`, Substrate MUST not execute host fallback.

@@ -25,13 +25,13 @@
 - Manual Playbook: `docs/project_management/next/workflow-engine/manual_testing_playbook.md` (not created; ADR draft phase)
 - Dependency foundations (must remain compatible):
   - Trace + event foundations: `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
-  - Output routing + attribution: `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+  - Output routing + attribution: `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
   - Router daemon (workflow triggers, queues, cross-workspace): `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md`
   - Config/policy surface (no new roots): `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: e2fa215bd1d1e6522efecf40c911fda4c06716f73a67c1acab9c7873cfd3da7d
+ADR_BODY_SHA256: ff1ed6ebaa33c86c483bbf053aa783e1fc10206f02a4b450b906995b96c1f5a7
 ### Changes (operator-facing)
 - Add a first-class “workflow run” capability to Substrate
   - Existing: Substrate executes single commands (interactive or non-interactive) and records spans for replay/audit; operators orchestrate multi-step flows outside of Substrate (scripts, makefiles, ad-hoc tooling).

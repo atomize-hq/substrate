@@ -56,7 +56,7 @@ make planning-validate FEATURE_DIR="$FEATURE_DIR"
 
 ## Required Inputs Read End-to-End (checklist)
 
-- ADR(s): `YES` (`docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`)
+- ADR(s): `YES` (`docs/project_management/adrs/implemented/ADR-0007-host-and-world-doctor-scopes.md`)
 - `plan.md`: `YES`
 - `tasks.json`: `YES`
 - `session_log.md`: `YES`
@@ -94,7 +94,7 @@ make planning-validate FEATURE_DIR="$FEATURE_DIR"
 - Result: `FAIL`
 - Evidence:
   - Exit code taxonomy is referenced consistently, but the “unreachable vs not provisioned” classification appears in both ADR and spec without a concrete discriminator:
-    - `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md` lines 79–85
+    - `docs/project_management/adrs/implemented/ADR-0007-host-and-world-doctor-scopes.md` lines 79–85
     - `docs/project_management/_archived/doctor_scopes/DS0-spec.md` lines 52–56
 - Notes: This will likely yield platform-divergent behavior for the same failure mode.
 
@@ -163,9 +163,9 @@ make planning-validate FEATURE_DIR="$FEATURE_DIR"
 - Evidence:
   - `docs/project_management/_archived/doctor_scopes/DS0-spec.md` lines 52–56 (`3`: unreachable; `4`: disabled/not provisioned or missing prereqs).
   - `docs/project_management/_archived/doctor_scopes/DS0-spec.md` lines 149–152 (JSON `world.status` includes `disabled|unreachable|ok|missing_prereqs`, but no distinct “not provisioned” status).
-  - `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md` lines 79–85 includes “world disabled/not provisioned” under exit `4`.
+  - `docs/project_management/adrs/implemented/ADR-0007-host-and-world-doctor-scopes.md` lines 79–85 includes “world disabled/not provisioned” under exit `4`.
 - Impact: Different implementations may choose exit `3` vs `4` for the same “socket missing/service not present” condition, breaking automation.
-- Fix required (exact): In both `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md` and `docs/project_management/_archived/doctor_scopes/DS0-spec.md`, define a concrete discriminator for exit `3` vs `4` (and, if needed, add/rename a `world.status` value so JSON matches exit semantics).
+- Fix required (exact): In both `docs/project_management/adrs/implemented/ADR-0007-host-and-world-doctor-scopes.md` and `docs/project_management/_archived/doctor_scopes/DS0-spec.md`, define a concrete discriminator for exit `3` vs `4` (and, if needed, add/rename a `world.status` value so JSON matches exit semantics).
 - If DEFECT: Alternative (one viable): Treat all “agent unreachable” states (including “not provisioned”) as exit `3`, and reserve exit `4` strictly for “world disabled” and “agent reachable but missing required primitives”; this requires removing “not provisioned” from the exit `4` description.
 
 ### Finding 006 — Windows manual playbook does not validate the DS0 “unsupported” world doctor contract
@@ -235,7 +235,7 @@ jq -e . docs/project_management/next/sequencing.json >/dev/null
 - Result: `PASS`
 - Evidence:
   - Exit code discriminator is aligned between:
-    - `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md` (Exit codes section)
+    - `docs/project_management/adrs/implemented/ADR-0007-host-and-world-doctor-scopes.md` (Exit codes section)
     - `docs/project_management/_archived/doctor_scopes/DS0-spec.md` (Exit codes + JSON contracts)
 - Notes: ADR and spec describe the same exit code semantics and detection rules.
 
@@ -285,7 +285,7 @@ jq -e . docs/project_management/next/sequencing.json >/dev/null
 - Status: `VERIFIED`
 - Evidence:
   - `docs/project_management/_archived/doctor_scopes/DS0-spec.md` defines the `3` vs `4` discriminator and adds `world.status=="not_provisioned"`.
-  - `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md` aligns to the same discriminator.
+  - `docs/project_management/adrs/implemented/ADR-0007-host-and-world-doctor-scopes.md` aligns to the same discriminator.
 - Impact: Automation and scripts can rely on stable exit codes and statuses.
 - Fix required (exact): `none`
 

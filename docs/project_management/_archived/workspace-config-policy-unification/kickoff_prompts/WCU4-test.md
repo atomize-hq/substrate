@@ -3,7 +3,7 @@
 ## Scope
 - Tests only; no production code.
 - Spec: `docs/project_management/_archived/workspace-config-policy-unification/WCU4-spec.md`
-- ADR: `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- ADR: `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 - Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 Do not edit planning docs inside the worktree.

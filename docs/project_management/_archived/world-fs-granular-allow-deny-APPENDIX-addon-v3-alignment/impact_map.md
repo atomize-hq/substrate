@@ -9,7 +9,7 @@ Authoring standards:
 ## Inputs
 - Feature directory: `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment`
 - ADR(s):
-  - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+  - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 - Spec manifest:
   - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/spec_manifest.md`
 
@@ -77,7 +77,7 @@ For each externally visible change, list:
 List overlaps/conflicts with other in-flight work and resolve them deterministically.
 
 ### Relevant ADRs (queued/unimplemented)
-- ADR-0020 (Draft): `docs/project_management/next/ADR-0020-profiles-config-policy-snapshots.md`
+- ADR-0020 (Draft): `docs/project_management/adrs/draft/ADR-0020-profiles-config-policy-snapshots.md`
   - Overlap surfaces: “full policy snapshot” concepts and `substrate policy show --explain` behavior.
   - Conflict: potential naming ambiguity between Appendix “PolicySnapshotV3” (world-agent protocol snapshot) and ADR-0020 “profile policy snapshots” (complete objects).
   - Resolution: keep this add-on scoped to Appendix A+B world-agent snapshot protocol + effective policy display; do not introduce profile snapshot semantics here.

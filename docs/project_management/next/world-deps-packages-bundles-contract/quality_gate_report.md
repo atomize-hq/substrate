@@ -58,7 +58,7 @@ Reference: `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
 export FEATURE_DIR="docs/project_management/next/world-deps-packages-bundles-contract"
 make planning-lint FEATURE_DIR="$FEATURE_DIR"
 # exit 2
-# FAIL: docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md:
+# FAIL: docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md:
 #   ADR_BODY_SHA256 mismatch (found f98e101d96918048c0407b0d8c26c127fcdef4c566d4a954b1a770cbdfc28696,
 #   expected 41fcd002c7e017054b2e4812420598a60ad6041277ebcfc9e41f881b5a83b29f)
 ```
@@ -66,7 +66,7 @@ make planning-lint FEATURE_DIR="$FEATURE_DIR"
 ### Additional review commands (if any)
 
 ```bash
-make adr-check ADR=docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md
+make adr-check ADR=docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md
 # exit 2
 ```
 
@@ -104,7 +104,7 @@ Mark `YES` only if read end-to-end.
 ### 3) Cross-doc consistency (CLI/config/exit codes/paths)
 - Result: `PASS`
 - Evidence:
-  - `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md`
+  - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
   - `docs/project_management/next/world_deps_packages_bundles_contract.md`
   - `docs/project_management/next/world-deps-packages-bundles-contract/manual_testing_playbook.md`
   - `docs/project_management/next/world-deps-packages-bundles-contract/smoke/_core.sh`
@@ -153,10 +153,10 @@ Mark `YES` only if read end-to-end.
 - Status: `DEFECT`
 - Evidence:
   - `make planning-lint FEATURE_DIR="docs/project_management/next/world-deps-packages-bundles-contract"` fails with:
-    - `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md: ADR_BODY_SHA256 mismatch (found f98e… expected 41fc…)`
-  - Repro: `make adr-check ADR=docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md` (exit 2)
+    - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md: ADR_BODY_SHA256 mismatch (found f98e… expected 41fc…)`
+  - Repro: `make adr-check ADR=docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md` (exit 2)
 - Impact: Planning Pack fails the mechanical quality gate; execution triads must not begin.
-- Fix required (exact): Update `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md` `ADR_BODY_SHA256` to `41fcd002c7e017054b2e4812420598a60ad6041277ebcfc9e41f881b5a83b29f` (or run `make adr-fix ADR=docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`), then re-run planning lint.
+- Fix required (exact): Update `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md` `ADR_BODY_SHA256` to `41fcd002c7e017054b2e4812420598a60ad6041277ebcfc9e41f881b5a83b29f` (or run `make adr-fix ADR=docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`), then re-run planning lint.
 - If DEFECT: Alternative (one viable): Remove references to ADR-0017 from this Planning Pack’s required inputs if it is not actually a constraint for this feature; then re-run planning lint.
 
 ### Finding 002 — Decision register entries do not meet the 2-option decision standard
@@ -305,7 +305,7 @@ Mark `YES` only if read end-to-end.
 ### 3) Cross-doc consistency (CLI/config/exit codes/paths)
 - Result: `PASS`
 - Evidence:
-  - `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md`
+  - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
   - `docs/project_management/next/world_deps_packages_bundles_contract.md`
   - `docs/project_management/next/world-deps-packages-bundles-contract/manual_testing_playbook.md`
   - `docs/project_management/next/world-deps-packages-bundles-contract/smoke/_core.sh`

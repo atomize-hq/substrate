@@ -238,7 +238,7 @@
 - Summary of changes (exhaustive):
   - Completed `docs/project_management/next/world-sync/execution_preflight_report.md` with `RECOMMENDATION: ACCEPT`.
   - Appended an `ACCEPT` verification pass to `docs/project_management/next/world-sync/quality_gate_report.md`.
-  - Fixed ADR executive summary hash drift for `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` via `make adr-fix` so planning lint passes for referenced ADR inputs.
+  - Fixed ADR executive summary hash drift for `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` via `make adr-fix` so planning lint passes for referenced ADR inputs.
   - Strengthened `docs/project_management/next/world-sync/smoke/*` to assert that `workspace sync --verbose` output includes the pending path(s) being applied (non-toy observable output check).
 - Mechanical checks:
   - `make planning-lint FEATURE_DIR="docs/project_management/next/world-sync"` → `0` → `PASS`

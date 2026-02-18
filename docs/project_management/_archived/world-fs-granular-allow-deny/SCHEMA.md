@@ -1,7 +1,7 @@
 # Schema — World FS Granular Allow/Deny (V2) (Authoritative)
 
 This document is authoritative for:
-- `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+- `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 
 It defines:
 - the V2 policy schema for `world_fs` (policy patch files), and

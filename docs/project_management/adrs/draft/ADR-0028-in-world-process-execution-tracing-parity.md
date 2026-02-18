@@ -30,7 +30,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 785fb497e333bd6b0c212a8e8a0bd11701d42b4a3ca6812682123b9cc8794fd8
+ADR_BODY_SHA256: 9885e07dbbc2521060b85029518193d6619dddfc27c6f3ddd5bf0c18dfa97cba
 ### Changes (operator-facing)
 - World executions gain subprocess-level visibility (exec/exit telemetry) comparable to host shim tracing
   - Existing: host execution is richly observable via shims, but world execution is observable primarily at “one command per world execute/stream” granularity (no structured visibility into spawned subprocess trees).
@@ -384,7 +384,7 @@ Any record intended to trigger routing or cross-component attribution MUST carry
   - Shared redaction helpers in `crates/common` MUST ship before argv/env emission at process granularity.
   - Span parent linkage bug fix MUST ship before (or alongside) process event emission to keep trace trees valid.
 - Cross-feature alignment dependencies:
-  - The event/correlation fields MUST remain compatible with the output/event attribution contract used by agent orchestration (see `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`).
+  - The event/correlation fields MUST remain compatible with the output/event attribution contract used by agent orchestration (see `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`).
 
 ## Security / Safety Posture
 - Fail-closed vs degrade behavior:

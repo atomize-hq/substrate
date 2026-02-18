@@ -9,7 +9,7 @@
 Do not edit planning docs inside the worktree.
 
 1. Verify you are in the task worktree `wt/world-first-repl-persistent-pty-c4-test` on branch `world-first-repl-persistent-pty-c4-test` and that `.taskmeta.json` exists at the worktree root.
-2. Read: `docs/project_management/_archived/world-first-repl-persistent-pty/C4-spec.md`, `docs/project_management/_archived/world-first-repl-persistent-pty/STATE_MACHINE.md`, `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`, `docs/project_management/_archived/world-first-repl-persistent-pty/requirements_traceability.md`, this prompt.
+2. Read: `docs/project_management/_archived/world-first-repl-persistent-pty/C4-spec.md`, `docs/project_management/_archived/world-first-repl-persistent-pty/STATE_MACHINE.md`, `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`, `docs/project_management/_archived/world-first-repl-persistent-pty/requirements_traceability.md`, this prompt.
 3. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run:
    - `make triad-task-start-pair FEATURE_DIR="docs/project_management/_archived/world-first-repl-persistent-pty" SLICE_ID="C4"`
 

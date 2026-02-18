@@ -14,7 +14,7 @@
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
 
 ## Related Docs
-- Prior ADR (world-deps provisioning posture): `docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
+- Prior ADR (world-deps provisioning posture): `docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
 - Prior hardening track (full cage / Landlock): `docs/project_management/_archived/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md`
 - Plan (stub): `docs/project_management/next/linux_guest_rootfs_backend/plan.md`
 - Decision Register (stub; required): `docs/project_management/next/linux_guest_rootfs_backend/decision_register.md`
@@ -25,7 +25,9 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0009-linux-guest-rootfs-backend-and-linux-system-packages-provisioning.md` after drafting>
+ADR_BODY_SHA256: a182aa49a069eb96e6534633f39fa13f3853af9b9c4fed3141763b5dc9cff4b3
+
+ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/adrs/draft/ADR-0009-linux-guest-rootfs-backend-and-linux-system-packages-provisioning.md` after drafting>
 
 ### Changes (operator-facing)
 - Linux can provision `system_packages` without mutating the host OS
@@ -33,12 +35,12 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0009-li
   - New: Linux gains a guest-like backend based on a Substrate-managed Linux root filesystem (“guest rootfs”), enabling `world deps provision` to install apt packages into the guest rootfs (not the host) while keeping the same explicit/selection-driven UX as macOS (Lima) and Windows (WSL).
   - Why: restores parity for `system_packages` while preserving the agent-hub threat model (“no privileged host mutation as a side effect of tool selection”).
   - Links:
-    - `docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
+    - `docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
     - `docs/WORLD.md`
 
 ## Problem / Context
 - Substrate’s Linux world backend is “host-native”: the agent runs directly on the workstation (`docs/WORLD.md`), so any OS package install performed during provisioning would change the host OS package set.
-- The world-deps selection layer formalizes `system_packages` as “must never be installed during runtime sync/install; must be fulfilled by an explicit provisioning command on supported guests” (`docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md`).
+- The world-deps selection layer formalizes `system_packages` as “must never be installed during runtime sync/install; must be fulfilled by an explicit provisioning command on supported guests” (`docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md`).
 - Substrate’s Linux “full isolation” mode (mount namespace + `pivot_root`) is designed to make host paths unnameable and constrain writes, but today it still relies on read-only bind mounts of host `/usr`, `/etc`, etc. That deliberately prevents any OS package mutation inside the cage, so apt/dpkg cannot be used as a “guest provisioning” mechanism without changing the design.
 
 We need a Linux “guest-like” environment that:

@@ -132,12 +132,12 @@ planning-lint-ps:
 
 .PHONY: adr-check
 adr-check:
-	@if [ -z "$(ADR)" ]; then echo "ERROR: set ADR=docs/project_management/<...>/ADR-XXXX-....md"; exit 2; fi
+	@if [ -z "$(ADR)" ]; then echo "ERROR: set ADR=docs/project_management/adrs/<bucket>/ADR-XXXX-....md"; exit 2; fi
 	python3 scripts/planning/check_adr_exec_summary.py --adr "$(ADR)"
 
 .PHONY: adr-fix
 adr-fix:
-	@if [ -z "$(ADR)" ]; then echo "ERROR: set ADR=docs/project_management/<...>/ADR-XXXX-....md"; exit 2; fi
+	@if [ -z "$(ADR)" ]; then echo "ERROR: set ADR=docs/project_management/adrs/<bucket>/ADR-XXXX-....md"; exit 2; fi
 	python3 scripts/planning/check_adr_exec_summary.py --adr "$(ADR)" --fix
 
 # =========================

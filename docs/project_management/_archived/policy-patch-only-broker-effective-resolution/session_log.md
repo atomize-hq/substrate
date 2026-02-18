@@ -3,9 +3,9 @@
 - Branch: `testing`
 - Goal: Produce an execution-ready Planning Pack for ADR-0013 with zero ambiguity.
 - Inputs to read end-to-end:
-  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
-  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-  - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
@@ -62,7 +62,7 @@
 - Branch: `testing`
 - Goal: Split the work into smaller slices (C0/C1) to reduce integration risk.
 - Inputs to read end-to-end:
-  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
   - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/plan.md`
   - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/tasks.json`
   - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/C0-spec.md`
@@ -123,7 +123,7 @@
   - Finding 006
 - Commands planned:
   - `export FEATURE_DIR="docs/project_management/_archived/policy-patch-only-broker-effective-resolution"`
-  - `make adr-fix ADR=docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+  - `make adr-fix ADR=docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
   - `make planning-lint FEATURE_DIR="$FEATURE_DIR"`
   - `make planning-validate FEATURE_DIR="$FEATURE_DIR"`
   - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null`
@@ -135,12 +135,12 @@
   - Finding 005: Wired `docs/CONFIGURATION.md` into C1 integration task references and acceptance criteria as an explicit deliverable.
   - Finding 006: Updated ADR-0013 validation pointers to reference this feature directory’s playbook/smoke scripts.
 - Files modified:
-  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
   - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md`
   - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/tasks.json`
   - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/session_log.md`
 - Commands run (with exit codes):
-  - `make adr-fix ADR=docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md` → `0`
+  - `make adr-fix ADR=docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md` → `0`
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/policy-patch-only-broker-effective-resolution"` → `0`
   - `make planning-validate FEATURE_DIR="docs/project_management/_archived/policy-patch-only-broker-effective-resolution"` → `0`
   - `jq -e . "docs/project_management/_archived/policy-patch-only-broker-effective-resolution/tasks.json" >/dev/null` → `0`
@@ -176,7 +176,7 @@
   - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/integration_map.md`
   - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md`
   - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/execution_preflight_report.md`
-  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
   - `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
 - Commands planned:
   - `export FEATURE_DIR="docs/project_management/_archived/policy-patch-only-broker-effective-resolution"`
@@ -188,7 +188,7 @@
 ## END — 2026-01-17T04:40:20Z — execution — F0 execution preflight gate
 - Outcome: `RECOMMENDATION: REVISE`
 - Blockers (must fix before starting `C0`):
-  - Approve ADR-0013 (`docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`: set status to `Approved`, or otherwise record acceptance)
+  - Approve ADR-0013 (`docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`: set status to `Approved`, or otherwise record acceptance)
   - Push `feat/policy-patch-only-broker-effective-resolution` to `origin` so CI dispatch using `WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution"` is runnable
 - Commands run (with exit codes):
   - `make triad-orch-ensure FEATURE_DIR="docs/project_management/_archived/policy-patch-only-broker-effective-resolution"` → `0`
@@ -201,7 +201,7 @@
 - Branch: `feat/policy-patch-only-broker-effective-resolution`
 - Goal: Approve ADR-0013, ensure orchestration branch exists on `origin`, and re-run the execution preflight gate to a final ACCEPT/REVISE.
 - Fixes applied:
-  - ADR-0013 status set to `Approved`: `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+  - ADR-0013 status set to `Approved`: `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
   - Pushed orchestration branch to remote: `feat/policy-patch-only-broker-effective-resolution` → `origin/feat/policy-patch-only-broker-effective-resolution`
 - Commands planned:
   - `make triad-orch-ensure FEATURE_DIR="docs/project_management/_archived/policy-patch-only-broker-effective-resolution"`

@@ -15,7 +15,7 @@ Grounding (what exists today)
       - Concurrent Substrate-managed output (e.g., `:demo-agent`, future AgentHub events) is **not PTY bytes** and MUST NOT be injected into
         the PTY stream. It must be rendered via a separate host path (Reedline external printer / buffered renderer), and during PTY
         passthrough it SHOULD be buffered to avoid corrupting TUIs.
-      - See `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`.
+      - See `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`.
 
   ———
 
@@ -248,7 +248,7 @@ Grounding (what exists today)
 
   - This document’s “stdout” refers to the **session PTY byte stream** only.
   - Substrate-managed concurrent output on the host (agent/task events) is a distinct stream and MUST be rendered separately (see
-    `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`).
+    `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`).
   - In particular, during PTY passthrough mode, the host SHOULD buffer structured events and render them only after the foreground PTY
     command completes, so TUIs/REPLs are not corrupted by interleaved host text.
 

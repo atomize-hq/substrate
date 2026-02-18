@@ -246,7 +246,7 @@ Implemented the “project bind mount” enforcement:
 ### 3.3 World-deps selection layer (Not implemented yet)
 
 The selection-driven world-deps model is specified and sequenced:
-- ADR: `docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
+- ADR: `docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
 - Specs: `docs/project_management/_archived/world_deps_selection_layer/S0-spec-selection-config-and-ux.md`, `docs/project_management/_archived/world_deps_selection_layer/S1-spec-install-classes.md`, `docs/project_management/_archived/world_deps_selection_layer/S2-spec-system-packages-provisioning.md`
 - Sequencing: `docs/project_management/next/sequencing.json`
 
@@ -260,7 +260,7 @@ Runtime settings format is YAML-only and is implemented by Y0:
 ## 4) Final UX and schema summary
 
 World-deps selection + install-class semantics are finalized in ADR-0002 and its triad specs:
-- `docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
+- `docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
 - `docs/project_management/_archived/world_deps_selection_layer/S0-spec-selection-config-and-ux.md`
 - `docs/project_management/_archived/world_deps_selection_layer/S1-spec-install-classes.md`
 - `docs/project_management/_archived/world_deps_selection_layer/S2-spec-system-packages-provisioning.md`

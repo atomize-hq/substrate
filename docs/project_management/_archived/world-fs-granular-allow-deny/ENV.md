@@ -1,7 +1,7 @@
 # Env Var Contract — World FS Allow/Deny + Strict Deny (Authoritative)
 
 This document is authoritative for:
-- `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+- `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 
 It defines the env var interfaces between:
 - host shell → world-agent,

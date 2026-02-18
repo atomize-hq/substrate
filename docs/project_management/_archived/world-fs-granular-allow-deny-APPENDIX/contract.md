@@ -1,7 +1,7 @@
 # Contract — World FS Allow/Deny Appendix (V3) (Authoritative)
 
 This document is authoritative for Appendix A + B of:
-- `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+- `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 
 ## 1) Operator-facing policy keys (V3)
 - Full schema and validation rules: `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/SCHEMA.md`

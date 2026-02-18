@@ -17,16 +17,16 @@
 
 ## Related Docs
 - Prior ADRs:
-  - `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md`
-  - `docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md`
-  - `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md`
+  - `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`
+  - `docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md`
+  - `docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md`
 - Follow-on ADRs:
-  - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+  - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 - Decision Register: `docs/project_management/_archived/workspace-config-policy-unification/decision_register.md`
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 8fa337b54ee1c23bad34e31ee47fc1ba4eb1811c136a92890fa517408237ab12
+ADR_BODY_SHA256: b05d3b2905cf142d383ada511ce8084a962783f5add20f27e51cabbf1315df4a
 ### Changes (operator-facing)
 - Config and policy commands become explicit about scope and effective views
   - Existing: `config show` vs `config global show` can disagree because `config show` is an effective/merged view and can be affected by persistent `SUBSTRATE_OVERRIDE_*` env exports from install/dev scripts in directories with no enabled workspace.
@@ -34,7 +34,7 @@ ADR_BODY_SHA256: 8fa337b54ee1c23bad34e31ee47fc1ba4eb1811c136a92890fa517408237ab1
   - Why: Eliminate “why didn’t my global set take effect?” confusion and make config and policy semantics symmetric.
   - Links:
     - `docs/project_management/_archived/workspace-config-policy-unification/decision_register.md`
-    - `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md`
+    - `docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md`
     - `crates/shell/src/execution/config_model.rs#L220`
 
 - Workspace state is unified under a single canonical `.substrate/` directory
@@ -106,7 +106,7 @@ Config patch header template (global/workspace):
 #   - Workspace patch: overrides the global patch + defaults.
 #   - Global patch: overrides defaults.
 # - Merge semantics are schema-defined per key; most keys are `replace`, but some keys may intentionally merge across scopes.
-#   - See `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`.
+#   - See `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`.
 # - You may edit this file directly, or use the CLI (recommended) for validated updates:
 #   - Global:    `substrate config global set ...` / `substrate config global reset ...`
 #   - Workspace: `substrate config workspace set ...` / `substrate config workspace reset ...`
@@ -155,7 +155,7 @@ Policy patch header template (global/workspace):
   - Emits an additional machine-readable provenance map to **stderr**.
   - For most keys, provenance indicates a single source layer.
   - For keys whose effective value is derived from multiple layers (schema-defined merge keys), provenance MUST list all contributing sources deterministically.
-    - See `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`.
+    - See `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`.
   - Source labels include:
     - `cli_flag`, `override_env`, `workspace_patch`, `global_patch`, `default`, `injected_protected`.
 - Exit codes:
@@ -251,7 +251,7 @@ Policy patch header template (global/workspace):
 - `--explain`:
   - Emits a per-key provenance breakdown to stderr.
   - If per-key merge strategies are introduced for policy keys, provenance must support multi-source keys as specified in:
-    - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`.
+    - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`.
 - Exit codes: `0` success; `2` invalid YAML / invalid policy; `1` unexpected.
 
 #### `substrate policy global show [--json]`
@@ -381,7 +381,7 @@ Protected exclude injection (always applied):
 The config patch is a YAML mapping where keys may be omitted to inherit. Unknown keys are a hard error.
 
 Per-key merge strategies (including multi-layer derived values) are defined by:
-- `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+- `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 
 Allowed keys (base allowlist; extended by follow-on ADRs):
 - `world.enabled` (bool)

@@ -88,7 +88,7 @@ sed -n '1,200p' docs/project_management/next/policy-patch-only-broker-effective-
 # C0-spec — Broker Canonical Policy Resolver + CLI Delegation
 
 Authoritative ADR:
-- `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+- `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
 
 Exit codes:
 - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
@@ -777,8 +777,8 @@ pub(crate) struct PolicyPatch {
     pub name: Option<String>,
     #[serde(skip_serializing_if = "WorldFsPatch::is_empty")]
 exec
-/bin/bash -lc "rg -n \"world_fs_require_world|policy current show|--json\" docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md | head -n 80
-sed -n '1,260p' docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ-core succeeded in 44ms:
+/bin/bash -lc "rg -n \"world_fs_require_world|policy current show|--json\" docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md | head -n 80
+sed -n '1,260p' docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ-core succeeded in 44ms:
 35:  - Existing: `substrate policy current show` can succeed with patch-form `policy.yaml`, while interactive runs/shims/world-agent can fail or silently fall back when the broker parses the same file as a full strict document.
 60:  - `substrate policy current show` can report a valid effective policy while execution paths fail to parse the same file or fall back to defaults.
 82:  - `substrate policy current show`:

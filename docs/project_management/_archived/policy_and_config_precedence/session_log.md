@@ -3,7 +3,7 @@
 - Branch: `feat/policy_and_config_precedence`
 - Goal: Produce an execution-ready Planning Pack for ADR-0005 with zero ambiguity.
 - Inputs to read end-to-end:
-  - `docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md`
+  - `docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md`
   - `docs/project_management/next/sequencing.json`
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/EXECUTIVE_SUMMARY_STANDARD.md`
@@ -16,20 +16,20 @@
   - `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
 - Commands planned (if any):
-  - `make adr-check ADR=docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md`
-  - `make adr-fix ADR=docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md`
+  - `make adr-check ADR=docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md`
+  - `make adr-fix ADR=docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md`
   - `jq -e . docs/project_management/_archived/policy_and_config_precedence/tasks.json >/dev/null`
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/policy_and_config_precedence"`
 
 ## END — 2026-01-02T00:43:55Z — planning — ADR-0005 planning pack
 - Summary of changes (exhaustive):
   - Created a dedicated Planning Pack for ADR-0005 under `docs/project_management/_archived/policy_and_config_precedence/` (plan/tasks/specs/decision register/integration map/playbook/smoke scripts/kickoff prompts).
-  - Updated `docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md` to reference the new feature directory and added the missing executive-summary drift guard.
+  - Updated `docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md` to reference the new feature directory and added the missing executive-summary drift guard.
   - Updated `docs/project_management/next/sequencing.json` to add the `policy_and_config_precedence` sprint and PCP0 slice.
   - Fixed ADR executive summary hashes via `make adr-fix` where required for mechanical lint.
 - Files created/modified:
-  - `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md`
-  - `docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md`
+  - `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`
+  - `docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md`
   - `docs/project_management/next/sequencing.json`
   - `docs/project_management/_archived/policy_and_config_precedence/plan.md`
   - `docs/project_management/_archived/policy_and_config_precedence/tasks.json`
@@ -48,7 +48,7 @@
 - Rubric checks run (with results):
   - `jq -e . docs/project_management/_archived/policy_and_config_precedence/tasks.json >/dev/null` → `0` → pass
   - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0` → pass
-  - `make adr-check ADR=docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md` → `0` → pass
+  - `make adr-check ADR=docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md` → `0` → pass
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/policy_and_config_precedence"` → `0` → pass
 - Sequencing alignment:
   - `sequencing.json` reviewed: `YES`

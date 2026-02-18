@@ -27,8 +27,8 @@ python3 scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "$FEATURE_
 
 # ADR exec-summary drift
 python3 scripts/planning/check_adr_exec_summary.py --adr docs/project_management/adrs/draft/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md
-python3 scripts/planning/check_adr_exec_summary.py --adr docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md
-python3 scripts/planning/check_adr_exec_summary.py --adr docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md
+python3 scripts/planning/check_adr_exec_summary.py --adr docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md
+python3 scripts/planning/check_adr_exec_summary.py --adr docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md
 
 # Mechanical Planning Pack lint (includes smoke linkage, kickoff sentinel, sequencing alignment)
 scripts/planning/lint.sh --feature-dir "$FEATURE_DIR"

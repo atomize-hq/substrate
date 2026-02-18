@@ -62,7 +62,7 @@ bash -n "$FEATURE_DIR/smoke/linux-smoke.sh"
 ## Required Inputs Read End-to-End (checklist)
 
 - ADR(s): `YES`
-  - `docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
+  - `docs/project_management/adrs/implemented/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
 - `plan.md`: `YES`
 - `tasks.json`: `YES`
 - `session_log.md`: `YES`
@@ -86,7 +86,7 @@ bash -n "$FEATURE_DIR/smoke/linux-smoke.sh"
 ### 1) Zero-ambiguity contracts
 - Result: `PASS`
 - Evidence:
-  - `docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md` (`User Contract (Authoritative)`)
+  - `docs/project_management/adrs/implemented/ADR-0004-world-overlayfs-directory-enumeration-reliability.md` (`User Contract (Authoritative)`)
   - `docs/project_management/_archived/world-overlayfs-enumeration/WO0-spec.md` (`Contract`)
 - Notes: The enumeration probe contract, fallback chain, warning line, required trace fields, doctor keys, and exit code are singular and testable.
 

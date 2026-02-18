@@ -13,7 +13,7 @@ Rules:
 **Decision owner(s):** Shell/Broker maintainers  
 **Date:** 2026-01-17  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`, `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`, `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 
 **Problem / Context**
 - ADR-0008 establishes patch-only policy files with layered precedence, but the broker’s runtime loader still expects a strict full document and does “first match wins”.

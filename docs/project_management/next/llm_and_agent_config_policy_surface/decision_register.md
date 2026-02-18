@@ -172,7 +172,7 @@ Scope:
 **Decision owner(s):** Shell + Broker maintainers  
 **Date:** 2026-02-08  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`, `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+**Related docs:** `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`, `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 
 **Problem / Context**
 - LLM + agents need fail-closed governance while keeping policy focused on enforcement requirements (as in ADR-0018) rather than acting as a second “feature enable” control plane.
@@ -297,7 +297,7 @@ Scope:
 **Decision owner(s):** Shell + Broker + Agent Hub maintainers  
 **Date:** 2026-02-08  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 
 **Problem / Context**
 - Agents can run either on the host or inside a world boundary. When an agent is configured/routed for in-world execution and a world boundary is not available, the “host fallback vs fail closed” behavior is a security boundary decision (analogous to ADR-0018’s `fail_closed.routing` posture).
@@ -347,7 +347,7 @@ Scope:
 **Decision owner(s):** Shell + Agent Hub maintainers  
 **Date:** 2026-02-08  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
 
 **Problem / Context**
 - Substrate needs to manage multiple agents/backends with stable identities. Encoding arbitrary agent ids into a strict YAML schema via fixed key paths is brittle and does not match the established inventory-directory mental model (ADR-0011).
@@ -401,7 +401,7 @@ Scope:
 **Decision owner(s):** Shell + Broker + Agent Hub maintainers  
 **Date:** 2026-02-08  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 
 **Problem / Context**
 - Agents need different restrictions (world FS, commands, egress). We need a per-agent mechanism without creating “policy scattered everywhere” that undermines effective-policy explainability.
@@ -451,7 +451,7 @@ Scope:
 **Decision owner(s):** Broker + Agent Hub maintainers  
 **Date:** 2026-02-08  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 
 **Problem / Context**
 - If per-agent policy overlays can broaden permissions, we lose the ability to reason about base policy as the enforcement truth. We need a composition rule that is safe by construction.

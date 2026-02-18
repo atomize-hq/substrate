@@ -16,8 +16,8 @@ user
 - Merge platform-fix branches (if any) and finalize WCU3 with an auditable cross-platform green state.
 - Spec: `docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md`
 - ADRs:
-  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-  - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 - Gate file: `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
 - Closeout report: `docs/project_management/next/workspace-config-policy-unification/WCU3-closeout_report.md`
 
@@ -95,8 +95,8 @@ exec
 /bin/bash -lc "set -euo pipefail
 ls -la docs/project_management/next/workspace-config-policy-unification || true
 sed -n '1,200p' docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md
-sed -n '1,200p' docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md
-sed -n '1,240p' docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md
+sed -n '1,200p' docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md
+sed -n '1,240p' docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md
 sed -n '1,240p' docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md
 
 # find task logs / session logs
@@ -137,10 +137,10 @@ jq '.slices[] | select(.id==\"WCU3\")' docs/project_management/next/workspace-co
 
 ## Context (why this exists)
 This Planning Pack implements the operator-facing contract defined by:
-- `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 
 This body of work also **must** implement the cross-cutting refinement defined by:
-- `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+- `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 
 Non-negotiable additional gating for this pack:
 - `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
@@ -674,7 +674,7 @@ jq '.tasks[] | select(.id==\"WCU3-integ\")' docs/project_management/next/workspa
   "status": "pending",
   "description": "Merge platform-fix branches (if any) and finalize WCU3 with a clean, auditable cross-platform green state.",
   "references": [
-    "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+    "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
     "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0002)",
     "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0003)",
     "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0009)",
@@ -750,8 +750,8 @@ sed -n '1,120p' docs/project_management/next/workspace-config-policy-unification
 - Merge platform-fix branches (if any) and finalize WCU3 with an auditable cross-platform green state.
 - Spec: `docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md`
 - ADRs:
-  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-  - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 - Gate file: `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
 - Closeout report: `docs/project_management/next/workspace-config-policy-unification/WCU3-closeout_report.md`
 
@@ -883,8 +883,8 @@ Feature directory:
 - `docs/project_management/next/workspace-config-policy-unification/`
 
 Slice spec:
-- `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-- `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+- `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 
 ## Behavior Delta (Existing → New → Why)
 - Existing behavior:
@@ -937,8 +937,8 @@ sed -n '1,220p' docs/project_management/next/workspace-config-policy-unification
 - Inputs to read end-to-end:
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-  - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 - Commands planned (if any):
   - `make planning-lint FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification"`
 
@@ -1374,7 +1374,7 @@ index c8db22a9f0d5ea1b88b7d6c074180956e7c81f02..5af572e495ec03c14e47836ec466a00d
 +      "status": "completed",
        "description": "Merge platform-fix branches (if any) and finalize WCU3 with a clean, auditable cross-platform green state.",
        "references": [
-         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+         "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
 
 file update:
 diff --git a/docs/project_management/next/workspace-config-policy-unification/WCU3-closeout_report.md b/docs/project_management/next/workspace-config-policy-unification/WCU3-closeout_report.md
@@ -1448,7 +1448,7 @@ index c8db22a9f0d5ea1b88b7d6c074180956e7c81f02..5af572e495ec03c14e47836ec466a00d
 +      "status": "completed",
        "description": "Merge platform-fix branches (if any) and finalize WCU3 with a clean, auditable cross-platform green state.",
        "references": [
-         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+         "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
 
 exec
 /bin/bash -lc 'set -euo pipefail
@@ -1546,7 +1546,7 @@ index c8db22a9f0d5ea1b88b7d6c074180956e7c81f02..5af572e495ec03c14e47836ec466a00d
 +      "status": "completed",
        "description": "Merge platform-fix branches (if any) and finalize WCU3 with a clean, auditable cross-platform green state.",
        "references": [
-         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+         "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
 
 file update
 M /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ/docs/project_management/next/workspace-config-policy-unification/session_log.md
@@ -1691,7 +1691,7 @@ index c8db22a9f0d5ea1b88b7d6c074180956e7c81f02..5af572e495ec03c14e47836ec466a00d
 +      "status": "completed",
        "description": "Merge platform-fix branches (if any) and finalize WCU3 with a clean, auditable cross-platform green state.",
        "references": [
-         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+         "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
 
 file update:
 diff --git a/docs/project_management/next/workspace-config-policy-unification/WCU3-closeout_report.md b/docs/project_management/next/workspace-config-policy-unification/WCU3-closeout_report.md
@@ -1801,7 +1801,7 @@ index c8db22a9f0d5ea1b88b7d6c074180956e7c81f02..5af572e495ec03c14e47836ec466a00d
 +      "status": "completed",
        "description": "Merge platform-fix branches (if any) and finalize WCU3 with a clean, auditable cross-platform green state.",
        "references": [
-         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+         "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
 
 
 thinking
@@ -1922,7 +1922,7 @@ index c8db22a9f0d5ea1b88b7d6c074180956e7c81f02..5af572e495ec03c14e47836ec466a00d
 +      "status": "completed",
        "description": "Merge platform-fix branches (if any) and finalize WCU3 with a clean, auditable cross-platform green state.",
        "references": [
-         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+         "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
 
 
 thinking
@@ -2052,7 +2052,7 @@ index c8db22a9f0d5ea1b88b7d6c074180956e7c81f02..5af572e495ec03c14e47836ec466a00d
 +      "status": "completed",
        "description": "Merge platform-fix branches (if any) and finalize WCU3 with a clean, auditable cross-platform green state.",
        "references": [
-         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+         "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
 
 file update
 M /home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/session_log.md
@@ -2351,7 +2351,7 @@ index c8db22a9f0d5ea1b88b7d6c074180956e7c81f02..5af572e495ec03c14e47836ec466a00d
 +      "status": "completed",
        "description": "Merge platform-fix branches (if any) and finalize WCU3 with a clean, auditable cross-platform green state.",
        "references": [
-         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+         "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
 diff --git a/docs/project_management/next/workspace-config-policy-unification/tasks.json b/docs/project_management/next/workspace-config-policy-unification/tasks.json
 index c8db22a9f0d5ea1b88b7d6c074180956e7c81f02..5af572e495ec03c14e47836ec466a00d7b3d7fe5
 --- a/docs/project_management/next/workspace-config-policy-unification/tasks.json
@@ -2364,7 +2364,7 @@ index c8db22a9f0d5ea1b88b7d6c074180956e7c81f02..5af572e495ec03c14e47836ec466a00d
 +      "status": "completed",
        "description": "Merge platform-fix branches (if any) and finalize WCU3 with a clean, auditable cross-platform green state.",
        "references": [
-         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+         "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
 
 file update:
 diff --git a/docs/project_management/next/workspace-config-policy-unification/WCU3-closeout_report.md b/docs/project_management/next/workspace-config-policy-unification/WCU3-closeout_report.md
@@ -2569,7 +2569,7 @@ index c8db22a9f0d5ea1b88b7d6c074180956e7c81f02..5af572e495ec03c14e47836ec466a00d
 +      "status": "completed",
        "description": "Merge platform-fix branches (if any) and finalize WCU3 with a clean, auditable cross-platform green state.",
        "references": [
-         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+         "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
 diff --git a/docs/project_management/next/workspace-config-policy-unification/tasks.json b/docs/project_management/next/workspace-config-policy-unification/tasks.json
 index c8db22a9f0d5ea1b88b7d6c074180956e7c81f02..5af572e495ec03c14e47836ec466a00d7b3d7fe5
 --- a/docs/project_management/next/workspace-config-policy-unification/tasks.json
@@ -2582,7 +2582,7 @@ index c8db22a9f0d5ea1b88b7d6c074180956e7c81f02..5af572e495ec03c14e47836ec466a00d
 +      "status": "completed",
        "description": "Merge platform-fix branches (if any) and finalize WCU3 with a clean, auditable cross-platform green state.",
        "references": [
-         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+         "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
 
 
 thinking
@@ -2705,7 +2705,7 @@ index c8db22a9f0d5ea1b88b7d6c074180956e7c81f02..5af572e495ec03c14e47836ec466a00d
 +      "status": "completed",
        "description": "Merge platform-fix branches (if any) and finalize WCU3 with a clean, auditable cross-platform green state.",
        "references": [
-         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+         "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
 
 exec
 /bin/bash -lc 'set -euo pipefail
@@ -2823,7 +2823,7 @@ index c8db22a9f0d5ea1b88b7d6c074180956e7c81f02..5af572e495ec03c14e47836ec466a00d
 +      "status": "completed",
        "description": "Merge platform-fix branches (if any) and finalize WCU3 with a clean, auditable cross-platform green state.",
        "references": [
-         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+         "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
 
 exec
 /bin/bash -lc 'set -euo pipefail
@@ -2941,7 +2941,7 @@ index c8db22a9f0d5ea1b88b7d6c074180956e7c81f02..5af572e495ec03c14e47836ec466a00d
 +      "status": "completed",
        "description": "Merge platform-fix branches (if any) and finalize WCU3 with a clean, auditable cross-platform green state.",
        "references": [
-         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+         "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
 
 
 thinking
@@ -3063,7 +3063,7 @@ index c8db22a9f0d5ea1b88b7d6c074180956e7c81f02..5af572e495ec03c14e47836ec466a00d
 +      "status": "completed",
        "description": "Merge platform-fix branches (if any) and finalize WCU3 with a clean, auditable cross-platform green state.",
        "references": [
-         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+         "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
 
 
 thinking
@@ -3185,7 +3185,7 @@ index c8db22a9f0d5ea1b88b7d6c074180956e7c81f02..5af572e495ec03c14e47836ec466a00d
 +      "status": "completed",
        "description": "Merge platform-fix branches (if any) and finalize WCU3 with a clean, auditable cross-platform green state.",
        "references": [
-         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+         "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
 
 
 thinking
@@ -3307,7 +3307,7 @@ index c8db22a9f0d5ea1b88b7d6c074180956e7c81f02..5af572e495ec03c14e47836ec466a00d
 +      "status": "completed",
        "description": "Merge platform-fix branches (if any) and finalize WCU3 with a clean, auditable cross-platform green state.",
        "references": [
-         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+         "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
 
 
 thinking
@@ -3427,7 +3427,7 @@ index c8db22a9f0d5ea1b88b7d6c074180956e7c81f02..5af572e495ec03c14e47836ec466a00d
 +      "status": "completed",
        "description": "Merge platform-fix branches (if any) and finalize WCU3 with a clean, auditable cross-platform green state.",
        "references": [
-         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+         "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
 
 
 thinking
@@ -3558,7 +3558,7 @@ index c8db22a9f0d5ea1b88b7d6c074180956e7c81f02..5af572e495ec03c14e47836ec466a00d
 +      "status": "completed",
        "description": "Merge platform-fix branches (if any) and finalize WCU3 with a clean, auditable cross-platform green state.",
        "references": [
-         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+         "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
 
 
 thinking
@@ -3689,7 +3689,7 @@ index c8db22a9f0d5ea1b88b7d6c074180956e7c81f02..5af572e495ec03c14e47836ec466a00d
 +      "status": "completed",
        "description": "Merge platform-fix branches (if any) and finalize WCU3 with a clean, auditable cross-platform green state.",
        "references": [
-         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+         "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
 
 
 thinking
@@ -3827,7 +3827,7 @@ index c8db22a9f0d5ea1b88b7d6c074180956e7c81f02..5af572e495ec03c14e47836ec466a00d
 +      "status": "completed",
        "description": "Merge platform-fix branches (if any) and finalize WCU3 with a clean, auditable cross-platform green state.",
        "references": [
-         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+         "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
 
 
 thinking
@@ -3949,7 +3949,7 @@ index c8db22a9f0d5ea1b88b7d6c074180956e7c81f02..5af572e495ec03c14e47836ec466a00d
 +      "status": "completed",
        "description": "Merge platform-fix branches (if any) and finalize WCU3 with a clean, auditable cross-platform green state.",
        "references": [
-         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+         "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
 
 exec
 /bin/bash -lc "set -euo pipefail
@@ -4084,7 +4084,7 @@ index c8db22a9f0d5ea1b88b7d6c074180956e7c81f02..5af572e495ec03c14e47836ec466a00d
 +      "status": "completed",
        "description": "Merge platform-fix branches (if any) and finalize WCU3 with a clean, auditable cross-platform green state.",
        "references": [
-         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+         "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
 
 
 
@@ -4215,7 +4215,7 @@ index c8db22a9f0d5ea1b88b7d6c074180956e7c81f02..5af572e495ec03c14e47836ec466a00d
 +      "status": "completed",
        "description": "Merge platform-fix branches (if any) and finalize WCU3 with a clean, auditable cross-platform green state.",
        "references": [
-         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+         "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
 
 tokens used
 230,157

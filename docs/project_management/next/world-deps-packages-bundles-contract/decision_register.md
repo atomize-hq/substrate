@@ -8,7 +8,7 @@ Template standard:
 **Decision owner(s):** Shell / World maintainers  
 **Date:** 2026-02-13  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md`, `docs/project_management/next/world_deps_packages_bundles_contract.md`, `docs/project_management/next/world-deps-packages-bundles-contract/WDP0-spec.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`, `docs/project_management/next/world_deps_packages_bundles_contract.md`, `docs/project_management/next/world-deps-packages-bundles-contract/WDP0-spec.md`
 
 **Problem / Context**
 - The repo currently ships a legacy `world deps` selection-file model (`status|init|select|provision`) that conflicts with ADR-0011’s inventory + enabled-patch contract.

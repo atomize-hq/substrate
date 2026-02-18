@@ -153,7 +153,7 @@ jq -e --arg dir "$FEATURE_DIR" '.sprints[] | select(.directory==$dir) | .id' doc
 ### Additional review commands (if any)
 ```bash
 rg -n "substrate_bashenv|\\.substrate/bashenv" \
-  docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md \
+  docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md \
   docs/project_management/next/policy_and_config_mental_model_simplification/PCM3-spec.md
 
 rg -n "unclassified" \
@@ -194,7 +194,7 @@ Mark `YES` only if read end-to-end.
 ### 3) Cross-doc consistency (CLI/config/exit codes/paths)
 - Result: `PASS`
 - Evidence:
-  - `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md` (cmd_allowed semantics; manager env bashenv path; world enable flags)
+  - `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md` (cmd_allowed semantics; manager env bashenv path; world enable flags)
   - `docs/project_management/next/policy_and_config_mental_model_simplification/PCM2-spec.md` (cmd_allowed semantics)
   - `docs/project_management/next/policy_and_config_mental_model_simplification/PCM3-spec.md` (manager env bashenv path; world enable flags)
 - Notes: CLI/config/exit-code/path contracts are consistent across ADR/spec/playbook/smoke/tasks.
@@ -233,7 +233,7 @@ Mark `YES` only if read end-to-end.
 - Status: `VERIFIED`
 - Evidence:
   - `docs/project_management/next/policy_and_config_mental_model_simplification/PCM2-spec.md` now matches ADR-0003 allowlist semantics for `cmd_allowed`.
-  - `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md` (“How policy decisions apply (command-level)”).
+  - `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md` (“How policy decisions apply (command-level)”).
 - Impact: Ensures implementers follow the authoritative allowlist contract.
 - Fix required (exact): none
 - If DEFECT: Alternative (one viable): none
@@ -242,7 +242,7 @@ Mark `YES` only if read end-to-end.
 - Status: `VERIFIED`
 - Evidence:
   - ADR requires sourcing `~/.substrate_bashenv`:
-    - `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md`: `Source the legacy bashenv file at ~/.substrate_bashenv if it exists.`
+    - `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`: `Source the legacy bashenv file at ~/.substrate_bashenv if it exists.`
   - `docs/project_management/next/policy_and_config_mental_model_simplification/PCM3-spec.md` matches ADR-0003:
     - `Source the legacy bashenv file at ~/.substrate_bashenv if it exists.`
 - Impact: Ensures implementers use the correct, repo-established legacy bashenv hook path.
@@ -252,7 +252,7 @@ Mark `YES` only if read end-to-end.
 ### Finding 003 — PCM3 “world enable” command contract is ambiguous vs ADR-0003
 - Status: `VERIFIED`
 - Evidence:
-  - `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md` defines the exact flag set for `substrate world enable`.
+  - `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md` defines the exact flag set for `substrate world enable`.
   - `docs/project_management/next/policy_and_config_mental_model_simplification/PCM3-spec.md` now matches the exact command and flag set.
 - Impact: Ensures implementers follow a zero-ambiguity CLI contract for `substrate world enable`.
 - Fix required (exact): none

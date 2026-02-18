@@ -1,7 +1,7 @@
 # Decision Register — World-First REPL With Persistent World PTY
 
 This decision register supports:
-- `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
+- `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
 
 Note on options:
 - Each DR has exactly **Option A** and **Option B** (no “Option C”), per `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`.

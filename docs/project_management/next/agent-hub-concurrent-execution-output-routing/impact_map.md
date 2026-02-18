@@ -9,7 +9,7 @@ Authoring standards:
 ## Inputs
 - Feature directory: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/`
 - ADR(s):
-  - `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+  - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 - Spec manifest:
   - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/spec_manifest.md`
 
@@ -57,7 +57,7 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
 - `docs/CONFIGURATION.md` — document `repl.max_pty_buffered_lines` (default, bounds, precedence, invalid handling)
 - `docs/TRACE.md` — document new trace record types (`agent_event`, warning codes) and required fields for correlation
 - `docs/project_management/next/sequencing.json` — add a sprint entry for this feature so task dependencies and sequencing are aligned before execution begins
-- `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md` — remove placeholder sequencing language and link to `tasks.json` and `ci_checkpoint_plan.md`
+- `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md` — remove placeholder sequencing language and link to `tasks.json` and `ci_checkpoint_plan.md`
 
 ### Deprecate
 - None (this ADR refines interactive behavior; no stable public APIs are deprecated).
@@ -100,7 +100,7 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
 ## Cross-queue scan (ADRs + Planning Packs)
 
 ### Relevant ADRs (queued/unimplemented)
-- ADR: `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
+- ADR: `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
   - Overlap surfaces: PTY passthrough contract, out-of-band PTY bytes during prompt, “no injection” invariant.
   - Conflict: no.
   - Resolution (explicit): ADR-0017 refines the structured-event path to remain out-of-band and explicitly non-injective during passthrough.

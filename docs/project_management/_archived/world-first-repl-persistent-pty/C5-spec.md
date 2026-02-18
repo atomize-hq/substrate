@@ -5,7 +5,7 @@ This slice implements the non-interactive consistency requirements from ADR-0016
 - and `:host` MUST NOT be recognized in non-interactive flows.
 
 Authoritative specs (do not diverge):
-- `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md` (CLI contract for `-c/--command`)
+- `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md` (CLI contract for `-c/--command`)
 - `docs/project_management/_archived/world-first-repl-persistent-pty/decision_register.md` (DR-05, DR-10)
 
 Depends on:

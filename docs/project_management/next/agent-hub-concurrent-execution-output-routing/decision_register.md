@@ -4,7 +4,7 @@ Standard:
 - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md` (Decision Register Standard)
 
 Scope:
-- This decision register supports `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`.
+- This decision register supports `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`.
 - Each decision is recorded as exactly two viable options (A/B) with explicit tradeoffs and a single selection.
 
 ---
@@ -14,7 +14,7 @@ Scope:
 **Decision owner(s):** Shell maintainers  
 **Date:** 2026-02-07  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+**Related docs:** `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 
 **Problem / Context**
 - Substrate needs a deterministic output contract for concurrent agent activity that preserves PTY correctness (TUIs) and avoids corrupting the interactive line editor.
@@ -70,7 +70,7 @@ Scope:
 **Decision owner(s):** Shell maintainers  
 **Date:** 2026-02-07  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+**Related docs:** `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 
 **Problem / Context**
 - During PTY passthrough (TUIs), structured agent events must not be injected into the PTY byte stream, but we still need deterministic behavior for concurrent structured output.
@@ -121,7 +121,7 @@ Scope:
 **Decision owner(s):** Shell maintainers  
 **Date:** 2026-02-07  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+**Related docs:** `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 
 **Problem / Context**
 - When the bounded structured-event buffer overflows during PTY passthrough, Substrate must provide an explicit, programmatically extractable signal describing what was suppressed, without injecting messages into the PTY byte stream.
@@ -184,7 +184,7 @@ Scope:
 **Decision owner(s):** Shell + Agent Hub maintainers  
 **Date:** 2026-02-07  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+**Related docs:** `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 
 **Problem / Context**
 - Upcoming LLM/agent/workflow/router ADRs require stable correlation fields to support trace-driven routing, session logging, and multi-agent attribution without heuristics.
@@ -265,7 +265,7 @@ Scope:
 **Decision owner(s):** Shell maintainers  
 **Date:** 2026-02-07  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+**Related docs:** `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 
 **Problem / Context**
 - The PTY passthrough structured-event buffer must be bounded by default, but operators may need to tune it per workspace/global context (CI vs local dev, noisy agents vs quiet agents).
@@ -319,7 +319,7 @@ Scope:
 **Decision owner(s):** Shell maintainers  
 **Date:** 2026-02-07  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+**Related docs:** `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 
 **Problem / Context**
 - While the line editor is active (`Idle`), PTY output may arrive out-of-band. Substrate must render this output without corrupting the current input buffer.
@@ -371,7 +371,7 @@ Scope:
 **Decision owner(s):** Shell maintainers  
 **Date:** 2026-02-07  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+**Related docs:** `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 
 **Problem / Context**
 - The buffer cap value will vary across machines, workloads, and environments (CI vs local dev). We must keep the system safe-by-default while preserving deterministic behavior and avoiding “footgun” values that cause unbounded memory growth.
@@ -443,7 +443,7 @@ Scope:
 **Decision owner(s):** Shell + Agent Hub maintainers  
 **Date:** 2026-02-07  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+**Related docs:** `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 
 **Problem / Context**
 - Downstream consumers (router daemon, session logs, block UIs) need deterministic, low-friction extraction of attribution fields. Field placement must avoid drift and minimize ad-hoc JSON parsing.
@@ -493,7 +493,7 @@ Scope:
 **Decision owner(s):** Shell + Trace maintainers  
 **Date:** 2026-02-07  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+**Related docs:** `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 
 **Problem / Context**
 - Substrate is both an interactive REPL and a backend engine for other applications. Structured agent events must be available programmatically and durably; the canonical local source of truth is `trace.jsonl`.
@@ -548,7 +548,7 @@ Scope:
 **Decision owner(s):** Shell maintainers  
 **Date:** 2026-02-07  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+**Related docs:** `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 
 **Problem / Context**
 - PTY passthrough can be entered explicitly (e.g., `:pty`) or implicitly (commands that require a PTY). Buffering/suppression semantics must be consistent regardless of how passthrough starts.
@@ -597,7 +597,7 @@ Scope:
 **Decision owner(s):** Shell + Trace maintainers  
 **Date:** 2026-02-15  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`, `docs/TRACE.md`
+**Related docs:** `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`, `docs/TRACE.md`
 
 **Problem / Context**
 - Phase 8 correlation vocabulary requires join keys to be present as top-level fields on trace records (operator queryability via `jq`, router/workflow joins, and auditability).

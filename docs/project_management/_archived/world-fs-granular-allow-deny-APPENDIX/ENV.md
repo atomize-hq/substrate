@@ -1,7 +1,7 @@
 # Env Var Contract — World FS Appendix (Authoritative)
 
 This document is authoritative for Appendix A + B of:
-- `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+- `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 
 It defines env var interfaces for exported state and execution routing behavior.
 
@@ -23,5 +23,5 @@ Rules:
 
 ## 2) Override inputs (non-overlapping)
 - Override inputs remain `SUBSTRATE_OVERRIDE_*` per:
-  - `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md`
+  - `docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md`
 

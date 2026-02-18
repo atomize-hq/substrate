@@ -4,8 +4,8 @@
 Make `--world` execution deterministic in host-visible worlds by constructing a sanitized in-world environment by default, rather than inheriting host user toolchain env.
 
 ## Inputs (authoritative)
-- `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md` (Appendix A)
-- `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+- `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md` (Appendix A)
+- `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 - `docs/project_management/next/world-deps-host-visible-hardening/decision_register.md` (DR-0001, DR-0002, DR-0007, DR-0008)
 
 ## Contract

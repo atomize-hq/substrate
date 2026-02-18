@@ -13,7 +13,7 @@ This slice applies to all commands that consume effective config (not only `subs
 - Trace schema changes.
 
 ## User Contract (Authoritative)
-Authoritative contract: `docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md`
+Authoritative contract: `docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md`
 
 This spec is the implementation slice and defines acceptance criteria and validation expectations for PCP0.
 

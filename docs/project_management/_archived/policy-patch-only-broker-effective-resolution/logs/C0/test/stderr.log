@@ -93,7 +93,7 @@ sed -n '1,200p' docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION
 # C0-spec — Broker Canonical Policy Resolver + CLI Delegation
 
 Authoritative ADR:
-- `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+- `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
 
 Exit codes:
 - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
@@ -124,7 +124,7 @@ sed -n '220,520p' docs/project_management/next/policy-patch-only-broker-effectiv
 # C0-spec — Broker Canonical Policy Resolver + CLI Delegation
 
 Authoritative ADR:
-- `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+- `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
 
 Exit codes:
 - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
@@ -167,19 +167,19 @@ rg -n \"global_patch|workspace_patch\" -S crates src" in /home/spenser/__Active_
 ./crates/shell/src/execution/policy_cmd.rs:125:        eprintln!("substrate: note: global policy patch is empty (no overrides); run 'substrate policy current show --explain' to view the effective policy for this directory");
 ./crates/shell/src/execution/policy_cmd.rs:232:            "--explain is only supported for `substrate policy current show`",
 ./crates/shell/src/execution/policy_cmd.rs:247:        eprintln!("substrate: note: workspace policy patch is empty (no overrides); run 'substrate policy current show --explain' to view the effective policy for this directory");
-./docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md:35:  - Existing: `substrate policy current show` can succeed with patch-form `policy.yaml`, while interactive runs/shims/world-agent can fail or silently fall back when the broker parses the same file as a full strict document.
-./docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md:60:  - `substrate policy current show` can report a valid effective policy while execution paths fail to parse the same file or fall back to defaults.
-./docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md:82:  - `substrate policy current show`:
-./docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md:121:    - `policy current show` delegates effective resolution to the broker (no duplicate merge logic).
-./docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md:139:    - consistent `policy current show` output matching runtime behavior
-./docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md:157:  - Effective policy provenance is explainable via `policy current show --explain` (ADR-0012), but policy resolution correctness MUST NOT depend on `--explain` being used.
-./docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md:167:    - succeed for `substrate policy current show`, and
-./docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md:98:  - (Optional but recommended for symmetry) `substrate policy current show --explain`
-./docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md:138:#   `substrate policy current show --explain`
-./docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md:246:#### `substrate policy current show [--json] [--explain]`
-./docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md:264:- It MUST NOT print built-in defaults; use `substrate policy current show` for the effective (merged) view.
-./docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md:266:  - `substrate: note: global policy patch is empty (no overrides); run 'substrate policy current show --explain' to view the effective policy for this directory`
-./docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md:281:  - Prints the **effective policy for `cwd`** after applying the update (same output contract as `policy current show` but without the merged notice line).
+./docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md:35:  - Existing: `substrate policy current show` can succeed with patch-form `policy.yaml`, while interactive runs/shims/world-agent can fail or silently fall back when the broker parses the same file as a full strict document.
+./docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md:60:  - `substrate policy current show` can report a valid effective policy while execution paths fail to parse the same file or fall back to defaults.
+./docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md:82:  - `substrate policy current show`:
+./docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md:121:    - `policy current show` delegates effective resolution to the broker (no duplicate merge logic).
+./docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md:139:    - consistent `policy current show` output matching runtime behavior
+./docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md:157:  - Effective policy provenance is explainable via `policy current show --explain` (ADR-0012), but policy resolution correctness MUST NOT depend on `--explain` being used.
+./docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md:167:    - succeed for `substrate policy current show`, and
+./docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md:98:  - (Optional but recommended for symmetry) `substrate policy current show --explain`
+./docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md:138:#   `substrate policy current show --explain`
+./docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md:246:#### `substrate policy current show [--json] [--explain]`
+./docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md:264:- It MUST NOT print built-in defaults; use `substrate policy current show` for the effective (merged) view.
+./docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md:266:  - `substrate: note: global policy patch is empty (no overrides); run 'substrate policy current show --explain' to view the effective policy for this directory`
+./docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md:281:  - Prints the **effective policy for `cwd`** after applying the update (same output contract as `policy current show` but without the merged notice line).
 exec
 /bin/bash -lc 'rg -n "struct .*Policy" crates/broker crates/shell crates/common -S
 rg -n "resolve.*policy|effective.*policy|merge.*patch" crates/broker crates/shell crates/common -S' in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-test succeeded in 86ms:

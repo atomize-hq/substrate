@@ -2,10 +2,10 @@
 
 ## Context
 This Planning Pack implements the precedence correction defined by:
-- `docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md`
+- `docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md`
 
 Baseline semantics live in:
-- `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md`
+- `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`
 
 ## Guardrails (non-negotiable)
 - Orchestration branch: `feat/policy_and_config_precedence`

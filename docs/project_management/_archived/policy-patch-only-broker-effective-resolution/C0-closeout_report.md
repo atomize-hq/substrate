@@ -19,7 +19,7 @@ Slice spec:
 - Why: a single resolver eliminates drift, keeps effective policy deterministic, and enforces the patch-only on-disk contract.
 - Links:
   - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/C0-spec.md`
-  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
 
 ## Spec Parity (No Drift)
 

@@ -5,7 +5,7 @@ This document maps every MUST / MUST NOT in the authoritative spec pack to:
 - an explicit validation step (test or manual verification).
 
 Authoritative spec pack (no drift allowed):
-- `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+- `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 - `docs/project_management/_archived/world-fs-granular-allow-deny/contract.md`
 - `docs/project_management/_archived/world-fs-granular-allow-deny/SCHEMA.md`
 - `docs/project_management/_archived/world-fs-granular-allow-deny/PROTOCOL.md`

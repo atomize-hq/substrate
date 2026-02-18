@@ -53,7 +53,7 @@
   - `docs/project_management/_archived/world-fs-granular-allow-deny/kickoff_prompts/WFGAD5-test.md`
   - `docs/project_management/_archived/world-fs-granular-allow-deny/kickoff_prompts/WFGAD5-integ.md`
   - `docs/project_management/_archived/world-fs-granular-allow-deny/kickoff_prompts/FZ-feature-cleanup.md`
-  - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+  - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
   - `docs/project_management/next/sequencing.json`
 - Rubric checks run (with results):
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/world-fs-granular-allow-deny"` → `PASS`

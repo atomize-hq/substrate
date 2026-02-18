@@ -108,8 +108,8 @@ exec
 # WCU3 Spec — CLI scopes + reset semantics + config editor support for `world.deps.enabled` (ADR-0012 Phase B)
 
 References:
-- `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-- `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+- `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 - `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
 - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 
@@ -158,8 +158,8 @@ exec
 - Inputs to read end-to-end:
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-  - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 - Commands planned (if any):
   - `make planning-lint FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification"`
 
@@ -221,8 +221,8 @@ exec
 - Merge platform-fix branches (if any) and finalize WCU3 with an auditable cross-platform green state.
 - Spec: `docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md`
 - ADRs:
-  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-  - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 - Gate file: `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
 - Closeout report: `docs/project_management/next/workspace-config-policy-unification/WCU3-closeout_report.md`
 
@@ -255,8 +255,8 @@ It layers on top of all repo planning standards and must be treated as **non-neg
 `ADR-0012` introduces per-key merge strategies and multi-source provenance. `ADR-0008` is the queued body of work that will implement the config plumbing and CLI surfaces; therefore, this Planning Pack must explicitly include and complete the Phase A/B work defined here so downstream work (notably world-deps) can safely depend on it.
 
 Authoritative ADRs:
-- `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-- `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+- `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 
 Primary downstream consumer contract:
 - `docs/project_management/next/world_deps_packages_bundles_contract.md`
@@ -265,13 +265,13 @@ Primary downstream consumer contract:
 
 ### A1) Schema supports per-key merge strategies
 exec
-/bin/bash -lc "rg -n \"world\\.deps\\.|WCU3\" docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md | head -n 80" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 43ms:
+/bin/bash -lc "rg -n \"world\\.deps\\.|WCU3\" docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md | head -n 80" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 43ms:
 34:  - Why: enables additive config keys (like `world.deps.enabled`) without creating a second parallel config system or confusing precedence.
 60:- Make `world.deps.enabled` explicitly additive via a deterministic ordered-set merge.
 124:#### `world.deps.enabled`
 exec
-/bin/bash -lc 'rg -n "config (current|global|workspace)|scope|reset|patch" docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md | head -n 120' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 43ms:
-30:ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md` after drafting>
+/bin/bash -lc 'rg -n "config (current|global|workspace)|scope|reset|patch" docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md | head -n 120' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 43ms:
+30:ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md` after drafting>
 33:- Config and policy commands become explicit about scope and effective views
 34:  - Existing: `config show` vs `config global show` can disagree because `config show` is an effective/merged view and can be overridden by persistent `SUBSTRATE_OVERRIDE_*` env exports from install/dev scripts.
 35:  - New: `current show` is the effective/merged view; `global|workspace show` shows exactly what is set at that scope (patch file). Install/dev scripts do not export `SUBSTRATE_OVERRIDE_*` by default.
@@ -2978,7 +2978,7 @@ I'm considering the implications of a key that includes both global_patch and wo
 
 Reordering keys instead of adding new fields seems less invasive and maintains schema, so I plan to prioritize key ordering by rank while keeping lexicographic order to ensure determinism.
 exec
-/bin/bash -lc 'rg -n "lexic|ordering|determin" docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md | head -n 80' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 57ms:
+/bin/bash -lc 'rg -n "lexic|ordering|determin" docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md | head -n 80' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 57ms:
 33:  - New: `current show --explain` supports keys whose effective value is derived from multiple layers (e.g. global + workspace), and reports those contributing sources deterministically.
 60:- Make `world.deps.enabled` explicitly additive via a deterministic ordered-set merge.
 116:- The explain output MUST be deterministic for the same inputs (no timestamps / random ordering).

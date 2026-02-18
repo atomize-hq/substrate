@@ -4,8 +4,8 @@ This decision register scopes decisions required to align world-agent enforcemen
 effective policy model while removing concurrency hazards from process-global broker state.
 
 Related ADR:
-- `docs/project_management/next/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
-- `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md`
+- `docs/project_management/adrs/implemented/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
+- `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
 
 ---
 
@@ -14,7 +14,7 @@ Related ADR:
 **Decision owner(s):** Substrate core team  
 **Date:** 2026-01-18  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
 
 **Problem / Context**
 - World-agent is a privileged system component (root service on Linux) accessed over a local
@@ -53,7 +53,7 @@ Related ADR:
 **Decision owner(s):** Substrate core team  
 **Date:** 2026-01-18  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
 
 **Problem / Context**
 - Current world-agent derives enforcement inputs by reading broker state inside the agent process.
@@ -92,7 +92,7 @@ Related ADR:
 **Decision owner(s):** Substrate core team  
 **Date:** 2026-01-18  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
 
 **Problem / Context**
 - World-agent needs policy-derived inputs for filesystem isolation (mode/isolation/allowlists) and
@@ -133,7 +133,7 @@ Related ADR:
 **Decision owner(s):** Substrate core team  
 **Date:** 2026-01-18  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
 
 **Problem / Context**
 - The world-agent currently resolves allowlist patterns into:
@@ -172,7 +172,7 @@ Related ADR:
 **Decision owner(s):** Substrate core team  
 **Date:** 2026-01-18  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
 
 **Problem / Context**
 - Shell and world-agent versions can be skewed (release bundles, dev installs, partial upgrades).
@@ -210,7 +210,7 @@ Related ADR:
 **Decision owner(s):** Substrate core team  
 **Date:** 2026-01-18  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
 
 **Problem / Context**
 - The host is the canonical policy resolver (DR-0002), so the host must define a deterministic
@@ -254,7 +254,7 @@ Related ADR:
 **Decision owner(s):** Substrate core team  
 **Date:** 2026-01-18  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
 
 **Problem / Context**
 - Linux currently provisions a systemd system service (`root`), shared by the `substrate` group.
@@ -291,7 +291,7 @@ Related ADR:
 **Decision owner(s):** Substrate core team  
 **Date:** 2026-01-18  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0014-world-agent-policy-resolution-and-concurrency.md`, `docs/TRACE.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0014-world-agent-policy-resolution-and-concurrency.md`, `docs/TRACE.md`
 
 **Problem / Context**
 - QA and operators need to know which policy semantics were applied for a given execution.
@@ -328,7 +328,7 @@ Related ADR:
 **Decision owner(s):** Substrate core team  
 **Date:** 2026-01-18  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0014-world-agent-policy-resolution-and-concurrency.md`, `docs/BROKER.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0014-world-agent-policy-resolution-and-concurrency.md`, `docs/BROKER.md`
 
 **Problem / Context**
 - The policy file includes command controls (`cmd_allowed`, `cmd_denied`, `cmd_isolated`,
@@ -367,7 +367,7 @@ Related ADR:
 **Decision owner(s):** Substrate core team  
 **Date:** 2026-01-18  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 
 **Problem / Context**
 - The Substrate operator contract treats config and policy as patch-merged, scope-aware inputs that can be updated via CLI (`config set`, `policy set`) or by editing YAML files.
@@ -405,7 +405,7 @@ Related ADR:
 **Decision owner(s):** Substrate core team  
 **Date:** 2026-01-18  
 **Status:** Accepted  
-**Related docs:** `docs/ISOLATION_SUPPORT_MATRIX.md`, `docs/project_management/next/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
+**Related docs:** `docs/ISOLATION_SUPPORT_MATRIX.md`, `docs/project_management/adrs/implemented/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
 
 **Problem / Context**
 - Policy snapshots exist to make policy semantics consistent across execution paths and platforms (Linux native, macOS Lima, Windows WSL).

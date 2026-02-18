@@ -48,7 +48,7 @@ rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' '\b(should
 ## Required Inputs Read End-to-End (checklist)
 Mark `YES` only if read end-to-end.
 
-- ADR(s): `YES` (`docs/project_management/next/macos_world_backend_vf/ADR-2026-02-13-macos-world-backend-virtualization-framework.md`)
+- ADR(s): `YES` (`docs/project_management/adrs/draft/ADR-2026-02-13-macos-world-backend-virtualization-framework.md`)
 - `spec_manifest.md`: `NO` (missing)
 - `plan.md`: `NO` (missing)
 - `tasks.json`: `NO` (missing)
@@ -139,7 +139,7 @@ Mark `YES` only if read end-to-end.
 
 ### Finding 003 — ADR fails `make adr-check` (missing Executive Summary section)
 - Status: `DEFECT`
-- Evidence: `make adr-check ADR=docs/project_management/next/macos_world_backend_vf/ADR-2026-02-13-macos-world-backend-virtualization-framework.md` reports missing `## Executive Summary (Operator)` section.
+- Evidence: `make adr-check ADR=docs/project_management/adrs/draft/ADR-2026-02-13-macos-world-backend-virtualization-framework.md` reports missing `## Executive Summary (Operator)` section.
 - Impact: ADR drift guard is part of the mechanical quality bar; operator-facing contract is missing.
 - Fix required (exact): Add `## Executive Summary (Operator)` to the ADR in the required format so `make adr-check` passes.
 - If DEFECT: Alternative (one viable): Move the ADR to the ADR system location and regenerate it from the ADR template (ensures required sections exist).
@@ -185,7 +185,7 @@ Mark `YES` only if read end-to-end.
 ### Finding 008 — Entitlements/signing/distribution is acknowledged but not decided
 - Status: `DEFECT`
 - Evidence:
-  - ADR states VF requires code signing + entitlements (`docs/project_management/next/macos_world_backend_vf/ADR-2026-02-13-macos-world-backend-virtualization-framework.md:60-65`).
+  - ADR states VF requires code signing + entitlements (`docs/project_management/adrs/draft/ADR-2026-02-13-macos-world-backend-virtualization-framework.md:60-65`).
   - Work breakdown does not include an explicit decision and contract for how Substrate binaries are signed/notarized and how dev/CI will run VF flows.
 - Impact: Without a concrete packaging/signed-helper decision, VF execution may be impossible for most users (and impossible in CI), blocking implementation.
 - Fix required (exact): Add a Decision Register entry with exactly two viable packaging options (e.g., signed helper vs signed main binary) and define the resulting build/test/distribution contract.

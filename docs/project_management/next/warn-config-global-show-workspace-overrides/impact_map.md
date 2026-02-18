@@ -59,11 +59,11 @@ Authoring standards:
 ## Cross-queue scan (ADRs + Planning Packs)
 
 ### Relevant ADRs (queued/unimplemented)
-- ADR: `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- ADR: `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
   - Overlap surfaces: workspace enablement + workspace config file location.
   - Conflict: no.
   - Resolution (explicit): `contract.md` uses the workspace marker path `<workspace_root>/.substrate/workspace.yaml` and defers enablement semantics to `workspace::find_workspace_root`.
-- ADR: `docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md`
+- ADR: `docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md`
   - Overlap surfaces: config precedence explanation and operator expectations.
   - Conflict: no.
   - Resolution (explicit): this feature emits a note routing operators to the effective config view and does not change precedence.

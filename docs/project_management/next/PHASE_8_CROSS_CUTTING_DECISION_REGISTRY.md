@@ -3,7 +3,7 @@
 This document is the Phase 8 “circle-back” registry for cross-cutting contracts that span:
 
 - Trace foundations: ADR-0028 (`docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`)
-- Output/event routing: ADR-0017 (`docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`)
+- Output/event routing: ADR-0017 (`docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`)
 - Config/policy surface: ADR-0027 (`docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`)
 - LLM gateway + engines: ADR-0023 / ADR-0024
 - Agent hub + toolbox: ADR-0025 / ADR-0026

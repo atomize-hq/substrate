@@ -56,7 +56,7 @@
       "status": "completed",
       "description": "Implement selection config loading, precedence, init/select UX, `--all` semantics, and exit-code behavior per S0 (production code only).",
       "references": [
-        "docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md",
+        "docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md",
         "docs/project_management/_archived/world_deps_selection_layer/plan.md",
         "docs/project_management/_archived/world_deps_selection_layer/tasks.json",
         "docs/project_management/_archived/world_deps_selection_layer/session_log.md",
@@ -366,7 +366,7 @@
       "status": "completed",
       "description": "Implement manifest v2 install class schema + validation and enforce routing in status/sync/install per S1 (production code only).",
       "references": [
-        "docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md",
+        "docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md",
         "docs/project_management/_archived/world_deps_selection_layer/plan.md",
         "docs/project_management/_archived/world_deps_selection_layer/tasks.json",
         "docs/project_management/_archived/world_deps_selection_layer/session_log.md",
@@ -676,7 +676,7 @@
       "status": "completed",
       "description": "Implement `substrate world deps provision` and package list computation per S2 (production code only).",
       "references": [
-        "docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md",
+        "docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md",
         "docs/project_management/_archived/world_deps_selection_layer/plan.md",
         "docs/project_management/_archived/world_deps_selection_layer/tasks.json",
         "docs/project_management/_archived/world_deps_selection_layer/session_log.md",

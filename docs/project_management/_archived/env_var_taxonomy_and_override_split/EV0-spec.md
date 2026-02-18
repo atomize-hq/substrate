@@ -13,7 +13,7 @@ This slice applies wherever `crates/shell/src/execution/config_model.rs` resolve
 - Changes to world backend transports or shim tracing.
 
 ## User Contract (Authoritative)
-Authoritative contract: `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md`
+Authoritative contract: `docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md`
 
 ### Effective config precedence (workspace present)
 When `<workspace_root>` exists for `cwd`, the effective config precedence (highest to lowest) is:

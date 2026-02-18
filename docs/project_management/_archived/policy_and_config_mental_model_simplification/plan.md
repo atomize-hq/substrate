@@ -5,7 +5,7 @@ ADR-0003 defines a single, strict mental model for Substrate config, policy, wor
 This Planning Pack turns ADR-0003 into execution-ready triads with explicit scope boundaries and validation.
 
 Authoritative contract:
-- `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md`
+- `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`
 
 ## Guardrails (non-negotiable)
 - Orchestration branch: `feat/policy_and_config`

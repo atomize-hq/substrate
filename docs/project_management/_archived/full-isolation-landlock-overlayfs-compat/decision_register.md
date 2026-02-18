@@ -5,7 +5,7 @@ in `world_fs.isolation=full` when Linux Landlock enforcement is enabled and the 
 strategy uses overlayfs backing dirs (`upperdir` / `workdir`).
 
 Related ADR:
-- `docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
+- `docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
 
 ---
 
@@ -14,7 +14,7 @@ Related ADR:
 **Decision owner(s):** Substrate core team  
 **Date:** 2026-01-20  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
 
 **Problem / Context**
 - In full isolation on Linux, the command process runs under an applied Landlock policy.
@@ -56,7 +56,7 @@ Related ADR:
 **Decision owner(s):** Substrate core team  
 **Date:** 2026-01-20  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/C0-spec.md`, `docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
+**Related docs:** `docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/C0-spec.md`, `docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
 
 **Problem / Context**
 - The Landlock exec wrapper must derive overlayfs `upperdir` and `workdir` for the project mountpoint to extend the Landlock write allowlist.
@@ -93,7 +93,7 @@ Related ADR:
 **Decision owner(s):** Substrate core team  
 **Date:** 2026-01-20  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/C0-spec.md`, `docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
+**Related docs:** `docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/C0-spec.md`, `docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
 
 **Problem / Context**
 - The overlayfs implementation requires writes to its `upperdir` and `workdir` for allowlisted project writes to succeed.
@@ -130,7 +130,7 @@ Related ADR:
 **Decision owner(s):** Substrate core team  
 **Date:** 2026-01-20  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/C0-spec.md`, `docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
+**Related docs:** `docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/C0-spec.md`, `docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
 
 **Problem / Context**
 - If Landlock is supported but the wrapper cannot derive overlay backing dirs, allowlisted writes will fail with `EPERM`.

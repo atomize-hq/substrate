@@ -13,7 +13,7 @@
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
   - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
   - `docs/project_management/next/sequencing.json`
-  - `docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
+  - `docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
 - Commands planned (if any):
   - `make planning-new-feature FEATURE=full-isolation-landlock-overlayfs-compat DECISION_HEAVY=1 CROSS_PLATFORM=1 AUTOMATION=1 BEHAVIOR_PLATFORMS=linux CI_PARITY_PLATFORMS=linux,macos,windows`
   - `python3 scripts/planning/validate_tasks_json.py --feature-dir "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat"`
@@ -78,7 +78,7 @@
 - Goal: Run the execution preflight gate before starting any triad work for C0.
 - Inputs reviewed end-to-end:
   - Standard: `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
-  - ADR: `docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
+  - ADR: `docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
   - Planning Pack: `plan.md`, `tasks.json`, `session_log.md`, `C0-spec.md`, `decision_register.md`, `integration_map.md`, `manual_testing_playbook.md`, `smoke/*`
   - CI dispatch plumbing: `Makefile`, `scripts/ci/dispatch_ci_testing.sh`, `scripts/ci/dispatch_feature_smoke.sh`, `.github/workflows/ci-testing.yml`, `.github/workflows/feature-smoke.yml`, `.github/workflows/ci-compile-parity.yml`
 

@@ -430,10 +430,10 @@ Repo maintainers + engineers/agents running the planning/triad automation via `m
 **Outcome**: ADR locations are canonical and references updated.
 
 **Checklist**
-- [ ] Move `docs/project_management/next/ADR-*.md` → `docs/project_management/adrs/implemented/` (or correct bucket)
+- [ ] Move legacy ADRs from `docs/project_management/next/**` → `docs/project_management/adrs/implemented/` (or correct bucket)
 - [ ] Move `docs/project_management/next/<feature>/ADR-*.md` → correct ADR bucket
 - [ ] Rewrite references in packs and docs:
-  - `docs/project_management/next/ADR-...` → `docs/project_management/adrs/implemented/ADR-...` (or chosen bucket)
+  - legacy ADR paths under `docs/project_management/next/**` → canonical paths under `docs/project_management/adrs/<bucket>/`
 - [ ] Update ADR README to document the new canonical root
 
 ---

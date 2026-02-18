@@ -18,7 +18,7 @@ Rule:
 ## Inputs Reviewed
 
 - [x] Planning quality gate is `ACCEPT` (`docs/project_management/_archived/world-first-repl-persistent-pty/quality_gate_report.md`)
-- [x] ADR accepted and still matches intent (`docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`)
+- [x] ADR accepted and still matches intent (`docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`)
 - [x] Planning Pack complete (`plan.md`, `tasks.json`, `session_log.md`, specs, kickoff prompts)
 - [x] Triad sizing is appropriate (each slice is one behavior delta; no “grab bag” slices)
 - [x] Required planning artifacts exist: `integration_map.md`, `manual_testing_playbook.md`

@@ -5,7 +5,7 @@
 **Decision owner(s):** shell/config maintainers  
 **Date:** 2026-01-02  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md`, `docs/project_management/_archived/policy_and_config_precedence/PCP0-spec.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md`, `docs/project_management/_archived/policy_and_config_precedence/PCP0-spec.md`
 
 **Problem / Context**
 - Effective config precedence must change so workspace config overrides `SUBSTRATE_*` env vars when a workspace exists.

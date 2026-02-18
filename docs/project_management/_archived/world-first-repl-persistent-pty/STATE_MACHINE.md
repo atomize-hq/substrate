@@ -1,7 +1,7 @@
 # State Machine — World-First REPL (Authoritative)
 
 This document is authoritative for:
-- `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
+- `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
 - host-side REPL behavior referenced by `docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md` (it does not override the wire protocol or agent-side requirements).
 
 It defines the observable behavior of the interactive REPL, including routing rules, lifecycle, and signal handling.
@@ -174,7 +174,7 @@ Edge case:
   undermining per-line auditability and command boundaries.
   - Out-of-band PTY output may continue after `command_complete` (see `PROTOCOL.md`). This is allowed but unattributed in v1.
 - Structured host/agent messages MUST NOT be injected into the PTY byte stream during passthrough (it would corrupt TUIs). If the REPL has concurrent structured events, implementations SHOULD buffer and flush them after passthrough ends (guidance; not a fallback).
-  - See `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`.
+  - See `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`.
 
 ### State: `ExecutingHost(line)`
 The REPL executes one REPL submission on the host.

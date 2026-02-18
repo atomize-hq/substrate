@@ -4,7 +4,7 @@ Related decisions (authoritative):
 - `docs/project_management/_archived/world-agent-policy-snapshot/decision_register.md` (DR-0002, DR-0005, DR-0008, DR-0011)
 
 Related ADR:
-- `docs/project_management/next/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
+- `docs/project_management/adrs/implemented/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
 
 ## Goal
 Remove world-agent’s legacy local policy resolution (broker reads inside the agent process) after a bounded compatibility window, so world-agent enforcement becomes a deterministic function of host-provided snapshots.

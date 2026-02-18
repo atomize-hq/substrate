@@ -8,7 +8,7 @@ Authoring standard:
 ## Inputs
 - Feature directory: `docs/project_management/_archived/world-fs-granular-allow-deny`
 - ADR(s):
-  - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+  - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 
 ## Required spec documents (authoritative)
 

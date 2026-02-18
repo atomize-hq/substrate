@@ -31,7 +31,7 @@
         "docs/project_management/_archived/world-first-repl-persistent-pty/tasks.json",
         "docs/project_management/_archived/world-first-repl-persistent-pty/session_log.md",
         "docs/project_management/_archived/world-first-repl-persistent-pty/execution_preflight_report.md",
-        "docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md",
+        "docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md",
         "docs/project_management/_archived/world-first-repl-persistent-pty/decision_register.md",
         "docs/project_management/_archived/world-first-repl-persistent-pty/integration_map.md",
         "docs/project_management/_archived/world-first-repl-persistent-pty/manual_testing_playbook.md",
@@ -64,7 +64,7 @@
       "status": "completed",
       "description": "Implement persistent-session bootstrap on world-agent (/v1/stream): start_session \u2192 ready with fail-closed DR-22/DR-23 preflight and legacy start preserved (production code only).",
       "references": [
-        "docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md",
+        "docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md",
         "docs/project_management/_archived/world-first-repl-persistent-pty/plan.md",
         "docs/project_management/_archived/world-first-repl-persistent-pty/C0-spec.md",
         "docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md",
@@ -381,7 +381,7 @@
       "status": "completed",
       "description": "Implement per-submission exec and explicit completion for persistent sessions on world-agent per C1-spec.md (production code only).",
       "references": [
-        "docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md",
+        "docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md",
         "docs/project_management/_archived/world-first-repl-persistent-pty/plan.md",
         "docs/project_management/_archived/world-first-repl-persistent-pty/C1-spec.md",
         "docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md",
@@ -715,7 +715,7 @@
       "status": "completed",
       "description": "Implement the host-side persistent session client core (protocol correctness; fail closed) per C2-spec.md (production code only).",
       "references": [
-        "docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md",
+        "docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md",
         "docs/project_management/_archived/world-first-repl-persistent-pty/plan.md",
         "docs/project_management/_archived/world-first-repl-persistent-pty/C2-spec.md",
         "docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md",
@@ -1046,7 +1046,7 @@
       "status": "completed",
       "description": "Wire interactive REPL routing and lifecycle to the persistent session client, including :host gating, :pty routing, and drift restart per C3-spec.md (production code only).",
       "references": [
-        "docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md",
+        "docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md",
         "docs/project_management/_archived/world-first-repl-persistent-pty/plan.md",
         "docs/project_management/_archived/world-first-repl-persistent-pty/C3-spec.md",
         "docs/project_management/_archived/world-first-repl-persistent-pty/STATE_MACHINE.md",
@@ -1383,7 +1383,7 @@
         "docs/project_management/_archived/world-first-repl-persistent-pty/C4-spec.md",
         "docs/project_management/_archived/world-first-repl-persistent-pty/STATE_MACHINE.md",
         "docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md",
-        "docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md",
+        "docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md",
         "docs/project_management/_archived/world-first-repl-persistent-pty/requirements_traceability.md",
         "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
@@ -1430,7 +1430,7 @@
         "docs/project_management/_archived/world-first-repl-persistent-pty/plan.md",
         "docs/project_management/_archived/world-first-repl-persistent-pty/C4-spec.md",
         "docs/project_management/_archived/world-first-repl-persistent-pty/STATE_MACHINE.md",
-        "docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md",
+        "docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md",
         "docs/project_management/_archived/world-first-repl-persistent-pty/requirements_traceability.md",
         "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
@@ -1715,7 +1715,7 @@
       "status": "completed",
       "description": "Implement non-interactive -c/--command and stdin pipe mode world-consistency when world is enabled per C5-spec.md (production code only).",
       "references": [
-        "docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md",
+        "docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md",
         "docs/project_management/_archived/world-first-repl-persistent-pty/plan.md",
         "docs/project_management/_archived/world-first-repl-persistent-pty/C5-spec.md",
         "docs/project_management/_archived/world-first-repl-persistent-pty/decision_register.md (DR-02, DR-03, DR-04, DR-05, DR-06, DR-10)",

@@ -13,7 +13,7 @@ Operationally, the base pack completed (slice flow + checkpoints + CI gates), bu
 - `substrate policy show` prints an effective policy whose `world_fs` block is still V2-shaped (`mode/isolation/require_world`) even though Appendix A+B are V3 and explicitly forbid backwards compatibility for operator-facing surfaces.
 
 ## Authoritative inputs (source of truth)
-- ADR: `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+- ADR: `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 - Appendix contract (output contract + no-backcompat):
   - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/contract.md`
     - §1.3 Output contract: effective policy display (`substrate policy show`) (Appendix A.6)

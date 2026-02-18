@@ -3,7 +3,7 @@
 - Branch: `testing`
 - Goal: Produce an execution-ready Planning Pack for ADR-0003 with zero ambiguity.
 - Inputs to read end-to-end:
-  - `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md`
+  - `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`
   - `docs/project_management/next/policy_and_config_mental_model_simplification/decision_register.md`
   - `docs/project_management/next/sequencing.json`
   - `docs/project_management/standards/PLANNING_README.md`
@@ -48,7 +48,7 @@
   - `docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh`
   - `docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh`
   - `docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1`
-  - `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md`
+  - `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`
   - `docs/project_management/next/sequencing.json`
 - Rubric checks run (with results):
   - `rg -n --hidden --glob '!**/.git/**' "$(printf '%b' '\\b(\\x54\\x42\\x44|\\x54\\x4f\\x44\\x4f|\\x57\\x49\\x50|\\x54\\x42\\x41)\\b|\\x6f\\x70\\x65\\x6e\\x20\\x71\\x75\\x65\\x73\\x74\\x69\\x6f\\x6e|\\b\\x65\\x74\\x63\\x2e|\\x61\\x6e\\x64\\x20\\x73\\x6f\\x20\\x6f\\x6e')" "$FEATURE_DIR"` → exit `1` → no matches

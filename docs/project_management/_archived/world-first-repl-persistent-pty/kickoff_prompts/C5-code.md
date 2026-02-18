@@ -3,7 +3,7 @@
 ## Scope
 - Production code only; no new tests.
 - Spec: `docs/project_management/_archived/world-first-repl-persistent-pty/C5-spec.md`
-- ADR CLI contract: `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
+- ADR CLI contract: `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
 - Execution workflow: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Start Checklist

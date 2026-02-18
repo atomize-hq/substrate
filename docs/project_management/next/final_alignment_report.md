@@ -9,7 +9,7 @@ Scope audited:
 - `docs/project_management/next/yaml-settings-migration/*`
 - `docs/project_management/next/sequencing.json`
 - `docs/project_management/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md`
-- `docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
+- `docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
 
 ---
 
@@ -61,7 +61,7 @@ Each item: issue → impact → exact fix → files changed.
 1) ADR-0002 contained open questions and a research prompt instead of final decisions
 - Impact: created non-executable ambiguity and violated “no open questions” contract for the queued work.
 - Exact fix: rewrote ADR-0002 as an Accepted ADR with final decisions, fixed command surface, fixed file paths, fixed exit codes, and explicit sequencing contract.
-- Files changed: `docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
+- Files changed: `docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
 
 2) ADR-0001 had naming drift and an open runtime-format decision
 - Impact: conflicting selection filename/paths and TOML/YAML uncertainty would block implementation and cross-triad composition.

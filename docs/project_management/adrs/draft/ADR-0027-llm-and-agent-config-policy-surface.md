@@ -31,13 +31,13 @@
 - Impact Map: `docs/project_management/next/llm_and_agent_config_policy_surface/impact_map.md`
 - Manual playbook: `docs/project_management/next/llm_and_agent_config_policy_surface/manual_testing_playbook.md`
 - Existing config/policy layering model:
-  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-  - `docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md`
-  - `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md`
-  - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
-  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md`
+  - `docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md`
+  - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
 - Profiles (future; must remain compatible):
-  - `docs/project_management/next/ADR-0020-profiles-config-policy-snapshots.md`
+  - `docs/project_management/adrs/draft/ADR-0020-profiles-config-policy-snapshots.md`
 - LLM + agents feature ADRs (draft; must defer to this ADR for config/policy shape):
   - `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md`
   - `docs/project_management/adrs/draft/ADR-0024-cli-backend-provider-engine.md`
@@ -48,7 +48,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 5063d55b19bcb8d153635032feedc8217cba26f7bd216d9d347bd38ceffecae3
+ADR_BODY_SHA256: 4058747309ca90a3c940d76e4a7d8026e0e3eaf5b7b8dc4b08b85d6c91c1864d
 ### Changes (operator-facing)
 - LLM + agent behavior is configured and governed via the existing config/policy files (new keys only)
   - Existing: There is no repo-wide, stable config/policy surface for LLM gateway routing, CLI agent backends, or agent role selection, which invites ad-hoc files/env vars and inconsistent enforcement boundaries.

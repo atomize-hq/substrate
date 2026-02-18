@@ -21,7 +21,7 @@
 - Each task (code/test/integ) must be scoped to fit within 40% of a typical 272k context window.
 
 ## Deliverables (authoritative)
-- ADR: `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+- ADR: `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 - Contract: `docs/project_management/_archived/world-fs-granular-allow-deny/contract.md`
 - Schema: `docs/project_management/_archived/world-fs-granular-allow-deny/SCHEMA.md`
 - Protocol: `docs/project_management/_archived/world-fs-granular-allow-deny/PROTOCOL.md`

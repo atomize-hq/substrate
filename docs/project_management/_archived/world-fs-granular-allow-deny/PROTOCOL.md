@@ -1,7 +1,7 @@
 # Protocol — PolicySnapshotV2 for World FS Allow/Deny (Authoritative)
 
 This document is authoritative for:
-- `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+- `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 
 It specifies the protocol surfaces that carry `PolicySnapshotV2` to world-agent.
 

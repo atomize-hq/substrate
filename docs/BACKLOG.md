@@ -57,7 +57,7 @@ Keep concise, actionable, and security-focused.
     - Install/dev scripts MUST NOT export override inputs by default (they remain explicit one-off operator/test inputs).
   - Acceptance:
     - New/updated tests prove that when a workspace is enabled and `SUBSTRATE_OVERRIDE_*` is set, override env beats the workspace patch (and remains below CLI flags where flags exist).
-    - `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md`, `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, and `docs/reference/env/contract.md` reflect the updated precedence contract.
+    - `docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md`, `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, and `docs/reference/env/contract.md` reflect the updated precedence contract.
 
 - **P1 – Warn on `config global show` when workspace config overrides**
   - Problem: `substrate policy global show` emits a clear note when a workspace policy overrides the global policy for the current directory, but `substrate config global show` does not emit an equivalent warning when `.substrate/workspace.yaml` overrides global config. This is confusing and makes it easy to misdiagnose “why does my config not match behavior?”

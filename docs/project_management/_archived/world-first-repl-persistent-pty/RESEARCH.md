@@ -1,7 +1,7 @@
 # Research — Builtins, Routing, and State Replacement for World-First REPL
 
 This document captures the codebase sweep and implementation options supporting:
-- `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
+- `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
 
 ## Current Behavior (Observed)
 

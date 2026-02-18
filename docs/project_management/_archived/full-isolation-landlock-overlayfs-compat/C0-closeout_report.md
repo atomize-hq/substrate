@@ -18,7 +18,7 @@ Slice spec:
 - New behavior: allowlisted project writes succeed consistently under full isolation with Landlock enabled; non-allowlisted writes remain denied.
 - Why: Landlock must allow overlayfs internal backing directory writes (`upperdir` / `workdir`) for overlayfs to service allowlisted project writes.
 - Links:
-  - `docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
+  - `docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
   - `docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/C0-spec.md`
   - `docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/decision_register.md (DR-0001, DR-0002, DR-0003, DR-0004)`
 

@@ -1,8 +1,8 @@
 # Manual Testing Playbook — Workspace Config/Policy Unification (ADR-0008)
 
 This playbook validates the operator-facing contract in:
-- `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-- `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md` (Phase A/B gates)
+- `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md` (Phase A/B gates)
 
 All steps are written to be run in a scratch workspace directory and must not mutate any real project.
 

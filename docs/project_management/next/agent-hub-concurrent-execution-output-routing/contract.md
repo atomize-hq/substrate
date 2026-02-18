@@ -1,7 +1,7 @@
 # Contract — Agent Hub Concurrent Execution Output Routing
 
 This document is the operator-facing contract summary for:
-- `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+- `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 
 ## Non-negotiable invariants
 

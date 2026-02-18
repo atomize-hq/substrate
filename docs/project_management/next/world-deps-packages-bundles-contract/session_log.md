@@ -6,7 +6,7 @@
 - Goal: Establish Planning Pack scaffolding for ADR-0011
 - Inputs read end-to-end:
   - `docs/project_management/standards/PLANNING_README.md`
-  - `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md`
+  - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
   - `docs/project_management/next/world_deps_packages_bundles_contract.md`
 - Sequencing alignment:
   - `docs/project_management/next/sequencing.json` updated: `YES`
@@ -28,7 +28,7 @@
   - `docs/project_management/next/world-deps-packages-bundles-contract/WDP*-spec.md`
   - `docs/project_management/next/world-deps-packages-bundles-contract/WDP*-closeout_report.md`
   - `docs/project_management/next/sequencing.json`
-  - `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md`
+  - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
   - `docs/project_management/next/world_deps_packages_bundles_contract.md`
 - Next steps:
   - Add smoke scripts and kickoff prompts
@@ -68,13 +68,13 @@ Policy:
   - Added explicit Decision Register (DR) references to `tasks.json` for tasks implementing DR-0001, DR-0002, and DR-0003.
   - Updated checkpoint kickoff prompts to include deterministic no-op completion steps for non-required platform-fix tasks.
 - Files modified:
-  - `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+  - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
   - `docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md`
   - `docs/project_management/next/world-deps-packages-bundles-contract/tasks.json`
   - `docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/CP1-ci-checkpoint.md`
   - `docs/project_management/next/world-deps-packages-bundles-contract/kickoff_prompts/CP2-ci-checkpoint.md`
 - Commands run (verbatim) + exit codes:
-  - `make adr-fix ADR=docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md` (exit 0)
+  - `make adr-fix ADR=docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md` (exit 0)
   - `make planning-lint FEATURE_DIR="docs/project_management/next/world-deps-packages-bundles-contract"` (exit 0)
   - `make planning-validate FEATURE_DIR="docs/project_management/next/world-deps-packages-bundles-contract"` (exit 0)
   - `jq -e . "docs/project_management/next/world-deps-packages-bundles-contract/tasks.json" >/dev/null` (exit 0)
@@ -96,7 +96,7 @@ Policy:
   - `docs/project_management/next/world-deps-packages-bundles-contract/smoke/_core.sh`
   - `docs/project_management/next/world-deps-packages-bundles-contract/ci_checkpoint_plan.md`
   - `docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md`
-  - `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md` (Executive Summary + contract)
+  - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md` (Executive Summary + contract)
   - `docs/project_management/next/world_deps_packages_bundles_contract.md`
 - Commands run (verbatim) + exit codes:
   - `make triad-orch-ensure FEATURE_DIR="docs/project_management/next/world-deps-packages-bundles-contract"` (exit 0)

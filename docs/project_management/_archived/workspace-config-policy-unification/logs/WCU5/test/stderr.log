@@ -16,8 +16,8 @@ user
 - Tests only; no production code.
 - Spec: `docs/project_management/next/workspace-config-policy-unification/WCU5-spec.md`
 - ADRs:
-  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-  - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 - Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 Do not edit planning docs inside the worktree.
@@ -143,7 +143,7 @@ References:
 ## Parity contract (authoritative)
 exec
 /bin/bash -lc "set -euo pipefail
-sed -n '1,260p' docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md
+sed -n '1,260p' docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md
 " in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 41ms:
 # ADR-0008 — Workspace Config/Policy Scopes + `.substrate/` Unification (Patch Files)
 
@@ -164,10 +164,10 @@ sed -n '1,260p' docs/project_management/next/ADR-0008-workspace-config-policy-sc
 
 ## Related Docs
 - Prior ADRs:
-  - `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md`
+  - `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`
 exec
 /bin/bash -lc "set -euo pipefail
-sed -n '1,260p' docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md
+sed -n '1,260p' docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md
 " in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 42ms:
 # ADR-0012 — Config Schema: Per-key Merge Strategies + Multi-source Provenance
 
@@ -187,7 +187,7 @@ sed -n '1,260p' docs/project_management/next/ADR-0012-config-schema-per-key-merg
 
 ## Related Docs
 - Patch files + scope model:
-  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 - World-deps consumer contract:
 exec
 /bin/bash -lc "set -euo pipefail
@@ -220,8 +220,8 @@ sed -n '1,220p' docs/project_management/next/workspace-config-policy-unification
 # Manual Testing Playbook — Workspace Config/Policy Unification (ADR-0008)
 
 This playbook validates the operator-facing contract in:
-- `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-- `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md` (Phase A/B gates)
+- `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md` (Phase A/B gates)
 
 All steps are written to be run in a scratch workspace directory and must not mutate any real project.
 
@@ -252,8 +252,8 @@ It layers on top of all repo planning standards and must be treated as **non-neg
 `ADR-0012` introduces per-key merge strategies and multi-source provenance. `ADR-0008` is the queued body of work that will implement the config plumbing and CLI surfaces; therefore, this Planning Pack must explicitly include and complete the Phase A/B work defined here so downstream work (notably world-deps) can safely depend on it.
 
 Authoritative ADRs:
-- `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-- `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+- `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 
 Primary downstream consumer contract:
 - `docs/project_management/next/world_deps_packages_bundles_contract.md`
@@ -579,10 +579,10 @@ sed -n '1,200p' docs/project_management/next/workspace-config-policy-unification
 
 ## Context (why this exists)
 This Planning Pack implements the operator-facing contract defined by:
-- `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 
 This body of work also **must** implement the cross-cutting refinement defined by:
-- `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+- `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 
 Non-negotiable additional gating for this pack:
 - `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
@@ -608,8 +608,8 @@ sed -n '1,120p' docs/project_management/next/workspace-config-policy-unification
 - Inputs to read end-to-end:
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-  - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 - Commands planned (if any):
   - `make planning-lint FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification"`
 

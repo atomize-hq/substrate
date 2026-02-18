@@ -9,10 +9,10 @@ Authoring standards:
 ## Inputs
 - Feature directory: `docs/project_management/next/world-sync`
 - ADR(s) / upstream contracts:
-  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-  - `docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
-  - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
-  - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/adrs/implemented/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
+  - `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
+  - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 - Spec manifest:
   - `docs/project_management/next/world-sync/spec_manifest.md`
 
@@ -97,11 +97,11 @@ For each externally visible change, list:
 List overlaps/conflicts with other in-flight work and resolve them deterministically.
 
 ### Relevant ADRs (queued/unimplemented)
-- `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
   - Overlap surfaces: workspace root discovery, `.substrate/` layout, protected excludes
   - Conflict: **no** (world-sync adopts ADR-0008 invariants)
   - Resolution: enforced via DR-0003 and contract/spec ownership.
-- `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
+- `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
   - Overlap surfaces: persistent PTY sessions + “session close” lifecycle events
   - Conflict: **no**, but world-sync auto-sync must hook into the same lifecycle
   - Resolution: WS3/WS4/WS5 explicitly define non-PTY vs PTY behavior and required retrieval semantics.

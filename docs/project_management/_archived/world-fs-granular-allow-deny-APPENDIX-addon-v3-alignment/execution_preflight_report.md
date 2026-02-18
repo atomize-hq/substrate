@@ -23,7 +23,7 @@ Commands run (verbatim) (all PASS):
 ## Inputs Reviewed
 
 - [x] Planning quality gate is `ACCEPT` (`docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/quality_gate_report.md`)
-- [x] ADR accepted and still matches intent (`docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`)
+- [x] ADR accepted and still matches intent (`docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`)
 - [x] Planning Pack complete (`plan.md`, `tasks.json`, `session_log.md`, specs, kickoff prompts)
 - [x] Triad sizing is appropriate (each slice is one behavior delta; no “grab bag” slices)
 - [x] Required planning artifacts exist (when required by planning standards): `impact_map.md`, `manual_testing_playbook.md`

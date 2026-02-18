@@ -29,7 +29,7 @@
       "references": [
         "docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md",
         "docs/project_management/_archived/env_var_taxonomy_and_override_split/execution_preflight_report.md",
-        "docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md",
+        "docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md",
         "docs/project_management/_archived/env_var_taxonomy_and_override_split/plan.md",
         "docs/project_management/_archived/env_var_taxonomy_and_override_split/tasks.json",
         "docs/project_management/_archived/env_var_taxonomy_and_override_split/session_log.md",
@@ -70,7 +70,7 @@
       "status": "pending",
       "description": "Implement the override split for effective config resolution (production code only).",
       "references": [
-        "docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md",
+        "docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md",
         "docs/project_management/_archived/env_var_taxonomy_and_override_split/plan.md",
         "docs/project_management/_archived/env_var_taxonomy_and_override_split/EV0-spec.md",
         "docs/project_management/_archived/env_var_taxonomy_and_override_split/decision_register.md (DR-0001, DR-0002, DR-0003)",
@@ -123,7 +123,7 @@
       "description": "Add/update tests that lock the override split behavior (tests only).",
       "references": [
         "docs/project_management/_archived/env_var_taxonomy_and_override_split/EV0-spec.md",
-        "docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md",
+        "docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
         "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],

@@ -13,7 +13,7 @@ Rules:
 **Decision owner(s):** spenser  
 **Date:** 2026-01-15  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU2-spec.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU3-spec.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU2-spec.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU3-spec.md`
 
 **Problem / Context**
 - Global and workspace scope files require a representation where “unset” means “inherit”, and `reset` produces auditable on-disk intent.
@@ -70,7 +70,7 @@ Rules:
 **Decision owner(s):** spenser  
 **Date:** 2026-01-15  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU2-spec.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU2-spec.md`
 
 **Problem / Context**
 - Effective views require provenance without breaking machine-parseable stdout for automation and scripts.
@@ -120,7 +120,7 @@ Rules:
 **Decision owner(s):** spenser  
 **Date:** 2026-01-15  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU3-spec.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU3-spec.md`
 
 **Problem / Context**
 - Config and policy require explicit naming that separates “effective merged view” from “scope patch view”.
@@ -170,7 +170,7 @@ Rules:
 **Decision owner(s):** spenser  
 **Date:** 2026-01-15  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU1-spec.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU1-spec.md`
 
 **Problem / Context**
 - Workspace discovery and effective resolution require a persistent, deterministic “disabled” state that survives shell restarts.
@@ -219,7 +219,7 @@ Rules:
 **Decision owner(s):** spenser  
 **Date:** 2026-01-15  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU1-spec.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU1-spec.md`
 
 **Problem / Context**
 - Workspace state requires a single canonical root for protected-path logic and operator mental model.
@@ -269,7 +269,7 @@ Rules:
 **Decision owner(s):** spenser  
 **Date:** 2026-01-15  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU1-spec.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU1-spec.md`
 
 **Problem / Context**
 - Operators need optional templates without increasing the default workspace footprint or creating template drift pressure.
@@ -322,7 +322,7 @@ Rules:
 **Decision owner(s):** spenser  
 **Date:** 2026-01-15  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU4-spec.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU4-spec.md`
 
 **Problem / Context**
 - Installer/dev scripts exporting override inputs by default breaks the scope model and creates hidden precedence state.
@@ -371,7 +371,7 @@ Rules:
 **Decision owner(s):** spenser  
 **Date:** 2026-01-15  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU1-spec.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU1-spec.md`
 
 **Problem / Context**
 - This body of work is explicitly greenfield and does not include migrations, warnings, or backwards-compat behavior for legacy layouts.
@@ -420,7 +420,7 @@ Rules:
 **Decision owner(s):** spenser  
 **Date:** 2026-01-15  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU3-spec.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU3-spec.md`
 
 **Problem / Context**
 - Patch files require an on-disk affordance that communicates “this file is an override patch” and points to the effective merged view.
@@ -474,7 +474,7 @@ Rules:
 **Decision owner(s):** spenser  
 **Date:** 2026-01-15  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU3-spec.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU3-spec.md`
 
 **Problem / Context**
 - Patch views frequently print `{}` and require a deterministic hint that disambiguates “empty patch” from “effective view”.
@@ -524,7 +524,7 @@ Rules:
 **Decision owner(s):** spenser  
 **Date:** 2026-01-15  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU2-spec.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU2-spec.md`
 
 **Problem / Context**
 - Multi-source keys require an auditable, explicit merge rule per key so `--explain` reports truthful behavior.
@@ -574,7 +574,7 @@ Rules:
 **Decision owner(s):** spenser  
 **Date:** 2026-01-15  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU2-spec.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU2-spec.md`
 
 **Problem / Context**
 - Provenance output requires a deterministic, parseable contract that does not pollute stdout.
@@ -625,7 +625,7 @@ Rules:
 **Decision owner(s):** spenser  
 **Date:** 2026-01-15  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU3-spec.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU3-spec.md`
 
 **Problem / Context**
 - Merge keys require a deterministic, automation-friendly mutation surface that works at both global and workspace scopes.
@@ -674,7 +674,7 @@ Rules:
 **Decision owner(s):** spenser  
 **Date:** 2026-01-15  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU2-spec.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU2-spec.md`
 
 **Problem / Context**
 - The ordered-set merge strategy requires a deterministic de-duplication policy that is explainable for operators and stable for tests.
@@ -724,7 +724,7 @@ Rules:
 **Decision owner(s):** spenser  
 **Date:** 2026-01-15  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU2-spec.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/_archived/workspace-config-policy-unification/WCU2-spec.md`
 
 **Problem / Context**
 - Merge keys require a representation for “explicit empty list” that is distinct from “inherit via omitted key” so patch views and provenance remain auditable.

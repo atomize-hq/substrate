@@ -66,7 +66,7 @@ make planning-lint FEATURE_DIR="$FEATURE_DIR"
 ## Required Inputs Read End-to-End (checklist)
 Mark `YES` only if read end-to-end.
 
-- ADR(s): `YES` (`docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md`, `docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md`)
+- ADR(s): `YES` (`docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md`, `docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md`)
 - `plan.md`: `YES` (`docs/project_management/_archived/env_var_taxonomy_and_override_split/plan.md`)
 - `tasks.json`: `YES` (`docs/project_management/_archived/env_var_taxonomy_and_override_split/tasks.json`)
 - `session_log.md`: `YES` (`docs/project_management/_archived/env_var_taxonomy_and_override_split/session_log.md`)
@@ -96,7 +96,7 @@ Mark `YES` only if read end-to-end.
 ### 3) Cross-doc consistency (CLI/config/exit codes/paths)
 - Result: `PASS`
 - Evidence:
-  - ADR contract: `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md` (“User Contract (Authoritative)”)
+  - ADR contract: `docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md` (“User Contract (Authoritative)”)
   - Spec: `docs/project_management/_archived/env_var_taxonomy_and_override_split/EV0-spec.md` (“User Contract (Authoritative)”)
   - Playbook: `docs/project_management/_archived/env_var_taxonomy_and_override_split/manual_testing_playbook.md`
 - Notes: Precedence rules and exit codes (0/1/2/3) are consistent across ADR/spec/playbook/smoke.
@@ -105,7 +105,7 @@ Mark `YES` only if read end-to-end.
 - Result: `PASS`
 - Evidence:
   - `docs/project_management/next/sequencing.json`: sprint `policy_and_config_precedence` is order `26`; this feature is order `26.5`
-  - `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md`: “Prerequisite integration task IDs: … `PCP0-integ`”
+  - `docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md`: “Prerequisite integration task IDs: … `PCP0-integ`”
   - `docs/project_management/_archived/env_var_taxonomy_and_override_split/tasks.json`: `meta.external_task_ids=["PCP0-integ"]` and `F0-exec-preflight.depends_on=["PCP0-integ"]`
 - Notes: Cross-feature prerequisite is encoded as an external dependency in `tasks.json`.
 
@@ -144,7 +144,7 @@ Mark `YES` only if read end-to-end.
 ### Finding 002 — Sequencing prerequisite is not encoded in tasks.json dependencies
 - Status: `VERIFIED`
 - Evidence:
-  - `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md` (Sequencing / Dependencies): prerequisite `PCP0-integ`
+  - `docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md` (Sequencing / Dependencies): prerequisite `PCP0-integ`
   - `docs/project_management/_archived/env_var_taxonomy_and_override_split/tasks.json`: `meta.external_task_ids=["PCP0-integ"]`, `F0-exec-preflight.depends_on=["PCP0-integ"]`
   - Standard rule: `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md` (“Sequencing and Dependency Alignment”)
 - Impact: Encodes sequencing prerequisite for auditability and execution ordering.
@@ -153,7 +153,7 @@ Mark `YES` only if read end-to-end.
 ### Finding 003 — ADR-required doc updates are not explicitly wired into EV0 integration tasks
 - Status: `VERIFIED`
 - Evidence:
-  - `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md` (Architecture Shape → Docs): requires `docs/CONFIGURATION.md` and `docs/ENVIRONMENT_VARIABLES.md` updates
+  - `docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md` (Architecture Shape → Docs): requires `docs/CONFIGURATION.md` and `docs/ENVIRONMENT_VARIABLES.md` updates
   - `docs/project_management/_archived/env_var_taxonomy_and_override_split/decision_register.md` (DR-0003 follow-up): “Ensure `docs/CONFIGURATION.md` references `docs/ENVIRONMENT_VARIABLES.md` and the override split (task: `EV0-integ`).”
   - `docs/project_management/_archived/env_var_taxonomy_and_override_split/tasks.json` (EV0-integ references/end_checklist/acceptance_criteria): includes both docs and requires updating them
 - Impact: Doc deliverables are now enforced in the EV0 final integration task.

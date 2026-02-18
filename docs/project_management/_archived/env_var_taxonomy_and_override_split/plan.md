@@ -3,7 +3,7 @@
 ## Scope
 - Feature directory: `docs/project_management/_archived/env_var_taxonomy_and_override_split/`
 - Orchestration branch: `feat/env_var_taxonomy_and_override_split`
-- Governing ADR: `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md`
+- Governing ADR: `docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md`
 
 ## Goal
 - Establish a repo-wide environment variable taxonomy and eliminate dual-use config overrides by splitting:

@@ -15,7 +15,7 @@ RECOMMENDATION: **ACCEPT**
 ## Inputs Reviewed
 
 - [x] Planning quality gate is `ACCEPT` (`docs/project_management/next/world-deps-packages-bundles-contract/quality_gate_report.md`)
-- [x] ADR accepted and still matches intent (`docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md`)
+- [x] ADR accepted and still matches intent (`docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`)
 - [x] Planning Pack complete (`plan.md`, `tasks.json`, `session_log.md`, specs, kickoff prompts)
 - [x] Triad sizing is appropriate (each slice is one behavior delta)
 - [x] Required planning artifacts exist: `impact_map.md`, `manual_testing_playbook.md`

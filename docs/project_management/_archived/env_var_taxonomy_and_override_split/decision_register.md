@@ -1,13 +1,13 @@
 # Decision Register — Env Var Taxonomy + Override Split
 
-This decision register captures the A/B decisions referenced by `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md`.
+This decision register captures the A/B decisions referenced by `docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md`.
 
 ### DR-0001 — Naming scheme for override inputs
 
 **Decision owner(s):** shell/config  
 **Date:** 2026-01-04  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md`, `docs/project_management/_archived/env_var_taxonomy_and_override_split/EV0-spec.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md`, `docs/project_management/_archived/env_var_taxonomy_and_override_split/EV0-spec.md`
 
 **Problem / Context**
 - `SUBSTRATE_*` variables are written by Substrate-owned scripts/runtime as stable exports (`$SUBSTRATE_HOME/env.sh`), and some of the same variable names are also consulted as override inputs by effective-config resolution.

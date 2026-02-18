@@ -10,12 +10,12 @@ Authoring standard:
 - ADR(s):
   - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
 - Related/upstream contracts (inputs; not owned by this feature pack):
-  - `docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md`
-  - `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md`
-  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-  - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
-  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
-  - `docs/project_management/next/ADR-0020-profiles-config-policy-snapshots.md`
+  - `docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md`
+  - `docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md`
+  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+  - `docs/project_management/adrs/draft/ADR-0020-profiles-config-policy-snapshots.md`
   - `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md` (Phase 8 additive keys: `workflow.router.*`)
 
 ## Required spec documents (authoritative)

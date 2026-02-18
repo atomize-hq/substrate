@@ -17,13 +17,13 @@
   - `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`
   - `docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md`
   - `docs/project_management/next/sequencing.json`
-  - `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md`
+  - `docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md`
   - `docs/project_management/_archived/env_var_taxonomy_and_override_split/plan.md`
   - `docs/project_management/_archived/env_var_taxonomy_and_override_split/decision_register.md`
   - `docs/project_management/_archived/env_var_taxonomy_and_override_split/integration_map.md`
   - `docs/project_management/_archived/env_var_taxonomy_and_override_split/manual_testing_playbook.md`
 - Commands planned (if any):
-  - `python3 scripts/planning/check_adr_exec_summary.py --adr docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md --fix`
+  - `python3 scripts/planning/check_adr_exec_summary.py --adr docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md --fix`
   - `make planning-validate FEATURE_DIR="docs/project_management/_archived/env_var_taxonomy_and_override_split"`
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/env_var_taxonomy_and_override_split"`
 
@@ -62,10 +62,10 @@
   - `docs/project_management/_archived/env_var_taxonomy_and_override_split/smoke/linux-smoke.sh`
   - `docs/project_management/_archived/env_var_taxonomy_and_override_split/smoke/macos-smoke.sh`
   - `docs/project_management/_archived/env_var_taxonomy_and_override_split/smoke/windows-smoke.ps1`
-  - `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md`
+  - `docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md`
   - `docs/project_management/next/sequencing.json`
 - Rubric checks run (with results):
-  - `python3 scripts/planning/check_adr_exec_summary.py --adr docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md --fix` → `0` → updated hash
+  - `python3 scripts/planning/check_adr_exec_summary.py --adr docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md --fix` → `0` → updated hash
   - `jq -e . docs/project_management/_archived/env_var_taxonomy_and_override_split/tasks.json >/dev/null` → `0` → pass
   - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0` → pass
   - `make planning-validate FEATURE_DIR="docs/project_management/_archived/env_var_taxonomy_and_override_split"` → `0` → pass
@@ -101,7 +101,7 @@
   - Added a required repo-wide grep/audit section to EV0 spec and wired it into EV0 tasks/prompts/closeout.
   - Expanded smoke + manual testing to validate policy.mode plus non-policy keys (minimum: world.caged and world.anchor_mode).
 - Files updated:
-  - `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md`
+  - `docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md`
   - `docs/project_management/_archived/env_var_taxonomy_and_override_split/EV0-spec.md`
   - `docs/project_management/_archived/env_var_taxonomy_and_override_split/plan.md`
   - `docs/project_management/_archived/env_var_taxonomy_and_override_split/integration_map.md`

@@ -52,7 +52,7 @@
         "docs/project_management/next/world-deps-packages-bundles-contract/quality_gate_report.md",
         "docs/project_management/next/world-deps-packages-bundles-contract/execution_preflight_report.md",
         "docs/project_management/next/world_deps_packages_bundles_contract.md",
-        "docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md"
+        "docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md"
       ],
       "start_checklist": [
         "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
@@ -93,7 +93,7 @@
         "docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md (DR-0001)",
         "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
         "docs/project_management/next/world_deps_packages_bundles_contract.md",
-        "docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md",
+        "docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md",
         "docs/project_management/next/world-deps-packages-bundles-contract/WDP0-spec.md"
       ],
       "required_make_targets": [
@@ -139,7 +139,7 @@
         "docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md (DR-0001)",
         "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
         "docs/project_management/next/world_deps_packages_bundles_contract.md",
-        "docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md",
+        "docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md",
         "docs/project_management/next/world-deps-packages-bundles-contract/WDP0-spec.md"
       ],
       "required_make_targets": [
@@ -236,7 +236,7 @@
         "docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md (DR-0001)",
         "docs/project_management/next/world-deps-packages-bundles-contract/platform-parity-spec.md",
         "docs/project_management/next/world_deps_packages_bundles_contract.md",
-        "docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md",
+        "docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md",
         "docs/project_management/next/world-deps-packages-bundles-contract/WDP1-spec.md"
       ],
       "required_make_targets": [

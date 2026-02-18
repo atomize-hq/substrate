@@ -23,8 +23,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 171ccb4d15846f07ada84e5f9f1a7dc4f1986a0170998b98cf5d429050cb2b65
-
+ADR_BODY_SHA256: 83c2ee5d41e7267d169627b560639bbd375101df356b4525f8437ff3e6bf885c
 ### Changes (operator-facing)
 - Treat subscription-authenticated CLIs (starting with Codex) as LLM “provider backends”
   - Existing: Cross-provider routing typically requires API keys or external proxies; subscription-authenticated CLIs cannot be used as provider backends in a controlled way.
@@ -112,7 +111,7 @@ Normative mapping for this ADR:
 
 This ADR does not define its own correlation vocabulary. Any trace records and/or structured events emitted as part of CLI-backend routing MUST explicitly defer to:
 - ADR-0028 (canonical correlation vocabulary + required/optional matrix): `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
-- ADR-0017 (structured event envelope + routing attribution) when emitting structured events: `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+- ADR-0017 (structured event envelope + routing attribution) when emitting structured events: `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 
 - End-to-end flow:
   - Inputs:

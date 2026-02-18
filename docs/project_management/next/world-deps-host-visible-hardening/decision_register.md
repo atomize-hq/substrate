@@ -8,7 +8,7 @@ Template standard:
 **Decision owner(s):** Shell / World maintainers  
 **Date:** 2026-02-15  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md` (Appendix A), `docs/project_management/next/world-deps-host-visible-hardening/WDH0-spec.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md` (Appendix A), `docs/project_management/next/world-deps-host-visible-hardening/WDH0-spec.md`
 
 **Problem / Context**
 - With `world_fs.host_visible=true`, host filesystem paths are nameable in-world. If we inherit host env (PATH/HOME/XDG), PATH-based resolution can find host toolchains (e.g., `~/.nvm/.../bin/npm`) even when no world-deps are enabled/applied.
@@ -76,7 +76,7 @@ Template standard:
 **Decision owner(s):** Shell / World maintainers  
 **Date:** 2026-02-15  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md` (Inventory schema), `docs/project_management/next/world-deps-host-visible-hardening/WDH1-spec.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md` (Inventory schema), `docs/project_management/next/world-deps-host-visible-hardening/WDH1-spec.md`
 
 **Problem / Context**
 - Script packages already place entrypoints in `/var/lib/substrate/world-deps/bin`. Runnable `apt` packages currently rely on system PATH (`/usr/bin/...`), which is fragile in host-visible worlds (and makes “which”/presence ambiguous).
@@ -181,7 +181,7 @@ Template standard:
 **Decision owner(s):** Shell / Installer maintainers  
 **Date:** 2026-02-15  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md` (Appendix A), `docs/project_management/next/world-deps-host-visible-hardening/WDH3-spec.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md` (Appendix A), `docs/project_management/next/world-deps-host-visible-hardening/WDH3-spec.md`
 
 **Problem / Context**
 - Operators see “available” deps even when `$SUBSTRATE_HOME/deps/` doesn’t exist (built-ins). Without scaffolding, it’s unclear where custom global deps live and whether host deps are “leaking”.

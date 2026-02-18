@@ -8,7 +8,7 @@ Authoring standard:
 ## Inputs
 - Feature directory: `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment`
 - ADR(s):
-  - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+  - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
   - Appendix authoritative inputs:
     - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/contract.md`
     - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/SCHEMA.md`

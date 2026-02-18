@@ -23,7 +23,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 17f608b37d863a3ca196b75e164be79f4dce294cdc1e37f693984f8687aa926f
+ADR_BODY_SHA256: f9d8246487eaecff83a45b600b8218480a38cb5a0e43181577735c7e34b860f6
 ### Changes (operator-facing)
 - Split doctor into host vs world scopes (without requiring a guest-installed `substrate` CLI)
   - Existing: `substrate world doctor` is host-oriented on macOS (Lima/transport/service checks) and kernel-oriented on Linux (overlay/nft/cgroup + Landlock probe). On macOS it cannot report guest-kernel facts like Landlock ABI/support without manually running commands inside the VM.

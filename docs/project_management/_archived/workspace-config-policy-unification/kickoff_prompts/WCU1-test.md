@@ -2,7 +2,7 @@
 
 ## Scope
 - Tests only (plus minimal test-only helpers if absolutely needed); no production code.
-- Spec: `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- Spec: `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 - Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 Do not edit planning docs inside the worktree.

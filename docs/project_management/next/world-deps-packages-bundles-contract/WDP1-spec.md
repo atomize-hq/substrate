@@ -16,7 +16,7 @@ All behavior for commands in scope is defined by the contract doc:
 Constraints enforced in this slice:
 - Patch edits preserve comment headers.
 - Patch-only semantics and effective resolution are broker-canonical (no bespoke merge logic):
-  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
 - `global add` validates names only against the global available inventory view (built-ins + `$SUBSTRATE_HOME/deps/`).
 - `workspace add` validates names against the current available inventory view for `cwd` (subject to `world.deps.inventory_mode`).
 - `current list enabled` MUST NOT make world-agent calls.

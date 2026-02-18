@@ -3,7 +3,7 @@
 ## Scope
 - Feature directory: `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/`
 - Orchestration branch: `feat/policy-patch-only-broker-effective-resolution`
-- ADR: `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+- ADR: `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
 
 ## Goal
 - Make `policy.yaml` patch-only everywhere and make the broker the canonical resolver for the effective policy used by shell, shim, and world-agent execution paths.

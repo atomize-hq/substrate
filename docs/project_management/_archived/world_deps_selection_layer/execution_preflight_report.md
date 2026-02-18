@@ -18,7 +18,7 @@ Rule:
 ## Inputs Reviewed
 
 - Planning quality gate is `ACCEPT` (`docs/project_management/_archived/world_deps_selection_layer/quality_gate_report.md`): VERIFIED
-- ADR accepted and still matches intent (`docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md`): VERIFIED
+- ADR accepted and still matches intent (`docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md`): VERIFIED
 - Planning Pack complete (`plan.md`, `tasks.json`, `session_log.md`, specs, kickoff prompts): VERIFIED
 - Triad sizing is appropriate (each slice is one behavior delta; no “grab bag” slices): VERIFIED
 - Required planning artifacts exist: `integration_map.md`, `manual_testing_playbook.md`: VERIFIED

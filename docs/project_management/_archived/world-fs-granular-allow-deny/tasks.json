@@ -1587,7 +1587,7 @@
         "docs/project_management/_archived/world-fs-granular-allow-deny/impact_map.md",
         "docs/project_management/_archived/world-fs-granular-allow-deny/ci_checkpoint_plan.md",
         "docs/project_management/_archived/world-fs-granular-allow-deny/manual_testing_playbook.md",
-        "docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md"
+        "docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md"
       ],
       "start_checklist": [
         "git checkout feat/world-fs-granular-allow-deny && git pull --ff-only",

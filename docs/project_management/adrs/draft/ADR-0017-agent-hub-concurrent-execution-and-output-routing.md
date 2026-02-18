@@ -37,7 +37,7 @@
 - Phase 8 cross-cutting registry (sequencing umbrella):
   - `docs/project_management/next/PHASE_8_CROSS_CUTTING_DECISION_REGISTRY.md`
 - Related ADRs:
-  - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
+  - `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
   - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
 - Historical context:
   - `docs/project_management/_archived/p0-agent-hub-isolation-hardening/`
@@ -48,7 +48,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: aa4c9b1473dbaeea3901d71ee0327aa249f4d7835942c730a7da7f8443f3c68a
+ADR_BODY_SHA256: e0a117970d68fb6e19affbce5ecd34c22ef1db8dc37a861e6d7203146e4eab24
 ### Changes (operator-facing)
 - Make concurrent outputs predictable and non-corrupting when multiple agents run
   - Existing: Substrate can render concurrent **structured** agent output during the REPL (e.g., `:demo-agent`), but there is no explicit output contract that separates:
@@ -59,9 +59,9 @@ ADR_BODY_SHA256: aa4c9b1473dbaeea3901d71ee0327aa249f4d7835942c730a7da7f8443f3c68
     - Structured agent events are rendered via a structured output path and are buffered during PTY passthrough to avoid corrupting TUIs.
   - Why: Agent hub orchestration will run multiple agent CLIs concurrently (via bindings/SDK wrappers). Without an output contract, concurrent outputs can corrupt terminal state or be mis-attributed, undermining usability and auditability.
   - Links:
-    - `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md#L78` (this ADR: contract)
+    - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md#L78` (this ADR: contract)
     - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md#L12` (DR-0001: output classes)
-    - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md#L89` (PTY passthrough contract)
+    - `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md#L89` (PTY passthrough contract)
     - `docs/project_management/_archived/world-first-repl-persistent-pty/STATE_MACHINE.md`
     - `docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md`
     - `crates/shell/src/repl/async_repl.rs` (concurrent structured printing today)

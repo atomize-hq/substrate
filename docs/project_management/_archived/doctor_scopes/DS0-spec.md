@@ -1,7 +1,7 @@
 # DS0-spec — Doctor scopes (host vs world)
 
 Driven by:
-- ADR: `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`
+- ADR: `docs/project_management/adrs/implemented/ADR-0007-host-and-world-doctor-scopes.md`
 - Decision register: `docs/project_management/_archived/doctor_scopes/decision_register.md`
 
 ## Scope

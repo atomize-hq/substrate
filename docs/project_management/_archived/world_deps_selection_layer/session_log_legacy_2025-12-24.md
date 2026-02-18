@@ -22,7 +22,7 @@ Rules:
 **Owner:** Codex CLI (planning/research only; no production code)
 
 **Inputs reviewed (required)**
-- `docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
+- `docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
 - `docs/project_management/_archived/world_deps_selection_layer/decision_register.md` (replaced with final decisions)
 - `docs/project_management/_archived/world_deps_selection_layer/integration_map.md` (updated)
 - `docs/project_management/_archived/world_deps_selection_layer/manual_testing_playbook.md` (updated)

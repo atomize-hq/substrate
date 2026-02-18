@@ -9,8 +9,8 @@ Authoring standards:
 ## Inputs
 - Feature directory: `docs/project_management/next/world-deps-host-visible-hardening`
 - ADR(s):
-  - `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md` (Appendix A)
-  - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+  - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md` (Appendix A)
+  - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 - Contract:
   - `docs/project_management/next/world_deps_packages_bundles_contract.md`
 - Spec manifest:
@@ -45,7 +45,7 @@ Execution triads under this Planning Pack are expected to edit:
   - the install/init path that creates `$SUBSTRATE_HOME` (to scaffold `$SUBSTRATE_HOME/deps/`)
 
 ### Edit (docs scope; expected follow-up)
-- `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md` (link this Planning Pack; tighten Appendix A to MUST-level language where implemented)
+- `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md` (link this Planning Pack; tighten Appendix A to MUST-level language where implemented)
 - User-facing docs that explain inventory vs enabled/applied and the scaffolded deps directory (if those docs are considered authoritative outside `docs/project_management/next/`)
 - `docs/CONFIGURATION.md` and `docs/reference/config/world.md` — document the new config key `world.env.inherit_from_host` and its default posture
 

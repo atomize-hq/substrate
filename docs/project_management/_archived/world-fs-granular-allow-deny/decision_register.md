@@ -4,7 +4,7 @@ Standard:
 - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
 
 Scope:
-- This decision register supports `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`.
+- This decision register supports `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`.
 - Each decision is recorded as exactly two viable options (A/B) with explicit tradeoffs and a single selection.
 
 ---
@@ -14,7 +14,7 @@ Scope:
 **Decision owner(s):** Substrate maintainers  
 **Date:** 2026-01-29  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`, `docs/project_management/_archived/world-fs-granular-allow-deny/SCHEMA.md`, `docs/project_management/_archived/world-fs-granular-allow-deny/PROTOCOL.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`, `docs/project_management/_archived/world-fs-granular-allow-deny/SCHEMA.md`, `docs/project_management/_archived/world-fs-granular-allow-deny/PROTOCOL.md`
 
 **Problem / Context**
 - The existing `world_fs.read_allowlist` / `world_fs.write_allowlist` model cannot express deny-overrides-allow safely, and the current system has a foot-gun where invalid patterns (notably `..`) can be accepted but silently ignored during allowlist resolution.
@@ -66,7 +66,7 @@ Scope:
 **Decision owner(s):** Substrate maintainers  
 **Date:** 2026-01-29  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`, `docs/project_management/_archived/world-fs-granular-allow-deny/SECURITY.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`, `docs/project_management/_archived/world-fs-granular-allow-deny/SECURITY.md`
 
 **Problem / Context**
 - Landlock is allowlist-only. Once broad allows exist (e.g., `.`), it cannot express “allow all except X”.
@@ -117,7 +117,7 @@ Scope:
 **Decision owner(s):** Substrate maintainers  
 **Date:** 2026-01-29  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` (authoritative decision detail), `docs/project_management/_archived/world-fs-granular-allow-deny/SECURITY.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` (authoritative decision detail), `docs/project_management/_archived/world-fs-granular-allow-deny/SECURITY.md`
 
 **Problem / Context**
 - Deny masks are only a security boundary if the workload cannot undo them after startup, but some workloads require mount operations inside the world.

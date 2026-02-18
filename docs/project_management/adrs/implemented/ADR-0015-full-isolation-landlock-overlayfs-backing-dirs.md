@@ -16,7 +16,7 @@
 - Policy snapshot spec: `docs/project_management/_archived/world-agent-policy-snapshot/policy-snapshot-spec.md`
 - Decision Register: `docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/decision_register.md`
 - Related ADRs:
-  - `docs/project_management/next/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
+  - `docs/project_management/adrs/implemented/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
 - Grounding code references:
   - Full isolation mount wrapper + allowlist remounting: `crates/world/src/exec.rs`
   - Landlock exec wrapper (full isolation policy): `crates/world-agent/src/internal_exec.rs`
@@ -24,7 +24,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 095953089da59f2a338b1e13e3f52ad448de588763b2a95bfa11e5a9164cd5ac
+ADR_BODY_SHA256: 7fb450fcafcf3cb53fd576b167a8bc26ab6aded352f141b91afec7f08cb50d77
 ### Changes (operator-facing)
 - Full isolation writable allowlists stop failing with EPERM on Linux
   - Existing: With `world_fs.isolation=full` and `world_fs.mode=writable`, project writes can fail with `Operation not permitted` even when `world_fs.write_allowlist` explicitly allows the target project prefix.

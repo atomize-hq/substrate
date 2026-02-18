@@ -16,8 +16,8 @@ user
 - Production code only; no new tests.
 - Spec: `docs/project_management/next/workspace-config-policy-unification/WCU5-spec.md`
 - ADRs:
-  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-  - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 - Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 Do not edit planning docs inside the worktree.
@@ -129,7 +129,7 @@ References:
 ## Parity contract (authoritative)
 exec
 /bin/bash -lc "set -euo pipefail
-sed -n '1,220p' docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md
+sed -n '1,220p' docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md
 " in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-code succeeded in 42ms:
 # ADR-0008 — Workspace Config/Policy Scopes + `.substrate/` Unification (Patch Files)
 
@@ -150,10 +150,10 @@ sed -n '1,220p' docs/project_management/next/ADR-0008-workspace-config-policy-sc
 
 ## Related Docs
 - Prior ADRs:
-  - `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md`
+  - `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`
 exec
 /bin/bash -lc "set -euo pipefail
-sed -n '1,260p' docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md
+sed -n '1,260p' docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md
 " in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-code succeeded in 34ms:
 # ADR-0012 — Config Schema: Per-key Merge Strategies + Multi-source Provenance
 
@@ -173,7 +173,7 @@ sed -n '1,260p' docs/project_management/next/ADR-0012-config-schema-per-key-merg
 
 ## Related Docs
 - Patch files + scope model:
-  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 - World-deps consumer contract:
 exec
 /bin/bash -lc "set -euo pipefail
@@ -206,8 +206,8 @@ sed -n '1,260p' docs/project_management/next/workspace-config-policy-unification
 # Manual Testing Playbook — Workspace Config/Policy Unification (ADR-0008)
 
 This playbook validates the operator-facing contract in:
-- `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-- `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md` (Phase A/B gates)
+- `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md` (Phase A/B gates)
 
 All steps are written to be run in a scratch workspace directory and must not mutate any real project.
 
@@ -240,10 +240,10 @@ sed -n '1,200p' docs/project_management/next/workspace-config-policy-unification
 
 ## Context (why this exists)
 This Planning Pack implements the operator-facing contract defined by:
-- `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 
 This body of work also **must** implement the cross-cutting refinement defined by:
-- `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+- `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 
 Non-negotiable additional gating for this pack:
 - `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
@@ -410,8 +410,8 @@ index 29
   "status": "in_progress",
   "description": "Apply remaining code-level polish required for docs/validation parity, including deterministic `--explain` output and patch header preservation.",
   "references": [
-    "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
-    "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+    "docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+    "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
     "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0002)",
     "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0006)",
     "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0009)",
@@ -927,9 +927,9 @@ thinking
 I need to check how these changes will impact the CLI surface and possibly earlier slices. Since we're in this worktree, there's an opportunity to fix things now. I'll read the ADR sections about the policy show and related topics. My plan is to search within ADR for the term "policy global show" using rg. This approach should help clarify the necessary adjustments and ensure everything is aligned!
 exec
 /bin/bash -lc "set -euo pipefail
-rg -n -- 'policy global show' docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md
-rg -n -- 'policy current show' docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md
-rg -n -- 'policy workspace show' docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md
+rg -n -- 'policy global show' docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md
+rg -n -- 'policy current show' docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md
+rg -n -- 'policy workspace show' docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md
 " in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-code succeeded in 52ms:
 259:#### `substrate policy global show [--json]`
 507:    - `policy current show` vs `policy global show` vs `policy workspace show`
@@ -1085,18 +1085,18 @@ rg -n -- 'DR-0002|DR-0006|DR-0009|DR-0012|DR-0013' docs/project_management/next/
 sed -n '1,260p' docs/project_management/next/workspace-config-policy-unification/decision_register.md
 " in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-code succeeded in 46ms:
 68:## DR-0002 — `current show` provenance visibility
-73:**Related docs:** `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md`
+73:**Related docs:** `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md`
 86:  - `--explain` emits a deterministic, machine-readable payload to stderr (ADR-0012).
 267:## DR-0006 — Workspace init example templates
 418:## DR-0009 — Patch file comment headers (clarity) vs bare YAML mappings
-527:**Related docs:** `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md`
+527:**Related docs:** `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md`
 572:## DR-0012 — `config current show --explain` provenance payload format
-577:**Related docs:** `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md`
+577:**Related docs:** `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md`
 623:## DR-0013 — Config editor list mutation syntax for merge keys
-628:**Related docs:** `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md`
-677:**Related docs:** `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md`
+628:**Related docs:** `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md`
+677:**Related docs:** `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md`
 686:  - Matches ADR-0012’s ordered-set semantics.
-727:**Related docs:** `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md`
+727:**Related docs:** `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md`
 # Decision Register — Workspace Config/Policy Unification (ADR-0008)
 
 This decision register records the architectural decisions for `ADR-0008`.
@@ -1340,8 +1340,8 @@ rg -n -- 'policy' docs/project_management/next/workspace-config-policy-unificati
 # WCU3 Spec — CLI scopes + reset semantics + config editor support for `world.deps.enabled` (ADR-0012 Phase B)
 
 References:
-- `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-- `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+- `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 - `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
 - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 
@@ -1499,8 +1499,8 @@ sed -n '400,520p' docs/project_management/next/workspace-config-policy-unificati
 
 exec
 /bin/bash -lc "set -euo pipefail
-sed -n '220,340p' docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md
-sed -n '340,420p' docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md
+sed -n '220,340p' docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md
+sed -n '340,420p' docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md
 " in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-code succeeded in 46ms:
   - `0`: success
   - `2`: no workspace root found
@@ -1578,19 +1578,19 @@ exec
 rg -n -- 'policy.*merge|more restrictive|union' docs/project_management/next/workspace-config-policy-unification/decision_register.md
 rg -n -- 'merge' docs/project_management/next/workspace-config-policy-unification/decision_register.md | head -n 120
 " in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-code succeeded in 51ms:
-73:**Related docs:** `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md`
+73:**Related docs:** `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md`
 79:- **Decision:** `current show` prints the effective/merged config or policy on stdout and prints a single stderr notice indicating it is merged; `--explain` adds a per-key provenance breakdown.
 126:- Config and policy require explicit naming that separates “effective merged view” from “scope patch view”.
 672:## DR-0014 — De-duplication policy for ordered-set merges
 30:  - Requires a merge layer and patch-aware validators for both config and policy.
 62:- Patch parsing + merge plumbing: `WCU2-code`, `WCU2-test`, `WCU2-integ`
-73:**Related docs:** `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md`
+73:**Related docs:** `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md`
 79:- **Decision:** `current show` prints the effective/merged config or policy on stdout and prints a single stderr notice indicating it is merged; `--explain` adds a per-key provenance breakdown.
 126:- Config and policy require explicit naming that separates “effective merged view” from “scope patch view”.
 426:- Patch files require an on-disk affordance that communicates “this file is an override patch” and points to the effective merged view.
 432:  - and how to inspect the effective merged view via `current show --explain`.
 522:## DR-0011 — Per-key merge strategy is schema-defined vs hardcoded key list
-527:**Related docs:** `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md`
+527:**Related docs:** `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md`
 530:- Multi-source keys require an auditable, explicit merge rule per key so `--explain` reports truthful behavior.
 533:- **Decision:** The config schema registry stores an explicit `merge_strategy` per key (defaulting to `replace` when unspecified).
 536:  - Enables `--explain` to report merge strategy mechanically for every key.

@@ -13,7 +13,7 @@ Do not edit planning docs inside the worktree.
 1. Ensure the orchestration branch exists and is checked out:
    - `make triad-orch-ensure FEATURE_DIR="docs/project_management/_archived/world-first-repl-persistent-pty"`
 2. Read end-to-end (authoritative set + supporting proofs):
-   - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
+   - `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
    - `docs/project_management/_archived/world-first-repl-persistent-pty/plan.md`
    - `docs/project_management/_archived/world-first-repl-persistent-pty/tasks.json`
    - `docs/project_management/_archived/world-first-repl-persistent-pty/session_log.md`

@@ -15,7 +15,7 @@ RECOMMENDATION: ACCEPT
 ## Inputs Reviewed
 
 - [x] Planning quality gate is `ACCEPT` (`docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/quality_gate_report.md`)
-- [x] ADR accepted and still matches intent (`docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`)
+- [x] ADR accepted and still matches intent (`docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`)
 - [x] Planning Pack complete (`plan.md`, `tasks.json`, `session_log.md`, specs, kickoff prompts)
 - [x] Triad sizing is one behavior delta (no mixed independent deltas)
 - [x] Required planning artifacts exist: `decision_register.md`, `integration_map.md`, `manual_testing_playbook.md`, `smoke/*`

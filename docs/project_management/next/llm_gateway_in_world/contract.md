@@ -5,7 +5,7 @@ This document is the operator-facing contract summary for ADR-0023.
 Authoritative inputs:
 - ADR: `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md`
 - Config/policy surface: `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
-- Output/event routing contract: `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+- Output/event routing contract: `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 
 ## Non-negotiable invariants
 - **In-world by default.** When `SUBSTRATE_WORLD=enabled`, the gateway runs inside the world boundary.

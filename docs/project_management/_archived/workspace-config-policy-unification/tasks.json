@@ -28,8 +28,8 @@
       "status": "completed",
       "description": "Run the feature start gate to confirm the Planning Pack is runnable and Phase A/B gates are explicitly covered before starting execution triads.",
       "references": [
-        "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
-        "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+        "docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+        "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
         "docs/project_management/_archived/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md",
         "docs/project_management/_archived/workspace-config-policy-unification/plan.md",
         "docs/project_management/_archived/workspace-config-policy-unification/tasks.json",
@@ -66,7 +66,7 @@
       "status": "completed",
       "description": "Implement the canonical `<workspace_root>/.substrate/` layout, internal git under `.substrate/git/repo.git/`, and workspace disable marker handling.",
       "references": [
-        "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+        "docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0004)",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0005)",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0006)",
@@ -117,7 +117,7 @@
       "status": "completed",
       "description": "Add tests for workspace root discovery, disable marker behavior, and `.substrate/` directory layout invariants.",
       "references": [
-        "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+        "docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0004)",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0005)",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0006)",
@@ -165,7 +165,7 @@
       "status": "completed",
       "description": "Merge WCU1 code+tests, reconcile to spec/ADR, and make the slice green on the primary dev platform.",
       "references": [
-        "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+        "docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
         "docs/project_management/_archived/workspace-config-policy-unification/WCU1-spec.md",
         "docs/project_management/_archived/workspace-config-policy-unification/plan.md",
         "docs/project_management/_archived/workspace-config-policy-unification/tasks.json",
@@ -364,7 +364,7 @@
       "status": "completed",
       "description": "Merge platform-fix branches (if any) and finalize WCU1 with a clean, auditable cross-platform green state.",
       "references": [
-        "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+        "docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0004)",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0005)",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0006)",
@@ -428,8 +428,8 @@
       "status": "completed",
       "description": "Implement schema-defined per-key merge strategies and multi-source provenance support required by ADR-0012.",
       "references": [
-        "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
-        "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+        "docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+        "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0001)",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0002)",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0011)",
@@ -480,7 +480,7 @@
       "status": "completed",
       "description": "Add tests for per-key merge strategies and multi-source provenance output required by ADR-0012.",
       "references": [
-        "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+        "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0001)",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0002)",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0011)",
@@ -530,7 +530,7 @@
       "status": "completed",
       "description": "Merge WCU2 code+tests, reconcile to spec/ADRs, and make the slice green on the primary dev platform.",
       "references": [
-        "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+        "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
         "docs/project_management/_archived/workspace-config-policy-unification/WCU2-spec.md",
         "docs/project_management/_archived/workspace-config-policy-unification/plan.md",
         "docs/project_management/_archived/workspace-config-policy-unification/tasks.json",
@@ -729,7 +729,7 @@
       "status": "completed",
       "description": "Merge platform-fix branches (if any) and finalize WCU2 with a clean, auditable cross-platform green state.",
       "references": [
-        "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+        "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0001)",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0002)",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0011)",
@@ -790,8 +790,8 @@
       "status": "completed",
       "description": "Ensure config editor allowlists and edits `world.deps.enabled` and that `--explain` surfaces merge strategy and contributing sources per ADR-0012.",
       "references": [
-        "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
-        "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+        "docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+        "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0002)",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0003)",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0009)",
@@ -842,7 +842,7 @@
       "status": "completed",
       "description": "Add tests proving config editor support for `world.deps.enabled` and `--explain` provenance for a multi-layer merged key.",
       "references": [
-        "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+        "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0002)",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0003)",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0009)",
@@ -893,7 +893,7 @@
       "status": "completed",
       "description": "Merge WCU3 code+tests, reconcile to spec/ADRs, and make the slice green on the primary dev platform.",
       "references": [
-        "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+        "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
         "docs/project_management/_archived/workspace-config-policy-unification/WCU3-spec.md",
         "docs/project_management/_archived/workspace-config-policy-unification/plan.md",
         "docs/project_management/_archived/workspace-config-policy-unification/tasks.json",
@@ -1092,7 +1092,7 @@
       "status": "completed",
       "description": "Merge platform-fix branches (if any) and finalize WCU3 with a clean, auditable cross-platform green state.",
       "references": [
-        "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+        "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0002)",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0003)",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0009)",
@@ -1153,7 +1153,7 @@
       "status": "completed",
       "description": "Update install/dev scripts to stop exporting `SUBSTRATE_OVERRIDE_*` by default and align with patch-file semantics.",
       "references": [
-        "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+        "docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0007)",
         "docs/project_management/_archived/workspace-config-policy-unification/plan.md",
         "docs/project_management/_archived/workspace-config-policy-unification/WCU4-spec.md",
@@ -1196,7 +1196,7 @@
       "status": "completed",
       "description": "Add/adjust tests for installer/env-script behavior so override exports are not required for correctness.",
       "references": [
-        "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+        "docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0007)",
         "docs/project_management/_archived/workspace-config-policy-unification/plan.md",
         "docs/project_management/_archived/workspace-config-policy-unification/WCU4-spec.md",
@@ -1238,7 +1238,7 @@
       "status": "completed",
       "description": "Merge WCU4 code+tests, reconcile to spec/ADR, and make the slice green on the primary dev platform.",
       "references": [
-        "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+        "docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
         "docs/project_management/_archived/workspace-config-policy-unification/WCU4-spec.md",
         "docs/project_management/_archived/workspace-config-policy-unification/plan.md",
         "docs/project_management/_archived/workspace-config-policy-unification/tasks.json",
@@ -1436,7 +1436,7 @@
       "status": "completed",
       "description": "Merge platform-fix branches (if any) and finalize WCU4 with a clean, auditable cross-platform green state.",
       "references": [
-        "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+        "docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0007)",
         "docs/project_management/_archived/workspace-config-policy-unification/WCU4-closeout_report.md",
         "docs/project_management/_archived/workspace-config-policy-unification/WCU4-spec.md",
@@ -1489,8 +1489,8 @@
       "status": "completed",
       "description": "Apply remaining code-level polish required for docs/validation parity, including deterministic `--explain` output and patch header preservation.",
       "references": [
-        "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
-        "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+        "docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+        "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0002)",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0006)",
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0009)",

@@ -1,7 +1,7 @@
 # Plan — agent-hub-concurrent-execution-output-routing
 
 Anchors (authoritative):
-- ADR: `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+- ADR: `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 - Decision register: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md`
 - Contract: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/contract.md`
 - Spec manifest: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/spec_manifest.md`

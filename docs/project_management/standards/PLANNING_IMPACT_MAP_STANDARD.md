@@ -78,7 +78,7 @@ Preferred ADR location (new):
   - `superseded/` (obsolete; replaced by another ADR)
 
 Legacy ADR locations (still supported):
-- `docs/project_management/next/ADR-000X-*.md` (cross-cutting)
+- `docs/project_management/adrs/<bucket>/ADR-000X-*.md` (canonical ADR registry)
 - `docs/project_management/next/<feature>/ADR-000X-*.md` (feature-local)
 
 ---
@@ -124,4 +124,3 @@ Downstream consumers:
 Use this prompt to generate `impact_map.md`.
 
 Canonical prompt: docs/project_management/system/prompts/planning/impact_map_agent.md
-

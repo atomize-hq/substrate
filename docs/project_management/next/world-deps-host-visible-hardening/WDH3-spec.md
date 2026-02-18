@@ -4,7 +4,7 @@
 Reduce operator confusion by scaffolding `$SUBSTRATE_HOME/deps/` during install/first-run init with non-enabling examples and a README describing inventory vs enabled/applied.
 
 ## Inputs (authoritative)
-- `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md` (Appendix A)
+- `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md` (Appendix A)
 - `docs/project_management/next/world-deps-host-visible-hardening/decision_register.md` (DR-0006, DR-0010)
 
 ## Contract

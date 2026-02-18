@@ -5,7 +5,7 @@ This document maps every MUST/SHOULD in the authoritative spec pack to:
 - an explicit validation step (test or manual verification).
 
 Authoritative spec pack (no drift allowed):
-- `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
+- `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
 - `docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md`
 - `docs/project_management/_archived/world-first-repl-persistent-pty/STATE_MACHINE.md`
 - `docs/project_management/_archived/world-first-repl-persistent-pty/decision_register.md`
@@ -85,24 +85,24 @@ Notes:
 - The same requirement may appear in multiple documents; each occurrence still appears here.
 - `decision_register.md` includes non-selected options for historical context; only “Selected” options are implemented in v1.
 
-- docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md:53  →  R-043
-- docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md:74  →  R-043
-- docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md:101  →  R-022
-- docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md:102  →  R-005
-- docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md:103  →  R-015
-- docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md:105  →  R-003
-- docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md:108  →  R-029
-- docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md:109  →  R-010
-- docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md:117  →  R-043
-- docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md:118  →  R-043
-- docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md:120  →  R-043
-- docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md:123  →  R-044
-- docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md:125  →  R-044
-- docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md:126  →  R-044
-- docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md:149  →  R-044
-- docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md:150  →  R-044
-- docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md:196  →  R-044
-- docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md:197  →  R-044
+- docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md:53  →  R-043
+- docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md:74  →  R-043
+- docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md:101  →  R-022
+- docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md:102  →  R-005
+- docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md:103  →  R-015
+- docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md:105  →  R-003
+- docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md:108  →  R-029
+- docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md:109  →  R-010
+- docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md:117  →  R-043
+- docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md:118  →  R-043
+- docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md:120  →  R-043
+- docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md:123  →  R-044
+- docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md:125  →  R-044
+- docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md:126  →  R-044
+- docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md:149  →  R-044
+- docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md:150  →  R-044
+- docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md:196  →  R-044
+- docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md:197  →  R-044
 - docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md:32  →  R-002
 - docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md:55  →  R-015
 - docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md:57  →  R-015

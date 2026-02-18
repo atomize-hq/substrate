@@ -4,8 +4,8 @@
 - Merge platform-fix branches (if any) and finalize WCU5 with an auditable cross-platform green state.
 - Spec: `docs/project_management/_archived/workspace-config-policy-unification/WCU5-spec.md`
 - ADRs:
-  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-  - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 - Closeout report: `docs/project_management/_archived/workspace-config-policy-unification/WCU5-closeout_report.md`
 
 Do not edit planning docs inside the worktree.

@@ -109,7 +109,7 @@ exec
 3:## Scope
 4:- Feature directory: `docs/project_management/next/policy-patch-only-broker-effective-resolution/`
 5:- Orchestration branch: `feat/policy-patch-only-broker-effective-resolution`
-6:- ADR: `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+6:- ADR: `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
 7:
 8:## Goal
 9:- Make `policy.yaml` patch-only everywhere and make the broker the canonical resolver for the effective policy used by shell, shim, and world-agent execution paths.
@@ -153,9 +153,9 @@ exec
 3:- Branch: `testing`
 4:- Goal: Produce an execution-ready Planning Pack for ADR-0013 with zero ambiguity.
 5:- Inputs to read end-to-end:
-6:  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
-7:  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-8:  - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+6:  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+7:  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+8:  - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 9:  - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
 10:  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 11:  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
@@ -199,7 +199,7 @@ exec
   - `docs/project_management/next/policy-patch-only-broker-effective-resolution/integration_map.md`
   - `docs/project_management/next/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md`
   - `docs/project_management/next/policy-patch-only-broker-effective-resolution/execution_preflight_report.md`
-  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
   - `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
 - Commands planned:
   - `export FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution"`
@@ -211,7 +211,7 @@ exec
 ## END — 2026-01-17T04:40:20Z — execution — F0 execution preflight gate
 - Outcome: `RECOMMENDATION: REVISE`
 - Blockers (must fix before starting `C0`):
-  - Approve ADR-0013 (`docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`: set status to `Approved`, or otherwise record acceptance)
+  - Approve ADR-0013 (`docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`: set status to `Approved`, or otherwise record acceptance)
 exec
 /bin/bash -lc "rg -n \"name = \\\"substrate-broker\\\"\" -S Cargo.toml crates/**/Cargo.toml && rg -n \"policy current show\" -S crates src | head" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-code succeeded in 71ms:
 crates/broker/Cargo.toml:2:name = "substrate-broker"

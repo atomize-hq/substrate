@@ -18,7 +18,7 @@ This document is a lightweight tracking plan for finalizing ADRs and their corre
   - Span parent-linkage fix spec
 
 ## Phase 2 — Output/routing contract (accept)
-- ADR-0017: `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+- ADR-0017: `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 - Outputs (required):
   - Output class contract (PTY bytes vs structured events) + buffering/render rules
   - Attribution requirements for concurrent agent output

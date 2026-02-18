@@ -53,7 +53,7 @@ PY
 # exit 0
 
 # ADR executive summary drift checks (as required by planning lint)
-make adr-check ADR=docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md
+make adr-check ADR=docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md
 # exit 0
 
 # Mechanical planning lint
@@ -86,7 +86,7 @@ Mark `YES` only if read end-to-end.
 ### 1) Zero-ambiguity contracts
 - Result: `PASS`
 - Evidence:
-  - `docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md` (User Contract; precedence order)
+  - `docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md` (User Contract; precedence order)
   - `docs/project_management/_archived/policy_and_config_precedence/PCP0-spec.md` (Effective config precedence; acceptance criteria)
 - Notes: Precedence is singular, ordered, and testable; no planning-lint hard-ban or ambiguity matches detected.
 
@@ -98,7 +98,7 @@ Mark `YES` only if read end-to-end.
 ### 3) Cross-doc consistency (CLI/config/exit codes/paths)
 - Result: `PASS`
 - Evidence:
-  - `docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md` (CLI + exit codes + config path)
+  - `docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md` (CLI + exit codes + config path)
   - `docs/project_management/_archived/policy_and_config_precedence/PCP0-spec.md` (Exit code taxonomy reference)
   - `docs/project_management/_archived/policy_and_config_precedence/manual_testing_playbook.md` (expected exit codes for CLI commands)
 - Notes: Workspace-scoped `substrate config show` requires a workspace and exits `2` when missing; consistent across ADR/spec/playbook.
@@ -152,7 +152,7 @@ Mark `YES` only if read end-to-end.
 ### Finding 003 — CLI precedence and exit codes are consistent across ADR/spec/playbook
 - Status: `VERIFIED`
 - Evidence:
-  - `docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md` (Effective precedence and exit codes)
+  - `docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md` (Effective precedence and exit codes)
   - `docs/project_management/_archived/policy_and_config_precedence/PCP0-spec.md` (“Effective config precedence (workspace present)” and “Exit codes”)
   - `docs/project_management/_archived/policy_and_config_precedence/manual_testing_playbook.md` (expected exit `0` and `2` for `substrate config show --json`)
 - Impact: Prevents contract drift that would make implementation or validation ambiguous.

@@ -62,7 +62,7 @@ jq -r '.sprints[] | select(.id=="workspace_config_policy_unification") | {order,
 ```
 
 ## Required Inputs Read End-to-End (checklist)
-- ADR(s): `YES` (`docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`, plus `docs/project_management/_archived/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`)
+- ADR(s): `YES` (`docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, plus `docs/project_management/_archived/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`)
 - `plan.md`: `YES` (`docs/project_management/_archived/workspace-config-policy-unification/plan.md`)
 - `tasks.json`: `YES` (`docs/project_management/_archived/workspace-config-policy-unification/tasks.json`)
 - `session_log.md`: `YES` (`docs/project_management/_archived/workspace-config-policy-unification/session_log.md`)
@@ -91,7 +91,7 @@ jq -r '.sprints[] | select(.id=="workspace_config_policy_unification") | {order,
 
 ### 3) Cross-doc consistency (CLI/config/exit codes/paths)
 - Result: `PASS`
-- Evidence: `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md:148`, `docs/project_management/_archived/workspace-config-policy-unification/manual_testing_playbook.md:30`, `docs/project_management/_archived/workspace-config-policy-unification/smoke/linux-smoke.sh:17`
+- Evidence: `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md:148`, `docs/project_management/_archived/workspace-config-policy-unification/manual_testing_playbook.md:30`, `docs/project_management/_archived/workspace-config-policy-unification/smoke/linux-smoke.sh:17`
 - Notes: Core command spellings, scope model (`current|global|workspace`), and canonical paths are consistent, and the ADR-declared behaviors have explicit playbook coverage.
 
 ### 4) Sequencing and dependency alignment

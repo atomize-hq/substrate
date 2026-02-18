@@ -8,7 +8,7 @@ Owners: Substrate maintainers
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 3766377ab49c9368e460e6df4a3bd6aa5fcc0ae29844ff209e00bcceb1c6ccb6
+ADR_BODY_SHA256: 6b8c510ead88e391788963e6bd8b965273c4aaa8312d91df9ea245126c78ad2b
 ### Changes (operator-facing)
 - Workspace override note for `substrate config global show`
   - Existing: `substrate config global show` prints the global config patch, which can be misinterpreted as the effective config when run inside a workspace.
@@ -48,8 +48,8 @@ which scope/file was actually modified. A single-line stderr note stating the wr
 at the point of action.
 
 Related ADRs / background:
-- `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-- `docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md`
+- `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- `docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md`
 
 ## Goals
 

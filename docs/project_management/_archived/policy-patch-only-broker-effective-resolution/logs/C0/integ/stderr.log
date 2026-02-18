@@ -108,7 +108,7 @@ exec
 # C0-spec — Broker Canonical Policy Resolver + CLI Delegation
 
 Authoritative ADR:
-- `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+- `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
 
 Exit codes:
 - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
@@ -132,7 +132,7 @@ exec
 ## Scope
 - Feature directory: `docs/project_management/next/policy-patch-only-broker-effective-resolution/`
 - Orchestration branch: `feat/policy-patch-only-broker-effective-resolution`
-- ADR: `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+- ADR: `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
 
 ## Goal
 - Make `policy.yaml` patch-only everywhere and make the broker the canonical resolver for the effective policy used by shell, shim, and world-agent execution paths.
@@ -154,9 +154,9 @@ exec
 - Branch: `testing`
 - Goal: Produce an execution-ready Planning Pack for ADR-0013 with zero ambiguity.
 - Inputs to read end-to-end:
-  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
-  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-  - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
@@ -4175,7 +4175,7 @@ M /home/spenser/__Active_code/substrate/docs/project_management/next/policy-patc
 +- Why: a single resolver eliminates drift, keeps effective policy deterministic, and enforces the patch-only on-disk contract.
  - Links:
 +  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
-+  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
++  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
  
 @@ -23,4 +25,4 @@
  
@@ -4331,7 +4331,7 @@ index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..8f3acc653bba50d63db18b3be9d90bf1
 +- Why: a single resolver eliminates drift, keeps effective policy deterministic, and enforces the patch-only on-disk contract.
  - Links:
 +  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
-+  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
++  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
  
  ## Spec Parity (No Drift)
  
@@ -4489,7 +4489,7 @@ index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..8f3acc653bba50d63db18b3be9d90bf1
 +- Why: a single resolver eliminates drift, keeps effective policy deterministic, and enforces the patch-only on-disk contract.
  - Links:
 +  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
-+  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
++  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
  
  ## Spec Parity (No Drift)
  
@@ -4664,7 +4664,7 @@ index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365b
 +- Why: a single resolver eliminates drift, keeps effective policy deterministic, and enforces the patch-only on-disk contract.
  - Links:
 +  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
-+  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
++  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
  
  ## Spec Parity (No Drift)
  
@@ -4824,7 +4824,7 @@ index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365b
 +- Why: a single resolver eliminates drift, keeps effective policy deterministic, and enforces the patch-only on-disk contract.
  - Links:
 +  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
-+  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
++  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
  
  ## Spec Parity (No Drift)
  
@@ -4990,7 +4990,7 @@ index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365b
 +- Why: a single resolver eliminates drift, keeps effective policy deterministic, and enforces the patch-only on-disk contract.
  - Links:
 +  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
-+  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
++  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
  
  ## Spec Parity (No Drift)
  
@@ -5158,7 +5158,7 @@ index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365b
 +- Why: a single resolver eliminates drift, keeps effective policy deterministic, and enforces the patch-only on-disk contract.
  - Links:
 +  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
-+  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
++  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
  
  ## Spec Parity (No Drift)
  
@@ -5332,7 +5332,7 @@ index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365b
 +- Why: a single resolver eliminates drift, keeps effective policy deterministic, and enforces the patch-only on-disk contract.
  - Links:
 +  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
-+  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
++  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
  
  ## Spec Parity (No Drift)
  
@@ -5499,7 +5499,7 @@ index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365b
 +- Why: a single resolver eliminates drift, keeps effective policy deterministic, and enforces the patch-only on-disk contract.
  - Links:
 +  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
-+  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
++  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
  
  ## Spec Parity (No Drift)
  
@@ -5681,7 +5681,7 @@ index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365b
 +- Why: a single resolver eliminates drift, keeps effective policy deterministic, and enforces the patch-only on-disk contract.
  - Links:
 +  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
-+  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
++  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
  
  ## Spec Parity (No Drift)
  
@@ -5853,7 +5853,7 @@ index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365b
 +- Why: a single resolver eliminates drift, keeps effective policy deterministic, and enforces the patch-only on-disk contract.
  - Links:
 +  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
-+  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
++  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
  
  ## Spec Parity (No Drift)
  
@@ -6027,7 +6027,7 @@ index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365b
 +- Why: a single resolver eliminates drift, keeps effective policy deterministic, and enforces the patch-only on-disk contract.
  - Links:
 +  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
-+  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
++  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
  
  ## Spec Parity (No Drift)
  
@@ -6196,7 +6196,7 @@ index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365b
 +- Why: a single resolver eliminates drift, keeps effective policy deterministic, and enforces the patch-only on-disk contract.
  - Links:
 +  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
-+  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
++  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
  
  ## Spec Parity (No Drift)
  
@@ -6363,7 +6363,7 @@ index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365b
 +- Why: a single resolver eliminates drift, keeps effective policy deterministic, and enforces the patch-only on-disk contract.
  - Links:
 +  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
-+  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
++  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
  
  ## Spec Parity (No Drift)
  

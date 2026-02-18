@@ -67,7 +67,7 @@ scripts/planning/lint.sh --feature-dir "docs/project_management/_archived/world_
 -- tasks.json invariants
 OK: tasks.json validation passed: docs/project_management/_archived/world_deps_selection_layer/tasks.json
 -- ADR Executive Summary drift (if ADRs found/referenced)
-OK: docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md executive summary hash matches
+OK: docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md executive summary hash matches
 -- Kickoff prompt sentinel
 -- Manual playbook smoke linkage (if present)
 -- Sequencing alignment
@@ -139,7 +139,7 @@ PY
 ### 3) Cross-doc consistency (CLI/config/exit codes/paths)
 - Result: `PASS`
 - Evidence:
-  - `docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md` (“Intended execution branch” and related track pointers)
+  - `docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md` (“Intended execution branch” and related track pointers)
   - `docs/project_management/_archived/world_deps_selection_layer/tasks.json` (`meta.automation.orchestration_branch: "feat/world_deps_selection_layer"`)
   - `docs/project_management/next/sequencing.json` (`world_deps_selection_layer.branch: "feat/world_deps_selection_layer"`)
 - Notes: CLI/exit codes/config precedence are consistent, and orchestration branch naming is aligned across ADR/tasks/sequencing.
@@ -179,7 +179,7 @@ PY
 ### Finding 002 — Orchestration branch is consistent across ADR/tasks/sequencing
 - Status: `VERIFIED`
 - Evidence:
-  - `docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md` (“Intended execution branch: `feat/world_deps_selection_layer`”)
+  - `docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md` (“Intended execution branch: `feat/world_deps_selection_layer`”)
   - `docs/project_management/_archived/world_deps_selection_layer/tasks.json` (`meta.automation.orchestration_branch: "feat/world_deps_selection_layer"`)
   - `docs/project_management/next/sequencing.json` sprint `id="world_deps_selection_layer"` uses `branch: "feat/world_deps_selection_layer"`
 - Impact: CI dispatch (`WORKFLOW_REF`) and automation will target the correct ref, preserving auditability.

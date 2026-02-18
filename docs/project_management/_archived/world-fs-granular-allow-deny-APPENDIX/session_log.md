@@ -6,7 +6,7 @@
 - Goal: Establish Appendix A + B Planning Pack scaffolding
 - Inputs to read end-to-end:
   - `docs/project_management/standards/PLANNING_README.md`
-  - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+  - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 
 ## END — 2026-02-06 — planning — init
 - Summary of changes (exhaustive):
@@ -41,8 +41,8 @@ Record after dispatch:
   - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/manual_testing_playbook.md`
   - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/kickoff_prompts/*.md`
   - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/quality_gate_report.md`
-  - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
-  - `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md`
+  - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+  - `docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md`
   - `docs/project_management/next/sequencing.json`
 
 ## END — 2026-02-06T19:39:38Z — planning — quality gate remediation
@@ -56,8 +56,8 @@ Record after dispatch:
   - Kickoff prompts updated to include required per-role command checklists.
   - planning-lint hard-ban violation removed from quality_gate_report.md without changing finding meaning.
 - Commands run (verbatim) and exit codes:
-  - `make adr-fix ADR=docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` → exit 0
-  - `make adr-fix ADR=docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md` → exit 0
+  - `make adr-fix ADR=docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` → exit 0
+  - `make adr-fix ADR=docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md` → exit 0
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX"` → exit 2 (hard-ban match in quality_gate_report.md)
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX"` → exit 0
   - `make planning-validate FEATURE_DIR="docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX"` → exit 0
@@ -94,8 +94,8 @@ Record after dispatch:
   - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → exit 0
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX"` → exit 0
   - `make planning-validate FEATURE_DIR="docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX"` → exit 0
-  - `make adr-fix ADR=docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md` → exit 0
-  - `make adr-fix ADR=docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` → exit 0
+  - `make adr-fix ADR=docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md` → exit 0
+  - `make adr-fix ADR=docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` → exit 0
 - Blockers: `NONE`
 
 ---

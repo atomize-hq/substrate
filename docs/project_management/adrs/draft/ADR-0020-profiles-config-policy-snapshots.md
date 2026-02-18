@@ -15,23 +15,23 @@
 
 ## Related Docs
 - Policy/config scope + patch files:
-  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 - Env override taxonomy:
-  - `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md`
+  - `docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md`
 - World-first REPL (motivation for surface scoping + drift messaging):
-  - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
+  - `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: bddadbef01f5598915a95a88842216ce6634fe23a2b565bab59373a797f6bc39
+ADR_BODY_SHA256: 4ac5c6b1469c172baef599cbafcb281d35137b4822d01a99b93bb3a6c49d4d52
 ### Changes (operator-facing)
 - Profiles can pin full behavior across config + policy
   - Existing: effective policy/config are derived by merging defaults + global + workspace patches (plus CLI/env overrides) based on the current directory.
   - New: an optional “profile” can be activated to provide a complete, explicit config+policy snapshot for selected command surfaces (REPL vs `-c`), preventing accidental leakage of defaults/global/workspace layers.
   - Why: provides deterministic, intent-aligned behavior for humans vs agents without multiplying ad-hoc override knobs; improves debuggability by making “what is active?” explicit.
   - Links:
-    - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-    - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
+    - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+    - `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
 
 ## Problem / Context
 - Substrate is used by both:

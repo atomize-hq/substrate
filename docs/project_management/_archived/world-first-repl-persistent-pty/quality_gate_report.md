@@ -44,7 +44,7 @@ PY
 ```
 
 ### Planning lint (mechanical)
-- `make adr-check ADR=docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md` → exit `0` → executive summary hash matches
+- `make adr-check ADR=docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md` → exit `0` → executive summary hash matches
 - `make planning-validate FEATURE_DIR="docs/project_management/_archived/world-first-repl-persistent-pty"` → exit `0` → tasks.json validator passes
 - `make planning-lint FEATURE_DIR="docs/project_management/_archived/world-first-repl-persistent-pty"` → exit `0` → hard-ban + ambiguity + invariants + sequencing checks pass
 
@@ -52,7 +52,7 @@ PY
 - `NONE` (hard-ban and ambiguity scans are covered by `make planning-lint`)
 
 ## Required Inputs Read End-to-End (checklist)
-- ADR(s): `YES` (`docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`)
+- ADR(s): `YES` (`docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`)
 - `plan.md`: `YES`
 - `tasks.json`: `YES`
 - `session_log.md`: `YES`
@@ -79,7 +79,7 @@ PY
 
 ### 3) Cross-doc consistency (CLI/config/exit codes/paths)
 - Result: `PASS`
-- Evidence: `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`, `docs/project_management/_archived/world-first-repl-persistent-pty/integration_map.md`, `docs/project_management/_archived/world-first-repl-persistent-pty/manual_testing_playbook.md`
+- Evidence: `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`, `docs/project_management/_archived/world-first-repl-persistent-pty/integration_map.md`, `docs/project_management/_archived/world-first-repl-persistent-pty/manual_testing_playbook.md`
 
 ### 4) Sequencing and dependency alignment
 - Result: `PASS`
@@ -122,7 +122,7 @@ PY
 
 ### Finding 002 — ADR executive summary is non-drifting
 - Status: `VERIFIED`
-- Evidence: `make adr-check ADR=docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md` (exit `0`)
+- Evidence: `make adr-check ADR=docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md` (exit `0`)
 - Impact: Prevents silent operator-facing contract drift
 - Fix required (exact): `NONE`
 

@@ -108,11 +108,11 @@ make planning-validate FEATURE_DIR="$FEATURE_DIR"
 # - WSL bundled coverage not represented in Linux platform-fix/checkpoint tasks
 
 # ADR executive summary drift (required when ADRs referenced)
-make adr-check ADR=docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md
+make adr-check ADR=docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md
 # exit=2
 # ADR_BODY_SHA256 mismatch (found 9f5a5e..., expected eea9a0...)
 
-make adr-check ADR=docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md
+make adr-check ADR=docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md
 # exit=0
 
 # Required-field audit (template minimum)
@@ -158,8 +158,8 @@ rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' '\\b(shoul
 
 ## Required Inputs Read End-to-End (checklist)
 - ADR(s): `YES`
-  - `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md`
-  - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+  - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
+  - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
   - `docs/project_management/next/world_deps_packages_bundles_contract.md`
 - `spec_manifest.md`: `YES`
 - `plan.md`: `YES`
@@ -202,7 +202,7 @@ rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' '\\b(shoul
 - Result: `FAIL`
 - Evidence:
   - `docs/project_management/next/world-deps-host-visible-hardening/WDH2-spec.md` states “unless explicitly allowed by policy” but defines only env-var overrides (no policy key).
-  - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` requires override inputs use `SUBSTRATE_OVERRIDE_*` (WDH2 introduces `SUBSTRATE_WORLD_EXEC_GUARD*`).
+  - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` requires override inputs use `SUBSTRATE_OVERRIDE_*` (WDH2 introduces `SUBSTRATE_WORLD_EXEC_GUARD*`).
 - Notes: Override surface and taxonomy are not consistent across authoritative inputs/specs.
 
 ### 4) Sequencing and dependency alignment
@@ -272,9 +272,9 @@ rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' '\\b(shoul
 ### Finding 004 — ADR-0011 executive summary hash drift (adr-check fails)
 - Status: `DEFECT`
 - Evidence:
-  - `make adr-check ADR=docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md` fails with `ADR_BODY_SHA256 mismatch`.
+  - `make adr-check ADR=docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md` fails with `ADR_BODY_SHA256 mismatch`.
 - Impact: ADR integrity gate is failing; downstream Planning Packs cannot rely on the ADR’s executive summary being in sync with the authoritative body.
-- Fix required (exact): Update `ADR_BODY_SHA256` in `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md` to match the current body (or revert body edits) so `make adr-check ADR=...` exits `0`.
+- Fix required (exact): Update `ADR_BODY_SHA256` in `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md` to match the current body (or revert body edits) so `make adr-check ADR=...` exits `0`.
 - If DEFECT: Alternative (one viable): If the body changes are intentional, re-run the standard ADR hash update workflow and record the reason for change in the ADR history/notes.
 
 ### Finding 005 — Ambiguity scan violation (`should` in feature directory)
@@ -314,7 +314,7 @@ rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' '\\b(shoul
 - Status: `DEFECT`
 - Evidence:
   - `docs/project_management/next/world-deps-host-visible-hardening/WDH2-spec.md:12-34` says “unless explicitly allowed by policy” but defines only env-var overrides (`SUBSTRATE_WORLD_EXEC_GUARD*`).
-  - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` (Appendix B.2.*) states override inputs remain `SUBSTRATE_OVERRIDE_*`.
+  - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` (Appendix B.2.*) states override inputs remain `SUBSTRATE_OVERRIDE_*`.
 - Impact: Cross-doc contract inconsistency; introduces a new env var surface that may violate established override taxonomy, and leaves “policy allow” unspecified.
 - Fix required (exact): Choose and specify one authoritative override surface for WDH2 and make it consistent everywhere (spec + manual playbook + smoke + tasks):
   - either define a policy key (and remove/rename env vars accordingly), or
@@ -332,7 +332,7 @@ rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' '\\b(shoul
 - Blockers to execution:
   - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` must exit `0`.
   - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` must exit `0`.
-  - `make adr-check ADR=docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md` must exit `0`.
+  - `make adr-check ADR=docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md` must exit `0`.
 
 ---
 
@@ -353,7 +353,7 @@ RECOMMENDATION: ACCEPT
 export FEATURE_DIR="docs/project_management/next/world-deps-host-visible-hardening"
 
 # ADR drift guard (required when ADRs referenced)
-make adr-check ADR=docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md
+make adr-check ADR=docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md
 # exit=0
 
 # Mechanical planning lint (required)
@@ -374,8 +374,8 @@ jq -e . docs/project_management/next/sequencing.json >/dev/null
 
 ## Required Inputs Read End-to-End (Pass 2 checklist)
 - ADR(s): `YES`
-  - `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md`
-  - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+  - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
+  - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
   - `docs/project_management/next/world_deps_packages_bundles_contract.md`
 - `spec_manifest.md`: `YES`
 - `plan.md`: `YES`
@@ -459,7 +459,7 @@ jq -e . docs/project_management/next/sequencing.json >/dev/null
 ### Finding 004 — ADR-0011 executive summary hash drift (adr-check fails)
 - Status: `VERIFIED`
 - Fix applied:
-  - Updated `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md` `ADR_BODY_SHA256` via `make adr-fix`.
+  - Updated `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md` `ADR_BODY_SHA256` via `make adr-fix`.
 
 ### Finding 005 — Ambiguity scan violation (`should` in feature directory)
 - Status: `VERIFIED`
@@ -521,10 +521,10 @@ make planning-validate FEATURE_DIR="$FEATURE_DIR"
 # exit=0
 
 # ADR executive summary drift (required when ADRs referenced)
-make adr-check ADR=docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md
+make adr-check ADR=docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md
 # exit=0
 
-make adr-check ADR=docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md
+make adr-check ADR=docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md
 # exit=0
 
 # Required-field audit (template minimum)
@@ -570,8 +570,8 @@ rg -n 'For `runnable: true`' docs/project_management/next/world_deps_packages_bu
 
 ## Required Inputs Read End-to-End (Pass 3 checklist)
 - ADR(s): `YES`
-  - `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md`
-  - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+  - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
+  - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
   - `docs/project_management/next/world_deps_packages_bundles_contract.md`
 - `spec_manifest.md`: `YES`
 - `plan.md`: `YES`
@@ -769,8 +769,8 @@ rg -n 'command -v <entrypoint>' "$FEATURE_DIR/WDH1-spec.md"
 
 ## Required Inputs Read End-to-End (Pass 4 checklist)
 - ADR(s): `YES`
-  - `docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md`
-  - `docs/project_management/next/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+  - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
+  - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
   - `docs/project_management/next/world_deps_packages_bundles_contract.md`
 - `spec_manifest.md`: `YES`
 - `plan.md`: `YES`

@@ -7,8 +7,8 @@
 - Inputs to read end-to-end:
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-  - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 - Commands planned (if any):
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/workspace-config-policy-unification"`
 
@@ -56,8 +56,8 @@
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
   - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
   - `docs/project_management/next/sequencing.json`
-  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-  - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
   - `docs/project_management/_archived/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
 - Commands planned:
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/workspace-config-policy-unification"`
@@ -92,7 +92,7 @@
   - `docs/project_management/_archived/workspace-config-policy-unification/kickoff_prompts/WCU5-test.md`
   - `docs/project_management/_archived/workspace-config-policy-unification/kickoff_prompts/WCU5-integ.md`
   - `docs/project_management/_archived/workspace-config-policy-unification/kickoff_prompts/FZ-feature-cleanup.md`
-  - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md` (exec summary hash fix for planning-lint parity)
+  - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md` (exec summary hash fix for planning-lint parity)
 - Rubric checks run (with results):
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/workspace-config-policy-unification"` → `0` → `PASS`
 - Sequencing alignment:

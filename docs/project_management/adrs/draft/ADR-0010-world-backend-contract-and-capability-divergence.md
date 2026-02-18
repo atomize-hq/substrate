@@ -18,6 +18,8 @@
 
 ## Executive Summary (Operator)
 
+ADR_BODY_SHA256: 8085cef34daab77959bda538b56106a62c84460226a761c4b923c3cef7688ce5
+
 ADR_BODY_SHA256: <intentionally omitted while Status=Proposed>
 
 ### Changes (operator-facing)

@@ -9,13 +9,13 @@ Feature directory:
 - `docs/project_management/_archived/workspace-config-policy-unification/`
 
 Slice spec:
-- `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 
 ## Behavior Delta (Existing → New → Why)
 - Existing behavior: Workspace state and internal git location were not unified under a single canonical `.substrate/` workspace root, and nested workspace init refusal/disable-marker semantics were not enforced per ADR-0008.
 - New behavior: Workspace state is canonicalized under `<workspace_root>/.substrate/` (workspace + policy patches + internal git), discovery respects `.substrate/workspace.disabled`, and nested `workspace init` is refused deterministically (exit `2`).
 - Why: Implements ADR-0008 workspace scope and on-disk layout contract.
-- Links: `docs/project_management/_archived/workspace-config-policy-unification/WCU1-spec.md`, `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- Links: `docs/project_management/_archived/workspace-config-policy-unification/WCU1-spec.md`, `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 
 ## Spec Parity (No Drift)
 - [x] Acceptance criteria satisfied
