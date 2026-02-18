@@ -10,7 +10,7 @@ the centralized policy and isolation boundary. That requires:
 
 This track is focused on Linux isolation semantics (with macOS Lima/Windows WSL parity in mind) and is
 recorded in the ADR:
-- `docs/project_management/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md`
+- `docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md`
 
 ## Guardrails
 

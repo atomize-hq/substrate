@@ -8,8 +8,8 @@ It is a focused companion to:
 ## Operating assumptions (the situation you are in)
 
 When this standard applies, the operator started you with one of:
-- `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1` (preferred)
-- `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
+- `make triad-task-start-pair FEATURE_DIR="docs/project_management/packs/active/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1` (preferred)
+- `make triad-task-start FEATURE_DIR="docs/project_management/packs/active/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
 
 You are already:
 - in a git worktree (usually under `wt/...`)
@@ -18,7 +18,7 @@ You are already:
 
 ## Non-negotiable safety rule
 
-- Do not edit planning docs inside the worktree (anything under `docs/project_management/next/`).
+- Do not edit planning docs inside the worktree (anything under `docs/project_management/packs/`).
   - The task finisher enforces this and will fail if you try.
 
 ## Separation of concerns (role boundaries)
@@ -98,8 +98,8 @@ All task types:
 ## Operator-owned steps (do not do these inside the worktree)
 
 The operator (or an orchestration/integration workflow) owns:
-- Updating `docs/project_management/next/<feature>/tasks.json` statuses.
-- Appending START/END entries to `docs/project_management/next/<feature>/session_log.md`.
+- Updating `<FEATURE_DIR>/tasks.json` statuses.
+- Appending START/END entries to `<FEATURE_DIR>/session_log.md`.
 - Merging/rebasing task branches into integration and then into orchestration (when applicable).
 - Running feature cleanup (`FZ-feature-cleanup`) to remove retained worktrees.
 
@@ -109,4 +109,3 @@ If your kickoff prompt asks you to edit `tasks.json`/`session_log.md` yourself, 
 
 If a slice cannot be executed via automation/concurrent code+test (rare), fall back to the manual flow in:
 - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
-

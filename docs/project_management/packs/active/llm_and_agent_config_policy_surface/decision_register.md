@@ -226,7 +226,7 @@ Scope:
 **Decision owner(s):** Broker + Engine + Security  
 **Date:** 2026-02-09  
 **Status:** Accepted  
-**Related docs:** ADR-0027, `docs/project_management/packs/active/llm_and_agent_config_policy_surface/SCHEMA.md`, `docs/project_management/next/llm_cli_backend_engine/decision_register.md` (DR-0008)
+**Related docs:** ADR-0027, `docs/project_management/packs/active/llm_and_agent_config_policy_surface/SCHEMA.md`, `docs/project_management/adrs/draft/ADR-0024-cli-backend-provider-engine.md`
 
 **Problem / Context**
 - We introduced `agents.host_credentials.read.allowed_backends` as an explicit policy gate for host credential reads by backend adapters.
@@ -259,7 +259,7 @@ Scope:
 **Decision owner(s):** Broker + Gateway + Security  
 **Date:** 2026-02-09  
 **Status:** Accepted  
-**Related docs:** ADR-0027, `docs/project_management/packs/active/llm_and_agent_config_policy_surface/SCHEMA.md`, `docs/project_management/next/llm_gateway_in_world/decision_register.md` (DR-0014)
+**Related docs:** ADR-0027, `docs/project_management/packs/active/llm_and_agent_config_policy_surface/SCHEMA.md`, `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md`
 
 **Problem / Context**
 - We introduced `llm.secrets.env_allowed` as a policy allowlist of secret env var *names* that Substrate may read on the host and inject into in-world gateway/engine processes.

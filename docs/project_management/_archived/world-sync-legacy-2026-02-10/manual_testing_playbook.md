@@ -3,16 +3,16 @@
 This playbook validates the world-sync workspace model (`substrate init`) and the core sync workflow (`substrate sync`) end-to-end.
 
 Authoritative docs:
-- Plan: `docs/project_management/next/world-sync/plan.md`
-- Specs: `docs/project_management/next/world-sync/C0-spec.md` through `docs/project_management/next/world-sync/C9-spec.md`
+- Plan: `docs/project_management/_archived/next/world-sync/plan.md`
+- Specs: `docs/project_management/_archived/next/world-sync/C0-spec.md` through `docs/project_management/_archived/next/world-sync/C9-spec.md`
 - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 
 ## Automated smoke scripts
 
 Run the platform smoke script first:
-- Linux: `bash docs/project_management/next/world-sync/smoke/linux-smoke.sh`
-- macOS: `bash docs/project_management/next/world-sync/smoke/macos-smoke.sh`
-- Windows: `pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1`
+- Linux: `bash docs/project_management/_archived/next/world-sync/smoke/linux-smoke.sh`
+- macOS: `bash docs/project_management/_archived/next/world-sync/smoke/macos-smoke.sh`
+- Windows: `pwsh -File docs/project_management/_archived/next/world-sync/smoke/windows-smoke.ps1`
 
 ## 0) Preconditions
 

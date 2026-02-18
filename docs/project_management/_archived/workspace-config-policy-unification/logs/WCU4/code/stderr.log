@@ -14,7 +14,7 @@ user
 
 ## Scope
 - Production code only; no new tests.
-- Spec: `docs/project_management/next/workspace-config-policy-unification/WCU4-spec.md`
+- Spec: `docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-spec.md`
 - ADR: `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 - Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
@@ -24,7 +24,7 @@ Do not edit planning docs inside the worktree.
 1. Verify you are in the task worktree `wt/workspace_config_policy_unification-wcu4-code` on branch `workspace_config_policy_unification-wcu4-code` and that `.taskmeta.json` exists.
 2. Read: WCU4-spec, ADR-0008, plan/tasks/session log, this prompt.
 3. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run:
-   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" SLICE_ID="WCU4"`
+   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification" SLICE_ID="WCU4"`
 
 ## Requirements
 - Implement WCU4 acceptance criteria in `tasks.json`.
@@ -50,14 +50,14 @@ workspace_config_policy_unification-wcu4-code
 {
   "created_at_utc": "2026-01-16T14:19:41Z",
   "created_from_sha": "cbfa6ad466a36afd5cd493e8c980cde4efca5559",
-  "feature_dir": "docs/project_management/next/workspace-config-policy-unification",
+  "feature_dir": "docs/project_management/_archived/next/workspace-config-policy-unification",
   "orchestration_branch": "feat/workspace-config-policy-unification",
   "schema_version": 1,
   "task_branch": "workspace_config_policy_unification-wcu4-code",
   "task_id": "WCU4-code"
 }
 exec
-/bin/bash -lc 'ls -la docs/project_management/next/workspace-config-policy-unification' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-code succeeded in 41ms:
+/bin/bash -lc 'ls -la docs/project_management/_archived/next/workspace-config-policy-unification' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-code succeeded in 41ms:
 total 296
 drwxr-xr-x 4 spenser spenser   4096 Jan 16 09:19 .
 drwxr-xr-x 7 spenser spenser   4096 Jan 16 09:19 ..
@@ -79,7 +79,7 @@ drwxr-xr-x 2 spenser spenser   4096 Jan 16 09:19 smoke
 -rw-r--r-- 1 spenser spenser   2392 Jan 16 09:19 WCU3-closeout_report.md
 -rw-r--r-- 1 spenser spenser   5688 Jan 16 09:19 WCU3-spec.md
 exec
-/bin/bash -lc "sed -n '1,200p' docs/project_management/next/workspace-config-policy-unification/WCU4-spec.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-code succeeded in 32ms:
+/bin/bash -lc "sed -n '1,200p' docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-spec.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-code succeeded in 32ms:
 # WCU4 Spec — Installer/dev env cleanup (stop exporting `SUBSTRATE_OVERRIDE_*` by default)
 
 References:
@@ -110,8 +110,8 @@ exec
 - Owner(s): spenser
 
 ## Scope
-- Feature directory: `docs/project_management/next/workspace-config-policy-unification/`
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Feature directory: `docs/project_management/_archived/next/workspace-config-policy-unification/`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
@@ -123,7 +123,7 @@ exec
 - Prior ADRs:
   - `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`
 exec
-/bin/bash -lc "ls -la docs/project_management/next/workspace-config-policy-unification | rg -n \"(plan|task|session|log|tasks\\.json|WCU4)\" || true" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-code succeeded in 60ms:
+/bin/bash -lc "ls -la docs/project_management/_archived/next/workspace-config-policy-unification | rg -n \"(plan|task|session|log|tasks\\.json|WCU4)\" || true" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-code succeeded in 60ms:
 10:-rw-r--r-- 1 spenser spenser   5537 Jan 16 09:19 plan.md
 12:-rw-r--r-- 1 spenser spenser  23864 Jan 16 09:19 session_log.md
 14:-rw-r--r-- 1 spenser spenser 112382 Jan 16 09:19 tasks.json
@@ -141,21 +141,21 @@ Plan update
   • Run fmt and clippy
   • Finish triad task
 exec
-/bin/bash -lc 'rg -n "WCU4-code|WCU4" docs/project_management/next/workspace-config-policy-unification/tasks.json | head' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-code succeeded in 45ms:
+/bin/bash -lc 'rg -n "WCU4-code|WCU4" docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json | head' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-code succeeded in 45ms:
 1149:      "id": "WCU4-code",
 1150:      "name": "WCU4 \u2014 Installer/dev env cleanup (code)",
 1152:      "phase": "WCU4",
-1159:        "docs/project_management/next/workspace-config-policy-unification/WCU4-spec.md",
-1170:        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\" SLICE_ID=\"WCU4\""
+1159:        "docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-spec.md",
+1170:        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/_archived/next/workspace-config-policy-unification\" SLICE_ID=\"WCU4\""
 1175:        "From inside the worktree: make triad-task-finish TASK_ID=\"WCU4-code\""
 1178:      "integration_task": "WCU4-integ-core",
-1179:      "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU4-code.md",
+1179:      "kickoff_prompt": "docs/project_management/_archived/next/workspace-config-policy-unification/kickoff_prompts/WCU4-code.md",
 1184:        "WCU4-test"
 1192:      "id": "WCU4-test",
 exec
 /bin/bash -lc "python - <<'PY'
 import json
-p='docs/project_management/next/workspace-config-policy-unification/tasks.json'
+p='docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json'
 with open(p) as f: data=json.load(f)
 # Print WCU4 tasks entries summary
 for t in data.get('tasks', data):
@@ -165,7 +165,7 @@ for t in data.get('tasks', data):
 PY" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-code succeeded in 190ms:
 
 exec
-/bin/bash -lc "sed -n '1,200p' docs/project_management/next/workspace-config-policy-unification/plan.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-code succeeded in 39ms:
+/bin/bash -lc "sed -n '1,200p' docs/project_management/_archived/next/workspace-config-policy-unification/plan.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-code succeeded in 39ms:
 # Workspace Config/Policy Unification (ADR-0008) — Plan
 
 ## Context (why this exists)
@@ -176,7 +176,7 @@ This body of work also **must** implement the cross-cutting refinement defined b
 - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 
 Non-negotiable additional gating for this pack:
-- `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
+- `docs/project_management/_archived/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
 
 ## Execution model (triads + automation)
 - Standards:
@@ -187,11 +187,11 @@ Non-negotiable additional gating for this pack:
 - Docs discipline:
   - planning docs (`plan.md`, `tasks.json`, `session_log.md`, specs, prompts) are edited only on the orchestration branch
 exec
-/bin/bash -lc "sed -n '1,200p' docs/project_management/next/workspace-config-policy-unification/session_log.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-code succeeded in 42ms:
+/bin/bash -lc "sed -n '1,200p' docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-code succeeded in 42ms:
 # workspace-config-policy-unification — session log
 
 ## START — 2026-01-14T00:00:00Z — planning — Phase A/B gate scaffolding
-- Feature: `docs/project_management/next/workspace-config-policy-unification/`
+- Feature: `docs/project_management/_archived/next/workspace-config-policy-unification/`
 - Branch: `feat/workspace-config-policy-unification`
 - Goal: Add Phase A/B gates (ADR-0012) scaffolding and ensure it is mechanically encoded in the Planning Pack.
 - Inputs to read end-to-end:
@@ -200,14 +200,14 @@ exec
   - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
   - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 - Commands planned (if any):
-  - `make planning-lint FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification"`
+  - `make planning-lint FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification"`
 
 ## END — 2026-01-14T00:00:00Z — planning — Phase A/B gate scaffolding
 - Summary of changes (exhaustive):
   - Added explicit Phase A/B gate file for ADR-0012 and wired it as a non-negotiable Planning Pack input
   - Added Planning Pack scaffolding files (`plan.md`, `tasks.json`, `integration_map.md`, gate report templates, smoke stubs)
 - Files created/modified:
-  - `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
+  - `docs/project_management/_archived/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
 exec
 /bin/bash -lc "sed -n '1,200p' docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-code succeeded in 41ms:
 # Task Triads — Worktree Execution Standard (Automation + Concurrent Code/Test)
@@ -220,8 +220,8 @@ It is a focused companion to:
 ## Operating assumptions (the situation you are in)
 
 When this standard applies, the operator started you with one of:
-- `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1` (preferred)
-- `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
+- `make triad-task-start-pair FEATURE_DIR="docs/project_management/_archived/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1` (preferred)
+- `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
 
 You are already:
 - in a git worktree (usually under `wt/...`)
@@ -244,7 +244,7 @@ exec
 /bin/bash -lc "python - <<'PY'
 import json
 from pathlib import Path
-p=Path('docs/project_management/next/workspace-config-policy-unification/tasks.json')
+p=Path('docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json')
 data=json.loads(p.read_text())
 # tasks.json seems to be object with key 'tasks'
 tasks=data.get('tasks')
@@ -889,12 +889,12 @@ thinking
 
 I need to confirm that the patch includes `world: { enabled: false }` and maintain a stable ordering. The acceptance criteria specify that the patch file must have a header and sparse overrides. For an empty patch, I’ll structure it with comment lines and a simple YAML mapping. If we're dealing with `world.enabled`, it should be a boolean, and I'll add string handling for options like anchor_mode. Config.yaml should still be written; this will satisfy the acceptance criteria. There might also be legacy dependencies on config.yaml, so I need to be cautious about how we reference it moving forward, especially with documentation updates.
 exec
-/bin/bash -lc "sed -n '1,200p' docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU4-code.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-code succeeded in 45ms:
+/bin/bash -lc "sed -n '1,200p' docs/project_management/_archived/next/workspace-config-policy-unification/kickoff_prompts/WCU4-code.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-code succeeded in 45ms:
 # Kickoff: WCU4-code (code)
 
 ## Scope
 - Production code only; no new tests.
-- Spec: `docs/project_management/next/workspace-config-policy-unification/WCU4-spec.md`
+- Spec: `docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-spec.md`
 - ADR: `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 - Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
@@ -904,7 +904,7 @@ Do not edit planning docs inside the worktree.
 1. Verify you are in the task worktree `wt/workspace_config_policy_unification-wcu4-code` on branch `workspace_config_policy_unification-wcu4-code` and that `.taskmeta.json` exists.
 2. Read: WCU4-spec, ADR-0008, plan/tasks/session log, this prompt.
 3. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run:
-   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" SLICE_ID="WCU4"`
+   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification" SLICE_ID="WCU4"`
 
 ## Requirements
 - Implement WCU4 acceptance criteria in `tasks.json`.
@@ -1983,7 +1983,7 @@ I’m looking to ensure the WCU4 acceptance criteria are met. I’ll summarize t
 thinking
 **Updating implementation plan**
 
-I need to ensure our tasks don’t involve editing documents in the `docs/project_management/next` folder, and it looks like we haven’t done that, so that’s good! Next, I need to update the implementation plan since we haven’t committed the changes yet. The standard suggests that we should commit changes to the task branch. I’ll make sure to check the git status, run `cargo fmt` and `clippy`, and rerun the baseline test afterward before finalizing everything.
+I need to ensure our tasks don’t involve editing documents in the `docs/project_management/_archived/next` folder, and it looks like we haven’t done that, so that’s good! Next, I need to update the implementation plan since we haven’t committed the changes yet. The standard suggests that we should commit changes to the task branch. I’ll make sure to check the git status, run `cargo fmt` and `clippy`, and rerun the baseline test afterward before finalizing everything.
 thinking
 **Finalizing installer configuration**
 

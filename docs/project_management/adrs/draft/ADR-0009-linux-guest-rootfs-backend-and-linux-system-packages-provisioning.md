@@ -6,8 +6,8 @@
 - Owner(s): Shell / World / Installer maintainers
 
 ## Scope
-- Feature directory: `docs/project_management/next/linux_guest_rootfs_backend/`
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Feature directory: `docs/project_management/_archived/next/linux_guest_rootfs_backend/`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
@@ -16,12 +16,12 @@
 ## Related Docs
 - Prior ADR (world-deps provisioning posture): `docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
 - Prior hardening track (full cage / Landlock): `docs/project_management/_archived/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md`
-- Plan (stub): `docs/project_management/next/linux_guest_rootfs_backend/plan.md`
-- Decision Register (stub; required): `docs/project_management/next/linux_guest_rootfs_backend/decision_register.md`
-- Integration Map (stub): `docs/project_management/next/linux_guest_rootfs_backend/integration_map.md`
-- Manual Playbook (stub): `docs/project_management/next/linux_guest_rootfs_backend/manual_testing_playbook.md`
+- Plan (stub): `docs/project_management/_archived/next/linux_guest_rootfs_backend/plan.md`
+- Decision Register (stub; required): `docs/project_management/_archived/next/linux_guest_rootfs_backend/decision_register.md`
+- Integration Map (stub): `docs/project_management/_archived/next/linux_guest_rootfs_backend/integration_map.md`
+- Manual Playbook (stub): `docs/project_management/_archived/next/linux_guest_rootfs_backend/manual_testing_playbook.md`
 - World architecture: `docs/WORLD.md`
-- World-sync (future pinning surface; out of scope here): `docs/project_management/next/world-sync/plan.md`
+- World-sync (future pinning surface; out of scope here): `docs/project_management/_archived/next/world-sync/plan.md`
 
 ## Executive Summary (Operator)
 
@@ -138,7 +138,7 @@ This ADR introduces a new Linux backend selection knob (exact schema location is
   - no host OS package mutation on Linux in guest-rootfs mode
 
 ## Sequencing / Dependencies
-- Sequencing entry: `docs/project_management/next/sequencing.json` → `linux_guest_rootfs_backend` (to be added)
+- Sequencing entry: `docs/project_management/packs/sequencing.json` → `linux_guest_rootfs_backend` (to be added)
 - Prerequisites:
   - WDL2 (`docs/project_management/_archived/world_deps_selection_layer/`) must land first so `world deps provision` exists and has a stable contract for `system_packages`.
   - Linux full-cage mechanics (I2/I3) must already be available (or this feature must fail closed when requested but unavailable).
@@ -165,10 +165,10 @@ This ADR introduces a new Linux backend selection knob (exact schema location is
   - A regression test proving no host OS package-manager calls occur when host-native backend is active.
 
 ### Manual validation
-- Manual playbook: `docs/project_management/next/linux_guest_rootfs_backend/manual_testing_playbook.md`
+- Manual playbook: `docs/project_management/_archived/next/linux_guest_rootfs_backend/manual_testing_playbook.md`
 
 ### Smoke scripts
-- Linux: `docs/project_management/next/linux_guest_rootfs_backend/smoke/linux-smoke.sh` (to be created)
+- Linux: `docs/project_management/_archived/next/linux_guest_rootfs_backend/smoke/linux-smoke.sh` (to be created)
 - macOS: N/A (no behavior change in this ADR)
 - Windows: N/A (no behavior change in this ADR)
 
@@ -178,6 +178,6 @@ This ADR introduces a new Linux backend selection knob (exact schema location is
 
 ## Decision Summary
 - Decision Register entries:
-  - `docs/project_management/next/linux_guest_rootfs_backend/decision_register.md`:
+  - `docs/project_management/_archived/next/linux_guest_rootfs_backend/decision_register.md`:
     - DR-0001, DR-0002, DR-0003, DR-0004, DR-0005 (to be written before execution)
 

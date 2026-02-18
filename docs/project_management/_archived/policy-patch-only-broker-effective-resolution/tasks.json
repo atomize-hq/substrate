@@ -760,12 +760,12 @@
       "type": "ops",
       "phase": "FZ",
       "status": "pending",
-      "description": "At feature end, remove retained worktrees and optionally prune task branches via scripts/triad/feature_cleanup.sh.",
+      "description": "At feature end, remove retained worktrees and optionally prune task branches via make triad-feature-cleanup.",
       "references": [
         "docs/project_management/_archived/policy-patch-only-broker-effective-resolution/plan.md",
         "docs/project_management/_archived/policy-patch-only-broker-effective-resolution/tasks.json",
         "docs/project_management/_archived/policy-patch-only-broker-effective-resolution/session_log.md",
-        "scripts/triad/feature_cleanup.sh"
+        "make triad-feature-cleanup"
       ],
       "acceptance_criteria": [
         "All worktrees removed (or intentionally retained) and cleanup summary recorded in session_log.md"

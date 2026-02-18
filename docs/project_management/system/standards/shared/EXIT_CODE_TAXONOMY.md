@@ -1,6 +1,6 @@
 # Exit Code Taxonomy (Canonical)
 
-This document defines the **default exit code taxonomy** for new Substrate CLI work planned under `docs/project_management/next/…`.
+This document defines the **default exit code taxonomy** for new Substrate CLI work planned under `docs/project_management/packs/…`.
 
 Goal:
 - Keep exit codes consistent across specs, playbooks, smoke scripts, and tasks.
@@ -26,7 +26,7 @@ If a feature needs different exit codes, it must:
 2) Repeat the override in each spec that defines CLI behavior.
 3) Use the overridden codes consistently in:
    - `manual_testing_playbook.md`
-   - smoke scripts under `docs/project_management/next/<feature>/smoke/`
+   - smoke scripts under `docs/project_management/packs/active/<feature>/smoke/`
    - `tasks.json` acceptance criteria / checklists
 
 An override is valid only if it:
@@ -47,4 +47,3 @@ Use this snippet in specs that define CLI behavior:
 - 4: <feature-specific unsupported/prereq-missing semantics>
 - 5: <feature-specific safety/policy violation semantics>
 ```
-

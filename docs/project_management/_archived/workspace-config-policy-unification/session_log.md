@@ -55,7 +55,7 @@
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
   - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
   - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
   - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
   - `docs/project_management/_archived/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
@@ -114,7 +114,7 @@
   - Finding 005
 - Commands planned:
   - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null`
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null`
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null`
   - `make planning-lint FEATURE_DIR="$FEATURE_DIR"`
   - `make planning-validate FEATURE_DIR="$FEATURE_DIR"`
 
@@ -136,7 +136,7 @@
 - Commands run (with results):
   - `export FEATURE_DIR="docs/project_management/_archived/workspace-config-policy-unification"`
   - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` → exit `0`
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → exit `0`
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → exit `0`
   - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → exit `2` (hard-ban match in `quality_gate_report.md`, fixed)
   - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → exit `0`
   - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` → exit `0`

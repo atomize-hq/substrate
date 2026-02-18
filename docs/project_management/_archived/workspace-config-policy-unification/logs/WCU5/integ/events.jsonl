@@ -4,4 +4,4 @@
 - Dispatched cross-platform feature smoke (behavior): run `21076914464` (`success`) `https://github.com/atomize-hq/substrate/actions/runs/21076914464` (passed `linux,macos,windows`).
 - Ran `make triad-task-finish TASK_ID="WCU5-integ"` (fast-forwarded orchestration); pushed `feat/workspace-config-policy-unification` to `origin` at `97fc1f4`.
 
-Next for closeout: update `docs/project_management/next/workspace-config-policy-unification/WCU5-closeout_report.md` with the smoke run URL/id and the final HEAD `97fc1f457d82b1c99cf0959c66585ce933cdf547` (I didn’t edit planning docs in this worktree).
+Next for closeout: update `docs/project_management/_archived/next/workspace-config-policy-unification/WCU5-closeout_report.md` with the smoke run URL/id and the final HEAD `97fc1f457d82b1c99cf0959c66585ce933cdf547` (I didn’t edit planning docs in this worktree).

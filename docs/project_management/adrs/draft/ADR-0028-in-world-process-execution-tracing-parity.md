@@ -6,27 +6,27 @@
 - Owner(s): Shell + World-Agent + World runtime
 
 ## Scope
-- Feature directory: `docs/project_management/next/world_process_exec_tracing_parity/`
+- Feature directory: `docs/project_management/_archived/next/world_process_exec_tracing_parity/`
 - Intended branch name(s): `feat/world-process-exec-tracing-parity`
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Related Docs
-- Plan: `docs/project_management/next/world_process_exec_tracing_parity/plan.md`
-- Tasks: `docs/project_management/next/world_process_exec_tracing_parity/tasks.json`
-- Spec manifest: `docs/project_management/next/world_process_exec_tracing_parity/spec_manifest.md`
+- Plan: `docs/project_management/_archived/next/world_process_exec_tracing_parity/plan.md`
+- Tasks: `docs/project_management/_archived/next/world_process_exec_tracing_parity/tasks.json`
+- Spec manifest: `docs/project_management/_archived/next/world_process_exec_tracing_parity/spec_manifest.md`
 - Specs:
-  - `docs/project_management/next/world_process_exec_tracing_parity/WPEP0-spec.md`
-  - `docs/project_management/next/world_process_exec_tracing_parity/WPEP1-spec.md`
-  - `docs/project_management/next/world_process_exec_tracing_parity/WPEP2-spec.md`
-  - `docs/project_management/next/world_process_exec_tracing_parity/WPEP3-spec.md`
-- Contract (if present): `docs/project_management/next/world_process_exec_tracing_parity/contract.md`
-- Decision Register: `docs/project_management/next/world_process_exec_tracing_parity/decision_register.md`
-- Impact Map: `docs/project_management/next/world_process_exec_tracing_parity/impact_map.md`
-- Manual Playbook: `docs/project_management/next/world_process_exec_tracing_parity/manual_testing_playbook.md`
+  - `docs/project_management/_archived/next/world_process_exec_tracing_parity/WPEP0-spec.md`
+  - `docs/project_management/_archived/next/world_process_exec_tracing_parity/WPEP1-spec.md`
+  - `docs/project_management/_archived/next/world_process_exec_tracing_parity/WPEP2-spec.md`
+  - `docs/project_management/_archived/next/world_process_exec_tracing_parity/WPEP3-spec.md`
+- Contract (if present): `docs/project_management/_archived/next/world_process_exec_tracing_parity/contract.md`
+- Decision Register: `docs/project_management/_archived/next/world_process_exec_tracing_parity/decision_register.md`
+- Impact Map: `docs/project_management/_archived/next/world_process_exec_tracing_parity/impact_map.md`
+- Manual Playbook: `docs/project_management/_archived/next/world_process_exec_tracing_parity/manual_testing_playbook.md`
 
 ## Executive Summary (Operator)
 
@@ -379,7 +379,7 @@ Any record intended to trigger routing or cross-component attribution MUST carry
     - process event records co-located with spans for deterministic reconstruction
 
 ## Sequencing / Dependencies
-- Sequencing entry: `docs/project_management/next/sequencing.json` → `world-process-exec-tracing-parity` (to be scheduled)
+- Sequencing entry: `docs/project_management/packs/sequencing.json` → `world-process-exec-tracing-parity` (to be scheduled)
 - Prerequisites / hard dependencies:
   - Shared redaction helpers in `crates/common` MUST ship before argv/env emission at process granularity.
   - Span parent linkage bug fix MUST ship before (or alongside) process event emission to keep trace trees valid.
@@ -411,12 +411,12 @@ Any record intended to trigger routing or cross-component attribution MUST carry
   - execute a world command that spawns children and assert `trace.jsonl` contains `world_process_start`/`world_process_exit` with correct `parent_span` and no secrets.
 
 ### Manual validation
-- Manual playbook: `docs/project_management/next/world_process_exec_tracing_parity/manual_testing_playbook.md`
+- Manual playbook: `docs/project_management/_archived/next/world_process_exec_tracing_parity/manual_testing_playbook.md`
 
 ### Smoke scripts
-- Linux: `docs/project_management/next/world_process_exec_tracing_parity/smoke/linux-smoke.sh`
-- macOS: `docs/project_management/next/world_process_exec_tracing_parity/smoke/macos-smoke.sh`
-- Windows: `docs/project_management/next/world_process_exec_tracing_parity/smoke/windows-smoke.ps1`
+- Linux: `docs/project_management/_archived/next/world_process_exec_tracing_parity/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/_archived/next/world_process_exec_tracing_parity/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/_archived/next/world_process_exec_tracing_parity/smoke/windows-smoke.ps1`
 
 ## Rollout / Backwards Compatibility
 - Policy: greenfield breaking is allowed
@@ -425,7 +425,7 @@ Any record intended to trigger routing or cross-component attribution MUST carry
 
 ## Decision Summary
 - Decision Register entries:
-  - `docs/project_management/next/world_process_exec_tracing_parity/decision_register.md`:
+  - `docs/project_management/_archived/next/world_process_exec_tracing_parity/decision_register.md`:
     - DR-0001 (In-world tracing mechanism: ptrace vs in-world shims)
     - DR-0002 (Env data minimization policy: allowlist-only vs full redacted map)
     - DR-0003 (Failure behavior: degrade (omit events) vs fail execution)

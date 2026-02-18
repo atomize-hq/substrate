@@ -3,16 +3,16 @@
 This playbook validates the I0–I9 policy schema and Linux isolation semantics end-to-end.
 
 Authoritative docs:
-- ADR: `docs/project_management/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md`
-- Specs: `docs/project_management/next/p0-agent-hub-isolation-hardening/I0-spec.md` through `docs/project_management/next/p0-agent-hub-isolation-hardening/I9-spec.md`
+- ADR: `docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md`
+- Specs: `docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I0-spec.md` through `docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I9-spec.md`
 - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 
 ## Automated smoke scripts
 
 Run the platform smoke script first:
-- Linux: `bash docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh`
-- macOS: `bash docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh`
-- Windows: `pwsh -File docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1`
+- Linux: `bash docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh`
+- macOS: `bash docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh`
+- Windows: `pwsh -File docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1`
 
 ## 0) Preconditions
 

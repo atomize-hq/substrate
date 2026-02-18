@@ -984,12 +984,12 @@
       "type": "ops",
       "phase": "FZ",
       "status": "pending",
-      "description": "At feature end, remove retained worktrees and optionally prune task branches via scripts/triad/feature_cleanup.sh.",
+      "description": "At feature end, remove retained worktrees and optionally prune task branches via make triad-feature-cleanup.",
       "references": [
         "docs/project_management/_archived/world_deps_selection_layer/plan.md",
         "docs/project_management/_archived/world_deps_selection_layer/tasks.json",
         "docs/project_management/_archived/world_deps_selection_layer/session_log.md",
-        "scripts/triad/feature_cleanup.sh"
+        "make triad-feature-cleanup"
       ],
       "acceptance_criteria": ["All worktrees removed (or intentionally retained) and cleanup summary recorded in session_log.md"],
       "start_checklist": [

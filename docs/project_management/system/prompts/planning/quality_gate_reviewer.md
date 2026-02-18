@@ -22,7 +22,7 @@ Inputs (must read end-to-end):
 - `spec_manifest.md` for the feature/track
 - The feature’s `decision_register.md`, `impact_map.md`, `plan.md`, `tasks.json`, `session_log.md`
 - All specs in the track
-- `docs/project_management/packs/sequencing.json` (legacy mirror during migration: `docs/project_management/next/sequencing.json`)
+- `docs/project_management/packs/sequencing.json`
 - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
 - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
 - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
@@ -75,7 +75,7 @@ Review checklist (pass/fail):
 Required reviewer actions (non-negotiable):
 1) Run the mechanical checks in `docs/project_management/system/standards/planning/PLANNING_LINT_CHECKLIST.md` for the feature directory.
 2) Create an auditable report in the feature Planning Pack:
-   - `docs/project_management/next/<feature>/quality_gate_report.md`
+   - `<FEATURE_DIR>/quality_gate_report.md`
    - using `docs/project_management/system/templates/planning_pack/PLANNING_GATE_REPORT_TEMPLATE.md`
 3) If any mechanical lint check fails, the recommendation must be `FLAG FOR HUMAN REVIEW`.
 
@@ -89,5 +89,5 @@ Output format:
   - Alternative: <only if flagging; propose one viable alternative and why>
 
 Additionally:
-- Append the full findings to `docs/project_management/next/<feature>/quality_gate_report.md` with the required evidence.
+- Append the full findings to `<FEATURE_DIR>/quality_gate_report.md` with the required evidence.
 ```

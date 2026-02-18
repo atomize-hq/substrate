@@ -26,7 +26,7 @@ Slice spec:
 - Why:
   - Completes the read-only workflow (discover → enable → observe applied status) and stabilizes exit-code semantics before install/sync mutation slices (WDP3+).
 - Links:
-  - Contract: `docs/project_management/next/world_deps_packages_bundles_contract.md`
+  - Contract: `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
   - Spec: `docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP2-spec.md`
   - Implementation: `crates/shell/src/builtins/world_deps/surfaces.rs`
   - Tests: `crates/shell/tests/world_deps_applied_wdp2.rs`

@@ -19,7 +19,7 @@
 
 ## Sequencing prerequisite (macro)
 - This sprint is sequenced after `policy_and_config_precedence` (ADR-0005 / PCP0) to avoid simultaneous churn in the same resolver layer.
-  - Sequencing spine: `docs/project_management/next/sequencing.json`
+  - Sequencing spine: `docs/project_management/packs/sequencing.json`
 
 ## Triads overview (spec slices)
 

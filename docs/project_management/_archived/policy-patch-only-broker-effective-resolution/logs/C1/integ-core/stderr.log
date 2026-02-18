@@ -14,7 +14,7 @@ user
 
 ## Scope
 - Merge code + tests, reconcile to spec, and make the slice green on the primary dev platform before CI dispatch.
-- Spec: `docs/project_management/next/policy-patch-only-broker-effective-resolution/C1-spec.md`
+- Spec: `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C1-spec.md`
 - Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Start Checklist
@@ -32,7 +32,7 @@ Do not edit planning docs inside the worktree.
   - `make integ-checks`
 - Dispatch validation:
   - CI compile parity (GitHub-hosted): `make ci-compile-parity CI_WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution" CI_REMOTE=origin CI_CLEANUP=1`
-  - Behavioral smoke (self-hosted): `make feature-smoke FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution" PLATFORM=behavior SMOKE_SLICE_ID="C1" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
+  - Behavioral smoke (self-hosted): `make feature-smoke FEATURE_DIR="docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution" PLATFORM=behavior SMOKE_SLICE_ID="C1" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
 
 ## End Checklist
 1. From inside the worktree, run: `make triad-task-finish TASK_ID="C1-integ-core"`.
@@ -64,7 +64,7 @@ policy-patch-only-broker-effective-resolution-c1-integ-core
 {
   "created_at_utc": "2026-01-17T21:10:26Z",
   "created_from_sha": "cc3ca13c0037441d55eb1fb9a18d2ad7ce557407",
-  "feature_dir": "docs/project_management/next/policy-patch-only-broker-effective-resolution",
+  "feature_dir": "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution",
   "orchestration_branch": "feat/policy-patch-only-broker-effective-resolution",
   "schema_version": 1,
   "task_branch": "policy-patch-only-broker-effective-resolution-c1-integ-core",
@@ -74,12 +74,12 @@ policy-patch-only-broker-effective-resolution-c1-integ-core
 thinking
 **Locating project documents**
 
-I’m checking my worktree, and everything seems fine and organized. Next, I need to read the relevant documents, including the specs and standards, along with the plan, tasks, and session log. I’m wondering where those might be stored—maybe they’re in the docs/project_management/next/... section? I'll list the files and use a parallel tool to read multiple files at once. I suspect the plan might be in docs/project_management/next/policy-patch-only-broker-effective-resolution/. Let’s track that down!
+I’m checking my worktree, and everything seems fine and organized. Next, I need to read the relevant documents, including the specs and standards, along with the plan, tasks, and session log. I’m wondering where those might be stored—maybe they’re in the docs/project_management/_archived/next/... section? I'll list the files and use a parallel tool to read multiple files at once. I suspect the plan might be in docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/. Let’s track that down!
 exec
 /bin/bash -lc "set -euo pipefail
-ls -ლა docs/project_management/next/policy-patch-only-broker-effective-resolution
+ls -ლა docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution
 ls -la docs/project_management/standards | sed -n '1,120p'
-rg -n \"C1-integ-core\" -S docs/project_management/next/policy-patch-only-broker-effective-resolution | head -n 50" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-integ-core exited 2 in 40ms:
+rg -n \"C1-integ-core\" -S docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution | head -n 50" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-integ-core exited 2 in 40ms:
 ls: invalid option -- 'á'
 Try 'ls --help' for more information.
 
@@ -87,9 +87,9 @@ thinking
 Hmm, it looks like I mistakenly typed "ls -λα" and that caused an issue because of the non-ASCII character 'á' — it gave me an error saying "invalid option." I should have just used "ls" with standard options to see the files. I'll have to stick to ASCII to avoid these hiccups. Maybe double-check my keyboard settings next time to prevent errors like this from happening again!
 exec
 /bin/bash -lc "set -euo pipefail
-ls -la docs/project_management/next/policy-patch-only-broker-effective-resolution
+ls -la docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution
 ls -la docs/project_management/standards | sed -n '1,120p'
-rg -n \"C1-integ-core\" -S docs/project_management/next/policy-patch-only-broker-effective-resolution | head -n 50 || true" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-integ-core succeeded in 59ms:
+rg -n \"C1-integ-core\" -S docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution | head -n 50 || true" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-integ-core succeeded in 59ms:
 total 152
 drwxr-xr-x 4 spenser spenser  4096 Jan 17 16:10 .
 drwxr-xr-x 8 spenser spenser  4096 Jan 17 16:10 ..
@@ -117,11 +117,11 @@ thinking
 I need to read through the plan.md, tasks.json, session_log, and spec file. Since I can’t edit the planning documents, I’ll focus on reading them. Additionally, I’ll check out the execution standard document. It looks like I’ll be using a parallel reading approach, leveraging multi_tool_use.parallel to streamline the process. Let’s gather all the necessary information efficiently!
 exec
 /bin/bash -lc "set -euo pipefail
-sed -n '1,220p' docs/project_management/next/policy-patch-only-broker-effective-resolution/plan.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-integ-core succeeded in 41ms:
+sed -n '1,220p' docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/plan.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-integ-core succeeded in 41ms:
 # policy-patch-only-broker-effective-resolution — plan
 
 ## Scope
-- Feature directory: `docs/project_management/next/policy-patch-only-broker-effective-resolution/`
+- Feature directory: `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/`
 - Orchestration branch: `feat/policy-patch-only-broker-effective-resolution`
 - ADR: `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
 
@@ -140,7 +140,7 @@ sed -n '1,220p' docs/project_management/next/policy-patch-only-broker-effective-
 - Specs are the single source of truth.
 exec
 /bin/bash -lc "set -euo pipefail
-sed -n '1,260p' docs/project_management/next/policy-patch-only-broker-effective-resolution/C1-spec.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-integ-core succeeded in 48ms:
+sed -n '1,260p' docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C1-spec.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-integ-core succeeded in 48ms:
 # C1-spec — Fail-closed Policy Resolution Across Execution Paths + Docs Alignment
 
 Authoritative ADR:
@@ -174,8 +174,8 @@ It is a focused companion to:
 ## Operating assumptions (the situation you are in)
 
 When this standard applies, the operator started you with one of:
-- `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1` (preferred)
-- `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
+- `make triad-task-start-pair FEATURE_DIR="docs/project_management/_archived/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1` (preferred)
+- `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
 
 You are already:
 - in a git worktree (usually under `wt/...`)
@@ -186,7 +186,7 @@ You are already:
 
 exec
 /bin/bash -lc "set -euo pipefail
-jq '.tasks[] | select(.id==\"C1-integ-core\")' docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-integ-core succeeded in 45ms:
+jq '.tasks[] | select(.id==\"C1-integ-core\")' docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/tasks.json" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-integ-core succeeded in 45ms:
 {
   "id": "C1-integ-core",
   "name": "C1 — Integration core",
@@ -195,23 +195,23 @@ jq '.tasks[] | select(.id==\"C1-integ-core\")' docs/project_management/next/poli
   "status": "pending",
   "description": "Merge C1 code+tests, reconcile to spec, and get a primary-platform green state before cross-platform dispatch.",
   "references": [
-    "docs/project_management/next/policy-patch-only-broker-effective-resolution/plan.md",
-    "docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json",
-    "docs/project_management/next/policy-patch-only-broker-effective-resolution/session_log.md",
-    "docs/project_management/next/policy-patch-only-broker-effective-resolution/C1-spec.md",
+    "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/plan.md",
+    "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/tasks.json",
+    "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/session_log.md",
+    "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C1-spec.md",
     "docs/CONFIGURATION.md",
-    "docs/project_management/next/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md",
-    "docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh",
-    "docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/macos-smoke.sh",
-    "docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/windows-smoke.ps1"
+    "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md",
+    "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh",
+    "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/smoke/macos-smoke.sh",
+    "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/smoke/windows-smoke.ps1"
   ],
   "acceptance_criteria": [
-    "docs/CONFIGURATION.md is updated per docs/project_management/next/policy-patch-only-broker-effective-resolution/C1-spec.md",
+    "docs/CONFIGURATION.md is updated per docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C1-spec.md",
 exec
 /bin/bash -lc "set -euo pipefail
-sed -n '1,220p' docs/project_management/next/policy-patch-only-broker-effective-resolution/session_log.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-integ-core succeeded in 35ms:
+sed -n '1,220p' docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/session_log.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-integ-core succeeded in 35ms:
 ## START — 2026-01-17T02:46:54Z — planning — planning pack for ADR-0013 (broker-canonical policy resolution)
-- Feature: `docs/project_management/next/policy-patch-only-broker-effective-resolution/`
+- Feature: `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/`
 - Branch: `testing`
 - Goal: Produce an execution-ready Planning Pack for ADR-0013 with zero ambiguity.
 - Inputs to read end-to-end:
@@ -228,7 +228,7 @@ sed -n '1,220p' docs/project_management/next/policy-patch-only-broker-effective-
   - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
   - `docs/CONFIGURATION.md`
 
 thinking
@@ -551,7 +551,7 @@ thinking
 I’ve successfully compiled parity with the run ID. Now, it's time to dispatch the feature for the behavior slice C1. This seems to trigger self-hosted workflows, and I need to wait for that to process. I’ll make sure to run the required command smoothly. Alright, I’m moving forward with this step! It's a crucial part of the process, so I’ll keep track of how it goes.
 exec
 /bin/bash -lc 'set -euo pipefail
-make feature-smoke FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution" PLATFORM=behavior SMOKE_SLICE_ID="C1" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1' in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-integ-core succeeded in 5m 20s:
+make feature-smoke FEATURE_DIR="docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution" PLATFORM=behavior SMOKE_SLICE_ID="C1" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1' in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-integ-core succeeded in 5m 20s:
 make[1]: Entering directory '/home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-integ-core'
 HEAD: 67665bbd458341ea34d99c54290b9c34a7214737
 Temp branch: tmp/feature-smoke/policy-patch-only-broker-effective-resolution/behavior/20260117T211655Z
@@ -695,6 +695,6 @@ codex
   - Feature smoke (behavior, C1, self-hosted): RUN_ID `21100994166` `https://github.com/atomize-hq/substrate/actions/runs/21100994166` (success)
 - Completed: `make triad-task-finish TASK_ID="C1-integ-core"`.
 
-Operator handoff: please record the two RUN_URLs in `docs/project_management/next/policy-patch-only-broker-effective-resolution/session_log.md` on the orchestration branch.
+Operator handoff: please record the two RUN_URLs in `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/session_log.md` on the orchestration branch.
 tokens used
 68,474

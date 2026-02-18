@@ -10,7 +10,7 @@ Summary:
 Focus files / context:
 - `crates/shim/tests/integration.rs` (new `manager_hint_logging_records_entry` + `manager_hint_skipped_when_world_disabled` cases)
 - Shim runtime sources in `crates/shim/src/exec.rs`, `crates/shim/src/logger.rs`, and related manifest plumbing from B1-code
-- Planning references: `docs/project_management/next/substrate_isolated_shell_plan.md` + `.../data_map.md` for expected env vars and logging schema
+- Planning references: `docs/project_management/_archived/next/substrate_isolated_shell_plan.md` + `.../data_map.md` for expected env vars and logging schema
 
 Commands to run:
 1. `cargo fmt --all`

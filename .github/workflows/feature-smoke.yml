@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       feature_dir:
-        description: "Feature Planning Pack directory (e.g., docs/project_management/next/world-sync)"
+        description: "Feature Planning Pack directory (e.g., docs/project_management/_archived/next/world-sync)"
         required: true
         type: string
       checkout_ref:
@@ -312,7 +312,7 @@ jobs:
           fi
 
       - name: Provision world-agent (Linux self-hosted; WAPS)
-        if: startsWith(inputs.feature_dir, 'docs/project_management/next/world-sync') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/world-agent-policy-snapshot') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/full-isolation-landlock-overlayfs-compat')
+        if: startsWith(inputs.feature_dir, 'docs/project_management/_archived/next/world-sync') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/world-agent-policy-snapshot') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/full-isolation-landlock-overlayfs-compat')
         working-directory: ${{ steps.checkout_dir.outputs.dir }}
         run: |
           set -euo pipefail
@@ -439,7 +439,7 @@ jobs:
         run: caffeinate -dimsu &
 
       - name: Warm Lima world (macOS self-hosted; WAPS)
-        if: startsWith(inputs.feature_dir, 'docs/project_management/next/world-sync') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/world-agent-policy-snapshot') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/full-isolation-landlock-overlayfs-compat')
+        if: startsWith(inputs.feature_dir, 'docs/project_management/_archived/next/world-sync') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/world-agent-policy-snapshot') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/full-isolation-landlock-overlayfs-compat')
         working-directory: ${{ steps.checkout_dir.outputs.dir }}
         run: bash scripts/mac/lima-warm.sh "$PWD"
 

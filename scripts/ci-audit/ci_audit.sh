@@ -25,7 +25,7 @@ Usage:
 
 Examples:
   scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch feat/my-feature
-  scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch feat/my-feature --feature-dir docs/project_management/next/my-feature
+  scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch feat/my-feature --feature-dir docs/project_management/packs/active/my-feature
 
 Notes:
   - Advisory only: does not dispatch CI.

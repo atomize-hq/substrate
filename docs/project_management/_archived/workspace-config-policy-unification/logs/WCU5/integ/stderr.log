@@ -14,11 +14,11 @@ user
 
 ## Scope
 - Merge platform-fix branches (if any) and finalize WCU5 with an auditable cross-platform green state.
-- Spec: `docs/project_management/next/workspace-config-policy-unification/WCU5-spec.md`
+- Spec: `docs/project_management/_archived/next/workspace-config-policy-unification/WCU5-spec.md`
 - ADRs:
   - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
   - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
-- Closeout report: `docs/project_management/next/workspace-config-policy-unification/WCU5-closeout_report.md`
+- Closeout report: `docs/project_management/_archived/next/workspace-config-policy-unification/WCU5-closeout_report.md`
 
 Do not edit planning docs inside the worktree.
 
@@ -26,13 +26,13 @@ Do not edit planning docs inside the worktree.
 1. Verify you are in the task worktree `wt/workspace_config_policy_unification-wcu5-integ` on branch `workspace_config_policy_unification-wcu5-integ` and that `.taskmeta.json` exists.
 2. Read: WCU5-spec, manual_testing_playbook.md, smoke scripts, plan/tasks/session log, this prompt.
 3. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run:
-   - `make triad-task-start FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" TASK_ID="WCU5-integ"`
+   - `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification" TASK_ID="WCU5-integ"`
 
 ## Requirements
 - Merge `WCU5-integ-core` and any platform-fix branches for WCU5 that produced commits.
 - Run: `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, then `make integ-checks`.
 - Dispatch feature smoke for behavior platforms and record evidence:
-  - `make feature-smoke FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" PLATFORM=behavior SMOKE_SLICE_ID="WCU5" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/workspace-config-policy-unification" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
+  - `make feature-smoke FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification" PLATFORM=behavior SMOKE_SLICE_ID="WCU5" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/workspace-config-policy-unification" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
 
 ## End Checklist
 1. Complete `WCU5-closeout_report.md` with evidence and smoke results.
@@ -115,8 +115,8 @@ Plan update
   • Run feature smoke and capture output
   • Summarize evidence and handoff
 exec
-/bin/bash -lc 'ls -la docs/project_management/next/workspace-config-policy-unification || true
-ls -la docs/project_management/next | rg -n "WCU5|workspace-config-policy-unification|manual_testing_playbook" || true' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-integ succeeded in 47ms:
+/bin/bash -lc 'ls -la docs/project_management/_archived/next/workspace-config-policy-unification || true
+ls -la docs/project_management/_archived/next | rg -n "WCU5|workspace-config-policy-unification|manual_testing_playbook" || true' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-integ succeeded in 47ms:
 total 304
 drwxr-xr-x 4 spenser spenser   4096 Jan 16 13:30 .
 drwxr-xr-x 7 spenser spenser   4096 Jan 16 13:30 ..
@@ -138,38 +138,38 @@ drwxr-xr-x 2 spenser spenser   4096 Jan 16 13:30 smoke
 -rw-r--r-- 1 spenser spenser   2392 Jan 16 13:30 WCU3-closeout_report.md
 -rw-r--r-- 1 spenser spenser   5688 Jan 16 13:30 WCU3-spec.md
 exec
-/bin/bash -lc "rg -n \"manual_testing_playbook\\.md|WCU5-spec\\.md|WCU5-closeout_report\\.md|ADR-0008|ADR-0012|session log|task\" docs/project_management/next -S || true" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-integ succeeded in 56ms:
-docs/project_management/next/sequencing.json:113:        "World-sync planning docs MUST be updated to align with ADR-0003 before implementing world_sync code (at minimum C0/C1; expand to more tasks if needed to cover additional world-sync specs)."
-docs/project_management/next/sequencing.json:208:	      "plan": "docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
-docs/project_management/next/workspace-config-policy-unification/execution_preflight_report.md:18:- [x] ADR-0008 still matches intent:
-docs/project_management/next/workspace-config-policy-unification/execution_preflight_report.md:19:  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-docs/project_management/next/workspace-config-policy-unification/execution_preflight_report.md:20:- [x] ADR-0012 still matches intent:
-docs/project_management/next/workspace-config-policy-unification/execution_preflight_report.md:21:  - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
-docs/project_management/next/workspace-config-policy-unification/execution_preflight_report.md:24:- [x] Planning Pack complete (`plan.md`, `tasks.json`, `session_log.md`, specs, kickoff prompts)
-docs/project_management/next/workspace-config-policy-unification/execution_preflight_report.md:26:- [x] Required planning artifacts exist: `integration_map.md`, `manual_testing_playbook.md`
-docs/project_management/next/workspace-config-policy-unification/execution_preflight_report.md:27:- [x] Cross-platform plan is explicit (tasks.json meta: behavior platforms; smoke scripts exist)
-docs/project_management/next/workspace-config-policy-unification/execution_preflight_report.md:32:- WCU2: config patch parsing + schema merge strategies + provenance (ADR-0012 Phase A)
-docs/project_management/next/workspace-config-policy-unification/execution_preflight_report.md:33:- WCU3: config CLI scopes + set/reset + `--explain` (ADR-0012 Phase B)
-docs/project_management/next/workspace-config-policy-unification/execution_preflight_report.md:40:From `docs/project_management/next/workspace-config-policy-unification/tasks.json` meta:
-docs/project_management/next/workspace-config-policy-unification/execution_preflight_report.md:45:- `docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md`
-docs/project_management/next/workspace-config-policy-unification/execution_preflight_report.md:59:- ADR-0012 Phase A/B world-deps list merge + provenance:
-docs/project_management/next/workspace-config-policy-unification/execution_preflight_report.md:76:- Feature smoke dispatch commands embedded in integration task end_checklists are runnable:
-docs/project_management/next/workspace-config-policy-unification/decision_register.md:1:# Decision Register — Workspace Config/Policy Unification (ADR-0008)
-docs/project_management/next/workspace-config-policy-unification/decision_register.md:3:This decision register records the architectural decisions for `ADR-0008`.
-docs/project_management/next/workspace-config-policy-unification/decision_register.md:16:**Related docs:** `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md`, `docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md`
-docs/project_management/next/workspace-config-policy-unification/decision_register.md:61:**Follow-up tasks (explicit)**
-docs/project_management/next/workspace-config-policy-unification/decision_register.md:73:**Related docs:** `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md`
+/bin/bash -lc "rg -n \"manual_testing_playbook\\.md|WCU5-spec\\.md|WCU5-closeout_report\\.md|ADR-0008|ADR-0012|session log|task\" docs/project_management/_archived/next -S || true" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-integ succeeded in 56ms:
+docs/project_management/packs/sequencing.json:113:        "World-sync planning docs MUST be updated to align with ADR-0003 before implementing world_sync code (at minimum C0/C1; expand to more tasks if needed to cover additional world-sync specs)."
+docs/project_management/packs/sequencing.json:208:	      "plan": "docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+docs/project_management/_archived/next/workspace-config-policy-unification/execution_preflight_report.md:18:- [x] ADR-0008 still matches intent:
+docs/project_management/_archived/next/workspace-config-policy-unification/execution_preflight_report.md:19:  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+docs/project_management/_archived/next/workspace-config-policy-unification/execution_preflight_report.md:20:- [x] ADR-0012 still matches intent:
+docs/project_management/_archived/next/workspace-config-policy-unification/execution_preflight_report.md:21:  - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+docs/project_management/_archived/next/workspace-config-policy-unification/execution_preflight_report.md:24:- [x] Planning Pack complete (`plan.md`, `tasks.json`, `session_log.md`, specs, kickoff prompts)
+docs/project_management/_archived/next/workspace-config-policy-unification/execution_preflight_report.md:26:- [x] Required planning artifacts exist: `integration_map.md`, `manual_testing_playbook.md`
+docs/project_management/_archived/next/workspace-config-policy-unification/execution_preflight_report.md:27:- [x] Cross-platform plan is explicit (tasks.json meta: behavior platforms; smoke scripts exist)
+docs/project_management/_archived/next/workspace-config-policy-unification/execution_preflight_report.md:32:- WCU2: config patch parsing + schema merge strategies + provenance (ADR-0012 Phase A)
+docs/project_management/_archived/next/workspace-config-policy-unification/execution_preflight_report.md:33:- WCU3: config CLI scopes + set/reset + `--explain` (ADR-0012 Phase B)
+docs/project_management/_archived/next/workspace-config-policy-unification/execution_preflight_report.md:40:From `docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json` meta:
+docs/project_management/_archived/next/workspace-config-policy-unification/execution_preflight_report.md:45:- `docs/project_management/_archived/next/workspace-config-policy-unification/manual_testing_playbook.md`
+docs/project_management/_archived/next/workspace-config-policy-unification/execution_preflight_report.md:59:- ADR-0012 Phase A/B world-deps list merge + provenance:
+docs/project_management/_archived/next/workspace-config-policy-unification/execution_preflight_report.md:76:- Feature smoke dispatch commands embedded in integration task end_checklists are runnable:
+docs/project_management/_archived/next/workspace-config-policy-unification/decision_register.md:1:# Decision Register — Workspace Config/Policy Unification (ADR-0008)
+docs/project_management/_archived/next/workspace-config-policy-unification/decision_register.md:3:This decision register records the architectural decisions for `ADR-0008`.
+docs/project_management/_archived/next/workspace-config-policy-unification/decision_register.md:16:**Related docs:** `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/_archived/next/workspace-config-policy-unification/WCU2-spec.md`, `docs/project_management/_archived/next/workspace-config-policy-unification/WCU3-spec.md`
+docs/project_management/_archived/next/workspace-config-policy-unification/decision_register.md:61:**Follow-up tasks (explicit)**
+docs/project_management/_archived/next/workspace-config-policy-unification/decision_register.md:73:**Related docs:** `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/_archived/next/workspace-config-policy-unification/WCU2-spec.md`
 exec
-/bin/bash -lc "sed -n '1,200p' docs/project_management/next/workspace-config-policy-unification/WCU5-spec.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-integ succeeded in 49ms:
+/bin/bash -lc "sed -n '1,200p' docs/project_management/_archived/next/workspace-config-policy-unification/WCU5-spec.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-integ succeeded in 49ms:
 # WCU5 Spec — Docs + smoke + manual playbook parity (includes ADR-0012 Phase A/B validation)
 
 References:
-- `docs/project_management/next/workspace-config-policy-unification/plan.md`
-- `docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md`
-- `docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh`
-- `docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh`
-- `docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1`
-- `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
+- `docs/project_management/_archived/next/workspace-config-policy-unification/plan.md`
+- `docs/project_management/_archived/next/workspace-config-policy-unification/manual_testing_playbook.md`
+- `docs/project_management/_archived/next/workspace-config-policy-unification/smoke/linux-smoke.sh`
+- `docs/project_management/_archived/next/workspace-config-policy-unification/smoke/macos-smoke.sh`
+- `docs/project_management/_archived/next/workspace-config-policy-unification/smoke/windows-smoke.ps1`
+- `docs/project_management/_archived/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
 
 ## Scope
 - Ensure the feature-local manual testing playbook and all feature smoke scripts remain in parity.
@@ -191,8 +191,8 @@ exec
 - Owner(s): spenser
 
 ## Scope
-- Feature directory: `docs/project_management/next/workspace-config-policy-unification/`
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Feature directory: `docs/project_management/_archived/next/workspace-config-policy-unification/`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
@@ -214,9 +214,9 @@ exec
 
 ## Scope
 - Feature directories (impacted):
-  - `docs/project_management/next/` (this ADR; cross-cutting contract)
-  - `docs/project_management/next/workspace-config-policy-unification/` (ADR-0008 implementation)
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+  - `docs/project_management/_archived/next/` (this ADR; cross-cutting contract)
+  - `docs/project_management/_archived/next/workspace-config-policy-unification/` (ADR-0008 implementation)
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
@@ -226,7 +226,7 @@ exec
   - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 - World-deps consumer contract:
 exec
-/bin/bash -lc "sed -n '1,220p' docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-integ succeeded in 44ms:
+/bin/bash -lc "sed -n '1,220p' docs/project_management/_archived/next/workspace-config-policy-unification/manual_testing_playbook.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-integ succeeded in 44ms:
 # Manual Testing Playbook — Workspace Config/Policy Unification (ADR-0008)
 
 This playbook validates the operator-facing contract in:
@@ -236,9 +236,9 @@ This playbook validates the operator-facing contract in:
 All steps are written to be run in a scratch workspace directory and must not mutate any real project.
 
 Smoke scripts (automated counterpart; must remain in parity with this playbook):
-- Linux: `docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh`
-- macOS: `docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh`
-- Windows: `docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1`
+- Linux: `docs/project_management/_archived/next/workspace-config-policy-unification/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/_archived/next/workspace-config-policy-unification/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/_archived/next/workspace-config-policy-unification/smoke/windows-smoke.ps1`
 
 ## 0) Setup (all platforms)
 
@@ -253,11 +253,11 @@ thinking
 
 I’m considering that if the smoke scripts fail, there's a requirement for parity, but I can’t edit the documents directly. It seems like a good approach would be to fix the underlying code so that the smoke scripts work as intended. I think it makes sense to read the existing smoke scripts first to better anticipate the tests. I'll set aside some time to go through them carefully.
 exec
-/bin/bash -lc "sed -n '1,220p' docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-integ succeeded in 38ms:
+/bin/bash -lc "sed -n '1,220p' docs/project_management/_archived/next/workspace-config-policy-unification/smoke/linux-smoke.sh" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-integ succeeded in 38ms:
 #!/usr/bin/env bash
 set -euo pipefail
 
-feature_dir="docs/project_management/next/workspace-config-policy-unification"
+feature_dir="docs/project_management/_archived/next/workspace-config-policy-unification"
 
 slice_id="${SUBSTRATE_SMOKE_SLICE_ID:-}"
 
@@ -275,7 +275,7 @@ cd "${workspace}"
 echo "INFO: ${feature_dir} linux smoke (SUBSTRATE_SMOKE_SLICE_ID='${slice_id}')" >&2
 
 exec
-/bin/bash -lc "sed -n '1,260p' docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-integ succeeded in 31ms:
+/bin/bash -lc "sed -n '1,260p' docs/project_management/_archived/next/workspace-config-policy-unification/smoke/macos-smoke.sh" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-integ succeeded in 31ms:
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -285,11 +285,11 @@ set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 bash "${script_dir}/linux-smoke.sh"
 exec
-/bin/bash -lc "sed -n '1,260p' docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-integ succeeded in 40ms:
+/bin/bash -lc "sed -n '1,260p' docs/project_management/_archived/next/workspace-config-policy-unification/smoke/windows-smoke.ps1" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-integ succeeded in 40ms:
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$FeatureDir = "docs/project_management/next/workspace-config-policy-unification"
+$FeatureDir = "docs/project_management/_archived/next/workspace-config-policy-unification"
 $SliceId = $env:SUBSTRATE_SMOKE_SLICE_ID
 if ($null -eq $SliceId) { $SliceId = "" }
 
@@ -311,7 +311,7 @@ exec
 {
   "created_at_utc": "2026-01-16T18:30:51Z",
   "created_from_sha": "693548365de9c9b6457f60ce54cd62d493bc4d13",
-  "feature_dir": "docs/project_management/next/workspace-config-policy-unification",
+  "feature_dir": "docs/project_management/_archived/next/workspace-config-policy-unification",
   "orchestration_branch": "feat/workspace-config-policy-unification",
   "schema_version": 1,
   "task_branch": "workspace_config_policy_unification-wcu5-integ",
@@ -320,7 +320,7 @@ exec
 exec
 /bin/bash -lc "python - <<'PY'
 import json
-p='docs/project_management/next/workspace-config-policy-unification/tasks.json'
+p='docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json'
 obj=json.load(open(p,'r',encoding='utf-8'))
 print('schema_version',obj.get('meta',{}).get('schema_version'))
 print('orchestration_branch',obj.get('meta',{}).get('orchestration_branch'))
@@ -344,7 +344,7 @@ thinking
 
 It seems like tasks.json doesn't include branch names, which might be computed by triad automation. But I know there are names like WCU5-integ-core. I need to merge these, so I'll check the session_log to see if it has the branch names. Using `rg`, I'll search for terms like "WCU5-integ-core" and "workspace_config_policy_unification-wcu5." Let's get started on that search!
 exec
-/bin/bash -lc 'rg -n "WCU5-integ-core|workspace_config_policy_unification-wcu5|wcu5" docs/project_management/next/workspace-config-policy-unification/session_log.md | head -n 120' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-integ succeeded in 45ms:
+/bin/bash -lc 'rg -n "WCU5-integ-core|workspace_config_policy_unification-wcu5|wcu5" docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md | head -n 120' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-integ succeeded in 45ms:
 435:- Worktree: `wt/workspace_config_policy_unification-wcu5-code`
 436:- Branch: `workspace_config_policy_unification-wcu5-code`
 442:- Worktree: `wt/workspace_config_policy_unification-wcu5-test`
@@ -358,7 +358,7 @@ exec
 473:  - `TASK_BRANCH=workspace_config_policy_unification-wcu5-test`
 474:  - `WORKTREE=/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test`
 exec
-/bin/bash -lc "sed -n '420,520p' docs/project_management/next/workspace-config-policy-unification/session_log.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-integ succeeded in 39ms:
+/bin/bash -lc "sed -n '420,520p' docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-integ succeeded in 39ms:
 - Checks run (with results):
   - `make integ-checks` → exit `0`
 - Cross-platform smoke:
@@ -378,7 +378,7 @@ exec
 - Branch: `workspace_config_policy_unification-wcu5-code`
 - Orchestration branch: `feat/workspace-config-policy-unification`
 - Dispatch:
-  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" SLICE_ID="WCU5" LAUNCH_CODEX=1`
+  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification" SLICE_ID="WCU5" LAUNCH_CODEX=1`
 
 thinking
 **Evaluating branch strategies**
@@ -635,7 +635,7 @@ Plan update
   → Run feature smoke and capture output
   • Summarize evidence and handoff
 exec
-/bin/bash -lc 'make feature-smoke FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" PLATFORM=behavior SMOKE_SLICE_ID="WCU5" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/workspace-config-policy-unification" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-integ succeeded in 4m 11s:
+/bin/bash -lc 'make feature-smoke FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification" PLATFORM=behavior SMOKE_SLICE_ID="WCU5" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/workspace-config-policy-unification" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-integ succeeded in 4m 11s:
 make[1]: Entering directory '/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-integ'
 HEAD: 97fc1f457d82b1c99cf0959c66585ce933cdf547
 Temp branch: tmp/feature-smoke/workspace-config-policy-unification/behavior/20260116T183623Z
@@ -688,7 +688,7 @@ I’ve decided not to run `triad-task-finish` because it might modify the planni
 thinking
 **Interpreting editing guidelines**
 
-I’m interpreting the "do not edit" instruction as not altering planning documents by hand, but perhaps automating script updates is acceptable. The prompt specifies not to change those documents within the worktree, but there isn't a clear prohibition on running scripts that may update them. It feels like a test—maybe the agent should handle merges and checks, while the operator updates the documents separately. However, I want to strictly comply and avoid modifying any files in `docs/project_management/next/...`. So, no edits on those!
+I’m interpreting the "do not edit" instruction as not altering planning documents by hand, but perhaps automating script updates is acceptable. The prompt specifies not to change those documents within the worktree, but there isn't a clear prohibition on running scripts that may update them. It feels like a test—maybe the agent should handle merges and checks, while the operator updates the documents separately. However, I want to strictly comply and avoid modifying any files in `docs/project_management/_archived/next/...`. So, no edits on those!
 thinking
 **Finalizing branch readiness**
 
@@ -727,10 +727,10 @@ exec
 
 .PHONY: triad-task-start-integ-final
 triad-task-start-integ-final:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/_archived/next/<feature>"; exit 2; fi
 	@if [ -z "$(SLICE_ID)" ]; then echo "ERROR: set SLICE_ID=<slice>"; exit 2; fi
 	@set -euo pipefail; \
-	cmd="scripts/triad/task_start_integ_final.sh --feature-dir \"$(FEATURE_DIR)\" --slice-id \"$(SLICE_ID)\""; \
+	cmd="triad/task_start_integ_final.sh --feature-dir \"$(FEATURE_DIR)\" --slice-id \"$(SLICE_ID)\""; \
 	if [ "$(LAUNCH_CODEX)" = "1" ]; then cmd="$$cmd --launch-codex"; fi; \
 	if [ -n "$(CODEX_PROFILE)" ]; then cmd="$$cmd --codex-profile \"$(CODEX_PROFILE)\""; fi; \
 	if [ -n "$(CODEX_MODEL)" ]; then cmd="$$cmd --codex-model \"$(CODEX_MODEL)\""; fi; \
@@ -744,16 +744,16 @@ triad-task-finish:
 thinking
 **Inspecting task finish script**
 
-I need to check out the task_finish script because it's likely responsible for writing documents and merging them. My goal is to really understand what this script does. It probably modifies planning documents, but I want to confirm that assumption. So, I'll open the script located at `scripts/triad/task_finish.sh` to see its actual content and functionality. Let’s figure out its specific operations together!
+I need to check out the task_finish script because it's likely responsible for writing documents and merging them. My goal is to really understand what this script does. It probably modifies planning documents, but I want to confirm that assumption. So, I'll open the script located at `triad/task_finish.sh` to see its actual content and functionality. Let’s figure out its specific operations together!
 exec
-/bin/bash -lc "sed -n '1,240p' scripts/triad/task_finish.sh" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-integ succeeded in 50ms:
+/bin/bash -lc "sed -n '1,240p' triad/task_finish.sh" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-integ succeeded in 50ms:
 #!/usr/bin/env bash
 set -euo pipefail
 
 usage() {
     cat <<'USAGE'
 Usage:
-  scripts/triad/task_finish.sh --task-id <id> [options]
+  triad/task_finish.sh --task-id <id> [options]
 
 Required:
   --task-id <id>         Task id (must match .taskmeta.json in this worktree)
@@ -773,7 +773,7 @@ thinking
 
 I’m thinking about how integration tasks should preserve the planning pack, but I’m not entirely sure. The script indicates it prevents uncommitted diffs in docs, which is good since it doesn't affect committed changes in history. The user instructed not to edit planning docs inside the worktree, but we haven't edited those documents. I'll continue reading the script to understand its impact on integration tasks, like fast-forwarding the orchard branch and potentially updating the registry.
 exec
-/bin/bash -lc "sed -n '240,520p' scripts/triad/task_finish.sh" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-integ succeeded in 31ms:
+/bin/bash -lc "sed -n '240,520p' triad/task_finish.sh" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-integ succeeded in 31ms:
         return 0
     fi
 
@@ -802,7 +802,7 @@ I'm looking at the process for `triad-task-finish`, which involves running make 
 exec
 /bin/bash -lc "python - <<'PY'
 import json
-p='docs/project_management/next/workspace-config-policy-unification/tasks.json'
+p='docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json'
 obj=json.load(open(p,'r',encoding='utf-8'))
 for t in obj['tasks']:
     if t['id']=='WCU5-integ':
@@ -816,17 +816,17 @@ PY" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unificat
   "status": "pending",
   "description": "Merge platform-fix branches (if any) and finalize WCU5 with a clean, auditable cross-platform green state.",
   "references": [
-    "docs/project_management/next/workspace-config-policy-unification/WCU5-closeout_report.md",
-    "docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md",
-    "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0002)",
-    "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0006)",
-    "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0009)",
-    "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0012)",
-    "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0013)",
-    "docs/project_management/next/workspace-config-policy-unification/WCU5-spec.md",
-    "docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh",
-    "docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh",
-    "docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1"
+    "docs/project_management/_archived/next/workspace-config-policy-unification/WCU5-closeout_report.md",
+    "docs/project_management/_archived/next/workspace-config-policy-unification/manual_testing_playbook.md",
+    "docs/project_management/_archived/next/workspace-config-policy-unification/decision_register.md (DR-0002)",
+    "docs/project_management/_archived/next/workspace-config-policy-unification/decision_register.md (DR-0006)",
+    "docs/project_management/_archived/next/workspace-config-policy-unification/decision_register.md (DR-0009)",
+    "docs/project_management/_archived/next/workspace-config-policy-unification/decision_register.md (DR-0012)",
+    "docs/project_management/_archived/next/workspace-config-policy-unification/decision_register.md (DR-0013)",
+    "docs/project_management/_archived/next/workspace-config-policy-unification/WCU5-spec.md",
+    "docs/project_management/_archived/next/workspace-config-policy-unification/smoke/linux-smoke.sh",
+    "docs/project_management/_archived/next/workspace-config-policy-unification/smoke/macos-smoke.sh",
+    "docs/project_management/_archived/next/workspace-config-policy-unification/smoke/windows-smoke.ps1"
   ],
 
 
@@ -928,6 +928,6 @@ codex
 - Dispatched cross-platform feature smoke (behavior): run `21076914464` (`success`) `https://github.com/atomize-hq/substrate/actions/runs/21076914464` (passed `linux,macos,windows`).
 - Ran `make triad-task-finish TASK_ID="WCU5-integ"` (fast-forwarded orchestration); pushed `feat/workspace-config-policy-unification` to `origin` at `97fc1f4`.
 
-Next for closeout: update `docs/project_management/next/workspace-config-policy-unification/WCU5-closeout_report.md` with the smoke run URL/id and the final HEAD `97fc1f457d82b1c99cf0959c66585ce933cdf547` (I didn’t edit planning docs in this worktree).
+Next for closeout: update `docs/project_management/_archived/next/workspace-config-policy-unification/WCU5-closeout_report.md` with the smoke run URL/id and the final HEAD `97fc1f457d82b1c99cf0959c66585ce933cdf547` (I didn’t edit planning docs in this worktree).
 tokens used
 131,191

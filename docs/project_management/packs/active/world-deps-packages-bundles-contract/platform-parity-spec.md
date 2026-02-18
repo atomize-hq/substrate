@@ -12,7 +12,7 @@ This spec is authoritative for platform guarantees and permitted divergences for
 - WSL required: `true` (bundled into Linux smoke via `RUN_WSL=1`)
 
 ## Guarantees (explicit)
-- The CLI contract in `docs/project_management/next/world_deps_packages_bundles_contract.md` is identical across platforms.
+- The CLI contract in `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md` is identical across platforms.
 - World-backed operations (`current list applied`, `current show --explain`, `current install`, `current sync`) fail closed with exit `3` when the world backend is unavailable.
 - Inventory/enabled operations (`current list available`, `current list enabled`, `global/workspace list available|enabled`, `global/workspace add|remove|reset`) do not require world backend access and remain available when world is disabled.
 

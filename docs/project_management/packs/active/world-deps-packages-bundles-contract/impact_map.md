@@ -11,7 +11,7 @@ Authoring standards:
 - ADR(s):
   - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
 - Contract:
-  - `docs/project_management/next/world_deps_packages_bundles_contract.md`
+  - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
 - Spec manifest:
   - `docs/project_management/packs/active/world-deps-packages-bundles-contract/spec_manifest.md`
 
@@ -35,9 +35,9 @@ Authoring standards:
 - `docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP*-closeout_report.md` — slice closeout gate reports
 
 ### Edit
-- `docs/project_management/next/sequencing.json` — add this feature directory as a sprint entry
+- `docs/project_management/packs/sequencing.json` — add this feature directory as a sprint entry
 - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md` — link to this Planning Pack (spec manifest + tasks + decision register)
-- `docs/project_management/next/world_deps_packages_bundles_contract.md` — align “World Shell Contract” wording with ADR-0016 and implemented REPL evaluator behavior
+- `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md` — align “World Shell Contract” wording with ADR-0016 and implemented REPL evaluator behavior
 
 ### Edit (execution scope; non-doc)
 Execution triads under this Planning Pack are expected to edit:

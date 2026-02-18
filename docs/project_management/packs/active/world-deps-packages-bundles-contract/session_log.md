@@ -7,9 +7,9 @@
 - Inputs read end-to-end:
   - `docs/project_management/standards/PLANNING_README.md`
   - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
-  - `docs/project_management/next/world_deps_packages_bundles_contract.md`
+  - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
 - Sequencing alignment:
-  - `docs/project_management/next/sequencing.json` updated: `YES`
+  - `docs/project_management/packs/sequencing.json` updated: `YES`
 
 ## END — 2026-02-13T04:21:36Z — planning — init
 - Summary of changes (exhaustive):
@@ -27,9 +27,9 @@
   - `docs/project_management/packs/active/world-deps-packages-bundles-contract/session_log.md`
   - `docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP*-spec.md`
   - `docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP*-closeout_report.md`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
   - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
-  - `docs/project_management/next/world_deps_packages_bundles_contract.md`
+  - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
 - Next steps:
   - Add smoke scripts and kickoff prompts
   - Run `make planning-lint FEATURE_DIR="docs/project_management/packs/active/world-deps-packages-bundles-contract"`
@@ -78,7 +78,7 @@ Policy:
   - `make planning-lint FEATURE_DIR="docs/project_management/packs/active/world-deps-packages-bundles-contract"` (exit 0)
   - `make planning-validate FEATURE_DIR="docs/project_management/packs/active/world-deps-packages-bundles-contract"` (exit 0)
   - `jq -e . "docs/project_management/packs/active/world-deps-packages-bundles-contract/tasks.json" >/dev/null` (exit 0)
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` (exit 0)
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` (exit 0)
 
 ---
 
@@ -97,7 +97,7 @@ Policy:
   - `docs/project_management/packs/active/world-deps-packages-bundles-contract/ci_checkpoint_plan.md`
   - `docs/project_management/packs/active/world-deps-packages-bundles-contract/platform-parity-spec.md`
   - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md` (Executive Summary + contract)
-  - `docs/project_management/next/world_deps_packages_bundles_contract.md`
+  - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
 - Commands run (verbatim) + exit codes:
   - `make triad-orch-ensure FEATURE_DIR="docs/project_management/packs/active/world-deps-packages-bundles-contract"` (exit 0)
 

@@ -7,7 +7,7 @@
 
 ## Scope
 - Feature directory: `docs/project_management/_archived/policy_and_config_precedence/`
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Intended branch: `feat/policy_and_config_precedence`
 - Standards:
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
@@ -22,7 +22,7 @@
   - `docs/project_management/_archived/policy_and_config_precedence/PCP0-spec.md`
 - Decision Register:
   - `docs/project_management/_archived/policy_and_config_precedence/decision_register.md`
-  - Baseline env scripts split: `docs/project_management/next/policy_and_config_mental_model_simplification/decision_register.md` (DR-0005)
+  - Baseline env scripts split: `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/decision_register.md` (DR-0005)
 - Integration Map: `docs/project_management/_archived/policy_and_config_precedence/integration_map.md`
 - Manual Playbook: `docs/project_management/_archived/policy_and_config_precedence/manual_testing_playbook.md`
 
@@ -125,7 +125,7 @@ Exit codes:
     - Exit code per taxonomy
 
 ## Sequencing / Dependencies
-- Sequencing entry: `docs/project_management/next/sequencing.json` → `policy_and_config_precedence`
+- Sequencing entry: `docs/project_management/packs/sequencing.json` → `policy_and_config_precedence`
 - Prerequisite integration task IDs:
   - None (this ADR is a follow-up correction to ADR-0003’s precedence contract; it can be implemented as a small dedicated triad under a new branch, e.g. `feat/policy_and_config_precedence`).
 

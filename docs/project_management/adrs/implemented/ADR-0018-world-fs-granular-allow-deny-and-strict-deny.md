@@ -7,7 +7,7 @@
 
 ## Scope
 - Feature directory: `docs/project_management/_archived/world-fs-granular-allow-deny/`
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
@@ -42,7 +42,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: e0b9e817d5d14f073052b485b9f87a329bec59d449ebfcbc8caa3842b558d1d9
+ADR_BODY_SHA256: ecc7cd31fbfb530e57ca93a53f192e8cac0462c05630c98eee56515fbdcc1ed4
 ### Changes (operator-facing)
 - Add granular `allow_list` + `deny_list` for world filesystem reads/writes (and optional directory visibility)
   - Existing: `world_fs.read_allowlist` / `world_fs.write_allowlist` are allowlist-only; invalid patterns (e.g., `..`) can be accepted but ignored; there is no deny list; “allow all except secrets” cannot be expressed.
@@ -160,7 +160,7 @@ ADR_BODY_SHA256: e0b9e817d5d14f073052b485b9f87a329bec59d449ebfcbc8caa3842b558d1d
     - strict mode blocks bypass via `mount/umount` by the workload
 
 ## Sequencing / Dependencies
-- Sequencing entry: `docs/project_management/next/sequencing.json` (new workstream to be added for ADR-0018)
+- Sequencing entry: `docs/project_management/packs/sequencing.json` (new workstream to be added for ADR-0018)
 - Dependencies:
   - Requires ADR-0014 snapshot direction (host-resolved policy snapshot is authoritative).
   - Must remain compatible with ADR-0015 overlayfs backing dir allowlist derivation for full isolation writable mode.

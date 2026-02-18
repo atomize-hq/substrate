@@ -6,20 +6,20 @@
 - Owner(s): Spenser McConnell (Substrate)
 
 ## Scope
-- Feature directory: `docs/project_management/next/llm_cli_backend_engine/`
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Feature directory: `docs/project_management/_archived/next/llm_cli_backend_engine/`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Related Docs
-- Plan: `docs/project_management/next/llm_cli_backend_engine/plan.md`
-- Tasks: `docs/project_management/next/llm_cli_backend_engine/tasks.json`
-- Spec manifest: `docs/project_management/next/llm_cli_backend_engine/spec_manifest.md`
-- Specs: `docs/project_management/next/llm_cli_backend_engine/specs/*`
-- Contract (if present): `docs/project_management/next/llm_cli_backend_engine/contract.md`
-- Decision Register: `docs/project_management/next/llm_cli_backend_engine/decision_register.md`
+- Plan: `docs/project_management/_archived/next/llm_cli_backend_engine/plan.md`
+- Tasks: `docs/project_management/_archived/next/llm_cli_backend_engine/tasks.json`
+- Spec manifest: `docs/project_management/_archived/next/llm_cli_backend_engine/spec_manifest.md`
+- Specs: `docs/project_management/_archived/next/llm_cli_backend_engine/specs/*`
+- Contract (if present): `docs/project_management/_archived/next/llm_cli_backend_engine/contract.md`
+- Decision Register: `docs/project_management/_archived/next/llm_cli_backend_engine/decision_register.md`
 
 ## Executive Summary (Operator)
 
@@ -73,7 +73,7 @@ This ADR MUST use the Phase 3 surface defined by ADR-0027 for:
 
 Sources of truth:
 - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
-- `docs/project_management/next/llm_and_agent_config_policy_surface/SCHEMA.md`
+- `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/SCHEMA.md`
 
 Config (selection surface; ADR-0027):
 - `llm.enabled: bool`
@@ -134,7 +134,7 @@ This ADR does not define its own correlation vocabulary. Any trace records and/o
       - correlation (`orchestration_session_id`, `run_id`, optional `thread_id`) when applicable
 
 ## Sequencing / Dependencies
-- Sequencing entry: `docs/project_management/next/sequencing.json` → `llm-cli-backend-engine` (to be scheduled)
+- Sequencing entry: `docs/project_management/packs/sequencing.json` → `llm-cli-backend-engine` (to be scheduled)
 - Prerequisite integration task IDs:
   - ADR-0023 must land first (gateway + manager shape).
   - ADR-0017 must be available for stable event framing and attribution.
@@ -146,7 +146,7 @@ This ADR does not define its own correlation vocabulary. Any trace records and/o
   - If effective policy has `llm.fail_closed.routing=true` and the world is unavailable, request fails (policy exit code `5` semantics).
 - Protected paths/invariants:
   - Do not copy/emit CLI credentials; Substrate does not persist subscription tokens.
-    - v1 (Codex legacy): required auth fields are extracted from host login state and delivered to the in-world gateway/manager at spawn time (no auth files are present in-world). This MUST be explicit, policy-gated (`agents.host_credentials.read.allowed_backends`), and MUST NOT log secret values (see `docs/project_management/next/llm_cli_backend_engine/decision_register.md` DR-0006, DR-0008, and Phase 8 DR-0012).
+    - v1 (Codex legacy): required auth fields are extracted from host login state and delivered to the in-world gateway/manager at spawn time (no auth files are present in-world). This MUST be explicit, policy-gated (`agents.host_credentials.read.allowed_backends`), and MUST NOT log secret values (see `docs/project_management/_archived/next/llm_cli_backend_engine/decision_register.md` DR-0006, DR-0008, and Phase 8 DR-0012).
   - Do not log request/response bodies by default; redact before persisting if body logging enabled.
 
 ## Validation Plan (Authoritative)
@@ -161,12 +161,12 @@ This ADR does not define its own correlation vocabulary. Any trace records and/o
   - Validate fail-closed when world required but unavailable.
 
 ### Manual validation
-- Manual playbook: `docs/project_management/next/llm_cli_backend_engine/manual_testing_playbook.md`
+- Manual playbook: `docs/project_management/_archived/next/llm_cli_backend_engine/manual_testing_playbook.md`
 
 ### Smoke scripts
-- Linux: `docs/project_management/next/llm_cli_backend_engine/smoke/linux-smoke.sh`
-- macOS: `docs/project_management/next/llm_cli_backend_engine/smoke/macos-smoke.sh`
-- Windows: `docs/project_management/next/llm_cli_backend_engine/smoke/windows-smoke.ps1`
+- Linux: `docs/project_management/_archived/next/llm_cli_backend_engine/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/_archived/next/llm_cli_backend_engine/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/_archived/next/llm_cli_backend_engine/smoke/windows-smoke.ps1`
 
 ## Rollout / Backwards Compatibility
 - Policy: greenfield breaking is allowed
@@ -174,7 +174,7 @@ This ADR does not define its own correlation vocabulary. Any trace records and/o
 
 ## Decision Summary
 - Decision Register entries:
-  - `docs/project_management/next/llm_cli_backend_engine/decision_register.md`:
+  - `docs/project_management/_archived/next/llm_cli_backend_engine/decision_register.md`:
     - DR-0001 (CLI session strategy: persistent vs per-request)
     - DR-0002 (Streaming behavior when CLI lacks streaming: buffer+rechunk vs non-stream)
     - DR-0003 (CLI prompt contract format: JSON envelope vs plain text template)

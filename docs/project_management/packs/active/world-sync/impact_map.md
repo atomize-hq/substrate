@@ -36,7 +36,7 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
   - `crates/world/src/sync_apply.rs` (or similar) — apply pending overlay diffs to workspace (Linux/macOS)
 
 ### Edit
-- `docs/project_management/next/sequencing.json` — update `world_sync` sprint sequence ids/paths to `WS*`
+- `docs/project_management/packs/sequencing.json` — update `world_sync` sprint sequence ids/paths to `WS*`
 - `crates/shell/src/execution/cli.rs` — add `workspace sync|checkpoint|rollback` subcommands + flags
 - `crates/shell/src/execution/workspace_cmd.rs` — route new `WorkspaceAction` variants; shared guardrails for workspace errors
 - `crates/shell/src/execution/workspace.rs` — helper functions for internal git dir + sync state as needed

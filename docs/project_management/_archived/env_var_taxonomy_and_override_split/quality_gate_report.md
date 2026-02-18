@@ -23,7 +23,7 @@ export FEATURE_DIR="docs/project_management/_archived/env_var_taxonomy_and_overr
 # JSON validity
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
 # exit 0
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 # exit 0
 
 # tasks.json required-field audit (per template)
@@ -75,7 +75,7 @@ Mark `YES` only if read end-to-end.
 - `integration_map.md`: `YES` (`docs/project_management/_archived/env_var_taxonomy_and_override_split/integration_map.md`)
 - `manual_testing_playbook.md`: `YES` (`docs/project_management/_archived/env_var_taxonomy_and_override_split/manual_testing_playbook.md`)
 - Feature smoke scripts under `smoke/`: `YES` (`docs/project_management/_archived/env_var_taxonomy_and_override_split/smoke/*`)
-- `docs/project_management/next/sequencing.json`: `YES` (`docs/project_management/next/sequencing.json`)
+- `docs/project_management/packs/sequencing.json`: `YES` (`docs/project_management/packs/sequencing.json`)
 - Standards:
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
@@ -104,7 +104,7 @@ Mark `YES` only if read end-to-end.
 ### 4) Sequencing and dependency alignment
 - Result: `PASS`
 - Evidence:
-  - `docs/project_management/next/sequencing.json`: sprint `policy_and_config_precedence` is order `26`; this feature is order `26.5`
+  - `docs/project_management/packs/sequencing.json`: sprint `policy_and_config_precedence` is order `26`; this feature is order `26.5`
   - `docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md`: “Prerequisite integration task IDs: … `PCP0-integ`”
   - `docs/project_management/_archived/env_var_taxonomy_and_override_split/tasks.json`: `meta.external_task_ids=["PCP0-integ"]` and `F0-exec-preflight.depends_on=["PCP0-integ"]`
 - Notes: Cross-feature prerequisite is encoded as an external dependency in `tasks.json`.

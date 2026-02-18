@@ -1,14 +1,14 @@
 # Planning Lint Checklist (Mechanical Quality Gate)
 
 This checklist is **mechanical** and **non-negotiable**. The quality gate reviewer must run it and record results in:
-- `docs/project_management/next/<feature>/quality_gate_report.md` (use `docs/project_management/system/templates/planning_pack/PLANNING_GATE_REPORT_TEMPLATE.md`)
+- `docs/project_management/packs/active/<feature>/quality_gate_report.md` (use `docs/project_management/system/templates/planning_pack/PLANNING_GATE_REPORT_TEMPLATE.md`)
 
 If any check fails, the Planning Pack is not execution-ready.
 
 ## Define scope
 
 Set a feature directory variable:
-- `export FEATURE_DIR="docs/project_management/next/world-sync"`
+- `export FEATURE_DIR="docs/project_management/packs/active/world-sync"`
 
 ## Run the mechanical lint runner (required)
 

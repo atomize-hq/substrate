@@ -255,7 +255,7 @@ Column notes:
 | `TRACE_LOG_KEEP` | `TRACE` | internal/trace | both | trace | crates/trace/src/tests.rs:135; crates/trace/src/tests.rs:168 | crates/trace/src/output.rs:41 | string | internal | no | yes (trace component) |
 | `TRACE_LOG_MAX_MB` | `TRACE` | internal/trace | both | shell, trace | crates/trace/src/tests.rs:134; crates/trace/src/tests.rs:167 | crates/trace/src/output.rs:27 | string | internal | no | yes (trace component) |
 | `WORLD_PROVISION_FAILED` | `WORLD` | internal/world | read | scripts | — | scripts/substrate/dev-install-substrate.sh:972 | bool (0/1) | script-only | no | no direct site |
-| `ACTION` | `standard` | standard | write | scripts | scripts/triad/orch_ensure.sh:21 | — | string | script-only | no | no direct site |
+| `ACTION` | `standard` | standard | write | scripts | `make triad-orch-ensure` | — | string | script-only | no | no direct site |
 | `AGENT_SOCKET` | `standard` | standard | read | host-proxy | — | crates/host-proxy/src/runtime.rs:358; crates/host-proxy/src/runtime.rs:369 | string | external | no | no direct site |
 | `AGENT_TCP_HOST` | `standard` | standard | read | host-proxy | — | crates/host-proxy/src/runtime.rs:350 | string | external | no | no direct site |
 | `AGENT_TCP_PORT` | `standard` | standard | read | host-proxy | — | crates/host-proxy/src/runtime.rs:351 | string | external | no | no direct site |
@@ -267,7 +267,7 @@ Column notes:
 | `ASDF_MANAGER` | `standard` | standard | write | shell | crates/shell/tests/shim_health.rs:54 | — | string | test-only | no | no direct site |
 | `AUTH_ENABLED` | `standard` | standard | read | host-proxy | — | crates/host-proxy/src/runtime.rs:320 | string | external | yes | no direct site |
 | `AUTH_TOKEN_FILE` | `standard` | standard | read | host-proxy | — | crates/host-proxy/src/runtime.rs:324 | string | external | yes | no direct site |
-| `AUTOMATION` | `standard` | standard | read | scripts | — | scripts/planning/new_feature.sh:158 | string | script-only | no | no direct site |
+| `AUTOMATION` | `standard` | standard | read | scripts | — | `make planning-new-feature` | string | script-only | no | no direct site |
 | `BASH_ENV` | `standard` | standard | both | shell | crates/shell/src/builtins/world_deps/guest.rs:268; crates/shell/src/builtins/world_deps/guest.rs:371 | crates/shell/src/builtins/world_deps/guest.rs:162; crates/shell/src/execution/invocation/plan.rs:531 | string | external | no | no direct site |
 | `BEFORE_MAIN` | `standard` | standard | write | CI | .github/workflows/promote.yml | — | string | CI-only | no | no direct site |
 | `BIN` | `standard` | standard | read | scripts | — | scripts/validate_phase_d.sh:10 | string | script-only | no | no direct site |
@@ -282,20 +282,20 @@ Column notes:
 | `CARGO_TARGET_DIR` | `standard` | standard | write | scripts | scripts/mac/lima-warm.sh:404; scripts/mac/lima-warm.sh:413 | — | string | script-only | no | no direct site |
 | `CARGO_TERM_COLOR` | `standard` | standard | write | CI | .github/workflows/feature-smoke.yml; .github/workflows/ci-testing.yml; .github/workflows/ci-testing-v2.yml | — | string | CI-only | no | no direct site |
 | `CARGO_WORKSPACE_DIR` | `standard` | standard | read | shell, shim | — | crates/shell/tests/common.rs:66; crates/shim/tests/integration.rs:29 | string | test-only | no | no direct site |
-| `CHECKS` | `standard` | standard | write | scripts | scripts/triad/task_finish.sh:24 | — | string | script-only | no | no direct site |
+| `CHECKS` | `standard` | standard | write | scripts | `make triad-task-finish` | — | string | script-only | no | no direct site |
 | `CI_FAILED_JOBS` | `standard` | standard | write | scripts | scripts/ci/dispatch_ci_testing.sh:35 | — | string | script-only | no | no direct site |
 | `CI_FAILED_OSES` | `standard` | standard | write | scripts | scripts/ci/dispatch_ci_testing.sh:34 | — | string | script-only | no | no direct site |
 | `CI_PASSED_OSES` | `standard` | standard | write | scripts | scripts/ci/dispatch_ci_testing.sh:33 | — | string | script-only | no | no direct site |
 | `CI_URL` | `standard` | standard | write | CI | .github/workflows/promote.yml | — | string | CI-only | no | no direct site |
 | `CI_WINDOW_MINUTES` | `standard` | standard | write | CI | .github/workflows/promote.yml | — | string | CI-only | no | no direct site |
 | `CMD` | `standard` | standard | write | shell | crates/shell/src/execution/manager_init/tests.rs:181 | — | string | test-only | no | no direct site |
-| `CODEX_CODE_EXIT` | `standard` | standard | write | scripts | scripts/triad/task_start_pair.sh:31 | — | string | script-only | no | no direct site |
-| `CODEX_EXIT` | `standard` | standard | write | scripts | scripts/triad/task_start.sh:30; scripts/triad/task_start_platform_fixes.sh:31 | — | string | script-only | no | no direct site |
-| `CODEX_TEST_EXIT` | `standard` | standard | write | scripts | scripts/triad/task_start_pair.sh:32 | — | string | test-only | no | no direct site |
+| `CODEX_CODE_EXIT` | `standard` | standard | write | scripts | `make triad-task-start-pair` | — | string | script-only | no | no direct site |
+| `CODEX_EXIT` | `standard` | standard | write | scripts | `make triad-task-start`, `make triad-task-start-platform-fixes` | — | string | script-only | no | no direct site |
+| `CODEX_TEST_EXIT` | `standard` | standard | write | scripts | `make triad-task-start-pair` | — | string | test-only | no | no direct site |
 | `COLUMNS` | `standard` | standard | both | shell | crates/shell/src/execution/pty/io/runner.rs:118; crates/shell/src/execution/pty/io/types.rs:301 | crates/shell/src/execution/pty/io/types.rs:240; crates/shell/src/execution/pty/io/types.rs:287 | string | external | no | no direct site |
 | `CONDA_MANAGER` | `standard` | standard | write | shell | crates/shell/tests/shim_health.rs:62 | — | string | test-only | no | no direct site |
 | `CONDA_ROOT` | `standard` | standard | both | other | config/manager_hooks.yaml:168; config/manager_hooks.yaml:170 | config/manager_hooks.yaml:166; config/manager_hooks.yaml:173 | string | external | no | no direct site |
-| `CROSS_PLATFORM` | `standard` | standard | read | scripts | — | scripts/planning/new_feature.sh:155 | string | script-only | no | no direct site |
+| `CROSS_PLATFORM` | `standard` | standard | read | scripts | — | `make planning-new-feature` | string | script-only | no | no direct site |
 | `CURRENT_VERSION` | `standard` | standard | write | CI | .github/workflows/promote.yml | — | string | CI-only | no | no direct site |
 | `DEBIAN_FRONTEND` | `standard` | standard | write | scripts | scripts/wsl/provision.sh:4 | — | string | script-only | no | no direct site |
 | `DETECTED_MARKER` | `standard` | standard | write | shell | crates/shell/tests/shim_doctor.rs:20; crates/shell/tests/shim_doctor.rs:22 | — | string | test-only | no | no direct site |
@@ -304,15 +304,15 @@ Column notes:
 | `DIRENV_MANAGER` | `standard` | standard | write | shell | crates/shell/tests/shim_health.rs:47 | — | string | test-only | no | no direct site |
 | `DRY_RUN` | `standard` | standard | write | CI | .github/workflows/promote.yml | — | string | CI-only | no | no direct site |
 | `EXPORT_COMPLEX` | `standard` | standard | both | shell | crates/shell/src/execution/routing/builtin/tests.rs:84 | crates/shell/src/execution/routing/builtin/tests.rs:88 | string | test-only | no | no direct site |
-| `FAILED_PLATFORMS` | `standard` | standard | write | scripts | scripts/triad/task_start_platform_fixes.sh:26 | — | string | script-only | no | no direct site |
+| `FAILED_PLATFORMS` | `standard` | standard | write | scripts | `make triad-task-start-platform-fixes` | — | string | script-only | no | no direct site |
 | `FAKE_ROOT` | `standard` | standard | read | tests | — | tests/installers/world_provision_smoke.sh:94; tests/installers/world_provision_smoke.sh:173 | string | test-only | no | no direct site |
 | `FAKE_VERSION` | `standard` | standard | read | tests | — | tests/installers/install_smoke.sh:63; tests/mac/installer_parity_fixture.sh:6 | string | test-only | no | no direct site |
-| `FEATURE` | `standard` | standard | read | scripts | — | scripts/planning/new_feature.sh:153 | string | script-only | no | no direct site |
-| `FEATURE_DIR` | `standard` | standard | read | scripts | — | scripts/planning/new_feature.sh:154 | string | script-only | no | no direct site |
+| `FEATURE` | `standard` | standard | read | scripts | — | `make planning-new-feature` | string | script-only | no | no direct site |
+| `FEATURE_DIR` | `standard` | standard | read | scripts | — | `make planning-new-feature` | string | script-only | no | no direct site |
 | `FILE` | `standard` | standard | write | shell | crates/shell/src/execution/manager_init/tests.rs:174 | — | string | test-only | no | no direct site |
 | `GH_TOKEN` | `standard` | standard | write | CI | .github/workflows/release.yml | — | string | CI-only | yes | no direct site |
 | `GITHUB_PATH` | `standard` | standard | read | CI | — | .github/workflows/feature-smoke.yml:293; .github/workflows/feature-smoke.yml:330 | string | CI-only | no | no direct site |
-| `GIT_COMMON_DIR` | `standard` | standard | write | scripts | scripts/triad/task_start.sh:210; scripts/triad/task_finish.sh:197 | — | string | script-only | no | no direct site |
+| `GIT_COMMON_DIR` | `standard` | standard | write | scripts | `make triad-task-start`, `make triad-task-finish` | — | string | script-only | no | no direct site |
 | `GOENV_MARKER` | `standard` | standard | write | shell | crates/shell/tests/manager_init.rs:66 | — | string | test-only | no | no direct site |
 | `GOENV_ROOT` | `standard` | standard | both | common, other | crates/common/src/manager_manifest/tests.rs:454; config/manager_hooks.yaml:386 | crates/common/src/manager_manifest/tests.rs:581; config/manager_hooks.yaml:386 | string | test-only | no | no direct site |
 | `HEALTHY_MARKER` | `standard` | standard | write | shell | crates/shell/tests/shim_health.rs:21; crates/shell/tests/shim_health.rs:23 | — | string | test-only | no | no direct site |
@@ -351,7 +351,7 @@ Column notes:
 | `MISE_MARKER` | `standard` | standard | write | shell | crates/shell/tests/manager_init.rs:24 | — | string | test-only | no | no direct site |
 | `MISSING_MARKER` | `standard` | standard | write | shell | crates/shell/tests/shim_doctor.rs:30; crates/shell/tests/shim_doctor.rs:32 | — | string | test-only | no | no direct site |
 | `NEW_MAIN` | `standard` | standard | write | CI | .github/workflows/promote.yml | — | string | CI-only | no | no direct site |
-| `NEXT` | `standard` | standard | write | scripts | scripts/triad/task_start.sh:31; scripts/triad/task_start_integ_final.sh:27 | — | string | script-only | no | no direct site |
+| `NEXT` | `standard` | standard | write | scripts | `make triad-task-start`, `make triad-task-start-integ-final` | — | string | script-only | no | no direct site |
 | `NEXT_VERSION` | `standard` | standard | write | CI | .github/workflows/promote.yml | — | string | CI-only | no | no direct site |
 | `NVM_DIR` | `standard` | standard | both | other | config/manager_hooks.yaml:22; config/manager_hooks.yaml:31 | config/manager_hooks.yaml:22; config/manager_hooks.yaml:31 | string | external | no | no direct site |
 | `OLDPWD` | `standard` | standard | both | shell | crates/shell/src/execution/routing/builtin/world_deps.rs:31 | crates/shell/src/execution/routing/builtin/tests.rs:366; crates/shell/src/execution/routing/builtin/tests.rs:383 | string | external | no | no direct site |
@@ -383,7 +383,7 @@ Column notes:
 | `REPO_ROOT` | `standard` | standard | write | scripts | scripts/substrate/dev-uninstall-substrate.sh:402; scripts/substrate/dev-install-substrate.sh:663 | — | string | script-only | no | no direct site |
 | `REQUESTED_VERSION` | `standard` | standard | write | CI | .github/workflows/promote.yml | — | string | CI-only | no | no direct site |
 | `REQUEST_TIMEOUT` | `standard` | standard | read | host-proxy | — | crates/host-proxy/src/runtime.rs:308 | string | external | no | no direct site |
-| `REQUIRED_TARGETS` | `standard` | standard | write | scripts | scripts/triad/task_finish.sh:180 | — | string | script-only | no | no direct site |
+| `REQUIRED_TARGETS` | `standard` | standard | write | scripts | `make triad-task-finish` | — | string | script-only | no | no direct site |
 | `RTX_HOME` | `standard` | standard | read | other | — | config/manager_hooks.yaml | string | external | no | no direct site |
 | `RTX_MARKER` | `standard` | standard | write | shell | crates/shell/tests/manager_init.rs:31 | — | string | test-only | no | no direct site |
 | `RUNNER_TEMP` | `standard` | standard | read | CI | — | .github/workflows/feature-smoke.yml:322 | string | CI-only | no | no direct site |
@@ -401,10 +401,10 @@ Column notes:
 | `SDKMAN_MARKER` | `standard` | standard | write | shell | crates/shell/tests/manager_init.rs:45 | — | string | test-only | no | no direct site |
 | `SHELL` | `standard` | standard | both | replay, scripts, shell, trace | crates/shell/tests/policy_routing_semantics.rs:105; crates/shell/tests/integration/support.rs:66 | crates/trace/src/context.rs:164; crates/shell/src/execution/invocation/plan.rs:562 | string | external | no | yes (trace component) |
 | `SKIP` | `standard` | standard | write | shell | crates/shell/src/execution/manager_init/tests.rs:229 | — | string | test-only | no | no direct site |
-| `SKIPPED_TASK_ID` | `standard` | standard | write | scripts | scripts/triad/mark_noop_platform_fixes_completed.sh:26 | — | string | script-only | no | no direct site |
+| `SKIPPED_TASK_ID` | `standard` | standard | write | scripts | `make triad-mark-noop-platform-fixes-completed` | — | string | script-only | no | no direct site |
 | `SKIP_LOG` | `standard` | standard | read | tests | — | tests/installers/install_state_smoke.sh:35; tests/installers/install_state_smoke.sh:39 | string | test-only | no | no direct site |
-| `SMOKE_RUN` | `standard` | standard | write | scripts | scripts/triad/task_finish.sh:25 | — | string | script-only | no | no direct site |
-| `SMOKE_RUN_ID` | `standard` | standard | write | scripts | scripts/triad/mark_noop_platform_fixes_completed.sh:24; scripts/triad/task_start_platform_fixes.sh:25 | — | string | script-only | no | no direct site |
+| `SMOKE_RUN` | `standard` | standard | write | scripts | `make triad-task-finish` | — | string | script-only | no | no direct site |
+| `SMOKE_RUN_ID` | `standard` | standard | write | scripts | `make triad-mark-noop-platform-fixes-completed`, `make triad-task-start-platform-fixes-from-smoke` | — | string | script-only | no | no direct site |
 | `STATE_EVENTS` | `standard` | standard | both | scripts | scripts/substrate/install-substrate.sh:260; scripts/substrate/dev-install-substrate.sh:318 | scripts/substrate/install-substrate.sh:268; scripts/substrate/dev-install-substrate.sh:326 | string | script-only | no | no direct site |
 | `STUB_BIN` | `standard` | standard | write | tests | tests/installers/install_state_smoke.sh:646; tests/installers/install_state_smoke.sh:737 | — | string | test-only | no | no direct site |
 | `SUDO_USER` | `standard` | standard | read | scripts | — | scripts/substrate/dev-uninstall-substrate.sh:48; scripts/substrate/install-substrate.sh:122 | string | script-only | no | no direct site |
@@ -420,7 +420,7 @@ Column notes:
 | `TIER2_HOME` | `standard` | standard | write | common | crates/common/src/manager_manifest/tests.rs:324; crates/common/src/manager_manifest/tests.rs:487 | — | string | test-only | no | no direct site |
 | `TMPDIR` | `standard` | standard | both | scripts, shell, tests | crates/shell/tests/world_enable.rs:128; crates/shell/tests/world_enable.rs:289 | scripts/substrate/install-substrate.sh:76; scripts/substrate/install-substrate.sh:77 | string | external | no | no direct site |
 | `UNSET_ME` | `standard` | standard | read | shell | — | crates/shell/src/execution/routing/builtin/tests.rs:100 | string | test-only | no | no direct site |
-| `UPDATED_TASK_ID` | `standard` | standard | write | scripts | scripts/triad/mark_noop_platform_fixes_completed.sh:25 | — | string | script-only | no | no direct site |
+| `UPDATED_TASK_ID` | `standard` | standard | write | scripts | `make triad-mark-noop-platform-fixes-completed` | — | string | script-only | no | no direct site |
 | `USER` | `standard` | standard | read | replay, scripts, shim, trace | — | crates/trace/src/context.rs:152; crates/replay/src/state.rs:123 | string | external | no | yes (trace component) |
 | `USERNAME` | `standard` | standard | read | shim, trace | — | crates/trace/src/context.rs:152; crates/shim/src/logger.rs:82 | string | external | no | yes (trace component) |
 | `USERPROFILE` | `standard` | standard | both | CI, scripts, shell | crates/shell/tests/world_enable.rs:130; crates/shell/tests/world_enable.rs:291 | crates/shell/src/execution/invocation/plan.rs:491; crates/shell/tests/shim_deployment.rs:42 | string | external | no | no direct site |
@@ -428,8 +428,8 @@ Column notes:
 | `VERSION_COMMIT` | `standard` | standard | write | CI | .github/workflows/promote.yml | — | string | CI-only | no | no direct site |
 | `VOLTA_HOME` | `standard` | standard | both | common, other, shell | crates/common/src/manager_manifest/tests.rs:435; crates/common/src/manager_manifest/tests.rs:440 | crates/common/src/manager_manifest/tests.rs:575; config/manager_hooks.yaml:354 | string | test-only | no | no direct site |
 | `VOLTA_MARKER` | `standard` | standard | write | shell | crates/shell/tests/shell_env.rs:29; crates/shell/tests/shim_doctor.rs:147 | — | string | test-only | no | no direct site |
-| `WSL_REQUIRED` | `standard` | standard | read | scripts | — | scripts/planning/new_feature.sh:156 | string | script-only | no | no direct site |
-| `WSL_SEPARATE` | `standard` | standard | read | scripts | — | scripts/planning/new_feature.sh:157 | string | script-only | no | no direct site |
+| `WSL_REQUIRED` | `standard` | standard | read | scripts | — | `make planning-new-feature` | string | script-only | no | no direct site |
+| `WSL_SEPARATE` | `standard` | standard | read | scripts | — | `make planning-new-feature` | string | script-only | no | no direct site |
 | `XDG_CACHE_HOME` | `standard` | standard | read | world-backend | — | crates/world/src/exec.rs:203 | string | external | no | no direct site |
 | `XDG_CONFIG_HOME` | `standard` | standard | read | world-backend | — | crates/world/src/exec.rs:204 | string | external | no | no direct site |
 | `XDG_DATA_HOME` | `standard` | standard | read | world-agent, world-backend | — | crates/world/src/exec.rs:205; crates/world-agent/src/pty.rs:641 | string | external | no | no direct site |

@@ -30,9 +30,9 @@ Append START/END entries only (no mid-stream commentary) using the template stan
   - ADRs:
     - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
     - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
-    - `docs/project_management/next/world_deps_packages_bundles_contract.md`
+    - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
   - Sequencing:
-    - `docs/project_management/next/sequencing.json`
+    - `docs/project_management/packs/sequencing.json`
   - Standards:
     - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
     - `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
@@ -50,7 +50,7 @@ Append START/END entries only (no mid-stream commentary) using the template stan
   - `make planning-lint FEATURE_DIR="$FEATURE_DIR"`
   - `make planning-validate FEATURE_DIR="$FEATURE_DIR"`
   - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null`
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null`
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null`
 
 ## END — 2026-02-16T01:18:35Z — planning — planning-pack remediation (quality gate defects)
 - Defects addressed (Finding IDs):
@@ -86,7 +86,7 @@ Append START/END entries only (no mid-stream commentary) using the template stan
   - `docs/project_management/packs/active/world-deps-host-visible-hardening/kickoff_prompts/CP2-ci-checkpoint.md`
   - `docs/project_management/packs/active/world-deps-host-visible-hardening/kickoff_prompts/FZ-feature-cleanup.md`
   - `docs/project_management/packs/active/world-deps-host-visible-hardening/quality_gate_report.md`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
   - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
 - Rubric checks run (with results):
   - `make adr-fix ADR=docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md` → `0`
@@ -94,7 +94,7 @@ Append START/END entries only (no mid-stream commentary) using the template stan
   - `make planning-lint FEATURE_DIR="docs/project_management/packs/active/world-deps-host-visible-hardening"` → `0`
   - `make planning-validate FEATURE_DIR="docs/project_management/packs/active/world-deps-host-visible-hardening"` → `0`
   - `jq -e . docs/project_management/packs/active/world-deps-host-visible-hardening/tasks.json >/dev/null` → `0`
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0`
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → `0`
 - Sequencing alignment:
   - `sequencing.json` reviewed: `YES`
   - Changes required: added `world_deps_host_visible_hardening` entry (WDH0..WDH3)
@@ -121,7 +121,7 @@ Append START/END entries only (no mid-stream commentary) using the template stan
   - `make planning-lint FEATURE_DIR="$FEATURE_DIR"`
   - `make planning-validate FEATURE_DIR="$FEATURE_DIR"`
   - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null`
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null`
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null`
 
 ## END — 2026-02-16T02:18:48Z — planning — planning-pack remediation (quality gate defects, Pass 3)
 - Defects addressed (Finding IDs):
@@ -136,7 +136,7 @@ Append START/END entries only (no mid-stream commentary) using the template stan
   - `make planning-lint FEATURE_DIR="docs/project_management/packs/active/world-deps-host-visible-hardening"` → `0`
   - `make planning-validate FEATURE_DIR="docs/project_management/packs/active/world-deps-host-visible-hardening"` → `0`
   - `jq -e . docs/project_management/packs/active/world-deps-host-visible-hardening/tasks.json >/dev/null` → `0`
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0`
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → `0`
 - Additional evidence commands run (with results):
   - `python3 - <<'PY' ... PY ; echo "required-field audit exit=$?"` → `2` (shell syntax error)
   - `python3 - <<'PY' ... PY` → `0`
@@ -155,7 +155,7 @@ Append START/END entries only (no mid-stream commentary) using the template stan
 - Goal: Preflight-validate `tasks.json` shape + kickoff prompt paths; run the mechanical planning lint checklist; record results in `quality_gate_report.md`.
 - Rubric checks run (with results):
   - `jq -e . docs/project_management/packs/active/world-deps-host-visible-hardening/tasks.json >/dev/null` → `0`
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0`
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → `0`
   - `make planning-lint FEATURE_DIR="docs/project_management/packs/active/world-deps-host-visible-hardening"` → `0`
   - `make planning-validate FEATURE_DIR="docs/project_management/packs/active/world-deps-host-visible-hardening"` → `0`
   - `python3 (required-field audit snippet from PLANNING_GATE_REPORT_TEMPLATE.md)` → `0`

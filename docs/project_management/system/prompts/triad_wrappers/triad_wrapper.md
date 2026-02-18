@@ -7,7 +7,7 @@ Use this **after** `F0-exec-preflight` is completed for a feature, to:
 
 Fast path (preferred when available):
 - Run the fully automated wrapper command instead of doing the manual bookkeeping steps in this prompt:
-  - `make triad-task-start-complete FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>"`
+  - `make triad-task-start-complete FEATURE_DIR="docs/project_management/packs/active/<feature>" SLICE_ID="<slice>"`
   - It updates `tasks.json` + `session_log.md`, runs code+test in parallel, runs the slice’s integration task as wired in `tasks.json` (`<slice>-code.integration_task`), and writes a wrapper summary under `FEATURE_DIR/logs/<slice>/wrapper/`.
   - For schema v4+ checkpointed cross-platform packs: on checkpoint-boundary slices, `<slice>-code.integration_task` is expected to be `<slice>-integ-core`. This wrapper does not run `CPk-ci-checkpoint`, does not start any `*-integ-<platform>` platform-fix tasks, and does not start `<slice>-integ` final aggregation.
 

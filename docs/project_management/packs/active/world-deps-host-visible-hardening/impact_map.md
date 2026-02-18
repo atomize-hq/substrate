@@ -12,7 +12,7 @@ Authoring standards:
   - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md` (Appendix A)
   - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 - Contract:
-  - `docs/project_management/next/world_deps_packages_bundles_contract.md`
+  - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
 - Spec manifest:
   - `docs/project_management/packs/active/world-deps-host-visible-hardening/spec_manifest.md`
 
@@ -46,7 +46,7 @@ Execution triads under this Planning Pack are expected to edit:
 
 ### Edit (docs scope; expected follow-up)
 - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md` (link this Planning Pack; tighten Appendix A to MUST-level language where implemented)
-- User-facing docs that explain inventory vs enabled/applied and the scaffolded deps directory (if those docs are considered authoritative outside `docs/project_management/next/`)
+- User-facing docs that explain inventory vs enabled/applied and the scaffolded deps directory (if those docs are considered authoritative outside `docs/project_management/packs/`)
 - `docs/CONFIGURATION.md` and `docs/reference/config/world.md` — document the new config key `world.env.inherit_from_host` and its default posture
 
 ## Cascading implications (behavior/UX)
@@ -89,5 +89,5 @@ Execution triads under this Planning Pack are expected to edit:
 - Resolution: Treat host-visible as filesystem visibility only; do not inherit host toolchain env by default.
 
 ## Sequencing alignment
-- `docs/project_management/next/sequencing.json` reviewed: YES
+- `docs/project_management/packs/sequencing.json` reviewed: YES
 - Sequencing entry: `world_deps_host_visible_hardening` (WDH0..WDH3)

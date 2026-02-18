@@ -4,14 +4,14 @@ set -euo pipefail
 usage() {
     cat <<'USAGE'
 Usage:
-  scripts/triad/mark_noop_platform_fixes_completed.sh --feature-dir <path> --slice-id <slice> [--from-smoke-run <id>] [--dry-run]
+  make triad-mark-noop-platform-fixes-completed FEATURE_DIR=<path> SLICE_ID=<slice> [SMOKE_RUN_ID=<id>] [DRY_RUN=1]
 
 Purpose:
   Mark <slice>-integ-<platform> platform-fix tasks as status=completed (no-ops) on the orchestration branch,
   typically when PLATFORM=all smoke is green and no platform-fix worktrees/branches are expected.
 
 Required:
-  --feature-dir <path>     Feature Planning Pack dir (docs/project_management/next/<feature> or equivalent)
+  --feature-dir <path>     Feature Planning Pack dir (docs/project_management/packs/active/<feature> or equivalent)
   --slice-id <slice>       Slice prefix (e.g., PCP0)
 
 Optional:

@@ -9,7 +9,7 @@ Authoritative contract:
 
 ## Guardrails (non-negotiable)
 - Orchestration branch: `feat/policy_and_config`
-- Planning Pack directory: `docs/project_management/next/policy_and_config_mental_model_simplification/`
+- Planning Pack directory: `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/`
 - Docs/tasks/session log edits happen only on the orchestration branch (never in worktrees).
 - Greenfield: remove all legacy compatibility paths; no aliases; no fallbacks.
 - YAML only for config and policy; parsing is strict (unknown keys and type mismatches are hard errors).
@@ -43,15 +43,15 @@ Authoritative contract:
    - Removal of legacy filenames/flags/env vars and naming collisions (anchor/isolation).
 
 Specs (single source of truth):
-- `docs/project_management/next/policy_and_config_mental_model_simplification/PCM0-spec.md`
-- `docs/project_management/next/policy_and_config_mental_model_simplification/PCM1-spec.md`
-- `docs/project_management/next/policy_and_config_mental_model_simplification/PCM2-spec.md`
-- `docs/project_management/next/policy_and_config_mental_model_simplification/PCM3-spec.md`
+- `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM0-spec.md`
+- `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM1-spec.md`
+- `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM2-spec.md`
+- `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM3-spec.md`
 
 ## Cross-sprint alignment (explicit)
-- Sequencing spine: `docs/project_management/next/sequencing.json` (sprint `policy_and_config_mental_model_simplification`, order `25`).
+- Sequencing spine: `docs/project_management/packs/sequencing.json` (sprint `policy_and_config_mental_model_simplification`, order `25`).
 - This sprint lands before `world_sync`.
-- Before any `world_sync` execution triads begin, update world-sync planning docs to match ADR-0003 (minimum: `docs/project_management/next/world-sync/C0-spec.md` and `docs/project_management/next/world-sync/C1-spec.md`).
+- Before any `world_sync` execution triads begin, update world-sync planning docs to match ADR-0003 (minimum: `docs/project_management/_archived/next/world-sync/C0-spec.md` and `docs/project_management/_archived/next/world-sync/C1-spec.md`).
 
 ## Primary code touchpoints (expected)
 These are the primary locations expected to change when implementing ADR-0003:
@@ -86,8 +86,8 @@ These are the primary locations expected to change when implementing ADR-0003:
 1. Merge code+test branches into the integration worktree; reconcile to spec.
 2. Run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, then `make integ-checks`.
 3. Run feature-local smoke scripts:
-   - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh`
-   - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh`
-   - `pwsh -File docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1`
+   - `bash docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh`
+   - `bash docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh`
+   - `pwsh -File docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1`
 4. Commit integration changes; merge/fast-forward into the orchestration branch.
 5. Update `tasks.json` + add END entry to `session_log.md`; commit docs (`docs: finish <task-id>`); remove the worktree.

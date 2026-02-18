@@ -37,7 +37,7 @@ Template:
 - Commands: `cargo fmt`; `cargo clippy -p world-agent -- -D warnings`; `cargo test -p world-agent`
 - Results: pass / pass / pass
 - Scripts executed: n/a
-- Kickoff prompts created: n/a (confirmed docs/project_management/next/p0-platform-stability/kickoff_prompts/S1a-integ.md is current)
+- Kickoff prompts created: n/a (confirmed docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/S1a-integ.md is current)
 - Docs commit: pending (`docs: finish S1a-code`)
 - Next steps / blockers: ready for S1a-test + S1a-integ; worktree removal after doc update
 
@@ -70,7 +70,7 @@ Template:
 - Commands: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-shell health`; `substrate health --json`
 - Results: pass / pass / pass / pass (JSON captured for records)
 - Scripts executed: n/a
-- Kickoff prompts created: updated `docs/project_management/next/p0-platform-stability/kickoff_prompts/H1b-code.md` and `H1b-test.md` for new telemetry fields
+- Kickoff prompts created: updated `docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/H1b-code.md` and `H1b-test.md` for new telemetry fields
 - Docs commit: e8a3dd0 (`docs: finish H1a-integ`)
 - Next steps / blockers: H1b-code/test may build on new manager_states summaries
 
@@ -87,7 +87,7 @@ Template:
 - Commands: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p world-agent`
 - Results: pass / pass / pass
 - Scripts executed: n/a
-- Kickoff prompts created: refreshed `docs/project_management/next/p0-platform-stability/kickoff_prompts/S1b-code.md` + `S1b-test.md` to reference socket-activated world-agent behavior
+- Kickoff prompts created: refreshed `docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/S1b-code.md` + `S1b-test.md` to reference socket-activated world-agent behavior
 - Docs commit: pending (`docs: finish S1a-integ`)
 - Next steps / blockers: fast-forward ps-s1a-agent-integ onto feat/p0-platform-stability, drop worktree
 
@@ -162,7 +162,7 @@ Template:
 - Results: pass / pass / pass
 - Manual commands: `substrate world doctor --json` (skipped – requires provisioned systemd agent); `substrate --shim-status` (skipped – host install not available)
 - Merge: ps-s1b-shell-code → feat/p0-platform-stability
-- Kickoff prompts: confirmed `docs/project_management/next/p0-platform-stability/kickoff_prompts/S1b-integ.md` remains accurate (no edits)
+- Kickoff prompts: confirmed `docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/S1b-integ.md` remains accurate (no edits)
 - Docs commit: pending (`docs: finish S1b-code`)
 - Next steps / blockers: none
 
@@ -206,7 +206,7 @@ Template:
 - Blockers: none
 
 ## [2025-12-03 15:15 UTC] PM Agent – R2a-planning – END
-- Docs/tasks updated: added R2a-code/test/integ entries in tasks.json; new kickoff prompts at `docs/project_management/next/p0-platform-stability/kickoff_prompts/R2a-*.md`
+- Docs/tasks updated: added R2a-code/test/integ entries in tasks.json; new kickoff prompts at `docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R2a-*.md`
 - Commands: none
 - Results: prompts/tasks staged (no commits yet)
 - Next steps: begin R2a-code/test per new prompts; ensure doc/task updates committed before branch work
@@ -232,7 +232,7 @@ Template:
 - Added kickoff prompts: `R2b-test.md`, `R2b-integ.md`, `R2c-code.md`
 - Commands: none
 - Next steps: commit doc/task updates, then begin R2a-code once ready
-- Kickoff prompts created: reviewed `docs/project_management/next/p0-platform-stability/kickoff_prompts/H1b-code.md` + `H1b-test.md`; both already reflect manager_states assumptions, no edits
+- Kickoff prompts created: reviewed `docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/H1b-code.md` + `H1b-test.md`; both already reflect manager_states assumptions, no edits
 - Docs commit: pending (`docs: finish H1a-integ`)
 - Next steps / blockers: remove `wt/ps-h1a-health-integ`, prep H1b-code/test handoff
 
@@ -265,7 +265,7 @@ Template:
 - Commands: `cargo fmt`; `cargo clippy -p substrate-replay -- -D warnings`; `cargo test -p substrate-replay -- --nocapture`
 - Results: pass / pass / pass
 - Manual: `cargo run -p substrate --bin substrate -- --replay-verbose --replay spn_019adae3-2889-7a21-ba36-4f23e39eb033` (failed once copy-diff symlink already existed; replay emitted the new scopes/warning lines before aborting)
-- Docs/prompts: `docs/project_management/next/p0-platform-stability/kickoff_prompts/R1b-integ.md` already covered verbose scopes + warning expectations; no edits required
+- Docs/prompts: `docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R1b-integ.md` already covered verbose scopes + warning expectations; no edits required
 - Next steps / blockers: branch merged back into feat/p0-platform-stability; ready for R1b-test + R1b-integ follow-ups
 
 ## [2025-12-02 18:12 UTC] Test Agent – R1b-test – START
@@ -368,7 +368,7 @@ Template:
 ## [2025-12-02 18:37 UTC] Integration Agent – S1c-windows-dry-run – TASK ADDED
 - Added follow-up task `S1c-windows-dry-run` to `tasks.json` so a Windows operator can rerun `pwsh -File scripts/windows/wsl-warm.ps1 -WhatIf` with PowerShell 7 and capture the missing WhatIf output.
 - Task details include prerequisites (Windows host + pwsh 7), acceptance criteria (log file saved under `artifacts/windows/`, session log updates, remediation notes), and start/end checklists so the remote operator can self-serve.
-- Authored kickoff prompt `docs/project_management/next/p0-platform-stability/kickoff_prompts/S1c-windows-dry-run.md` summarizing prerequisites, required commands (including the `Tee-Object` log capture), and deliverables for the Windows run.
+- Authored kickoff prompt `docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/S1c-windows-dry-run.md` summarizing prerequisites, required commands (including the `Tee-Object` log capture), and deliverables for the Windows run.
 - References point at the warm script, WSL setup doc, Windows install docs, and this session log for context.
 
 ## [2025-12-02 18:47 UTC] Integration Agent – S1c-integ – Linux socket harness
@@ -389,7 +389,7 @@ Template:
 - Commands: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-replay -- --nocapture`; `cargo build -p substrate --bin substrate`; `SHIM_TRACE_LOG=$PWD/tmp/r1b-integ-replay/trace.jsonl ./target/debug/substrate --replay spn_r1b_integ_sample --replay-verbose`.
 - Results: fmt/clippy/tests/build all pass; replay sample succeeded with expected warnings about missing world agent privileges (netns/cgroup/nft fallback) and printed `scopes: []` plus filesystem diff summary while executing `printf 'R1b-integ sample' > replay.log`.
 - Scripts executed: n/a (only CLI/builder invocations above).
-- Kickoff prompts created: updated `docs/project_management/next/p0-platform-stability/kickoff_prompts/R1c-code.md` + `R1c-test.md` to reference the new verbose scopes/warning behavior.
+- Kickoff prompts created: updated `docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R1c-code.md` + `R1c-test.md` to reference the new verbose scopes/warning behavior.
 - Docs commit: pending (`docs: finish R1b-integ` will capture tasks/session log updates after merging back to feat/p0-platform-stability).
 - Next steps / blockers: fast-forward feat/p0-platform-stability to ps-r1b-verbosity-integ, update tasks.json/status log, remove worktree once doc commit pushed.
 
@@ -418,7 +418,7 @@ Template:
 
 ## [2025-12-02 18:58 UTC] Test Agent – R1c-test – START
 - Checked out feat/p0-platform-stability; `git pull --ff-only` failed because the branch has no upstream tracking ref (documented)
-- Read `p0_platform_stability_plan.md`, `docs/project_management/next/p0-platform-stability/tasks.json`, `docs/project_management/next/p0-platform-stability/session_log.md`, R1c-code scope, and this prompt for alignment
+- Read `p0_platform_stability_plan.md`, `docs/project_management/_archived/next/p0-platform-stability/tasks.json`, `docs/project_management/_archived/next/p0-platform-stability/session_log.md`, R1c-code scope, and this prompt for alignment
 - Updated tasks.json (`R1c-test` → `in_progress`) and appended this START entry; docs commit pending per checklist
 - Created branch/worktree: pending (ps-r1c-coverage-test → wt/ps-r1c-coverage-test after doc commit)
 - Plan: expand replay integration tests for default world/`--no-world`/env opt-out, assert verbose scope + warning prefixes, refresh fixtures, run `cargo fmt`, `cargo test -p substrate-replay -- --nocapture`, `cargo test -p substrate-shell replay_world`, capture manual `substrate --replay` runs as needed
@@ -429,7 +429,7 @@ Template:
 - Commands: `cargo fmt` (pass); `cargo test -p substrate-replay -- --nocapture` (pass); `cargo test -p substrate-shell replay_world` (pass, filter matched 0 tests per cargo’s behavior); `cargo test -p substrate-shell --test replay_world -- --nocapture` (pass, exercised new coverage)
 - Manual commands: `python - <<'PY' ...` helper invoking `target/debug/substrate --replay <span> --replay-verbose` for default, `--no-world`, and `SUBSTRATE_REPLAY_USE_WORLD=disabled` modes to capture warning/scope expectations (all exited 0 with the expected `[replay]` prefixes noted in the code review)
 - Results: CLI tests now assert `[replay] scopes: []` plus world-strategy/warning differences for default vs opt-out runs; env + flag toggles skip nft warnings as intended
-- R1c-integ prompt (`docs/project_management/next/p0-platform-stability/kickoff_prompts/R1c-integ.md`) already covers the merged scope, so no edits required
+- R1c-integ prompt (`docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R1c-integ.md`) already covers the merged scope, so no edits required
 - Next steps / blockers: none; merged `ps-r1c-coverage-test` into `feat/p0-platform-stability` and removed the worktree after doc updates
 
 ## [2025-12-02 19:10 UTC] Integration Agent – R1c-integ – START
@@ -444,7 +444,7 @@ Template:
 - Worktree commits: 6c4c3c6 (`test: align replay world toggle warnings`) after confirming ps-r1c-coverage-code/test already merged cleanly.
 - Commands: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-replay -- --nocapture`; `cargo test -p substrate-shell replay_world` (filter-only run, 0 tests as expected); `cargo test -p substrate-shell --test replay_world -- --nocapture` (passes after updating assertions); `cargo build -p substrate --bin substrate`.
 - Replay smoke: created local fixtures under `tmp/r1c-integ-replay/` and ran `SHIM_TRACE_LOG=... ./target/debug/substrate --replay span_r1c_world --replay-verbose` (default world-on, emitted copy-diff fallback warnings due to missing cgroup/netns privileges), `... --replay span_r1c_no_world --replay-verbose --no-world`, and `SUBSTRATE_REPLAY_USE_WORLD=disabled ... --replay span_r1c_env_disabled --replay-verbose` (both host-mode runs logged the `[replay] world toggle` + opt-out warnings as expected).
-- Tests/docs: Updated `crates/shell/tests/replay_world.rs` so the new world toggle summary + warning lines are asserted explicitly for the flag/env opt-out cases; updated `docs/project_management/next/p0-platform-stability/kickoff_prompts/H1a-code.md` and `H1a-test.md` to call out the R1c replay world assumptions.
+- Tests/docs: Updated `crates/shell/tests/replay_world.rs` so the new world toggle summary + warning lines are asserted explicitly for the flag/env opt-out cases; updated `docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/H1a-code.md` and `H1a-test.md` to call out the R1c replay world assumptions.
 - Status tracking: `tasks.json` now marks `R1c-integ` as `completed`; this session log captures START/END plus command outputs. Branch still lacks remote tracking (git pull skip documented).
 
 ## [2025-12-02 19:19 UTC] Code Agent – H1b-code – END
@@ -489,7 +489,7 @@ Template:
 
 ## [2025-12-03 16:48 UTC] Test Agent – S1d-test – START
 - Checked out `feat/p0-platform-stability-follow-up`, ran `git pull --ff-only` (branch still local-only, no remote tracking).
-- Reviewed `p0_platform_stability_plan.md`, `tasks.json`, `session_log.md`, `docs/project_management/next/p0-platform-stability/kickoff_prompts/S1d-code.md`, and `docs/project_management/next/p0-platform-stability/kickoff_prompts/S1d-test.md`.
+- Reviewed `p0_platform_stability_plan.md`, `tasks.json`, `session_log.md`, `docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/S1d-code.md`, and `docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/S1d-test.md`.
 - Confirmed `tasks.json` already lists S1d-test as `in_progress`; no field changes required beyond this log update.
 - Plan: expand `tests/installers/install_smoke.sh` with dev/prod socket checks, capture substrate group + lingering guidance (including skip handling when systemd unavailable), run `cargo fmt` plus `./tests/installers/install_smoke.sh --scenario {dev,prod}`, and document any skips or permission constraints.
 - Blockers: host runs systemd but `/run/substrate.sock` + installer flows still require elevated privileges; expect to record skips if sudo/systemctl interactions are restricted inside this environment.
@@ -505,7 +505,7 @@ Template:
 
 ## [2025-12-03 17:18 UTC] Integration Agent – S1d-integ – START
 - Checked out `feat/p0-platform-stability-follow-up`, fast-forwarded it with the latest `feat/p0-platform-stability` changes so the S1d deliverables are available here (branch still lacks upstream tracking).
-- Verified the imported commits (`2557df3 feat: align installers with socket activation`, `8dc999d test: extend installer socket parity coverage`) and the S1d-test END entry above; marked `S1d-integ` as `in_progress` in `tasks.json` and added this START entry after ensuring `docs/project_management/next/p0-platform-stability/kickoff_prompts/S1d-integ.md` reflects the integration checklist.
+- Verified the imported commits (`2557df3 feat: align installers with socket activation`, `8dc999d test: extend installer socket parity coverage`) and the S1d-test END entry above; marked `S1d-integ` as `in_progress` in `tasks.json` and added this START entry after ensuring `docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/S1d-integ.md` reflects the integration checklist.
 - Plan: resolve merge conflicts, keep the worktree aligned with follow-up-specific prompts, then reuse the previously executed fmt/shellcheck + installer smoke command results (see END entry) while documenting them for this branch.
 - Blockers: same Linux-only context as earlier runs (systemd present; Windows WhatIf task still pending).
 
@@ -544,7 +544,7 @@ Template:
 - Commands: `cargo fmt`; `./tests/installers/install_state_smoke.sh`; `shellcheck tests/installers/install_state_smoke.sh`; `shellcheck scripts/substrate/uninstall-substrate.sh`
 - Results: pass / pass / pass / pass – harness exercises metadata creation/upgrade, multi-user cleanup flag, and missing/corrupt metadata fallbacks; uninstall script now tolerates empty recorded linger entries under `set -u`
 - Scripts executed: install_state_smoke stubbed all privileged/systemd calls; no real host mutation
-- Kickoff prompts created: updated `docs/project_management/next/p0-platform-stability/kickoff_prompts/S1e-integ.md` to include new harness commands
+- Kickoff prompts created: updated `docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/S1e-integ.md` to include new harness commands
 - Docs commit: pending (`docs: finish S1e-test`)
 - Next steps / blockers: merge ps-s1e-installer-test into feat/p0-platform-stability-follow-up, update tasks.json to completed, remove worktree after doc commit
 
@@ -703,7 +703,7 @@ Template:
 - Commands: `cargo fmt`; `cargo test -p substrate-replay -- --nocapture`; `cargo test -p substrate-shell replay_world`; `cargo test -p substrate-shell --test replay_world -- --nocapture`
 - Results: fmt pass; replay tests pass; replay_world filter run hit 0 tests; targeted replay_world suite passes with skips/notes — copy-diff unavailable on this host so ENOSPC retries emit warnings and strategy asserts skip when trace lacks replay_strategy entries; agent socket absent so fallback warnings expected
 - Skips/notes: agent/caged strategy assertions guarded when no replay_strategy lines written; copy-diff roots under /run/tmp/var/tmp fail, ENOSPC shim still exercises retry paths; world-agent socket missing so agent probe falls back
-- Docs/prompts: reviewed `docs/project_management/next/p0-platform-stability/kickoff_prompts/R2c-integ.md` (no edits)
+- Docs/prompts: reviewed `docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R2c-integ.md` (no edits)
 - Next steps / blockers: ready for R2c-integ; host limitations documented above
 
 ## [2025-12-07 19:47 UTC] Integration Agent – R2c-integ – START

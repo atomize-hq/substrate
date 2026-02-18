@@ -112,7 +112,7 @@ export FEATURE_DIR="docs/project_management/packs/active/world-sync"
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
 # exit: 0
 
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 # exit: 0
 
 # Planning lint (mechanical)
@@ -233,7 +233,7 @@ make planning-validate FEATURE_DIR="$FEATURE_DIR"
 # JSON validity
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
 # exit: 0
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 # exit: 0
 ```
 
@@ -258,7 +258,7 @@ jq -e . docs/project_management/next/sequencing.json >/dev/null
 - `impact_map.md`: `YES`
 - `manual_testing_playbook.md`: `YES`
 - Feature smoke scripts under `smoke/`: `YES`
-- `docs/project_management/next/sequencing.json`: `YES`
+- `docs/project_management/packs/sequencing.json`: `YES`
 - Standards: `YES`
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
@@ -358,7 +358,7 @@ make planning-validate FEATURE_DIR="$FEATURE_DIR"
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
 # exit: 0
 
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 # exit: 0
 ```
 

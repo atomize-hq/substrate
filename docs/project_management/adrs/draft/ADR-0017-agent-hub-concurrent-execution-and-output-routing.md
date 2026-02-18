@@ -6,36 +6,36 @@
 - Owner(s): Substrate maintainers
 
 ## Scope
-- Feature directory: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/`
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Feature directory: `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/EXECUTIVE_SUMMARY_STANDARD.md`
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 
 ## Related Docs
-- Plan: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/plan.md`
-- Tasks: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/tasks.json`
-- Spec manifest: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/spec_manifest.md`
-- Impact map: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/impact_map.md`
-- CI checkpoint plan: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/ci_checkpoint_plan.md`
-- Contract: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/contract.md`
-- Spec: structured event envelope: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/agent-hub-event-envelope-schema-spec.md`
-- Spec: telemetry/trace records: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/telemetry-spec.md`
-- Spec: platform parity: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/platform-parity-spec.md`
+- Plan: `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/plan.md`
+- Tasks: `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/tasks.json`
+- Spec manifest: `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/spec_manifest.md`
+- Impact map: `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/impact_map.md`
+- CI checkpoint plan: `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/ci_checkpoint_plan.md`
+- Contract: `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/contract.md`
+- Spec: structured event envelope: `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/agent-hub-event-envelope-schema-spec.md`
+- Spec: telemetry/trace records: `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/telemetry-spec.md`
+- Spec: platform parity: `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/platform-parity-spec.md`
 - Slice specs:
-  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/OR0-spec.md`
-  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/OR1-spec.md`
-- Decision Register: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md`
-- Manual playbook: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/manual_testing_playbook.md`
+  - `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/OR0-spec.md`
+  - `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/OR1-spec.md`
+- Decision Register: `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/decision_register.md`
+- Manual playbook: `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/manual_testing_playbook.md`
 - Smoke scripts:
-  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/smoke/linux-smoke.sh`
-  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/smoke/macos-smoke.sh`
-  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/smoke/windows-smoke.ps1`
+  - `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/smoke/linux-smoke.sh`
+  - `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/smoke/macos-smoke.sh`
+  - `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/smoke/windows-smoke.ps1`
 - Agent Hub core decisions (world reuse, drift posture, alert schema):
-  - `docs/project_management/next/agent_hub_core/decision_register.md`
+  - `docs/project_management/_archived/next/agent_hub_core/decision_register.md`
 - Phase 8 cross-cutting registry (sequencing umbrella):
-  - `docs/project_management/next/PHASE_8_CROSS_CUTTING_DECISION_REGISTRY.md`
+  - `docs/project_management/packs/PHASE_8_CROSS_CUTTING_DECISION_REGISTRY.md`
 - Related ADRs:
   - `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
   - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
@@ -60,7 +60,7 @@ ADR_BODY_SHA256: e0a117970d68fb6e19affbce5ecd34c22ef1db8dc37a861e6d7203146e4eab2
   - Why: Agent hub orchestration will run multiple agent CLIs concurrently (via bindings/SDK wrappers). Without an output contract, concurrent outputs can corrupt terminal state or be mis-attributed, undermining usability and auditability.
   - Links:
     - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md#L78` (this ADR: contract)
-    - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md#L12` (DR-0001: output classes)
+    - `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/decision_register.md#L12` (DR-0001: output classes)
     - `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md#L89` (PTY passthrough contract)
     - `docs/project_management/_archived/world-first-repl-persistent-pty/STATE_MACHINE.md`
     - `docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md`
@@ -113,7 +113,7 @@ ADR_BODY_SHA256: e0a117970d68fb6e19affbce5ecd34c22ef1db8dc37a861e6d7203146e4eab2
 - During PTY passthrough (TUIs/interactive commands), Substrate MUST NOT inject structured agent events into the PTY byte stream.
   - Structured events MUST be handled via a bounded buffer and MUST NOT backpressure execution.
   - If the buffer overflows, Substrate MUST drop additional structured lines for the duration of the passthrough and MUST emit an explicit dropped-count summary after passthrough ends.
-    - Source of truth: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0006)
+    - Source of truth: `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0006)
   - If the structured-event envelope includes `channel` values, the dropped-count summary MAY include a per-channel breakdown in addition to the total dropped count.
 - While the line editor is active (`Idle`), PTY bytes MAY arrive (out-of-band) and Substrate MUST render them without corrupting the current input buffer.
   - PTY bytes MUST be rendered as raw bytes with prompt/input redraw semantics (byte fidelity preserved).
@@ -131,21 +131,21 @@ ADR_BODY_SHA256: e0a117970d68fb6e19affbce5ecd34c22ef1db8dc37a861e6d7203146e4eab2
     - `backend_id` when the emitting backend’s kind is known (v1 default: known) to avoid heuristic inference from `agent_id` alone.
   - Join keys (required when the event is tied to execution/trace):
     - `cmd_id` and/or `span_id`
-  - Source of truth: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003)
+  - Source of truth: `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003)
 - Placement: attribution fields are top-level keys on the serialized event envelope.
-  - Source of truth: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0008)
+  - Source of truth: `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0008)
 - Alignment hooks (agent hub core):
   - Structured agent events MUST carry `world_id` when the emitting backend executes inside a world boundary, so operators can verify whether concurrently-running in-world agents share (or intentionally do not share) the same filesystem/isolation boundary.
-    - Source of truth: `docs/project_management/next/agent_hub_core/decision_register.md` (DR-0004) and `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003).
+    - Source of truth: `docs/project_management/_archived/next/agent_hub_core/decision_register.md` (DR-0004) and `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003).
   - The structured-event envelope MAY carry an optional event-plane routing hint (`channel`) so future subscribe/filter behavior is expressible without PTY injection or attribution ambiguity.
-    - Source of truth: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003).
+    - Source of truth: `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003).
 
 ### Structured agent event envelope (v1; Phase 8 additive clarifications)
 
 Structured agent events are serialized as a top-level envelope with stable correlation fields for deterministic joins. This envelope is the surface emitted to the shell/UI and (after adding `session_id` and any trace-writer metadata) persisted to canonical trace.
 
 Authoritative shape and field requirements live in:
-- `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003, DR-0008, DR-0009)
+- `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003, DR-0008, DR-0009)
 - Phase 8 correlation vocabulary (canonical field names): `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
 
 Envelope fields (top-level; no nesting required for joinability):
@@ -175,10 +175,10 @@ World-scoped member agents share a world boundary by default (same `world_id` pe
 - when/why a world was restarted (explicit structured alert events; never implied).
 
 Authoritative sources:
-- World reuse semantics: `docs/project_management/next/agent_hub_core/decision_register.md` (DR-0004)
-- Drift handling + reason taxonomy: `docs/project_management/next/agent_hub_core/decision_register.md` (DR-0008)
-- `world_restarted` alert schema: `docs/project_management/next/agent_hub_core/decision_register.md` (DR-0010)
-- `world_restart_required` alert schema (fail-closed drift posture): `docs/project_management/next/agent_hub_core/decision_register.md` (DR-0009)
+- World reuse semantics: `docs/project_management/_archived/next/agent_hub_core/decision_register.md` (DR-0004)
+- Drift handling + reason taxonomy: `docs/project_management/_archived/next/agent_hub_core/decision_register.md` (DR-0008)
+- `world_restarted` alert schema: `docs/project_management/_archived/next/agent_hub_core/decision_register.md` (DR-0010)
+- `world_restart_required` alert schema (fail-closed drift posture): `docs/project_management/_archived/next/agent_hub_core/decision_register.md` (DR-0009)
 
 Structured alert event: `world_restarted` (required on auto-restart)
 - Envelope:
@@ -204,14 +204,14 @@ Fail-closed drift posture (`agents.hub.world_restart.on_drift=fail_closed`)
     - Meaning: maximum number of **structured event lines** buffered during PTY passthrough before dropping begins (does not affect PTY bytes).
     - Default: `2048`.
     - Precedence: workspace overrides global (consistent with the existing config layering model).
-    - Source of truth: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0004)
+    - Source of truth: `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0004)
     - Bounds: `min=0`, `max=16384`.
     - Invalid/out-of-range handling:
       - Invalid type/parse: hard error (exit code `2` at config/CLI boundary).
       - Out-of-range integer: clamp and emit a structured warning (no PTY injection).
-      - Source of truth: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0007)
+      - Source of truth: `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0007)
     - Scope: applies to any PTY passthrough session (explicit `:pty` and implicit PTY-required runs).
-      - Source of truth: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0010)
+      - Source of truth: `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0010)
     - Example:
       ```yaml
       repl:
@@ -239,7 +239,7 @@ Fail-closed drift posture (`agents.hub.world_restart.on_drift=fail_closed`)
   - Structured agent events MUST be traceable with stable correlation identifiers (persisted to canonical `trace.jsonl`).
   - Trace persistence (authoritative):
     - Each structured agent event MUST be persisted as its own JSONL record in canonical trace.
-    - Source of truth: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0009)
+    - Source of truth: `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0009)
 
 ### End-to-end flow
 - Inputs:
@@ -258,7 +258,7 @@ Fail-closed drift posture (`agents.hub.world_restart.on_drift=fail_closed`)
   - Canonical trace records for structured events with correlation fields (per DR-0009).
 
 ## Sequencing / Dependencies
-- Sequencing entry: `docs/project_management/next/sequencing.json` → `agent_hub_concurrent_execution_output_routing` (order `41`).
+- Sequencing entry: `docs/project_management/packs/sequencing.json` → `agent_hub_concurrent_execution_output_routing` (order `41`).
 - Orchestration branch: `feat/agent-hub-concurrent-execution-output-routing`
 - Prerequisite integration task IDs: none (ADR-0016 is already implemented; this ADR is self-contained).
 - Dependencies:
@@ -285,13 +285,13 @@ Fail-closed drift posture (`agents.hub.world_restart.on_drift=fail_closed`)
   - REPL scenario where a PTY passthrough command is active while structured agent events are emitted concurrently; verify no corruption and correct drop-summary behavior at the end of passthrough.
 
 ### Manual validation
-- Manual playbook: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/manual_testing_playbook.md`
+- Manual playbook: `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/manual_testing_playbook.md`
   - Verify a structured-event producer (e.g., `:demo-agent`) can run concurrently with a PTY passthrough command without corrupting the terminal.
 
 ### Smoke scripts
-- Linux: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/smoke/linux-smoke.sh`
-- macOS: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/smoke/macos-smoke.sh`
-- Windows: `docs/project_management/next/agent-hub-concurrent-execution-output-routing/smoke/windows-smoke.ps1`
+- Linux: `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/smoke/windows-smoke.ps1`
 
 ## Rollout / Backwards Compatibility
 - Greenfield breaking is acceptable: behavior changes are allowed so long as the operator-facing contract is explicit and high-signal.
@@ -299,5 +299,5 @@ Fail-closed drift posture (`agents.hub.world_restart.on_drift=fail_closed`)
 
 ## Decision Summary
 - Decision Register entries:
-  - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md`:
+  - `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/decision_register.md`:
     - DR-0001, DR-0002, DR-0003, DR-0004, DR-0005, DR-0006, DR-0007, DR-0008, DR-0009, DR-0010, DR-0011, DR-0012, DR-0013

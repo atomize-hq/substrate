@@ -4,10 +4,11 @@ set -euo pipefail
 usage() {
     cat <<'USAGE'
 Usage:
-  scripts/triad/task_start_platform_fixes.sh --feature-dir <path> --slice-id <slice> (--platform <p> [--platform <p> ...] | --from-smoke-run <id>) [options]
+  make triad-task-start-platform-fixes FEATURE_DIR=<path> SLICE_ID=<slice> PLATFORMS=<csv> [LAUNCH_CODEX=1] [CODEX_PROFILE=<p>] [CODEX_MODEL=<m>] [CODEX_JSONL=1] [DRY_RUN=1]
+  make triad-task-start-platform-fixes-from-smoke FEATURE_DIR=<path> SLICE_ID=<slice> SMOKE_RUN_ID=<id> [LAUNCH_CODEX=1] [CODEX_PROFILE=<p>] [CODEX_MODEL=<m>] [CODEX_JSONL=1] [DRY_RUN=1]
 
 Required:
-  --feature-dir <path>     Feature Planning Pack dir (docs/project_management/next/<feature> or equivalent)
+  --feature-dir <path>     Feature Planning Pack dir (docs/project_management/packs/active/<feature> or equivalent)
   --slice-id <slice>       Slice id (e.g., WCU0)
   --platform <p>           linux|macos|windows|wsl (repeatable; failing platforms only)
   --from-smoke-run <id>    GitHub Actions run id for Feature Smoke (platform=all); selects only failing platforms automatically
@@ -36,9 +37,7 @@ Stdout contract (machine-parseable):
 
 Notes:
   - Requires an automation-enabled planning pack (tasks.json meta.schema_version>=3 and meta.automation.enabled=true).
-  - Runs from the orchestration worktree (or repo root) and uses:
-    - `scripts/triad/orch_ensure.sh`
-    - `scripts/triad/task_start.sh`
+  - Runs from the orchestration worktree (or repo root) and uses `make triad-orch-ensure` and `make triad-task-start`.
   - Codex artifacts are written under <feature_dir>/logs/<slice>/<task-kind>/ to avoid being deleted by `cargo clean`.
   - This wrapper does not edit tasks.json; it only sets up branches/worktrees and optionally launches Codex.
 USAGE

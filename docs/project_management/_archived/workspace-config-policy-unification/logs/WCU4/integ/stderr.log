@@ -14,9 +14,9 @@ user
 
 ## Scope
 - Merge platform-fix branches (if any) and finalize WCU4 with an auditable cross-platform green state.
-- Spec: `docs/project_management/next/workspace-config-policy-unification/WCU4-spec.md`
+- Spec: `docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-spec.md`
 - ADR: `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-- Closeout report: `docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md`
+- Closeout report: `docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md`
 
 Do not edit planning docs inside the worktree.
 
@@ -24,13 +24,13 @@ Do not edit planning docs inside the worktree.
 1. Verify you are in the task worktree `wt/workspace_config_policy_unification-wcu4-integ` on branch `workspace_config_policy_unification-wcu4-integ` and that `.taskmeta.json` exists.
 2. Read: WCU4-spec, ADR-0008, plan/tasks/session log, this prompt.
 3. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run:
-   - `make triad-task-start FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" TASK_ID="WCU4-integ"`
+   - `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification" TASK_ID="WCU4-integ"`
 
 ## Requirements
 - Merge `WCU4-integ-core` and any platform-fix branches for WCU4 that produced commits.
 - Run: `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, then `make integ-checks`.
 - Dispatch feature smoke for behavior platforms and record evidence:
-  - `make feature-smoke FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" PLATFORM=behavior SMOKE_SLICE_ID="WCU4" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/workspace-config-policy-unification" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
+  - `make feature-smoke FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification" PLATFORM=behavior SMOKE_SLICE_ID="WCU4" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/workspace-config-policy-unification" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
 
 ## End Checklist
 1. Complete `WCU4-closeout_report.md` with evidence and smoke results.
@@ -131,14 +131,14 @@ exec
 {
   "created_at_utc": "2026-01-16T15:10:32Z",
   "created_from_sha": "9c686ae8512e917d1aeca340aaedb9a26f4b19e5",
-  "feature_dir": "docs/project_management/next/workspace-config-policy-unification",
+  "feature_dir": "docs/project_management/_archived/next/workspace-config-policy-unification",
   "orchestration_branch": "feat/workspace-config-policy-unification",
   "schema_version": 1,
   "task_branch": "workspace_config_policy_unification-wcu4-integ",
   "task_id": "WCU4-integ"
 }
 exec
-/bin/bash -lc 'ls -la docs/project_management/next/workspace-config-policy-unification || true' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 43ms:
+/bin/bash -lc 'ls -la docs/project_management/_archived/next/workspace-config-policy-unification || true' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 43ms:
 total 300
 drwxr-xr-x 4 spenser spenser   4096 Jan 16 10:10 .
 drwxr-xr-x 7 spenser spenser   4096 Jan 16 10:10 ..
@@ -160,7 +160,7 @@ drwxr-xr-x 2 spenser spenser   4096 Jan 16 10:10 smoke
 -rw-r--r-- 1 spenser spenser   2392 Jan 16 10:10 WCU3-closeout_report.md
 -rw-r--r-- 1 spenser spenser   5688 Jan 16 10:10 WCU3-spec.md
 exec
-/bin/bash -lc "sed -n '1,200p' docs/project_management/next/workspace-config-policy-unification/WCU4-spec.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 48ms:
+/bin/bash -lc "sed -n '1,200p' docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-spec.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 48ms:
 # WCU4 Spec — Installer/dev env cleanup (stop exporting `SUBSTRATE_OVERRIDE_*` by default)
 
 References:
@@ -191,8 +191,8 @@ exec
 - Owner(s): spenser
 
 ## Scope
-- Feature directory: `docs/project_management/next/workspace-config-policy-unification/`
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Feature directory: `docs/project_management/_archived/next/workspace-config-policy-unification/`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
@@ -204,19 +204,19 @@ exec
 - Prior ADRs:
   - `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`
 exec
-/bin/bash -lc 'rg -n "WCU4" -S docs/project_management/next/workspace-config-policy-unification | head' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 57ms:
-docs/project_management/next/workspace-config-policy-unification/WCU4-spec.md:1:# WCU4 Spec — Installer/dev env cleanup (stop exporting `SUBSTRATE_OVERRIDE_*` by default)
-docs/project_management/next/workspace-config-policy-unification/integration_map.md:68:  - stop exporting `SUBSTRATE_OVERRIDE_*` by default (ADR-0008 WCU4)
-docs/project_management/next/workspace-config-policy-unification/integration_map.md:106:- WCU4: `docs/project_management/next/workspace-config-policy-unification/WCU4-spec.md`
-docs/project_management/next/workspace-config-policy-unification/execution_preflight_report.md:34:- WCU4: installer/dev env cleanup (stop exporting `SUBSTRATE_OVERRIDE_*` by default)
-docs/project_management/next/workspace-config-policy-unification/quality_gate_report.md:153:- Evidence: `docs/project_management/next/workspace-config-policy-unification/tasks.json:215` (WCU2 depends on WCU1-integ; WCU3 depends on WCU2-integ; WCU4 depends on WCU3-integ; WCU5 depends on WCU4-integ.)
-docs/project_management/next/workspace-config-policy-unification/tasks.json:1149:      "id": "WCU4-code",
-docs/project_management/next/workspace-config-policy-unification/tasks.json:1150:      "name": "WCU4 \u2014 Installer/dev env cleanup (code)",
-docs/project_management/next/workspace-config-policy-unification/tasks.json:1152:      "phase": "WCU4",
-docs/project_management/next/workspace-config-policy-unification/tasks.json:1159:        "docs/project_management/next/workspace-config-policy-unification/WCU4-spec.md",
-docs/project_management/next/workspace-config-policy-unification/tasks.json:1170:        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\" SLICE_ID=\"WCU4\""
+/bin/bash -lc 'rg -n "WCU4" -S docs/project_management/_archived/next/workspace-config-policy-unification | head' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 57ms:
+docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-spec.md:1:# WCU4 Spec — Installer/dev env cleanup (stop exporting `SUBSTRATE_OVERRIDE_*` by default)
+docs/project_management/_archived/next/workspace-config-policy-unification/integration_map.md:68:  - stop exporting `SUBSTRATE_OVERRIDE_*` by default (ADR-0008 WCU4)
+docs/project_management/_archived/next/workspace-config-policy-unification/integration_map.md:106:- WCU4: `docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-spec.md`
+docs/project_management/_archived/next/workspace-config-policy-unification/execution_preflight_report.md:34:- WCU4: installer/dev env cleanup (stop exporting `SUBSTRATE_OVERRIDE_*` by default)
+docs/project_management/_archived/next/workspace-config-policy-unification/quality_gate_report.md:153:- Evidence: `docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json:215` (WCU2 depends on WCU1-integ; WCU3 depends on WCU2-integ; WCU4 depends on WCU3-integ; WCU5 depends on WCU4-integ.)
+docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json:1149:      "id": "WCU4-code",
+docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json:1150:      "name": "WCU4 \u2014 Installer/dev env cleanup (code)",
+docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json:1152:      "phase": "WCU4",
+docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json:1159:        "docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-spec.md",
+docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json:1170:        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/_archived/next/workspace-config-policy-unification\" SLICE_ID=\"WCU4\""
 exec
-/bin/bash -lc "sed -n '1,260p' docs/project_management/next/workspace-config-policy-unification/plan.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 42ms:
+/bin/bash -lc "sed -n '1,260p' docs/project_management/_archived/next/workspace-config-policy-unification/plan.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 42ms:
 # Workspace Config/Policy Unification (ADR-0008) — Plan
 
 ## Context (why this exists)
@@ -227,7 +227,7 @@ This body of work also **must** implement the cross-cutting refinement defined b
 - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 
 Non-negotiable additional gating for this pack:
-- `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
+- `docs/project_management/_archived/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
 
 ## Execution model (triads + automation)
 - Standards:
@@ -238,26 +238,26 @@ Non-negotiable additional gating for this pack:
 - Docs discipline:
   - planning docs (`plan.md`, `tasks.json`, `session_log.md`, specs, prompts) are edited only on the orchestration branch
 exec
-/bin/bash -lc 'rg -n "WCU4" docs/project_management/next/workspace-config-policy-unification/session_log.md | head -n 40' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 61ms:
-30:  - `docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md`
-75:  - `docs/project_management/next/workspace-config-policy-unification/WCU4-spec.md`
-88:  - `docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU4-code.md`
-89:  - `docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU4-test.md`
-90:  - `docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU4-integ.md`
+/bin/bash -lc 'rg -n "WCU4" docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md | head -n 40' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 61ms:
+30:  - `docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md`
+75:  - `docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-spec.md`
+88:  - `docs/project_management/_archived/next/workspace-config-policy-unification/kickoff_prompts/WCU4-code.md`
+89:  - `docs/project_management/_archived/next/workspace-config-policy-unification/kickoff_prompts/WCU4-test.md`
+90:  - `docs/project_management/_archived/next/workspace-config-policy-unification/kickoff_prompts/WCU4-integ.md`
 354:## START — 2026-01-16T14:19:03Z — code — WCU4-code
-359:  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" SLICE_ID="WCU4" LAUNCH_CODEX=1`
+359:  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification" SLICE_ID="WCU4" LAUNCH_CODEX=1`
 361:## START — 2026-01-16T14:19:03Z — test — WCU4-test
-366:  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" SLICE_ID="WCU4" LAUNCH_CODEX=1`
+366:  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification" SLICE_ID="WCU4" LAUNCH_CODEX=1`
 368:## END — 2026-01-16T14:33:07Z — code — WCU4-code
-382:  - `CODEX_CODE_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/code/last_message.md`
-383:  - `CODEX_CODE_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/code/events.jsonl`
-384:  - `CODEX_CODE_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/code/stderr.log`
+382:  - `CODEX_CODE_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/logs/WCU4/code/last_message.md`
+383:  - `CODEX_CODE_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/logs/WCU4/code/events.jsonl`
+384:  - `CODEX_CODE_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/logs/WCU4/code/stderr.log`
 387:## END — 2026-01-16T14:33:07Z — test — WCU4-test
-401:  - `CODEX_TEST_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/test/last_message.md`
-402:  - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/test/events.jsonl`
-403:  - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/test/stderr.log`
+401:  - `CODEX_TEST_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/logs/WCU4/test/last_message.md`
+402:  - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/logs/WCU4/test/events.jsonl`
+403:  - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/logs/WCU4/test/stderr.log`
 exec
-/bin/bash -lc "sed -n '1,220p' docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 42ms:
+/bin/bash -lc "sed -n '1,220p' docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 42ms:
 # Slice Closeout Gate Report — workspace-config-policy-unification / WCU4
 
 Date (UTC): <YYYY-MM-DD>
@@ -266,7 +266,7 @@ Standards:
 - `docs/project_management/standards/SLICE_CLOSEOUT_GATE_STANDARD.md`
 
 Feature directory:
-- `docs/project_management/next/workspace-config-policy-unification/`
+- `docs/project_management/_archived/next/workspace-config-policy-unification/`
 
 Slice spec:
 - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
@@ -296,12 +296,12 @@ exec
 /bin/bash -lc 'git branch -r | rg "workspace_config_policy_unification-wcu4" || true' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 52ms:
 
 exec
-/bin/bash -lc "rg -n '\"id\": \"WCU4-integ\"' -n docs/project_management/next/workspace-config-policy-unification/tasks.json" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 43ms:
+/bin/bash -lc "rg -n '\"id\": \"WCU4-integ\"' -n docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 43ms:
 1432:      "id": "WCU4-integ",
 exec
 /bin/bash -lc "python - <<'PY'
 import json
-p='docs/project_management/next/workspace-config-policy-unification/tasks.json'
+p='docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json'
 with open(p) as f: data=json.load(f)
 for t in data.get('tasks', []):
     if t.get('id')=='WCU4-integ':
@@ -318,22 +318,22 @@ PY" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unificat
  'description': 'Merge platform-fix branches (if any) and finalize WCU4 with a '
                 'clean, auditable cross-platform green state.',
  'references': ['docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md',
-                'docs/project_management/next/workspace-config-policy-unification/decision_register.md '
+                'docs/project_management/_archived/next/workspace-config-policy-unification/decision_register.md '
                 '(DR-0007)',
-                'docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md',
-                'docs/project_management/next/workspace-config-policy-unification/WCU4-spec.md',
-                'docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh',
-                'docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh',
-                'docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1'],
+                'docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md',
+                'docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-spec.md',
+                'docs/project_management/_archived/next/workspace-config-policy-unification/smoke/linux-smoke.sh',
+                'docs/project_management/_archived/next/workspace-config-policy-unification/smoke/macos-smoke.sh',
+                'docs/project_management/_archived/next/workspace-config-policy-unification/smoke/windows-smoke.ps1'],
  'acceptance_criteria': ['Installer/dev env behavior matches ADR-0008 contract',
                          'WCU4-closeout_report.md is completed with evidence'],
  'start_checklist': ['Run: make triad-orch-ensure '
-                     'FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification"',
+                     'FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification"',
                      'Read: kickoff prompt',
 exec
-/bin/bash -lc "sed -n '330,450p' docs/project_management/next/workspace-config-policy-unification/session_log.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 43ms:
+/bin/bash -lc "sed -n '330,450p' docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 43ms:
 - Dispatch:
-  - `make triad-task-start FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" TASK_ID="WCU3-integ"`
+  - `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification" TASK_ID="WCU3-integ"`
 
 ## END — 2026-01-16T04:45:56Z — integration — WCU3-integ
 - Worktree: `/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ`
@@ -359,15 +359,15 @@ thinking
 I'm looking into the behavior of `make triad-task-finish`. I’m considering committing documentation changes and merges. To get a clearer understanding, I’ll open the relevant makefile target or script. I could use a command like `rg "triad-task-finish" Makefile` to search through the file. This will help me locate the relevant information and read through it, ensuring I grasp how everything functions. Let's dive into that!
 exec
 /bin/bash -lc "rg -n \"triad-task-finish\" -S Makefile
-rg -n \"triad-task-finish\" -S scripts tools docs/project_management/next/workspace-config-policy-unification -g'*.sh' -g'*.py' -g'*.mk' | head -n 50" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 58ms:
+rg -n \"triad-task-finish\" -S scripts tools docs/project_management/_archived/next/workspace-config-policy-unification -g'*.sh' -g'*.py' -g'*.mk' | head -n 50" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 58ms:
 358:.PHONY: triad-task-finish
 359:triad-task-finish:
-scripts/planning/new_feature.sh:257:                f"From inside the worktree: make triad-task-finish TASK_ID=\"{task_id}\""
-scripts/planning/new_feature.sh:303:                f"From inside the worktree: make triad-task-finish TASK_ID=\"{task_id}\""
-scripts/planning/new_feature.sh:356:                "From inside the worktree: make triad-task-finish TASK_ID=\"C0-integ-core\""
-scripts/planning/new_feature.sh:463:                f"From inside the worktree: make triad-task-finish TASK_ID=\"{task_id}\""
-scripts/planning/new_feature.sh:519:                "From inside the worktree: make triad-task-finish TASK_ID=\"C0-integ\""
-scripts/planning/new_feature.sh:591:                "From inside the worktree: make triad-task-finish TASK_ID=\"C0-integ\""
+planning/new_feature.sh:257:                f"From inside the worktree: make triad-task-finish TASK_ID=\"{task_id}\""
+planning/new_feature.sh:303:                f"From inside the worktree: make triad-task-finish TASK_ID=\"{task_id}\""
+planning/new_feature.sh:356:                "From inside the worktree: make triad-task-finish TASK_ID=\"C0-integ-core\""
+planning/new_feature.sh:463:                f"From inside the worktree: make triad-task-finish TASK_ID=\"{task_id}\""
+planning/new_feature.sh:519:                "From inside the worktree: make triad-task-finish TASK_ID=\"C0-integ\""
+planning/new_feature.sh:591:                "From inside the worktree: make triad-task-finish TASK_ID=\"C0-integ\""
 scripts/e2e/triad_e2e_phase2.sh:334:run bash -lc "cd \"${core_wt}\" && make triad-task-finish TASK_ID=\"C0-integ-core\""
 scripts/e2e/triad_e2e_phase2.sh:435:        run bash -lc "cd \"${wt_abs}\" && make triad-task-finish TASK_ID=\"${task_id}\""
 scripts/e2e/triad_e2e_phase2.sh:474:run bash -lc "cd \"${final_wt}\" && make triad-task-finish TASK_ID=\"C0-integ\""
@@ -381,7 +381,7 @@ scripts/e2e/triad_e2e_phase1.sh:616:run bash -lc "cd \"${CODE_WORKTREE}\" && mak
 scripts/e2e/triad_e2e_phase1.sh:619:run bash -lc "cd \"${TEST_WORKTREE}\" && make triad-task-finish TASK_ID=\"C0-test\""
 exec
 /bin/bash -lc "sed -n '350,460p' Makefile" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 39ms:
-	cmd="scripts/triad/task_start_integ_final.sh --feature-dir \"$(FEATURE_DIR)\" --slice-id \"$(SLICE_ID)\""; \
+	cmd="triad/task_start_integ_final.sh --feature-dir \"$(FEATURE_DIR)\" --slice-id \"$(SLICE_ID)\""; \
 	if [ "$(LAUNCH_CODEX)" = "1" ]; then cmd="$$cmd --launch-codex"; fi; \
 	if [ -n "$(CODEX_PROFILE)" ]; then cmd="$$cmd --codex-profile \"$(CODEX_PROFILE)\""; fi; \
 	if [ -n "$(CODEX_MODEL)" ]; then cmd="$$cmd --codex-model \"$(CODEX_MODEL)\""; fi; \
@@ -393,7 +393,7 @@ exec
 triad-task-finish:
 	@if [ -z "$(TASK_ID)" ]; then echo "ERROR: set TASK_ID=<task-id>"; exit 2; fi
 	@set -euo pipefail; \
-	cmd="scripts/triad/task_finish.sh --task-id \"$(TASK_ID)\""; \
+	cmd="triad/task_finish.sh --task-id \"$(TASK_ID)\""; \
 	if [ "$(VERIFY_ONLY)" = "1" ]; then cmd="$$cmd --verify-only"; fi; \
 	if [ "$(NO_COMMIT)" = "1" ]; then cmd="$$cmd --no-commit"; fi; \
 	if [ "$(SMOKE)" = "1" ]; then cmd="$$cmd --smoke"; fi; \
@@ -405,16 +405,16 @@ triad-task-finish:
 thinking
 **Inspecting script functionality**
 
-I need to take a closer look at scripts/triad/task_finish.sh to understand its role in handling documentation. It’s essential to read through this script carefully. Additionally, I should check if there are specific discipline-related documents associated with the scripts in the triad folder. Let’s go ahead and open them up to clarify any questions I might have about their functions.
+I need to take a closer look at triad/task_finish.sh to understand its role in handling documentation. It’s essential to read through this script carefully. Additionally, I should check if there are specific discipline-related documents associated with the scripts in the triad folder. Let’s go ahead and open them up to clarify any questions I might have about their functions.
 exec
-/bin/bash -lc "sed -n '1,260p' scripts/triad/task_finish.sh" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 45ms:
+/bin/bash -lc "sed -n '1,260p' triad/task_finish.sh" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 45ms:
 #!/usr/bin/env bash
 set -euo pipefail
 
 usage() {
     cat <<'USAGE'
 Usage:
-  scripts/triad/task_finish.sh --task-id <id> [options]
+  triad/task_finish.sh --task-id <id> [options]
 
 Required:
   --task-id <id>         Task id (must match .taskmeta.json in this worktree)
@@ -429,7 +429,7 @@ Options:
 Stdout contract (machine-parseable):
   TASK_BRANCH=<branch>
 exec
-/bin/bash -lc "sed -n '260,520p' scripts/triad/task_finish.sh" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 37ms:
+/bin/bash -lc "sed -n '260,520p' triad/task_finish.sh" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 37ms:
 
 find_orch_worktree() {
     git worktree list --porcelain | awk -v b="refs/heads/${ORCH_BRANCH}" '
@@ -538,7 +538,7 @@ I want to look at commit `21a7b5f merge: WCU4 code into integ-core` to check wha
 thinking
 **Considering merge conflicts**
 
-I realize that merging could create conflicts with modifications from the core branch. However, I still want to proceed with the merge, even knowing I might need to resolve conflicts. Since the planning docs are located in `docs/project_management/next`, we need to preserve orchestration's version during the merge. It's tricky because modification of these docs isn't recommended in the worktree, and any conflicts I encounter might need resolving. If conflicts arise, I could take our current version while handling the merge, which seems acceptable. It's worth noting that the task_finish guard only checks for uncommitted changes, so this wouldn't violate that.
+I realize that merging could create conflicts with modifications from the core branch. However, I still want to proceed with the merge, even knowing I might need to resolve conflicts. Since the planning docs are located in `docs/project_management/_archived/next`, we need to preserve orchestration's version during the merge. It's tricky because modification of these docs isn't recommended in the worktree, and any conflicts I encounter might need resolving. If conflicts arise, I could take our current version while handling the merge, which seems acceptable. It's worth noting that the task_finish guard only checks for uncommitted changes, so this wouldn't violate that.
 thinking
 **Evaluating planning doc edits**
 
@@ -598,10 +598,10 @@ Date:   Fri Jan 16 09:40:23 2026 -0500
  tests/installers/install_state_smoke.sh  | 20 ++++++++
  3 files changed, 132 insertions(+), 15 deletions(-)
 exec
-/bin/bash -lc "git show 6336ad8:docs/project_management/next/workspace-config-policy-unification/tasks.json >/dev/null 2>&1 && echo '6336ad8 touches tasks.json' || echo '6336ad8 no tasks.json'" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 40ms:
+/bin/bash -lc "git show 6336ad8:docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json >/dev/null 2>&1 && echo '6336ad8 touches tasks.json' || echo '6336ad8 no tasks.json'" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 40ms:
 6336ad8 touches tasks.json
 exec
-/bin/bash -lc 'git log --oneline --decorate -- docs/project_management/next/workspace-config-policy-unification/tasks.json | head -n 20' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 68ms:
+/bin/bash -lc 'git log --oneline --decorate -- docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json | head -n 20' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 68ms:
 9c686ae (HEAD -> workspace_config_policy_unification-wcu4-integ, feat/workspace-config-policy-unification) docs: complete WCU4 integration tasks
 0c0518c docs: finish WCU4 code+test
 cbfa6ad docs: start WCU4 code+test
@@ -658,11 +658,11 @@ There's a task_finish function for non-fast-forward merges that checks out the p
 
 To avoid introducing changes from the core branch into planning docs, I should revert or exclude those changes during the merge. Merging from the core branch should keep planning docs intact. If any changes sneak in, I can revert to the current version of tasks.json before the merge. However, that could be problematic since it counts as editing. I need to inspect the actual diff for verification.
 exec
-/bin/bash -lc 'git diff workspace_config_policy_unification-wcu4-integ..workspace_config_policy_unification-wcu4-integ-core -- docs/project_management/next/workspace-config-policy-unification/tasks.json | head -n 120' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 46ms:
-diff --git a/docs/project_management/next/workspace-config-policy-unification/tasks.json b/docs/project_management/next/workspace-config-policy-unification/tasks.json
+/bin/bash -lc 'git diff workspace_config_policy_unification-wcu4-integ..workspace_config_policy_unification-wcu4-integ-core -- docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json | head -n 120' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 46ms:
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json b/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 index ef09f87..3b85d91 100644
---- a/docs/project_management/next/workspace-config-policy-unification/tasks.json
-+++ b/docs/project_management/next/workspace-config-policy-unification/tasks.json
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 @@ -1235,7 +1235,7 @@
        "name": "WCU4 \u2014 Integration core",
        "type": "integration",
@@ -686,7 +686,7 @@ import subprocess
 import sys
 
 def get_status(commit, task_id):
-    blob = subprocess.check_output(['git','show',f'{commit}:docs/project_management/next/workspace-config-policy-unification/tasks.json'])
+    blob = subprocess.check_output(['git','show',f'{commit}:docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json'])
     data=json.loads(blob)
     for t in data['tasks']:
         if t['id']==task_id:
@@ -964,7 +964,7 @@ usage() {
     cat <<'USAGE'
 Usage:
   scripts/ci/dispatch_feature_smoke.sh \
-    --feature-dir docs/project_management/next/<feature> \
+    --feature-dir docs/project_management/_archived/next/<feature> \
     [--runner-kind github-hosted|self-hosted] \
     --platform behavior|linux|macos|windows|wsl|all \
     [--smoke-slice-id <slice>] \
@@ -1011,7 +1011,7 @@ github.com
   - Token: gho_************************************
   - Token scopes: 'admin:org', 'admin:public_key', 'gist', 'repo'
 exec
-/bin/bash -lc 'make feature-smoke FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" PLATFORM=behavior SMOKE_SLICE_ID="WCU4" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/workspace-config-policy-unification" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 4m 14s:
+/bin/bash -lc 'make feature-smoke FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification" PLATFORM=behavior SMOKE_SLICE_ID="WCU4" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/workspace-config-policy-unification" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 4m 14s:
 make[1]: Entering directory '/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ'
 HEAD: c7fb28bf1ea09e87d23887709321a7a4f7f7d0e1
 Temp branch: tmp/feature-smoke/workspace-config-policy-unification/behavior/20260116T151904Z
@@ -1080,8 +1080,8 @@ thinking
 
 I really need to follow the tasks.json end checklist, which includes setting the status to completed and adding an END entry. I noticed that the earlier orchestration commit 9c686ae indicates “docs: complete WCU4 integration tasks,” but I'm unsure if it includes a START entry for WCU4-integ since it seems that hasn’t started yet. We might have missed how triad-task-start updated the tasks.json status to in_progress. I’ll check the session log for any WCU4-integ entries and dig deeper for more details.
 exec
-/bin/bash -lc 'rg -n "WCU4-integ" docs/project_management/next/workspace-config-policy-unification/session_log.md' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 56ms:
-90:  - `docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU4-integ.md`
+/bin/bash -lc 'rg -n "WCU4-integ" docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 56ms:
+90:  - `docs/project_management/_archived/next/workspace-config-policy-unification/kickoff_prompts/WCU4-integ.md`
 
 
 
@@ -1103,7 +1103,7 @@ git status --porcelain=v1 -b' in /home/spenser/__Active_code/substrate succeeded
 feat/workspace-config-policy-unification
 ## feat/workspace-config-policy-unification...origin/feat/workspace-config-policy-unification [ahead 3]
 exec
-/bin/bash -lc "sed -n '1,220p' docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md" in /home/spenser/__Active_code/substrate succeeded in 44ms:
+/bin/bash -lc "sed -n '1,220p' docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md" in /home/spenser/__Active_code/substrate succeeded in 44ms:
 # Slice Closeout Gate Report — workspace-config-policy-unification / WCU4
 
 Date (UTC): <YYYY-MM-DD>
@@ -1112,7 +1112,7 @@ Standards:
 - `docs/project_management/standards/SLICE_CLOSEOUT_GATE_STANDARD.md`
 
 Feature directory:
-- `docs/project_management/next/workspace-config-policy-unification/`
+- `docs/project_management/_archived/next/workspace-config-policy-unification/`
 
 Slice spec:
 - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
@@ -1127,7 +1127,7 @@ Slice spec:
 exec
 /bin/bash -lc "python - <<'PY'
 import json
-p='docs/project_management/next/workspace-config-policy-unification/tasks.json'
+p='docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json'
 data=json.load(open(p))
 for t in data['tasks']:
     if t['id'] in ('WCU4-integ','WCU4-integ-core','WCU4-integ-linux','WCU4-integ-macos','WCU4-integ-windows'):
@@ -1169,10 +1169,10 @@ thinking
 
 I'm getting ready to include the date (2026-01-16), evidence, smoke run, and behavior delta in the documentation. I’ll link various scripts and URLs in a bullet list format. In the Checks Run section, I'll note that cargo fmt and clippy passed, along with test commands. They want evidence of `make integ-checks`, which I'll mention if it passes. For the cross-platform smoke tests, I’ll cite the successful CI run. Regarding the smoke versus manual parity, I’m unsure. It would be better to verify since WCU4 focuses on installers; so I’ll inspect relevant scripts quickly before marking anything.
 exec
-/bin/bash -lc 'rg -n "SUBSTRATE_OVERRIDE" docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1 || true' in /home/spenser/__Active_code/substrate succeeded in 56ms:
+/bin/bash -lc 'rg -n "SUBSTRATE_OVERRIDE" docs/project_management/_archived/next/workspace-config-policy-unification/smoke/linux-smoke.sh docs/project_management/_archived/next/workspace-config-policy-unification/smoke/macos-smoke.sh docs/project_management/_archived/next/workspace-config-policy-unification/smoke/windows-smoke.ps1 || true' in /home/spenser/__Active_code/substrate succeeded in 56ms:
 
 exec
-/bin/bash -lc "sed -n '1,200p' docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md" in /home/spenser/__Active_code/substrate succeeded in 49ms:
+/bin/bash -lc "sed -n '1,200p' docs/project_management/_archived/next/workspace-config-policy-unification/manual_testing_playbook.md" in /home/spenser/__Active_code/substrate succeeded in 49ms:
 # Manual Testing Playbook — Workspace Config/Policy Unification (ADR-0008)
 
 This playbook validates the operator-facing contract in:
@@ -1182,9 +1182,9 @@ This playbook validates the operator-facing contract in:
 All steps are written to be run in a scratch workspace directory and must not mutate any real project.
 
 Smoke scripts (automated counterpart; must remain in parity with this playbook):
-- Linux: `docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh`
-- macOS: `docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh`
-- Windows: `docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1`
+- Linux: `docs/project_management/_archived/next/workspace-config-policy-unification/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/_archived/next/workspace-config-policy-unification/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/_archived/next/workspace-config-policy-unification/smoke/windows-smoke.ps1`
 
 ## 0) Setup (all platforms)
 
@@ -1194,11 +1194,11 @@ Smoke scripts (automated counterpart; must remain in parity with this playbook):
    - `export SUBSTRATE_HOME=/tmp/substrate-wcu-home`
 2. Enter the scratch workspace directory:
 exec
-/bin/bash -lc "sed -n '1,260p' docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh" in /home/spenser/__Active_code/substrate succeeded in 41ms:
+/bin/bash -lc "sed -n '1,260p' docs/project_management/_archived/next/workspace-config-policy-unification/smoke/linux-smoke.sh" in /home/spenser/__Active_code/substrate succeeded in 41ms:
 #!/usr/bin/env bash
 set -euo pipefail
 
-feature_dir="docs/project_management/next/workspace-config-policy-unification"
+feature_dir="docs/project_management/_archived/next/workspace-config-policy-unification"
 
 slice_id="${SUBSTRATE_SMOKE_SLICE_ID:-}"
 
@@ -1216,7 +1216,7 @@ cd "${workspace}"
 echo "INFO: ${feature_dir} linux smoke (SUBSTRATE_SMOKE_SLICE_ID='${slice_id}')" >&2
 
 exec
-/bin/bash -lc "sed -n '1,260p' docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh" in /home/spenser/__Active_code/substrate succeeded in 37ms:
+/bin/bash -lc "sed -n '1,260p' docs/project_management/_archived/next/workspace-config-policy-unification/smoke/macos-smoke.sh" in /home/spenser/__Active_code/substrate succeeded in 37ms:
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -1240,7 +1240,7 @@ I realized that I didn't verify WCU4-specific items like whether installer scrip
 
 So, the smoke script checkboxes are validated. I need to update the closeout report accordingly and also patch the file in the orchestration worktree using apply_patch.
 file update
-M /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+M /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 @@ -2,3 +2,3 @@
  
 -Date (UTC): <YYYY-MM-DD>
@@ -1288,12 +1288,12 @@ M /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-w
 +- [x] Smoke scripts validate exit codes and key output (not just “command ran”)
 apply_patch(auto_approved=true) exited 0 in 10ms:
 Success. Updated the following files:
-M docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+M docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 file update:
-diff --git a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165a2d3ec0f
---- a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — workspace-config-policy-unification / WCU4
  
@@ -1346,10 +1346,10 @@ index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165
 +- [x] Smoke scripts validate exit codes and key output (not just “command ran”)
 
 file update:
-diff --git a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165a2d3ec0f
---- a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — workspace-config-policy-unification / WCU4
  
@@ -1411,10 +1411,10 @@ exec
 git diff --name-only' in /home/spenser/__Active_code/substrate succeeded in 52ms:
 ## feat/workspace-config-policy-unification...origin/feat/workspace-config-policy-unification [ahead 3]
 file update:
-diff --git a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165a2d3ec0f
---- a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — workspace-config-policy-unification / WCU4
  
@@ -1492,9 +1492,9 @@ To play it safe, I'll use a shell command to write with heredoc. Although editin
 exec
 /bin/bash -lc 'git status --porcelain=v1 -b' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 25ms:
 ## workspace_config_policy_unification-wcu4-integ
- M docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+ M docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 exec
-/bin/bash -lc 'git checkout -- docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 51ms:
+/bin/bash -lc 'git checkout -- docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 51ms:
 
 exec
 /bin/bash -lc 'git status --porcelain=v1 -b' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 46ms:
@@ -1505,7 +1505,7 @@ thinking
 
 I’m feeling good about the clean-up we’ve achieved! We made some modifications to the planning document but decided to revert them, and that’s fine; no harm done. Now, it’s time to apply the patch to the orchestration file. I’ll be using the apply_patch function with the absolute path to ensure everything works smoothly. Let's get this done!
 file update
-M /home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+M /home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 @@ -2,3 +2,3 @@
  
 -Date (UTC): <YYYY-MM-DD>
@@ -1553,12 +1553,12 @@ M /home/spenser/__Active_code/substrate/docs/project_management/next/workspace-c
 +- [x] Smoke scripts validate exit codes and key output (not just “command ran”)
 apply_patch(auto_approved=true) exited 0 in 21ms:
 Success. Updated the following files:
-M /home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+M /home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 file update:
-diff --git a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165a2d3ec0f
---- a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — workspace-config-policy-unification / WCU4
  
@@ -1611,10 +1611,10 @@ index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165
 +- [x] Smoke scripts validate exit codes and key output (not just “command ran”)
 
 file update:
-diff --git a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165a2d3ec0f
---- a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — workspace-config-policy-unification / WCU4
  
@@ -1674,12 +1674,12 @@ I'm running `git status` on the orchestration worktree to see if it lists the mo
 exec
 /bin/bash -lc 'git status --porcelain=v1 -b' in /home/spenser/__Active_code/substrate succeeded in 41ms:
 ## feat/workspace-config-policy-unification...origin/feat/workspace-config-policy-unification [ahead 3]
- M docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+ M docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 file update:
-diff --git a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165a2d3ec0f
---- a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — workspace-config-policy-unification / WCU4
  
@@ -1732,15 +1732,15 @@ index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165
 +- [x] Smoke scripts validate exit codes and key output (not just “command ran”)
 
 exec
-/bin/bash -lc 'git add docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+/bin/bash -lc 'git add docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 git commit -m "docs: close out WCU4"' in /home/spenser/__Active_code/substrate succeeded in 69ms:
 [feat/workspace-config-policy-unification 627b43b] docs: close out WCU4
  1 file changed, 16 insertions(+), 16 deletions(-)
 file update:
-diff --git a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165a2d3ec0f
---- a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — workspace-config-policy-unification / WCU4
  
@@ -1820,10 +1820,10 @@ cargo fmt && cargo clippy --workspace --all-targets -- -D warnings && cargo chec
     Checking substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.32s
 file update:
-diff --git a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165a2d3ec0f
---- a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — workspace-config-policy-unification / WCU4
  
@@ -1894,10 +1894,10 @@ exec
 /bin/bash -lc 'git status --porcelain=v1 -b' in /home/spenser/__Active_code/substrate succeeded in 35ms:
 ## feat/workspace-config-policy-unification...origin/feat/workspace-config-policy-unification [ahead 10]
 exec
-/bin/bash -lc "rg -n '\"id\": \"WCU4-integ\"' -n docs/project_management/next/workspace-config-policy-unification/tasks.json" in /home/spenser/__Active_code/substrate succeeded in 32ms:
+/bin/bash -lc "rg -n '\"id\": \"WCU4-integ\"' -n docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json" in /home/spenser/__Active_code/substrate succeeded in 32ms:
 1432:      "id": "WCU4-integ",
 exec
-/bin/bash -lc "sed -n '1418,1455p' docs/project_management/next/workspace-config-policy-unification/tasks.json" in /home/spenser/__Active_code/substrate succeeded in 44ms:
+/bin/bash -lc "sed -n '1418,1455p' docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json" in /home/spenser/__Active_code/substrate succeeded in 44ms:
       "depends_on": [
         "WCU4-integ-core"
       ],
@@ -1919,14 +1919,14 @@ exec
       "status": "pending",
       "description": "Merge platform-fix branches (if any) and finalize WCU4 with a clean, auditable cross-platform green state.",
 exec
-/bin/bash -lc 'tail -n 80 docs/project_management/next/workspace-config-policy-unification/session_log.md' in /home/spenser/__Active_code/substrate succeeded in 50ms:
+/bin/bash -lc 'tail -n 80 docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md' in /home/spenser/__Active_code/substrate succeeded in 50ms:
 
 ## START — 2026-01-16T04:31:03Z — integration — WCU3-integ
 - Worktree: `wt/workspace_config_policy_unification-wcu3-integ`
 - Branch: `workspace_config_policy_unification-wcu3-integ`
 - Orchestration branch: `feat/workspace-config-policy-unification`
 - Dispatch:
-  - `make triad-task-start FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" TASK_ID="WCU3-integ"`
+  - `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification" TASK_ID="WCU3-integ"`
 
 ## END — 2026-01-16T04:45:56Z — integration — WCU3-integ
 - Worktree: `/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ`
@@ -1941,10 +1941,10 @@ exec
   - Run `21055761993` (`success`) — https://github.com/atomize-hq/substrate/actions/runs/21055761993
 - Finisher summary:
 file update:
-diff --git a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165a2d3ec0f
---- a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — workspace-config-policy-unification / WCU4
  
@@ -2000,10 +2000,10 @@ exec
 /bin/bash -lc 'date -u +%Y-%m-%dT%H:%M:%SZ' in /home/spenser/__Active_code/substrate succeeded in 38ms:
 2026-01-16T15:28:48Z
 file update:
-diff --git a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165a2d3ec0f
---- a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — workspace-config-policy-unification / WCU4
  
@@ -2056,7 +2056,7 @@ index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165
 +- [x] Smoke scripts validate exit codes and key output (not just “command ran”)
 
 file update
-M /home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/tasks.json
+M /home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 @@ -1435,3 +1435,3 @@
        "phase": "WCU4",
 -      "status": "pending",
@@ -2064,12 +2064,12 @@ M /home/spenser/__Active_code/substrate/docs/project_management/next/workspace-c
        "description": "Merge platform-fix branches (if any) and finalize WCU4 with a clean, auditable cross-platform green state.",
 apply_patch(auto_approved=true) exited 0 in 23ms:
 Success. Updated the following files:
-M /home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/tasks.json
+M /home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 file update:
-diff --git a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165a2d3ec0f
---- a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — workspace-config-policy-unification / WCU4
  
@@ -2120,10 +2120,10 @@ index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165
 -- [ ] Smoke scripts validate exit codes and key output (not just “command ran”)
 +- [x] Smoke scripts run the same commands/workflows as the manual testing playbook (minimal viable subset)
 +- [x] Smoke scripts validate exit codes and key output (not just “command ran”)
-diff --git a/docs/project_management/next/workspace-config-policy-unification/tasks.json b/docs/project_management/next/workspace-config-policy-unification/tasks.json
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json b/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 index ef09f875e54f02b78b4125863df9e34af6f236a8..df11056e6669e2775dd6f44ce1b37b6d56629139
---- a/docs/project_management/next/workspace-config-policy-unification/tasks.json
-+++ b/docs/project_management/next/workspace-config-policy-unification/tasks.json
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 @@ -1433,7 +1433,7 @@
        "name": "WCU4 \u2014 Installer/dev env cleanup (integration)",
        "type": "integration",
@@ -2135,10 +2135,10 @@ index ef09f875e54f02b78b4125863df9e34af6f236a8..df11056e6669e2775dd6f44ce1b37b6d
          "docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
 
 file update:
-diff --git a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165a2d3ec0f
---- a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — workspace-config-policy-unification / WCU4
  
@@ -2189,10 +2189,10 @@ index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165
 -- [ ] Smoke scripts validate exit codes and key output (not just “command ran”)
 +- [x] Smoke scripts run the same commands/workflows as the manual testing playbook (minimal viable subset)
 +- [x] Smoke scripts validate exit codes and key output (not just “command ran”)
-diff --git a/docs/project_management/next/workspace-config-policy-unification/tasks.json b/docs/project_management/next/workspace-config-policy-unification/tasks.json
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json b/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 index ef09f875e54f02b78b4125863df9e34af6f236a8..df11056e6669e2775dd6f44ce1b37b6d56629139
---- a/docs/project_management/next/workspace-config-policy-unification/tasks.json
-+++ b/docs/project_management/next/workspace-config-policy-unification/tasks.json
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 @@ -1433,7 +1433,7 @@
        "name": "WCU4 \u2014 Installer/dev env cleanup (integration)",
        "type": "integration",
@@ -2204,7 +2204,7 @@ index ef09f875e54f02b78b4125863df9e34af6f236a8..df11056e6669e2775dd6f44ce1b37b6d
          "docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
 
 exec
-/bin/bash -lc 'tail -n 20 docs/project_management/next/workspace-config-policy-unification/session_log.md' in /home/spenser/__Active_code/substrate succeeded in 42ms:
+/bin/bash -lc 'tail -n 20 docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md' in /home/spenser/__Active_code/substrate succeeded in 42ms:
 - Blockers: `NONE`
 
 ## END — 2026-01-16T14:33:07Z — test — WCU4-test
@@ -2221,15 +2221,15 @@ exec
   - `SMOKE_RUN=`
   - `MERGED_TO_ORCH=`
 - Artifacts:
-  - `CODEX_TEST_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/test/last_message.md`
-  - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/test/events.jsonl`
-  - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/test/stderr.log`
+  - `CODEX_TEST_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/logs/WCU4/test/last_message.md`
+  - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/logs/WCU4/test/events.jsonl`
+  - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/logs/WCU4/test/stderr.log`
 - Blockers: `NONE`
 file update:
-diff --git a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165a2d3ec0f
---- a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — workspace-config-policy-unification / WCU4
  
@@ -2280,10 +2280,10 @@ index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165
 -- [ ] Smoke scripts validate exit codes and key output (not just “command ran”)
 +- [x] Smoke scripts run the same commands/workflows as the manual testing playbook (minimal viable subset)
 +- [x] Smoke scripts validate exit codes and key output (not just “command ran”)
-diff --git a/docs/project_management/next/workspace-config-policy-unification/tasks.json b/docs/project_management/next/workspace-config-policy-unification/tasks.json
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json b/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 index ef09f875e54f02b78b4125863df9e34af6f236a8..df11056e6669e2775dd6f44ce1b37b6d56629139
---- a/docs/project_management/next/workspace-config-policy-unification/tasks.json
-+++ b/docs/project_management/next/workspace-config-policy-unification/tasks.json
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 @@ -1433,7 +1433,7 @@
        "name": "WCU4 \u2014 Installer/dev env cleanup (integration)",
        "type": "integration",
@@ -2300,7 +2300,7 @@ thinking
 
 I'm following the WCU3 guidelines where the finisher summary had the smoke run blank but the smoke section filled in. I’ll be doing something similar. It’s also essential to mention that `MERGED_TO_ORCH=true`. That sounds good! I should include `COMMITS=5` as well. This is shaping up nicely. Now it’s time to apply the patch to append those details.
 file update
-M /home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/session_log.md
+M /home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
 @@ -404 +404,29 @@
  - Blockers: `NONE`
 +
@@ -2309,7 +2309,7 @@ M /home/spenser/__Active_code/substrate/docs/project_management/next/workspace-c
 +- Branch: `workspace_config_policy_unification-wcu4-integ`
 +- Orchestration branch: `feat/workspace-config-policy-unification`
 +- Dispatch:
-+  - `make triad-task-start FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" TASK_ID="WCU4-integ"`
++  - `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification" TASK_ID="WCU4-integ"`
 +
 +## END — 2026-01-16T15:28:48Z — integration — WCU4-integ
 +- Worktree: `/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ`
@@ -2333,12 +2333,12 @@ M /home/spenser/__Active_code/substrate/docs/project_management/next/workspace-c
 +- Blockers: `NONE`
 apply_patch(auto_approved=true) exited 0 in 25ms:
 Success. Updated the following files:
-M /home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/session_log.md
+M /home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
 file update:
-diff --git a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165a2d3ec0f
---- a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — workspace-config-policy-unification / WCU4
  
@@ -2389,13 +2389,13 @@ index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165
 -- [ ] Smoke scripts validate exit codes and key output (not just “command ran”)
 +- [x] Smoke scripts run the same commands/workflows as the manual testing playbook (minimal viable subset)
 +- [x] Smoke scripts validate exit codes and key output (not just “command ran”)
-diff --git a/docs/project_management/next/workspace-config-policy-unification/session_log.md b/docs/project_management/next/workspace-config-policy-unification/session_log.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md b/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
 index 00bcc25abd3e4a24541794218dbfd3ba9a90357d..b3b207de6e6cf68a4dc8a3251c3545e9ffdcc81c
---- a/docs/project_management/next/workspace-config-policy-unification/session_log.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/session_log.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
 @@ -402,3 +402,31 @@
-   - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/test/events.jsonl`
-   - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/test/stderr.log`
+   - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/logs/WCU4/test/events.jsonl`
+   - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/logs/WCU4/test/stderr.log`
  - Blockers: `NONE`
 +
 +## START — 2026-01-16T15:10:32Z — integration — WCU4-integ
@@ -2403,7 +2403,7 @@ index 00bcc25abd3e4a24541794218dbfd3ba9a90357d..b3b207de6e6cf68a4dc8a3251c3545e9
 +- Branch: `workspace_config_policy_unification-wcu4-integ`
 +- Orchestration branch: `feat/workspace-config-policy-unification`
 +- Dispatch:
-+  - `make triad-task-start FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" TASK_ID="WCU4-integ"`
++  - `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification" TASK_ID="WCU4-integ"`
 +
 +## END — 2026-01-16T15:28:48Z — integration — WCU4-integ
 +- Worktree: `/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ`
@@ -2425,10 +2425,10 @@ index 00bcc25abd3e4a24541794218dbfd3ba9a90357d..b3b207de6e6cf68a4dc8a3251c3545e9
 +  - `SMOKE_RUN=`
 +  - `MERGED_TO_ORCH=true`
 +- Blockers: `NONE`
-diff --git a/docs/project_management/next/workspace-config-policy-unification/tasks.json b/docs/project_management/next/workspace-config-policy-unification/tasks.json
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json b/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 index ef09f875e54f02b78b4125863df9e34af6f236a8..df11056e6669e2775dd6f44ce1b37b6d56629139
---- a/docs/project_management/next/workspace-config-policy-unification/tasks.json
-+++ b/docs/project_management/next/workspace-config-policy-unification/tasks.json
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 @@ -1433,7 +1433,7 @@
        "name": "WCU4 \u2014 Installer/dev env cleanup (integration)",
        "type": "integration",
@@ -2440,10 +2440,10 @@ index ef09f875e54f02b78b4125863df9e34af6f236a8..df11056e6669e2775dd6f44ce1b37b6d
          "docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
 
 file update:
-diff --git a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165a2d3ec0f
---- a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — workspace-config-policy-unification / WCU4
  
@@ -2494,13 +2494,13 @@ index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165
 -- [ ] Smoke scripts validate exit codes and key output (not just “command ran”)
 +- [x] Smoke scripts run the same commands/workflows as the manual testing playbook (minimal viable subset)
 +- [x] Smoke scripts validate exit codes and key output (not just “command ran”)
-diff --git a/docs/project_management/next/workspace-config-policy-unification/session_log.md b/docs/project_management/next/workspace-config-policy-unification/session_log.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md b/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
 index 00bcc25abd3e4a24541794218dbfd3ba9a90357d..b3b207de6e6cf68a4dc8a3251c3545e9ffdcc81c
---- a/docs/project_management/next/workspace-config-policy-unification/session_log.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/session_log.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
 @@ -402,3 +402,31 @@
-   - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/test/events.jsonl`
-   - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/test/stderr.log`
+   - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/logs/WCU4/test/events.jsonl`
+   - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/logs/WCU4/test/stderr.log`
  - Blockers: `NONE`
 +
 +## START — 2026-01-16T15:10:32Z — integration — WCU4-integ
@@ -2508,7 +2508,7 @@ index 00bcc25abd3e4a24541794218dbfd3ba9a90357d..b3b207de6e6cf68a4dc8a3251c3545e9
 +- Branch: `workspace_config_policy_unification-wcu4-integ`
 +- Orchestration branch: `feat/workspace-config-policy-unification`
 +- Dispatch:
-+  - `make triad-task-start FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" TASK_ID="WCU4-integ"`
++  - `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification" TASK_ID="WCU4-integ"`
 +
 +## END — 2026-01-16T15:28:48Z — integration — WCU4-integ
 +- Worktree: `/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ`
@@ -2530,10 +2530,10 @@ index 00bcc25abd3e4a24541794218dbfd3ba9a90357d..b3b207de6e6cf68a4dc8a3251c3545e9
 +  - `SMOKE_RUN=`
 +  - `MERGED_TO_ORCH=true`
 +- Blockers: `NONE`
-diff --git a/docs/project_management/next/workspace-config-policy-unification/tasks.json b/docs/project_management/next/workspace-config-policy-unification/tasks.json
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json b/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 index ef09f875e54f02b78b4125863df9e34af6f236a8..df11056e6669e2775dd6f44ce1b37b6d56629139
---- a/docs/project_management/next/workspace-config-policy-unification/tasks.json
-+++ b/docs/project_management/next/workspace-config-policy-unification/tasks.json
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 @@ -1433,7 +1433,7 @@
        "name": "WCU4 \u2014 Installer/dev env cleanup (integration)",
        "type": "integration",
@@ -2552,13 +2552,13 @@ I need to commit the document changes in the worktree for orch, but I have to be
 exec
 /bin/bash -lc 'git status --porcelain=v1 -b' in /home/spenser/__Active_code/substrate succeeded in 34ms:
 ## feat/workspace-config-policy-unification...origin/feat/workspace-config-policy-unification [ahead 10]
- M docs/project_management/next/workspace-config-policy-unification/session_log.md
- M docs/project_management/next/workspace-config-policy-unification/tasks.json
+ M docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
+ M docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 file update:
-diff --git a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165a2d3ec0f
---- a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — workspace-config-policy-unification / WCU4
  
@@ -2609,13 +2609,13 @@ index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165
 -- [ ] Smoke scripts validate exit codes and key output (not just “command ran”)
 +- [x] Smoke scripts run the same commands/workflows as the manual testing playbook (minimal viable subset)
 +- [x] Smoke scripts validate exit codes and key output (not just “command ran”)
-diff --git a/docs/project_management/next/workspace-config-policy-unification/session_log.md b/docs/project_management/next/workspace-config-policy-unification/session_log.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md b/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
 index 00bcc25abd3e4a24541794218dbfd3ba9a90357d..b3b207de6e6cf68a4dc8a3251c3545e9ffdcc81c
---- a/docs/project_management/next/workspace-config-policy-unification/session_log.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/session_log.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
 @@ -402,3 +402,31 @@
-   - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/test/events.jsonl`
-   - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/test/stderr.log`
+   - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/logs/WCU4/test/events.jsonl`
+   - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/logs/WCU4/test/stderr.log`
  - Blockers: `NONE`
 +
 +## START — 2026-01-16T15:10:32Z — integration — WCU4-integ
@@ -2623,7 +2623,7 @@ index 00bcc25abd3e4a24541794218dbfd3ba9a90357d..b3b207de6e6cf68a4dc8a3251c3545e9
 +- Branch: `workspace_config_policy_unification-wcu4-integ`
 +- Orchestration branch: `feat/workspace-config-policy-unification`
 +- Dispatch:
-+  - `make triad-task-start FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" TASK_ID="WCU4-integ"`
++  - `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification" TASK_ID="WCU4-integ"`
 +
 +## END — 2026-01-16T15:28:48Z — integration — WCU4-integ
 +- Worktree: `/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ`
@@ -2645,10 +2645,10 @@ index 00bcc25abd3e4a24541794218dbfd3ba9a90357d..b3b207de6e6cf68a4dc8a3251c3545e9
 +  - `SMOKE_RUN=`
 +  - `MERGED_TO_ORCH=true`
 +- Blockers: `NONE`
-diff --git a/docs/project_management/next/workspace-config-policy-unification/tasks.json b/docs/project_management/next/workspace-config-policy-unification/tasks.json
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json b/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 index ef09f875e54f02b78b4125863df9e34af6f236a8..df11056e6669e2775dd6f44ce1b37b6d56629139
---- a/docs/project_management/next/workspace-config-policy-unification/tasks.json
-+++ b/docs/project_management/next/workspace-config-policy-unification/tasks.json
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 @@ -1433,7 +1433,7 @@
        "name": "WCU4 \u2014 Installer/dev env cleanup (integration)",
        "type": "integration",
@@ -2660,15 +2660,15 @@ index ef09f875e54f02b78b4125863df9e34af6f236a8..df11056e6669e2775dd6f44ce1b37b6d
          "docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
 
 exec
-/bin/bash -lc 'git add docs/project_management/next/workspace-config-policy-unification/session_log.md docs/project_management/next/workspace-config-policy-unification/tasks.json
+/bin/bash -lc 'git add docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 git commit -m "docs: finish WCU4-integ"' in /home/spenser/__Active_code/substrate succeeded in 67ms:
 [feat/workspace-config-policy-unification ab58e8e] docs: finish WCU4-integ
  2 files changed, 29 insertions(+), 1 deletion(-)
 file update:
-diff --git a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165a2d3ec0f
---- a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — workspace-config-policy-unification / WCU4
  
@@ -2719,13 +2719,13 @@ index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165
 -- [ ] Smoke scripts validate exit codes and key output (not just “command ran”)
 +- [x] Smoke scripts run the same commands/workflows as the manual testing playbook (minimal viable subset)
 +- [x] Smoke scripts validate exit codes and key output (not just “command ran”)
-diff --git a/docs/project_management/next/workspace-config-policy-unification/session_log.md b/docs/project_management/next/workspace-config-policy-unification/session_log.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md b/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
 index 00bcc25abd3e4a24541794218dbfd3ba9a90357d..b3b207de6e6cf68a4dc8a3251c3545e9ffdcc81c
---- a/docs/project_management/next/workspace-config-policy-unification/session_log.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/session_log.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
 @@ -402,3 +402,31 @@
-   - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/test/events.jsonl`
-   - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/test/stderr.log`
+   - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/logs/WCU4/test/events.jsonl`
+   - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/logs/WCU4/test/stderr.log`
  - Blockers: `NONE`
 +
 +## START — 2026-01-16T15:10:32Z — integration — WCU4-integ
@@ -2733,7 +2733,7 @@ index 00bcc25abd3e4a24541794218dbfd3ba9a90357d..b3b207de6e6cf68a4dc8a3251c3545e9
 +- Branch: `workspace_config_policy_unification-wcu4-integ`
 +- Orchestration branch: `feat/workspace-config-policy-unification`
 +- Dispatch:
-+  - `make triad-task-start FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" TASK_ID="WCU4-integ"`
++  - `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification" TASK_ID="WCU4-integ"`
 +
 +## END — 2026-01-16T15:28:48Z — integration — WCU4-integ
 +- Worktree: `/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ`
@@ -2755,10 +2755,10 @@ index 00bcc25abd3e4a24541794218dbfd3ba9a90357d..b3b207de6e6cf68a4dc8a3251c3545e9
 +  - `SMOKE_RUN=`
 +  - `MERGED_TO_ORCH=true`
 +- Blockers: `NONE`
-diff --git a/docs/project_management/next/workspace-config-policy-unification/tasks.json b/docs/project_management/next/workspace-config-policy-unification/tasks.json
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json b/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 index ef09f875e54f02b78b4125863df9e34af6f236a8..df11056e6669e2775dd6f44ce1b37b6d56629139
---- a/docs/project_management/next/workspace-config-policy-unification/tasks.json
-+++ b/docs/project_management/next/workspace-config-policy-unification/tasks.json
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 @@ -1433,7 +1433,7 @@
        "name": "WCU4 \u2014 Installer/dev env cleanup (integration)",
        "type": "integration",
@@ -2777,10 +2777,10 @@ Plan update
   ✓ Run feature-smoke and capture evidence
   ✓ Update closeout report and finish
 file update:
-diff --git a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165a2d3ec0f
---- a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — workspace-config-policy-unification / WCU4
  
@@ -2831,13 +2831,13 @@ index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165
 -- [ ] Smoke scripts validate exit codes and key output (not just “command ran”)
 +- [x] Smoke scripts run the same commands/workflows as the manual testing playbook (minimal viable subset)
 +- [x] Smoke scripts validate exit codes and key output (not just “command ran”)
-diff --git a/docs/project_management/next/workspace-config-policy-unification/session_log.md b/docs/project_management/next/workspace-config-policy-unification/session_log.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md b/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
 index 00bcc25abd3e4a24541794218dbfd3ba9a90357d..b3b207de6e6cf68a4dc8a3251c3545e9ffdcc81c
---- a/docs/project_management/next/workspace-config-policy-unification/session_log.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/session_log.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
 @@ -402,3 +402,31 @@
-   - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/test/events.jsonl`
-   - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/test/stderr.log`
+   - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/logs/WCU4/test/events.jsonl`
+   - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/logs/WCU4/test/stderr.log`
  - Blockers: `NONE`
 +
 +## START — 2026-01-16T15:10:32Z — integration — WCU4-integ
@@ -2845,7 +2845,7 @@ index 00bcc25abd3e4a24541794218dbfd3ba9a90357d..b3b207de6e6cf68a4dc8a3251c3545e9
 +- Branch: `workspace_config_policy_unification-wcu4-integ`
 +- Orchestration branch: `feat/workspace-config-policy-unification`
 +- Dispatch:
-+  - `make triad-task-start FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" TASK_ID="WCU4-integ"`
++  - `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification" TASK_ID="WCU4-integ"`
 +
 +## END — 2026-01-16T15:28:48Z — integration — WCU4-integ
 +- Worktree: `/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ`
@@ -2867,10 +2867,10 @@ index 00bcc25abd3e4a24541794218dbfd3ba9a90357d..b3b207de6e6cf68a4dc8a3251c3545e9
 +  - `SMOKE_RUN=`
 +  - `MERGED_TO_ORCH=true`
 +- Blockers: `NONE`
-diff --git a/docs/project_management/next/workspace-config-policy-unification/tasks.json b/docs/project_management/next/workspace-config-policy-unification/tasks.json
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json b/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 index ef09f875e54f02b78b4125863df9e34af6f236a8..df11056e6669e2775dd6f44ce1b37b6d56629139
---- a/docs/project_management/next/workspace-config-policy-unification/tasks.json
-+++ b/docs/project_management/next/workspace-config-policy-unification/tasks.json
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 @@ -1433,7 +1433,7 @@
        "name": "WCU4 \u2014 Installer/dev env cleanup (integration)",
        "type": "integration",
@@ -2885,10 +2885,10 @@ exec
 /bin/bash -lc 'git status --porcelain=v1 -b' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ succeeded in 36ms:
 ## workspace_config_policy_unification-wcu4-integ
 file update:
-diff --git a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165a2d3ec0f
---- a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — workspace-config-policy-unification / WCU4
  
@@ -2939,13 +2939,13 @@ index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165
 -- [ ] Smoke scripts validate exit codes and key output (not just “command ran”)
 +- [x] Smoke scripts run the same commands/workflows as the manual testing playbook (minimal viable subset)
 +- [x] Smoke scripts validate exit codes and key output (not just “command ran”)
-diff --git a/docs/project_management/next/workspace-config-policy-unification/session_log.md b/docs/project_management/next/workspace-config-policy-unification/session_log.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md b/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
 index 00bcc25abd3e4a24541794218dbfd3ba9a90357d..b3b207de6e6cf68a4dc8a3251c3545e9ffdcc81c
---- a/docs/project_management/next/workspace-config-policy-unification/session_log.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/session_log.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
 @@ -402,3 +402,31 @@
-   - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/test/events.jsonl`
-   - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/test/stderr.log`
+   - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/logs/WCU4/test/events.jsonl`
+   - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/logs/WCU4/test/stderr.log`
  - Blockers: `NONE`
 +
 +## START — 2026-01-16T15:10:32Z — integration — WCU4-integ
@@ -2953,7 +2953,7 @@ index 00bcc25abd3e4a24541794218dbfd3ba9a90357d..b3b207de6e6cf68a4dc8a3251c3545e9
 +- Branch: `workspace_config_policy_unification-wcu4-integ`
 +- Orchestration branch: `feat/workspace-config-policy-unification`
 +- Dispatch:
-+  - `make triad-task-start FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" TASK_ID="WCU4-integ"`
++  - `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification" TASK_ID="WCU4-integ"`
 +
 +## END — 2026-01-16T15:28:48Z — integration — WCU4-integ
 +- Worktree: `/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ`
@@ -2975,10 +2975,10 @@ index 00bcc25abd3e4a24541794218dbfd3ba9a90357d..b3b207de6e6cf68a4dc8a3251c3545e9
 +  - `SMOKE_RUN=`
 +  - `MERGED_TO_ORCH=true`
 +- Blockers: `NONE`
-diff --git a/docs/project_management/next/workspace-config-policy-unification/tasks.json b/docs/project_management/next/workspace-config-policy-unification/tasks.json
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json b/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 index ef09f875e54f02b78b4125863df9e34af6f236a8..df11056e6669e2775dd6f44ce1b37b6d56629139
---- a/docs/project_management/next/workspace-config-policy-unification/tasks.json
-+++ b/docs/project_management/next/workspace-config-policy-unification/tasks.json
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 @@ -1433,7 +1433,7 @@
        "name": "WCU4 \u2014 Installer/dev env cleanup (integration)",
        "type": "integration",
@@ -3011,10 +3011,10 @@ tests/installers/install_smoke.sh:708:  if env -i PATH="${HOST_PATH}" bash -lc "
 tests/installers/install_smoke.sh:709:    fatal "Sourcing env.sh must not export SUBSTRATE_OVERRIDE_* (WCU4)"
 tests/installers/install_smoke.sh:711:  log "Verified env.sh does not export SUBSTRATE_OVERRIDE_* (${env_sh})"
 file update:
-diff --git a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165a2d3ec0f
---- a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — workspace-config-policy-unification / WCU4
  
@@ -3065,13 +3065,13 @@ index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165
 -- [ ] Smoke scripts validate exit codes and key output (not just “command ran”)
 +- [x] Smoke scripts run the same commands/workflows as the manual testing playbook (minimal viable subset)
 +- [x] Smoke scripts validate exit codes and key output (not just “command ran”)
-diff --git a/docs/project_management/next/workspace-config-policy-unification/session_log.md b/docs/project_management/next/workspace-config-policy-unification/session_log.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md b/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
 index 00bcc25abd3e4a24541794218dbfd3ba9a90357d..b3b207de6e6cf68a4dc8a3251c3545e9ffdcc81c
---- a/docs/project_management/next/workspace-config-policy-unification/session_log.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/session_log.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
 @@ -402,3 +402,31 @@
-   - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/test/events.jsonl`
-   - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/test/stderr.log`
+   - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/logs/WCU4/test/events.jsonl`
+   - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/logs/WCU4/test/stderr.log`
  - Blockers: `NONE`
 +
 +## START — 2026-01-16T15:10:32Z — integration — WCU4-integ
@@ -3079,7 +3079,7 @@ index 00bcc25abd3e4a24541794218dbfd3ba9a90357d..b3b207de6e6cf68a4dc8a3251c3545e9
 +- Branch: `workspace_config_policy_unification-wcu4-integ`
 +- Orchestration branch: `feat/workspace-config-policy-unification`
 +- Dispatch:
-+  - `make triad-task-start FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" TASK_ID="WCU4-integ"`
++  - `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification" TASK_ID="WCU4-integ"`
 +
 +## END — 2026-01-16T15:28:48Z — integration — WCU4-integ
 +- Worktree: `/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ`
@@ -3101,10 +3101,10 @@ index 00bcc25abd3e4a24541794218dbfd3ba9a90357d..b3b207de6e6cf68a4dc8a3251c3545e9
 +  - `SMOKE_RUN=`
 +  - `MERGED_TO_ORCH=true`
 +- Blockers: `NONE`
-diff --git a/docs/project_management/next/workspace-config-policy-unification/tasks.json b/docs/project_management/next/workspace-config-policy-unification/tasks.json
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json b/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 index ef09f875e54f02b78b4125863df9e34af6f236a8..df11056e6669e2775dd6f44ce1b37b6d56629139
---- a/docs/project_management/next/workspace-config-policy-unification/tasks.json
-+++ b/docs/project_management/next/workspace-config-policy-unification/tasks.json
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 @@ -1433,7 +1433,7 @@
        "name": "WCU4 \u2014 Installer/dev env cleanup (integration)",
        "type": "integration",
@@ -3116,16 +3116,16 @@ index ef09f875e54f02b78b4125863df9e34af6f236a8..df11056e6669e2775dd6f44ce1b37b6d
          "docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
 
 exec
-/bin/bash -lc 'rg -n "START — 2026-01-16T15:10:32Z" docs/project_management/next/workspace-config-policy-unification/session_log.md' in /home/spenser/__Active_code/substrate succeeded in 36ms:
+/bin/bash -lc 'rg -n "START — 2026-01-16T15:10:32Z" docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md' in /home/spenser/__Active_code/substrate succeeded in 36ms:
 406:## START — 2026-01-16T15:10:32Z — integration — WCU4-integ
 exec
-/bin/bash -lc "rg -n '\"id\": \"WCU4-integ\"' docs/project_management/next/workspace-config-policy-unification/tasks.json" in /home/spenser/__Active_code/substrate succeeded in 45ms:
+/bin/bash -lc "rg -n '\"id\": \"WCU4-integ\"' docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json" in /home/spenser/__Active_code/substrate succeeded in 45ms:
 1432:      "id": "WCU4-integ",
 file update:
-diff --git a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165a2d3ec0f
---- a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — workspace-config-policy-unification / WCU4
  
@@ -3176,13 +3176,13 @@ index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165
 -- [ ] Smoke scripts validate exit codes and key output (not just “command ran”)
 +- [x] Smoke scripts run the same commands/workflows as the manual testing playbook (minimal viable subset)
 +- [x] Smoke scripts validate exit codes and key output (not just “command ran”)
-diff --git a/docs/project_management/next/workspace-config-policy-unification/session_log.md b/docs/project_management/next/workspace-config-policy-unification/session_log.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md b/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
 index 00bcc25abd3e4a24541794218dbfd3ba9a90357d..b3b207de6e6cf68a4dc8a3251c3545e9ffdcc81c
---- a/docs/project_management/next/workspace-config-policy-unification/session_log.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/session_log.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
 @@ -402,3 +402,31 @@
-   - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/test/events.jsonl`
-   - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/test/stderr.log`
+   - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/logs/WCU4/test/events.jsonl`
+   - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/logs/WCU4/test/stderr.log`
  - Blockers: `NONE`
 +
 +## START — 2026-01-16T15:10:32Z — integration — WCU4-integ
@@ -3190,7 +3190,7 @@ index 00bcc25abd3e4a24541794218dbfd3ba9a90357d..b3b207de6e6cf68a4dc8a3251c3545e9
 +- Branch: `workspace_config_policy_unification-wcu4-integ`
 +- Orchestration branch: `feat/workspace-config-policy-unification`
 +- Dispatch:
-+  - `make triad-task-start FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" TASK_ID="WCU4-integ"`
++  - `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification" TASK_ID="WCU4-integ"`
 +
 +## END — 2026-01-16T15:28:48Z — integration — WCU4-integ
 +- Worktree: `/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ`
@@ -3212,10 +3212,10 @@ index 00bcc25abd3e4a24541794218dbfd3ba9a90357d..b3b207de6e6cf68a4dc8a3251c3545e9
 +  - `SMOKE_RUN=`
 +  - `MERGED_TO_ORCH=true`
 +- Blockers: `NONE`
-diff --git a/docs/project_management/next/workspace-config-policy-unification/tasks.json b/docs/project_management/next/workspace-config-policy-unification/tasks.json
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json b/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 index ef09f875e54f02b78b4125863df9e34af6f236a8..df11056e6669e2775dd6f44ce1b37b6d56629139
---- a/docs/project_management/next/workspace-config-policy-unification/tasks.json
-+++ b/docs/project_management/next/workspace-config-policy-unification/tasks.json
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 @@ -1433,7 +1433,7 @@
        "name": "WCU4 \u2014 Installer/dev env cleanup (integration)",
        "type": "integration",
@@ -3232,13 +3232,13 @@ thinking
 
 I need to compute the line number for the closeout report, starting with line 1. That's manageable. I also want to reference the session log line for the “END” entry, so I’ll note that. I’ll run a command like `rg -n "END — 2026-01-16T15:28:48Z" ...` to get the exact line number. Let’s go ahead and do that!
 exec
-/bin/bash -lc 'rg -n "END — 2026-01-16T15:28:48Z" docs/project_management/next/workspace-config-policy-unification/session_log.md' in /home/spenser/__Active_code/substrate succeeded in 54ms:
+/bin/bash -lc 'rg -n "END — 2026-01-16T15:28:48Z" docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md' in /home/spenser/__Active_code/substrate succeeded in 54ms:
 413:## END — 2026-01-16T15:28:48Z — integration — WCU4-integ
 file update:
-diff --git a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165a2d3ec0f
---- a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — workspace-config-policy-unification / WCU4
  
@@ -3289,13 +3289,13 @@ index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165
 -- [ ] Smoke scripts validate exit codes and key output (not just “command ran”)
 +- [x] Smoke scripts run the same commands/workflows as the manual testing playbook (minimal viable subset)
 +- [x] Smoke scripts validate exit codes and key output (not just “command ran”)
-diff --git a/docs/project_management/next/workspace-config-policy-unification/session_log.md b/docs/project_management/next/workspace-config-policy-unification/session_log.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md b/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
 index 00bcc25abd3e4a24541794218dbfd3ba9a90357d..b3b207de6e6cf68a4dc8a3251c3545e9ffdcc81c
---- a/docs/project_management/next/workspace-config-policy-unification/session_log.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/session_log.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
 @@ -402,3 +402,31 @@
-   - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/test/events.jsonl`
-   - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/test/stderr.log`
+   - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/logs/WCU4/test/events.jsonl`
+   - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/logs/WCU4/test/stderr.log`
  - Blockers: `NONE`
 +
 +## START — 2026-01-16T15:10:32Z — integration — WCU4-integ
@@ -3303,7 +3303,7 @@ index 00bcc25abd3e4a24541794218dbfd3ba9a90357d..b3b207de6e6cf68a4dc8a3251c3545e9
 +- Branch: `workspace_config_policy_unification-wcu4-integ`
 +- Orchestration branch: `feat/workspace-config-policy-unification`
 +- Dispatch:
-+  - `make triad-task-start FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" TASK_ID="WCU4-integ"`
++  - `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification" TASK_ID="WCU4-integ"`
 +
 +## END — 2026-01-16T15:28:48Z — integration — WCU4-integ
 +- Worktree: `/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ`
@@ -3325,10 +3325,10 @@ index 00bcc25abd3e4a24541794218dbfd3ba9a90357d..b3b207de6e6cf68a4dc8a3251c3545e9
 +  - `SMOKE_RUN=`
 +  - `MERGED_TO_ORCH=true`
 +- Blockers: `NONE`
-diff --git a/docs/project_management/next/workspace-config-policy-unification/tasks.json b/docs/project_management/next/workspace-config-policy-unification/tasks.json
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json b/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 index ef09f875e54f02b78b4125863df9e34af6f236a8..df11056e6669e2775dd6f44ce1b37b6d56629139
---- a/docs/project_management/next/workspace-config-policy-unification/tasks.json
-+++ b/docs/project_management/next/workspace-config-policy-unification/tasks.json
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 @@ -1433,7 +1433,7 @@
        "name": "WCU4 \u2014 Installer/dev env cleanup (integration)",
        "type": "integration",
@@ -3348,14 +3348,14 @@ codex
 - Merged `workspace_config_policy_unification-wcu4-integ-core` into `workspace_config_policy_unification-wcu4-integ` (HEAD `c7fb28bf1ea09e87d23887709321a7a4f7f7d0e1`).
 - Ran checks in the integ worktree: `cargo fmt --all`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p substrate-shell --test installer_env_wcu4 -- --nocapture`, `make integ-checks` (all pass).
 - Dispatched feature smoke (behavior) with `SMOKE_SLICE_ID=WCU4`: run `21071405891` success — https://github.com/atomize-hq/substrate/actions/runs/21071405891
-- Updated closeout + evidence: `docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md:1`, `docs/project_management/next/workspace-config-policy-unification/session_log.md:406`, `docs/project_management/next/workspace-config-policy-unification/tasks.json:1432`.
+- Updated closeout + evidence: `docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md:1`, `docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md:406`, `docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json:1432`.
 - Finished task: `make triad-task-finish TASK_ID="WCU4-integ"` (merged back to orchestration via merge commit).
 - Note: `make integ-checks` initially failed due to disk full; freed space by deleting other worktree `target/` dirs under `wt/*/target`.
 file update:
-diff --git a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165a2d3ec0f
---- a/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — workspace-config-policy-unification / WCU4
  
@@ -3406,13 +3406,13 @@ index 54ff97de16a8988e17d92dba42dc4a0c1996cbcf..ec41aa60523ed9d1d73cdd131a67a165
 -- [ ] Smoke scripts validate exit codes and key output (not just “command ran”)
 +- [x] Smoke scripts run the same commands/workflows as the manual testing playbook (minimal viable subset)
 +- [x] Smoke scripts validate exit codes and key output (not just “command ran”)
-diff --git a/docs/project_management/next/workspace-config-policy-unification/session_log.md b/docs/project_management/next/workspace-config-policy-unification/session_log.md
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md b/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
 index 00bcc25abd3e4a24541794218dbfd3ba9a90357d..b3b207de6e6cf68a4dc8a3251c3545e9ffdcc81c
---- a/docs/project_management/next/workspace-config-policy-unification/session_log.md
-+++ b/docs/project_management/next/workspace-config-policy-unification/session_log.md
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
 @@ -402,3 +402,31 @@
-   - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/test/events.jsonl`
-   - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/test/stderr.log`
+   - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/logs/WCU4/test/events.jsonl`
+   - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/workspace-config-policy-unification/logs/WCU4/test/stderr.log`
  - Blockers: `NONE`
 +
 +## START — 2026-01-16T15:10:32Z — integration — WCU4-integ
@@ -3420,7 +3420,7 @@ index 00bcc25abd3e4a24541794218dbfd3ba9a90357d..b3b207de6e6cf68a4dc8a3251c3545e9
 +- Branch: `workspace_config_policy_unification-wcu4-integ`
 +- Orchestration branch: `feat/workspace-config-policy-unification`
 +- Dispatch:
-+  - `make triad-task-start FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" TASK_ID="WCU4-integ"`
++  - `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification" TASK_ID="WCU4-integ"`
 +
 +## END — 2026-01-16T15:28:48Z — integration — WCU4-integ
 +- Worktree: `/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ`
@@ -3442,10 +3442,10 @@ index 00bcc25abd3e4a24541794218dbfd3ba9a90357d..b3b207de6e6cf68a4dc8a3251c3545e9
 +  - `SMOKE_RUN=`
 +  - `MERGED_TO_ORCH=true`
 +- Blockers: `NONE`
-diff --git a/docs/project_management/next/workspace-config-policy-unification/tasks.json b/docs/project_management/next/workspace-config-policy-unification/tasks.json
+diff --git a/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json b/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 index ef09f875e54f02b78b4125863df9e34af6f236a8..df11056e6669e2775dd6f44ce1b37b6d56629139
---- a/docs/project_management/next/workspace-config-policy-unification/tasks.json
-+++ b/docs/project_management/next/workspace-config-policy-unification/tasks.json
+--- a/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
++++ b/docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 @@ -1433,7 +1433,7 @@
        "name": "WCU4 \u2014 Installer/dev env cleanup (integration)",
        "type": "integration",

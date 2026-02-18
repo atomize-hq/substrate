@@ -33,7 +33,7 @@ ADR_BODY_SHA256: <auto>
   - New: <…>
   - Why: <…>
   - Links:
-    - `docs/project_management/next/<feature>/<file>.md#L123`
+    - `docs/project_management/packs/active/<feature>/<file>.md#L123`
 ```
 
 ## Deep links (strongly recommended)

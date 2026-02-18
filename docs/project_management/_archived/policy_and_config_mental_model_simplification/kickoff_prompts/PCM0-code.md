@@ -2,7 +2,7 @@
 
 ## Scope
 - Production code only; no new tests.
-- Spec: `docs/project_management/next/policy_and_config_mental_model_simplification/PCM0-spec.md`
+- Spec: `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM0-spec.md`
 - Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Start Checklist

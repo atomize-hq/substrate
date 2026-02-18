@@ -7,8 +7,8 @@
 
 ## Scope
 - Feature directories (impacted):
-  - `docs/project_management/next/` (this ADR; cross-cutting contract)
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+  - `docs/project_management/_archived/next/` (this ADR; cross-cutting contract)
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
@@ -162,7 +162,7 @@ Exit codes:
     - normal Substrate execution with explicit explainability and fail-closed behavior on profile invalidity
 
 ## Sequencing / Dependencies
-- Sequencing entry: `docs/project_management/next/sequencing.json` (add a profile workstream before accepting this ADR)
+- Sequencing entry: `docs/project_management/packs/sequencing.json` (add a profile workstream before accepting this ADR)
 - Dependencies:
   - Must remain consistent with ADR-0008 patch file and scope model (no schema conflicts).
   - If profile schema changes require env taxonomy updates, align with ADR-0006 guidance.
@@ -199,5 +199,5 @@ Exit codes:
 ## Decision Summary
 - No decision register is included in this Draft ADR.
 - If this ADR is accepted and remains non-trivial (surface scope rules, workspace-vs-profile priority behavior, and fix tooling), create:
-  - `docs/project_management/next/<feature>/decision_register.md`
+  - `docs/project_management/_archived/next/<feature>/decision_register.md`
   and move A/B selections there (ADR remains the authoritative end-to-end contract).

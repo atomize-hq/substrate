@@ -7,10 +7,10 @@
 
 ## Scope
 - Feature directories (impacted):
-  - `docs/project_management/next/` (this ADR; cross-cutting contract)
+  - `docs/project_management/_archived/next/` (this ADR; cross-cutting contract)
   - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/` (planning pack + decision register)
   - `docs/project_management/_archived/workspace-config-policy-unification/` (ADR-0008 baseline contract this work enforces)
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
@@ -140,7 +140,7 @@ Run `make adr-fix ADR=docs/project_management/adrs/implemented/ADR-0013-policy-p
     - deterministic policy deny/allow decisions and isolation requirements
 
 ## Sequencing / Dependencies
-- Sequencing entry: `docs/project_management/next/sequencing.json` → `workspace_config_policy_unification`
+- Sequencing entry: `docs/project_management/packs/sequencing.json` → `workspace_config_policy_unification`
 - Prerequisite integration task IDs:
   - None; this ADR is a consolidation/remediation to bring broker/runtime behavior into compliance with ADR-0008’s patch-only policy contract.
 

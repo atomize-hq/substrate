@@ -43,5 +43,5 @@
   - Extend the full-isolation Landlock exec wrapper to include derived overlayfs internal write roots in the Landlock write allowlist.
 
 ## Sequencing alignment
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - This feature directory is the authoritative Planning Pack for ADR-0015.

@@ -35,7 +35,7 @@ Document all commands in the END log entry.
 2. Commit test changes (`git commit -am "test: verify bundled manifest"`).
 3. Merge results back to `feat/settings-stack`.
 4. Update `tasks.json` (status → `completed`) and append an END entry to the session log summarizing commands/results.
-5. Author the following kickoff prompts in `docs/project_management/next/settings-stack/kickoff_prompts/` and reference their paths in the log:
+5. Author the following kickoff prompts in `docs/project_management/_archived/next/settings-stack/kickoff_prompts/` and reference their paths in the log:
    - `S0-integ`
    - Updated `S1-code` and `S1-test` prompts (ensure they reflect any new prerequisites from S0)
 6. Commit the doc updates (`git commit -am "docs: finish S0-test + prompts"`).

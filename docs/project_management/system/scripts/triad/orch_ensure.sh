@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
     cat <<'USAGE'
 Usage:
-  scripts/triad/orch_ensure.sh --feature-dir <path> [--from-branch <branch>] [--dry-run]
+  make triad-orch-ensure FEATURE_DIR=<path> [FROM_BRANCH=<branch>] [DRY_RUN=1]
 
 Behavior:
   - Ensures the feature orchestration branch exists locally and is checked out.

@@ -13,7 +13,7 @@ This gate is **execution-time** (not a planning quality gate):
 
 ## Required artifacts
 For features that opt in (`tasks.json` meta: `execution_gates: true`):
-- `docs/project_management/next/<feature>/execution_preflight_report.md`
+- `docs/project_management/packs/active/<feature>/execution_preflight_report.md`
 - Task in `tasks.json`: `F0-exec-preflight` (type `ops`), with its kickoff prompt.
 
 ## What it checks (no ambiguity)

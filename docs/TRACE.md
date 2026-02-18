@@ -6,7 +6,7 @@ The Substrate Trace module (`crates/trace`) provides comprehensive span-based tr
 
 Canonical trace schema/correlation vocabulary (Phase 8 cross-cutting spines for LLM/agents/router/workflows):
 - Source of truth: `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md` (Phase 8 additive correlation vocabulary + required/optional matrix)
-- Phase 8 registry/progress: `docs/project_management/next/PHASE_8_CROSS_CUTTING_DECISION_REGISTRY.md`
+- Phase 8 registry/progress: `docs/project_management/packs/PHASE_8_CROSS_CUTTING_DECISION_REGISTRY.md`
 
 ### Key Features
 

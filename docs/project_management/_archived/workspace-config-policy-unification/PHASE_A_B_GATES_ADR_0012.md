@@ -13,7 +13,7 @@ Authoritative ADRs:
 - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 
 Primary downstream consumer contract:
-- `docs/project_management/next/world_deps_packages_bundles_contract.md`
+- `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
 
 ## Phase A (must complete) — Per-key merge strategies + multi-source provenance
 
@@ -63,7 +63,7 @@ Evidence required:
 ## Phase B extension (must complete) — World-deps enum keys (contract parity)
 
 Source of truth:
-- `docs/project_management/next/world_deps_packages_bundles_contract.md`
+- `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
 
 This Planning Pack MUST also gate schema allowlisting, strict enum validation, config editor set/reset, and deterministic `--explain` provenance for these additional world-deps config keys:
 - `world.deps.inventory_mode` (allowed values exactly: `merged`, `workspace_only`)

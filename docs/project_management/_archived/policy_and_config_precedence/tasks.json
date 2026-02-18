@@ -359,7 +359,7 @@
       "description": "Feature-level cleanup: remove retained task worktrees and optionally prune task branches.",
       "references": [
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
-        "scripts/triad/feature_cleanup.sh"
+        "make triad-feature-cleanup"
       ],
       "acceptance_criteria": [
         "Cleanup completed and summary recorded in session_log.md"

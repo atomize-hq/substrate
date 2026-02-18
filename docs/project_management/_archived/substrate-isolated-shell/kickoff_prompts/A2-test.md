@@ -12,7 +12,7 @@ Summary:
 Focus files / context:
 - `crates/shell/src/manager_init.rs`
 - `crates/shell/src/lib.rs` (helper fns: `configure_manager_init`, `manager_manifest_base_path`, logging helpers)
-- Planning docs: `docs/project_management/next/substrate_isolated_shell_plan.md`, `.../data_map.md`, `.../dependency_graph.md`
+- Planning docs: `docs/project_management/_archived/next/substrate_isolated_shell_plan.md`, `.../data_map.md`, `.../dependency_graph.md`
 
 Commands to run:
 1. `cargo fmt --all`

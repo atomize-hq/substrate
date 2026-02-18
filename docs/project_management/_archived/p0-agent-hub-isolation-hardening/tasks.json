@@ -8,9 +8,9 @@
       "status": "completed",
       "description": "Implement a strict, versioned world_fs policy schema with strong validation and broker outputs required for enforcement.",
       "references": [
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I0-spec.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I0-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md",
         "crates/broker/src/policy.rs",
         "crates/broker/src/profile.rs",
         "crates/broker/src/policy_loader.rs",
@@ -36,7 +36,7 @@
       ],
       "worktree": "wt/ahih-i0-policy-schema-code",
       "integration_task": "I0-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I0-code.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I0-code.md",
       "depends_on": [],
       "concurrent_with": [
         "I0-test"
@@ -50,7 +50,7 @@
       "status": "completed",
       "description": "Add unit/integration tests covering world_fs parsing, validation, and error messaging.",
       "references": [
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I0-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I0-spec.md",
         "crates/broker/src/policy.rs",
         "crates/broker/src/tests.rs",
         "crates/broker/src/profile.rs"
@@ -74,7 +74,7 @@
       ],
       "worktree": "wt/ahih-i0-policy-schema-test",
       "integration_task": "I0-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I0-test.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I0-test.md",
       "depends_on": [],
       "concurrent_with": [
         "I0-code"
@@ -88,12 +88,12 @@
       "status": "completed",
       "description": "Merge I0 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
       "references": [
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I0-spec.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I0-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
         "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md"
       ],
@@ -120,7 +120,7 @@
       ],
       "worktree": "wt/ahih-i0-policy-schema-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I0-integ.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I0-integ.md",
       "depends_on": [
         "I0-code",
         "I0-test"
@@ -136,7 +136,7 @@
       "status": "completed",
       "description": "Implement fail-closed routing when policy requires world enforcement (no host fallback).",
       "references": [
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I1-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I1-spec.md",
         "crates/shell/src/execution/routing/dispatch/exec.rs",
         "crates/shell/src/execution/routing/dispatch/pty.rs",
         "crates/broker/src/policy.rs",
@@ -161,7 +161,7 @@
       ],
       "worktree": "wt/ahih-i1-fail-closed-code",
       "integration_task": "I1-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I1-code.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I1-code.md",
       "depends_on": [
         "I0-integ"
       ],
@@ -177,7 +177,7 @@
       "status": "completed",
       "description": "Add integration tests proving no host fallback occurs when world is required.",
       "references": [
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I1-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I1-spec.md",
         "crates/shell/tests",
         "crates/world-agent",
         "docs/WORLD.md"
@@ -200,7 +200,7 @@
       ],
       "worktree": "wt/ahih-i1-fail-closed-test",
       "integration_task": "I1-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I1-test.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I1-test.md",
       "depends_on": [
         "I0-integ"
       ],
@@ -216,12 +216,12 @@
       "status": "completed",
       "description": "Merge I1 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
       "references": [
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I1-spec.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I1-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
         "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md"
       ],
@@ -248,7 +248,7 @@
       ],
       "worktree": "wt/ahih-i1-fail-closed-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I1-integ.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I1-integ.md",
       "depends_on": [
         "I1-code",
         "I1-test"
@@ -264,7 +264,7 @@
       "status": "completed",
       "description": "Implement full caging for non-PTY execution using mount namespace + pivot_root (Linux).",
       "references": [
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I2-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I2-spec.md",
         "crates/world/src/isolation.rs",
         "crates/world/src/session.rs",
         "crates/world-agent/src/service.rs",
@@ -290,7 +290,7 @@
       ],
       "worktree": "wt/ahih-i2-full-cage-nonpty-code",
       "integration_task": "I2-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I2-code.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I2-code.md",
       "depends_on": [
         "I1-integ"
       ],
@@ -306,7 +306,7 @@
       "status": "completed",
       "description": "Add tests validating non-PTY full cage behavior and fail-closed handling.",
       "references": [
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I2-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I2-spec.md",
         "crates/world/tests",
         "crates/world-agent/tests"
       ],
@@ -329,7 +329,7 @@
       ],
       "worktree": "wt/ahih-i2-full-cage-nonpty-test",
       "integration_task": "I2-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I2-test.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I2-test.md",
       "depends_on": [
         "I1-integ"
       ],
@@ -345,12 +345,12 @@
       "status": "completed",
       "description": "Merge I2 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
       "references": [
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I2-spec.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I2-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
         "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md"
       ],
@@ -377,7 +377,7 @@
       ],
       "worktree": "wt/ahih-i2-full-cage-nonpty-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I2-integ.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I2-integ.md",
       "depends_on": [
         "I2-code",
         "I2-test"
@@ -393,7 +393,7 @@
       "status": "completed",
       "description": "Extend full cage mechanics to PTY execution paths (world-agent stream/REPL).",
       "references": [
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I3-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I3-spec.md",
         "crates/world-agent/src/pty.rs",
         "crates/world/src/isolation.rs",
         "docs/WORLD.md"
@@ -418,7 +418,7 @@
       ],
       "worktree": "wt/ahih-i3-full-cage-pty-code",
       "integration_task": "I3-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I3-code.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I3-code.md",
       "depends_on": [
         "I2-integ"
       ],
@@ -434,7 +434,7 @@
       "status": "completed",
       "description": "Add PTY-path tests validating full cage parity and read-only behavior.",
       "references": [
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I3-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I3-spec.md",
         "crates/world-agent/tests",
         "crates/world-agent/src/pty.rs"
       ],
@@ -457,7 +457,7 @@
       ],
       "worktree": "wt/ahih-i3-full-cage-pty-test",
       "integration_task": "I3-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I3-test.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I3-test.md",
       "depends_on": [
         "I2-integ"
       ],
@@ -473,12 +473,12 @@
       "status": "completed",
       "description": "Merge I3 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
       "references": [
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I3-spec.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I3-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
         "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md"
       ],
@@ -505,7 +505,7 @@
       ],
       "worktree": "wt/ahih-i3-full-cage-pty-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I3-integ.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I3-integ.md",
       "depends_on": [
         "I3-code",
         "I3-test"
@@ -521,7 +521,7 @@
       "status": "completed",
       "description": "Add Landlock-based allowlist enforcement when available; surface detection in doctor output.",
       "references": [
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I4-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I4-spec.md",
         "crates/world/src",
         "docs/WORLD.md"
       ],
@@ -544,7 +544,7 @@
       ],
       "worktree": "wt/ahih-i4-landlock-code",
       "integration_task": "I4-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I4-code.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I4-code.md",
       "depends_on": [
         "I3-integ"
       ],
@@ -560,7 +560,7 @@
       "status": "pending",
       "description": "Add tests for Landlock detection and enforcement behavior (with skips where unsupported).",
       "references": [
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I4-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I4-spec.md",
         "crates/world/tests"
       ],
       "acceptance_criteria": [
@@ -582,7 +582,7 @@
       ],
       "worktree": "wt/ahih-i4-landlock-test",
       "integration_task": "I4-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I4-test.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I4-test.md",
       "depends_on": [
         "I3-integ"
       ],
@@ -598,12 +598,12 @@
       "status": "completed",
       "description": "Merge I4 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
       "references": [
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I4-spec.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I4-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
         "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md"
       ],
@@ -630,7 +630,7 @@
       ],
       "worktree": "wt/ahih-i4-landlock-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I4-integ.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I4-integ.md",
       "depends_on": [
         "I4-code",
         "I4-test"
@@ -646,7 +646,7 @@
       "status": "completed",
       "description": "Update docs to match real isolation guarantees and add verification tooling/checklists.",
       "references": [
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I5-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I5-spec.md",
         "docs/WORLD.md",
         "docs/VISION.md",
         "docs/CONFIGURATION.md",
@@ -673,7 +673,7 @@
       ],
       "worktree": "wt/ahih-i5-docs-verify-code",
       "integration_task": "I5-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I5-code.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I5-code.md",
       "depends_on": [
         "I4-integ"
       ],
@@ -689,7 +689,7 @@
       "status": "completed",
       "description": "Add minimal automated coverage for the docs/tooling changes (schema fields present; scripts linted).",
       "references": [
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I5-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I5-spec.md",
         "docs/WORLD.md",
         "crates/shell/tests",
         "scripts/linux"
@@ -713,7 +713,7 @@
       ],
       "worktree": "wt/ahih-i5-docs-verify-test",
       "integration_task": "I5-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I5-test.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I5-test.md",
       "depends_on": [
         "I4-integ"
       ],
@@ -729,12 +729,12 @@
       "status": "completed",
       "description": "Merge I5 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
       "references": [
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I5-spec.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I5-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
         "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md"
       ],
@@ -761,7 +761,7 @@
       ],
       "worktree": "wt/ahih-i5-docs-verify-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I5-integ.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I5-integ.md",
       "depends_on": [
         "I5-code",
         "I5-test"
@@ -776,7 +776,7 @@
       "status": "completed",
       "description": "Add an install-available CLI subcommand that performs end-to-end isolation enforcement verification.",
       "references": [
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I6-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I6-spec.md",
         "docs/WORLD.md",
         "docs/CONFIGURATION.md",
         "scripts/linux/agent-hub-isolation-verify.sh",
@@ -806,7 +806,7 @@
       ],
       "worktree": "wt/ahih-i6-world-verify-code",
       "integration_task": "I6-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I6-code.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I6-code.md",
       "depends_on": [
         "I5-integ"
       ],
@@ -822,7 +822,7 @@
       "status": "completed",
       "description": "Add fixture-based tests covering CLI wiring, skip behavior, and JSON output for `substrate world verify`.",
       "references": [
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I6-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I6-spec.md",
         "crates/shell/tests",
         "crates/shell/src/execution/cli.rs"
       ],
@@ -845,7 +845,7 @@
       ],
       "worktree": "wt/ahih-i6-world-verify-test",
       "integration_task": "I6-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I6-test.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I6-test.md",
       "depends_on": [
         "I5-integ"
       ],
@@ -861,12 +861,12 @@
       "status": "completed",
       "description": "Merge I6 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
       "references": [
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I6-spec.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I6-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -892,7 +892,7 @@
       ],
       "worktree": "wt/ahih-i6-world-verify-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I6-integ.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I6-integ.md",
       "depends_on": [
         "I6-code",
         "I6-test"
@@ -907,17 +907,17 @@
       "status": "completed",
       "description": "Update manual_testing_playbook.md to match I0–I5 specs and the strict world_fs policy schema (including required id/name).",
       "references": [
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I0-spec.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I1-spec.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I2-spec.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I3-spec.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I4-spec.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I5-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I0-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I1-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I2-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I3-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I4-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I5-spec.md",
         "docs/CONFIGURATION.md",
         "docs/WORLD.md",
         "docs/project_management/standards/EXIT_CODE_TAXONOMY.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts"
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts"
       ],
       "acceptance_criteria": [
         "manual_testing_playbook.md `.substrate-profile` examples include required top-level `id` and `name`.",
@@ -937,7 +937,7 @@
       ],
       "worktree": "wt/ahih-i7-playbook-align-code",
       "integration_task": "I7-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I7-code.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I7-code.md",
       "depends_on": [
         "I5-integ"
       ],
@@ -953,8 +953,8 @@
       "status": "completed",
       "description": "Add lightweight automated coverage that prevents obvious manual_testing_playbook.md drift (e.g., missing id/name in policy examples).",
       "references": [
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I7-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I7-spec.md",
         "crates/shell/tests"
       ],
       "acceptance_criteria": [
@@ -976,7 +976,7 @@
       ],
       "worktree": "wt/ahih-i7-playbook-align-test",
       "integration_task": "I7-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I7-test.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I7-test.md",
       "depends_on": [
         "I5-integ"
       ],
@@ -992,12 +992,12 @@
       "status": "completed",
       "description": "Merge I7 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
       "references": [
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I7-spec.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I7-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -1023,7 +1023,7 @@
       ],
       "worktree": "wt/ahih-i7-playbook-align-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I7-integ.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I7-integ.md",
       "depends_on": [
         "I7-code",
         "I7-test"
@@ -1038,8 +1038,8 @@
       "status": "completed",
       "description": "Reduce world routing output noise to match I1-spec: single warning on allowed fallback; single error when required.",
       "references": [
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I1-spec.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I8-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I1-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I8-spec.md",
         "crates/shell/src/execution/routing/dispatch/exec.rs",
         "crates/shell/src/execution/routing/dispatch/world_ops.rs",
         "crates/shell/src/execution/invocation/runtime.rs"
@@ -1064,7 +1064,7 @@
       ],
       "worktree": "wt/ahih-i8-i1-noise-code",
       "integration_task": "I8-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I8-code.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I8-code.md",
       "depends_on": [
         "I5-integ"
       ],
@@ -1080,8 +1080,8 @@
       "status": "completed",
       "description": "Add tests asserting single warning/error emission for I1 required-world vs fallback-allowed behavior.",
       "references": [
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I1-spec.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I8-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I1-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I8-spec.md",
         "crates/shell/tests"
       ],
       "acceptance_criteria": [
@@ -1103,7 +1103,7 @@
       ],
       "worktree": "wt/ahih-i8-i1-noise-test",
       "integration_task": "I8-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I8-test.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I8-test.md",
       "depends_on": [
         "I5-integ"
       ],
@@ -1119,12 +1119,12 @@
       "status": "completed",
       "description": "Merge I8 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
       "references": [
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I8-spec.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I8-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -1150,7 +1150,7 @@
       ],
       "worktree": "wt/ahih-i8-i1-noise-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I8-integ.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I8-integ.md",
       "depends_on": [
         "I8-code",
         "I8-test"
@@ -1165,10 +1165,10 @@
       "status": "completed",
       "description": "Fix full cage execution when the host project/cwd is under /tmp and align world verify full-cage behavior with the isolation model.",
       "references": [
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I2-spec.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I6-spec.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I9-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I2-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I6-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I9-spec.md",
         "crates/world/src/exec.rs",
         "crates/shell/src/builtins/world_verify.rs"
       ],
@@ -1192,7 +1192,7 @@
       ],
       "worktree": "wt/ahih-i9-full-cage-verify-code",
       "integration_task": "I9-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I9-code.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I9-code.md",
       "depends_on": [
         "I8-integ"
       ],
@@ -1208,9 +1208,9 @@
       "status": "completed",
       "description": "Add regression and coverage tests for full cage execution robustness, including /tmp-rooted projects and allowlist behavior.",
       "references": [
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I2-spec.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I6-spec.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I9-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I2-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I6-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I9-spec.md",
         "crates/world-agent/tests",
         "crates/shell/tests"
       ],
@@ -1234,7 +1234,7 @@
       ],
       "worktree": "wt/ahih-i9-full-cage-verify-test",
       "integration_task": "I9-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I9-test.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I9-test.md",
       "depends_on": [
         "I8-integ"
       ],
@@ -1250,12 +1250,12 @@
       "status": "completed",
       "description": "Merge I9 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
       "references": [
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/I9-spec.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I9-spec.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
+        "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -1282,7 +1282,7 @@
       ],
       "worktree": "wt/ahih-i9-full-cage-verify-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I9-integ.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I9-integ.md",
       "depends_on": [
         "I9-code",
         "I9-test"

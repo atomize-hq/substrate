@@ -26,7 +26,7 @@ Rule:
 
 Commands run during preflight (record exit codes):
 - `FEATURE_DIR="docs/project_management/_archived/world-first-repl-persistent-pty"; jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` → exit `0`
-- `jq -e . docs/project_management/next/sequencing.json >/dev/null` → exit `0`
+- `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → exit `0`
 - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → exit `0`
 
 Notes:

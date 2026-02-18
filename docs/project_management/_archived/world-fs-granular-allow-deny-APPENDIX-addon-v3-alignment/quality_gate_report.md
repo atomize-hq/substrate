@@ -15,7 +15,7 @@ NOTE: This Planning Pack includes a prior self-review and a third-party reviewer
 
 ### Required preflight (minimum)
 - `jq -e . "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/tasks.json" >/dev/null` → `0` → `PASS`
-- `jq -e . "docs/project_management/next/sequencing.json" >/dev/null` → `0` → `PASS`
+- `jq -e . "docs/project_management/packs/sequencing.json" >/dev/null` → `0` → `PASS`
 - `make planning-validate FEATURE_DIR="docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment"` → `0` → `PASS`
 - `make planning-lint FEATURE_DIR="docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment"` → `0` → `PASS`
 
@@ -43,7 +43,7 @@ Smoke script syntax checks (required for cross-platform packs):
 - `impact_map.md` (required): `YES`
 - `manual_testing_playbook.md` (required): `YES`
 - Feature smoke scripts under `smoke/` (required): `YES` (`smoke/linux-smoke.sh`, `smoke/macos-smoke.sh`, `smoke/_core.sh`)
-- `docs/project_management/next/sequencing.json`: `YES`
+- `docs/project_management/packs/sequencing.json`: `YES`
 - Standards:
   - `docs/project_management/standards/PLANNING_README.md`: `YES`
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
@@ -75,7 +75,7 @@ Smoke script syntax checks (required for cross-platform packs):
 ### 4) Sequencing and dependency alignment
 - Result: `PASS`
 - Evidence:
-  - `docs/project_management/next/sequencing.json` supports triad ordering (feature-local deps are linear and do not require new global sequencing entries).
+  - `docs/project_management/packs/sequencing.json` supports triad ordering (feature-local deps are linear and do not require new global sequencing entries).
   - Checkpoint boundary wiring: `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/ci_checkpoint_plan.md` ↔ `tasks.json` `meta.checkpoint_boundaries`.
 
 ### 5) Testability and validation readiness

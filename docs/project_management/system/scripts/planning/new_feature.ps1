@@ -16,12 +16,13 @@ $ErrorActionPreference = "Stop"
 $repoRoot = (& git -C $PSScriptRoot rev-parse --show-toplevel).Trim()
 if (-not $repoRoot) { throw "ERROR: failed to locate repo root via git" }
 Set-Location $repoRoot
-$pmRootsJson = (& python3 scripts/planning/pm_paths.py print-roots) | Out-String
+$pmRootsJson = (& python3 (Join-Path $PSScriptRoot "pm_paths.py") print-roots) | Out-String
 $pmRoots = $pmRootsJson | ConvertFrom-Json
 if (-not $pmRoots.pm_packs_root) { throw "ERROR: pm_paths.py print-roots returned empty pm_packs_root" }
 
 $featureDir = "$($pmRoots.pm_packs_root)/active/$Feature"
-$templatesDir = "docs/project_management/standards/templates"
+$planningTemplatesDir = "docs/project_management/system/templates/planning_pack"
+$kickoffTemplatesDir = "docs/project_management/system/templates/kickoff"
 
 if (Test-Path -LiteralPath $featureDir) {
     throw "Refusing to overwrite existing directory: $featureDir"
@@ -106,22 +107,22 @@ $vars = @{
 
 New-Item -ItemType Directory -Force -Path (Join-Path $featureDir "kickoff_prompts") | Out-Null
 
-Render-Template (Join-Path $templatesDir "plan.md.tmpl") (Join-Path $featureDir "plan.md") $vars
-Render-Template (Join-Path $templatesDir "session_log.md.tmpl") (Join-Path $featureDir "session_log.md") $vars
-Render-Template (Join-Path $templatesDir "contract.md.tmpl") (Join-Path $featureDir "contract.md") $vars
-Render-Template (Join-Path $templatesDir "spec_manifest.md.tmpl") (Join-Path $featureDir "spec_manifest.md") $vars
-Render-Template (Join-Path $templatesDir "impact_map.md.tmpl") (Join-Path $featureDir "impact_map.md") $vars
+Render-Template (Join-Path $planningTemplatesDir "plan.md.tmpl") (Join-Path $featureDir "plan.md") $vars
+Render-Template (Join-Path $planningTemplatesDir "session_log.md.tmpl") (Join-Path $featureDir "session_log.md") $vars
+Render-Template (Join-Path $planningTemplatesDir "contract.md.tmpl") (Join-Path $featureDir "contract.md") $vars
+Render-Template (Join-Path $planningTemplatesDir "spec_manifest.md.tmpl") (Join-Path $featureDir "spec_manifest.md") $vars
+Render-Template (Join-Path $planningTemplatesDir "impact_map.md.tmpl") (Join-Path $featureDir "impact_map.md") $vars
 if ($CrossPlatform.IsPresent -and $Automation.IsPresent) {
-    Render-Template (Join-Path $templatesDir "ci_checkpoint_plan.md.tmpl") (Join-Path $featureDir "ci_checkpoint_plan.md") $vars
+    Render-Template (Join-Path $planningTemplatesDir "ci_checkpoint_plan.md.tmpl") (Join-Path $featureDir "ci_checkpoint_plan.md") $vars
 }
 
 $varsCp1 = $vars.Clone()
 $varsCp1["TASK_ID"] = "CP1-ci-checkpoint"
 if ($CrossPlatform.IsPresent -and $Automation.IsPresent) {
-    Render-Template (Join-Path $templatesDir "kickoff_ci_checkpoint.md.tmpl") (Join-Path $featureDir "kickoff_prompts/CP1-ci-checkpoint.md") $varsCp1
+    Render-Template (Join-Path $kickoffTemplatesDir "kickoff_ci_checkpoint.md.tmpl") (Join-Path $featureDir "kickoff_prompts/CP1-ci-checkpoint.md") $varsCp1
 }
 
-Render-Template (Join-Path $templatesDir "slice_spec.v2.md.tmpl") (Join-Path $featureDir $script:SliceSpecFile) $vars
+Render-Template (Join-Path $planningTemplatesDir "slice_spec.v2.md.tmpl") (Join-Path $featureDir $script:SliceSpecFile) $vars
 
 function New-TaskBase([string]$Id, [string]$Name, [string]$Type, [string]$Description) {
     $refs = @("$featureDir/plan.md", "$featureDir/spec_manifest.md", "$featureDir/impact_map.md", "$featureDir/$($script:SliceSpecFile)")
@@ -514,12 +515,12 @@ if ($Automation.IsPresent) {
         type = "ops"
         phase = "FZ"
         status = "pending"
-        description = "At feature end, remove retained worktrees and optionally prune task branches via scripts/triad/feature_cleanup.sh."
+        description = "At feature end, remove retained worktrees and optionally prune task branches via make triad-feature-cleanup."
         references = @(
             "$featureDir/plan.md",
             "$featureDir/tasks.json",
             "$featureDir/session_log.md",
-            "scripts/triad/feature_cleanup.sh"
+            "make triad-feature-cleanup"
         )
         acceptance_criteria = @("Cleanup completed and summary recorded in session_log.md")
         start_checklist = @(
@@ -544,12 +545,12 @@ $data = @{ meta = $meta; tasks = $tasks }
 $data | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath (Join-Path $featureDir "tasks.json") -NoNewline
 
 $varsExec = $vars.Clone()
-Render-Template (Join-Path $templatesDir "execution_preflight_report.md.tmpl") (Join-Path $featureDir "execution_preflight_report.md") $varsExec
+Render-Template (Join-Path $planningTemplatesDir "execution_preflight_report.md.tmpl") (Join-Path $featureDir "execution_preflight_report.md") $varsExec
 
 $varsCloseout = $vars.Clone()
 $varsCloseout["SLICE_ID"] = $script:SliceId
 $varsCloseout["SPEC_FILE"] = $script:SliceSpecFile
-Render-Template (Join-Path $templatesDir "slice_closeout_report.md.tmpl") (Join-Path $featureDir $script:SliceCloseoutFile) $varsCloseout
+Render-Template (Join-Path $planningTemplatesDir "slice_closeout_report.md.tmpl") (Join-Path $featureDir $script:SliceCloseoutFile) $varsCloseout
 
 <# Legacy tasks.json generator removed (kept for history). #>
 
@@ -560,7 +561,7 @@ function Render-Kickoff([string]$Template, [string]$OutFile, [string]$TaskId, [s
     $vars2["BRANCH"] = $Branch
     $vars2["WORKTREE"] = $Worktree
     $vars2["PLATFORM"] = $Platform
-    Render-Template (Join-Path $templatesDir $Template) (Join-Path $featureDir "kickoff_prompts/$OutFile") $vars2
+    Render-Template (Join-Path $kickoffTemplatesDir $Template) (Join-Path $featureDir "kickoff_prompts/$OutFile") $vars2
 }
 
 $sliceCodeBranch = if ($Automation.IsPresent) { "$Feature-$($script:SliceIdLower)-code" } else { "$($script:SliceIdLower)-code" }

@@ -18,7 +18,7 @@ export FEATURE_DIR="docs/project_management/packs/active/world_process_exec_trac
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
 # exit=0
 
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 # exit=0
 
 # tasks.json required-field audit
@@ -62,7 +62,7 @@ make planning-lint FEATURE_DIR="$FEATURE_DIR"
 ```bash
 # Sequencing spine entry exists for the feature
 jq -r '.sprints[] | select(.id=="world_process_exec_tracing_parity") | {order,id,title,directory,branch,status,sequence}' \
-  docs/project_management/next/sequencing.json
+  docs/project_management/packs/sequencing.json
 # exit=0
 
 # tasks.json meta (schema/cross-platform/checkpoints)
@@ -84,7 +84,7 @@ Mark `YES` only if read end-to-end.
 - `impact_map.md`: `YES`
 - `manual_testing_playbook.md`: `YES`
 - Feature smoke scripts under `smoke/`: `YES`
-- `docs/project_management/next/sequencing.json`: `YES`
+- `docs/project_management/packs/sequencing.json`: `YES`
 - Standards:
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
@@ -122,7 +122,7 @@ Mark `YES` only if read end-to-end.
 ### 4) Sequencing and dependency alignment
 - Result: `PASS`
 - Evidence:
-  - `docs/project_management/next/sequencing.json` sprint `world_process_exec_tracing_parity` includes `WPEP0..WPEP3`
+  - `docs/project_management/packs/sequencing.json` sprint `world_process_exec_tracing_parity` includes `WPEP0..WPEP3`
   - `docs/project_management/packs/active/world_process_exec_tracing_parity/tasks.json` deps enforce WPEP0 → CP1 → WPEP1 → WPEP2 → WPEP3 → CP2
 - Notes: First slice of the next checkpoint group depends on the prior checkpoint task (CP1), preventing checkpoint bypass.
 
@@ -227,7 +227,7 @@ make adr-fix ADR=docs/project_management/adrs/draft/ADR-0028-in-world-process-ex
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
 # exit=0
 
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 # exit=0
 
 # tasks.json required-field audit
@@ -290,7 +290,7 @@ make planning-lint FEATURE_DIR="$FEATURE_DIR"
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
 # exit=0
 
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 # exit=0
 
 # tasks.json required-field audit
@@ -346,7 +346,7 @@ rg -n "## 3\\) World process event family" "$FEATURE_DIR/SCHEMA.md"
 - All specs in the track: `YES` (`WPEP0`..`WPEP3`)
 - `manual_testing_playbook.md`: `YES`
 - All feature specs/contract docs in the manifest (`PROTOCOL.md`, `SCHEMA.md`, `SECURITY.md`, `contract.md`): `YES`
-- `docs/project_management/next/sequencing.json`: `YES`
+- `docs/project_management/packs/sequencing.json`: `YES`
 - Standards (all listed in `docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md`): `YES`
 
 ## Gate Results (PASS/FAIL with evidence)
@@ -371,7 +371,7 @@ rg -n "## 3\\) World process event family" "$FEATURE_DIR/SCHEMA.md"
 ### 4) Sequencing and dependency alignment
 - Result: `PASS`
 - Evidence:
-  - `docs/project_management/next/sequencing.json` sprint `world_process_exec_tracing_parity` sequences `WPEP0..WPEP3`
+  - `docs/project_management/packs/sequencing.json` sprint `world_process_exec_tracing_parity` sequences `WPEP0..WPEP3`
   - `docs/project_management/packs/active/world_process_exec_tracing_parity/tasks.json` enforces `WPEP1-*` depends on `CP1-ci-checkpoint`, and `WPEP2-*` depends on `WPEP1-integ`, and `WPEP3-*` depends on `WPEP2-integ`
 - Notes: No slice starts before its prerequisites integrate.
 
@@ -460,7 +460,7 @@ export FEATURE_DIR="docs/project_management/packs/active/world_process_exec_trac
 # JSON validity
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
 # exit 0
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 # exit 0
 
 # tasks.json required-field audit

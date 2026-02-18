@@ -10,13 +10,13 @@ Summary:
 Focus files / context:
 - `crates/shim/src/exec.rs`, `crates/shim/src/context.rs`, `crates/shim/src/logger.rs` (or whichever modules handle process exec + logging)
 - Shared manifest types in `crates/common/src/manager_manifest.rs`
-- Docs in `docs/project_management/next/substrate_isolated_shell_plan.md`, `.../substrate_isolated_shell_data_map.md`
+- Docs in `docs/project_management/_archived/next/substrate_isolated_shell_plan.md`, `.../substrate_isolated_shell_data_map.md`
 
 Commands to run:
 1. `cargo fmt --all`
 2. `cargo check -p substrate-shim`
 
 Reminders:
-- Start at `AI_AGENT_START_HERE.md`, update `docs/project_management/next/tasks.json` + `session_log.md` on `feat/isolated-shell-plan`, and record START/END entries.
+- Start at `AI_AGENT_START_HERE.md`, update `docs/project_management/_archived/next/tasks.json` + `session_log.md` on `feat/isolated-shell-plan`, and record START/END entries.
 - Work inside `wt/b1-shim-code`; keep coordination artifacts untouched in that worktree.
 - Before finishing, craft the Test Agent Kickoff Prompt for `B1-test` so the next agent can validate shim hinting/skip behavior.

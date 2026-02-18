@@ -99,7 +99,7 @@ ADR-0028’s Phase 8 additive correlation vocabulary extends beyond `world_proce
 
 Authoritative sources:
 - ADR-0028 Phase 8 additive correlation vocabulary + matrix: `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
-- Router derived-event taxonomy + required fields: `docs/project_management/next/host_event_bus_router_daemon/decision_register.md` (DR-0016)
+- Router derived-event taxonomy + required fields: `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md`
 
 ### Event types (v1; additive-only list)
 Router-derived events appended to canonical `trace.jsonl` MUST use explicit `event_type` values such as:

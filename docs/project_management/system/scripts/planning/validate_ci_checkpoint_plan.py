@@ -260,7 +260,7 @@ def _validate_against_tasks(feature_dir: Path, tasks_data: dict[str, Any], defau
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Validate ci_checkpoint_plan.md against tasks.json.")
-    ap.add_argument("--feature-dir", required=True, help="docs/project_management/next/<feature>")
+    ap.add_argument("--feature-dir", required=True, help="docs/project_management/packs/<bucket>/<feature>")
     ap.add_argument(
         "--ci-checkpoint-plan",
         default="ci_checkpoint_plan.md",

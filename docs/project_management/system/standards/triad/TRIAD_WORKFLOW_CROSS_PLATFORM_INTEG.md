@@ -19,7 +19,7 @@ Operational notes (important for correct orchestration):
   - In checkpointed packs, dispatch these gates from the orchestration checkout (repo root) at the planned checkpoint task (`CPk-ci-checkpoint`), not from each `X-integ-core` worktree.
 - Platform-fix tasks should begin by merging the `X-integ-core` task branch into their own branch before running smoke or making fixes.
 - Before any CI dispatch, run a **local behavioral smoke preflight** (fast fail) on the current platform when possible:
-  - Build `substrate` in the integration worktree, add `target/debug` to `PATH`, and run the matching feature-local smoke script from `docs/project_management/packs/active/<feature>/smoke/` (legacy during migration: `docs/project_management/next/<feature>/smoke/`; or `"$FEATURE_DIR/smoke/"` if you set `FEATURE_DIR`).
+  - Build `substrate` in the integration worktree, add `target/debug` to `PATH`, and run the matching feature-local smoke script from `docs/project_management/packs/active/<feature>/smoke/` (or `"$FEATURE_DIR/smoke/"` if you set `FEATURE_DIR`).
   - This catches obvious smoke-script/behavior drift before burning runner time and creating throwaway branches.
 - At each CI checkpoint, validate cross-platform compile parity before Feature Smoke dispatch to avoid discovering macOS/Windows compilation breaks only after consuming self-hosted runner time:
   - `make ci-compile-parity CI_WORKFLOW_REF="$ORCH_BRANCH" CI_REMOTE=origin CI_CLEANUP=1` (dispatches CI Testing in `mode=compile-parity` via `scripts/ci/dispatch_ci_testing.sh`).
@@ -266,7 +266,7 @@ flowchart TD
   end
 
   %% ======== task_start internals ========
-  subgraph START_INT["scripts/triad/task_start.sh (automation)"]
+  subgraph START_INT["make triad-task-start (automation)"]
     START_PARSE["parse tasks.json (requires schema_version>=3 and meta.automation.enabled=true)"]
     START_WT["git worktree add (create branch/worktree if needed)"]
     START_META["write .taskmeta.json in worktree root"]
@@ -275,7 +275,7 @@ flowchart TD
   end
 
   %% ======== task_start_pair internals ========
-  subgraph START_PAIR_INT["scripts/triad/task_start_pair.sh (automation)"]
+  subgraph START_PAIR_INT["make triad-task-start-pair (automation)"]
     PAIR_PARSE["parse tasks.json (requires schema_version>=3 and meta.automation.enabled=true)"]
     PAIR_VALIDATE["validate code/test types + concurrent_with linkage + deps completed"]
     PAIR_CALLS["call task_start.sh twice (code then test)"]
@@ -284,7 +284,7 @@ flowchart TD
   end
 
   %% ======== task_start_complete internals ========
-  subgraph START_COMPLETE_INT["scripts/triad/task_start_complete.sh (automation wrapper)"]
+  subgraph START_COMPLETE_INT["make triad-task-start-complete (automation wrapper)"]
     COMPLETE_PRE["prechecks: orch clean; code/test deps completed; boundary detection via meta.checkpoint_boundaries"]
     COMPLETE_START["start code+test pair (calls task_start_pair.sh; optional codex exec)"]
     COMPLETE_FINISH_PAIR["finish code+test (calls task_finish.sh in each worktree)"]
@@ -294,7 +294,7 @@ flowchart TD
   end
 
   %% ======== task_start_platform_fixes internals ========
-  subgraph START_PF_INT["scripts/triad/task_start_platform_fixes.sh (automation)"]
+  subgraph START_PF_INT["make triad-task-start-platform-fixes (automation)"]
     PF_PARSE["parse tasks.json (requires schema_version>=3 and meta.automation.enabled=true)"]
     PF_SELECT["select X-integ-<platform> tasks for failing platforms"]
     PF_CALLS["call task_start.sh for each platform task (sequential setup)"]
@@ -303,7 +303,7 @@ flowchart TD
   end
 
   %% ======== task_start_integ_final internals ========
-  subgraph START_FINAL_INT["scripts/triad/task_start_integ_final.sh (automation)"]
+  subgraph START_FINAL_INT["make triad-task-start-integ-final (automation)"]
     FINAL_PARSE["parse tasks.json (requires schema_version>=3 and meta.automation.enabled=true)"]
     FINAL_VALIDATE["require X-integ exists and merge_to_orchestration=true"]
     FINAL_DEPS["require all X-integ depends_on tasks are completed"]
@@ -318,7 +318,7 @@ flowchart TD
   end
 
   %% ======== task_finish internals ========
-  subgraph FINISH_INT["scripts/triad/task_finish.sh (automation)"]
+  subgraph FINISH_INT["make triad-task-finish (automation)"]
     FINISH_META["require .taskmeta.json and task_id match"]
     FINISH_GUARDS["guardrails: refuse planning doc edits; integration merge-back preserves orchestration Planning Pack files"]
     FINISH_CHECKS["run required_make_targets (or verify-only)"]
@@ -330,7 +330,7 @@ flowchart TD
   %% ======== Feature cleanup (retention model) ========
   subgraph CLEAN["Feature end (cleanup task)"]
     CLEANUP["make triad-feature-cleanup FEATURE_DIR=... REMOVE_WORKTREES=1 PRUNE_LOCAL=1 (optional PRUNE_REMOTE=origin; optional FORCE=1)"]
-    CLEAN_INT["scripts/triad/feature_cleanup.sh removes worktrees using registry and prunes branches (with safety checks)"]
+    CLEAN_INT["Feature cleanup removes worktrees using registry and prunes branches (with safety checks)"]
   end
 
   ENSURE --> DOCS_START

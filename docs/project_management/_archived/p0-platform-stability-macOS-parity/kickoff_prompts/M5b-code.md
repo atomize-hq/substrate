@@ -7,10 +7,10 @@ Code agent: production code/scripts only. No tests. Do not edit docs/tasks/sessi
 Implement M5b-spec: make world deps host detection reflect the Substrate-managed host environment (manager init semantics).
 
 ## Read first
-- `docs/project_management/next/p0-platform-stability-macOS-parity/plan.md`
-- `docs/project_management/next/p0-platform-stability-macOS-parity/tasks.json`
-- `docs/project_management/next/p0-platform-stability-macOS-parity/session_log.md`
-- `docs/project_management/next/p0-platform-stability-macOS-parity/M5b-spec.md`
+- `docs/project_management/_archived/next/p0-platform-stability-macOS-parity/plan.md`
+- `docs/project_management/_archived/next/p0-platform-stability-macOS-parity/tasks.json`
+- `docs/project_management/_archived/next/p0-platform-stability-macOS-parity/session_log.md`
+- `docs/project_management/_archived/next/p0-platform-stability-macOS-parity/M5b-spec.md`
 
 ## Start checklist (must follow)
 1. `git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only`

@@ -7,7 +7,7 @@
 
 ## Scope
 - Feature directory: `docs/project_management/_archived/env_var_taxonomy_and_override_split/`
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
@@ -145,7 +145,7 @@ ADR_BODY_SHA256: 878cc1d007c83254cff8881b120d132493f8f9d634a7d56e3dc47fc93497a03
   - Outputs: runtime exported state env vars (`SUBSTRATE_*`), logs/trace
 
 ## Sequencing / Dependencies
-- Sequencing entry: `docs/project_management/next/sequencing.json` → `env_var_taxonomy_and_override_split`
+- Sequencing entry: `docs/project_management/packs/sequencing.json` → `env_var_taxonomy_and_override_split`
 - Prerequisite integration task IDs:
   - `docs/project_management/_archived/policy_and_config_precedence/tasks.json` → `PCP0-integ`
 

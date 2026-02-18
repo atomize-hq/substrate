@@ -2,7 +2,7 @@
 
 - Date (UTC): 2026-02-16
 - Worktree: `/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh0-integ`
-- Spec: `docs/project_management/next/world-deps-host-visible-hardening/WDH0-spec.md`
+- Spec: `docs/project_management/_archived/next/world-deps-host-visible-hardening/WDH0-spec.md`
 
 This file records smoke + targeted integration validation results for WDH0 without modifying planning docs.
 
@@ -127,7 +127,7 @@ This file records smoke + targeted integration validation results for WDH0 witho
     - World backend: run workloads under non-login shells for overlay/caged execution, clear inherited env, and apply the deterministic env contract defensively.
     - World-agent: honor `SUBSTRATE_WORLD_SOCKET` env var for direct-bind dev runs (useful for local testing; systemd still binds `/run/substrate.sock` by default).
 - Status:
-  - Full end-to-end validation of the fixed `always_isolate` path requires rebuilding/reprovisioning the system world-agent service (root/systemd) and rerunning `docs/project_management/next/world-deps-host-visible-hardening/smoke/linux-smoke.sh` with `SUBSTRATE_SMOKE_SLICE_ID=WDH0`.
+  - Full end-to-end validation of the fixed `always_isolate` path requires rebuilding/reprovisioning the system world-agent service (root/systemd) and rerunning `docs/project_management/_archived/next/world-deps-host-visible-hardening/smoke/linux-smoke.sh` with `SUBSTRATE_SMOKE_SLICE_ID=WDH0`.
 
 
 ## Run 2026-02-16 14:32:49 UTC (WDH1-integ kickoff)
@@ -136,7 +136,7 @@ This file records smoke + targeted integration validation results for WDH0 witho
 - Git branch: world-deps-host-visible-hardening-wdh1-integ-core
 - Platform: Linux spenser-linux 6.16.8-1-MANJARO #1 SMP PREEMPT_DYNAMIC Fri, 19 Sep 2025 16:09:36 +0000 x86_64 GNU/Linux
 - Worktree: `/home/spenser/__Active_code/substrate/wt/world-deps-host-visible-hardening-wdh1-integ-core`
-- Spec: `docs/project_management/next/world-deps-host-visible-hardening/WDH1-spec.md`
+- Spec: `docs/project_management/_archived/next/world-deps-host-visible-hardening/WDH1-spec.md`
 - Artifacts: artifacts/wdh1-integ-20260216-143249
 
 ### Platform smoke: scripts/check-container-prereqs.sh

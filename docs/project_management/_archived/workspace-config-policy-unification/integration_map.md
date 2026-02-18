@@ -19,7 +19,7 @@ Non-negotiable gate file for this Planning Pack:
     - `world.deps.inventory_mode` (`merged|workspace_only`)
     - `world.deps.builtins` (`enabled|disabled`)
 - Reference:
-  - `docs/project_management/next/world_deps_packages_bundles_contract.md`
+  - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
 
 ## End-to-end flow (config)
 

@@ -68,13 +68,13 @@ Required guardrails:
 
 - **Orchestration toolbox auth token**:
   - Delivery: FD/pipe (Substrate-spawned orchestrator sessions).
-  - Source of truth: `docs/project_management/next/orchestration_mcp_toolbox/decision_register.md` (DR-0009).
+  - Source of truth: `docs/project_management/packs/PHASE_8_CROSS_CUTTING_DECISION_REGISTRY.md` (CC-0006).
 
 - **LLM gateway/engine auth for `api:*` backends**:
   - Delivery:
     - Preferred (v1.1): host→world secret-channel payload + in-world FD/pipe auth bundle into the gateway/manager (no secret-bearing env vars in-world by default).
     - Legacy (v1): env var injection into in-world gateway/engine spawn environment (no persistence).
-  - Source of truth: `docs/project_management/next/llm_gateway_in_world/decision_register.md` (DR-0007, DR-0018) and `docs/project_management/next/llm_gateway_in_world/specs/env_injection.md`.
+  - Source of truth: `docs/project_management/packs/PHASE_8_CROSS_CUTTING_DECISION_REGISTRY.md` (CC-0006).
 
 ---
 

@@ -22,13 +22,13 @@ Constraints (non-negotiable):
 - Do not edit planning docs from inside task worktrees; do remediation on the orchestration branch.
 
 Inputs (must read end-to-end):
-- `docs/project_management/next/<feature>/quality_gate_report.md` (the most recent review pass and all findings)
+- `<FEATURE_DIR>/quality_gate_report.md` (the most recent review pass and all findings)
 - The feature’s planning pack:
   - `decision_register.md`, `impact_map.md`, `plan.md`, `tasks.json`, `session_log.md`
   - all specs in the feature/track
   - `manual_testing_playbook.md` and feature `smoke/*` scripts (if present)
 - ADR(s) referenced by the pack
-- `docs/project_management/packs/sequencing.json` (legacy mirror during migration: `docs/project_management/next/sequencing.json`)
+- `docs/project_management/packs/sequencing.json`
 - Standards (read end-to-end):
   - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
   - `docs/project_management/system/standards/planning/PLANNING_LINT_CHECKLIST.md`
@@ -71,7 +71,7 @@ Remediation workflow (required):
      - Run `make adr-fix ADR=<path>` (or equivalent) so the exec-summary drift guard is updated.
 
 3) Re-run mechanical checks (required)
-   - `export FEATURE_DIR="docs/project_management/next/<feature>"`
+   - `export FEATURE_DIR="<FEATURE_DIR>"`
    - Run:
      - `make planning-lint FEATURE_DIR="$FEATURE_DIR"`
      - `make planning-validate FEATURE_DIR="$FEATURE_DIR"`
@@ -80,7 +80,7 @@ Remediation workflow (required):
    - If any check fails, fix and re-run until all pass.
 
 4) Audit trail
-   - Append a START/END remediation entry to `docs/project_management/next/<feature>/session_log.md` including:
+   - Append a START/END remediation entry to `<FEATURE_DIR>/session_log.md` including:
      - the defects addressed (by Finding ID),
      - files changed,
      - exact commands run + exit codes.

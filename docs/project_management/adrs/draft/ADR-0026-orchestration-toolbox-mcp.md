@@ -6,16 +6,16 @@
 - Owner(s): Spenser McConnell (Substrate)
 
 ## Scope
-- Feature directory: `docs/project_management/next/orchestration_mcp_toolbox/`
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Feature directory: `docs/project_management/_archived/next/orchestration_mcp_toolbox/`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Related Docs
-- Decision Register: `docs/project_management/next/orchestration_mcp_toolbox/decision_register.md`
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Decision Register: `docs/project_management/_archived/next/orchestration_mcp_toolbox/decision_register.md`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Dependency ADR: `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`
 
 ## Executive Summary (Operator)
@@ -28,7 +28,7 @@ ADR_BODY_SHA256: 486da7f019f858ac7a373d6692b4ea0a9bae3acd98325ad78a415b992d2952a
   - Why: Make orchestration levers/context available via tool calls, enabling role-swappable orchestrators (CLI or API) without bespoke SDK coupling while keeping the `mcp` CLI namespace reserved for external MCP servers.
   - Links:
     - `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md#L1`
-    - `docs/project_management/next/orchestration_mcp_toolbox/decision_register.md`
+    - `docs/project_management/_archived/next/orchestration_mcp_toolbox/decision_register.md`
 
 ## Problem / Context
 - Substrate needs a clean mechanism to expose orchestration functions (agent/session discovery, trace/graph queries, policy views) to the orchestrator agent.
@@ -91,7 +91,7 @@ ADR_BODY_SHA256: 486da7f019f858ac7a373d6692b4ea0a9bae3acd98325ad78a415b992d2952a
 - This ADR does not define new config file families. It MUST use the Phase 3 config/policy surface defined by ADR-0027.
 - Source of truth (key paths + precedence + defaults):
   - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
-  - `docs/project_management/next/llm_and_agent_config_policy_surface/SCHEMA.md`
+  - `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/SCHEMA.md`
 
 - Additive config keys (authoritative):
   - `agents.toolbox.enabled: bool`
@@ -226,7 +226,7 @@ Safe-by-default payload posture (non-negotiable):
     - trace event record
 
 ## Sequencing / Dependencies
-- Sequencing entry: `docs/project_management/next/sequencing.json` → `orchestration-mcp-toolbox` (to be scheduled)
+- Sequencing entry: `docs/project_management/packs/sequencing.json` → `orchestration-mcp-toolbox` (to be scheduled)
 - Prerequisite integration task IDs:
   - ADR-0025 Agent Hub Core (required for `list_agents`, `get_session_history`)
   - ADR-0017 Output/Event Contract (required for attribution + auditing)
@@ -253,12 +253,12 @@ Safe-by-default payload posture (non-negotiable):
   - orchestrator agent calls toolbox tools; non-orchestrator agent denied
 
 ### Manual validation
-- Manual playbook: `docs/project_management/next/orchestration_mcp_toolbox/manual_testing_playbook.md`
+- Manual playbook: `docs/project_management/_archived/next/orchestration_mcp_toolbox/manual_testing_playbook.md`
 
 ### Smoke scripts
-- Linux: `docs/project_management/next/orchestration_mcp_toolbox/smoke/linux-smoke.sh`
-- macOS: `docs/project_management/next/orchestration_mcp_toolbox/smoke/macos-smoke.sh`
-- Windows: `docs/project_management/next/orchestration_mcp_toolbox/smoke/windows-smoke.ps1`
+- Linux: `docs/project_management/_archived/next/orchestration_mcp_toolbox/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/_archived/next/orchestration_mcp_toolbox/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/_archived/next/orchestration_mcp_toolbox/smoke/windows-smoke.ps1`
 
 ## Rollout / Backwards Compatibility
 - Policy: greenfield breaking is allowed
@@ -266,7 +266,7 @@ Safe-by-default payload posture (non-negotiable):
 
 ## Decision Summary
 - Decision Register entries:
-  - `docs/project_management/next/orchestration_mcp_toolbox/decision_register.md`:
+  - `docs/project_management/_archived/next/orchestration_mcp_toolbox/decision_register.md`:
     - DR-0001 (Bind transport: UDS-first vs TCP-only)
     - DR-0002 (Toolbox server lifecycle: per-session vs global singleton)
     - DR-0003 (Tool namespace + versioning: server-level version vs tool-name version)

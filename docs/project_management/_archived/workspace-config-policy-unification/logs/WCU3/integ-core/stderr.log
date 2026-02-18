@@ -14,7 +14,7 @@ user
 
 ## Scope
 - Merge code + tests, resolve drift to ADR/spec, and make the slice green on the primary dev platform.
-- Spec: `docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md`
+- Spec: `docs/project_management/_archived/next/workspace-config-policy-unification/WCU3-spec.md`
 - Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 Do not edit planning docs inside the worktree.
@@ -26,7 +26,7 @@ Do not edit planning docs inside the worktree.
 ## Requirements
 - Run: `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, then `make integ-checks`.
 - Dispatch compile parity (fast fail): `make ci-compile-parity CI_WORKFLOW_REF="feat/workspace-config-policy-unification" CI_REMOTE=origin CI_CLEANUP=1`
-- Dispatch behavioral smoke via CI: `make feature-smoke FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" PLATFORM=behavior SMOKE_SLICE_ID="WCU3" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/workspace-config-policy-unification" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
+- Dispatch behavioral smoke via CI: `make feature-smoke FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification" PLATFORM=behavior SMOKE_SLICE_ID="WCU3" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/workspace-config-policy-unification" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
 
 ## End Checklist
 1. From inside the worktree, run: `make triad-task-finish TASK_ID="WCU3-integ-core"`
@@ -59,18 +59,18 @@ exec
 {
   "created_at_utc": "2026-01-16T03:49:34Z",
   "created_from_sha": "e3bdff899940db002b277743db16c096ae42a6ed",
-  "feature_dir": "docs/project_management/next/workspace-config-policy-unification",
+  "feature_dir": "docs/project_management/_archived/next/workspace-config-policy-unification",
   "orchestration_branch": "feat/workspace-config-policy-unification",
   "schema_version": 1,
   "task_branch": "workspace_config_policy_unification-wcu3-integ-core",
   "task_id": "WCU3-integ-core"
 }
 exec
-/bin/bash -lc "ls -ლა docs/project_management/next/workspace-config-policy-unification && ls -la docs/project_management/standards | sed -n '1,200p'" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core exited 2 in 41ms:
+/bin/bash -lc "ls -ლა docs/project_management/_archived/next/workspace-config-policy-unification && ls -la docs/project_management/standards | sed -n '1,200p'" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core exited 2 in 41ms:
 ls: invalid option -- 'á'
 Try 'ls --help' for more information.
 exec
-/bin/bash -lc 'ls -la docs/project_management/next/workspace-config-policy-unification && echo "---" && ls -la docs/project_management/standards' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 52ms:
+/bin/bash -lc 'ls -la docs/project_management/_archived/next/workspace-config-policy-unification && echo "---" && ls -la docs/project_management/standards' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 52ms:
 total 296
 drwxr-xr-x 4 spenser spenser   4096 Jan 15 22:49 .
 drwxr-xr-x 7 spenser spenser   4096 Jan 15 22:49 ..
@@ -97,20 +97,20 @@ thinking
 
 I need to read through the plan, tasks, and session log alongside the WCU3 specification and the standard. I'll check the session log and tasks.json for relevant information. Opening those documents and the TASK_TRIADS standard should help. I’m contemplating using `cat` or `sed` to highlight key sections. I might start with `sed -n '1,200p'` to peek at the beginning, but for the spec, I’ll likely need to read it fully. I'll check line counts with `wc -l` to keep things organized.
 exec
-/bin/bash -lc 'wc -l docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md docs/project_management/next/workspace-config-policy-unification/session_log.md docs/project_management/next/workspace-config-policy-unification/tasks.json docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 50ms:
-    94 docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md
-   324 docs/project_management/next/workspace-config-policy-unification/session_log.md
-  1867 docs/project_management/next/workspace-config-policy-unification/tasks.json
+/bin/bash -lc 'wc -l docs/project_management/_archived/next/workspace-config-policy-unification/WCU3-spec.md docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 50ms:
+    94 docs/project_management/_archived/next/workspace-config-policy-unification/WCU3-spec.md
+   324 docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
+  1867 docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
    112 docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md
   2397 total
 exec
-/bin/bash -lc "sed -n '1,220p' docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 43ms:
+/bin/bash -lc "sed -n '1,220p' docs/project_management/_archived/next/workspace-config-policy-unification/WCU3-spec.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 43ms:
 # WCU3 Spec — CLI scopes + reset semantics + config editor support for `world.deps.enabled` (ADR-0012 Phase B)
 
 References:
 - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
-- `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
+- `docs/project_management/_archived/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
 - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 
 ## Scope
@@ -137,8 +137,8 @@ It is a focused companion to:
 ## Operating assumptions (the situation you are in)
 
 When this standard applies, the operator started you with one of:
-- `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1` (preferred)
-- `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
+- `make triad-task-start-pair FEATURE_DIR="docs/project_management/_archived/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1` (preferred)
+- `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
 
 You are already:
 - in a git worktree (usually under `wt/...`)
@@ -148,11 +148,11 @@ You are already:
 ## Non-negotiable safety rule
 
 exec
-/bin/bash -lc "sed -n '1,220p' docs/project_management/next/workspace-config-policy-unification/session_log.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 41ms:
+/bin/bash -lc "sed -n '1,220p' docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 41ms:
 # workspace-config-policy-unification — session log
 
 ## START — 2026-01-14T00:00:00Z — planning — Phase A/B gate scaffolding
-- Feature: `docs/project_management/next/workspace-config-policy-unification/`
+- Feature: `docs/project_management/_archived/next/workspace-config-policy-unification/`
 - Branch: `feat/workspace-config-policy-unification`
 - Goal: Add Phase A/B gates (ADR-0012) scaffolding and ensure it is mechanically encoded in the Planning Pack.
 - Inputs to read end-to-end:
@@ -161,33 +161,33 @@ exec
   - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
   - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 - Commands planned (if any):
-  - `make planning-lint FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification"`
+  - `make planning-lint FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification"`
 
 ## END — 2026-01-14T00:00:00Z — planning — Phase A/B gate scaffolding
 - Summary of changes (exhaustive):
   - Added explicit Phase A/B gate file for ADR-0012 and wired it as a non-negotiable Planning Pack input
   - Added Planning Pack scaffolding files (`plan.md`, `tasks.json`, `integration_map.md`, gate report templates, smoke stubs)
 - Files created/modified:
-  - `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
+  - `docs/project_management/_archived/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
 
 thinking
 **Planning integration tasks**
 
 The session log output was truncated, so that's a bit of a hiccup. I need to read tasks and strategize since our goal is integrating code and tests, resolving drift while keeping things aligned with the ADR/spec. It appears I'm working on the "integ-core," which means I can edit both code and tests but shouldn't change any planning documents. I should look for relevant WCU3 entries in the session log, possibly using `rg` to assist with that.
 exec
-/bin/bash -lc 'rg -n "WCU3" docs/project_management/next/workspace-config-policy-unification/session_log.md | head' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 47ms:
-29:  - `docs/project_management/next/workspace-config-policy-unification/WCU3-closeout_report.md`
+/bin/bash -lc 'rg -n "WCU3" docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md | head' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 47ms:
+29:  - `docs/project_management/_archived/next/workspace-config-policy-unification/WCU3-closeout_report.md`
 68:  - Tightened Phase A/B ownership and acceptance criteria (WCU2/WCU3) and made smoke dispatch mechanically explicit via `make feature-smoke`.
-74:  - `docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md`
-85:  - `docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU3-code.md`
-86:  - `docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU3-test.md`
-87:  - `docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU3-integ.md`
-131:  - `docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md`
+74:  - `docs/project_management/_archived/next/workspace-config-policy-unification/WCU3-spec.md`
+85:  - `docs/project_management/_archived/next/workspace-config-policy-unification/kickoff_prompts/WCU3-code.md`
+86:  - `docs/project_management/_archived/next/workspace-config-policy-unification/kickoff_prompts/WCU3-test.md`
+87:  - `docs/project_management/_archived/next/workspace-config-policy-unification/kickoff_prompts/WCU3-integ.md`
+131:  - `docs/project_management/_archived/next/workspace-config-policy-unification/WCU3-spec.md`
 159:  - Verified: Phase A/B gates are explicitly owned by slice acceptance criteria and validation artifacts (WCU2/WCU3) and integration tasks reference smoke scripts + closeout reports.
 274:## START — 2026-01-16T02:41:14Z — code — WCU3-code
 281:## START — 2026-01-16T02:42:17Z — test — WCU3-test
 exec
-/bin/bash -lc "sed -n '250,340p' docs/project_management/next/workspace-config-policy-unification/session_log.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 40ms:
+/bin/bash -lc "sed -n '250,340p' docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 40ms:
   - `CODEX_CODE_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU2-code/last_message.md`
   - `CODEX_CODE_EVENTS_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU2-code/events.jsonl`
   - `CODEX_CODE_STDERR_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU2-code/stderr.log`
@@ -214,17 +214,17 @@ thinking
 
 I’m considering the integration process: should we merge the code and test branches into the integration core? They likely came from separate worktrees, so we’ll need to cherry-pick or merge commits from those branches and resolve any conflicts according to specifications. I plan to inspect the branches via git history and find relevant commits. We should check the kickoff prompts for WCU3 for any additional details and instructions. Let's go ahead and view that file carefully.
 exec
-/bin/bash -lc "sed -n '1,240p' docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU3-integ.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 36ms:
+/bin/bash -lc "sed -n '1,240p' docs/project_management/_archived/next/workspace-config-policy-unification/kickoff_prompts/WCU3-integ.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 36ms:
 # Kickoff: WCU3-integ (integration final — cross-platform merge)
 
 ## Scope
 - Merge platform-fix branches (if any) and finalize WCU3 with an auditable cross-platform green state.
-- Spec: `docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md`
+- Spec: `docs/project_management/_archived/next/workspace-config-policy-unification/WCU3-spec.md`
 - ADRs:
   - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
   - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
-- Gate file: `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
-- Closeout report: `docs/project_management/next/workspace-config-policy-unification/WCU3-closeout_report.md`
+- Gate file: `docs/project_management/_archived/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
+- Closeout report: `docs/project_management/_archived/next/workspace-config-policy-unification/WCU3-closeout_report.md`
 
 Do not edit planning docs inside the worktree.
 
@@ -232,7 +232,7 @@ Do not edit planning docs inside the worktree.
 1. Verify you are in the task worktree `wt/workspace_config_policy_unification-wcu3-integ` on branch `workspace_config_policy_unification-wcu3-integ` and that `.taskmeta.json` exists.
 2. Read: WCU3-spec, ADR-0008, ADR-0012, PHASE_A_B_GATES, plan/tasks/session log, this prompt.
 3. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run:
-   - `make triad-task-start FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" TASK_ID="WCU3-integ"`
+   - `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification" TASK_ID="WCU3-integ"`
 
 ## Requirements
 Plan update
@@ -243,11 +243,11 @@ Plan update
   • Run integ-checks and CI dispatch
   • Finish triad task
 exec
-/bin/bash -lc "sed -n '1,240p' docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 45ms:
+/bin/bash -lc "sed -n '1,240p' docs/project_management/_archived/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 45ms:
 # ADR-0008 Planning Pack — Phase A/B Gates (ADR-0012) (Non-negotiable)
 
 This file is an **additive execution constraint** for the Planning Pack under:
-- `docs/project_management/next/workspace-config-policy-unification/`
+- `docs/project_management/_archived/next/workspace-config-policy-unification/`
 
 It layers on top of all repo planning standards and must be treated as **non-negotiable acceptance criteria** for this body of work.
 
@@ -259,7 +259,7 @@ Authoritative ADRs:
 - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 
 Primary downstream consumer contract:
-- `docs/project_management/next/world_deps_packages_bundles_contract.md`
+- `docs/project_management/_archived/next/world_deps_packages_bundles_contract.md`
 
 ## Phase A (must complete) — Per-key merge strategies + multi-source provenance
 
@@ -292,7 +292,7 @@ exec
 95:- Global policy patch: `$SUBSTRATE_HOME/policy.yaml`
 96:- Workspace config patch: `<workspace_root>/.substrate/workspace.yaml`
 exec
-/bin/bash -lc "jq '.tasks[] | select(.id|test(\"WCU3\")) | {id,type,owner,status,depends_on,summary,acceptance_criteria}' docs/project_management/next/workspace-config-policy-unification/tasks.json" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 54ms:
+/bin/bash -lc "jq '.tasks[] | select(.id|test(\"WCU3\")) | {id,type,owner,status,depends_on,summary,acceptance_criteria}' docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 54ms:
 {
   "id": "WCU3-code",
   "type": "code",
@@ -2098,7 +2098,7 @@ index ee78c29e5eb73e15e50bd4f369ec2b2cc643c02b..b8e113ec14811f0bc7f35c39da8988cd
  fn parse_explain(stderr: &[u8]) -> JsonValue {
 
 exec
-/bin/bash -lc 'make feature-smoke FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" PLATFORM=behavior SMOKE_SLICE_ID="WCU3" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/workspace-config-policy-unification" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core exited 2 in 4m 19s:
+/bin/bash -lc 'make feature-smoke FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification" PLATFORM=behavior SMOKE_SLICE_ID="WCU3" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/workspace-config-policy-unification" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core exited 2 in 4m 19s:
 make[1]: Entering directory '/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core'
 HEAD: be0838751754853b45d05082cf14f0fe2f721b23
 Temp branch: tmp/feature-smoke/workspace-config-policy-unification/behavior/20260116T040115Z
@@ -2288,23 +2288,23 @@ index ee78c29e5eb73e15e50bd4f369ec2b2cc643c02b..b8e113ec14811f0bc7f35c39da8988cd
 
 exec
 /bin/bash -lc "gh run view 21055154050 --repo atomize-hq/substrate --log-failed | sed -n '1,200p'" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 802ms:
-windows_self_hosted	Run Windows smoke	﻿2026-01-16T04:05:04.3744053Z ##[group]Run pwsh -File "docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1"
-windows_self_hosted	Run Windows smoke	2026-01-16T04:05:04.3744568Z [36;1mpwsh -File "docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1"[0m
+windows_self_hosted	Run Windows smoke	﻿2026-01-16T04:05:04.3744053Z ##[group]Run pwsh -File "docs/project_management/_archived/next/workspace-config-policy-unification/smoke/windows-smoke.ps1"
+windows_self_hosted	Run Windows smoke	2026-01-16T04:05:04.3744568Z [36;1mpwsh -File "docs/project_management/_archived/next/workspace-config-policy-unification/smoke/windows-smoke.ps1"[0m
 windows_self_hosted	Run Windows smoke	2026-01-16T04:05:04.3809613Z shell: C:\Program Files\WindowsApps\Microsoft.PowerShell_7.5.4.0_x64__8wekyb3d8bbwe\pwsh.EXE -command ". '{0}'"
 windows_self_hosted	Run Windows smoke	2026-01-16T04:05:04.3809906Z env:
 windows_self_hosted	Run Windows smoke	2026-01-16T04:05:04.3810008Z   CARGO_TERM_COLOR: always
 windows_self_hosted	Run Windows smoke	2026-01-16T04:05:04.3810138Z   RUST_TOOLCHAIN: 1.89.0
 windows_self_hosted	Run Windows smoke	2026-01-16T04:05:04.3810253Z   SUBSTRATE_SMOKE_SLICE_ID: WCU3
 windows_self_hosted	Run Windows smoke	2026-01-16T04:05:04.3810393Z ##[endgroup]
-windows_self_hosted	Run Windows smoke	2026-01-16T04:05:05.0128050Z INFO: docs/project_management/next/workspace-config-policy-unification windows smoke (SUBSTRATE_SMOKE_SLICE_ID='WCU3')
+windows_self_hosted	Run Windows smoke	2026-01-16T04:05:05.0128050Z INFO: docs/project_management/_archived/next/workspace-config-policy-unification windows smoke (SUBSTRATE_SMOKE_SLICE_ID='WCU3')
 windows_self_hosted	Run Windows smoke	2026-01-16T04:05:06.1853576Z [31;1mException: [0mC:\actions-runner\_work\substrate\substrate\docs\project_management\next\workspace-config-policy-unification\smoke\windows-smoke.ps1:245[0m
 windows_self_hosted	Run Windows smoke	2026-01-16T04:05:06.1855681Z [31;1m[0m[36;1mLine |[0m
 windows_self_hosted	Run Windows smoke	2026-01-16T04:05:06.1856566Z [31;1m[0m[36;1m[36;1m 245 | [0m … spacePos) { [36;1mthrow "expected global_patch to appear before workspace_p[0m …[0m
 windows_self_hosted	Run Windows smoke	2026-01-16T04:05:06.1857300Z [31;1m[0m[36;1m[36;1m[0m[36;1m[0m[36;1m     | [31;1m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
 windows_self_hosted	Run Windows smoke	2026-01-16T04:05:06.1858040Z [31;1m[0m[36;1m[36;1m[0m[36;1m[0m[36;1m[31;1m[31;1m[36;1m     | [31;1mexpected global_patch to appear before workspace_patch in --explain stderr[0m
 windows_self_hosted	Run Windows smoke	2026-01-16T04:05:06.3684644Z ##[error]Process completed with exit code 1.
-linux_self_hosted	Run linux smoke	﻿2026-01-16T04:02:53.9332952Z ##[group]Run bash "docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh"
-linux_self_hosted	Run linux smoke	2026-01-16T04:02:53.9333340Z [36;1mbash "docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh"[0m
+linux_self_hosted	Run linux smoke	﻿2026-01-16T04:02:53.9332952Z ##[group]Run bash "docs/project_management/_archived/next/workspace-config-policy-unification/smoke/linux-smoke.sh"
+linux_self_hosted	Run linux smoke	2026-01-16T04:02:53.9333340Z [36;1mbash "docs/project_management/_archived/next/workspace-config-policy-unification/smoke/linux-smoke.sh"[0m
 linux_self_hosted	Run linux smoke	2026-01-16T04:02:53.9345089Z shell: /usr/bin/bash -e {0}
 linux_self_hosted	Run linux smoke	2026-01-16T04:02:53.9345249Z env:
 linux_self_hosted	Run linux smoke	2026-01-16T04:02:53.9345358Z   CARGO_TERM_COLOR: always
@@ -2476,7 +2476,7 @@ index ee78c29e5eb73e15e50bd4f369ec2b2cc643c02b..b8e113ec14811f0bc7f35c39da8988cd
  fn parse_explain(stderr: &[u8]) -> JsonValue {
 
 exec
-/bin/bash -lc "nl -ba docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1 | sed -n '210,270p'" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 55ms:
+/bin/bash -lc "nl -ba docs/project_management/_archived/next/workspace-config-policy-unification/smoke/windows-smoke.ps1 | sed -n '210,270p'" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 55ms:
    210	  substrate config workspace set world.deps.inventory_mode=workspace_only world.deps.builtins=disabled | Out-Null
    211	
    212	  $effectiveJson = substrate config current show --json
@@ -2498,7 +2498,7 @@ exec
    228	  # Determinism/idempotence: re-running show + explain without changes yields identical outputs.
    229	  $effectiveJson2 = substrate config current show --json
 exec
-/bin/bash -lc "nl -ba docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh | sed -n '180,260p'" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 31ms:
+/bin/bash -lc "nl -ba docs/project_management/_archived/next/workspace-config-policy-unification/smoke/linux-smoke.sh | sed -n '180,260p'" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 31ms:
    180	    (.world.deps.enabled | index("bun") != null) and
    181	    (.world.deps.enabled | index("deno") == null)
    182	  ' >/dev/null
@@ -2520,7 +2520,7 @@ exec
    198	  # When workspace is disabled, enum keys report a single contributing layer (global_patch).
    199	  python - <<'PY' "${explain_disabled}"
 exec
-/bin/bash -lc "nl -ba docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh | sed -n '180,260p'" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 47ms:
+/bin/bash -lc "nl -ba docs/project_management/_archived/next/workspace-config-policy-unification/smoke/macos-smoke.sh | sed -n '180,260p'" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 47ms:
 
 file update:
 diff --git a/crates/shell/tests/config_init.rs b/crates/shell/tests/config_init.rs
@@ -2598,9 +2598,9 @@ thinking
 
 It looks like the `macos-smoke.sh` excerpt didn't show because the output is empty, possibly due to the file path. Actually, the command I used included 'nl ... macos-smoke.sh ...', but it returned no output (0 lines). Hmm, the file might just be shorter than I thought, so I might need a different range. Let’s open around where it checks the ordering and use `rg` to look for the global patch order in `macos-smoke.sh`.
 exec
-/bin/bash -lc "rg -n \"global_patch to appear before workspace_patch|IndexOf\\(\\\"global_patch\\\"\\)\" docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 61ms:
-docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh:153:    raise SystemExit("expected global_patch to appear before workspace_patch in --explain output")
-docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh:293:    raise SystemExit("expected global_patch to appear before workspace_patch in --explain output")
+/bin/bash -lc "rg -n \"global_patch to appear before workspace_patch|IndexOf\\(\\\"global_patch\\\"\\)\" docs/project_management/_archived/next/workspace-config-policy-unification/smoke/macos-smoke.sh docs/project_management/_archived/next/workspace-config-policy-unification/smoke/linux-smoke.sh" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 61ms:
+docs/project_management/_archived/next/workspace-config-policy-unification/smoke/linux-smoke.sh:153:    raise SystemExit("expected global_patch to appear before workspace_patch in --explain output")
+docs/project_management/_archived/next/workspace-config-policy-unification/smoke/linux-smoke.sh:293:    raise SystemExit("expected global_patch to appear before workspace_patch in --explain output")
 file update:
 diff --git a/crates/shell/tests/config_init.rs b/crates/shell/tests/config_init.rs
 index 1b5f69f5c2b79de4c4e68ca6501716d6be4d96b9..bc8c0e6a0b88df89e2941ddb64d52de64a0d6c3b
@@ -2672,7 +2672,7 @@ index ee78c29e5eb73e15e50bd4f369ec2b2cc643c02b..b8e113ec14811f0bc7f35c39da8988cd
  fn parse_explain(stderr: &[u8]) -> JsonValue {
 
 exec
-/bin/bash -lc "nl -ba docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh | sed -n '120,180p'" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 38ms:
+/bin/bash -lc "nl -ba docs/project_management/_archived/next/workspace-config-policy-unification/smoke/linux-smoke.sh | sed -n '120,180p'" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 38ms:
    120	    ($a|index("bun")) as $i_bun |
    121	    ($a|index("node-runtime")) as $i_node |
    122	    ($a|index("deno")) as $i_deno |
@@ -4279,7 +4279,7 @@ index ee78c29e5eb73e15e50bd4f369ec2b2cc643c02b..b8e113ec14811f0bc7f35c39da8988cd
 thinking
 I'm focusing on compiling the parity success. The next step is to rerun the feature smoke dispatch with the same arguments, and I'm hopeful that it will pass this time. I’ll proceed with the execution and keep my fingers crossed that everything goes smoothly. It's always a bit nerve-wracking to rerun processes, but I’m staying optimistic. Alright, let's see how it turns out!
 exec
-/bin/bash -lc 'make feature-smoke FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" PLATFORM=behavior SMOKE_SLICE_ID="WCU3" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/workspace-config-policy-unification" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 4m 13s:
+/bin/bash -lc 'make feature-smoke FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification" PLATFORM=behavior SMOKE_SLICE_ID="WCU3" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/workspace-config-policy-unification" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core succeeded in 4m 13s:
 make[1]: Entering directory '/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ-core'
 HEAD: 4661a3658062dd5a9b4fb4e7ef34ee5f166ec7c2
 Temp branch: tmp/feature-smoke/workspace-config-policy-unification/behavior/20260116T041405Z

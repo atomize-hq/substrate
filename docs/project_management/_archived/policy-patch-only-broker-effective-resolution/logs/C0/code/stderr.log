@@ -14,16 +14,16 @@ user
 
 ## Scope
 - Production code only; no new tests.
-- Spec: `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
+- Spec: `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
 - Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Start Checklist
 Do not edit planning docs inside the worktree.
 
 1. Verify you are in the task worktree `wt/policy-patch-only-broker-effective-resolution-c0-code` on branch `policy-patch-only-broker-effective-resolution-c0-code` and that `.taskmeta.json` exists at the worktree root.
-2. Read: `docs/project_management/next/policy-patch-only-broker-effective-resolution/plan.md`, `docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json`, `docs/project_management/next/policy-patch-only-broker-effective-resolution/session_log.md`, spec, this prompt.
+2. Read: `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/plan.md`, `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/tasks.json`, `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/session_log.md`, spec, this prompt.
 3. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run:
-   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution" SLICE_ID="C0"`
+   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution" SLICE_ID="C0"`
 
 ## Requirements
 - Implement exactly the behaviors and error handling in the spec.
@@ -81,7 +81,7 @@ Plan update
   • Run fmt, clippy, baseline tests (post)
   • Finish triad task and handoff
 exec
-/bin/bash -lc "ls -la docs/project_management/next/policy-patch-only-broker-effective-resolution && rg -n \"\" docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md | sed -n '1,200p'" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-code succeeded in 42ms:
+/bin/bash -lc "ls -la docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution && rg -n \"\" docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-spec.md | sed -n '1,200p'" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-code succeeded in 42ms:
 total 148
 drwxr-xr-x 4 spenser spenser  4096 Jan 16 23:53 .
 drwxr-xr-x 8 spenser spenser  4096 Jan 16 23:53 ..
@@ -103,11 +103,11 @@ drwxr-xr-x 2 spenser spenser  4096 Jan 16 23:53 smoke
 2:
 3:Authoritative ADR:
 exec
-/bin/bash -lc "rg -n \"\" docs/project_management/next/policy-patch-only-broker-effective-resolution/plan.md | sed -n '1,200p'" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-code succeeded in 54ms:
+/bin/bash -lc "rg -n \"\" docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/plan.md | sed -n '1,200p'" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-code succeeded in 54ms:
 1:# policy-patch-only-broker-effective-resolution — plan
 2:
 3:## Scope
-4:- Feature directory: `docs/project_management/next/policy-patch-only-broker-effective-resolution/`
+4:- Feature directory: `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/`
 5:- Orchestration branch: `feat/policy-patch-only-broker-effective-resolution`
 6:- ADR: `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
 7:
@@ -125,7 +125,7 @@ exec
 19:## Guardrails (non-negotiable)
 20:- Specs are the single source of truth.
 exec
-/bin/bash -lc "rg -n \"\" docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json | sed -n '1,200p'" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-code succeeded in 47ms:
+/bin/bash -lc "rg -n \"\" docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/tasks.json | sed -n '1,200p'" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-code succeeded in 47ms:
 1:{
 2:  "meta": {
 3:    "schema_version": 3,
@@ -147,9 +147,9 @@ exec
 19:      "phase": "F0",
 20:      "status": "completed",
 exec
-/bin/bash -lc "rg -n \"\" docs/project_management/next/policy-patch-only-broker-effective-resolution/session_log.md | sed -n '1,200p'" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-code succeeded in 48ms:
+/bin/bash -lc "rg -n \"\" docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/session_log.md | sed -n '1,200p'" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-code succeeded in 48ms:
 1:## START — 2026-01-17T02:46:54Z — planning — planning pack for ADR-0013 (broker-canonical policy resolution)
-2:- Feature: `docs/project_management/next/policy-patch-only-broker-effective-resolution/`
+2:- Feature: `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/`
 3:- Branch: `testing`
 4:- Goal: Produce an execution-ready Planning Pack for ADR-0013 with zero ambiguity.
 5:- Inputs to read end-to-end:
@@ -166,7 +166,7 @@ exec
 16:  - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
 17:  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
 18:  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
-19:  - `docs/project_management/next/sequencing.json`
+19:  - `docs/project_management/packs/sequencing.json`
 20:  - `docs/CONFIGURATION.md`
 exec
 /bin/bash -lc "rg -n \"\" docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md | sed -n '1,220p'" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-code succeeded in 50ms:
@@ -180,8 +180,8 @@ exec
 8:## Operating assumptions (the situation you are in)
 9:
 10:When this standard applies, the operator started you with one of:
-11:- `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1` (preferred)
-12:- `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
+11:- `make triad-task-start-pair FEATURE_DIR="docs/project_management/_archived/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1` (preferred)
+12:- `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
 13:
 14:You are already:
 15:- in a git worktree (usually under `wt/...`)
@@ -191,18 +191,18 @@ exec
 19:## Non-negotiable safety rule
 20:
 exec
-/bin/bash -lc 'rg -n "RECOMMENDATION" docs/project_management/next/policy-patch-only-broker-effective-resolution/quality_gate_report.md && tail -n 60 docs/project_management/next/policy-patch-only-broker-effective-resolution/session_log.md' in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-code succeeded in 50ms:
+/bin/bash -lc 'rg -n "RECOMMENDATION" docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/quality_gate_report.md && tail -n 60 docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/session_log.md' in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-code succeeded in 50ms:
 201:RECOMMENDATION: ACCEPT
-  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/session_log.md`
-  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
-  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C1-spec.md`
-  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/integration_map.md`
-  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md`
-  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/execution_preflight_report.md`
+  - `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/session_log.md`
+  - `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
+  - `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C1-spec.md`
+  - `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/integration_map.md`
+  - `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md`
+  - `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/execution_preflight_report.md`
   - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
   - `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
 - Commands planned:
-  - `export FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution"`
+  - `export FEATURE_DIR="docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution"`
   - `make triad-orch-ensure FEATURE_DIR="$FEATURE_DIR"`
   - `make -n ci-compile-parity CI_WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution" CI_REMOTE=origin CI_CLEANUP=1`
   - `make -n feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=behavior SMOKE_SLICE_ID="C0" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`

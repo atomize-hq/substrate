@@ -37,7 +37,11 @@ def ensure_in_file(path: Path) -> bool:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Ensure kickoff prompts contain the canonical no-doc-edits sentinel.")
-    parser.add_argument("--root", default="docs/project_management/next", help="Root directory to scan (default: docs/project_management/next)")
+    parser.add_argument(
+        "--root",
+        default="docs/project_management/packs",
+        help="Root directory to scan (default: docs/project_management/packs)",
+    )
     args = parser.parse_args()
 
     root = Path(args.root)
@@ -58,4 +62,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

@@ -19,6 +19,6 @@ Commands to run:
 3. `cargo test -p substrate-shell manager_init`
 
 Reminders:
-- Start at `AI_AGENT_START_HERE.md`, update `docs/project_management/next/tasks.json` + `session_log.md`, and capture START/END entries on `feat/isolated-shell-plan`.
+- Start at `AI_AGENT_START_HERE.md`, update `docs/project_management/_archived/next/tasks.json` + `session_log.md`, and capture START/END entries on `feat/isolated-shell-plan`.
 - Work inside `wt/a3-shell-env-code`, keep coordination artifacts off that worktree, and craft the Test Agent Kickoff Prompt for task `A3-test` before finishing.
-- Review the isolated shell plan/data map docs plus `docs/project_management/next/kickoff_prompts/A2-integ.md` for the latest integrated context.
+- Review the isolated shell plan/data map docs plus `docs/project_management/_archived/next/kickoff_prompts/A2-integ.md` for the latest integrated context.

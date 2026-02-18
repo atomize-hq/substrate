@@ -1,11 +1,11 @@
 ## START — 2025-12-28T02:07:08Z — planning — planning pack scaffolding
-- Feature: `docs/project_management/next/policy_and_config_mental_model_simplification/`
+- Feature: `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/`
 - Branch: `testing`
 - Goal: Produce an execution-ready Planning Pack for ADR-0003 with zero ambiguity.
 - Inputs to read end-to-end:
   - `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/decision_register.md`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/decision_register.md`
+  - `docs/project_management/packs/sequencing.json`
   - `docs/project_management/standards/PLANNING_README.md`
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
@@ -20,41 +20,41 @@
 - Summary of changes (exhaustive):
   - Created the Planning Pack scaffolding (plan, specs, tasks, prompts, integration map, manual playbook, smoke scripts).
   - Rewrote the feature decision register to the two-option decision template with explicit follow-up task IDs.
-  - Updated `docs/project_management/next/sequencing.json` to point the sprint to the feature directory and spec slices.
+  - Updated `docs/project_management/packs/sequencing.json` to point the sprint to the feature directory and spec slices.
   - Updated the ADR related-doc links and validation artifact references to point to the Planning Pack.
 - Files created/modified:
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/plan.md`
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/tasks.json`
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/session_log.md`
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/decision_register.md`
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/integration_map.md`
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/manual_testing_playbook.md`
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/PCM0-spec.md`
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/PCM1-spec.md`
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/PCM2-spec.md`
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/PCM3-spec.md`
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM0-code.md`
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM0-test.md`
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM0-integ.md`
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM1-code.md`
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM1-test.md`
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM1-integ.md`
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM2-code.md`
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM2-test.md`
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM2-integ.md`
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM3-code.md`
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM3-test.md`
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM3-integ.md`
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh`
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh`
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/plan.md`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/tasks.json`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/session_log.md`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/decision_register.md`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/integration_map.md`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/manual_testing_playbook.md`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM0-spec.md`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM1-spec.md`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM2-spec.md`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM3-spec.md`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM0-code.md`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM0-test.md`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM0-integ.md`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM1-code.md`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM1-test.md`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM1-integ.md`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM2-code.md`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM2-test.md`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM2-integ.md`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM3-code.md`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM3-test.md`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM3-integ.md`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1`
   - `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
 - Rubric checks run (with results):
   - `rg -n --hidden --glob '!**/.git/**' "$(printf '%b' '\\b(\\x54\\x42\\x44|\\x54\\x4f\\x44\\x4f|\\x57\\x49\\x50|\\x54\\x42\\x41)\\b|\\x6f\\x70\\x65\\x6e\\x20\\x71\\x75\\x65\\x73\\x74\\x69\\x6f\\x6e|\\b\\x65\\x74\\x63\\x2e|\\x61\\x6e\\x64\\x20\\x73\\x6f\\x20\\x6f\\x6e')" "$FEATURE_DIR"` → exit `1` → no matches
   - `rg -n --hidden --glob '!**/.git/**' "$(printf '%b' '\\b(\\x73\\x68\\x6f\\x75\\x6c\\x64|\\x63\\x6f\\x75\\x6c\\x64|\\x6d\\x69\\x67\\x68\\x74|\\x6d\\x61\\x79\\x62\\x65|\\x6f\\x70\\x74\\x69\\x6f\\x6e\\x61\\x6c\\x6c\\x79|\\x6f\\x70\\x74\\x69\\x6f\\x6e\\x61\\x6c)\\b')" "$FEATURE_DIR"` → exit `1` → no matches
   - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` → exit `0` → OK
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → exit `0` → OK
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → exit `0` → OK
   - `python (tasks.json required-field audit)` → exit `0` → OK
   - `python (integration smoke references audit)` → exit `0` → OK
   - `python (kickoff prompt existence audit)` → exit `0` → OK
@@ -66,7 +66,7 @@
 - Blockers:
   - `NONE`
 - Next steps:
-  - Quality gate reviewer: run `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md` and create `docs/project_management/next/policy_and_config_mental_model_simplification/quality_gate_report.md` with `RECOMMENDATION: ACCEPT`.
+  - Quality gate reviewer: run `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md` and create `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/quality_gate_report.md` with `RECOMMENDATION: ACCEPT`.
   - Execution triads: start `PCM0-code` and `PCM0-test` after the quality gate is `ACCEPT`.
 
 ## START — 2025-12-28T12:49:11Z — PCM0-code — workspace + config inventory and CLI
@@ -116,9 +116,9 @@
   - `cargo test -p substrate-shell --test config_init --test config_show --test config_set --test workspace_init -- --nocapture` → exit `0`
   - `make integ-checks` → exit `0`
 - Smoke scripts:
-  - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh` (with `PATH=target/debug:$PATH`) → exit `1` (fails on `$SUBSTRATE_HOME/env.sh` check; `substrate policy *` not yet implemented in PCM0)
-  - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh` → exit `0` (SKIP: not macOS)
-  - `pwsh -File docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1` → exit `127` (`pwsh` not found)
+  - `bash docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh` (with `PATH=target/debug:$PATH`) → exit `1` (fails on `$SUBSTRATE_HOME/env.sh` check; `substrate policy *` not yet implemented in PCM0)
+  - `bash docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh` → exit `0` (SKIP: not macOS)
+  - `pwsh -File docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1` → exit `127` (`pwsh` not found)
 
 ## START — 2025-12-28T15:02:47Z — PCM1-code — policy inventory and CLI
 - Orchestration branch: `feat/policy_and_config`
@@ -169,9 +169,9 @@
   - `cargo test -p substrate-shell --test policy_discovery -- --nocapture` → exit `0`
   - `make integ-checks` → exit `0`
 - Smoke scripts:
-  - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh` (with `PATH=target/debug:$PATH`) → exit `1` (fails: `$SUBSTRATE_HOME/env.sh` not yet created by `substrate config global init --force`)
-  - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh` → exit `0` (SKIP: not macOS)
-  - `pwsh -File docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1` → exit `127` (`pwsh` not found)
+  - `bash docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh` (with `PATH=target/debug:$PATH`) → exit `1` (fails: `$SUBSTRATE_HOME/env.sh` not yet created by `substrate config global init --force`)
+  - `bash docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh` → exit `0` (SKIP: not macOS)
+  - `pwsh -File docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1` → exit `127` (`pwsh` not found)
 
 ## START — 2025-12-28T17:07:56Z — PCM3-code — env scripts + world enable home + legacy removals (code)
 - Orchestration branch: `feat/policy_and_config`
@@ -237,9 +237,9 @@
   - `cargo test -p substrate-broker pcm2_save_to_policy -- --nocapture` → exit `0`
   - `make integ-checks` → exit `0`
 - Smoke scripts:
-  - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh` (with `PATH=target/debug:$PATH`) → exit `1` (fails: `$SUBSTRATE_HOME/env.sh` not yet created by `substrate config global init --force`)
-  - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh` → exit `0` (SKIP: not macOS)
-  - `pwsh -File docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1` → exit `127` (`pwsh` not found)
+  - `bash docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh` (with `PATH=target/debug:$PATH`) → exit `1` (fails: `$SUBSTRATE_HOME/env.sh` not yet created by `substrate config global init --force`)
+  - `bash docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh` → exit `0` (SKIP: not macOS)
+  - `pwsh -File docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1` → exit `127` (`pwsh` not found)
 
 ## START — 2025-12-28T17:51:46Z — PCM3-test — env scripts + world enable home + legacy removals (test)
 - Orchestration branch: `feat/policy_and_config`
@@ -283,6 +283,6 @@
   - `cargo test -p world-agent --test full_cage_pty -- --nocapture` → exit `0` (some cases skipped: overlay support or privileges missing)
   - `make integ-checks` → exit `0`
 - Smoke scripts:
-  - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh` (with `PATH=target/debug:$PATH`) → exit `0`
-  - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh` → exit `0` (SKIP: not macOS)
-  - `pwsh -File docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1` → exit `127` (`pwsh` not found)
+  - `bash docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh` (with `PATH=target/debug:$PATH`) → exit `0`
+  - `bash docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh` → exit `0` (SKIP: not macOS)
+  - `pwsh -File docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1` → exit `127` (`pwsh` not found)

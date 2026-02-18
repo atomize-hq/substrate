@@ -12,7 +12,7 @@ Focus files / context:
 - `crates/shell/src/lib.rs` (`ShellConfig`, session env builders, `configure_manager_init`, CLI flag plumbing)
 - `crates/shell/src/async_repl.rs` (flag propagation, manager env wiring)
 - `crates/shell/src/pty_exec.rs` (new PTY bootstrap sourcing order)
-- `docs/project_management/next/substrate_isolated_shell_plan.md`, `.../data_map.md`, `.../kickoff_prompts/A3-code.md` for background
+- `docs/project_management/_archived/next/substrate_isolated_shell_plan.md`, `.../data_map.md`, `.../kickoff_prompts/A3-code.md` for background
 
 Commands to run:
 1. `cargo fmt --all`

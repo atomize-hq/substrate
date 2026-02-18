@@ -8,7 +8,7 @@
 ## Scope
 - Feature directory: `docs/project_management/_archived/world-overlayfs-enumeration/`
 - Orchestration branch: `feat/world-overlayfs-enumeration`
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
@@ -24,7 +24,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 26e58c0b2d64a9f9fb9ba0f8ea553c4b73a84056e4154306c98ce75deb8dd0a2
+ADR_BODY_SHA256: d7ca7b07d4b30d283dcd9abd9a829fa388df25aeeb9f1fc34ca3ebf136adffbf
 ### Changes (operator-facing)
 - World overlay directory enumeration reliability (Linux)
   - Existing: On some Linux hosts, a world overlay mount can succeed but directory enumeration in the merged view is broken (e.g., `ls` shows empty even though `stat` works), making worlds unsafe/confusing.
@@ -141,7 +141,7 @@ ADR_BODY_SHA256: 26e58c0b2d64a9f9fb9ba0f8ea553c4b73a84056e4154306c98ce75deb8dd0a
     - doctor output reports strategy health
 
 ## Sequencing / Dependencies
-- Sequencing entry: `docs/project_management/next/sequencing.json` → `world_overlayfs_enumeration`
+- Sequencing entry: `docs/project_management/packs/sequencing.json` → `world_overlayfs_enumeration`
 - Prerequisite integration task IDs:
   - `WO0-integ` before `WO1-code` (if later triads extend into PTY parity or full-cage)
 

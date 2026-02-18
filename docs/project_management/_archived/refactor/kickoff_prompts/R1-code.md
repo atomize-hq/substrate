@@ -56,7 +56,7 @@ cargo test -p forwarder
    ```
 4. Update `tasks.json` (status → `completed`), append an END entry to
    `session_log.md` (commands/results/blockers), and ensure the paired test
-   prompt (`docs/project_management/next/refactor/kickoff_prompts/R1-test.md`)
+   prompt (`docs/project_management/_archived/next/refactor/kickoff_prompts/R1-test.md`)
    is referenced.
 5. Commit docs/log updates on `feat/crate-refactor`
    (`git commit -am "docs: finish R1-code"`).

@@ -20,4 +20,4 @@ Notes & reminders:
 - Start at `AI_AGENT_START_HERE.md`, update coordination files on `feat/isolated-shell-plan`, and record START/END entries in the session log.
 - Work inside git worktree `wt/b1-shim-test`; keep `tasks.json` and `session_log.md` untouched from that worktree.
 - Capture current `cargo test -p substrate-shim` output even if it fails until B1-code is merged; document results in the END log plus Integration Kickoff Prompt.
-- Reference `docs/project_management/next/substrate_isolated_shell_plan.md` and the data map for schema/telemetry expectations.
+- Reference `docs/project_management/_archived/next/substrate_isolated_shell_plan.md` and the data map for schema/telemetry expectations.

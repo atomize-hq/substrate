@@ -33,5 +33,5 @@ Notes / assumptions:
 
 Finish checklist:
 1. After successful runs, commit/push the merged integration worktree and return to `feat/isolated-shell-plan`.
-2. Append START/END entries for C3-integ in `docs/project_management/next/session_log.md`, update `docs/project_management/next/tasks.json` (C3-code/C3-test/C3-integ statuses), and reference this prompt plus the harness commands in the log.
+2. Append START/END entries for C3-integ in `docs/project_management/_archived/next/session_log.md`, update `docs/project_management/_archived/next/tasks.json` (C3-code/C3-test/C3-integ statuses), and reference this prompt plus the harness commands in the log.
 3. Include the harness output (or pointers to the preserved temp dirs if `--keep-temp` was used) in the integration notes/PR so downstream agents can reproduce the installer behavior.

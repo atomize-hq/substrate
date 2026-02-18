@@ -10,7 +10,7 @@ This document explains, step by step, how to create a new feature directory, def
 - Test agent: tests only (plus minimal test-only helpers/fixtures/mocks if absolutely needed). No production code. Runs `cargo fmt` and the targeted tests they add/touch; not responsible for full suite.
   - Passing is owned by integration; test-only branches may be red until the code branch lands, but tests must compile and fail deterministically for spec-driven reasons.
 - Integration agent: merges code+tests, resolves drift to the spec, ensures behavior matches the spec, runs `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, all relevant tests, and finishes with `make integ-checks` (required). They own the final green state.
-- Execution triads must not begin until the Planning Pack has a quality gate report with `RECOMMENDATION: ACCEPT` at `docs/project_management/packs/active/<feature>/quality_gate_report.md` (legacy during migration: `docs/project_management/next/<feature>/quality_gate_report.md`; see `docs/project_management/system/prompts/planning/quality_gate_reviewer.md`).
+- Execution triads must not begin until the Planning Pack has a quality gate report with `RECOMMENDATION: ACCEPT` at `docs/project_management/packs/active/<feature>/quality_gate_report.md` (see `docs/project_management/system/prompts/planning/quality_gate_reviewer.md`).
 - If the feature opts into execution gates (`tasks.json` meta: `execution_gates: true`), triads must not begin until the execution preflight gate is completed (see `docs/project_management/system/standards/execution/EXECUTION_PREFLIGHT_GATE_STANDARD.md`).
 - Docs/tasks/session log edits happen **only** on the orchestration branch (never in worktrees).
 - Specs are the single source of truth; integration reconciles code/tests to the spec.
@@ -50,7 +50,7 @@ When tasks are started via triad automation (preferred) and agents run inside an
 
 ## Creating a New Feature Directory (from scratch)
 1. Choose orchestration branch name (e.g., `feat/<feature>`). Create/pull it.
-2. Create directory: `docs/project_management/packs/active/<feature>/` (legacy during migration: `docs/project_management/next/<feature>/`).
+2. Create directory: `docs/project_management/packs/active/<feature>/`.
 3. Add files:
    - `plan.md` (runbook/guardrails/triad overview).
    - `tasks.json` (all tasks with ids, worktrees, deps, prompts).

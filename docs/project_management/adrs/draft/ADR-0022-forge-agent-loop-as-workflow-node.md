@@ -6,8 +6,8 @@
 - Owner(s): Substrate maintainers
 
 ## Scope
-- Feature directory: `docs/project_management/next/forge/`
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Feature directory: `docs/project_management/_archived/next/forge/`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
@@ -15,13 +15,13 @@
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 
 ## Related Docs
-- Plan: `docs/project_management/next/forge/plan.md` (not created; ADR draft phase)
-- Tasks: `docs/project_management/next/forge/tasks.json` (not created; ADR draft phase)
-- Spec manifest: `docs/project_management/next/forge/spec_manifest.md` (not created; ADR draft phase)
-- Contract (if present): `docs/project_management/next/forge/contract.md` (not created; ADR draft phase)
-- Decision Register: `docs/project_management/next/forge/decision_register.md` (required before Accepted)
-- Impact Map: `docs/project_management/next/forge/impact_map.md` (not created; ADR draft phase)
-- Manual Playbook: `docs/project_management/next/forge/manual_testing_playbook.md` (not created; ADR draft phase)
+- Plan: `docs/project_management/_archived/next/forge/plan.md` (not created; ADR draft phase)
+- Tasks: `docs/project_management/_archived/next/forge/tasks.json` (not created; ADR draft phase)
+- Spec manifest: `docs/project_management/_archived/next/forge/spec_manifest.md` (not created; ADR draft phase)
+- Contract (if present): `docs/project_management/_archived/next/forge/contract.md` (not created; ADR draft phase)
+- Decision Register: `docs/project_management/_archived/next/forge/decision_register.md` (required before Accepted)
+- Impact Map: `docs/project_management/_archived/next/forge/impact_map.md` (not created; ADR draft phase)
+- Manual Playbook: `docs/project_management/_archived/next/forge/manual_testing_playbook.md` (not created; ADR draft phase)
 - Dependency foundations (must remain compatible):
   - Workflow engine (node executor hook): `docs/project_management/adrs/draft/ADR-0021-substrate-workflow-engine.md`
   - LLM gateway front door: `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md`
@@ -40,7 +40,7 @@ ADR_BODY_SHA256: ebc465112d409c333a645c9a8e5c6a3218c267dd57f42c76c1e3da3360d6487
   - Links:
     - `docs/project_management/adrs/draft/ADR-0022-forge-agent-loop-as-workflow-node.md#L1`
     - `docs/project_management/adrs/draft/ADR-0021-substrate-workflow-engine.md#L1`
-    - `docs/project_management/next/forge/decision_register.md`
+    - `docs/project_management/_archived/next/forge/decision_register.md`
 
 ## Problem / Context
 - Forge (as implemented in the current Python repo) is a specialized orchestration loop with role-based prompts/config, retries, and “leadership” adjustments.
@@ -134,7 +134,7 @@ ADR_BODY_SHA256: ebc465112d409c333a645c9a8e5c6a3218c267dd57f42c76c1e3da3360d6487
     - nested spans/events suitable for replay/inspection.
 
 ## Sequencing / Dependencies
-- Sequencing entry: this ADR must add a `forge` entry to `docs/project_management/next/sequencing.json` before it can be marked `Accepted`.
+- Sequencing entry: this ADR must add a `forge` entry to `docs/project_management/packs/sequencing.json` before it can be marked `Accepted`.
 - Prerequisite integration task IDs: none yet (this ADR is Draft). Before `Accepted`, this section must be updated to reference the Planning Pack task IDs for forge.
 - Dependencies:
   - Workflow engine (`ADR-0021`) provides the host DAG runtime and the `forge.run` node hook point.
@@ -175,7 +175,7 @@ ADR_BODY_SHA256: ebc465112d409c333a645c9a8e5c6a3218c267dd57f42c76c1e3da3360d6487
 - Forge config schemas must be versioned and validated; unknown schema versions fail with exit `2` (invalid config/spec).
 
 ## Decision Summary
-- Decision Register: `docs/project_management/next/forge/decision_register.md`
+- Decision Register: `docs/project_management/_archived/next/forge/decision_register.md`
   - DR-0001: Loop shape + step semantics
   - DR-0002: Budget enforcement + fail-closed rules
   - DR-0003: Output extraction contract (`FINAL:` marker) vs JSON-only

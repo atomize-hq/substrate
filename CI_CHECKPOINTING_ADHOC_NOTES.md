@@ -34,7 +34,7 @@ Notes:
 ## New planning artifact
 
 Add a required planning-pack document:
-- `docs/project_management/next/<feature>/ci_checkpoint_plan.md`
+- `docs/project_management/_archived/next/<feature>/ci_checkpoint_plan.md`
 
 This document:
 - Partitions the feature’s slices into checkpoint groups.
@@ -69,7 +69,7 @@ The following items are implemented in the repo:
 - `docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md`
 - `docs/project_management/standards/templates/ci_checkpoint_plan.md.tmpl`
 - `docs/project_management/standards/templates/kickoff_ci_checkpoint.md.tmpl`
-- `scripts/planning/validate_ci_checkpoint_plan.py`
+- `docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py`
 - Planning lint requires and validates `ci_checkpoint_plan.md` for automation-enabled cross-platform packs.
 - Integration kickoff templates explicitly remove “run cross-platform CI per slice” defaults (CI is a checkpoint-only activity).
 - Cross-platform dispatch scripts support validating an exact commit (checkout-ref) so checkpoints can validate the merged state deterministically.
@@ -109,7 +109,7 @@ Rules:
 ### Operator UX: single wrapper entrypoint
 
 Add a single automation entrypoint to run a slice “start → complete” end-to-end:
-- `make triad-task-start-complete FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>"`
+- `make triad-task-start-complete FEATURE_DIR="docs/project_management/_archived/next/<feature>" SLICE_ID="<slice>"`
 
 Requirements:
 - Wrapper runs from the orchestration checkout and uses Codex-enabled automation internally (no extra flags required in the common case).

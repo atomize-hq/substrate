@@ -2,7 +2,7 @@
 
 ## Scope
 - Implement the inventory directory model defined by:
-  - `docs/project_management/next/world_deps_packages_bundles_contract.md` (Inventory schema + merge rules)
+  - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md` (Inventory schema + merge rules)
 - Implement non-world, read-only CLI surfaces:
   - `substrate world deps current list available`
   - `substrate world deps current show <item_name>` (without `--explain`)
@@ -11,7 +11,7 @@
 
 ## Behavior (authoritative)
 All behavior for the commands in scope is defined by the contract doc:
-- `docs/project_management/next/world_deps_packages_bundles_contract.md`
+- `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
 
 Constraints enforced in this slice:
 - Inventory parsing rejects invalid YAML and schema violations.

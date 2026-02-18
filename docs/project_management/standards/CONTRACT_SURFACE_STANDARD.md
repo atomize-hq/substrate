@@ -5,7 +5,7 @@ Goal:
 
 ## When to use
 
-Create `docs/project_management/next/<feature>/contract.md` when the work defines or changes any of:
+Create `docs/project_management/packs/active/<feature>/contract.md` when the work defines or changes any of:
 - CLI commands/flags/defaults
 - Config files, paths, precedence, schema constraints
 - Exit code meanings

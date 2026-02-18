@@ -16,7 +16,7 @@
   - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
   - `docs/CONFIGURATION.md`
 - Commands planned (if any):
   - `export FEATURE_DIR="docs/project_management/_archived/policy-patch-only-broker-effective-resolution"`
@@ -26,7 +26,7 @@
 ## END — 2026-01-17T02:56:34Z — planning — planning pack for ADR-0013 (broker-canonical policy resolution)
 - Summary of changes (exhaustive):
   - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/`: created full Planning Pack artifacts (plan/spec/tasks/prompts/playbook/smoke).
-  - `docs/project_management/next/sequencing.json`: added sprint entry for this feature directory.
+  - `docs/project_management/packs/sequencing.json`: added sprint entry for this feature directory.
 - Files created/modified:
   - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/plan.md`
   - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/tasks.json`
@@ -42,11 +42,11 @@
   - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/smoke/windows-smoke.ps1`
   - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/kickoff_prompts/*`
   - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/quality_gate_report.md`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
 - Rubric checks run (with results):
   - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` → `0` → `OK`
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0` → `OK`
-  - `python3 scripts/planning/validate_tasks_json.py --feature-dir "$FEATURE_DIR"` → `0` → `OK`
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → `0` → `OK`
+  - `PM_SYSTEM_SCRIPTS="docs/project_management/system/scripts" python3 "${PM_SYSTEM_SCRIPTS}/planning/validate_tasks_json.py" --feature-dir "$FEATURE_DIR"` → `0` → `OK`
   - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` → `0` → `OK`
   - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → `0` → `OK`
 - Sequencing alignment:
@@ -72,7 +72,7 @@
   - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh`
   - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/smoke/macos-smoke.sh`
   - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/smoke/windows-smoke.ps1`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
 - Commands planned (if any):
   - `export FEATURE_DIR="docs/project_management/_archived/policy-patch-only-broker-effective-resolution"`
   - `make planning-validate FEATURE_DIR="$FEATURE_DIR"`
@@ -102,7 +102,7 @@
   - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/kickoff_prompts/C1-integ-macos.md`
   - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/kickoff_prompts/C1-integ-windows.md`
   - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/kickoff_prompts/C1-integ.md`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
 - Rubric checks run (with results):
   - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` → `0` → `OK`
   - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → `0` → `OK`
@@ -127,7 +127,7 @@
   - `make planning-lint FEATURE_DIR="$FEATURE_DIR"`
   - `make planning-validate FEATURE_DIR="$FEATURE_DIR"`
   - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null`
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null`
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null`
 
 ## END — 2026-01-17T04:12:26Z — remediation — fix Planning Quality Gate DEFECT findings
 - Defects addressed (Finding IDs):
@@ -144,7 +144,7 @@
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/policy-patch-only-broker-effective-resolution"` → `0`
   - `make planning-validate FEATURE_DIR="docs/project_management/_archived/policy-patch-only-broker-effective-resolution"` → `0`
   - `jq -e . "docs/project_management/_archived/policy-patch-only-broker-effective-resolution/tasks.json" >/dev/null` → `0`
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0`
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → `0`
 
 ## START — 2026-01-17T04:16:30Z — remediation — quality gate re-run (verification only)
 - Feature: `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/`
@@ -154,12 +154,12 @@
   - `make planning-lint FEATURE_DIR="$FEATURE_DIR"`
   - `make planning-validate FEATURE_DIR="$FEATURE_DIR"`
   - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null`
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null`
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null`
 
 ## END — 2026-01-17T04:16:30Z — remediation — quality gate re-run (verification only)
 - Commands run (with exit codes):
   - `jq -e . "docs/project_management/_archived/policy-patch-only-broker-effective-resolution/tasks.json" >/dev/null` → `0`
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0`
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → `0`
   - `make planning-validate FEATURE_DIR="docs/project_management/_archived/policy-patch-only-broker-effective-resolution"` → `0`
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/policy-patch-only-broker-effective-resolution"` → `0`
 

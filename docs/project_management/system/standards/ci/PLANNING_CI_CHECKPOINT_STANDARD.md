@@ -26,7 +26,7 @@ Checkpoints preserve safety by:
 ## Required artifact
 
 Create:
-- `docs/project_management/next/<feature>/ci_checkpoint_plan.md`
+- `docs/project_management/packs/active/<feature>/ci_checkpoint_plan.md`
 
 Rules:
 - Must include a **machine-readable JSON section** that is linted.

@@ -49,12 +49,12 @@ Authoring standard:
 
 ## Cross-queue scan (2026-02-06)
 Scan scope:
-- `docs/project_management/next/sequencing.json` `sprints[]` list (feature ids, titles, and directories).
-- Planning packs under `docs/project_management/next/` referenced by ADR-0018.
+- `docs/project_management/packs/sequencing.json` `sprints[]` list (feature ids, titles, and directories).
+- Planning packs under `docs/project_management/_archived/next/` referenced by ADR-0018.
 
 Overlaps found and explicit resolution:
 - `world_fs_granular_allow_deny` (order `33`) and `world_fs_granular_allow_deny_appendix` (order `34`) both touch policy schema/snapshot + routing behavior in `crates/broker`, `crates/shell`, and `crates/world-agent`.
-  - Resolution: the appendix workstream is ordered after the baseline workstream in `docs/project_management/next/sequencing.json` and MUST NOT execute concurrently with it.
+  - Resolution: the appendix workstream is ordered after the baseline workstream in `docs/project_management/packs/sequencing.json` and MUST NOT execute concurrently with it.
   - Contract precedence: for Appendix A + B deltas, contracts under `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/` are authoritative and supersede prior naming (`world_fs.require_world`, `PolicySnapshotV2`) for this track.
 
-No other overlapping queued workstreams were found in `docs/project_management/next/sequencing.json` that match this feature’s touch set keywords (`world_fs`, `policy snapshot`, `routing`, `caged`, `repl.exit_cwd`).
+No other overlapping queued workstreams were found in `docs/project_management/packs/sequencing.json` that match this feature’s touch set keywords (`world_fs`, `policy snapshot`, `routing`, `caged`, `repl.exit_cwd`).

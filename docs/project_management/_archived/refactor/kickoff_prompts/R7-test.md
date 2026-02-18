@@ -50,7 +50,7 @@ cargo test -p substrate-replay --all-targets
    ```
 4. Update `tasks.json` (status → `completed`), append an END entry to
    `session_log.md` (commands/results/blockers), and ensure the integration
-   prompt (`docs/project_management/next/refactor/kickoff_prompts/R7-integ.md`)
+   prompt (`docs/project_management/_archived/next/refactor/kickoff_prompts/R7-integ.md`)
    is referenced.
 5. Commit docs/log updates on `feat/crate-refactor`
    (`git commit -am "docs: finish R7-test"`).

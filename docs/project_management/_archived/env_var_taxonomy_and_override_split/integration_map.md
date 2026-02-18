@@ -76,5 +76,5 @@ Evidence requirement:
   - This feature builds on that resolver layer and replaces the env override namespace for config-shaped keys.
 
 ## Sequencing alignment (final)
-- Sequencing entry: `docs/project_management/next/sequencing.json` → sprint id `env_var_taxonomy_and_override_split`
+- Sequencing entry: `docs/project_management/packs/sequencing.json` → sprint id `env_var_taxonomy_and_override_split`
 - Sequenced after: `policy_and_config_precedence` (order 26)

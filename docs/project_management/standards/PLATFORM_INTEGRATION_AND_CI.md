@@ -6,7 +6,7 @@ Goal:
 ## Model
 
 When a feature has platform smoke scripts under:
-- `docs/project_management/next/<feature>/smoke/`
+- `docs/project_management/packs/active/<feature>/smoke/`
 
 …treat platform validation as integration work that may run in different execution environments:
 - Prefer GitHub Actions + self-hosted runners for cross-platform parity (Linux/macOS/Windows).
@@ -121,7 +121,7 @@ Cross-platform Planning Packs are required to use the platform-fix model. Encode
     - `"separate"`: add `X-integ-wsl` as its own platform-fix task
 
 The mechanical tasks validator enforces the required task shape when `meta.cross_platform=true`:
-- `make planning-validate FEATURE_DIR="docs/project_management/next/<feature>"`
+- `make planning-validate FEATURE_DIR="docs/project_management/packs/active/<feature>"`
 
 ## WSL task rubric (bundled vs separate)
 

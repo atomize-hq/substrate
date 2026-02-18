@@ -12,7 +12,7 @@ Summary:
 Focus files / context:
 - `crates/common/src/manager_manifest.rs` (new module)
 - `crates/common/src/lib.rs` (re-export and any helper wiring)
-- Reference docs: `docs/project_management/next/substrate_isolated_shell_plan.md`, `.../data_map.md`, `.../dependency_graph.md`
+- Reference docs: `docs/project_management/_archived/next/substrate_isolated_shell_plan.md`, `.../data_map.md`, `.../dependency_graph.md`
 
 Commands to run:
 1. `cargo fmt --all`
@@ -20,7 +20,7 @@ Commands to run:
 3. `cargo clippy -p substrate-common -- -D warnings` (if time allows, to keep the crate tidy)
 
 Reminders:
-- Start from `AI_AGENT_START_HERE.md`, follow the logging + task workflow, and update `docs/project_management/next/session_log.md` for START/END entries.
+- Start from `AI_AGENT_START_HERE.md`, follow the logging + task workflow, and update `docs/project_management/_archived/next/session_log.md` for START/END entries.
 - Work inside the `wt/a1-manifest-test` worktree when implementing tests.
 - Document any new fixtures or helper files you add.
 

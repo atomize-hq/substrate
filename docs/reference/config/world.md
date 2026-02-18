@@ -73,7 +73,7 @@ Controls whether Substrate forwards a small allowlist of host environment variab
 
 See:
 - Full configuration reference (including env forwarding contract): `docs/CONFIGURATION.md`
-- Planning contract (host-visible hardening): `docs/project_management/next/world-deps-host-visible-hardening/WDH0-spec.md`
+- Planning contract (host-visible hardening): `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH0-spec.md`
 
 ## Related documentation
 

@@ -7,10 +7,10 @@ Test agent: tests/fixtures only. No production code. Do not edit docs/tasks/sess
 Add tests/fixtures validating inventory alignment and manifest layering per M5a-spec.
 
 ## Read first
-- `docs/project_management/next/p0-platform-stability-macOS-parity/plan.md`
-- `docs/project_management/next/p0-platform-stability-macOS-parity/tasks.json`
-- `docs/project_management/next/p0-platform-stability-macOS-parity/session_log.md`
-- `docs/project_management/next/p0-platform-stability-macOS-parity/M5a-spec.md`
+- `docs/project_management/_archived/next/p0-platform-stability-macOS-parity/plan.md`
+- `docs/project_management/_archived/next/p0-platform-stability-macOS-parity/tasks.json`
+- `docs/project_management/_archived/next/p0-platform-stability-macOS-parity/session_log.md`
+- `docs/project_management/_archived/next/p0-platform-stability-macOS-parity/M5a-spec.md`
 
 ## Start checklist (must follow)
 1. `git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only`

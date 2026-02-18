@@ -18,7 +18,7 @@ export FEATURE_DIR="docs/project_management/_archived/world_deps_selection_layer
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
 # exit: 0
 
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 # exit: 0
 
 # tasks.json required-field audit
@@ -58,7 +58,7 @@ make planning-lint FEATURE_DIR="$FEATURE_DIR"
 
 Result (verbatim):
 ```text
-scripts/planning/lint.sh --feature-dir "docs/project_management/_archived/world_deps_selection_layer"
+make planning-lint FEATURE_DIR="docs/project_management/_archived/world_deps_selection_layer"
 == Planning lint: docs/project_management/_archived/world_deps_selection_layer ==
 -- Smoke script scaffold scan
 -- Hard-ban scan
@@ -118,7 +118,7 @@ PY
 - `integration_map.md` (if present/required): `YES`
 - `manual_testing_playbook.md` (if present/required): `YES`
 - Feature smoke scripts under `smoke/` (if required): `YES`
-- `docs/project_management/next/sequencing.json`: `YES`
+- `docs/project_management/packs/sequencing.json`: `YES`
 - Standards:
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
@@ -141,13 +141,13 @@ PY
 - Evidence:
   - `docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md` (“Intended execution branch” and related track pointers)
   - `docs/project_management/_archived/world_deps_selection_layer/tasks.json` (`meta.automation.orchestration_branch: "feat/world_deps_selection_layer"`)
-  - `docs/project_management/next/sequencing.json` (`world_deps_selection_layer.branch: "feat/world_deps_selection_layer"`)
+  - `docs/project_management/packs/sequencing.json` (`world_deps_selection_layer.branch: "feat/world_deps_selection_layer"`)
 - Notes: CLI/exit codes/config precedence are consistent, and orchestration branch naming is aligned across ADR/tasks/sequencing.
 
 ### 4) Sequencing and dependency alignment
 - Result: `PASS`
 - Evidence:
-  - `docs/project_management/next/sequencing.json` (Y0 and other completed sprints point at `docs/project_management/_archived/...`)
+  - `docs/project_management/packs/sequencing.json` (Y0 and other completed sprints point at `docs/project_management/_archived/...`)
   - `docs/project_management/_archived/world_deps_selection_layer/tasks.json` (`depends_on: ["Y0-integ"]` for `F0-exec-preflight`)
 - Notes: Macro sequencing and micro task dependencies are aligned; completed-sprint pointers resolve after archiving.
 
@@ -181,15 +181,15 @@ PY
 - Evidence:
   - `docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md` (“Intended execution branch: `feat/world_deps_selection_layer`”)
   - `docs/project_management/_archived/world_deps_selection_layer/tasks.json` (`meta.automation.orchestration_branch: "feat/world_deps_selection_layer"`)
-  - `docs/project_management/next/sequencing.json` sprint `id="world_deps_selection_layer"` uses `branch: "feat/world_deps_selection_layer"`
+  - `docs/project_management/packs/sequencing.json` sprint `id="world_deps_selection_layer"` uses `branch: "feat/world_deps_selection_layer"`
 - Impact: CI dispatch (`WORKFLOW_REF`) and automation will target the correct ref, preserving auditability.
 - Fix required (exact): none
 
 ### Finding 003 — Completed sprint pointers in sequencing.json resolve after archiving
 - Status: `VERIFIED`
 - Evidence:
-  - `docs/project_management/next/sequencing.json` completed sprints reference `docs/project_management/_archived/...`
-  - `scripts/planning/lint.sh` includes `Sequencing spine validity (completed sprints)` check which prints `OK: completed sprint paths resolve`
+  - `docs/project_management/packs/sequencing.json` completed sprints reference `docs/project_management/_archived/...`
+  - `make planning-lint` includes `Sequencing spine validity (completed sprints)` check which prints `OK: completed sprint paths resolve`
 - Impact: Prevents recurrence where archiving leaves broken prerequisite pointers.
 - Fix required (exact): none
 

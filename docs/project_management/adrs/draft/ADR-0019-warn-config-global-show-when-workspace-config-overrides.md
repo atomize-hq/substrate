@@ -24,14 +24,14 @@ ADR_BODY_SHA256: 6b8c510ead88e391788963e6bd8b965273c4aaa8312d91df9ea245126c78ad2
   - Why: keep stderr high-signal and avoid double-notes.
 
 Links:
-- Plan: `docs/project_management/next/warn-config-global-show-workspace-overrides/plan.md`
-- Tasks: `docs/project_management/next/warn-config-global-show-workspace-overrides/tasks.json`
-- Spec manifest: `docs/project_management/next/warn-config-global-show-workspace-overrides/spec_manifest.md`
-- Spec: `docs/project_management/next/warn-config-global-show-workspace-overrides/C0-spec.md`
-- Contract: `docs/project_management/next/warn-config-global-show-workspace-overrides/contract.md`
-- Impact map: `docs/project_management/next/warn-config-global-show-workspace-overrides/impact_map.md`
-- CI checkpoint plan: `docs/project_management/next/warn-config-global-show-workspace-overrides/ci_checkpoint_plan.md`
-- Manual Playbook: `docs/project_management/next/warn-config-global-show-workspace-overrides/manual_testing_playbook.md`
+- Plan: `docs/project_management/_archived/next/warn-config-global-show-workspace-overrides/plan.md`
+- Tasks: `docs/project_management/_archived/next/warn-config-global-show-workspace-overrides/tasks.json`
+- Spec manifest: `docs/project_management/_archived/next/warn-config-global-show-workspace-overrides/spec_manifest.md`
+- Spec: `docs/project_management/_archived/next/warn-config-global-show-workspace-overrides/C0-spec.md`
+- Contract: `docs/project_management/_archived/next/warn-config-global-show-workspace-overrides/contract.md`
+- Impact map: `docs/project_management/_archived/next/warn-config-global-show-workspace-overrides/impact_map.md`
+- CI checkpoint plan: `docs/project_management/_archived/next/warn-config-global-show-workspace-overrides/ci_checkpoint_plan.md`
+- Manual Playbook: `docs/project_management/_archived/next/warn-config-global-show-workspace-overrides/manual_testing_playbook.md`
 
 ## Context
 
@@ -109,7 +109,7 @@ Notes:
 ## User Contract
 
 Authoritative contract text lives in:
-- `docs/project_management/next/warn-config-global-show-workspace-overrides/contract.md`
+- `docs/project_management/_archived/next/warn-config-global-show-workspace-overrides/contract.md`
 
 Key invariants:
 - stderr-only note, single-line

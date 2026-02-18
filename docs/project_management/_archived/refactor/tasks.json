@@ -8,7 +8,7 @@
       "status": "completed",
       "description": "Replace .unwrap() panics with Result-based error handling in broker, world, telemetry-lib, and forwarder; add rich context and keep APIs stable.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/broker/src",
         "crates/world/src",
@@ -42,7 +42,7 @@
       ],
       "worktree": "wt/cr-r1-panics-code",
       "integration_task": "R1-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R1-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R1-code.md"
     },
     {
       "id": "R1-test",
@@ -52,7 +52,7 @@
       "status": "completed",
       "description": "Add panic-focused tests for broker, world, telemetry-lib, and forwarder to ensure poisoned locks and error paths return Result instead of panicking.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/broker/tests",
         "crates/world/tests",
@@ -85,7 +85,7 @@
       ],
       "worktree": "wt/cr-r1-panics-test",
       "integration_task": "R1-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R1-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R1-test.md"
     },
     {
       "id": "R1-integ",
@@ -95,7 +95,7 @@
       "status": "completed",
       "description": "Merge panic-remediation code/test worktrees, resolve conflicts, and ensure fmt/clippy/tests pass across the affected crates.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "crates/broker",
         "crates/world",
         "crates/telemetry-lib",
@@ -127,7 +127,7 @@
       "concurrent_with": [],
       "worktree": "wt/cr-r1-panics-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R1-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R1-integ.md"
     },
     {
       "id": "R2-code",
@@ -137,7 +137,7 @@
       "status": "completed",
       "description": "Split shell/lib.rs into execution, repl, builtins, and scripts modules, replace nested Arc<Mutex> PTY handling with a channel-based pattern, and keep CLI/docs aligned.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/shell/src/lib.rs",
         "crates/shell/src/pty_exec.rs",
@@ -172,7 +172,7 @@
       ],
       "worktree": "wt/cr-r2-shell-code",
       "integration_task": "R2-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R2-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R2-code.md"
     },
     {
       "id": "R2-test",
@@ -182,7 +182,7 @@
       "status": "completed",
       "description": "Move shell tests out of lib.rs into tests/ modules, add coverage for the new PTY channel manager and module seams, and update fixtures.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/shell/tests",
         "crates/shell/src",
@@ -216,7 +216,7 @@
       ],
       "worktree": "wt/cr-r2-shell-test",
       "integration_task": "R2-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R2-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R2-test.md"
     },
     {
       "id": "R2-integ",
@@ -226,7 +226,7 @@
       "status": "completed",
       "description": "Merge shell decomposition code/test branches, resolve conflicts, and ensure fmt/clippy/tests plus installer smoke scripts pass.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "crates/shell",
         "tests/installers",
         "docs/USAGE.md"
@@ -257,7 +257,7 @@
       "concurrent_with": [],
       "worktree": "wt/cr-r2-shell-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R2-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R2-integ.md"
     },
     {
       "id": "R3-code",
@@ -267,7 +267,7 @@
       "status": "completed",
       "description": "Remove broker/trace global singletons, enforce thin binaries for world-agent and host-proxy, and expose context-based constructors.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/broker/src",
         "crates/trace/src",
@@ -302,7 +302,7 @@
       ],
       "worktree": "wt/cr-r3-boundaries-code",
       "integration_task": "R3-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R3-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R3-code.md"
     },
     {
       "id": "R3-test",
@@ -312,7 +312,7 @@
       "status": "completed",
       "description": "Add tests ensuring broker/trace contexts are isolated (no shared global state) and cover world-agent/host-proxy thin binary entrypoints.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/broker/tests",
         "crates/trace/tests",
@@ -347,7 +347,7 @@
       ],
       "worktree": "wt/cr-r3-boundaries-test",
       "integration_task": "R3-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R3-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R3-test.md"
     },
     {
       "id": "R3-integ",
@@ -357,7 +357,7 @@
       "status": "completed",
       "description": "Merge broker/trace/world-agent/host-proxy code/test branches, resolve conflicts, and ensure fmt/clippy/tests are green.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "crates/broker",
         "crates/trace",
         "crates/world-agent",
@@ -389,7 +389,7 @@
       "concurrent_with": [],
       "worktree": "wt/cr-r3-boundaries-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R3-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R3-integ.md"
     },
     {
       "id": "R4-code",
@@ -399,7 +399,7 @@
       "status": "completed",
       "description": "Split remaining single-file crates (trace, world-windows-wsl), add replay/common prelude docs, and ensure CHANGELOG reflects refactor outcomes.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/trace/src",
         "crates/world-windows-wsl/src",
@@ -435,7 +435,7 @@
       ],
       "worktree": "wt/cr-r4-polish-code",
       "integration_task": "R4-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R4-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R4-code.md"
     },
     {
       "id": "R4-test",
@@ -445,7 +445,7 @@
       "status": "completed",
       "description": "Add tests/doctests/property tests to cover new module splits, replay docs, and ensure benchmarks/fixtures stay stable.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/trace",
         "crates/world-windows-wsl",
@@ -480,7 +480,7 @@
       ],
       "worktree": "wt/cr-r4-polish-test",
       "integration_task": "R4-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R4-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R4-test.md"
     },
     {
       "id": "R4-integ",
@@ -490,7 +490,7 @@
       "status": "completed",
       "description": "Merge polish/doc code/test branches, resolve conflicts, and ensure full fmt/clippy/tests (and relevant doctests/benches) pass.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "crates/trace",
         "crates/world-windows-wsl",
         "crates/replay",
@@ -522,7 +522,7 @@
       "concurrent_with": [],
       "worktree": "wt/cr-r4-polish-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R4-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R4-integ.md"
     },
     {
       "id": "R5-code",
@@ -532,7 +532,7 @@
       "status": "completed",
       "description": "Split shell execution stack into modules (routing, invocation planning, platform adapters) and break up pty_exec/settings/manager init without changing CLI behavior.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/shell/src/execution/mod.rs",
         "crates/shell/src/execution/pty_exec.rs",
@@ -566,7 +566,7 @@
       ],
       "worktree": "wt/cr-r5-exec-code",
       "integration_task": "R5-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R5-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R5-code.md"
     },
     {
       "id": "R5-test",
@@ -576,7 +576,7 @@
       "status": "completed",
       "description": "Add/reshape tests for the split shell execution modules and PTY pipeline, ensuring routing, plan building, and resize/write flows remain correct.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/shell/src/execution",
         "crates/shell/tests"
@@ -608,7 +608,7 @@
       ],
       "worktree": "wt/cr-r5-exec-test",
       "integration_task": "R5-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R5-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R5-test.md"
     },
     {
       "id": "R5-integ",
@@ -618,7 +618,7 @@
       "status": "completed",
       "description": "Merge shell execution code/test branches, resolve conflicts, and ensure fmt/clippy/tests stay green after the module split.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "crates/shell/src/execution"
       ],
       "acceptance_criteria": [
@@ -647,7 +647,7 @@
       "concurrent_with": [],
       "worktree": "wt/cr-r5-exec-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R5-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R5-integ.md"
     },
     {
       "id": "R6-code",
@@ -657,7 +657,7 @@
       "status": "completed",
       "description": "Split manager_manifest, shim exec, and large shell builtins into focused modules with unchanged outputs and logging.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/common/src/manager_manifest.rs",
         "crates/shim/src/exec.rs",
@@ -692,7 +692,7 @@
       ],
       "worktree": "wt/cr-r6-bootstrap-code",
       "integration_task": "R6-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R6-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R6-code.md"
     },
     {
       "id": "R6-test",
@@ -702,7 +702,7 @@
       "status": "completed",
       "description": "Add tests/fixtures for the split manager_manifest, shim exec, and builtin modules, validating outputs and validation paths.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/common/tests",
         "crates/shim/tests",
@@ -735,7 +735,7 @@
       ],
       "worktree": "wt/cr-r6-bootstrap-test",
       "integration_task": "R6-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R6-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R6-test.md"
     },
     {
       "id": "R6-integ",
@@ -745,7 +745,7 @@
       "status": "completed",
       "description": "Merge manager_manifest/shim/builtins code/test branches, resolve conflicts, and ensure fmt/clippy/tests are green.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "crates/common",
         "crates/shim",
         "crates/shell/src/builtins"
@@ -776,7 +776,7 @@
       "concurrent_with": [],
       "worktree": "wt/cr-r6-bootstrap-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R6-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R6-integ.md"
     },
     {
       "id": "R7-code",
@@ -786,7 +786,7 @@
       "status": "completed",
       "description": "Reduce host-proxy/lib.rs, world/overlayfs.rs, and replay/replay.rs into thin public surfaces with internal modules, keeping behavior and performance stable.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/host-proxy/src/lib.rs",
         "crates/world/src/overlayfs.rs",
@@ -819,7 +819,7 @@
       ],
       "worktree": "wt/cr-r7-services-code",
       "integration_task": "R7-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R7-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R7-code.md"
     },
     {
       "id": "R7-test",
@@ -829,7 +829,7 @@
       "status": "completed",
       "description": "Add tests/fixtures for slimmed host-proxy/overlayfs/replay modules, confirming semantics and performance-sensitive paths remain stable.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/host-proxy/tests",
         "crates/world/tests",
@@ -862,7 +862,7 @@
       ],
       "worktree": "wt/cr-r7-services-test",
       "integration_task": "R7-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R7-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R7-test.md"
     },
     {
       "id": "R7-integ",
@@ -872,7 +872,7 @@
       "status": "completed",
       "description": "Merge host-proxy/overlayfs/replay code/test branches, resolve conflicts, and ensure fmt/clippy/tests are green.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "crates/host-proxy",
         "crates/world/src/overlayfs.rs",
         "crates/replay/src/replay.rs"
@@ -903,7 +903,7 @@
       "concurrent_with": [],
       "worktree": "wt/cr-r7-services-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R7-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R7-integ.md"
     },
     {
       "id": "R8-code",
@@ -913,7 +913,7 @@
       "status": "completed",
       "description": "Further decompose oversized shell execution files (routing.rs, pty/io.rs, invocation.rs, settings.rs, platform.rs, manager_init.rs) into focused modules while keeping behavior stable.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/shell/src/execution/routing.rs",
         "crates/shell/src/execution/pty/io.rs",
@@ -949,7 +949,7 @@
       ],
       "worktree": "wt/cr-r8-shell-slim-code",
       "integration_task": "R8-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R8-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R8-code.md"
     },
     {
       "id": "R8-test",
@@ -959,7 +959,7 @@
       "status": "completed",
       "description": "Add/reshape tests to cover the new shell execution submodules (pty/io, invocation planning, settings, platform adapters, manager init) without altering production code.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/shell/tests",
         "crates/shell/src/execution"
@@ -991,7 +991,7 @@
       ],
       "worktree": "wt/cr-r8-shell-slim-test",
       "integration_task": "R8-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R8-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R8-test.md"
     },
     {
       "id": "R8-integ",
@@ -1001,7 +1001,7 @@
       "status": "completed",
       "description": "Merge R8 code/test worktrees for the shell execution slicing, resolve conflicts, and ensure fmt/clippy/tests stay green after the splits.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "crates/shell/src/execution",
         "crates/shell/tests"
       ],
@@ -1030,7 +1030,7 @@
       "concurrent_with": [],
       "worktree": "wt/cr-r8-shell-slim-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R8-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R8-integ.md"
     },
     {
       "id": "R9a-code",
@@ -1040,7 +1040,7 @@
       "status": "completed",
       "description": "Split routing.rs by dispatch/builtin handling, keeping CLI semantics and logging unchanged; introduce focused modules and re-export a thin surface.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/shell/src/execution/routing.rs"
       ],
@@ -1071,7 +1071,7 @@
       ],
       "worktree": "wt/cr-r9a-routing-code",
       "integration_task": "R9a-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R9a-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R9a-code.md"
     },
     {
       "id": "R9a-test",
@@ -1081,7 +1081,7 @@
       "status": "completed",
       "description": "Align tests/fixtures with the routing dispatch/builtin module split; cover dispatch paths without changing production code.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/shell/tests",
         "crates/shell/src/execution/routing.rs"
@@ -1113,7 +1113,7 @@
       ],
       "worktree": "wt/cr-r9a-routing-test",
       "integration_task": "R9a-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R9a-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R9a-test.md"
     },
     {
       "id": "R9a-integ",
@@ -1123,7 +1123,7 @@
       "status": "completed",
       "description": "Merge R9a code/test routing split for dispatch/builtins, resolve conflicts, ensure fmt/clippy/tests are green.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "crates/shell/src/execution/routing.rs",
         "crates/shell/tests"
       ],
@@ -1152,7 +1152,7 @@
       "concurrent_with": [],
       "worktree": "wt/cr-r9a-routing-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R9a-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R9a-integ.md"
     },
     {
       "id": "R9b-code",
@@ -1162,7 +1162,7 @@
       "status": "completed",
       "description": "Extract path/cwd/env/world-env helpers from routing.rs into focused modules; keep behavior and logging unchanged.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/shell/src/execution/routing.rs"
       ],
@@ -1193,7 +1193,7 @@
       ],
       "worktree": "wt/cr-r9b-routing-code",
       "integration_task": "R9b-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R9b-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R9b-code.md"
     },
     {
       "id": "R9b-test",
@@ -1203,7 +1203,7 @@
       "status": "completed",
       "description": "Update tests/fixtures for routing path/cwd/env helper extraction; keep assertions intact.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/shell/tests",
         "crates/shell/src/execution/routing.rs"
@@ -1235,7 +1235,7 @@
       ],
       "worktree": "wt/cr-r9b-routing-test",
       "integration_task": "R9b-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R9b-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R9b-test.md"
     },
     {
       "id": "R9b-integ",
@@ -1245,7 +1245,7 @@
       "status": "completed",
       "description": "Merge R9b code/test routing split for path/cwd/env helpers, resolve conflicts, ensure fmt/clippy/tests are green.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "crates/shell/src/execution/routing.rs",
         "crates/shell/tests"
       ],
@@ -1274,7 +1274,7 @@
       "concurrent_with": [],
       "worktree": "wt/cr-r9b-routing-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R9b-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R9b-integ.md"
     },
     {
       "id": "R9c-code",
@@ -1284,7 +1284,7 @@
       "status": "completed",
       "description": "Extract world enable/disable, agent client wiring, and platform bridging logic from routing.rs into focused modules; preserve CLI behavior.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/shell/src/execution/routing.rs"
       ],
@@ -1315,7 +1315,7 @@
       ],
       "worktree": "wt/cr-r9c-routing-code",
       "integration_task": "R9c-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R9c-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R9c-code.md"
     },
     {
       "id": "R9c-test",
@@ -1325,7 +1325,7 @@
       "status": "completed",
       "description": "Update tests/fixtures for world enable/disable and agent client flows after routing split; preserve behavior assertions.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/shell/tests",
         "crates/shell/src/execution/routing.rs"
@@ -1357,7 +1357,7 @@
       ],
       "worktree": "wt/cr-r9c-routing-test",
       "integration_task": "R9c-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R9c-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R9c-test.md"
     },
     {
       "id": "R9c-integ",
@@ -1367,7 +1367,7 @@
       "status": "completed",
       "description": "Merge R9c code/test routing split for world/agent flows, resolve conflicts, ensure fmt/clippy/tests are green.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "crates/shell/src/execution/routing.rs",
         "crates/shell/tests"
       ],
@@ -1396,7 +1396,7 @@
       "concurrent_with": [],
       "worktree": "wt/cr-r9c-routing-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R9c-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R9c-integ.md"
     },
     {
       "id": "R10-code",
@@ -1406,7 +1406,7 @@
       "status": "completed",
       "description": "Split execution/pty/io/mod.rs into focused modules (traits/state vs readers/writers) while preserving channel semantics and logging.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/shell/src/execution/pty/io/mod.rs"
       ],
@@ -1437,7 +1437,7 @@
       ],
       "worktree": "wt/cr-r10-pty-code",
       "integration_task": "R10-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R10-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R10-code.md"
     },
     {
       "id": "R10-test",
@@ -1447,7 +1447,7 @@
       "status": "completed",
       "description": "Update/add tests to mirror the pty/io module split; assert resize/write/close/channel flows remain correct.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/shell/tests",
         "crates/shell/src/execution/pty/io/mod.rs"
@@ -1479,7 +1479,7 @@
       ],
       "worktree": "wt/cr-r10-pty-test",
       "integration_task": "R10-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R10-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R10-test.md"
     },
     {
       "id": "R10-integ",
@@ -1489,7 +1489,7 @@
       "status": "completed",
       "description": "Merge R10 code/test pty/io splits, resolve conflicts, ensure fmt/clippy/tests are green.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "crates/shell/src/execution/pty/io/mod.rs",
         "crates/shell/tests"
       ],
@@ -1518,7 +1518,7 @@
       "concurrent_with": [],
       "worktree": "wt/cr-r10-pty-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R10-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R10-integ.md"
     },
     {
       "id": "R11-code",
@@ -1528,7 +1528,7 @@
       "status": "completed",
       "description": "Break routing/dispatch.rs into focused modules and a registry-style router to shrink the remaining god file without changing CLI behavior.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/shell/src/execution/routing/dispatch.rs"
       ],
@@ -1559,7 +1559,7 @@
       ],
       "worktree": "wt/cr-r11-routing-code",
       "integration_task": "R11-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R11-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R11-code.md"
     },
     {
       "id": "R11-test",
@@ -1569,7 +1569,7 @@
       "status": "completed",
       "description": "Update/move tests to match the dispatch modularization and ensure routing behavior stays intact.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/shell/tests",
         "crates/shell/src/execution/routing/dispatch.rs"
@@ -1601,7 +1601,7 @@
       ],
       "worktree": "wt/cr-r11-routing-test",
       "integration_task": "R11-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R11-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R11-test.md"
     },
     {
       "id": "R11-integ",
@@ -1611,7 +1611,7 @@
       "status": "completed",
       "description": "Merge R11 code/test routing modularization, resolve conflicts, ensure fmt/clippy/tests are green.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "crates/shell/src/execution/routing/dispatch.rs",
         "crates/shell/tests"
       ],
@@ -1640,7 +1640,7 @@
       "concurrent_with": [],
       "worktree": "wt/cr-r11-routing-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R11-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R11-integ.md"
     },
     {
       "id": "R12-code",
@@ -1650,7 +1650,7 @@
       "status": "completed",
       "description": "Reduce routing builtin modules and world_enable runner into smaller units, keeping outputs and logging stable.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/shell/src/execution/routing/builtin.rs",
         "crates/shell/src/builtins/world_enable/runner.rs"
@@ -1682,7 +1682,7 @@
       ],
       "worktree": "wt/cr-r12-routing-builtin-code",
       "integration_task": "R12-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R12-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R12-code.md"
     },
     {
       "id": "R12-test",
@@ -1692,7 +1692,7 @@
       "status": "completed",
       "description": "Update/move tests to match builtin/world runner splits; ensure behavior and outputs remain stable.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/shell/tests",
         "crates/shell/src/execution/routing/builtin.rs",
@@ -1725,7 +1725,7 @@
       ],
       "worktree": "wt/cr-r12-routing-builtin-test",
       "integration_task": "R12-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R12-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R12-test.md"
     },
     {
       "id": "R12-integ",
@@ -1735,7 +1735,7 @@
       "status": "completed",
       "description": "Merge R12 code/test splits for routing builtins and world runner, resolve conflicts, ensure fmt/clippy/tests are green.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "crates/shell/src/execution/routing/builtin.rs",
         "crates/shell/src/builtins/world_enable/runner.rs",
         "crates/shell/tests"
@@ -1765,7 +1765,7 @@
       "concurrent_with": [],
       "worktree": "wt/cr-r12-routing-builtin-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R12-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R12-integ.md"
     },
     {
       "id": "R13-code",
@@ -1775,7 +1775,7 @@
       "status": "completed",
       "description": "Shrink broker/src/lib.rs by extracting modules for profile detection, policy loading, and watch plumbing; keep public API and behavior stable.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/broker/src/lib.rs"
       ],
@@ -1805,7 +1805,7 @@
       ],
       "worktree": "wt/cr-r13-broker-code",
       "integration_task": "R13-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R13-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R13-code.md"
     },
     {
       "id": "R13-test",
@@ -1815,7 +1815,7 @@
       "status": "completed",
       "description": "Update tests/fixtures to match broker/lib.rs split; ensure policy/profile/watch behavior remains intact.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/broker/tests",
         "crates/broker/src/lib.rs"
@@ -1847,7 +1847,7 @@
       ],
       "worktree": "wt/cr-r13-broker-test",
       "integration_task": "R13-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R13-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R13-test.md"
     },
     {
       "id": "R13-integ",
@@ -1857,7 +1857,7 @@
       "status": "completed",
       "description": "Merge R13 code/test broker splits, resolve conflicts, ensure fmt/clippy/tests are green.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "crates/broker/src/lib.rs",
         "crates/broker/tests"
       ],
@@ -1886,7 +1886,7 @@
       "concurrent_with": [],
       "worktree": "wt/cr-r13-broker-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R13-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R13-integ.md"
     },
     {
       "id": "R14-code",
@@ -1896,7 +1896,7 @@
       "status": "completed",
       "description": "Further slim routing/dispatch modules (mod.rs + tests.rs) by extracting common helpers/fixtures and shrinking top-level orchestration without behavior changes.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/shell/src/execution/routing/dispatch/mod.rs",
         "crates/shell/src/execution/routing/dispatch/tests.rs"
@@ -1928,7 +1928,7 @@
       ],
       "worktree": "wt/cr-r14-routing-dispatch-code",
       "integration_task": "R14-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R14-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R14-code.md"
     },
     {
       "id": "R14-test",
@@ -1938,7 +1938,7 @@
       "status": "completed",
       "description": "Align tests/fixtures with the trimmed dispatch modules; ensure coverage remains intact after helper extraction.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/shell/src/execution/routing/dispatch/tests.rs",
         "crates/shell/tests"
@@ -1970,7 +1970,7 @@
       ],
       "worktree": "wt/cr-r14-routing-dispatch-test",
       "integration_task": "R14-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R14-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R14-test.md"
     },
     {
       "id": "R14-integ",
@@ -1980,7 +1980,7 @@
       "status": "completed",
       "description": "Merge R14 dispatch code/test splits, resolve conflicts, ensure fmt/clippy/tests are green.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "crates/shell/src/execution/routing/dispatch",
         "crates/shell/tests"
       ],
@@ -2009,7 +2009,7 @@
       "concurrent_with": [],
       "worktree": "wt/cr-r14-routing-dispatch-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R14-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R14-integ.md"
     },
     {
       "id": "R15-code",
@@ -2019,7 +2019,7 @@
       "status": "completed",
       "description": "Split shell/tests/integration.rs into logical suites (e.g., world enable/disable, shim deployment, logging/rotation, env inheritance) with shared fixtures to reduce monolith size.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/shell/tests/integration.rs"
       ],
@@ -2049,7 +2049,7 @@
       ],
       "worktree": "wt/cr-r15-shell-integration-code",
       "integration_task": "R15-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R15-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R15-code.md"
     },
     {
       "id": "R15-test",
@@ -2059,7 +2059,7 @@
       "status": "completed",
       "description": "Refactor shell integration test fixtures/utilities to match the split suites and keep behavior coverage intact.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
         "crates/shell/tests/integration.rs",
         "crates/shell/tests"
@@ -2091,7 +2091,7 @@
       ],
       "worktree": "wt/cr-r15-shell-integration-test",
       "integration_task": "R15-integ",
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R15-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R15-test.md"
     },
     {
       "id": "R15-integ",
@@ -2101,7 +2101,7 @@
       "status": "completed",
       "description": "Merge R15 code/test splits for shell integration tests, resolve conflicts, ensure fmt/clippy/tests are green.",
       "references": [
-        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/_archived/next/refactor/refactor_plan.md",
         "crates/shell/tests"
       ],
       "acceptance_criteria": [
@@ -2129,7 +2129,7 @@
       "concurrent_with": [],
       "worktree": "wt/cr-r15-shell-integration-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R15-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/refactor/kickoff_prompts/R15-integ.md"
     }
   ]
 }

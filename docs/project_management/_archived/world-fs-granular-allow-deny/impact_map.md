@@ -67,7 +67,7 @@ Authoring standards:
 - `docs/project_management/_archived/world-fs-granular-allow-deny/kickoff_prompts/` — replace legacy C0 kickoff prompts with WFGAD0-WFGAD5 kickoff prompts with v4 automation workflow and required sentinel.
 - `docs/project_management/_archived/world-fs-granular-allow-deny/requirements_traceability.md` — replace legacy integration_map reference with impact_map.
 - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` — update Related Docs list to include spec_manifest and impact_map.
-- `docs/project_management/next/sequencing.json` — add sprint entry for this Planning Pack directory.
+- `docs/project_management/packs/sequencing.json` — add sprint entry for this Planning Pack directory.
 
 ### Deprecate
 - `docs/project_management/_archived/world-fs-granular-allow-deny/integration_map.md` — legacy doc retained for existing links; authoritative replacement is impact_map.md.

@@ -7,7 +7,7 @@
 
 ## Scope
 - Feature directory: `docs/project_management/_archived/workspace-config-policy-unification/`
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
@@ -26,7 +26,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: b05d3b2905cf142d383ada511ce8084a962783f5add20f27e51cabbf1315df4a
+ADR_BODY_SHA256: 957869d03b6b5e51184f84de7a77ef189f9e16b63f21e7139d47a11d1eda6b1e
 ### Changes (operator-facing)
 - Config and policy commands become explicit about scope and effective views
   - Existing: `config show` vs `config global show` can disagree because `config show` is an effective/merged view and can be affected by persistent `SUBSTRATE_OVERRIDE_*` env exports from install/dev scripts in directories with no enabled workspace.
@@ -487,7 +487,7 @@ Policy validation invariants are enforced on the effective merged policy:
   - exported state env vars via `$SUBSTRATE_HOME/env.sh` (never used as inputs)
 
 ## Sequencing / Dependencies
-- Sequencing entry: `docs/project_management/next/sequencing.json` → `workspace_config_policy_unification`
+- Sequencing entry: `docs/project_management/packs/sequencing.json` → `workspace_config_policy_unification`
 - Prerequisites:
   - None; this ADR is a cross-cutting contract consolidation that supersedes prior behavioral ambiguity between effective vs scope views.
 

@@ -7,10 +7,10 @@ Code agent: production code/scripts only. No tests. Do not edit docs/tasks/sessi
 Implement M5c-spec: wire first-run/provision flows so macOS installs “feel like host” out of the box, with coherent guidance across installer/health/doctor.
 
 ## Read first
-- `docs/project_management/next/p0-platform-stability-macOS-parity/plan.md`
-- `docs/project_management/next/p0-platform-stability-macOS-parity/tasks.json`
-- `docs/project_management/next/p0-platform-stability-macOS-parity/session_log.md`
-- `docs/project_management/next/p0-platform-stability-macOS-parity/M5c-spec.md`
+- `docs/project_management/_archived/next/p0-platform-stability-macOS-parity/plan.md`
+- `docs/project_management/_archived/next/p0-platform-stability-macOS-parity/tasks.json`
+- `docs/project_management/_archived/next/p0-platform-stability-macOS-parity/session_log.md`
+- `docs/project_management/_archived/next/p0-platform-stability-macOS-parity/M5c-spec.md`
 - `docs/INSTALLATION.md`
 - `docs/USAGE.md`
 

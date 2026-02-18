@@ -8,7 +8,7 @@
       "status": "completed",
       "description": "Introduce the `config` subcommand to Clap, implement `substrate config init` with `--force`, and update shell/install diagnostics to point users at the command whenever the global config is missing.",
       "references": [
-        "docs/project_management/next/config-subcommand/config_subcommand_plan.md",
+        "docs/project_management/_archived/next/config-subcommand/config_subcommand_plan.md",
         "docs/BACKLOG.md",
         "crates/shell/src/execution/cli.rs",
         "crates/shell/src/execution/invocation.rs",
@@ -45,7 +45,7 @@
       ],
       "worktree": "wt/cs-c1-config-code",
       "integration_task": "C1-integ",
-      "kickoff_prompt": "docs/project_management/next/config-subcommand/kickoff_prompts/C1-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/config-subcommand/kickoff_prompts/C1-code.md"
     },
     {
       "id": "C1-test",
@@ -55,7 +55,7 @@
       "status": "in_progress",
       "description": "Author integration/unit tests that cover `substrate config init`, missing-config diagnostics, and installer/script scaffolding without touching production code beyond test helpers.",
       "references": [
-        "docs/project_management/next/config-subcommand/config_subcommand_plan.md",
+        "docs/project_management/_archived/next/config-subcommand/config_subcommand_plan.md",
         "docs/BACKLOG.md",
         "crates/shell/tests",
         "tests/installers/install_smoke.sh",
@@ -88,7 +88,7 @@
       ],
       "worktree": "wt/cs-c1-config-test",
       "integration_task": "C1-integ",
-      "kickoff_prompt": "docs/project_management/next/config-subcommand/kickoff_prompts/C1-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/config-subcommand/kickoff_prompts/C1-test.md"
     },
     {
       "id": "C1-integ",
@@ -98,7 +98,7 @@
       "status": "completed",
       "description": "Merge the C1 code/test worktrees, resolve conflicts, and ensure fmt/clippy/tests pass before updating docs/tasks/session log on feat/config-subcommand.",
       "references": [
-        "docs/project_management/next/config-subcommand/config_subcommand_plan.md",
+        "docs/project_management/_archived/next/config-subcommand/config_subcommand_plan.md",
         "crates/shell",
         "tests/installers"
       ],
@@ -129,7 +129,7 @@
       "concurrent_with": [],
       "worktree": "wt/cs-c1-config-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/config-subcommand/kickoff_prompts/C1-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/config-subcommand/kickoff_prompts/C1-integ.md"
     },
     {
       "id": "C2-code",
@@ -139,7 +139,7 @@
       "status": "completed",
       "description": "Implement `substrate config show` with human-readable output and `--json`, including redaction of sensitive values and helpful exit codes.",
       "references": [
-        "docs/project_management/next/config-subcommand/config_subcommand_plan.md",
+        "docs/project_management/_archived/next/config-subcommand/config_subcommand_plan.md",
         "crates/shell/src/execution/cli.rs",
         "crates/shell/src/execution/invocation.rs",
         "crates/shell/src/execution/settings.rs",
@@ -175,7 +175,7 @@
       ],
       "worktree": "wt/cs-c2-show-code",
       "integration_task": "C2-integ",
-      "kickoff_prompt": "docs/project_management/next/config-subcommand/kickoff_prompts/C2-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/config-subcommand/kickoff_prompts/C2-code.md"
     },
     {
       "id": "C2-test",
@@ -185,7 +185,7 @@
       "status": "completed",
       "description": "Add tests validating `substrate config show` output in both human and JSON modes, including redaction hooks and missing-file errors.",
       "references": [
-        "docs/project_management/next/config-subcommand/config_subcommand_plan.md",
+        "docs/project_management/_archived/next/config-subcommand/config_subcommand_plan.md",
         "crates/shell/tests",
         "docs/CONFIGURATION.md"
       ],
@@ -217,7 +217,7 @@
       ],
       "worktree": "wt/cs-c2-show-test",
       "integration_task": "C2-integ",
-      "kickoff_prompt": "docs/project_management/next/config-subcommand/kickoff_prompts/C2-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/config-subcommand/kickoff_prompts/C2-test.md"
     },
     {
       "id": "C2-integ",
@@ -227,7 +227,7 @@
       "status": "completed",
       "description": "Merge the config-show code/test branches, ensure fmt/clippy/tests pass, and stage the next kickoff prompts.",
       "references": [
-        "docs/project_management/next/config-subcommand/config_subcommand_plan.md",
+        "docs/project_management/_archived/next/config-subcommand/config_subcommand_plan.md",
         "crates/shell",
         "docs/CONFIGURATION.md"
       ],
@@ -257,7 +257,7 @@
       "concurrent_with": [],
       "worktree": "wt/cs-c2-show-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/config-subcommand/kickoff_prompts/C2-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/config-subcommand/kickoff_prompts/C2-integ.md"
     },
     {
       "id": "C3-code",
@@ -267,7 +267,7 @@
       "status": "completed",
       "description": "Implement `substrate config set key=value ...` with dotted key paths, schema-aware validation, multi-key support, atomic writes, and JSON-capable responses.",
       "references": [
-        "docs/project_management/next/config-subcommand/config_subcommand_plan.md",
+        "docs/project_management/_archived/next/config-subcommand/config_subcommand_plan.md",
         "crates/shell/src/execution/cli.rs",
         "crates/shell/src/execution/invocation.rs",
         "crates/shell/src/execution/settings.rs",
@@ -304,7 +304,7 @@
       ],
       "worktree": "wt/cs-c3-set-code",
       "integration_task": "C3-integ",
-      "kickoff_prompt": "docs/project_management/next/config-subcommand/kickoff_prompts/C3-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/config-subcommand/kickoff_prompts/C3-code.md"
     },
     {
       "id": "C3-test",
@@ -314,7 +314,7 @@
       "status": "completed",
       "description": "Add tests for `substrate config set` covering multi-key updates, validation errors, JSON output, and atomic persistence.",
       "references": [
-        "docs/project_management/next/config-subcommand/config_subcommand_plan.md",
+        "docs/project_management/_archived/next/config-subcommand/config_subcommand_plan.md",
         "crates/shell/tests",
         "docs/CONFIGURATION.md"
       ],
@@ -347,7 +347,7 @@
       ],
       "worktree": "wt/cs-c3-set-test",
       "integration_task": "C3-integ",
-      "kickoff_prompt": "docs/project_management/next/config-subcommand/kickoff_prompts/C3-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/config-subcommand/kickoff_prompts/C3-test.md"
     },
     {
       "id": "C3-integ",
@@ -357,7 +357,7 @@
       "status": "completed",
       "description": "Merge the config-set code/test branches, verify fmt/clippy/tests, and close out the program with documentation/status updates.",
       "references": [
-        "docs/project_management/next/config-subcommand/config_subcommand_plan.md",
+        "docs/project_management/_archived/next/config-subcommand/config_subcommand_plan.md",
         "crates/shell",
         "docs/CONFIGURATION.md",
         "docs/USAGE.md"
@@ -389,7 +389,7 @@
       "concurrent_with": [],
       "worktree": "wt/cs-c3-set-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/config-subcommand/kickoff_prompts/C3-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/config-subcommand/kickoff_prompts/C3-integ.md"
     }
   ]
 }

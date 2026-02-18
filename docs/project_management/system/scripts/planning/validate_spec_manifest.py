@@ -47,7 +47,7 @@ def _extract_required_doc_paths(spec_manifest_text: str) -> list[str]:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Validate spec_manifest.md required docs exist.")
-    ap.add_argument("--feature-dir", required=True, help="docs/project_management/next/<feature>")
+    ap.add_argument("--feature-dir", required=True, help="docs/project_management/packs/<bucket>/<feature>")
     ap.add_argument(
         "--spec-manifest",
         default="spec_manifest.md",

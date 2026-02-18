@@ -313,7 +313,11 @@ def _emit_json(normalized_by_section: dict[str, list[str]]) -> None:
 
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description="Validate impact_map.md Touch Set for strict planning packs.")
-    ap.add_argument("--feature-dir", required=True, help="Planning pack directory under docs/project_management/next/<feature>")
+    ap.add_argument(
+        "--feature-dir",
+        required=True,
+        help="Planning pack directory under docs/project_management/packs/<bucket>/<feature>",
+    )
     ap.add_argument("--mode", choices=["strict", "legacy"], help="Override auto mode derivation")
     ap.add_argument("--emit-json", action="store_true", help="Emit JSON allowlists to stdout (stdout is JSON-only)")
     args = ap.parse_args(argv)

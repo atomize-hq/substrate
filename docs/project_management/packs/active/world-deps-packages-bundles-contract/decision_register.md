@@ -8,7 +8,7 @@ Template standard:
 **Decision owner(s):** Shell / World maintainers  
 **Date:** 2026-02-13  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`, `docs/project_management/next/world_deps_packages_bundles_contract.md`, `docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP0-spec.md`
+**Related docs:** `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`, `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`, `docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP0-spec.md`
 
 **Problem / Context**
 - The repo currently ships a legacy `world deps` selection-file model (`status|init|select|provision`) that conflicts with ADR-0011’s inventory + enabled-patch contract.
@@ -40,7 +40,7 @@ Template standard:
 **Decision owner(s):** Shell / World maintainers  
 **Date:** 2026-02-13  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/world_deps_packages_bundles_contract.md`, `docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP2-spec.md`
+**Related docs:** `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`, `docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP2-spec.md`
 
 **Problem / Context**
 - The contract defines `present|missing|blocked` as world-backed status and requires a deterministic `current list applied`.
@@ -73,7 +73,7 @@ Template standard:
 **Decision owner(s):** World maintainers  
 **Date:** 2026-02-13  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/world_deps_packages_bundles_contract.md`, `docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP4-spec.md`
+**Related docs:** `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`, `docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP4-spec.md`
 
 **Problem / Context**
 - Script installers in common ecosystems frequently assume bash features (`set -euo pipefail`, arrays, `source`).

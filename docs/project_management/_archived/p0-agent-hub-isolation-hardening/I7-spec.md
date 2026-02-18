@@ -22,7 +22,7 @@
 - Any “new contract” changes (e.g., changing CLI exit codes) belong in a separate triad/spec.
 
 ## Acceptance
-- `docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md` no longer
+- `docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md` no longer
   contains invalid `.substrate-profile` examples (i.e., missing `id`/`name`).
 - Each section (I0–I5) matches the relevant spec’s scope and acceptance criteria.
 - The playbook remains runnable on Linux and includes correct macOS/Windows notes where applicable.

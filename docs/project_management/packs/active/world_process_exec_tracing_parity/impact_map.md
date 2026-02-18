@@ -50,5 +50,5 @@ Standard:
 - ADR-0017 output attribution remains compatible; process event attribution uses `parent_span`/`parent_cmd_id` links.
 
 ## Sequencing alignment
-- Sprint id: `world_process_exec_tracing_parity` (see `docs/project_management/next/sequencing.json`)
+- Sprint id: `world_process_exec_tracing_parity` (see `docs/project_management/packs/sequencing.json`)
 - Dependencies: ADR-0028 before ADR-0029.

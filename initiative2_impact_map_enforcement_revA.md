@@ -16,7 +16,7 @@ This initiative turns `impact_map.md` from a planning artifact into an **enforce
    - `### Deprecate`
    - `### Delete`
 
-2. **Planning-time validation**: add `scripts/planning/validate_impact_map.py` and run it via `scripts/planning/lint.*` (strict only for packs with `meta.slice_spec_version >= 2`).
+2. **Planning-time validation**: add `docs/project_management/system/scripts/planning/validate_impact_map.py` and run it via `docs/project_management/system/scripts/planning/lint.*` (strict only for packs with `meta.slice_spec_version >= 2`).
 
 3. **Execution-time enforcement**: modify `scripts/triad/task_finish.sh` to refuse completion if the task introduces changes to paths outside the declared touch set (strict only for packs with `meta.slice_spec_version >= 2`).
 
@@ -143,10 +143,10 @@ This keeps classification clean and prevents “double-listing”.
 
 ## 4. Planning-time validation
 
-### 4.1 Add validator: `scripts/planning/validate_impact_map.py`
+### 4.1 Add validator: `docs/project_management/system/scripts/planning/validate_impact_map.py`
 
 **New file:**
-- `scripts/planning/validate_impact_map.py`
+- `docs/project_management/system/scripts/planning/validate_impact_map.py`
 
 #### 4.1.1 Inputs
 - `--feature-dir <path>`
@@ -221,14 +221,14 @@ Legacy mode with `--emit-json`:
 ### 4.2 Wire validator into planning lint (GATED)
 
 **Modify:**
-- `scripts/planning/lint.sh`
-- `scripts/planning/lint.ps1`
+- `docs/project_management/system/scripts/planning/lint.sh`
+- `docs/project_management/system/scripts/planning/lint.ps1`
 
 Add (near other validators):
 
 ```bash
 echo "-- impact_map.md touch-set invariants"
-python3 scripts/planning/validate_impact_map.py --feature-dir "${FEATURE_DIR}"
+python3 docs/project_management/system/scripts/planning/validate_impact_map.py --feature-dir "${FEATURE_DIR}"
 ```
 
 The validator itself is responsible for gating (strict vs legacy) by reading `tasks.json`.
@@ -290,7 +290,7 @@ Add a step (run in normal and `--verify-only` modes):
 Call the validator and parse JSON:
 
 ```bash
-ALLOW_JSON="$(python3 scripts/planning/validate_impact_map.py --feature-dir "$FEATURE_DIR_ABS" --emit-json)"
+ALLOW_JSON="$(python3 docs/project_management/system/scripts/planning/validate_impact_map.py --feature-dir "$FEATURE_DIR_ABS" --emit-json)"
 ```
 
 If the validator fails, task_finish MUST fail (planning docs must be fixed before completing the task).
@@ -453,7 +453,7 @@ Test rename handling:
 ## 9. Acceptance criteria for this initiative
 
 - `impact_map.md` Touch Set paths are parseable and validated in planning lint (strict packs only).
-- `scripts/planning/validate_impact_map.py` exists with gated strict behavior.
+- `docs/project_management/system/scripts/planning/validate_impact_map.py` exists with gated strict behavior.
 - `scripts/triad/task_finish.sh` blocks completion if unplanned file touches occur (strict packs only).
 - Override exists but requires explicit acknowledgement and a reason and is logged.
 - At least one active strict Planning Pack can complete triads without excessive friction.

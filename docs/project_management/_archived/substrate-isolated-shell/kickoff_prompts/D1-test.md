@@ -11,7 +11,7 @@ Summary:
 Focus files / context:
 - `crates/common/src/manager_manifest.rs` tests (schema + env expansion).
 - `crates/shell/tests/manager_init.rs`, `crates/shim/tests/integration.rs`, and related fixtures to exercise hint logging + snippet sourcing.
-- Planning docs: `docs/project_management/next/substrate_isolated_shell_plan.md` (§5.9), `docs/project_management/next/substrate_isolated_shell_data_map.md`, and the updated manifest from D1-code.
+- Planning docs: `docs/project_management/_archived/next/substrate_isolated_shell_plan.md` (§5.9), `docs/project_management/_archived/next/substrate_isolated_shell_data_map.md`, and the updated manifest from D1-code.
 
 Commands to run:
 1. `cargo fmt --all`
@@ -20,6 +20,6 @@ Commands to run:
 4. `cargo test -p substrate-shim`
 
 Reminders:
-- Start at `AI_AGENT_START_HERE.md`, set D1-test to `in_progress` in `docs/project_management/next/tasks.json`, and log START/END entries in `docs/project_management/next/session_log.md`.
+- Start at `AI_AGENT_START_HERE.md`, set D1-test to `in_progress` in `docs/project_management/_archived/next/tasks.json`, and log START/END entries in `docs/project_management/_archived/next/session_log.md`.
 - Work from `wt/d1-managers-test`, referencing the D1-code prompt + manifest commit to know the expected structure. If code isn’t merged yet, capture the failing command output once before building the new tests.
 - Before wrapping up, craft the Integration Agent Kickoff Prompt for `D1-integ`, run the commands above, commit/push from the worktree, switch back to `feat/isolated-shell-plan`, and update the session log/tasks with the prompt location.

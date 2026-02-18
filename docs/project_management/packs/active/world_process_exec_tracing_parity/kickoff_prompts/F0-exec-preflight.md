@@ -8,7 +8,7 @@
 Do not edit planning docs inside the worktree.
 
 1. Read: `docs/project_management/packs/active/world_process_exec_tracing_parity/plan.md`, `docs/project_management/packs/active/world_process_exec_tracing_parity/spec_manifest.md`, `docs/project_management/packs/active/world_process_exec_tracing_parity/tasks.json`.
-2. Confirm the feature directory is present in `docs/project_management/next/sequencing.json`.
+2. Confirm the feature directory is present in `docs/project_management/packs/sequencing.json`.
 
 ## Required commands
 - `make planning-lint FEATURE_DIR="docs/project_management/packs/active/world_process_exec_tracing_parity"`

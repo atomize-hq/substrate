@@ -32,7 +32,7 @@ Use this rule:
 - Decision Register: **all** architectural decisions recorded as exactly two options (A/B) with explicit tradeoffs and one selection.
 
 If the work has more than one meaningful decision, the Planning Pack must include:
-- `docs/project_management/packs/active/<feature>/decision_register.md` (legacy during migration: `docs/project_management/next/<feature>/decision_register.md`)
+- `docs/project_management/packs/active/<feature>/decision_register.md`
 
 The ADR must link to that decision register and must not duplicate decision entries.
 
@@ -41,7 +41,7 @@ If the Planning Pack uses `contract.md` (see `docs/project_management/standards/
 ## Accepted ADR requirements (non-negotiable)
 
 If an ADR status is `Accepted`, it must include:
-- the exact feature directory path(s) under `docs/project_management/packs/active/<feature>/` (legacy during migration: `docs/project_management/next/<feature>/`), and
+- the exact feature directory path(s) under `docs/project_management/packs/active/<feature>/`, and
 - the intended branch name(s) (e.g., `feat/<feature>`).
 
 ## Executive Summary (Operator) (required)
@@ -70,7 +70,7 @@ Every ADR must include all sections below. Every behavior statement must be sing
 - Status: `Draft` or `Accepted`
 - Date (UTC)
 - Owner(s)
-- Feature directory path under `docs/project_management/packs/active/<feature>/` (legacy during migration: `docs/project_management/next/<feature>/`)
+- Feature directory path under `docs/project_management/packs/active/<feature>/`
 - Related documents (links to plan/specs/decision register/sequencing)
 
 ### Required sections
@@ -99,7 +99,7 @@ Every ADR must include all sections below. Every behavior statement must be sing
 - End-to-end flow: inputs → derived state → actions → outputs.
 
 6) Sequencing / Dependencies
-- Alignment to `docs/project_management/packs/sequencing.json` (legacy mirror during migration: `docs/project_management/next/sequencing.json`).
+- Alignment to `docs/project_management/packs/sequencing.json`.
 - Dependencies on other sprints/triads (must reference integration task IDs).
 
 7) Security / Safety Posture
@@ -145,8 +145,8 @@ If both a cross-cutting ADR and a feature-local ADR exist, the cross-cutting ADR
 - Owner(s): <names/roles>
 
 ## Scope
-- Feature directory: `docs/project_management/packs/active/<feature>/` (legacy during migration: `docs/project_management/next/<feature>/`)
-- Sequencing spine: `docs/project_management/packs/sequencing.json` (legacy mirror during migration: `docs/project_management/next/sequencing.json`)
+- Feature directory: `docs/project_management/packs/active/<feature>/`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
@@ -221,7 +221,7 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
   - Outputs: <list>
 
 ## Sequencing / Dependencies
-- Sequencing entry: `docs/project_management/packs/sequencing.json` → `<sprint id>` (legacy mirror during migration: `docs/project_management/next/sequencing.json`)
+- Sequencing entry: `docs/project_management/packs/sequencing.json` → `<sprint id>`
 - Prerequisite integration task IDs:
   - `<X-integ>` before `<Y-code>`
 

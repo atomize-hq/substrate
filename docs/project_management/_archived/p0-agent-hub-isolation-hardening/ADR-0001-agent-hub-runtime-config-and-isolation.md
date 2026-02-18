@@ -7,8 +7,8 @@ Last updated: 2025-12-22
 Owners: Shell/World/Broker maintainers
 
 Related work:
-- macOS parity triad (M4–M6): `docs/project_management/next/p0-platform-stability-macOS-parity/`
-- Earlier platform stability tracks: `docs/project_management/next/p0-platform-stability/`
+- macOS parity triad (M4–M6): `docs/project_management/_archived/next/p0-platform-stability-macOS-parity/`
+- Earlier platform stability tracks: `docs/project_management/_archived/next/p0-platform-stability/`
 
 ---
 
@@ -16,14 +16,14 @@ Related work:
 
 ADR_BODY_SHA256: 1c743bfa97e7e8f4c6ebfd76e66481fa63ce920553348c09fc58a566dc83f649
 
-ADR_BODY_SHA256: <run `python3 scripts/planning/check_adr_exec_summary.py --adr <this-file> --fix` after editing>
+ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after editing>
 
 - Existing: Substrate can feel like a “best effort wrapper” where some operations (world-deps, config, isolation) are ambiguous, drift-prone, or silently degrade when guarantees are not met.
 - New: Substrate behaves like a strict agent-hub execution layer: selection-driven world-deps (no-op when unconfigured), YAML-only runtime config, and Linux isolation guarantees that prevent absolute-path project writes from bypassing the overlay.
 - Why: Reduces security footguns and makes guarantees auditable/reproducible across tools (humans + multiple agent CLIs).
 - Links:
   - `docs/project_management/_archived/world_deps_selection_layer/`
-  - `docs/project_management/next/yaml-settings-migration/Y0-spec.md`
+  - `docs/project_management/_archived/next/yaml-settings-migration/Y0-spec.md`
 
 ## 0) Executive Summary
 
@@ -148,7 +148,7 @@ Status: Accepted (implemented in Y0)
 Decision:
 - Substrate-owned runtime settings must be YAML-only with no dual-format support.
 - TOML runtime settings files are unsupported.
-- The authoritative spec for this migration is `docs/project_management/next/yaml-settings-migration/Y0-spec.md`.
+- The authoritative spec for this migration is `docs/project_management/_archived/next/yaml-settings-migration/Y0-spec.md`.
 
 ### D4 — `.substrate-profile` schema is greenfield (strict + versioned)
 
@@ -248,12 +248,12 @@ Implemented the “project bind mount” enforcement:
 The selection-driven world-deps model is specified and sequenced:
 - ADR: `docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
 - Specs: `docs/project_management/_archived/world_deps_selection_layer/S0-spec-selection-config-and-ux.md`, `docs/project_management/_archived/world_deps_selection_layer/S1-spec-install-classes.md`, `docs/project_management/_archived/world_deps_selection_layer/S2-spec-system-packages-provisioning.md`
-- Sequencing: `docs/project_management/next/sequencing.json`
+- Sequencing: `docs/project_management/packs/sequencing.json`
 
 ### 3.4 Runtime format unification (Not started)
 
 Runtime settings format is YAML-only and is implemented by Y0:
-- `docs/project_management/next/yaml-settings-migration/Y0-spec.md`
+- `docs/project_management/_archived/next/yaml-settings-migration/Y0-spec.md`
 
 ---
 
@@ -266,8 +266,8 @@ World-deps selection + install-class semantics are finalized in ADR-0002 and its
 - `docs/project_management/_archived/world_deps_selection_layer/S2-spec-system-packages-provisioning.md`
 
 Policy schema is finalized by I0/I1:
-- `docs/project_management/next/p0-agent-hub-isolation-hardening/I0-spec.md`
-- `docs/project_management/next/p0-agent-hub-isolation-hardening/I1-spec.md`
+- `docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I0-spec.md`
+- `docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I1-spec.md`
 
 ---
 
@@ -363,5 +363,5 @@ This keeps us honest about guarantees while improving security steadily.
 - `docs/WORLD.md` (world architecture, routing, and world-deps UX)
 - `docs/VISION.md` (roadmap and policy examples; needs alignment with enforcement guarantees)
 - `docs/project_management/future/PHASE_4_5_ISOLATION_UPGRADE.md` (design draft; notes mount hardening as future)
-- M5a inventory alignment spec: `docs/project_management/next/p0-platform-stability-macOS-parity/M5a-spec.md`
-- M5a integration notes: `docs/project_management/next/p0-platform-stability-macOS-parity/session_log.md`
+- M5a inventory alignment spec: `docs/project_management/_archived/next/p0-platform-stability-macOS-parity/M5a-spec.md`
+- M5a integration notes: `docs/project_management/_archived/next/p0-platform-stability-macOS-parity/session_log.md`

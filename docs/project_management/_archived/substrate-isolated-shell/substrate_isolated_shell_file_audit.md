@@ -68,6 +68,6 @@ This checklist enumerates every file that must be added or updated to deliver th
 | File | Action | Notes |
 | --- | --- | --- |
 | `.github/workflows/*.yml` or CI scripts | Update smoke tests to cover pass-through mode and `world deps status`. |
-| `docs/project_management/next/substrate_isolated_shell_plan.md` | Already created; keep in sync with implementation. |
+| `docs/project_management/_archived/next/substrate_isolated_shell_plan.md` | Already created; keep in sync with implementation. |
 
 Ensure each listed file has a clear owner before coding begins.***

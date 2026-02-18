@@ -14,14 +14,14 @@ user
 
 ## Scope
 - Merge code + tests, reconcile to spec, and make the slice green on the primary dev platform before CI dispatch.
-- Spec: `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
+- Spec: `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
 - Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Start Checklist
 Do not edit planning docs inside the worktree.
 
 1. Verify you are in the task worktree `wt/policy-patch-only-broker-effective-resolution-c0-integ-core` on branch `policy-patch-only-broker-effective-resolution-c0-integ-core` and that `.taskmeta.json` exists at the worktree root.
-2. Read: `docs/project_management/next/policy-patch-only-broker-effective-resolution/plan.md`, `docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json`, `docs/project_management/next/policy-patch-only-broker-effective-resolution/session_log.md`, spec, this prompt.
+2. Read: `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/plan.md`, `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/tasks.json`, `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/session_log.md`, spec, this prompt.
 
 ## Requirements
 - Spec wins over implementation details.
@@ -32,7 +32,7 @@ Do not edit planning docs inside the worktree.
   - `make integ-checks`
 - Dispatch validation:
   - CI compile parity (GitHub-hosted): `make ci-compile-parity CI_WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution" CI_REMOTE=origin CI_CLEANUP=1`
-  - Behavioral smoke (self-hosted): `make feature-smoke FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution" PLATFORM=behavior RUNNER_KIND=self-hosted WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
+  - Behavioral smoke (self-hosted): `make feature-smoke FEATURE_DIR="docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution" PLATFORM=behavior RUNNER_KIND=self-hosted WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
 
 ## End Checklist
 1. From inside the worktree, run: `make triad-task-finish TASK_ID="C0-integ-core"`.
@@ -70,8 +70,8 @@ It is a focused companion to:
 ## Operating assumptions (the situation you are in)
 
 When this standard applies, the operator started you with one of:
-- `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1` (preferred)
-- `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
+- `make triad-task-start-pair FEATURE_DIR="docs/project_management/_archived/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1` (preferred)
+- `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
 
 You are already:
 - in a git worktree (usually under `wt/...`)
@@ -81,10 +81,10 @@ You are already:
 ## Non-negotiable safety rule
 
 exec
-/bin/bash -lc "sed -n '1,200p' docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md
-sed -n '1,200p' docs/project_management/next/policy-patch-only-broker-effective-resolution/plan.md
-sed -n '1,200p' docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json
-sed -n '1,200p' docs/project_management/next/policy-patch-only-broker-effective-resolution/session_log.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ-core succeeded in 56ms:
+/bin/bash -lc "sed -n '1,200p' docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-spec.md
+sed -n '1,200p' docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/plan.md
+sed -n '1,200p' docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/tasks.json
+sed -n '1,200p' docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/session_log.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ-core succeeded in 56ms:
 # C0-spec — Broker Canonical Policy Resolver + CLI Delegation
 
 Authoritative ADR:
@@ -115,14 +115,14 @@ exec
 {
   "created_at_utc": "2026-01-17T13:30:18Z",
   "created_from_sha": "0007ff3d22b37d2a88f8dbb090153a7ecdad33a4",
-  "feature_dir": "docs/project_management/next/policy-patch-only-broker-effective-resolution",
+  "feature_dir": "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution",
   "orchestration_branch": "feat/policy-patch-only-broker-effective-resolution",
   "schema_version": 1,
   "task_branch": "policy-patch-only-broker-effective-resolution-c0-integ-core",
   "task_id": "C0-integ-core"
 }
 exec
-/bin/bash -lc "jq '.tasks[] | select(.id|test(\""'^C0")) | {id, type, title, depends_on, status}'"' docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ-core succeeded in 41ms:
+/bin/bash -lc "jq '.tasks[] | select(.id|test(\""'^C0")) | {id, type, title, depends_on, status}'"' docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/tasks.json" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ-core succeeded in 41ms:
 {
   "id": "C0-code",
   "type": "code",
@@ -144,7 +144,7 @@ exec
 {
   "id": "C0-integ-core",
 exec
-/bin/bash -lc "jq '.tasks[] | select(.id==\"C0-integ-core\")' docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ-core succeeded in 44ms:
+/bin/bash -lc "jq '.tasks[] | select(.id==\"C0-integ-core\")' docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/tasks.json" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ-core succeeded in 44ms:
 {
   "id": "C0-integ-core",
   "name": "C0 — Integration core",
@@ -153,14 +153,14 @@ exec
   "status": "pending",
   "description": "Merge C0 code+tests, reconcile to spec, and get a primary-platform green state before cross-platform dispatch.",
   "references": [
-    "docs/project_management/next/policy-patch-only-broker-effective-resolution/plan.md",
-    "docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json",
-    "docs/project_management/next/policy-patch-only-broker-effective-resolution/session_log.md",
-    "docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md",
-    "docs/project_management/next/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md",
-    "docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh",
-    "docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/macos-smoke.sh",
-    "docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/windows-smoke.ps1"
+    "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/plan.md",
+    "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/tasks.json",
+    "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/session_log.md",
+    "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-spec.md",
+    "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md",
+    "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh",
+    "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/smoke/macos-smoke.sh",
+    "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/smoke/windows-smoke.ps1"
   ],
   "acceptance_criteria": [
     "Local integration gates are green (fmt, clippy -D warnings, relevant tests, integ-checks)",
@@ -216,7 +216,7 @@ Plan update
   • Run CI parity and feature smoke
   • Finish triad task and report IDs
 exec
-/bin/bash -lc 'export FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution"
+/bin/bash -lc 'export FEATURE_DIR="docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution"
 make triad-orch-ensure FEATURE_DIR="$FEATURE_DIR"' in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ-core exited 2 in 313ms:
 make[1]: Entering directory '/home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ-core'
 ERROR: Orchestration branch feat/policy-patch-only-broker-effective-resolution is already checked out in another worktree: /home/spenser/__Active_code/substrate
@@ -345,7 +345,7 @@ cargo fmt && cargo clippy --workspace --all-targets -- -D warnings && cargo chec
     Checking substrate-shell v0.2.5 (/home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ-core/crates/shell)
     Checking world-agent v0.2.5 (/home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ-core/crates/world-agent)
 exec
-/bin/bash -lc "export FEATURE_DIR=\"docs/project_management/next/policy-patch-only-broker-effective-resolution\"
+/bin/bash -lc "export FEATURE_DIR=\"docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution\"
 make -n ci-compile-parity CI_WORKFLOW_REF=\"feat/policy-patch-only-broker-effective-resolution\" CI_REMOTE=origin CI_CLEANUP=1 | sed -n '1,160p'
 
 echo '---'
@@ -364,12 +364,12 @@ make[2]: Leaving directory '/home/spenser/__Active_code/substrate/wt/policy-patc
 make[1]: Leaving directory '/home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ-core'
 ---
 make[1]: Entering directory '/home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ-core'
-if [ -z "docs/project_management/next/policy-patch-only-broker-effective-resolution" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+if [ -z "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/_archived/next/<feature>"; exit 2; fi
 if [ -z "feat/policy-patch-only-broker-effective-resolution" ]; then echo "ERROR: set WORKFLOW_REF=<ref> (ref must not be main/testing; use the orchestration/task ref)"; exit 2; fi
 if [ "behavior" = "wsl" ] && [ "self-hosted" != "self-hosted" ]; then echo "ERROR: PLATFORM=wsl requires RUNNER_KIND=self-hosted"; exit 2; fi
 if [ "0" = "1" ] && [ "self-hosted" != "self-hosted" ]; then echo "ERROR: RUN_WSL=1 requires RUNNER_KIND=self-hosted"; exit 2; fi
 set -euo pipefail; \
-args="--feature-dir \"docs/project_management/next/policy-patch-only-broker-effective-resolution\" --runner-kind self-hosted --platform behavior --workflow \".github/workflows/feature-smoke.yml\" --workflow-ref \"feat/policy-patch-only-broker-effective-resolution\" --remote \"origin\""; \
+args="--feature-dir \"docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution\" --runner-kind self-hosted --platform behavior --workflow \".github/workflows/feature-smoke.yml\" --workflow-ref \"feat/policy-patch-only-broker-effective-resolution\" --remote \"origin\""; \
 exec
 /bin/bash -lc 'make ci-compile-parity CI_WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution" CI_REMOTE=origin CI_CLEANUP=1' in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ-core succeeded in 2m 00s:
 make[1]: Entering directory '/home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ-core'
@@ -398,7 +398,7 @@ thinking
 
 The parity compilation succeeded, and I've noted the run ID and URL—great! Now, it’s time to execute the feature smoke tests. I suspect this may take a bit longer, but I’m ready to run it. I want to ensure everything is working smoothly and efficiently, so I'll keep an eye on the progress as we move forward. Let’s see how this goes!
 exec
-/bin/bash -lc 'export FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution"
+/bin/bash -lc 'export FEATURE_DIR="docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution"
 make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=behavior RUNNER_KIND=self-hosted WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1' in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ-core exited 2 in 5m 04s:
 make[1]: Entering directory '/home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ-core'
 HEAD: 0007ff3d22b37d2a88f8dbb090153a7ecdad33a4
@@ -508,13 +508,13 @@ crates/broker/src/policy.rs:461:                require_world: self.world_fs_req
 crates/broker/src/effective_policy.rs:432:        effective.world_fs_require_world,
 crates/broker/src/effective_policy.rs:437:    effective.world_fs_require_world = require_world;
 exec
-/bin/bash -lc "nl -ba docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/windows-smoke.ps1 | sed -n '1,120p'
+/bin/bash -lc "nl -ba docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/smoke/windows-smoke.ps1 | sed -n '1,120p'
 
 echo '---'
-nl -ba docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh | sed -n '1,200p'
+nl -ba docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh | sed -n '1,200p'
 
 echo '---'
-nl -ba docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/macos-smoke.sh | sed -n '1,200p'" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ-core succeeded in 59ms:
+nl -ba docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/smoke/macos-smoke.sh | sed -n '1,200p'" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ-core succeeded in 59ms:
      1	Set-StrictMode -Version Latest
      2	$ErrorActionPreference = "Stop"
      3	
@@ -795,10 +795,10 @@ sed -n '1,260p' docs/project_management/adrs/implemented/ADR-0013-policy-patch-o
 
 ## Scope
 - Feature directories (impacted):
-  - `docs/project_management/next/` (this ADR; cross-cutting contract)
-  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/` (planning pack + decision register)
-  - `docs/project_management/next/workspace-config-policy-unification/` (ADR-0008 baseline contract this work enforces)
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+  - `docs/project_management/_archived/next/` (this ADR; cross-cutting contract)
+  - `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/` (planning pack + decision register)
+  - `docs/project_management/_archived/next/workspace-config-policy-unification/` (ADR-0008 baseline contract this work enforces)
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 
 
 
@@ -886,8 +886,8 @@ I'm thinking about how PowerShell handles command invocation without an extensio
 I need to check the logs for the Windows job to see if the error message includes the full filename. I’ll look into fetching more log details to clarify.
 exec
 /bin/bash -lc 'gh run view 21095117735 --repo atomize-hq/substrate --log-failed | rg -n "windows_self_hosted|substrate_shell_driver" -n | head -n 80' in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ-core succeeded in 810ms:
-35:windows_self_hosted	Run Windows smoke	﻿2026-01-17T13:40:40.9325265Z ##[group]Run pwsh -File "docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/windows-smoke.ps1"
-36:windows_self_hosted	Run Windows smoke	2026-01-17T13:40:40.9325846Z [36;1mpwsh -File "docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/windows-smoke.ps1"[0m
+35:windows_self_hosted	Run Windows smoke	﻿2026-01-17T13:40:40.9325265Z ##[group]Run pwsh -File "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/smoke/windows-smoke.ps1"
+36:windows_self_hosted	Run Windows smoke	2026-01-17T13:40:40.9325846Z [36;1mpwsh -File "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/smoke/windows-smoke.ps1"[0m
 37:windows_self_hosted	Run Windows smoke	2026-01-17T13:40:40.9387667Z shell: C:\Program Files\WindowsApps\Microsoft.PowerShell_7.5.4.0_x64__8wekyb3d8bbwe\pwsh.EXE -command ". '{0}'"
 38:windows_self_hosted	Run Windows smoke	2026-01-17T13:40:40.9387931Z env:
 39:windows_self_hosted	Run Windows smoke	2026-01-17T13:40:40.9388019Z   CARGO_TERM_COLOR: always
@@ -1012,7 +1012,7 @@ scripts/dev/substrate_shell_driver:13:  substrate_shell_driver [substrate args..
 scripts/validate_phase_d.sh:6:DRIVER="${REPO_ROOT}/scripts/dev/substrate_shell_driver"
 docs/project_management/_archived/substrate-isolated-shell/substrate_isolated_shell_data_map.md:89:- `scripts/dev/substrate_shell_driver`
 docs/project_management/_archived/substrate-isolated-shell/session_log.md:269:- Delivered the shared `substrate_shell_driver` helper (Rust + scripts/dev/substrate_shell_driver), moved shell/world_* tests to it, updated replay + docs, and rewired the host-side scripts (validate_phase_d, podman log rotation, dev shim bootstrap/uninstall on Linux & Windows) so SUBSTRATE_WORLD/SUBSTRATE_WORLD_ENABLED overrides are honored consistently
-docs/project_management/_archived/substrate-isolated-shell/session_log.md:270:- Audit checklist: crates/shell/tests/{common.rs,integration.rs,world_enable.rs,world_deps.rs}, crates/replay/src/replay.rs, scripts/dev/substrate_shell_driver, scripts/validate_phase_d.sh, scripts/podman/log_rotation_sanity.sh, scripts/substrate/dev-shim-bootstrap.sh, scripts/substrate/dev-uninstall-substrate.sh, scripts/windows/dev-uninstall-substrate.ps1, docs/CONFIGURATION.md, docs/project_management/next/substrate_isolated_shell_data_map.md
+docs/project_management/_archived/substrate-isolated-shell/session_log.md:270:- Audit checklist: crates/shell/tests/{common.rs,integration.rs,world_enable.rs,world_deps.rs}, crates/replay/src/replay.rs, scripts/dev/substrate_shell_driver, scripts/validate_phase_d.sh, scripts/podman/log_rotation_sanity.sh, scripts/substrate/dev-shim-bootstrap.sh, scripts/substrate/dev-uninstall-substrate.sh, scripts/windows/dev-uninstall-substrate.ps1, docs/CONFIGURATION.md, docs/project_management/_archived/next/substrate_isolated_shell_data_map.md
 docs/project_management/_archived/substrate-isolated-shell/session_log.md:275:- Next: audit every shell/shim/script entry point for `substrate_shell_driver` usage, verify docs map updates, and run the required fmt/test/script commands under `SUBSTRATE_WORLD=disabled`
 docs/project_management/_archived/substrate-isolated-shell/session_log.md:278:- Audited the shell/shim integration tests and scripts called out in the kickoff prompt: none of them use a shared `substrate_shell_driver` helper, `scripts/dev/substrate_shell_driver` does not exist, and the docs/data-map never mention the helper, so the toggle audit from D3-code hasn’t landed yet
 docs/project_management/_archived/substrate-isolated-shell/session_log.md:280:- Commands: `cargo fmt --all`, `cargo test -p substrate-shell integration -- --nocapture`, `cargo test -p substrate-shell world_enable`, `cargo test -p substrate-shell world_deps`, `cargo test -p substrate-shell shim_doctor`, `cargo test -p substrate-shell --test shim_health -- --nocapture`, `SUBSTRATE_BIN=target/debug/substrate scripts/dev/substrate_shell_driver --no-world -c 'echo helper-ok'` (fails: script missing), `BIN=target/debug/substrate scripts/validate_phase_d.sh`
@@ -1030,16 +1030,16 @@ thinking
 
 I see that the manual testing playbook mentions that smoke scripts run substrates through a driver. It seems like this driver is expected to work on Windows as well. I should check the relevant section of the manual testing playbook to look for instructions about running it via `bash` on Windows, but it seems I might be running into some limitations there. Let's read more to clarify this!
 exec
-/bin/bash -lc "sed -n '1,120p' docs/project_management/next/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ-core succeeded in 37ms:
+/bin/bash -lc "sed -n '1,120p' docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ-core succeeded in 37ms:
 # Manual Testing Playbook — Policy Patch-only + Broker-Canonical Effective Resolution
 
 Exit codes:
 - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 
 Smoke scripts (minimal, runnable subset of this playbook):
-- Linux: `docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh`
-- macOS: `docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/macos-smoke.sh`
-- Windows: `docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/windows-smoke.ps1`
+- Linux: `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/smoke/windows-smoke.ps1`
 
 ## Preconditions
 - Repo is checked out and buildable.
@@ -5865,7 +5865,7 @@ thinking
 
 I’m focusing on compiling something called "parity green" — that sounds important! Now, I need to re-run the feature smoke tests to ensure everything is functioning properly. It's crucial to make sure that the features are working as intended after this compilation. I’ll keep an eye on the results to see if anything pops up that requires further attention. Let’s ensure everything is smooth sailing!
 exec
-/bin/bash -lc 'export FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution"
+/bin/bash -lc 'export FEATURE_DIR="docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution"
 make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=behavior RUNNER_KIND=self-hosted WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1' in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ-core exited 2 in 5m 04s:
 make[1]: Entering directory '/home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ-core'
 HEAD: 9f301c491389df5219899b3a07c18eb6633a7422
@@ -13255,7 +13255,7 @@ index e7b17a7d619fcc5bfff1114acd4999f5c5c2d113..67f43ed4b9d776000585258b6bd30378
      let fs_mode = world_fs.mode;
 
 exec
-/bin/bash -lc 'export FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution"
+/bin/bash -lc 'export FEATURE_DIR="docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution"
 make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=behavior RUNNER_KIND=self-hosted WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1' in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ-core exited 2 in 5m 04s:
 make[1]: Entering directory '/home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ-core'
 HEAD: 9cbd502f4cc12f74df9a0b3001d6cfb30e965317
@@ -15608,7 +15608,7 @@ index e7b17a7d619fcc5bfff1114acd4999f5c5c2d113..67f43ed4b9d776000585258b6bd30378
      let fs_mode = world_fs.mode;
 
 exec
-/bin/bash -lc 'export FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution"
+/bin/bash -lc 'export FEATURE_DIR="docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution"
 make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=behavior RUNNER_KIND=self-hosted WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1' in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ-core succeeded in 5m 05s:
 make[1]: Entering directory '/home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ-core'
 HEAD: b0440d894b4c906c611fb664db76ea6504900db5

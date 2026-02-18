@@ -6,7 +6,7 @@ Make runnable `apt` packages behave like runnable script packages by anchoring e
 ## Inputs (authoritative)
 - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md` (Appendix A + inventory schema)
 - `docs/project_management/packs/active/world-deps-host-visible-hardening/decision_register.md` (DR-0003, DR-0004, DR-0009)
-- `docs/project_management/next/world_deps_packages_bundles_contract.md` (status semantics)
+- `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md` (status semantics)
 
 ## Contract
 

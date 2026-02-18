@@ -35,7 +35,7 @@ Template (copy/paste and fill in):
 - Worktree commits: e4cf22b
 - Commands: cargo fmt; bash -n scripts/substrate/install-substrate.sh; bash -n scripts/substrate/uninstall-substrate.sh
 - Results: fmt and shell syntax checks passed; installer smoke not run
-- Kickoff prompts created: docs/project_management/next/settings-stack/kickoff_prompts/S0-test.md
+- Kickoff prompts created: docs/project_management/_archived/next/settings-stack/kickoff_prompts/S0-test.md
 - Docs commit: docs: finish S0-code (this commit)
 - Next steps / blockers: none
 
@@ -50,7 +50,7 @@ Template (copy/paste and fill in):
 - Worktree commits: 65dd5f3
 - Commands: ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world
 - Results: both scenarios pass with manager_hooks.yaml staged under the temp prefixes and `substrate health --json` succeeding (temp roots: /tmp/substrate-installer-default.bblfQS, /tmp/substrate-installer-no-world.lNiFDI)
-- Kickoff prompts created: docs/project_management/next/settings-stack/kickoff_prompts/S0-integ.md; docs/project_management/next/settings-stack/kickoff_prompts/S1-code.md; docs/project_management/next/settings-stack/kickoff_prompts/S1-test.md
+- Kickoff prompts created: docs/project_management/_archived/next/settings-stack/kickoff_prompts/S0-integ.md; docs/project_management/_archived/next/settings-stack/kickoff_prompts/S1-code.md; docs/project_management/_archived/next/settings-stack/kickoff_prompts/S1-test.md
 - Docs commit: docs: finish S0-test + prompts
 - Next steps / blockers: none
 
@@ -65,7 +65,7 @@ Template (copy/paste and fill in):
 - Worktree commits: n/a (no integration code/test changes required)
 - Commands: ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world
 - Results: both scenarios passed; manager_hooks.yaml present and `substrate health --json` succeeded (temp roots: /tmp/substrate-installer-default.pzsF0H, /tmp/substrate-installer-no-world.xoLPA4)
-- Kickoff prompts created: n/a (verified docs/project_management/next/settings-stack/kickoff_prompts/S1-code.md and docs/project_management/next/settings-stack/kickoff_prompts/S1-test.md)
+- Kickoff prompts created: n/a (verified docs/project_management/_archived/next/settings-stack/kickoff_prompts/S1-code.md and docs/project_management/_archived/next/settings-stack/kickoff_prompts/S1-test.md)
 - Docs commit: docs: finish S0-integ (tasks + session log)
 - Next steps / blockers: none
 
@@ -80,7 +80,7 @@ Template (copy/paste and fill in):
 - Worktree commits: 51c73c6
 - Commands: cargo fmt; cargo clippy -p substrate-shell -- -D warnings
 - Results: both commands passed
-- Kickoff prompts created: docs/project_management/next/settings-stack/kickoff_prompts/S1-test.md (already present)
+- Kickoff prompts created: docs/project_management/_archived/next/settings-stack/kickoff_prompts/S1-test.md (already present)
 - Docs commit: docs: finish S1-code (this commit)
 - Next steps / blockers: none; S1-test should cover config.toml parsing/load/save and installer smoke with the new metadata plus legacy config.json fallback
 
@@ -95,7 +95,7 @@ Template (copy/paste and fill in):
 - Worktree commits: 69cb34b, ff483d4
 - Commands: cargo fmt; cargo test -p substrate-shell world_enable; ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world
 - Results: cargo fmt + world_enable unit/integration tests passed; installer smoke scenarios succeeded (temp roots: /tmp/substrate-installer-default.0wbijG, /tmp/substrate-installer-no-world.3yYZeb)
-- Kickoff prompts created: docs/project_management/next/settings-stack/kickoff_prompts/S1-integ.md; docs/project_management/next/settings-stack/kickoff_prompts/S2-code.md; docs/project_management/next/settings-stack/kickoff_prompts/S2-test.md (S2 tasks wait for S1-integ to merge)
+- Kickoff prompts created: docs/project_management/_archived/next/settings-stack/kickoff_prompts/S1-integ.md; docs/project_management/_archived/next/settings-stack/kickoff_prompts/S2-code.md; docs/project_management/_archived/next/settings-stack/kickoff_prompts/S2-test.md (S2 tasks wait for S1-integ to merge)
 - Docs commit: docs: finish S1-test + prompts (this commit)
 - Next steps / blockers: none
 
@@ -110,7 +110,7 @@ Template (copy/paste and fill in):
 - Worktree commits: n/a (no integration code/test changes required)
 - Commands: cargo fmt; cargo clippy -p substrate-shell -- -D warnings; cargo test -p substrate-shell world_enable; ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world
 - Results: all passed; installer temp roots /tmp/substrate-installer-default.Af8r30 (world_enabled=true) and /tmp/substrate-installer-no-world.prNqFh (world_enabled=false)
-- Kickoff prompts created: n/a (verified docs/project_management/next/settings-stack/kickoff_prompts/S2-code.md and docs/project_management/next/settings-stack/kickoff_prompts/S2-test.md)
+- Kickoff prompts created: n/a (verified docs/project_management/_archived/next/settings-stack/kickoff_prompts/S2-code.md and docs/project_management/_archived/next/settings-stack/kickoff_prompts/S2-test.md)
 - Docs commit: docs: finish S1-integ (this commit)
 - Next steps / blockers: none
 
@@ -125,7 +125,7 @@ Template (copy/paste and fill in):
 - Worktree commits: 0c135b3
 - Commands: cargo fmt; cargo clippy -p substrate-shell -- -D warnings; cargo test -p substrate-shell world_enable
 - Results: fmt/clippy passed; world_enable tests passed
-- Kickoff prompts created: n/a (S2-test prompt already at docs/project_management/next/settings-stack/kickoff_prompts/S2-test.md)
+- Kickoff prompts created: n/a (S2-test prompt already at docs/project_management/_archived/next/settings-stack/kickoff_prompts/S2-test.md)
 - Docs commit: e5fe698
 - Next steps / blockers: none
 
@@ -141,7 +141,7 @@ Template (copy/paste and fill in):
 - Worktree commits: 6c6b882
 - Commands: cargo fmt; cargo test -p substrate-shell world_enable; cargo test -p substrate-shell world_root; ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world
 - Results: settings stack precedence/mode tests added and passing; installer smoke scenarios passed with `[world]` keys present (temp roots: /tmp/substrate-installer-default.1ItEHH, /tmp/substrate-installer-no-world.eSf6vW)
-- Kickoff prompts created: docs/project_management/next/settings-stack/kickoff_prompts/S2-integ.md
+- Kickoff prompts created: docs/project_management/_archived/next/settings-stack/kickoff_prompts/S2-integ.md
 - Docs commit: docs: finish S2-test (this commit)
 - Next steps / blockers: hand off to S2-integ to merge code/test work
 
@@ -188,7 +188,7 @@ Template (copy/paste and fill in):
 - Worktree commits: 5871a1a
 - Commands: cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell caged; ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world
 - Results: fmt clean; world_root + caged test suites pass; installer smoke scenarios pass with caged=true recorded (temp roots: /tmp/substrate-installer-default.lDU55G, /tmp/substrate-installer-no-world.Ohy3jK)
-- Kickoff prompts created: docs/project_management/next/settings-stack/kickoff_prompts/S3-integ.md
+- Kickoff prompts created: docs/project_management/_archived/next/settings-stack/kickoff_prompts/S3-integ.md
 - Docs commit: docs: finish S3-test (this commit)
 - Next steps / blockers: none
 
@@ -219,7 +219,7 @@ Template (copy/paste and fill in):
 - Worktree commits: c9b190e
 - Commands: cargo fmt; cargo clippy -p substrate-shell -- -D warnings; cargo test -p substrate-shell world_root
 - Results: all commands passed
-- Kickoff prompts created: docs/project_management/next/settings-stack/kickoff_prompts/S4-test.md
+- Kickoff prompts created: docs/project_management/_archived/next/settings-stack/kickoff_prompts/S4-test.md
 - Docs commit: pending (tasks/status/log updates on feat/settings-stack)
 - Next steps / blockers: merge branch into feat/settings-stack and remove worktree
 
@@ -234,7 +234,7 @@ Template (copy/paste and fill in):
 - Worktree commits: 34a660f
 - Commands: cargo fmt; cargo test -p substrate-shell world_root; ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world
 - Results: world override/caged/world-root precedence tests added; world_root suite passes; installer smoke scenarios pass (temp roots: /tmp/substrate-installer-default.NazMko, /tmp/substrate-installer-no-world.39Xwvi)
-- Kickoff prompts created: docs/project_management/next/settings-stack/kickoff_prompts/S4-integ.md (confirmed)
+- Kickoff prompts created: docs/project_management/_archived/next/settings-stack/kickoff_prompts/S4-integ.md (confirmed)
 - Docs commit: docs: finish S4-test (this commit)
 - Next steps / blockers: ready for S4-integ to merge code+tests
 
@@ -264,7 +264,7 @@ Template (copy/paste and fill in):
 - Worktree commits: f0e0993
 - Commands: cargo fmt; cargo clippy -p substrate-shell -- -D warnings; cargo test -p substrate-shell world_root
 - Results: fmt/clippy clean; world_root suite passed
-- Kickoff prompts created: docs/project_management/next/settings-stack/kickoff_prompts/S5-test.md (confirmed)
+- Kickoff prompts created: docs/project_management/_archived/next/settings-stack/kickoff_prompts/S5-test.md (confirmed)
 - Docs commit: docs: finish S5-code (this commit)
 - Next steps / blockers: hand off to S5-test for compatibility + caged coverage
 
@@ -279,7 +279,7 @@ Template (copy/paste and fill in):
 - Worktree commits: cde5dec
 - Commands: cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell caged; ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world
 - Results: fmt clean; world_root + caged suites passed; installer smoke scenarios passed (temp roots: /tmp/substrate-installer-default.4KEHqs, /tmp/substrate-installer-no-world.Agesl7)
-- Kickoff prompts created: docs/project_management/next/settings-stack/kickoff_prompts/S5-integ.md (confirmed)
+- Kickoff prompts created: docs/project_management/_archived/next/settings-stack/kickoff_prompts/S5-integ.md (confirmed)
 - Docs commit: docs: finish S5-test (this commit)
 - Next steps / blockers: merge branch into feat/settings-stack and drop worktree when ready
 

@@ -59,10 +59,19 @@ def _normalize_repo_relpath(path: str) -> str:
 
 
 def _pm_resolve_feature_dir(repo_root: Path, feature_dir: str) -> str:
+    pm_paths = (
+        repo_root
+        / "docs"
+        / "project_management"
+        / "system"
+        / "scripts"
+        / "planning"
+        / "pm_paths.py"
+    )
     res = _run(
         [
             sys.executable,
-            "scripts/planning/pm_paths.py",
+            pm_paths.as_posix(),
             "resolve-feature-dir",
             "--feature-dir",
             feature_dir,
@@ -212,7 +221,7 @@ def main(argv: list[str]) -> int:
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    ap.add_argument("--from", dest="from_dir", required=True, help="e.g. docs/project_management/next/<feature>")
+    ap.add_argument("--from", dest="from_dir", required=True, help="e.g. docs/project_management/packs/active/<feature>")
     ap.add_argument("--to", dest="to_dir", required=True, help="e.g. docs/project_management/packs/active/<feature>")
     ap.add_argument("--dry-run", action="store_true", help="Print planned changes without writing files")
     ap.add_argument(

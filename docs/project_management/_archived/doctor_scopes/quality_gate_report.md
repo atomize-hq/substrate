@@ -20,7 +20,7 @@ make planning-lint FEATURE_DIR="$FEATURE_DIR"
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
 # exit 0
 
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 # exit 0
 
 # tasks.json required-field audit
@@ -65,7 +65,7 @@ make planning-validate FEATURE_DIR="$FEATURE_DIR"
 - `integration_map.md`: `YES`
 - `manual_testing_playbook.md`: `YES`
 - Feature smoke scripts under `smoke/`: `YES` (`docs/project_management/_archived/doctor_scopes/smoke/`)
-- `docs/project_management/next/sequencing.json`: `YES`
+- `docs/project_management/packs/sequencing.json`: `YES`
 - Standards:
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
@@ -101,7 +101,7 @@ make planning-validate FEATURE_DIR="$FEATURE_DIR"
 ### 4) Sequencing and dependency alignment
 - Result: `PASS`
 - Evidence:
-  - `docs/project_management/next/sequencing.json` includes sprint `doctor_scopes` with `DS0` spec (`sequencing.json` lines ~172–178).
+  - `docs/project_management/packs/sequencing.json` includes sprint `doctor_scopes` with `DS0` spec (`sequencing.json` lines ~172–178).
   - `docs/project_management/_archived/doctor_scopes/tasks.json` dependencies enforce internal ordering (F0 → DS0-code/test → DS0-integ-core → platform-fix → DS0-integ) (see `tasks.json` task `depends_on` fields).
 - Notes: No task starts before its declared prerequisites.
 
@@ -213,7 +213,7 @@ make planning-validate FEATURE_DIR="$FEATURE_DIR"
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
 # exit 0
 
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 # exit 0
 ```
 
@@ -242,7 +242,7 @@ jq -e . docs/project_management/next/sequencing.json >/dev/null
 ### 4) Sequencing and dependency alignment
 - Result: `PASS`
 - Evidence:
-  - `docs/project_management/next/sequencing.json` contains sprint `doctor_scopes` with `DS0` spec.
+  - `docs/project_management/packs/sequencing.json` contains sprint `doctor_scopes` with `DS0` spec.
   - `docs/project_management/_archived/doctor_scopes/tasks.json` maintains the DS0 dependency graph (F0 → code/test → integ-core → platform-fix → integ).
 - Notes: No task starts before declared prerequisites.
 

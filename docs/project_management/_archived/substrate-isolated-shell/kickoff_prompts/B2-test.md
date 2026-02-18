@@ -11,7 +11,7 @@ Summary:
 Focus files / context:
 - `crates/shell/tests/` (existing CLI + shim deployment tests)
 - Manager manifest + init helpers (`crates/shell/src/manager_init.rs`, `crates/common/src/manager_manifest.rs`)
-- Planning docs in `docs/project_management/next/substrate_isolated_shell_plan.md`, `.../execution_plan.md`, and `.../data_map.md`
+- Planning docs in `docs/project_management/_archived/next/substrate_isolated_shell_plan.md`, `.../execution_plan.md`, and `.../data_map.md`
 
 Commands to run:
 1. `cargo fmt --all`

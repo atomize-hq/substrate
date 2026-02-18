@@ -3,15 +3,15 @@
 This playbook validates the Y0 TOML→YAML runtime settings migration (`substrate config init/show/set`) end-to-end using a throwaway `HOME`.
 
 Authoritative spec:
-- `docs/project_management/next/yaml-settings-migration/Y0-spec.md`
+- `docs/project_management/_archived/next/yaml-settings-migration/Y0-spec.md`
 - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 
 ## Automated smoke scripts
 
 Run the platform smoke script first (it uses temp directories and exits non-zero on failure):
-- Linux: `bash docs/project_management/next/yaml-settings-migration/smoke/linux-smoke.sh`
-- macOS: `bash docs/project_management/next/yaml-settings-migration/smoke/macos-smoke.sh`
-- Windows: `pwsh -File docs/project_management/next/yaml-settings-migration/smoke/windows-smoke.ps1`
+- Linux: `bash docs/project_management/_archived/next/yaml-settings-migration/smoke/linux-smoke.sh`
+- macOS: `bash docs/project_management/_archived/next/yaml-settings-migration/smoke/macos-smoke.sh`
+- Windows: `pwsh -File docs/project_management/_archived/next/yaml-settings-migration/smoke/windows-smoke.ps1`
 
 ## 0) Preconditions
 

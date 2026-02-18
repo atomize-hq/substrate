@@ -21,8 +21,8 @@ Stop scope drift during execution by enforcing that every path touched by a tria
 Engineers and agents running triads need a deterministic “unplanned touches” failure at `task_finish`, with actionable remediation (“update impact_map on orchestration branch; commit; rerun task_finish”).
 
 ### In scope
-- `scripts/planning/validate_impact_map.py` (strict + legacy gating) with `--emit-json`.
-- Wire validator into planning lint (`scripts/planning/lint.sh`, `scripts/planning/lint.ps1`) via a single call.
+- `docs/project_management/system/scripts/planning/validate_impact_map.py` (strict + legacy gating) with `--emit-json`.
+- Wire validator into planning lint (`docs/project_management/system/scripts/planning/lint.sh`, `docs/project_management/system/scripts/planning/lint.ps1`) via a single call.
 - Update `docs/project_management/standards/templates/impact_map.md.tmpl` to a legacy-safe skeleton using `- None`.
 - Update `docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md` to document strict format + enforcement behavior.
 - Enforce Touch Set at `scripts/triad/task_finish.sh` (strict only), using:
@@ -85,7 +85,7 @@ Engineers and agents running triads need a deterministic “unplanned touches”
 - Optional: `--emit-json` (JSON-only output)
 
 **Implementation notes**
-- Add file: `scripts/planning/validate_impact_map.py`
+- Add file: `docs/project_management/system/scripts/planning/validate_impact_map.py`
 - Mode derivation (when `--mode` not provided):
   - Read `<feature_dir>/tasks.json`
   - STRICT if `meta.slice_spec_version` is an int >= 2
@@ -97,7 +97,7 @@ Engineers and agents running triads need a deterministic “unplanned touches”
   - In STRICT: fail if any `### ` heading is present that is not one of the four required headings
 
 **Sub-task checklist**
-- Add `scripts/planning/validate_impact_map.py` with argparse and exit codes.
+- Add `docs/project_management/system/scripts/planning/validate_impact_map.py` with argparse and exit codes.
 - Implement:
   - repo root discovery via `git rev-parse --show-toplevel`
   - reading `<feature_dir>/tasks.json` (for auto mode)
@@ -166,9 +166,9 @@ Engineers and agents running triads need a deterministic “unplanned touches”
 
 **Implementation notes**
 - Modify:
-  - `scripts/planning/lint.sh`
-  - `scripts/planning/lint.ps1`
-  - add a step: `python3 scripts/planning/validate_impact_map.py --feature-dir ...`
+  - `docs/project_management/system/scripts/planning/lint.sh`
+  - `docs/project_management/system/scripts/planning/lint.ps1`
+  - add a step: `python3 docs/project_management/system/scripts/planning/validate_impact_map.py --feature-dir ...`
   - validator is responsible for gating strict vs legacy via tasks.json
 - Modify template: `docs/project_management/standards/templates/impact_map.md.tmpl`
   - Touch Set sections become:
@@ -219,7 +219,7 @@ Engineers and agents running triads need a deterministic “unplanned touches”
 - In legacy:
   - print WARN and skip enforcement entirely
 - In strict:
-  - call: `python3 scripts/planning/validate_impact_map.py --feature-dir "$FEATURE_DIR_ABS" --emit-json`
+  - call: `python3 docs/project_management/system/scripts/planning/validate_impact_map.py --feature-dir "$FEATURE_DIR_ABS" --emit-json`
   - if validator exits non-zero: fail task_finish (planning docs must be fixed first)
 
 **Sub-task checklist**
@@ -314,7 +314,7 @@ Engineers and agents running triads need a deterministic “unplanned touches”
 - One-off converter for Touch Set bullets.
 
 **Implementation notes**
-- New file: `scripts/planning/migrate_impact_map_touchset_v1_to_v2.py`
+- New file: `docs/project_management/system/scripts/planning/migrate_impact_map_touchset_v1_to_v2.py`
 - Behavior:
   - locate `## Touch set (explicit)` region
   - under Create/Edit/Deprecate/Delete:
@@ -333,7 +333,7 @@ Engineers and agents running triads need a deterministic “unplanned touches”
 - Demonstrate low-friction adoption.
 
 **Sub-task checklist**
-- Pick one strict pack under `docs/project_management/next/*` with `meta.slice_spec_version >= 2`.
+- Pick one strict pack under `docs/project_management/_archived/next/*` with `meta.slice_spec_version >= 2`.
 - Run migration script.
 - Fix any strict validation failures.
 - Run `make planning-lint FEATURE_DIR=...` and record results (for reviewer notes / PR description).
@@ -372,9 +372,9 @@ Critical path:
 
 ### WS-VAL — Validator + lint wiring
 Touch surface:
-- `scripts/planning/validate_impact_map.py`
-- `scripts/planning/lint.sh`
-- `scripts/planning/lint.ps1`
+- `docs/project_management/system/scripts/planning/validate_impact_map.py`
+- `docs/project_management/system/scripts/planning/lint.sh`
+- `docs/project_management/system/scripts/planning/lint.ps1`
 
 Tasks:
 - `S1.T1`, `S1.T2`, `S1.T3`

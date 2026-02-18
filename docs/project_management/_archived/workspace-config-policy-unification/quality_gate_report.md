@@ -20,7 +20,7 @@ FEATURE_DIR="docs/project_management/_archived/workspace-config-policy-unificati
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
 # exit=0
 
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 # exit=0
 
 make planning-validate FEATURE_DIR="$FEATURE_DIR"
@@ -57,7 +57,7 @@ PY
 
 ### Additional review commands
 ```bash
-jq -r '.sprints[] | select(.id=="workspace_config_policy_unification") | {order,id,title,status,directory,plan,sequence}' docs/project_management/next/sequencing.json
+jq -r '.sprints[] | select(.id=="workspace_config_policy_unification") | {order,id,title,status,directory,plan,sequence}' docs/project_management/packs/sequencing.json
 # exit=0
 ```
 
@@ -71,7 +71,7 @@ jq -r '.sprints[] | select(.id=="workspace_config_policy_unification") | {order,
 - `integration_map.md` (if present/required): `YES` (`docs/project_management/_archived/workspace-config-policy-unification/integration_map.md`)
 - `manual_testing_playbook.md` (if present/required): `YES` (`docs/project_management/_archived/workspace-config-policy-unification/manual_testing_playbook.md`)
 - Feature smoke scripts under `smoke/` (if required): `YES` (`docs/project_management/_archived/workspace-config-policy-unification/smoke/linux-smoke.sh`, `docs/project_management/_archived/workspace-config-policy-unification/smoke/macos-smoke.sh`, `docs/project_management/_archived/workspace-config-policy-unification/smoke/windows-smoke.ps1`)
-- `docs/project_management/next/sequencing.json`: `YES`
+- `docs/project_management/packs/sequencing.json`: `YES`
 - Standards:
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
@@ -97,7 +97,7 @@ jq -r '.sprints[] | select(.id=="workspace_config_policy_unification") | {order,
 ### 4) Sequencing and dependency alignment
 - Result: `PASS`
 - Evidence:
-  - `docs/project_management/next/sequencing.json` sprint entry: `workspace_config_policy_unification` (order `29`)
+  - `docs/project_management/packs/sequencing.json` sprint entry: `workspace_config_policy_unification` (order `29`)
   - `docs/project_management/_archived/workspace-config-policy-unification/tasks.json:215`
 - Notes: Slice dependencies enforce WCU1→WCU5 ordering via prior-slice integration tasks; code/test concurrency only within a slice.
 

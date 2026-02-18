@@ -25,9 +25,9 @@ make integ-checks
 ```
 
 ## Smoke Scripts (required)
-- Linux: `bash docs/project_management/next/yaml-settings-migration/smoke/linux-smoke.sh`
-- macOS: `bash docs/project_management/next/yaml-settings-migration/smoke/macos-smoke.sh`
-- Windows: `pwsh -File docs/project_management/next/yaml-settings-migration/smoke/windows-smoke.ps1`
+- Linux: `bash docs/project_management/_archived/next/yaml-settings-migration/smoke/linux-smoke.sh`
+- macOS: `bash docs/project_management/_archived/next/yaml-settings-migration/smoke/macos-smoke.sh`
+- Windows: `pwsh -File docs/project_management/_archived/next/yaml-settings-migration/smoke/windows-smoke.ps1`
 
 ## End Checklist
 1. Commit integration changes.

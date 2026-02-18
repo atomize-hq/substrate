@@ -6,15 +6,15 @@
 - Owner(s): Spenser McConnell (Substrate); Shell maintainers
 
 ## Scope
-- Feature directory: `docs/project_management/next/host_event_bus_router_daemon/`
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Feature directory: `docs/project_management/_archived/next/host_event_bus_router_daemon/`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Related Docs
-- Decision Register: `docs/project_management/next/host_event_bus_router_daemon/decision_register.md`
+- Decision Register: `docs/project_management/_archived/next/host_event_bus_router_daemon/decision_register.md`
 - Trace/event foundations:
   - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
   - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
@@ -25,7 +25,7 @@
   - `docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md`
   - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
 - Future alignment (not required to land this ADR):
-  - `docs/project_management/next/world-sync/` (internal git support; not yet landed)
+  - `docs/project_management/_archived/next/world-sync/` (internal git support; not yet landed)
 
 ## Executive Summary (Operator)
 
@@ -37,7 +37,7 @@ ADR_BODY_SHA256: 86af8acb4a4b7843b575b3738e111e54212356be41b3e0709b4ae82d3d506e4
   - Why: Enable reliable “when A completes, trigger B” workflows and selective file-change triggers without introducing an external broker or bypassing workspace policy boundaries.
   - Links:
     - `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md#L1`
-    - `docs/project_management/next/host_event_bus_router_daemon/decision_register.md`
+    - `docs/project_management/_archived/next/host_event_bus_router_daemon/decision_register.md`
     - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md#L1`
     - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md#L1`
 
@@ -309,12 +309,12 @@ Only an explicit allowlist of event families is triggerable. v1 supports:
   - file triggers: only configured include paths trigger (deny all other changes)
 
 ### Manual validation
-- Manual playbook: `docs/project_management/next/host_event_bus_router_daemon/manual_testing_playbook.md`
+- Manual playbook: `docs/project_management/_archived/next/host_event_bus_router_daemon/manual_testing_playbook.md`
 
 ### Smoke scripts
-- Linux: `docs/project_management/next/host_event_bus_router_daemon/smoke/linux-smoke.sh`
-- macOS: `docs/project_management/next/host_event_bus_router_daemon/smoke/macos-smoke.sh`
-- Windows: `docs/project_management/next/host_event_bus_router_daemon/smoke/windows-smoke.ps1`
+- Linux: `docs/project_management/_archived/next/host_event_bus_router_daemon/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/_archived/next/host_event_bus_router_daemon/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/_archived/next/host_event_bus_router_daemon/smoke/windows-smoke.ps1`
 
 ## Rollout / Backwards Compatibility
 - Policy: greenfield breaking is allowed
@@ -322,7 +322,7 @@ Only an explicit allowlist of event families is triggerable. v1 supports:
 
 ## Decision Summary
 - Decision Register entries:
-  - `docs/project_management/next/host_event_bus_router_daemon/decision_register.md`:
+  - `docs/project_management/_archived/next/host_event_bus_router_daemon/decision_register.md`:
     - DR-0001 (Service packaging: standalone binary vs `substrate` subcommand)
     - DR-0002 (Event ingestion: tail `trace.jsonl` vs direct publish API)
     - DR-0003 (Derived workflow-router events location: append to `trace.jsonl` vs separate log)

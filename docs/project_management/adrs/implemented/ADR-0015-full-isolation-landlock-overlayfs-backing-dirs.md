@@ -7,7 +7,7 @@
 
 ## Scope
 - Feature directory: `docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/`
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
@@ -92,7 +92,7 @@ ADR_BODY_SHA256: 7fb450fcafcf3cb53fd576b167a8bc26ab6aded352f141b91afec7f08cb50d7
     - allowlisted project writes succeed; denied writes remain denied; diagnostics improve on failure.
 
 ## Sequencing / Dependencies
-- Sequencing entry: `docs/project_management/next/sequencing.json` (world-agent policy snapshot parity workstream)
+- Sequencing entry: `docs/project_management/packs/sequencing.json` (world-agent policy snapshot parity workstream)
 - Prerequisites:
   - Policy snapshot allowlist canonicalization and env injection must already be in place (covered by ADR-0014 and the policy snapshot implementation).
 

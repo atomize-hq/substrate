@@ -7,10 +7,10 @@ Test agent: tests/fixtures only. No production code. Do not edit docs/tasks/sess
 Add tests/fixtures validating that macOS world deps install/sync fail when the backend is unavailable (and do not claim success via host fallback), per M6-spec.
 
 ## Read first
-- `docs/project_management/next/p0-platform-stability-macOS-parity/plan.md`
-- `docs/project_management/next/p0-platform-stability-macOS-parity/tasks.json`
-- `docs/project_management/next/p0-platform-stability-macOS-parity/session_log.md`
-- `docs/project_management/next/p0-platform-stability-macOS-parity/M6-spec.md`
+- `docs/project_management/_archived/next/p0-platform-stability-macOS-parity/plan.md`
+- `docs/project_management/_archived/next/p0-platform-stability-macOS-parity/tasks.json`
+- `docs/project_management/_archived/next/p0-platform-stability-macOS-parity/session_log.md`
+- `docs/project_management/_archived/next/p0-platform-stability-macOS-parity/M6-spec.md`
 
 ## Start checklist (must follow)
 1. `git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only`

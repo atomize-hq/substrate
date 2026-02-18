@@ -4,7 +4,7 @@
 You are the planning/research/documentation agent for <FEATURE>.
 
 Goal:
-- Produce an execution-ready Planning Pack under `docs/project_management/next/<feature>/` with zero ambiguity.
+- Produce an execution-ready Planning Pack under `<FEATURE_DIR>/` with zero ambiguity.
 - All decisions are final and explicitly recorded; the plan is auditable and strictly compatible with triad execution.
 
 Constraints (non-negotiable):
@@ -24,34 +24,34 @@ Required reading (end-to-end):
 - `docs/project_management/system/standards/adr/ADR_STANDARD_AND_TEMPLATE.md`
 - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 - `docs/project_management/system/templates/planning_pack/PLANNING_SESSION_LOG_TEMPLATE.md`
-- `docs/project_management/packs/sequencing.json` (legacy mirror during migration: `docs/project_management/next/sequencing.json`)
-- `docs/project_management/next/<feature>/spec_manifest.md`
-- `docs/project_management/next/<feature>/impact_map.md`
+- `docs/project_management/packs/sequencing.json`
+- `<FEATURE_DIR>/spec_manifest.md`
+- `<FEATURE_DIR>/impact_map.md`
 - All existing planning docs relevant to <FEATURE> (if any).
 
 Required deliverables (must create or update):
 1) Planning Pack (minimum):
-   - `docs/project_management/next/<feature>/plan.md`
-   - `docs/project_management/next/<feature>/spec_manifest.md` (authoritative spec list + surface ownership)
-   - `docs/project_management/next/<feature>/impact_map.md` (touch set + cascading implications + cross-queue conflicts; replaces legacy `integration_map.md`)
-   - `docs/project_management/next/<feature>/ci_checkpoint_plan.md` (cross-platform automation packs only; bounded CI checkpoints between groups of triads)
-   - `docs/project_management/next/<feature>/tasks.json`
-   - `docs/project_management/next/<feature>/session_log.md` (START/END entries only)
+   - `<FEATURE_DIR>/plan.md`
+   - `<FEATURE_DIR>/spec_manifest.md` (authoritative spec list + surface ownership)
+   - `<FEATURE_DIR>/impact_map.md` (touch set + cascading implications + cross-queue conflicts; replaces legacy `integration_map.md`)
+   - `<FEATURE_DIR>/ci_checkpoint_plan.md` (cross-platform automation packs only; bounded CI checkpoints between groups of triads)
+   - `<FEATURE_DIR>/tasks.json`
+   - `<FEATURE_DIR>/session_log.md` (START/END entries only)
    - Specs: the exact spec docs listed in `spec_manifest.md` (no extras, no missing docs)
-   - Kickoff prompts: `docs/project_management/next/<feature>/kickoff_prompts/*-{code,test,integ}.md`
+   - Kickoff prompts: `<FEATURE_DIR>/kickoff_prompts/*-{code,test,integ}.md`
 	   - Execution gates (recommended; scaffolded by `make planning-new-feature` / `make planning-new-feature-ps`):
-	     - `docs/project_management/next/<feature>/execution_preflight_report.md`
-	     - `docs/project_management/next/<feature>/<SLICE_ID>-closeout_report.md` (e.g., `WCU0-closeout_report.md`)
+	     - `<FEATURE_DIR>/execution_preflight_report.md`
+	     - `<FEATURE_DIR>/<SLICE_ID>-closeout_report.md` (e.g., `WCU0-closeout_report.md`)
 		   - If you want to use triad execution automation (task runner/finisher + feature cleanup), scaffold with `AUTOMATION=1`:
 		     - `make planning-new-feature FEATURE=<feature> AUTOMATION=1`
 		     - `make planning-new-feature-ps FEATURE=<feature> AUTOMATION=1`
 	   - For cross-platform packs, set `CROSS_PLATFORM=1` and optionally split scopes (P3-008):
 	     - `make planning-new-feature FEATURE=<feature> CROSS_PLATFORM=1 AUTOMATION=1 BEHAVIOR_PLATFORMS=linux CI_PARITY_PLATFORMS=linux,macos,windows`
 	2) If decision-heavy or cross-platform:
-	   - `docs/project_management/next/<feature>/decision_register.md`
-	   - `docs/project_management/next/<feature>/impact_map.md`
-	   - `docs/project_management/next/<feature>/manual_testing_playbook.md`
-   - `docs/project_management/next/<feature>/smoke/{linux-smoke.sh,macos-smoke.sh,windows-smoke.ps1}`
+	   - `<FEATURE_DIR>/decision_register.md`
+	   - `<FEATURE_DIR>/impact_map.md`
+	   - `<FEATURE_DIR>/manual_testing_playbook.md`
+   - `<FEATURE_DIR>/smoke/{linux-smoke.sh,macos-smoke.sh,windows-smoke.ps1}`
 
 Required interoperability rules:
 - `tasks.json` must match the required fields and workflow described in `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`.
@@ -86,7 +86,7 @@ Required interoperability rules:
         - `meta.checkpoint_boundaries` lists the slice ids that are the **last slice** in each checkpoint group (must match `ci_checkpoint_plan.md`).
         - Normal slices use only `X-integ` as the per-slice merge task.
         - Boundary slices use `B-integ-core`, `B-integ-<platform>`, and `B-integ`.
-    - This is enforced mechanically by `make planning-validate` (via `scripts/planning/validate_tasks_json.py`).
+    - This is enforced mechanically by `make planning-validate FEATURE_DIR="$FEATURE_DIR"`.
   - If WSL coverage is required, use `meta.wsl_required: true` and `meta.wsl_task_mode: "bundled"|"separate"` (do not add `"wsl"` to `meta.behavior_platforms_required` or `meta.ci_parity_platforms_required`).
   - Preferred smoke dispatch examples:
     - Behavior platforms (preferred): `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=behavior WORKFLOW_REF="feat/<feature>" SMOKE_CHECKOUT_REF="<sha>"`

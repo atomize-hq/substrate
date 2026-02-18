@@ -6,22 +6,22 @@
 - Owner(s): Spenser McConnell (Substrate)
 
 ## Scope
-- Feature directory: `docs/project_management/next/llm_gateway_in_world/`
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Feature directory: `docs/project_management/_archived/next/llm_gateway_in_world/`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Related Docs
-- Plan: `docs/project_management/next/llm_gateway_in_world/plan.md`
-- Tasks: `docs/project_management/next/llm_gateway_in_world/tasks.json`
-- Spec manifest: `docs/project_management/next/llm_gateway_in_world/spec_manifest.md`
-- Specs: `docs/project_management/next/llm_gateway_in_world/specs/*`
-- Contract (if present): `docs/project_management/next/llm_gateway_in_world/contract.md`
-- Decision Register: `docs/project_management/next/llm_gateway_in_world/decision_register.md`
-- Impact Map: `docs/project_management/next/llm_gateway_in_world/impact_map.md`
-- Manual Playbook: `docs/project_management/next/llm_gateway_in_world/manual_testing_playbook.md`
+- Plan: `docs/project_management/_archived/next/llm_gateway_in_world/plan.md`
+- Tasks: `docs/project_management/_archived/next/llm_gateway_in_world/tasks.json`
+- Spec manifest: `docs/project_management/_archived/next/llm_gateway_in_world/spec_manifest.md`
+- Specs: `docs/project_management/_archived/next/llm_gateway_in_world/specs/*`
+- Contract (if present): `docs/project_management/_archived/next/llm_gateway_in_world/contract.md`
+- Decision Register: `docs/project_management/_archived/next/llm_gateway_in_world/decision_register.md`
+- Impact Map: `docs/project_management/_archived/next/llm_gateway_in_world/impact_map.md`
+- Manual Playbook: `docs/project_management/_archived/next/llm_gateway_in_world/manual_testing_playbook.md`
 
 ## Executive Summary (Operator)
 
@@ -62,8 +62,8 @@ ADR_BODY_SHA256: e4484d14e3cfad79300a982b445f3dbbb04375c34023000505221aede57fa6d
 ### CLI
 - Commands:
   - Gateway lifecycle is owned by the world subsystem (session world management + deps provisioning).
-    - v1 requirement (legacy): the “ensure gateway running” path MUST pass any required secret values to the in-world gateway/engine spawn request over the existing world-agent transport (see `docs/project_management/next/llm_gateway_in_world/specs/env_injection.md`).
-    - Phase 8 additive upgrade (preferred): secret values MUST NOT live in the in-world gateway/manager process environment by default. Host→world secret delivery SHOULD use a secret-channel payload and an inherited one-time FD/pipe bundle into the gateway/manager (see `docs/project_management/next/llm_gateway_in_world/decision_register.md` (DR-0018)).
+    - v1 requirement (legacy): the “ensure gateway running” path MUST pass any required secret values to the in-world gateway/engine spawn request over the existing world-agent transport (see `docs/project_management/_archived/next/llm_gateway_in_world/specs/env_injection.md`).
+    - Phase 8 additive upgrade (preferred): secret values MUST NOT live in the in-world gateway/manager process environment by default. Host→world secret delivery SHOULD use a secret-channel payload and an inherited one-time FD/pipe bundle into the gateway/manager (see `docs/project_management/_archived/next/llm_gateway_in_world/decision_register.md` (DR-0018)).
   - `substrate world status gateway`:
     - Behavior: prints per-world-session gateway state (running/not), bind endpoints inside the world, active backend kind, and policy mode.
     - Default output: status + health only (no client wiring exports by default).
@@ -96,7 +96,7 @@ This ADR does not define new config file families or bespoke gateway config file
 
 - Source of truth (config/policy key paths + precedence + defaults):
   - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
-  - `docs/project_management/next/llm_and_agent_config_policy_surface/SCHEMA.md`
+  - `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/SCHEMA.md`
 
 Files and locations (existing YAML layering model):
 - Global config patch: `$SUBSTRATE_HOME/config.yaml` (default: `~/.substrate/config.yaml`)
@@ -161,7 +161,7 @@ Non-negotiable rules (Phase 8):
     - optional metrics (if enabled)
 
 ## Sequencing / Dependencies
-- Sequencing entry: `docs/project_management/next/sequencing.json` → `llm-gateway-in-world` (to be scheduled)
+- Sequencing entry: `docs/project_management/packs/sequencing.json` → `llm-gateway-in-world` (to be scheduled)
 - Prerequisite integration task IDs:
   - ADR-0017 (Output/Event Contract) must be available for stable event framing and routing attribution.
   - ADR-0028 (Correlation vocabulary + required/optional matrix) must be available as the canonical join-key spine for persisted trace records (no heuristic joins).
@@ -186,12 +186,12 @@ Non-negotiable rules (Phase 8):
   - Validate fail-closed behavior when world is required but unavailable.
 
 ### Manual validation
-- Manual playbook: `docs/project_management/next/llm_gateway_in_world/manual_testing_playbook.md`
+- Manual playbook: `docs/project_management/_archived/next/llm_gateway_in_world/manual_testing_playbook.md`
 
 ### Smoke scripts
-- Linux: `docs/project_management/next/llm_gateway_in_world/smoke/linux-smoke.sh`
-- macOS: `docs/project_management/next/llm_gateway_in_world/smoke/macos-smoke.sh`
-- Windows: `docs/project_management/next/llm_gateway_in_world/smoke/windows-smoke.ps1`
+- Linux: `docs/project_management/_archived/next/llm_gateway_in_world/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/_archived/next/llm_gateway_in_world/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/_archived/next/llm_gateway_in_world/smoke/windows-smoke.ps1`
 
 ## Rollout / Backwards Compatibility
 - Policy: greenfield breaking is allowed
@@ -199,7 +199,7 @@ Non-negotiable rules (Phase 8):
 
 ## Decision Summary
 - Decision Register entries:
-  - `docs/project_management/next/llm_gateway_in_world/decision_register.md`:
+  - `docs/project_management/_archived/next/llm_gateway_in_world/decision_register.md`:
     - DR-0001 (Gateway bind strategy: UDS vs loopback TCP inside world)
     - DR-0002 (Default logging policy: metadata-only vs body logging)
     - DR-0003 (Policy integration point: broker vs gateway-native checks)

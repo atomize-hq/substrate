@@ -6,8 +6,8 @@
 - Owner(s): Spenser McConnell (Substrate)
 
 ## Scope
-- Feature directory: `docs/project_management/next/llm_and_agent_config_policy_surface/`
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Feature directory: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md`
@@ -18,18 +18,18 @@
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 
 ## Related Docs
-- Plan: `docs/project_management/next/llm_and_agent_config_policy_surface/plan.md`
-- Tasks: `docs/project_management/next/llm_and_agent_config_policy_surface/tasks.json`
-- CI checkpoints: `docs/project_management/next/llm_and_agent_config_policy_surface/ci_checkpoint_plan.md`
-- Spec manifest: `docs/project_management/next/llm_and_agent_config_policy_surface/spec_manifest.md`
+- Plan: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/plan.md`
+- Tasks: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/tasks.json`
+- CI checkpoints: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/ci_checkpoint_plan.md`
+- Spec manifest: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/spec_manifest.md`
 - Specs:
-  - Contract: `docs/project_management/next/llm_and_agent_config_policy_surface/contract.md`
-  - Schema: `docs/project_management/next/llm_and_agent_config_policy_surface/SCHEMA.md`
-  - Phase 3a slice: `docs/project_management/next/llm_and_agent_config_policy_surface/LACP0-spec.md`
-  - Phase 3b slice: `docs/project_management/next/llm_and_agent_config_policy_surface/LACP1-spec.md`
-- Decision Register: `docs/project_management/next/llm_and_agent_config_policy_surface/decision_register.md`
-- Impact Map: `docs/project_management/next/llm_and_agent_config_policy_surface/impact_map.md`
-- Manual playbook: `docs/project_management/next/llm_and_agent_config_policy_surface/manual_testing_playbook.md`
+  - Contract: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/contract.md`
+  - Schema: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/SCHEMA.md`
+  - Phase 3a slice: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/LACP0-spec.md`
+  - Phase 3b slice: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/LACP1-spec.md`
+- Decision Register: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/decision_register.md`
+- Impact Map: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/impact_map.md`
+- Manual playbook: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/manual_testing_playbook.md`
 - Existing config/policy layering model:
   - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
   - `docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md`
@@ -59,9 +59,9 @@ ADR_BODY_SHA256: 4058747309ca90a3c940d76e4a7d8026e0e3eaf5b7b8dc4b08b85d6c91c1864
   - Why: Keep Substrate’s enforcement/audit claims accurate and avoid a “second config system” as LLM + agent features land (gateway, CLI backends, agent hub, orchestration toolbox).
   - Links:
     - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md#L1`
-    - `docs/project_management/next/llm_and_agent_config_policy_surface/contract.md#L1`
-    - `docs/project_management/next/llm_and_agent_config_policy_surface/SCHEMA.md#L1`
-    - `docs/project_management/next/llm_and_agent_config_policy_surface/decision_register.md#L1`
+    - `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/contract.md#L1`
+    - `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/SCHEMA.md#L1`
+    - `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/decision_register.md#L1`
 
 ## Problem / Context
 - The next major body of work adds:
@@ -301,7 +301,7 @@ Phase 8 additive note: ADR-0029 introduces an indirect execution path (trace eve
     - allow/deny (and approval) decisions are observable in structured events/spans (defined in other ADRs)
 
 ## Sequencing / Dependencies
-- Sequencing entry: `docs/project_management/next/sequencing.json` → `llm-and-agent-config-policy-surface` (to be scheduled)
+- Sequencing entry: `docs/project_management/packs/sequencing.json` → `llm-and-agent-config-policy-surface` (to be scheduled)
 - Dependencies:
   - LLM gateway ADRs (front door + engines) must use this ADR’s config/policy shape.
   - Agent hub ADRs must use this ADR’s config/policy shape.
@@ -330,19 +330,19 @@ Phase 8 additive note: ADR-0029 introduces an indirect execution path (trace eve
   - fail-closed behavior: with defaults (config disabled + allowlists empty), LLM/agent entrypoints refuse to run (exact behavior defined in the feature ADRs)
 
 ### Manual validation
-- Manual playbook: `docs/project_management/next/llm_and_agent_config_policy_surface/manual_testing_playbook.md`
+- Manual playbook: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/manual_testing_playbook.md`
 
 ### Smoke scripts
-- Linux: `docs/project_management/next/llm_and_agent_config_policy_surface/smoke/linux-smoke.sh`
-- macOS: `docs/project_management/next/llm_and_agent_config_policy_surface/smoke/macos-smoke.sh`
-- Windows: `docs/project_management/next/llm_and_agent_config_policy_surface/smoke/windows-smoke.ps1`
+- Linux: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/smoke/windows-smoke.ps1`
 
 ## Rollout / Backwards Compatibility
 - Policy: greenfield breaking is allowed
 - Compat work: none
 
 ## Decision Summary
-- Decision Register: `docs/project_management/next/llm_and_agent_config_policy_surface/decision_register.md`
+- Decision Register: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/decision_register.md`
   - DR-0001: config/policy live in existing YAML patch files (new keys only)
   - DR-0002: backend ids use `<kind>:<name>` string format
   - DR-0004: policy expresses requirements + allowlists (no `policy.*.enabled`)

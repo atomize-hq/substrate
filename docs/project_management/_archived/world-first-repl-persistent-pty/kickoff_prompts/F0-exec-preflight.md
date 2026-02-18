@@ -23,7 +23,7 @@ Do not edit planning docs inside the worktree.
    - `docs/project_management/_archived/world-first-repl-persistent-pty/integration_map.md`
    - `docs/project_management/_archived/world-first-repl-persistent-pty/manual_testing_playbook.md`
    - `docs/project_management/_archived/world-first-repl-persistent-pty/smoke/*`
-   - `docs/project_management/next/sequencing.json`
+   - `docs/project_management/packs/sequencing.json`
 3. Set `F0-exec-preflight` status to `in_progress` in `docs/project_management/_archived/world-first-repl-persistent-pty/tasks.json`; add START entry to `docs/project_management/_archived/world-first-repl-persistent-pty/session_log.md`; commit docs (`docs: start F0-exec-preflight`).
 
 ## Requirements (record results in `execution_preflight_report.md`)
@@ -67,7 +67,7 @@ Minimum checks (no ambiguity; each must have evidence in the report):
 
 ## Commands (minimum; include exit codes in the report)
 - `FEATURE_DIR="docs/project_management/_archived/world-first-repl-persistent-pty"; jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` (expected exit `0`)
-- `jq -e . docs/project_management/next/sequencing.json >/dev/null` (expected exit `0`)
+- `jq -e . docs/project_management/packs/sequencing.json >/dev/null` (expected exit `0`)
 - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` (expected exit `0`)
 
 ## End Checklist

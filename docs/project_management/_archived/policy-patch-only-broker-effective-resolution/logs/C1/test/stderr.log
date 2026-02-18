@@ -14,7 +14,7 @@ user
 
 ## Scope
 - Tests only (plus minimal test-only helpers/fixtures if required); no production code.
-- Spec: `docs/project_management/next/policy-patch-only-broker-effective-resolution/C1-spec.md`
+- Spec: `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C1-spec.md`
 - Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Start Checklist
@@ -23,7 +23,7 @@ Do not edit planning docs inside the worktree.
 1. Verify you are in the task worktree `wt/policy-patch-only-broker-effective-resolution-c1-test` on branch `policy-patch-only-broker-effective-resolution-c1-test` and that `.taskmeta.json` exists at the worktree root.
 2. Read: plan, tasks, session log, spec, this prompt.
 3. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run:
-   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution" SLICE_ID="C1"`
+   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution" SLICE_ID="C1"`
 
 ## Requirements
 - Add tests that enforce the C1 acceptance criteria.
@@ -69,14 +69,14 @@ exec
 {
   "created_at_utc": "2026-01-17T16:52:34Z",
   "created_from_sha": "c5a8f198fc49d38e944b2ab2966bda9ccf016c38",
-  "feature_dir": "docs/project_management/next/policy-patch-only-broker-effective-resolution",
+  "feature_dir": "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution",
   "orchestration_branch": "feat/policy-patch-only-broker-effective-resolution",
   "schema_version": 1,
   "task_branch": "policy-patch-only-broker-effective-resolution-c1-test",
   "task_id": "C1-test"
 }
 exec
-/bin/bash -lc 'ls -la docs/project_management/next/policy-patch-only-broker-effective-resolution && ls -la docs/project_management/standards | head' in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-test succeeded in 56ms:
+/bin/bash -lc 'ls -la docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution && ls -la docs/project_management/standards | head' in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-test succeeded in 56ms:
 total 152
 drwxr-xr-x 4 spenser spenser  4096 Jan 17 11:52 .
 drwxr-xr-x 8 spenser spenser  4096 Jan 17 11:52 ..
@@ -98,7 +98,7 @@ total 232
 drwxr-xr-x 3 spenser spenser  4096 Jan 17 11:52 .
 drwxr-xr-x 7 spenser spenser  4096 Jan 17 11:52 ..
 exec
-/bin/bash -lc "sed -n '1,200p' docs/project_management/next/policy-patch-only-broker-effective-resolution/C1-spec.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-test succeeded in 30ms:
+/bin/bash -lc "sed -n '1,200p' docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C1-spec.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-test succeeded in 30ms:
 # C1-spec — Fail-closed Policy Resolution Across Execution Paths + Docs Alignment
 
 Authoritative ADR:
@@ -131,8 +131,8 @@ It is a focused companion to:
 ## Operating assumptions (the situation you are in)
 
 When this standard applies, the operator started you with one of:
-- `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1` (preferred)
-- `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
+- `make triad-task-start-pair FEATURE_DIR="docs/project_management/_archived/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1` (preferred)
+- `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
 
 You are already:
 - in a git worktree (usually under `wt/...`)
@@ -479,12 +479,12 @@ exec
 ./scripts/windows/wsl-smoke.ps1:263:    $args = @('--command', ('"{0}"' -f $cmd))
 ./scripts/windows/wsl-smoke.ps1:280:    $args = @('--pty','--command','"echo pty-smoke"')
 ./scripts/windows/wsl-smoke.ps1:341:    & $SubstrateExe --command "echo restart-smoke" | Out-Host
-./docs/project_management/next/policy-patch-only-broker-effective-resolution/quality_gate_report.md:115:  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh` (C1 runs `--command "echo …"` only)
-./docs/project_management/next/policy-patch-only-broker-effective-resolution/quality_gate_report.md:160:  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh` (`run_c1` uses `--command "echo …"` only)
-./docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/macos-smoke.sh:77:  out="$("${DRIVER}" --command "echo SMOKE_POLICY_INVALID_YAML_RAN" 2>&1)"
-./docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/windows-smoke.ps1:75:      $out = & $Driver --command "echo SMOKE_POLICY_INVALID_YAML_RAN" 2>&1
-./docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh:77:  out="$("${DRIVER}" --command "echo SMOKE_POLICY_INVALID_YAML_RAN" 2>&1)"
-./docs/project_management/next/policy-patch-only-broker-effective-resolution/C1-spec.md:47:  - `substrate --command "<cmd>"` (shell execution path),
+./docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/quality_gate_report.md:115:  - `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh` (C1 runs `--command "echo …"` only)
+./docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/quality_gate_report.md:160:  - `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh` (`run_c1` uses `--command "echo …"` only)
+./docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/smoke/macos-smoke.sh:77:  out="$("${DRIVER}" --command "echo SMOKE_POLICY_INVALID_YAML_RAN" 2>&1)"
+./docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/smoke/windows-smoke.ps1:75:      $out = & $Driver --command "echo SMOKE_POLICY_INVALID_YAML_RAN" 2>&1
+./docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh:77:  out="$("${DRIVER}" --command "echo SMOKE_POLICY_INVALID_YAML_RAN" 2>&1)"
+./docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C1-spec.md:47:  - `substrate --command "<cmd>"` (shell execution path),
 ./docs/project_management/_archived/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh:200:run_expect_exit 0 substrate --no-world --command "echo disabled > \"$OUT_DISABLED\"" >/dev/null
 ./docs/project_management/_archived/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh:206:run_expect_exit 0 substrate --no-world --command "echo observe > \"$OUT_OBS\"" >/dev/null
 ./docs/project_management/_archived/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh:212:run_expect_nonzero substrate --no-world --command "echo enforce > \"$OUT_ENF\"" >/dev/null 2>&1
@@ -493,7 +493,7 @@ exec
 ./docs/project_management/_archived/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh:272:run_expect_nonzero substrate --no-world --command "echo reqworld > \"$OUT_REQWORLD\"" >/dev/null 2>&1
 ./docs/project_management/_archived/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh:279:SUBSTRATE_MANAGER_ENV="$SUBSTRATE_HOME/override_manager_env.sh" run_expect_exit 0 substrate --no-world --command "true" >/dev/null
 exec
-/bin/bash -lc "sed -n '1,140p' docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-test succeeded in 32ms:
+/bin/bash -lc "sed -n '1,140p' docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-test succeeded in 32ms:
 #!/usr/bin/env bash
 set -euo pipefail
 

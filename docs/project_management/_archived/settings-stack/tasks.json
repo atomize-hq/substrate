@@ -8,7 +8,7 @@
       "status": "completed",
       "description": "Ensure release bundles + installers carry config/manager_hooks.yaml (and related manifests) so health/doctor work out of the box.",
       "references": [
-        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "docs/project_management/_archived/next/settings-stack/settings_stack_plan.md",
         "dist/scripts/collect-supporting-artifacts.sh",
         "dist/scripts/assemble-release-bundles.sh",
         "scripts/substrate/install-substrate.sh",
@@ -41,7 +41,7 @@
       ],
       "worktree": "wt/ss-s0-manifest-code",
       "integration_task": "S0-integ",
-      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S0-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/settings-stack/kickoff_prompts/S0-code.md"
     },
     {
       "id": "S0-test",
@@ -51,7 +51,7 @@
       "status": "completed",
       "description": "Add/extend tests to confirm installers emit config/manager_hooks.yaml and that substrate health works after install.",
       "references": [
-        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "docs/project_management/_archived/next/settings-stack/settings_stack_plan.md",
         "tests/installers/install_smoke.sh",
         "scripts/substrate/install-substrate.sh",
         "docs/USAGE.md"
@@ -81,7 +81,7 @@
       ],
       "worktree": "wt/ss-s0-manifest-test",
       "integration_task": "S0-integ",
-      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S0-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/settings-stack/kickoff_prompts/S0-test.md"
     },
     {
       "id": "S0-integ",
@@ -91,7 +91,7 @@
       "status": "completed",
       "description": "Merge the manifest-packaging code + tests, run required scripts, and ensure feat/settings-stack reflects the fix before later stages begin.",
       "references": [
-        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "docs/project_management/_archived/next/settings-stack/settings_stack_plan.md",
         "dist/scripts",
         "scripts/substrate",
         "tests/installers"
@@ -122,7 +122,7 @@
       "concurrent_with": [],
       "worktree": "wt/ss-s0-manifest-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S0-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/settings-stack/kickoff_prompts/S0-integ.md"
     },
     {
       "id": "S1-code",
@@ -132,7 +132,7 @@
       "status": "completed",
       "description": "Replace ~/.substrate/config.json with config.toml, update installers/CLI to read & write TOML, and refresh docs without touching tests.",
       "references": [
-        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "docs/project_management/_archived/next/settings-stack/settings_stack_plan.md",
         "docs/INSTALLATION.md",
         "docs/CONFIGURATION.md",
         "crates/shell/src/commands/world_enable.rs",
@@ -168,7 +168,7 @@
       ],
       "worktree": "wt/ss-s1-config-code",
       "integration_task": "S1-integ",
-      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S1-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/settings-stack/kickoff_prompts/S1-code.md"
     },
     {
       "id": "S1-test",
@@ -178,7 +178,7 @@
       "status": "completed",
       "description": "Add/refresh tests that cover loading/saving config.toml and guard against regressions.",
       "references": [
-        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "docs/project_management/_archived/next/settings-stack/settings_stack_plan.md",
         "crates/shell/src/commands/world_enable.rs",
         "tests/installers/install_smoke.sh"
       ],
@@ -210,7 +210,7 @@
       ],
       "worktree": "wt/ss-s1-config-test",
       "integration_task": "S1-integ",
-      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S1-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/settings-stack/kickoff_prompts/S1-test.md"
     },
     {
       "id": "S1-integ",
@@ -220,7 +220,7 @@
       "status": "completed",
       "description": "Merge the TOML code + tests into feat/settings-stack, resolve conflicts, and ensure fmt/clippy/tests pass.",
       "references": [
-        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "docs/project_management/_archived/next/settings-stack/settings_stack_plan.md",
         "crates/shell",
         "scripts/substrate",
         "tests/installers"
@@ -262,7 +262,7 @@
       "status": "completed",
       "description": "Add CLI flag/env parsing, directory/local config readers, and shell plumbing for world root precedence.",
       "references": [
-        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "docs/project_management/_archived/next/settings-stack/settings_stack_plan.md",
         "docs/CONFIGURATION.md",
         "crates/shell/src/lib.rs",
         "crates/shell/src/platform_world",
@@ -297,7 +297,7 @@
       ],
       "worktree": "wt/ss-s2-settings-code",
       "integration_task": "S2-integ",
-      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S2-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/settings-stack/kickoff_prompts/S2-code.md"
     },
     {
       "id": "S2-test",
@@ -307,7 +307,7 @@
       "status": "completed",
       "description": "Add targeted tests that verify precedence (flag > dir config > global config > env > default) and world root behavior.",
       "references": [
-        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "docs/project_management/_archived/next/settings-stack/settings_stack_plan.md",
         "crates/shell/src/lib.rs",
         "crates/world",
         "tests/installers/install_smoke.sh"
@@ -339,7 +339,7 @@
       ],
       "worktree": "wt/ss-s2-settings-test",
       "integration_task": "S2-integ",
-      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S2-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/settings-stack/kickoff_prompts/S2-test.md"
     },
     {
       "id": "S2-integ",
@@ -349,7 +349,7 @@
       "status": "completed",
       "description": "Merge settings stack code/test worktrees, resolve conflicts, and ensure full fmt/clippy/test suite passes before updating feat/settings-stack.",
       "references": [
-        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "docs/project_management/_archived/next/settings-stack/settings_stack_plan.md",
         "crates/shell",
         "crates/world",
         "scripts/dev",
@@ -381,7 +381,7 @@
       "concurrent_with": [],
       "worktree": "wt/ss-s2-settings-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S2-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/settings-stack/kickoff_prompts/S2-integ.md"
     },
     {
       "id": "S3-code",
@@ -391,7 +391,7 @@
       "status": "completed",
       "description": "Replace the world-root flags with a standalone caged mode (boolean) that anchors the shell to a chosen root even when the world backend is disabled.",
       "references": [
-        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "docs/project_management/_archived/next/settings-stack/settings_stack_plan.md",
         "docs/CONFIGURATION.md",
         "crates/shell/src/lib.rs",
         "scripts/substrate/dev-install-substrate.sh",
@@ -424,7 +424,7 @@
       ],
       "worktree": "wt/ss-s3-caged-code",
       "integration_task": "S3-integ",
-      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S3-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/settings-stack/kickoff_prompts/S3-code.md"
     },
     {
       "id": "S3-test",
@@ -434,7 +434,7 @@
       "status": "completed",
       "description": "Add tests that cover the caged boolean, anchor enforcement while world is disabled, and precedence across flags/config/env.",
       "references": [
-        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "docs/project_management/_archived/next/settings-stack/settings_stack_plan.md",
         "crates/shell/src/lib.rs",
         "tests/installers/install_smoke.sh",
         "scripts/substrate/dev-install-substrate.sh"
@@ -465,7 +465,7 @@
       ],
       "worktree": "wt/ss-s3-caged-test",
       "integration_task": "S3-integ",
-      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S3-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/settings-stack/kickoff_prompts/S3-test.md"
     },
     {
       "id": "S3-integ",
@@ -475,7 +475,7 @@
       "status": "completed",
       "description": "Merge the caged guard code + tests, resolve conflicts, and ensure fmt/clippy/tests and installer scenarios pass.",
       "references": [
-        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "docs/project_management/_archived/next/settings-stack/settings_stack_plan.md",
         "crates/shell",
         "scripts/substrate",
         "tests/installers"
@@ -505,7 +505,7 @@
       "concurrent_with": [],
       "worktree": "wt/ss-s3-caged-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S3-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/settings-stack/kickoff_prompts/S3-integ.md"
     },
     {
       "id": "S4-code",
@@ -515,7 +515,7 @@
       "status": "completed",
       "description": "Add a one-shot --world flag that overrides disabled installs/config to run in the world for a single invocation, keeping --no-world as the opt-out.",
       "references": [
-        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "docs/project_management/_archived/next/settings-stack/settings_stack_plan.md",
         "docs/CONFIGURATION.md",
         "crates/shell/src/lib.rs",
         "scripts/substrate/install-substrate.sh"
@@ -547,7 +547,7 @@
       ],
       "worktree": "wt/ss-s4-world-override-code",
       "integration_task": "S4-integ",
-      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S4-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/settings-stack/kickoff_prompts/S4-code.md"
     },
     {
       "id": "S4-test",
@@ -557,7 +557,7 @@
       "status": "completed",
       "description": "Add tests validating the new --world override against disabled installs/config/env and confirm interaction with --no-world/caged settings.",
       "references": [
-        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "docs/project_management/_archived/next/settings-stack/settings_stack_plan.md",
         "crates/shell/src/lib.rs",
         "tests/installers/install_smoke.sh"
       ],
@@ -587,7 +587,7 @@
       ],
       "worktree": "wt/ss-s4-world-override-test",
       "integration_task": "S4-integ",
-      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S4-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/settings-stack/kickoff_prompts/S4-test.md"
     },
     {
       "id": "S4-integ",
@@ -597,7 +597,7 @@
       "status": "completed",
       "description": "Merge the force-world flag code + tests, resolve conflicts, and ensure fmt/clippy/tests and installer scenarios pass.",
       "references": [
-        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "docs/project_management/_archived/next/settings-stack/settings_stack_plan.md",
         "crates/shell",
         "scripts/substrate",
         "tests/installers"
@@ -627,7 +627,7 @@
       "concurrent_with": [],
       "worktree": "wt/ss-s4-world-override-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S4-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/settings-stack/kickoff_prompts/S4-integ.md"
     },
     {
       "id": "S5-code",
@@ -637,7 +637,7 @@
       "status": "completed",
       "description": "Rename the world root selector to anchor terminology (mode/path) while keeping backward compatibility, and fix caged enforcement for complex commands when the world is disabled.",
       "references": [
-        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "docs/project_management/_archived/next/settings-stack/settings_stack_plan.md",
         "docs/CONFIGURATION.md",
         "docs/USAGE.md",
         "crates/shell/src/lib.rs",
@@ -671,7 +671,7 @@
       ],
       "worktree": "wt/ss-s5-anchor-code",
       "integration_task": "S5-integ",
-      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S5-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/settings-stack/kickoff_prompts/S5-code.md"
     },
     {
       "id": "S5-test",
@@ -681,7 +681,7 @@
       "status": "completed",
       "description": "Add tests covering anchor naming compatibility and ensure caged enforcement applies to complex commands when the world is disabled or unavailable.",
       "references": [
-        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "docs/project_management/_archived/next/settings-stack/settings_stack_plan.md",
         "crates/shell/src/lib.rs",
         "crates/shell/src/settings.rs",
         "tests/installers/install_smoke.sh"
@@ -712,7 +712,7 @@
       ],
       "worktree": "wt/ss-s5-anchor-test",
       "integration_task": "S5-integ",
-      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S5-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/settings-stack/kickoff_prompts/S5-test.md"
     },
     {
       "id": "S5-integ",
@@ -722,7 +722,7 @@
       "status": "completed",
       "description": "Merge the anchor naming/code changes and caged guard fixes with the test updates, resolve conflicts, and ensure fmt/clippy/tests and installer scenarios pass.",
       "references": [
-        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "docs/project_management/_archived/next/settings-stack/settings_stack_plan.md",
         "crates/shell",
         "tests/installers",
         "scripts/substrate"
@@ -752,7 +752,7 @@
       "concurrent_with": [],
       "worktree": "wt/ss-s5-anchor-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S5-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/settings-stack/kickoff_prompts/S5-integ.md"
     }
   ]
 }

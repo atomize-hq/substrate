@@ -20,7 +20,7 @@ export FEATURE_DIR="docs/project_management/packs/active/world-deps-packages-bun
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
 # exit 0
 
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 # exit 0
 
 # tasks.json required-field audit
@@ -83,7 +83,7 @@ Mark `YES` only if read end-to-end.
 - `impact_map.md` (if present/required): `YES`
 - `manual_testing_playbook.md` (if present/required): `YES`
 - Feature smoke scripts under `smoke/` (if required): `YES`
-- `docs/project_management/next/sequencing.json`: `YES`
+- `docs/project_management/packs/sequencing.json`: `YES`
 - Standards:
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
@@ -105,7 +105,7 @@ Mark `YES` only if read end-to-end.
 - Result: `PASS`
 - Evidence:
   - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
-  - `docs/project_management/next/world_deps_packages_bundles_contract.md`
+  - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
   - `docs/project_management/packs/active/world-deps-packages-bundles-contract/manual_testing_playbook.md`
   - `docs/project_management/packs/active/world-deps-packages-bundles-contract/smoke/_core.sh`
 - Notes: CLI surface, config paths, and exit-code taxonomy references are consistent across the reviewed documents.
@@ -113,7 +113,7 @@ Mark `YES` only if read end-to-end.
 ### 4) Sequencing and dependency alignment
 - Result: `PASS`
 - Evidence:
-  - `docs/project_management/next/sequencing.json` sprint id: `world_deps_packages_bundles_contract`
+  - `docs/project_management/packs/sequencing.json` sprint id: `world_deps_packages_bundles_contract`
   - `docs/project_management/packs/active/world-deps-packages-bundles-contract/tasks.json` slice deps:
     - `WDP1-code depends_on=WDP0-integ`
     - `WDP2-code depends_on=WDP1-integ`
@@ -184,9 +184,9 @@ Mark `YES` only if read end-to-end.
   - `docs/project_management/packs/active/world-deps-packages-bundles-contract/tasks.json`: boundary final integration depends on platform-fix tasks:
     - `WDP2-integ depends_on=[..., WDP2-integ-linux, WDP2-integ-macos]` (see around `id: WDP2-integ`)
   - `docs/project_management/packs/active/world-deps-packages-bundles-contract/kickoff_prompts/CP1-ci-checkpoint.md` instructs: “Start only failing platform-fix tasks” but does not describe how to mark non-failing platform-fix tasks complete/no-op so `WDP2-integ` can start.
-  - Repo helper exists but is not referenced: `scripts/triad/mark_noop_platform_fixes_completed.sh`.
+  - Repo helper exists but is not referenced: `make triad-mark-noop-platform-fixes-completed`.
 - Impact: Execution can stall at the boundary slice even when smoke is fully green (platform-fix tasks remain `pending` and block the final integrator task).
-- Fix required (exact): Update `docs/project_management/packs/active/world-deps-packages-bundles-contract/kickoff_prompts/CP1-ci-checkpoint.md` and `.../CP2-ci-checkpoint.md` to include a deterministic completion step for non-failing platform-fix tasks (e.g., run `scripts/triad/mark_noop_platform_fixes_completed.sh --feature-dir ... --slice-id <slice> --from-smoke-run <run_id>` from the orchestration checkout), and require recording the smoke run evidence in `session_log.md`.
+- Fix required (exact): Update `docs/project_management/packs/active/world-deps-packages-bundles-contract/kickoff_prompts/CP1-ci-checkpoint.md` and `.../CP2-ci-checkpoint.md` to include a deterministic completion step for non-failing platform-fix tasks (e.g., run `make triad-mark-noop-platform-fixes-completed FEATURE_DIR=... SLICE_ID=<slice> SMOKE_RUN_ID=<run-id>` from the orchestration checkout), and require recording the smoke run evidence in `session_log.md`.
 - If DEFECT: Alternative (one viable): Change `tasks.json` so `WDP2-integ` / `WDP5-integ` do not depend on platform-fix tasks by default, and instead depend only on the checkpoint task; start platform-fix tasks only when smoke fails.
 
 ## Decision: ACCEPT or FLAG
@@ -224,7 +224,7 @@ export FEATURE_DIR="docs/project_management/packs/active/world-deps-packages-bun
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
 # exit 0
 
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 # exit 0
 
 # tasks.json required-field audit
@@ -284,7 +284,7 @@ Mark `YES` only if read end-to-end.
 - `impact_map.md` (if present/required): `YES`
 - `manual_testing_playbook.md` (if present/required): `YES`
 - Feature smoke scripts under `smoke/` (if required): `YES`
-- `docs/project_management/next/sequencing.json`: `YES`
+- `docs/project_management/packs/sequencing.json`: `YES`
 - Standards:
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
@@ -306,7 +306,7 @@ Mark `YES` only if read end-to-end.
 - Result: `PASS`
 - Evidence:
   - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
-  - `docs/project_management/next/world_deps_packages_bundles_contract.md`
+  - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
   - `docs/project_management/packs/active/world-deps-packages-bundles-contract/manual_testing_playbook.md`
   - `docs/project_management/packs/active/world-deps-packages-bundles-contract/smoke/_core.sh`
 - Notes: CLI spelling/flags, backend-unavailable exit `3` posture, and legacy-path removal semantics are consistent across docs.
@@ -314,7 +314,7 @@ Mark `YES` only if read end-to-end.
 ### 4) Sequencing and dependency alignment
 - Result: `PASS`
 - Evidence:
-  - `docs/project_management/next/sequencing.json` entry: `world_deps_packages_bundles_contract` (WDP0..WDP5)
+  - `docs/project_management/packs/sequencing.json` entry: `world_deps_packages_bundles_contract` (WDP0..WDP5)
   - `docs/project_management/packs/active/world-deps-packages-bundles-contract/tasks.json` code task deps:
     - `WDP1-code` depends on `WDP0-integ`
     - `WDP2-code` depends on `WDP1-integ`

@@ -12,7 +12,7 @@ The system is designed for:
 ## Two Phases
 
 1) **Planning (docs-only)**
-- Output is a Planning Pack under `docs/project_management/next/<feature>/`.
+- Output is a Planning Pack under `docs/project_management/packs/active/<feature>/`.
 - A separate quality gate must approve the pack before execution begins.
 
 2) **Execution (triads)**
@@ -38,13 +38,13 @@ The system is designed for:
 
 **Tooling and schema**
 - `docs/project_management/system/schemas/tasks.schema.json`
-- `scripts/planning/validate_tasks_json.py`
+- `make planning-validate FEATURE_DIR="docs/project_management/packs/<bucket>/<feature>"`
 - Advisory CI reuse tooling (recommended; reduces redundant multi-OS CI):
   - `scripts/ci-audit/ci_audit.sh` (audit before dispatch; may recommend skip for docs-only changes)
-  - `scripts/ci-audit/ci_audit_record.sh` (record run evidence to a local ledger; not committed)
-- `scripts/planning/new_feature.sh`
-- `scripts/planning/new_feature.ps1`
-- `scripts/planning/archive_project_management_dir.py` (archive a Planning Pack into `docs/project_management/_archived/` and rewrite in-repo references)
+- `scripts/ci-audit/ci_audit_record.sh` (record run evidence to a local ledger; not committed)
+- `make planning-new-feature FEATURE="<feature>"`
+- `make planning-new-feature-ps FEATURE="<feature>"`
+- `make planning-archive SRC="docs/project_management/packs/<bucket>/<feature>"`
 - `Makefile`
 
 ## Quickstart (Recommended Workflow)
@@ -63,12 +63,12 @@ Cross-platform scaffolding (P3-008; optional knobs):
   - `make planning-new-feature FEATURE="<feature>" CROSS_PLATFORM=1 AUTOMATION=1 BEHAVIOR_PLATFORMS=linux CI_PARITY_PLATFORMS=linux,macos,windows`
 
 This creates:
-- `docs/project_management/next/<feature>/plan.md`
-- `docs/project_management/next/<feature>/tasks.json`
-- `docs/project_management/next/<feature>/session_log.md`
-- `docs/project_management/next/<feature>/spec_manifest.md`
-- `docs/project_management/next/<feature>/impact_map.md`
-- `docs/project_management/next/<feature>/kickoff_prompts/*`
+- `docs/project_management/packs/active/<feature>/plan.md`
+- `docs/project_management/packs/active/<feature>/tasks.json`
+- `docs/project_management/packs/active/<feature>/session_log.md`
+- `docs/project_management/packs/active/<feature>/spec_manifest.md`
+- `docs/project_management/packs/active/<feature>/impact_map.md`
+- `docs/project_management/packs/active/<feature>/kickoff_prompts/*`
 - execution gates (when enabled by scaffolder): `execution_preflight_report.md`, `<SLICE_ID>-closeout_report.md`
 - cross-platform smoke scaffolds if requested
 
@@ -81,13 +81,13 @@ Fill/update:
 - kickoff prompts (`kickoff_prompts/*.md`) with role boundaries and required commands.
 
 Validate:
-- `make planning-lint FEATURE_DIR="docs/project_management/next/<feature>"`
-- `make planning-validate FEATURE_DIR="docs/project_management/next/<feature>"`
+- `make planning-lint FEATURE_DIR="docs/project_management/packs/active/<feature>"`
+- `make planning-validate FEATURE_DIR="docs/project_management/packs/active/<feature>"`
 
 ### 2) Quality gate (required before execution)
 
 Create/approve:
-  - `docs/project_management/next/<feature>/quality_gate_report.md` containing `RECOMMENDATION: ACCEPT`
+  - `docs/project_management/packs/active/<feature>/quality_gate_report.md` containing `RECOMMENDATION: ACCEPT`
 
 Execution triads must not begin until the recommendation is `ACCEPT`.
 
@@ -95,7 +95,7 @@ Execution triads must not begin until the recommendation is `ACCEPT`.
 
 Complete the feature-level start gate:
 - `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
-- `docs/project_management/next/<feature>/execution_preflight_report.md`
+- `docs/project_management/packs/active/<feature>/execution_preflight_report.md`
 
 ### 4) Execute slices as triads (automation-enabled packs)
 
@@ -104,15 +104,15 @@ General rules:
 - Worktrees are retained for the duration of the feature and removed only by feature cleanup.
 
 Orchestration branch bootstrap (used by the opening gate):
-- `make triad-orch-ensure FEATURE_DIR="docs/project_management/next/<feature>"`
+- `make triad-orch-ensure FEATURE_DIR="docs/project_management/packs/active/<feature>"`
 
 #### Code + test (always parallel)
 
 	Start both worktrees:
 	- Preferred (post-preflight): use `docs/project_management/system/prompts/triad_wrappers/triad_wrapper.md` (runs start-pair with `LAUNCH_CODEX=1` and reports exit codes + last messages + artifact paths).
-	- Preferred (fully automated): `make triad-task-start-complete FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<SLICE_ID>"` (runs code+test in parallel, then runs the slice’s integration task as wired in `tasks.json` (`<slice>-code.integration_task`), and writes a wrapper summary under `FEATURE_DIR/logs/<slice>/wrapper/`).
+	- Preferred (fully automated): `make triad-task-start-complete FEATURE_DIR="docs/project_management/packs/active/<feature>" SLICE_ID="<SLICE_ID>"` (runs code+test in parallel, then runs the slice’s integration task as wired in `tasks.json` (`<slice>-code.integration_task`), and writes a wrapper summary under `FEATURE_DIR/logs/<slice>/wrapper/`).
 	  - For schema v4+ checkpointed cross-platform packs: on checkpoint-boundary slices, `<slice>-code.integration_task` is expected to be `<slice>-integ-core`. This command does not run `CPk-ci-checkpoint`, does not start any `*-integ-<platform>` platform-fix tasks, and does not start `<slice>-integ` final aggregation.
-	- `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<SLICE_ID>" LAUNCH_CODEX=1`
+	- `make triad-task-start-pair FEATURE_DIR="docs/project_management/packs/active/<feature>" SLICE_ID="<SLICE_ID>" LAUNCH_CODEX=1`
 
 Finish each task from inside its worktree (commits to the task branch; does not merge to orchestration):
 - `make triad-task-finish TASK_ID="<SLICE_ID>-code"`
@@ -126,9 +126,9 @@ Integration tasks should set `merge_to_orchestration` in `tasks.json`:
 
 	Start integration worktree:
 	- Determine the per-slice integration merge task id from `tasks.json` (do not guess):
-	  - `INTEG_TASK_ID="$(jq -r --arg id "<SLICE_ID>-code" '.tasks[] | select(.id==$id) | .integration_task' "docs/project_management/next/<feature>/tasks.json")"`
+	  - `INTEG_TASK_ID="$(jq -r --arg id "<SLICE_ID>-code" '.tasks[] | select(.id==$id) | .integration_task' "docs/project_management/packs/active/<feature>/tasks.json")"`
 	- Start it:
-	  - `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="$INTEG_TASK_ID"`
+	  - `make triad-task-start FEATURE_DIR="docs/project_management/packs/active/<feature>" TASK_ID="$INTEG_TASK_ID"`
 
 Optional: run an end-to-end integration orchestration wrapper for a CI checkpoint boundary slice (integ-core -> checkpoint CI -> platform-fix -> final) with artifact reporting:
 - `docs/project_management/system/prompts/triad_wrappers/triad_integration_wrapper.md`
@@ -136,14 +136,14 @@ Optional: use a single unified wrapper prompt that covers both normal slices and
 - `docs/project_management/system/prompts/triad_wrappers/triad_unified_wrapper_checkpoint_aware.md`
 
 Run the planned CI checkpoint (bounded; only at checkpoint boundaries):
-- Read: `docs/project_management/next/<feature>/ci_checkpoint_plan.md`
-- Use the checkpoint’s kickoff prompt (example): `docs/project_management/next/<feature>/kickoff_prompts/CP1-ci-checkpoint.md`
+- Read: `docs/project_management/packs/active/<feature>/ci_checkpoint_plan.md`
+- Use the checkpoint’s kickoff prompt (example): `docs/project_management/packs/active/<feature>/kickoff_prompts/CP1-ci-checkpoint.md`
   - This includes the exact commands to compute the checkpoint `CHECKOUT_SHA` and dispatch:
     - compile parity (`CI_CHECKOUT_REF="$CHECKOUT_SHA"`)
     - Feature Smoke (`SMOKE_CHECKOUT_REF="$CHECKOUT_SHA"`)
 
 Dispatch cross-platform smoke (when required by the feature’s CI checkpoint plan):
-- Preferred: `make feature-smoke FEATURE_DIR="docs/project_management/next/<feature>" PLATFORM=behavior WORKFLOW_REF="feat/<feature>" SMOKE_CHECKOUT_REF="<sha>"`
+- Preferred: `make feature-smoke FEATURE_DIR="docs/project_management/packs/active/<feature>" PLATFORM=behavior WORKFLOW_REF="feat/<feature>" SMOKE_CHECKOUT_REF="<sha>"`
 - Add WSL coverage when required: `RUN_WSL=1` (Linux smoke, or `PLATFORM=wsl` when `wsl_task_mode="separate"`)
 
 Recommended (reduces redundant CI):
@@ -152,11 +152,11 @@ Recommended (reduces redundant CI):
 - Docs/planning-only changes (anything under `docs/`) may skip all CI/smoke when the audit shows `DIFF_CLASS=docs_only` and `RECOMMEND=skip`.
 
 If smoke fails, start only the failing platform-fix tasks:
-- Single smoke run id case (`PLATFORM=behavior`): `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<SLICE_ID>" SMOKE_RUN_ID="<run-id>" LAUNCH_CODEX=1`
-- Multi-run case (per-platform smoke): `make triad-task-start-platform-fixes FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<SLICE_ID>" PLATFORMS="<csv>" LAUNCH_CODEX=1`
+- Single smoke run id case (`PLATFORM=behavior`): `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="docs/project_management/packs/active/<feature>" SLICE_ID="<SLICE_ID>" SMOKE_RUN_ID="<run-id>" LAUNCH_CODEX=1`
+- Multi-run case (per-platform smoke): `make triad-task-start-platform-fixes FEATURE_DIR="docs/project_management/packs/active/<feature>" SLICE_ID="<SLICE_ID>" PLATFORMS="<csv>" LAUNCH_CODEX=1`
 
 After all failing platform-fix tasks are green, start the final aggregator:
-- `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<SLICE_ID>" LAUNCH_CODEX=1`
+- `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/packs/active/<feature>" SLICE_ID="<SLICE_ID>" LAUNCH_CODEX=1`
   - Note: the final aggregator task id is `<SLICE_ID>-integ` (the command name contains `integ-final`).
 
 Finish integration from inside the worktree:
@@ -167,8 +167,8 @@ Guardrail: the finisher will only merge back to orchestration when the task has 
 ### 5) Feature end cleanup (worktree retention model)
 
 At feature end, remove retained worktrees and optionally prune branches:
-- Dry-run: `make triad-feature-cleanup FEATURE_DIR="docs/project_management/next/<feature>" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1`
-- Real: `make triad-feature-cleanup FEATURE_DIR="docs/project_management/next/<feature>" REMOVE_WORKTREES=1 PRUNE_LOCAL=1`
+- Dry-run: `make triad-feature-cleanup FEATURE_DIR="docs/project_management/packs/active/<feature>" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1`
+- Real: `make triad-feature-cleanup FEATURE_DIR="docs/project_management/packs/active/<feature>" REMOVE_WORKTREES=1 PRUNE_LOCAL=1`
 
 ## tasks.json Versions and Opt-Ins (Mental Model)
 
@@ -178,7 +178,7 @@ At feature end, remove retained worktrees and optionally prune branches:
    - `meta.ci_parity_platforms_required`: platforms that must be green in CI parity gates (platform-fix tasks required here; legacy: `meta.platforms_required`)
    - optional WSL via `meta.wsl_required`/`meta.wsl_task_mode` (behavior-scoped; do not include `"wsl"` in the platform arrays)
 - **v3** (`meta.schema_version: 3` + `meta.automation.enabled=true`): execution automation is enabled.
-  - Required structured fields are enforced by `scripts/planning/validate_tasks_json.py`.
+  - Required structured fields are enforced by `make planning-validate`.
   - Integration tasks must include `merge_to_orchestration` to make merge-back behavior explicit.
 - **v4** (`meta.schema_version: 4` + `meta.cross_platform=true`): boundary-only platform-fix for cross-platform automation packs.
   - Requires `meta.checkpoint_boundaries` to match the checkpoint group boundaries in `ci_checkpoint_plan.md`.

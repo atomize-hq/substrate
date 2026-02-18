@@ -22,7 +22,7 @@ git rev-parse HEAD
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
 # exit 0
 
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 # exit 0
 
 # tasks.json required-field audit
@@ -73,7 +73,7 @@ Mark `YES` only if read end-to-end.
 - `integration_map.md` (if present/required): `YES`
 - `manual_testing_playbook.md` (if present/required): `YES`
 - Feature smoke scripts under `smoke/` (if required): `YES`
-- `docs/project_management/next/sequencing.json`: `YES`
+- `docs/project_management/packs/sequencing.json`: `YES`
 - Standards:
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`: `YES`
@@ -106,7 +106,7 @@ Mark `YES` only if read end-to-end.
 ### 4) Sequencing and dependency alignment
 - Result: `PASS`
 - Evidence:
-  - `docs/project_management/next/sequencing.json` includes sprint id `policy_and_config_precedence` (order `26`, slice `PCP0`)
+  - `docs/project_management/packs/sequencing.json` includes sprint id `policy_and_config_precedence` (order `26`, slice `PCP0`)
   - `docs/project_management/_archived/policy_and_config_precedence/tasks.json` deps: `PCP0-integ` depends on `PCP0-code` + `PCP0-test`; no out-of-sprint prereqs
 - Notes: No task depends on a future sprint’s integration output.
 
@@ -162,7 +162,7 @@ Mark `YES` only if read end-to-end.
 ### Finding 004 — Sequencing entry exists and tasks deps are internally consistent
 - Status: `VERIFIED`
 - Evidence:
-  - `docs/project_management/next/sequencing.json` includes `policy_and_config_precedence` (order `26`, slice `PCP0`)
+  - `docs/project_management/packs/sequencing.json` includes `policy_and_config_precedence` (order `26`, slice `PCP0`)
   - `docs/project_management/_archived/policy_and_config_precedence/tasks.json` deps: `PCP0-integ` depends on `PCP0-code` + `PCP0-test`
 - Impact: Prevents starting work before prerequisites are integrated.
 - Fix required (exact): none

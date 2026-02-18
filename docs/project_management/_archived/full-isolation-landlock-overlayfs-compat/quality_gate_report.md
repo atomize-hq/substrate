@@ -18,11 +18,11 @@ export FEATURE_DIR="docs/project_management/_archived/full-isolation-landlock-ov
 
 # JSON validity
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 ```
 
 - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` → exit `0`
-- `jq -e . docs/project_management/next/sequencing.json >/dev/null` → exit `0`
+- `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → exit `0`
 
 ```bash
 # tasks.json required-field audit
@@ -79,7 +79,7 @@ make planning-lint FEATURE_DIR="$FEATURE_DIR"
 - `integration_map.md`: `YES` (`docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/integration_map.md`)
 - `manual_testing_playbook.md`: `YES` (`docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/manual_testing_playbook.md`)
 - Feature smoke scripts under `smoke/`: `YES` (`docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/smoke/*`)
-- `docs/project_management/next/sequencing.json`: `YES`
+- `docs/project_management/packs/sequencing.json`: `YES`
 - Standards:
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
@@ -110,7 +110,7 @@ make planning-lint FEATURE_DIR="$FEATURE_DIR"
 ### 4) Sequencing and dependency alignment
 - Result: `PASS`
 - Evidence:
-  - `docs/project_management/next/sequencing.json` sprint id `full_isolation_landlock_overlayfs_compat` (order `31`) includes `C0` spec
+  - `docs/project_management/packs/sequencing.json` sprint id `full_isolation_landlock_overlayfs_compat` (order `31`) includes `C0` spec
   - `docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/tasks.json` depends_on chain: `F0-exec-preflight → (C0-code,C0-test) → C0-integ-core → (C0-integ-{linux,macos,windows}) → C0-integ → FZ-feature-cleanup`
 - Notes: Task deps are consistent with the sequencing entry for this feature.
 

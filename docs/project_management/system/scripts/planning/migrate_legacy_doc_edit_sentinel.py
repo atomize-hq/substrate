@@ -61,7 +61,11 @@ def rewrite_file(path: Path) -> bool:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Migrate legacy `docs/tasks/session_log.md` sentinel phrases to the canonical planning-doc sentinel.")
-    parser.add_argument("--root", default="docs/project_management/next", help="Root directory to rewrite (default: docs/project_management/next)")
+    parser.add_argument(
+        "--root",
+        default="docs/project_management/packs",
+        help="Root directory to rewrite (default: docs/project_management/packs)",
+    )
     args = parser.parse_args()
 
     root = Path(args.root)

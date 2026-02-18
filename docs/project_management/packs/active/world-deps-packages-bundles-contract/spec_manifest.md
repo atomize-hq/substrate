@@ -9,7 +9,7 @@ Authoring standard:
 - Feature directory: `docs/project_management/packs/active/world-deps-packages-bundles-contract`
 - ADR(s) / upstream contracts (inputs; not owned by this Planning Pack):
   - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
-  - `docs/project_management/next/world_deps_packages_bundles_contract.md`
+  - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
   - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
   - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
   - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
@@ -52,11 +52,11 @@ List the exact spec documents that must exist. These documents are owned by this
 
 | Surface | Authoritative doc | What must be explicitly defined |
 | --- | --- | --- |
-| CLI commands/flags/defaults | `docs/project_management/next/world_deps_packages_bundles_contract.md` | names, defaults, examples, exit codes |
-| Config file paths/precedence/keys | `docs/project_management/next/world_deps_packages_bundles_contract.md` | file paths, precedence, key set + defaults |
-| Inventory directory layout + schema | `docs/project_management/next/world_deps_packages_bundles_contract.md` | file layout, item schema, merge semantics |
-| World shell contract for “runnable” deps | `docs/project_management/next/world_deps_packages_bundles_contract.md` | interactive vs non-interactive evaluator, no rcfiles |
-| World status semantics (`present|missing|blocked`) | `docs/project_management/next/world_deps_packages_bundles_contract.md` | probe/blocked rules, exit codes |
+| CLI commands/flags/defaults | `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md` | names, defaults, examples, exit codes |
+| Config file paths/precedence/keys | `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md` | file paths, precedence, key set + defaults |
+| Inventory directory layout + schema | `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md` | file layout, item schema, merge semantics |
+| World shell contract for “runnable” deps | `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md` | interactive vs non-interactive evaluator, no rcfiles |
+| World status semantics (`present|missing|blocked`) | `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md` | probe/blocked rules, exit codes |
 | Cross-platform support/unsupported contract | `docs/project_management/packs/active/world-deps-packages-bundles-contract/platform-parity-spec.md` | guaranteed behavior, fail-closed posture |
 | Slicing + acceptance criteria per increment | `docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP*-spec.md` | slice scope, explicit unsupported surfaces, acceptance |
 | CI cadence + checkpoint boundaries | `docs/project_management/packs/active/world-deps-packages-bundles-contract/ci_checkpoint_plan.md` | checkpoint groups, gates, rationale |

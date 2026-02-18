@@ -71,7 +71,7 @@ def compute_archive_plan(repo_root: Path, src_dir: Path) -> ArchivePlan:
     parts = rel_to_pm.parts
     if len(parts) < 2:
         raise ValueError(
-            f"Refusing to archive a top-level bucket; expected something like docs/project_management/next/<name>: {src_abs}"
+            f"Refusing to archive a top-level bucket; expected something like docs/project_management/packs/<bucket>/<name>: {src_abs}"
         )
 
     bucket = parts[0]
@@ -211,10 +211,10 @@ def main() -> int:
             "Mapping rule:\n"
             "  docs/project_management/<bucket>/<tail> -> docs/project_management/_archived/<tail>\n\n"
             "Example:\n"
-            "  docs/project_management/next/env_var_taxonomy_and_override_split -> docs/project_management/_archived/env_var_taxonomy_and_override_split\n"
+            "  docs/project_management/packs/active/world-sync -> docs/project_management/_archived/active/world-sync\n"
         )
     )
-    parser.add_argument("--src", help="Directory to archive (e.g. docs/project_management/next/<feature>)")
+    parser.add_argument("--src", help="Directory to archive (e.g. docs/project_management/packs/<bucket>/<feature>)")
     parser.add_argument("--dry-run", action="store_true", help="Print planned actions without modifying anything")
     parser.add_argument(
         "--rewrite-only",

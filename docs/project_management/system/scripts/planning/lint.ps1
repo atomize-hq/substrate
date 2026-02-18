@@ -50,7 +50,6 @@ $roots = $rootsJson | ConvertFrom-Json
 $pmRoot = [string]$roots.pm_root
 $pmPacksRoot = [string]$roots.pm_packs_root
 
-$pmNextPrefix = ($pmRoot.TrimEnd("/", "\\") + "/next/")
 $pmPacksPrefix = ($pmPacksRoot.TrimEnd("/", "\\") + "/")
 
 $schemaVersion = & jq -r '.meta.schema_version // 1' (Join-Path $FeatureDir "tasks.json")
@@ -109,22 +108,9 @@ Write-Host "-- JSON validity"
 if ($LASTEXITCODE -ne 0) { throw "FAIL: tasks.json is not valid JSON" }
 
 $sequencingCanonical = Join-Path $pmPacksRoot "sequencing.json"
-$sequencingLegacy = Join-Path $pmRoot "next/sequencing.json"
-
 $sequencingJson = $sequencingCanonical
 if (-not (Test-Path -LiteralPath $sequencingJson)) {
-    Write-Host "WARN: canonical sequencing.json not found; falling back to legacy mirror: $sequencingLegacy"
-    $sequencingJson = $sequencingLegacy
-}
-
-if ((Test-Path -LiteralPath $sequencingCanonical) -and (Test-Path -LiteralPath $sequencingLegacy)) {
-    $canon = & jq -S . $sequencingCanonical | Out-String
-    if ($LASTEXITCODE -ne 0) { throw "FAIL: sequencing.json is not valid JSON: $sequencingCanonical" }
-    $legacy = & jq -S . $sequencingLegacy | Out-String
-    if ($LASTEXITCODE -ne 0) { throw "FAIL: sequencing.json is not valid JSON: $sequencingLegacy" }
-    if ($canon -ne $legacy) {
-        throw "FAIL: sequencing.json drift (canonical packs != legacy next). Fix: run `make pm-sync-sequencing` and commit the updated mirror."
-    }
+    throw "FAIL: sequencing.json missing: $sequencingJson"
 }
 
 & jq -e . $sequencingJson *> $null
@@ -219,16 +205,9 @@ if (Test-Path -LiteralPath $playbook) {
 }
 
 Write-Host "-- Sequencing alignment"
-if ($featureDirRel.StartsWith($pmNextPrefix)) {
+if ($featureDirRel.StartsWith($pmPacksPrefix)) {
     & jq -e --arg dir $featureDirRel '.sprints[] | select(.directory==$dir) | .id' $sequencingJson *> $null
     if ($LASTEXITCODE -ne 0) { throw "FAIL: sequencing.json missing sprint entry for $featureDirRel" }
-} elseif ($featureDirRel.StartsWith($pmPacksPrefix)) {
-    if ($sequencingJson -eq $sequencingCanonical) {
-        & jq -e --arg dir $featureDirRel '.sprints[] | select(.directory==$dir) | .id' $sequencingJson *> $null
-        if ($LASTEXITCODE -ne 0) { throw "FAIL: sequencing.json missing sprint entry for $featureDirRel" }
-    } else {
-        Write-Host "SKIP: sequencing alignment (packs sequencing.json not present yet)"
-    }
 } else {
     Write-Host "SKIP: sequencing alignment (feature dir not under PM roots)"
 }

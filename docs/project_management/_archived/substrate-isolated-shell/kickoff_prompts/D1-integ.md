@@ -24,5 +24,5 @@ What you need to do:
 
 Finish checklist:
 1. Commit/push the merged results inside `wt/d1-managers-integ` after the commands above succeed.
-2. Return to `feat/isolated-shell-plan`, log the END entry for D1-integ, update `docs/project_management/next/tasks.json`, and reference this prompt path plus the executed commands in `docs/project_management/next/session_log.md`.
+2. Return to `feat/isolated-shell-plan`, log the END entry for D1-integ, update `docs/project_management/_archived/next/tasks.json`, and reference this prompt path plus the executed commands in `docs/project_management/_archived/next/session_log.md`.
 3. Leave the tree ready for Phase D2 (doctor/health) by keeping manifests/tests in sync and documenting any deviations in the session log.

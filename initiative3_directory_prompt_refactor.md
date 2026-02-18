@@ -17,13 +17,13 @@ Today, the project management system and the project artifacts are interleaved:
 
 - System:
   - `docs/project_management/standards/` (standards + templates + prompts mixed)
-  - `scripts/planning/` and `scripts/triad/` (mixed into repo-wide scripts)
+  - `docs/project_management/system/scripts/planning/` and `scripts/triad/` (mixed into repo-wide scripts)
 
 - Artifacts:
   - ADRs are split across:
     - `docs/project_management/adrs/*` (good start), and
-    - legacy ADR files under `docs/project_management/next/…` (messy)
-  - Planning Packs live under `docs/project_management/next/` and `future/` (mixed contents, large folders, and kickoff prompts in a single flat directory).
+    - legacy ADR files under `docs/project_management/_archived/next/…` (messy)
+  - Planning Packs live under `docs/project_management/_archived/next/` and `future/` (mixed contents, large folders, and kickoff prompts in a single flat directory).
 
 This initiative makes the structure intentional and portable:
 
@@ -45,18 +45,18 @@ This initiative moves directories that are currently relied on by enforcement an
 
 ### Compatibility surface (guarantees during the refactor)
 - **Stable script entrypoints remain callable** (even if implementation moves):
-  - `scripts/planning/*` (including `scripts/planning/validate_impact_map.py`)
+  - `docs/project_management/system/scripts/planning/*` (including `docs/project_management/system/scripts/planning/validate_impact_map.py`)
   - `scripts/triad/*` (including orchestration worktree discovery logic used by `task_*`)
   - (If you introduce `pm-run-planning-agent`, provide a stable wrapper entrypoint as well.)
 - **Planning Pack locations are accepted in both forms during migration**:
-  - legacy: `docs/project_management/next/<feature>`
+  - legacy: `docs/project_management/_archived/next/<feature>`
   - new: `docs/project_management/packs/<bucket>/<feature>`
   - Implement a shared “feature dir resolver” used by:
     - planning lint + all planning validators (`--feature-dir` consumers), and
     - triad scripts that read `feature_dir` from `.taskmeta.json`.
 - **In-flight worktrees must not break when packs move**:
   - `.taskmeta.json` stores `feature_dir` (repo-relative) and triad registries store a `feature_dir` as well.
-  - Before moving `docs/project_management/next/<feature>` to `packs/...`, either:
+  - Before moving `docs/project_management/_archived/next/<feature>` to `packs/...`, either:
     - require **zero active worktrees** for that feature, or
     - ship a mechanical migration that updates `.taskmeta.json` + the triad registry entries to the new pack path.
 
@@ -242,7 +242,7 @@ If the agent discovers it needs additional docs, it must write a “Follow-ups�
 ### 3.3 Planning agent dispatcher (script)
 
 **Add script (implementation):**
-- `docs/project_management/system/scripts/planning/run_planning_agent.sh`
+- `docs/project_management/system/docs/project_management/system/scripts/planning/run_planning_agent.sh`
 - (and optional `run_planning_agent.ps1`)
 
 **Expose via Make (recommended):**
@@ -260,7 +260,7 @@ make pm-run-planning-agent \
 Direct script usage (optional, for non-Make contexts):
 
 ```bash
-docs/project_management/system/scripts/planning/run_planning_agent.sh \
+docs/project_management/system/docs/project_management/system/scripts/planning/run_planning_agent.sh \
   --feature-dir docs/project_management/packs/active/<feature> \
   --agent spec_manifest \
   [--codex-profile <p>] [--codex-model <m>] [--codex-jsonl]
@@ -288,12 +288,12 @@ Behavior:
 
 Move:
 
-- `scripts/planning/*` → `docs/project_management/system/scripts/planning/*`
+- `docs/project_management/system/scripts/planning/*` → `docs/project_management/system/docs/project_management/system/scripts/planning/*`
 - `scripts/triad/*` → `docs/project_management/system/scripts/triad/*`
 
 Add a thin compatibility shim (temporary) in old locations to avoid breaking muscle memory:
 
-- Keep `scripts/planning/new_feature.sh` as:
+- Keep `docs/project_management/system/scripts/planning/new_feature.sh` as:
   - a wrapper that calls the new path, e.g.:
 
 ```bash
@@ -301,7 +301,7 @@ Add a thin compatibility shim (temporary) in old locations to avoid breaking mus
 set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/../.." && pwd)"
-exec "${repo_root}/docs/project_management/system/scripts/planning/new_feature.sh" "$@"
+exec "${repo_root}/docs/project_management/system/docs/project_management/system/scripts/planning/new_feature.sh" "$@"
 ```
 
 Same for `scripts/triad/*`.
@@ -320,15 +320,15 @@ Introduce environment variables with defaults:
 - `PM_ADRS_ROOT` default: `${PM_ROOT}/adrs`
 
 Update scripts to use these instead of hardcoding:
-- `docs/project_management/next`
+- `docs/project_management/_archived/next`
 - `docs/project_management/standards/templates`
 - etc.
 
 Examples of scripts that currently hardcode:
 - `new_feature.sh` / `new_feature.ps1`
-- `lint.sh` / `lint.ps1` (references `docs/project_management/next/sequencing.json`)
+- `lint.sh` / `lint.ps1` (references `docs/project_management/packs/sequencing.json`)
 - triad runners (`task_start*`, `task_finish`, `feature_cleanup`, `codex_pidfiles`, `dispatch_feature_smoke`) that:
-  - hardcode `docs/project_management/next` in invariants (e.g., “no planning docs edits inside worktree”), and/or
+  - hardcode `docs/project_management/_archived/next` in invariants (e.g., “no planning docs edits inside worktree”), and/or
   - print help text that implies `next/<feature>` is the only supported pack layout
 - `ensure_kickoff_prompt_sentinel.py` default root
 - any regex in validators that references `docs/project_management/(next|adrs/...)`
@@ -344,11 +344,11 @@ Examples of scripts that currently hardcode:
 ### 5.2 Migration steps
 1) Create any missing bucket dirs (`draft/queued/implemented/superseded` already exist).
 2) Move legacy ADRs:
-   - legacy ADRs under `docs/project_management/next/**` → `docs/project_management/adrs/<bucket>/` (`implemented/` or `superseded/` as applicable)
-   - `docs/project_management/next/<feature>/ADR-000*-*.md` → appropriate bucket
+   - legacy ADRs under `docs/project_management/_archived/next/**` → `docs/project_management/adrs/<bucket>/` (`implemented/` or `superseded/` as applicable)
+   - `docs/project_management/_archived/next/<feature>/ADR-000*-*.md` → appropriate bucket
 3) Update references:
    - Use a mechanical search/replace in Planning Packs:
-     - legacy ADR paths under `docs/project_management/next/**` → canonical ADR registry paths under `docs/project_management/adrs/<bucket>/`
+     - legacy ADR paths under `docs/project_management/_archived/next/**` → canonical ADR registry paths under `docs/project_management/adrs/<bucket>/`
 4) Update `docs/project_management/adrs/README.md`:
    - Remove “legacy locations still supported” after migration is complete, OR keep but mark deprecated.
 
@@ -367,21 +367,21 @@ Examples of scripts that currently hardcode:
 
 **Phase A — introduce packs/ without moving anything**
 1) Create `docs/project_management/packs/*` buckets.
-2) Copy `docs/project_management/next/sequencing.json` → `docs/project_management/packs/sequencing.json`.
+2) Copy `docs/project_management/packs/sequencing.json` → `docs/project_management/packs/sequencing.json`.
 3) Update planning lint scripts to reference the new `sequencing.json` location via `${PM_ROOT}`.
 
 **Phase B — move active packs**
 1) Move directories:
-   - `docs/project_management/next/<feature>` → `docs/project_management/packs/active/<feature>`
-2) Update any scripts and docs that default to `docs/project_management/next` to default to `packs/active`.
+   - `docs/project_management/_archived/next/<feature>` → `docs/project_management/packs/active/<feature>`
+2) Update any scripts and docs that default to `docs/project_management/_archived/next` to default to `packs/active`.
 
 **Phase C — move future packs**
 - `docs/project_management/future/*` → `docs/project_management/packs/draft/*` or `queued/*` depending on readiness.
 
 **Phase D — update cross-references**
-- Tasks and references contain many absolute repo-relative paths pointing to the old locations (e.g., `docs/project_management/next/world-sync/...`).
+- Tasks and references contain many absolute repo-relative paths pointing to the old locations (e.g., `docs/project_management/_archived/next/world-sync/...`).
 - Perform a mechanical rewrite:
-  - prefix replace: `docs/project_management/next/` → `docs/project_management/packs/active/`
+  - prefix replace: `docs/project_management/_archived/next/` → `docs/project_management/packs/active/`
 - Apply across:
   - `tasks.json` (kickoff_prompt + references)
   - `plan.md`, `spec_manifest.md`, `impact_map.md` (if they contain explicit paths)
@@ -495,7 +495,7 @@ Update these assumptions:
 - kickoff prompts can be in either:
   - `<feature_dir>/kickoff_prompts/`
   - `<feature_dir>/slices/<slice>/kickoff_prompts/`
-- feature dir is no longer `docs/project_management/next/<feature>` (but validator already receives `--feature-dir`, so just remove any explicit “next” logic in regex or messages).
+- feature dir is no longer `docs/project_management/_archived/next/<feature>` (but validator already receives `--feature-dir`, so just remove any explicit “next” logic in regex or messages).
 
 ### 10.4 ensure_kickoff_prompt_sentinel.py
 - Default root should become `docs/project_management/packs` (or `${PM_ROOT}/packs`).

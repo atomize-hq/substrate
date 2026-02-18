@@ -14,7 +14,7 @@ user
 
 ## Scope
 - Production code only; no new tests.
-- Spec: `docs/project_management/next/policy-patch-only-broker-effective-resolution/C1-spec.md`
+- Spec: `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C1-spec.md`
 - Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Start Checklist
@@ -23,7 +23,7 @@ Do not edit planning docs inside the worktree.
 1. Verify you are in the task worktree `wt/policy-patch-only-broker-effective-resolution-c1-code` on branch `policy-patch-only-broker-effective-resolution-c1-code` and that `.taskmeta.json` exists at the worktree root.
 2. Read: plan, tasks, session log, spec, this prompt.
 3. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run:
-   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution" SLICE_ID="C1"`
+   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution" SLICE_ID="C1"`
 
 ## Requirements
 - Implement exactly the behaviors and error handling in the spec.
@@ -84,7 +84,7 @@ Plan update
   • Re-run fmt/clippy and validate
   • Finish triad task and handoff
 exec
-/bin/bash -lc 'ls -la docs/project_management/next/policy-patch-only-broker-effective-resolution && ls -la docs/project_management/standards' in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-code succeeded in 38ms:
+/bin/bash -lc 'ls -la docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution && ls -la docs/project_management/standards' in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-code succeeded in 38ms:
 total 152
 drwxr-xr-x 4 spenser spenser  4096 Jan 17 11:52 .
 drwxr-xr-x 8 spenser spenser  4096 Jan 17 11:52 ..
@@ -111,7 +111,7 @@ thinking
 
 I need to look over several files: plan.md, tasks.json, session_log.md, and spec C1, along with a standard document. I want to focus only on the relevant sections to avoid being overwhelmed. To achieve this, I’m planning to use the `sed` command with `sed -n '1,200p'` to read only the first 200 lines. I’ll employ `multi_tool_use.parallel` for this task since it should streamline the process.
 exec
-/bin/bash -lc "sed -n '1,220p' docs/project_management/next/policy-patch-only-broker-effective-resolution/C1-spec.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-code succeeded in 33ms:
+/bin/bash -lc "sed -n '1,220p' docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C1-spec.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-code succeeded in 33ms:
 # C1-spec — Fail-closed Policy Resolution Across Execution Paths + Docs Alignment
 
 Authoritative ADR:
@@ -133,11 +133,11 @@ Exit codes:
 ### Fail-closed on policy resolution errors
 - A policy resolution error prevents command execution for broker-dependent execution paths.
 exec
-/bin/bash -lc "sed -n '1,240p' docs/project_management/next/policy-patch-only-broker-effective-resolution/plan.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-code succeeded in 46ms:
+/bin/bash -lc "sed -n '1,240p' docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/plan.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-code succeeded in 46ms:
 # policy-patch-only-broker-effective-resolution — plan
 
 ## Scope
-- Feature directory: `docs/project_management/next/policy-patch-only-broker-effective-resolution/`
+- Feature directory: `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/`
 - Orchestration branch: `feat/policy-patch-only-broker-effective-resolution`
 - ADR: `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
 
@@ -155,9 +155,9 @@ exec
 ## Guardrails (non-negotiable)
 - Specs are the single source of truth.
 exec
-/bin/bash -lc "sed -n '1,220p' docs/project_management/next/policy-patch-only-broker-effective-resolution/session_log.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-code succeeded in 40ms:
+/bin/bash -lc "sed -n '1,220p' docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/session_log.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-code succeeded in 40ms:
 ## START — 2026-01-17T02:46:54Z — planning — planning pack for ADR-0013 (broker-canonical policy resolution)
-- Feature: `docs/project_management/next/policy-patch-only-broker-effective-resolution/`
+- Feature: `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/`
 - Branch: `testing`
 - Goal: Produce an execution-ready Planning Pack for ADR-0013 with zero ambiguity.
 - Inputs to read end-to-end:
@@ -174,7 +174,7 @@ exec
   - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
   - `docs/CONFIGURATION.md`
 exec
 /bin/bash -lc "sed -n '1,260p' docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-code succeeded in 39ms:
@@ -188,8 +188,8 @@ It is a focused companion to:
 ## Operating assumptions (the situation you are in)
 
 When this standard applies, the operator started you with one of:
-- `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1` (preferred)
-- `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
+- `make triad-task-start-pair FEATURE_DIR="docs/project_management/_archived/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1` (preferred)
+- `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
 
 You are already:
 - in a git worktree (usually under `wt/...`)
@@ -201,7 +201,7 @@ You are already:
 exec
 /bin/bash -lc "python - <<'PY'
 import json
-p='docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json'
+p='docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/tasks.json'
 with open(p) as f:
   data=json.load(f)
 # print tasks related to C1
@@ -215,7 +215,7 @@ thinking
 
 I see that the Python output is empty, probably because I made a mistake in my code. I need to parse the `tasks.json` file for the triad, so I’ll use `jq` to do this. I’m planning to filter for C1 tasks, and it looks like using `jq` is allowed here. I'll just go ahead and run the command to extract the information I need. Let's make sure to get it right this time!
 exec
-/bin/bash -lc "jq '.tasks[] | select(.id|test(\"C1\")) | {id, type, status, title}' docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-code succeeded in 49ms:
+/bin/bash -lc "jq '.tasks[] | select(.id|test(\"C1\")) | {id, type, status, title}' docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/tasks.json" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-code succeeded in 49ms:
 {
   "id": "C1-code",
   "type": "code",

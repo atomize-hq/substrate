@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
     cat <<'USAGE'
 Usage:
-  scripts/triad/task_finish.sh --task-id <id> [options]
+  make triad-task-finish TASK_ID=<id> [VERIFY_ONLY=1] [SMOKE=1] [...]
 
 Required:
   --task-id <id>         Task id (must match .taskmeta.json in this worktree)
@@ -173,6 +173,9 @@ if [[ -z "${REPO_ROOT}" ]]; then
     REPO_ROOT="$(git rev-parse --show-toplevel)"
 fi
 
+PM_SYSTEM_SCRIPTS_DIR="${REPO_ROOT}/docs/project_management/system/scripts"
+PLANNING_SCRIPTS_DIR="${PM_SYSTEM_SCRIPTS_DIR}/planning"
+
 FEATURE_DIR_RELPATH="$(jq -r '.feature_dir // empty' <<<"${TASKMETA_JSON}")"
 ORCH_BRANCH="$(jq -r '.orchestration_branch // empty' <<<"${TASKMETA_JSON}")"
 TASK_BRANCH="$(jq -r '.task_branch // empty' <<<"${TASKMETA_JSON}")"
@@ -234,19 +237,15 @@ if [[ "${current_branch}" != "${TASK_BRANCH}" ]]; then
     die "Expected to be on task branch ${TASK_BRANCH}, but current branch is ${current_branch}"
 fi
 
-pm_roots_json="$(python3 scripts/planning/pm_paths.py print-roots 2>/dev/null)" || die "Failed to resolve PM roots (pm_paths.py print-roots)"
+pm_roots_json="$(python3 "${PLANNING_SCRIPTS_DIR}/pm_paths.py" print-roots 2>/dev/null)" || die "Failed to resolve PM roots (pm_paths.py print-roots)"
 PM_ROOT="$(jq -r '.pm_root' <<<"${pm_roots_json}")"
 PM_PACKS_ROOT="$(jq -r '.pm_packs_root' <<<"${pm_roots_json}")"
 
-PM_NEXT_PREFIX="${PM_ROOT%/}/next/"
 PM_PACKS_PREFIX="${PM_PACKS_ROOT%/}/"
 
 is_planning_path() {
     local p="$1"
     [[ -z "${p}" ]] && return 1
-    if [[ "${p}" == "${PM_NEXT_PREFIX}"* ]]; then
-        return 0
-    fi
     if [[ "${p}" == "${PM_PACKS_PREFIX}"* ]]; then
         return 0
     fi
@@ -257,13 +256,13 @@ guard_no_planning_doc_edits() {
     local p
     while IFS= read -r p; do
         if is_planning_path "${p}"; then
-            die "Worktree contains changes under planning roots (${PM_NEXT_PREFIX} or ${PM_PACKS_PREFIX}): ${p} (do not edit planning docs inside the worktree; move these edits to the orchestration branch)"
+            die "Worktree contains changes under planning roots (${PM_PACKS_PREFIX}): ${p} (do not edit planning docs inside the worktree; move these edits to the orchestration branch)"
         fi
     done < <(git diff --name-only)
 
     while IFS= read -r p; do
         if is_planning_path "${p}"; then
-            die "Worktree contains staged changes under planning roots (${PM_NEXT_PREFIX} or ${PM_PACKS_PREFIX}): ${p} (do not edit planning docs inside the worktree)"
+            die "Worktree contains staged changes under planning roots (${PM_PACKS_PREFIX}): ${p} (do not edit planning docs inside the worktree)"
         fi
     done < <(git diff --name-only --cached)
 
@@ -381,7 +380,7 @@ enforce_impact_map_touchset() {
     impact_map_source_worktree="${orch_wt}"
 
     local allow_json
-    if ! allow_json="$(cd "${orch_wt}" && python3 scripts/planning/validate_impact_map.py --feature-dir "${FEATURE_DIR_RELPATH}" --emit-json)"; then
+    if ! allow_json="$(cd "${orch_wt}" && python3 "${PLANNING_SCRIPTS_DIR}/validate_impact_map.py" --feature-dir "${FEATURE_DIR_RELPATH}" --emit-json)"; then
         die "impact_map Touch Set validation failed on orchestration branch; fix ${FEATURE_DIR_RELPATH}/impact_map.md in ${ORCH_BRANCH} before completing the task"
     fi
 
@@ -444,7 +443,7 @@ enforce_impact_map_touchset() {
     echo "To proceed:" >&2
     echo "1) In orchestration worktree (${orch_wt}) on branch ${ORCH_BRANCH}: update ${FEATURE_DIR_RELPATH}/impact_map.md to include these paths (Create/Edit/Deprecate/Delete)." >&2
     echo "2) Commit planning docs update." >&2
-    echo "3) Re-run: scripts/triad/task_finish.sh --task-id ${TASK_ID}" >&2
+    echo "3) Re-run: make triad-task-finish TASK_ID=\"${TASK_ID}\"" >&2
 
     if [[ "${ALLOW_UNPLANNED_TOUCH}" -eq 1 ]]; then
         impact_map_touchset_status="overridden"

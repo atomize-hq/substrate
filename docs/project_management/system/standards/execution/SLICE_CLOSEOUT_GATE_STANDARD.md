@@ -12,7 +12,7 @@ This gate runs after `X-integ` (or after `X-integ` final in the platform-fix mod
 ## Required artifacts
 For features that opt in (`tasks.json` meta: `execution_gates: true`):
 - A closeout report per slice:
-  - `docs/project_management/next/<feature>/<SLICE_ID>-closeout_report.md` (e.g., `WCU0-closeout_report.md`)
+  - `docs/project_management/packs/active/<feature>/<SLICE_ID>-closeout_report.md` (e.g., `WCU0-closeout_report.md`)
 - The slice final integration task (`<SLICE>-integ`) must reference the closeout report and require completing it.
 
 ## What it checks (no ambiguity)

@@ -27,7 +27,7 @@ export FEATURE_DIR="docs/project_management/packs/active/agent-hub-concurrent-ex
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
 # exit: 0
 
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 # exit: 0
 
 # Mechanical planning lint (required)
@@ -51,21 +51,21 @@ jq -r '.tasks[] | select(.id=="CP1-ci-checkpoint") | {id, depends_on}' "$FEATURE
 
 ### Finding 001 — Mechanical planning lint passed (required)
 - Status: `VERIFIED`
-- Evidence: `scripts/planning/lint.sh` output for `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing`
+- Evidence: `make planning-lint FEATURE_DIR="docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing"` output
 - Impact: Confirms baseline pack completeness and mechanical invariants.
 - Fix required (exact): none
 - If DEFECT: Alternative (one viable): none
 
 ### Finding 002 — Mechanical tasks.json validation passed (required)
 - Status: `VERIFIED`
-- Evidence: `scripts/planning/validate_tasks_json.py` output for `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/tasks.json`
+- Evidence: `make planning-validate FEATURE_DIR="docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing"` output
 - Impact: Confirms `tasks.json` matches the validator’s schema and invariants.
 - Fix required (exact): none
 - If DEFECT: Alternative (one viable): none
 
 ### Finding 003 — Sequencing spine JSON is valid (required)
 - Status: `VERIFIED`
-- Evidence: `docs/project_management/next/sequencing.json` parses (`jq -e` exit `0`)
+- Evidence: `docs/project_management/packs/sequencing.json` parses (`jq -e` exit `0`)
 - Impact: Confirms sequencing spine is mechanically valid.
 - Fix required (exact): none
 - If DEFECT: Alternative (one viable): none
@@ -109,4 +109,3 @@ jq -r '.tasks[] | select(.id=="CP1-ci-checkpoint") | {id, depends_on}' "$FEATURE
 - Summary: Planning Pack is implementation-ready; mechanical checks pass; contracts/specs/tasks/playbooks are present and consistent per reviewed evidence.
 - Required human decisions (explicit): None.
 - Blockers to execution: None.
-

@@ -1,14 +1,14 @@
 # Decision Register — Policy + Config Mental Model Simplification (ADR-0003)
 
 This decision register records ADR-0003 architectural decisions as exactly two options (A/B) with explicit tradeoffs and a single selected option. Every decision maps to concrete follow-up triad tasks in:
-- `docs/project_management/next/policy_and_config_mental_model_simplification/tasks.json`
+- `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/tasks.json`
 
 ### DR-0001 — Workspace root marker
 
 **Decision owner(s):** spenser  
 **Date:** 2025-12-27  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`, `docs/project_management/next/policy_and_config_mental_model_simplification/PCM0-spec.md`
+**Related docs:** `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`, `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM0-spec.md`
 
 **Problem / Context**
 - Workspace scoping must be explicit and testable without relying on `.git` presence or heuristics.
@@ -41,7 +41,7 @@ This decision register records ADR-0003 architectural decisions as exactly two o
 **Decision owner(s):** spenser  
 **Date:** 2025-12-27  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`, `docs/project_management/next/policy_and_config_mental_model_simplification/PCM0-spec.md`, `docs/project_management/next/policy_and_config_mental_model_simplification/PCM1-spec.md`, `docs/project_management/next/policy_and_config_mental_model_simplification/PCM3-spec.md`
+**Related docs:** `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`, `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM0-spec.md`, `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM1-spec.md`, `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM3-spec.md`
 
 **Problem / Context**
 - Configuration and policy inputs must have a finite, unambiguous inventory with strict loader behavior.
@@ -74,7 +74,7 @@ This decision register records ADR-0003 architectural decisions as exactly two o
 **Decision owner(s):** spenser  
 **Date:** 2025-12-27  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`, `docs/project_management/next/sequencing.json`
+**Related docs:** `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`, `docs/project_management/packs/sequencing.json`
 
 **Problem / Context**
 - The mental model simplification must not carry legacy aliases, migrations, or discovery fallbacks.
@@ -107,7 +107,7 @@ This decision register records ADR-0003 architectural decisions as exactly two o
 **Decision owner(s):** spenser  
 **Date:** 2025-12-27  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`, `docs/project_management/next/policy_and_config_mental_model_simplification/PCM0-spec.md`, `docs/project_management/next/policy_and_config_mental_model_simplification/PCM3-spec.md`
+**Related docs:** `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`, `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM0-spec.md`, `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM3-spec.md`
 
 **Problem / Context**
 - Anchor naming must align with workspace scoping and remove “root” naming from all surfaces.
@@ -140,7 +140,7 @@ This decision register records ADR-0003 architectural decisions as exactly two o
 **Decision owner(s):** spenser  
 **Date:** 2025-12-27  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`, `docs/project_management/next/policy_and_config_mental_model_simplification/PCM3-spec.md`
+**Related docs:** `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`, `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM3-spec.md`
 
 **Problem / Context**
 - Cached state must not drift because runtime overwrites installer state.
@@ -173,7 +173,7 @@ This decision register records ADR-0003 architectural decisions as exactly two o
 **Decision owner(s):** spenser  
 **Date:** 2025-12-27  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`, `docs/project_management/next/policy_and_config_mental_model_simplification/PCM3-spec.md`
+**Related docs:** `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`, `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM3-spec.md`
 
 **Problem / Context**
 - World enable state writes must not be split between an install root and a different `$SUBSTRATE_HOME`.
@@ -206,7 +206,7 @@ This decision register records ADR-0003 architectural decisions as exactly two o
 **Decision owner(s):** spenser  
 **Date:** 2025-12-27  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`, `docs/project_management/next/policy_and_config_mental_model_simplification/PCM2-spec.md`
+**Related docs:** `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`, `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM2-spec.md`
 
 **Problem / Context**
 - Runtime must represent “no evaluation” distinctly from “evaluate but do not block”.
@@ -239,7 +239,7 @@ This decision register records ADR-0003 architectural decisions as exactly two o
 **Decision owner(s):** spenser  
 **Date:** 2025-12-27  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`, `docs/project_management/next/policy_and_config_mental_model_simplification/PCM1-spec.md`, `docs/project_management/next/policy_and_config_mental_model_simplification/PCM2-spec.md`
+**Related docs:** `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`, `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM1-spec.md`, `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM2-spec.md`
 
 **Problem / Context**
 - Policy command matching must be predictable and safe under strict parsing.
@@ -272,7 +272,7 @@ This decision register records ADR-0003 architectural decisions as exactly two o
 **Decision owner(s):** spenser  
 **Date:** 2025-12-27  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`, `docs/project_management/next/policy_and_config_mental_model_simplification/PCM0-spec.md`
+**Related docs:** `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`, `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM0-spec.md`
 
 **Problem / Context**
 - Sync must not mutate `.git`, `.substrate`, or `.substrate-git` under any configuration layer.
@@ -305,7 +305,7 @@ This decision register records ADR-0003 architectural decisions as exactly two o
 **Decision owner(s):** spenser  
 **Date:** 2025-12-27  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`, `docs/project_management/next/policy_and_config_mental_model_simplification/PCM0-spec.md`
+**Related docs:** `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`, `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM0-spec.md`
 
 **Problem / Context**
 - Nested workspaces introduce ambiguity in discovery and in policy/config layering.

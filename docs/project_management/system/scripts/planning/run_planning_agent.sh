@@ -25,7 +25,7 @@ Contract:
   - impact_map    -> <FEATURE_DIR>/impact_map.md
 
 Notes:
-  - Uses roots from: scripts/planning/pm_paths.py
+  - Uses roots from: `pm_paths.py` (sibling in this directory)
   - Enforces a single-output rule: only the intended output file within FEATURE_DIR may change.
   - Writes run artifacts under: <FEATURE_DIR>/logs/planning_agents/<AGENT>/<YYYYMMDD-HHMMSS>/
 EOF
@@ -448,12 +448,10 @@ fi
     printf '- Do not edit any other files. If you find follow-ups, record them *inside that output file* under a \"Follow-ups\" section.\n'
     printf '\n---\n\n'
 
-    sed \
-        -e "s|<FEATURE>|${FEATURE_SLUG}|g" \
-        -e "s|<FEATURE_DIR>|${FEATURE_DIR_REL}|g" \
-        -e "s|docs/project_management/next/<feature>/|${FEATURE_DIR_REL}/|g" \
-        -e "s|docs/project_management/next/<feature>|${FEATURE_DIR_REL}|g" \
-        "${PAYLOAD_TMP}"
+	    sed \
+	        -e "s|<FEATURE>|${FEATURE_SLUG}|g" \
+	        -e "s|<FEATURE_DIR>|${FEATURE_DIR_REL}|g" \
+	        "${PAYLOAD_TMP}"
 } > "${PROMPT_OUT}"
 
 codex_args=(codex exec --dangerously-bypass-approvals-and-sandbox --cd "${REPO_ROOT}")

@@ -116,7 +116,7 @@
       - session_env = environ_from_proc minus reserved_env_keys
   - Compute exit:
       - normal: evaluator exit status
-      - signaled: 128 + signal_number (bash convention; aligns with protocol guidance) (docs/project_management/next/world-first-repl-
+      - signaled: 128 + signal_number (bash convention; aligns with protocol guidance) (docs/project_management/_archived/next/world-first-repl-
         persistent-pty/PROTOCOL.md, “command_complete”).
 
   This produces persistence that matches the design goal and avoids “untrusted code writes its own state record” pitfalls.
@@ -302,7 +302,7 @@
 
   # 5) Explicit invariants + how to test them (mapped to plan bullets)
 
-  Below are “MUST” invariants plus a concrete test strategy (unit/integration), aligned to docs/project_management/next/world-first-repl-
+  Below are “MUST” invariants plus a concrete test strategy (unit/integration), aligned to docs/project_management/_archived/next/world-first-repl-
   persistent-pty/plan.md (see its validation bullet list).
 
   ## Protocol + sequencing invariants
@@ -315,7 +315,7 @@
         PROTOCOL.md, “command_complete” acceptance rules).
       - Test: fuzz a driver in a harness to send mismatched `token_hex`; host must fail closed.
   3. Output ordering
-      - command_complete must not arrive before all foreground stdout bytes were forwarded (docs/project_management/next/world-first-repl-
+      - command_complete must not arrive before all foreground stdout bytes were forwarded (docs/project_management/_archived/next/world-first-repl-
         persistent-pty/PROTOCOL.md, “Output ordering / drain guarantee”).
       - Test: run a command that writes a large output then exits; assert the next prompt/render only happens after the final bytes.
 
@@ -381,7 +381,7 @@
   ## Backgrounding
 
   - Still unsupported (v1 doesn’t do job control), but:
-      - background processes can write to the controlling TTY and create out-of-band stdout (docs/project_management/next/world-first-repl-
+      - background processes can write to the controlling TTY and create out-of-band stdout (docs/project_management/_archived/next/world-first-repl-
         persistent-pty/PROTOCOL.md, “Out-of-band PTY output”).
       - host must render out-of-band bytes and must not attribute them to a cmd_id.
 

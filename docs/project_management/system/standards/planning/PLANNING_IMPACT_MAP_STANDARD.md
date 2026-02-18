@@ -28,7 +28,7 @@ Run this immediately after `spec_manifest.md` exists for the feature:
 ## Required output
 
 Create:
-- `docs/project_management/next/<feature>/impact_map.md`
+- `docs/project_management/packs/active/<feature>/impact_map.md`
 
 Scaffolding:
 - `make planning-new-feature FEATURE=<feature>` creates `impact_map.md` from `docs/project_management/system/templates/planning_pack/impact_map.md.tmpl`.
@@ -77,9 +77,9 @@ Preferred ADR location (new):
   - `implemented/` (landed/merged)
   - `superseded/` (obsolete; replaced by another ADR)
 
-Legacy ADR locations (still supported):
+Legacy ADR locations:
 - `docs/project_management/adrs/<bucket>/ADR-000X-*.md` (canonical ADR registry)
-- `docs/project_management/next/<feature>/ADR-000X-*.md` (feature-local)
+  - If you find feature-local ADRs in legacy/archived material, migrate them into the ADR registry.
 
 ---
 

@@ -24,7 +24,7 @@ Slice spec:
 - Why:
   - WDP3 implements install/sync planning and dry-run behavior per the packages/bundles contract, as a prerequisite for WDP4/WDP5 execution.
 - Links:
-  - Contract: `docs/project_management/next/world_deps_packages_bundles_contract.md` (`deps current install`, `deps current sync`)
+  - Contract: `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md` (`deps current install`, `deps current sync`)
   - Implementation: `crates/shell/src/builtins/world_deps/surfaces.rs`, `crates/shell/src/execution/cli.rs`
   - Tests: `crates/shell/tests/world_deps_current_dry_run_wdp3.rs`
 

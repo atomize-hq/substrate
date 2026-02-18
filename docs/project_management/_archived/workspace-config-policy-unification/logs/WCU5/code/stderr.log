@@ -14,7 +14,7 @@ user
 
 ## Scope
 - Production code only; no new tests.
-- Spec: `docs/project_management/next/workspace-config-policy-unification/WCU5-spec.md`
+- Spec: `docs/project_management/_archived/next/workspace-config-policy-unification/WCU5-spec.md`
 - ADRs:
   - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
   - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
@@ -26,7 +26,7 @@ Do not edit planning docs inside the worktree.
 1. Verify you are in the task worktree `wt/workspace_config_policy_unification-wcu5-code` on branch `workspace_config_policy_unification-wcu5-code` and that `.taskmeta.json` exists.
 2. Read: WCU5-spec, ADR-0008, ADR-0012, manual_testing_playbook.md, smoke scripts, plan/tasks/session log, this prompt.
 3. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run:
-   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" SLICE_ID="WCU5"`
+   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification" SLICE_ID="WCU5"`
 
 ## Requirements
 - Implement WCU5 acceptance criteria in `tasks.json`.
@@ -47,7 +47,7 @@ I’m getting ready to implement the acceptance criteria. First, I need to inspe
 thinking
 **Clarifying tasks.json location**
 
-It seems that I need to check in docs/project_management/next/workspace-config-policy-unification for tasks.json. The requirement indicates that I should implement acceptance criteria there, which may mean the tasks.json is in the project management docs, not just in the planning docs. I believe it’s crucial not to edit planning documents in the worktree. Additionally, I need to read the manual_testing_playbook.md and locate the smoke scripts. I’ll move forward with that. Let’s execute!
+It seems that I need to check in docs/project_management/_archived/next/workspace-config-policy-unification for tasks.json. The requirement indicates that I should implement acceptance criteria there, which may mean the tasks.json is in the project management docs, not just in the planning docs. I believe it’s crucial not to edit planning documents in the worktree. Additionally, I need to read the manual_testing_playbook.md and locate the smoke scripts. I’ll move forward with that. Let’s execute!
 exec
 /bin/bash -lc 'set -euo pipefail
 pwd
@@ -62,7 +62,7 @@ workspace_config_policy_unification-wcu5-code
 {
   "created_at_utc": "2026-01-16T17:06:37Z",
   "created_from_sha": "a6b9afdbfa773999cb52f56be2d409d1b1227080",
-  "feature_dir": "docs/project_management/next/workspace-config-policy-unification",
+  "feature_dir": "docs/project_management/_archived/next/workspace-config-policy-unification",
   "orchestration_branch": "feat/workspace-config-policy-unification",
   "schema_version": 1,
   "task_branch": "workspace_config_policy_unification-wcu5-code",
@@ -75,8 +75,8 @@ thinking
 I’m verifying that the first checklist item is satisfied. Now, I need to read the specification and ADR documents. I should also find the manual testing playbook, smoke scripts, and other related files like the session log and execution standards. I plan to locate these using parallel reads with commands like cat or sed. To find the correct file paths, I think the manual testing playbook might be in docs/project_management/standards, so I’ll run a search.
 exec
 /bin/bash -lc "set -euo pipefail
-ls docs/project_management/next/workspace-config-policy-unification
-ls docs/project_management/next | rg 'ADR-0008|ADR-0012'
+ls docs/project_management/_archived/next/workspace-config-policy-unification
+ls docs/project_management/_archived/next | rg 'ADR-0008|ADR-0012'
 " in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-code succeeded in 46ms:
 decision_register.md
 execution_preflight_report.md
@@ -105,17 +105,17 @@ thinking
 To understand the acceptance criteria, I need relevant parts. I’ll consider opening the WCU5 spec fully, possibly starting with something like `sed -n '1,200p'`. I wonder if I should use more lines as needed. Using `python -c` feels like avoiding simpler solutions, so I'll use `sed` commands instead. Ah! I think I can use separate commands effectively. Maybe I'll look into multi_tool_use.parallel to read multiple files at once. Let's see how that works!
 exec
 /bin/bash -lc "set -euo pipefail
-sed -n '1,200p' docs/project_management/next/workspace-config-policy-unification/WCU5-spec.md
+sed -n '1,200p' docs/project_management/_archived/next/workspace-config-policy-unification/WCU5-spec.md
 " in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-code succeeded in 34ms:
 # WCU5 Spec — Docs + smoke + manual playbook parity (includes ADR-0012 Phase A/B validation)
 
 References:
-- `docs/project_management/next/workspace-config-policy-unification/plan.md`
-- `docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md`
-- `docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh`
-- `docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh`
-- `docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1`
-- `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
+- `docs/project_management/_archived/next/workspace-config-policy-unification/plan.md`
+- `docs/project_management/_archived/next/workspace-config-policy-unification/manual_testing_playbook.md`
+- `docs/project_management/_archived/next/workspace-config-policy-unification/smoke/linux-smoke.sh`
+- `docs/project_management/_archived/next/workspace-config-policy-unification/smoke/macos-smoke.sh`
+- `docs/project_management/_archived/next/workspace-config-policy-unification/smoke/windows-smoke.ps1`
+- `docs/project_management/_archived/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
 
 ## Scope
 - Ensure the feature-local manual testing playbook and all feature smoke scripts remain in parity.
@@ -139,8 +139,8 @@ sed -n '1,220p' docs/project_management/adrs/implemented/ADR-0008-workspace-conf
 - Owner(s): spenser
 
 ## Scope
-- Feature directory: `docs/project_management/next/workspace-config-policy-unification/`
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Feature directory: `docs/project_management/_archived/next/workspace-config-policy-unification/`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
@@ -164,9 +164,9 @@ sed -n '1,260p' docs/project_management/adrs/implemented/ADR-0012-config-schema-
 
 ## Scope
 - Feature directories (impacted):
-  - `docs/project_management/next/` (this ADR; cross-cutting contract)
-  - `docs/project_management/next/workspace-config-policy-unification/` (ADR-0008 implementation)
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+  - `docs/project_management/_archived/next/` (this ADR; cross-cutting contract)
+  - `docs/project_management/_archived/next/workspace-config-policy-unification/` (ADR-0008 implementation)
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
@@ -189,8 +189,8 @@ It is a focused companion to:
 ## Operating assumptions (the situation you are in)
 
 When this standard applies, the operator started you with one of:
-- `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1` (preferred)
-- `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
+- `make triad-task-start-pair FEATURE_DIR="docs/project_management/_archived/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1` (preferred)
+- `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
 
 You are already:
 - in a git worktree (usually under `wt/...`)
@@ -201,7 +201,7 @@ You are already:
 
 exec
 /bin/bash -lc "set -euo pipefail
-sed -n '1,260p' docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md
+sed -n '1,260p' docs/project_management/_archived/next/workspace-config-policy-unification/manual_testing_playbook.md
 " in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-code succeeded in 39ms:
 # Manual Testing Playbook — Workspace Config/Policy Unification (ADR-0008)
 
@@ -212,9 +212,9 @@ This playbook validates the operator-facing contract in:
 All steps are written to be run in a scratch workspace directory and must not mutate any real project.
 
 Smoke scripts (automated counterpart; must remain in parity with this playbook):
-- Linux: `docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh`
-- macOS: `docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh`
-- Windows: `docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1`
+- Linux: `docs/project_management/_archived/next/workspace-config-policy-unification/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/_archived/next/workspace-config-policy-unification/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/_archived/next/workspace-config-policy-unification/smoke/windows-smoke.ps1`
 
 ## 0) Setup (all platforms)
 
@@ -225,16 +225,16 @@ Smoke scripts (automated counterpart; must remain in parity with this playbook):
 2. Enter the scratch workspace directory:
 exec
 /bin/bash -lc "set -euo pipefail
-ls -ლა docs/project_management/next/workspace-config-policy-unification/smoke
-rg -n \"WCU5\" docs/project_management/next/workspace-config-policy-unification/tasks.json
-sed -n '1,220p' docs/project_management/next/workspace-config-policy-unification/tasks.json
+ls -ლა docs/project_management/_archived/next/workspace-config-policy-unification/smoke
+rg -n \"WCU5\" docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
+sed -n '1,220p' docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 " in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-code exited 2 in 41ms:
 ls: invalid option -- 'á'
 Try 'ls --help' for more information.
 exec
 /bin/bash -lc "set -euo pipefail
-sed -n '1,200p' docs/project_management/next/workspace-config-policy-unification/plan.md
-sed -n '1,200p' docs/project_management/next/workspace-config-policy-unification/session_log.md
+sed -n '1,200p' docs/project_management/_archived/next/workspace-config-policy-unification/plan.md
+sed -n '1,200p' docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
 " in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-code succeeded in 41ms:
 # Workspace Config/Policy Unification (ADR-0008) — Plan
 
@@ -246,7 +246,7 @@ This body of work also **must** implement the cross-cutting refinement defined b
 - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 
 Non-negotiable additional gating for this pack:
-- `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
+- `docs/project_management/_archived/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
 
 ## Execution model (triads + automation)
 - Standards:
@@ -293,7 +293,7 @@ I’m thinking to inspect crates/shell to check for any existing integration tes
 Also, I’ll run the final command `make triad-task-finish TASK_ID="WCU5-code"` from within the worktree at the end, which may enforce the no-editing rule for planning documents and likely requires a git clean. Before that, I’ll review the contents of tasks.json and smoke scripts, using parallel to output them without making any edits.
 exec
 /bin/bash -lc "set -euo pipefail
-sed -n '1,260p' docs/project_management/next/workspace-config-policy-unification/tasks.json
+sed -n '1,260p' docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 " in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-code succeeded in 42ms:
 {
   "meta": {
@@ -317,8 +317,8 @@ sed -n '1,260p' docs/project_management/next/workspace-config-policy-unification
     }
 exec
 /bin/bash -lc "set -euo pipefail
-ls -la docs/project_management/next/workspace-config-policy-unification/smoke
-sed -n '1,260p' docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh
+ls -la docs/project_management/_archived/next/workspace-config-policy-unification/smoke
+sed -n '1,260p' docs/project_management/_archived/next/workspace-config-policy-unification/smoke/linux-smoke.sh
 " in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-code succeeded in 34ms:
 total 48
 drwxr-xr-x 2 spenser spenser  4096 Jan 16 12:06 .
@@ -329,7 +329,7 @@ drwxr-xr-x 4 spenser spenser  4096 Jan 16 12:06 ..
 #!/usr/bin/env bash
 set -euo pipefail
 
-feature_dir="docs/project_management/next/workspace-config-policy-unification"
+feature_dir="docs/project_management/_archived/next/workspace-config-policy-unification"
 
 slice_id="${SUBSTRATE_SMOKE_SLICE_ID:-}"
 
@@ -342,7 +342,7 @@ mkdir -p "${workspace}" "${home_dir}"
 
 exec
 /bin/bash -lc "set -euo pipefail
-sed -n '1,260p' docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh
+sed -n '1,260p' docs/project_management/_archived/next/workspace-config-policy-unification/smoke/macos-smoke.sh
 " in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-code succeeded in 42ms:
 #!/usr/bin/env bash
 set -euo pipefail
@@ -354,12 +354,12 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 bash "${script_dir}/linux-smoke.sh"
 exec
 /bin/bash -lc "set -euo pipefail
-sed -n '1,300p' docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1
+sed -n '1,300p' docs/project_management/_archived/next/workspace-config-policy-unification/smoke/windows-smoke.ps1
 " in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-code succeeded in 36ms:
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$FeatureDir = "docs/project_management/next/workspace-config-policy-unification"
+$FeatureDir = "docs/project_management/_archived/next/workspace-config-policy-unification"
 $SliceId = $env:SUBSTRATE_SMOKE_SLICE_ID
 if ($null -eq $SliceId) { $SliceId = "" }
 
@@ -383,11 +383,11 @@ thinking
 I’m working on smoke scripts which have various requirements. The goal here is to implement the acceptance criteria for the WCU5-code within tasks.json. It seems they relate to parity smoke and a manual playbook. WCU5 is documented, but I’ve only seen part of tasks.json. Now, I need to find the WCU5-code entry, so I’ll use the command to search for it in tasks.json and open the relevant section.
 exec
 /bin/bash -lc "set -euo pipefail
-rg -n 'WCU5-code' -n docs/project_management/next/workspace-config-policy-unification/tasks.json
+rg -n 'WCU5-code' -n docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json
 # print a bit around it
 python - <<'PY'
 import json
-p='docs/project_management/next/workspace-config-policy-unification/tasks.json'
+p='docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json'
 obj=json.load(open(p,'r',encoding='utf-8'))
 for i,t in enumerate(obj['tasks']):
     if t.get('id')=='WCU5-code':
@@ -398,7 +398,7 @@ PY
 " in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-code succeeded in 201ms:
 1485:      "id": "WCU5-code",
 1518:        "From inside the worktree: make triad-task-finish TASK_ID=\"WCU5-code\""
-1522:      "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU5-code.md",
+1522:      "kickoff_prompt": "docs/project_management/_archived/next/workspace-config-policy-unification/kickoff_prompts/WCU5-code.md",
 1573:        "WCU5-code"
 1627:        "WCU5-code",
 index 29
@@ -412,10 +412,10 @@ index 29
   "references": [
     "docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
     "docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md",
-    "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0002)",
-    "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0006)",
-    "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0009)",
-    "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0012)",
+    "docs/project_management/_archived/next/workspace-config-policy-unification/decision_register.md (DR-0002)",
+    "docs/project_management/_archived/next/workspace-config-policy-unification/decision_register.md (DR-0006)",
+    "docs/project_management/_archived/next/workspace-config-policy-unification/decision_register.md (DR-0009)",
+    "docs/project_management/_archived/next/workspace-config-policy-unification/decision_register.md (DR-0012)",
 exec
 /bin/bash -lc 'set -euo pipefail
 rg -n "--explain" crates/shell/src/execution -S
@@ -649,7 +649,7 @@ fn resolve_effective_from_layers(
     let workspace_enabled = workspace_patch.is_some();
 exec
 /bin/bash -lc "set -euo pipefail
-rg -n -- '--explain' docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md
+rg -n -- '--explain' docs/project_management/_archived/next/workspace-config-policy-unification/manual_testing_playbook.md
 " in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-code succeeded in 44ms:
 158:4. Verify `--explain` indicates merge strategy + multi-source provenance and is deterministic/idempotent:
 162:   - `substrate config current show --json --explain >/dev/null 2> /tmp/wcu-explain.1.json`
@@ -702,9 +702,9 @@ cargo build -p substrate
    Compiling typenum v1.19.0
 exec
 /bin/bash -lc 'set -euo pipefail
-PATH="$(pwd)/target/debug:$PATH" bash docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh
+PATH="$(pwd)/target/debug:$PATH" bash docs/project_management/_archived/next/workspace-config-policy-unification/smoke/linux-smoke.sh
 ' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-code succeeded in 1.25s:
-INFO: docs/project_management/next/workspace-config-policy-unification linux smoke (SUBSTRATE_SMOKE_SLICE_ID='')
+INFO: docs/project_management/_archived/next/workspace-config-policy-unification linux smoke (SUBSTRATE_SMOKE_SLICE_ID='')
 substrate: wrote default config to /tmp/substrate-wcu-smoke.O0ojYB/home/config.yaml
 substrate: wrote default policy to /tmp/substrate-wcu-smoke.O0ojYB/home/policy.yaml
 substrate: workspace initialized at /tmp/substrate-wcu-smoke.O0ojYB/ws
@@ -1081,22 +1081,22 @@ pub(crate) fn handle_policy_command(cmd: &PolicyCmd, _cli: &Cli) -> i32 {
         PolicyAction::Show(args) => run_workspace_show(args),
 exec
 /bin/bash -lc "set -euo pipefail
-rg -n -- 'DR-0002|DR-0006|DR-0009|DR-0012|DR-0013' docs/project_management/next/workspace-config-policy-unification/decision_register.md
-sed -n '1,260p' docs/project_management/next/workspace-config-policy-unification/decision_register.md
+rg -n -- 'DR-0002|DR-0006|DR-0009|DR-0012|DR-0013' docs/project_management/_archived/next/workspace-config-policy-unification/decision_register.md
+sed -n '1,260p' docs/project_management/_archived/next/workspace-config-policy-unification/decision_register.md
 " in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-code succeeded in 46ms:
 68:## DR-0002 — `current show` provenance visibility
-73:**Related docs:** `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md`
+73:**Related docs:** `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/_archived/next/workspace-config-policy-unification/WCU2-spec.md`
 86:  - `--explain` emits a deterministic, machine-readable payload to stderr (ADR-0012).
 267:## DR-0006 — Workspace init example templates
 418:## DR-0009 — Patch file comment headers (clarity) vs bare YAML mappings
-527:**Related docs:** `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md`
+527:**Related docs:** `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/_archived/next/workspace-config-policy-unification/WCU2-spec.md`
 572:## DR-0012 — `config current show --explain` provenance payload format
-577:**Related docs:** `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md`
+577:**Related docs:** `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/_archived/next/workspace-config-policy-unification/WCU2-spec.md`
 623:## DR-0013 — Config editor list mutation syntax for merge keys
-628:**Related docs:** `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md`
-677:**Related docs:** `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md`
+628:**Related docs:** `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/_archived/next/workspace-config-policy-unification/WCU3-spec.md`
+677:**Related docs:** `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/_archived/next/workspace-config-policy-unification/WCU2-spec.md`
 686:  - Matches ADR-0012’s ordered-set semantics.
-727:**Related docs:** `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md`
+727:**Related docs:** `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/_archived/next/workspace-config-policy-unification/WCU2-spec.md`
 # Decision Register — Workspace Config/Policy Unification (ADR-0008)
 
 This decision register records the architectural decisions for `ADR-0008`.
@@ -1167,8 +1167,8 @@ thinking
 I’m planning to start by initializing the global policy patch file, then confirming that the headers and the curly braces are set correctly. Next, I’ll show the global patches and the current/effective views. I notice there's no policy set yet. Later, I might need to involve the policy workspace for showing additional details. To ensure I have all the information, I’m thinking about searching for "substrate policy" in the playbook for more context.
 exec
 /bin/bash -lc "set -euo pipefail
-rg -n '"'^'"\\s*- "'`substrate policy'"' docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md
-rg -n 'substrate policy ' docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md | head -n 80
+rg -n '"'^'"\\s*- "'`substrate policy'"' docs/project_management/_archived/next/workspace-config-policy-unification/manual_testing_playbook.md
+rg -n 'substrate policy ' docs/project_management/_archived/next/workspace-config-policy-unification/manual_testing_playbook.md | head -n 80
 " in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-code succeeded in 40ms:
 34:   - `substrate policy global show >/dev/null` and `test ! -e "$SUBSTRATE_HOME/policy.yaml"`
 37:   - `substrate policy global init --force`
@@ -1334,15 +1334,15 @@ thinking
 I see that the decision register mentions patch files for policy, so I need to check the WCU2 and WCU3 specifications to determine the policy scope. These documents are planning docs, but I can read them for more clarity. I wonder if the WCU3 spec indicates that policy scope commands aren't required. I'll inspect that document to confirm since I'm permitted to read them.
 exec
 /bin/bash -lc "set -euo pipefail
-sed -n '1,240p' docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md
-rg -n -- 'policy' docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md | head -n 100
+sed -n '1,240p' docs/project_management/_archived/next/workspace-config-policy-unification/WCU3-spec.md
+rg -n -- 'policy' docs/project_management/_archived/next/workspace-config-policy-unification/WCU3-spec.md | head -n 100
 " in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-code succeeded in 48ms:
 # WCU3 Spec — CLI scopes + reset semantics + config editor support for `world.deps.enabled` (ADR-0012 Phase B)
 
 References:
 - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
-- `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
+- `docs/project_management/_archived/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
 - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 
 ## Scope
@@ -1434,9 +1434,9 @@ pub(crate) fn resolve_global_effective_config() -> Result<SubstrateConfig> {
 
 exec
 /bin/bash -lc "set -euo pipefail
-rg -n -- '# Substrate config patch' docs/project_management/next/workspace-config-policy-unification/decision_register.md
-rg -n -- 'Substrate config patch' docs/project_management/next/workspace-config-policy-unification/decision_register.md | head -n 40
-sed -n '380,560p' docs/project_management/next/workspace-config-policy-unification/decision_register.md
+rg -n -- '# Substrate config patch' docs/project_management/_archived/next/workspace-config-policy-unification/decision_register.md
+rg -n -- 'Substrate config patch' docs/project_management/_archived/next/workspace-config-policy-unification/decision_register.md | head -n 40
+sed -n '380,560p' docs/project_management/_archived/next/workspace-config-policy-unification/decision_register.md
 " in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-code exited 1 in 46ms:
 
 
@@ -1446,7 +1446,7 @@ thinking
 I'm not finding a match, but maybe I need to check if DR-0009 specifies that the header should start with "# Substrate config patch." I'll use a search command like `rg 'DR-0009'` to dig deeper. It makes sense to look around where DR-0006 begins, probably around line 418, and later check around 527 as well. There’s a lot here to consider!
 exec
 /bin/bash -lc "set -euo pipefail
-sed -n '500,700p' docs/project_management/next/workspace-config-policy-unification/decision_register.md
+sed -n '500,700p' docs/project_management/_archived/next/workspace-config-policy-unification/decision_register.md
 " in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-code succeeded in 41ms:
   - Simplest behavior and cleanest output.
 - **Cons:**
@@ -1475,7 +1475,7 @@ thinking
 I'm noticing that DR-0009 is mentioned earlier, but we haven't seen the details yet. It might define the exact header line, which isn't shown in the current document. I'll look for DR-0009 details by searching `rg 'DR-0009'` at line 418. Ah, it seems that DR-0009 actually begins at line 418. I’ll plan to check the section between lines 418 to 500 to gather the necessary information.
 exec
 /bin/bash -lc "set -euo pipefail
-sed -n '400,520p' docs/project_management/next/workspace-config-policy-unification/decision_register.md
+sed -n '400,520p' docs/project_management/_archived/next/workspace-config-policy-unification/decision_register.md
 " in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-code succeeded in 33ms:
 - **Cascading implications:**
   - Requires a migration policy and on-disk transformation rules.
@@ -1575,22 +1575,22 @@ pub struct Policy {
     pub name: String,
 exec
 /bin/bash -lc "set -euo pipefail
-rg -n -- 'policy.*merge|more restrictive|union' docs/project_management/next/workspace-config-policy-unification/decision_register.md
-rg -n -- 'merge' docs/project_management/next/workspace-config-policy-unification/decision_register.md | head -n 120
+rg -n -- 'policy.*merge|more restrictive|union' docs/project_management/_archived/next/workspace-config-policy-unification/decision_register.md
+rg -n -- 'merge' docs/project_management/_archived/next/workspace-config-policy-unification/decision_register.md | head -n 120
 " in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-code succeeded in 51ms:
-73:**Related docs:** `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md`
+73:**Related docs:** `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/_archived/next/workspace-config-policy-unification/WCU2-spec.md`
 79:- **Decision:** `current show` prints the effective/merged config or policy on stdout and prints a single stderr notice indicating it is merged; `--explain` adds a per-key provenance breakdown.
 126:- Config and policy require explicit naming that separates “effective merged view” from “scope patch view”.
 672:## DR-0014 — De-duplication policy for ordered-set merges
 30:  - Requires a merge layer and patch-aware validators for both config and policy.
 62:- Patch parsing + merge plumbing: `WCU2-code`, `WCU2-test`, `WCU2-integ`
-73:**Related docs:** `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md`
+73:**Related docs:** `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/_archived/next/workspace-config-policy-unification/WCU2-spec.md`
 79:- **Decision:** `current show` prints the effective/merged config or policy on stdout and prints a single stderr notice indicating it is merged; `--explain` adds a per-key provenance breakdown.
 126:- Config and policy require explicit naming that separates “effective merged view” from “scope patch view”.
 426:- Patch files require an on-disk affordance that communicates “this file is an override patch” and points to the effective merged view.
 432:  - and how to inspect the effective merged view via `current show --explain`.
 522:## DR-0011 — Per-key merge strategy is schema-defined vs hardcoded key list
-527:**Related docs:** `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md`
+527:**Related docs:** `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`, `docs/project_management/_archived/next/workspace-config-policy-unification/WCU2-spec.md`
 530:- Multi-source keys require an auditable, explicit merge rule per key so `--explain` reports truthful behavior.
 533:- **Decision:** The config schema registry stores an explicit `merge_strategy` per key (defaulting to `replace` when unspecified).
 536:  - Enables `--explain` to report merge strategy mechanically for every key.
@@ -59540,9 +59540,9 @@ thinking
 I need to check everything to ensure stability. There's a point about sometimes comparing entire stderr to make sure it's byte identical. That's a good note since it seems stable. Anyway, I'll run the linux-smoke full test again to see how it performs. It’s crucial to confirm everything works as expected before moving forward! Let's see what happens with this round of testing.
 exec
 /bin/bash -lc 'set -euo pipefail
-PATH="$(pwd)/target/debug:$PATH" bash docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh
+PATH="$(pwd)/target/debug:$PATH" bash docs/project_management/_archived/next/workspace-config-policy-unification/smoke/linux-smoke.sh
 ' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-code succeeded in 1.20s:
-INFO: docs/project_management/next/workspace-config-policy-unification linux smoke (SUBSTRATE_SMOKE_SLICE_ID='')
+INFO: docs/project_management/_archived/next/workspace-config-policy-unification linux smoke (SUBSTRATE_SMOKE_SLICE_ID='')
 substrate: wrote default config to /tmp/substrate-wcu-smoke.7zbs22/home/config.yaml
 substrate: wrote global policy patch to /tmp/substrate-wcu-smoke.7zbs22/home/policy.yaml
 substrate: workspace initialized at /tmp/substrate-wcu-smoke.7zbs22/ws

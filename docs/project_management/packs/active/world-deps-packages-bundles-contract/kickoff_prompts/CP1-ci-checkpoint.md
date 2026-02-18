@@ -57,7 +57,7 @@ If smoke indicates no platform fixes are required, platform-fix tasks for a chec
 
 Mark non-required platform-fix tasks as deterministic no-ops from the orchestration checkout:
 
-- `scripts/triad/mark_noop_platform_fixes_completed.sh --feature-dir "docs/project_management/packs/active/world-deps-packages-bundles-contract" --slice-id "<slice>" --from-smoke-run "<run-id>"`
+- `make triad-mark-noop-platform-fixes-completed FEATURE_DIR="docs/project_management/packs/active/world-deps-packages-bundles-contract" SLICE_ID="<slice>" SMOKE_RUN_ID="<run-id>"`
   - If Feature Smoke was skipped via ci-audit, omit `--from-smoke-run` and record the ci-audit evidence lines in `session_log.md`.
 
 ## End Checklist

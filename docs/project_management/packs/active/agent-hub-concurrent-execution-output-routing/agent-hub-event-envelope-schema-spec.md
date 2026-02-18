@@ -133,7 +133,7 @@ Additional fields for `data.code="world_restarted"`:
 - `data.new_world_generation` (int; required)
 
 Additional fields for `data.code="world_restart_required"`:
-- Schema is authoritative in `docs/project_management/next/agent_hub_core/decision_register.md` (DR-0009).
+- Schema is authoritative in `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0009).
 
 ### Canonicalization rules (explicit)
 - Producers MUST emit all required top-level fields.

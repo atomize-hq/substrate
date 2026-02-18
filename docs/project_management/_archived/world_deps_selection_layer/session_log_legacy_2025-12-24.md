@@ -26,10 +26,10 @@ Rules:
 - `docs/project_management/_archived/world_deps_selection_layer/decision_register.md` (replaced with final decisions)
 - `docs/project_management/_archived/world_deps_selection_layer/integration_map.md` (updated)
 - `docs/project_management/_archived/world_deps_selection_layer/manual_testing_playbook.md` (updated)
-- `docs/project_management/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md`
-- `docs/project_management/next/p0-agent-hub-isolation-hardening/I0-spec.md` through `I5-spec.md`
-- `docs/project_management/next/yaml-settings-migration/Y0-spec.md`, `plan.md`, `tasks.json`
-- `docs/project_management/next/world-sync/plan.md`, `C0-spec.md`, `C1-spec.md` (skimmed C2–C5 patterns)
+- `docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md`
+- `docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I0-spec.md` through `I5-spec.md`
+- `docs/project_management/_archived/next/yaml-settings-migration/Y0-spec.md`, `plan.md`, `tasks.json`
+- `docs/project_management/_archived/next/world-sync/plan.md`, `C0-spec.md`, `C1-spec.md` (skimmed C2–C5 patterns)
 - Current touchpoints:
   - `config/manager_hooks.yaml`
   - `scripts/substrate/world-deps.yaml`
@@ -41,7 +41,7 @@ Rules:
 **Outputs produced**
 - New specs: `S0`, `S1`, `S2`
 - Triad scaffolding: `plan.md`, `tasks.json`, `session_log.md`
-- Sequencing update plan captured in `integration_map.md` and applied in `docs/project_management/next/sequencing.json` (see commit for exact diff)
+- Sequencing update plan captured in `integration_map.md` and applied in `docs/project_management/packs/sequencing.json` (see commit for exact diff)
 
 **Key decisions recorded**
 - Selection config is YAML-only and stored in `world-deps.selection.yaml` at workspace + global paths (workspace overrides).

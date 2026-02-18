@@ -202,7 +202,7 @@ class AdrMove:
 
 
 def collect_legacy_adrs(repo_root: Path) -> list[AdrMove]:
-    legacy_root = repo_root / "docs" / "project_management" / "next"
+    legacy_root = repo_root / "docs" / "project_management" / "_archived" / "next"
     if not legacy_root.is_dir():
         raise ValueError(f"Legacy ADR root not found: {legacy_root}")
 
@@ -249,7 +249,7 @@ def default_exclude_repo_paths(repo_root: Path) -> set[Path]:
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Migrate legacy ADRs from docs/project_management/next/** into docs/project_management/adrs/<bucket>/, "
+            "Migrate legacy ADRs from docs/project_management/_archived/next/** into docs/project_management/adrs/<bucket>/, "
             "then rewrite in-repo references.\n\n"
             "Bucketing rules:\n"
             "  - Draft|Proposed|In Review -> adrs/draft/\n"
@@ -286,15 +286,15 @@ def main() -> int:
 
     # Strict needles: no legacy ADR paths should remain in scanned text files post-migration.
     # Note: keep these needles out of the rewrite scan by excluding this script from the scan set.
-    next_prefix = "docs/project_management/next/"
+    legacy_prefix = "docs/project_management/_archived/next/"
     strict_needles = [
-        next_prefix + "ADR-",
-        "./" + next_prefix + "ADR-",
+        legacy_prefix + "ADR-",
+        "./" + legacy_prefix + "ADR-",
     ]
 
     if args.verify_only:
         remaining = find_remaining_needles(repo_root, strict_needles, max_bytes=50 * 1024 * 1024)
-        legacy_left = sorted((repo_root / "docs" / "project_management" / "next").rglob("ADR-*.md"))
+        legacy_left = sorted((repo_root / "docs" / "project_management" / "_archived" / "next").rglob("ADR-*.md"))
         if legacy_left or remaining:
             if legacy_left:
                 print("LEGACY_ADR_FILES=1", file=sys.stderr)
@@ -323,7 +323,7 @@ def main() -> int:
                 print(f"REMAINING={path.as_posix()} needle={needle}", file=sys.stderr)
             print("FAIL: legacy ADR references remain (no ADR files left to move)", file=sys.stderr)
             return 2
-        print("OK: no legacy ADRs found under docs/project_management/next/**")
+        print("OK: no legacy ADRs found under docs/project_management/_archived/next/**")
         return 0
 
     print(f"REPO_ROOT={repo_root}")
@@ -382,10 +382,10 @@ def main() -> int:
         print("ERROR: legacy ADR references remain; fix manually and rerun", file=sys.stderr)
         return 2
 
-    # Ensure no legacy ADR files remain under next.
-    legacy_left = sorted((repo_root / "docs" / "project_management" / "next").rglob("ADR-*.md"))
+    # Ensure no legacy ADR files remain under the legacy archive root.
+    legacy_left = sorted((repo_root / "docs" / "project_management" / "_archived" / "next").rglob("ADR-*.md"))
     if legacy_left:
-        print("ERROR: legacy ADR files remain under docs/project_management/next/**:", file=sys.stderr)
+        print("ERROR: legacy ADR files remain under docs/project_management/_archived/next/**:", file=sys.stderr)
         for p in legacy_left:
             print(f"  {p.relative_to(repo_root)}", file=sys.stderr)
         return 2

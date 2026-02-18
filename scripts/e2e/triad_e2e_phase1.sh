@@ -249,6 +249,8 @@ cd "${REPO_ROOT}"
 ORCH_BRANCH="feat/${FEATURE}"
 FEATURE_DIR="docs/project_management/packs/active/${FEATURE}"
 FEATURE_DIR_ABS="$(python_abs_path "${FEATURE_DIR}")"
+SEQUENCING_JSON="docs/project_management/packs/sequencing.json"
+PM_SYSTEM_SCRIPTS="docs/project_management/system/scripts"
 
 SLICE_PREFIX="E2E"
 SLICE_ID="${SLICE_PREFIX}0"
@@ -289,14 +291,14 @@ log "Creating orchestration branch: ${ORCH_BRANCH}"
 run git checkout -b "${ORCH_BRANCH}"
 
 log "Scaffolding Planning Pack (cross-platform + automation)"
-scaffold_args=(scripts/planning/new_feature.sh --feature "${FEATURE}" --slice-prefix "${SLICE_PREFIX}" --cross-platform --automation)
+scaffold_make_args=(planning-new-feature FEATURE="${FEATURE}" SLICE_PREFIX="${SLICE_PREFIX}" CROSS_PLATFORM=1 AUTOMATION=1)
 if [[ "${RUN_WSL}" -eq 1 ]]; then
-    scaffold_args+=(--wsl-required)
+    scaffold_make_args+=(WSL_REQUIRED=1)
     if [[ "${WSL_SEPARATE}" -eq 1 ]]; then
-        scaffold_args+=(--wsl-separate)
+        scaffold_make_args+=(WSL_SEPARATE=1)
     fi
 fi
-run "${scaffold_args[@]}"
+run make "${scaffold_make_args[@]}"
 
 TASKS_JSON="${FEATURE_DIR_ABS}/tasks.json"
 SESSION_LOG="${FEATURE_DIR_ABS}/session_log.md"
@@ -351,7 +353,7 @@ ADR_BODY_SHA256: placeholder
 ## Notes
 - This feature is intended for workflow validation and can be removed after debugging.
 MD
-    python3 scripts/planning/check_adr_exec_summary.py --adr "${ADR_PATH}" --fix
+    python3 "${PM_SYSTEM_SCRIPTS}/planning/check_adr_exec_summary.py" --adr "${ADR_PATH}" --fix
 fi
 
 log "Writing quality gate report (ACCEPT) and execution preflight report (ACCEPT)"
@@ -528,18 +530,15 @@ PS1
 fi
 
 if [[ "${SKIP_SEQUENCING_UPDATE}" -eq 0 ]]; then
-    sequencing_canonical="docs/project_management/packs/sequencing.json"
-    sequencing_legacy="docs/project_management/next/sequencing.json"
-    sequencing_target="${sequencing_legacy}"
-    if [[ -f "${sequencing_canonical}" ]]; then
-        sequencing_target="${sequencing_canonical}"
+    if [[ ! -f "${SEQUENCING_JSON}" ]]; then
+        die "Missing canonical sequencing file: ${SEQUENCING_JSON}"
     fi
 
-    log "Adding temporary sequencing.json entry (required for planning-lint): ${sequencing_target}"
+    log "Adding temporary sequencing.json entry (required for planning-lint): ${SEQUENCING_JSON}"
     if [[ "${DRY_RUN}" -eq 1 ]]; then
-        echo "+ update ${sequencing_target}" >&2
+        echo "+ update ${SEQUENCING_JSON}" >&2
     else
-        python3 - "${sequencing_target}" "${FEATURE_DIR}" "${FEATURE}" "${ORCH_BRANCH}" "${SLICE_ID}" <<'PY'
+        python3 - "${SEQUENCING_JSON}" "${FEATURE_DIR}" "${FEATURE}" "${ORCH_BRANCH}" "${SLICE_ID}" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -571,10 +570,6 @@ sprints.append(
 data["sprints"] = sprints
 path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 PY
-
-        if [[ "${sequencing_target}" == "${sequencing_canonical}" ]]; then
-            run make pm-sync-sequencing
-        fi
     fi
 fi
 
@@ -588,11 +583,8 @@ fi
 
 log "Committing Planning Pack on orchestration branch"
 add_paths=("${FEATURE_DIR}")
-if [[ -f "docs/project_management/packs/sequencing.json" ]]; then
-    add_paths+=("docs/project_management/packs/sequencing.json")
-fi
-if [[ -f "docs/project_management/next/sequencing.json" ]]; then
-    add_paths+=("docs/project_management/next/sequencing.json")
+if [[ -f "${SEQUENCING_JSON}" ]]; then
+    add_paths+=("${SEQUENCING_JSON}")
 fi
 run git add "${add_paths[@]}" || true
 run git commit -m "docs: scaffold e2e triad smoke (${FEATURE})"

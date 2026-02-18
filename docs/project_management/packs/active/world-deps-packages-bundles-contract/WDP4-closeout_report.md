@@ -25,7 +25,7 @@ Slice spec:
   - Make `install.method=script` produce runnable entrypoints under the world shell contract (non-interactive `/bin/sh -c` and REPL evaluator semantics).
 - Links:
   - `docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP4-spec.md`
-  - `docs/project_management/next/world_deps_packages_bundles_contract.md` (Wrapper generation + script installs; `current install` / `current sync`)
+  - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md` (Wrapper generation + script installs; `current install` / `current sync`)
 
 ## Spec Parity (No Drift)
 

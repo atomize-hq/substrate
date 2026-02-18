@@ -23,5 +23,5 @@ Notes:
 
 Finish checklist:
 1. Once the integration worktree is green, merge/push back to `feat/isolated-shell-plan`.
-2. While on the coordination worktree, append START/END entries for D2-integ to `docs/project_management/next/session_log.md`, update `docs/project_management/next/tasks.json` (mark D2-code and D2-test completed if not already, set D2-integ accordingly), and reference this prompt plus the exact commands above.
+2. While on the coordination worktree, append START/END entries for D2-integ to `docs/project_management/_archived/next/session_log.md`, update `docs/project_management/_archived/next/tasks.json` (mark D2-code and D2-test completed if not already, set D2-integ accordingly), and reference this prompt plus the exact commands above.
 3. Ensure any captured sample outputs/logs are linked in the session log or PR description so downstream reviewers can reproduce the doctor/health snapshots.

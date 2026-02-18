@@ -5,4 +5,4 @@
   - Feature smoke (behavior, C1, self-hosted): RUN_ID `21100994166` `https://github.com/atomize-hq/substrate/actions/runs/21100994166` (success)
 - Completed: `make triad-task-finish TASK_ID="C1-integ-core"`.
 
-Operator handoff: please record the two RUN_URLs in `docs/project_management/next/policy-patch-only-broker-effective-resolution/session_log.md` on the orchestration branch.
+Operator handoff: please record the two RUN_URLs in `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/session_log.md` on the orchestration branch.

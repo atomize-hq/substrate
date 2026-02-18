@@ -6,7 +6,7 @@
 - Goal: Produce an execution-ready Planning Pack (schema v4, cross-platform, automation-enabled) with zero ambiguity.
 - Inputs to read end-to-end:
   - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
   - `docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md`
   - `docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md`
   - `docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md`
@@ -49,12 +49,12 @@
   - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/OR0-closeout_report.md`
   - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/OR1-closeout_report.md`
   - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
 - Rubric checks run (with results):
   - `make planning-validate FEATURE_DIR="docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing"` → exit `0` → tasks.json validator passed
   - `make planning-lint FEATURE_DIR="docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing"` → exit `0` → lint passed
   - `jq -e . docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/tasks.json` → exit `0`
-  - `jq -e . docs/project_management/next/sequencing.json` → exit `0`
+  - `jq -e . docs/project_management/packs/sequencing.json` → exit `0`
   - `bash -n docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/smoke/linux-smoke.sh` → exit `0`
   - `bash -n docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/smoke/macos-smoke.sh` → exit `0`
   - `make adr-fix ADR="docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md"` → exit `0` → ADR_BODY_SHA256 updated
@@ -85,7 +85,7 @@
   - `make planning-lint` (with `FEATURE_DIR="docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing"` exported) → exit `0`
   - `make planning-validate` (with `FEATURE_DIR="docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing"` exported) → exit `0`
   - `jq -e . docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/tasks.json >/dev/null` → exit `0`
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → exit `0`
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → exit `0`
 - Exit codes observed: `0` only.
 
 ## START — 2026-02-15T13:11:31Z — remediation — mechanical verification
@@ -97,5 +97,5 @@
   - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` (with `FEATURE_DIR="docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing"` exported) → exit `0`
   - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` (with `FEATURE_DIR="docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing"` exported) → exit `0`
   - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` (with `FEATURE_DIR="docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing"` exported) → exit `0`
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → exit `0`
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → exit `0`
 - Exit codes observed: `0` only.

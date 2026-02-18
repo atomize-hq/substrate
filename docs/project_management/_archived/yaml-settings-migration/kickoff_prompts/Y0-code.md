@@ -13,7 +13,7 @@
 5. Do not edit docs/tasks/session_log.md inside the worktree.
 
 ## Spec (shared with Y0-test)
-- `docs/project_management/next/yaml-settings-migration/Y0-spec.md`
+- `docs/project_management/_archived/next/yaml-settings-migration/Y0-spec.md`
 
 ## Scope & Guardrails
 - Production code only (no tests).

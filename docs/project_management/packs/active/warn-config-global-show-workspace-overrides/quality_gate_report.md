@@ -13,34 +13,35 @@ RECOMMENDATION: ACCEPT
 
 ```bash
 FEATURE_DIR="docs/project_management/packs/active/warn-config-global-show-workspace-overrides"
+PM_SYSTEM_SCRIPTS="docs/project_management/system/scripts"
 
 # JSON validity
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 
 # tasks.json invariants
-python3 scripts/planning/validate_tasks_json.py --feature-dir "$FEATURE_DIR"
+make planning-validate FEATURE_DIR="$FEATURE_DIR"
 
 # spec manifest + checkpoints
-python3 scripts/planning/validate_spec_manifest.py --feature-dir "$FEATURE_DIR"
-python3 scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "$FEATURE_DIR"
+python3 "$PM_SYSTEM_SCRIPTS/planning/validate_spec_manifest.py" --feature-dir "$FEATURE_DIR"
+python3 "$PM_SYSTEM_SCRIPTS/planning/validate_ci_checkpoint_plan.py" --feature-dir "$FEATURE_DIR"
 
 # ADR exec-summary drift
-python3 scripts/planning/check_adr_exec_summary.py --adr docs/project_management/adrs/draft/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md
-python3 scripts/planning/check_adr_exec_summary.py --adr docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md
-python3 scripts/planning/check_adr_exec_summary.py --adr docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md
+make adr-check ADR=docs/project_management/adrs/draft/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md
+make adr-check ADR=docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md
+make adr-check ADR=docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md
 
 # Mechanical Planning Pack lint (includes smoke linkage, kickoff sentinel, sequencing alignment)
-scripts/planning/lint.sh --feature-dir "$FEATURE_DIR"
+make planning-lint FEATURE_DIR="$FEATURE_DIR"
 ```
 
 Exit codes:
 - `jq` checks → `0`
-- `validate_tasks_json.py` → `0`
+- `make planning-validate` → `0`
 - `validate_spec_manifest.py` → `0`
 - `validate_ci_checkpoint_plan.py` → `0`
 - ADR exec-summary drift checks → `0`
-- `scripts/planning/lint.sh` → `0`
+- `make planning-lint` → `0`
 
 ## Required Inputs Read End-to-End (checklist)
 - ADR(s): `YES`
@@ -53,7 +54,7 @@ Exit codes:
 - `impact_map.md`: `YES`
 - `manual_testing_playbook.md`: `YES`
 - Feature smoke scripts under `smoke/`: `YES`
-- `docs/project_management/next/sequencing.json`: `YES`
+- `docs/project_management/packs/sequencing.json`: `YES`
 - Standards:
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
@@ -79,7 +80,7 @@ Exit codes:
 ### 4) Sequencing and dependency alignment
 - Result: `PASS`
 - Evidence:
-  - `docs/project_management/next/sequencing.json` sprint: `warn_config_global_show_workspace_overrides`
+  - `docs/project_management/packs/sequencing.json` sprint: `warn_config_global_show_workspace_overrides`
   - `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/tasks.json`
 
 ### 5) Testability and validation readiness

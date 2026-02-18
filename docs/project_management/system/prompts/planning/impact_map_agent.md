@@ -35,7 +35,7 @@ Discovery requirements (must do):
    - Call out any UX disjoint (different commands behaving inconsistently, mismatched defaults, conflicting env var semantics).
 3) Cross-queue scan:
    - Scan queued/unimplemented ADRs under `docs/project_management/adrs/{draft,queued}/` (and legacy ADR locations).
-   - Scan queued Planning Packs under `docs/project_management/next/*/` and `docs/project_management/_archived/*/` for overlapping surfaces.
+   - Scan Planning Packs under `docs/project_management/packs/{active,queued,draft}/*/` and `docs/project_management/_archived/*/` for overlapping surfaces.
    - Document overlaps/conflicts and how they are resolved (sequencing boundary, Decision Register, or explicit non-overlap).
 
 Output requirements:

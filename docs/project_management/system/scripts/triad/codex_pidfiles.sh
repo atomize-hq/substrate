@@ -4,10 +4,10 @@ set -euo pipefail
 usage() {
     cat <<'USAGE'
 Usage:
-  scripts/triad/codex_pidfiles.sh --feature-dir <path> [options]
+  codex_pidfiles.sh --feature-dir <path> [options]
 
 Required:
-  --feature-dir <path>   Feature Planning Pack dir (docs/project_management/next/<feature> or equivalent)
+  --feature-dir <path>   Feature Planning Pack dir (docs/project_management/packs/active/<feature> or equivalent)
 
 Options:
   --kill                 Send a signal to any live PIDs referenced by codex.pid files

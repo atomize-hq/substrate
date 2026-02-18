@@ -12,7 +12,7 @@
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
   - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
   - `docs/project_management/adrs/implemented/ADR-0007-host-and-world-doctor-scopes.md`
   - `docs/project_management/_archived/doctor_scopes/plan.md` (pre-existing stub)
   - `docs/project_management/_archived/doctor_scopes/decision_register.md` (pre-existing stub)
@@ -62,7 +62,7 @@
   - `make planning-validate FEATURE_DIR="docs/project_management/_archived/doctor_scopes"` → `PASS`
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/doctor_scopes"` → `PASS`
 - Sequencing alignment:
-  - `docs/project_management/next/sequencing.json` reviewed: `YES`
+  - `docs/project_management/packs/sequencing.json` reviewed: `YES`
   - Changes required: `NO` (sequencing updated to reference `DS0-spec.md`)
 - Blockers:
   - `NONE`
@@ -102,7 +102,7 @@
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/doctor_scopes"` → exit `0`
   - `make planning-validate FEATURE_DIR="docs/project_management/_archived/doctor_scopes"` → exit `0`
   - `jq -e . "docs/project_management/_archived/doctor_scopes/tasks.json" >/dev/null` → exit `0`
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → exit `0`
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → exit `0`
 
 ## START — 2026-01-09T02:30:36Z — ops — F0-exec-preflight
 - Feature: `docs/project_management/_archived/doctor_scopes/`

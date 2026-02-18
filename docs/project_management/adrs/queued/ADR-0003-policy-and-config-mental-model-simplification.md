@@ -8,8 +8,8 @@
 
 ## Scope
 
-- Feature directory: `docs/project_management/next/policy_and_config_mental_model_simplification/`
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Feature directory: `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
@@ -17,40 +17,40 @@
 
 ## Related Docs
 
-- Sequencing: `docs/project_management/next/sequencing.json`
-- Plan: `docs/project_management/next/policy_and_config_mental_model_simplification/plan.md`
-- Tasks: `docs/project_management/next/policy_and_config_mental_model_simplification/tasks.json`
-- Session log: `docs/project_management/next/policy_and_config_mental_model_simplification/session_log.md`
+- Sequencing: `docs/project_management/packs/sequencing.json`
+- Plan: `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/plan.md`
+- Tasks: `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/tasks.json`
+- Session log: `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/session_log.md`
 - Specs:
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/PCM0-spec.md`
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/PCM1-spec.md`
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/PCM2-spec.md`
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/PCM3-spec.md`
-- Decision Register: `docs/project_management/next/policy_and_config_mental_model_simplification/decision_register.md`
-- Integration map: `docs/project_management/next/policy_and_config_mental_model_simplification/integration_map.md`
-- Manual playbook: `docs/project_management/next/policy_and_config_mental_model_simplification/manual_testing_playbook.md`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM0-spec.md`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM1-spec.md`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM2-spec.md`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM3-spec.md`
+- Decision Register: `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/decision_register.md`
+- Integration map: `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/integration_map.md`
+- Manual playbook: `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/manual_testing_playbook.md`
 - Prior (untemplated) ADR content preserved verbatim:
   - `docs/project_management/adrs/draft/ADR-0003-policy-and-config-mental-model-simplification_OG.md`
 - World-sync specs that MUST be updated to align with this ADR before `world_sync` implementation:
-  - `docs/project_management/next/world-sync/C0-spec.md`
-  - `docs/project_management/next/world-sync/C1-spec.md`
+  - `docs/project_management/_archived/next/world-sync/C0-spec.md`
+  - `docs/project_management/_archived/next/world-sync/C1-spec.md`
 
 ## Executive Summary (Operator)
 
 ADR_BODY_SHA256: 6599e2c4c0c757e864a3e06076dd6abc9ec206b06cb6664159c0c23edcf36c52
-ADR_BODY_SHA256: <run `python3 scripts/planning/check_adr_exec_summary.py --adr <this-file> --fix` after editing>
+ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after editing>
 
 - Existing: Config/policy discovery and naming is ambiguous (multiple file names, “settings vs config vs policy”, and colliding terms like `cage/caged` and `root/anchor`).
 - New: One strict, testable inventory of config/policy files + precedence, with explicit removals and no legacy fallbacks.
 - Why: Shrinks the mental model, reduces bug surface, and increases reproducibility (operators can predict exactly what is loaded).
 - Links:
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/PCM0-spec.md`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM0-spec.md`
 
 - Existing: Policy mode semantics and runtime state can be drift-prone/hard to reason about.
 - New: Policy mode is explicit (`disabled|observe|enforce`), strict parsing is required, and cached state is stabilized via `env.sh`.
 - Why: Makes enforcement reliable and removes footguns for agent workflows.
 - Links:
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/PCM1-spec.md`
+  - `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM1-spec.md`
 
 ## Problem / Context
 
@@ -803,9 +803,9 @@ Outputs:
 
 ## Sequencing / Dependencies
 
-- Sequencing entry: `docs/project_management/next/sequencing.json` → sprint id `policy_and_config_mental_model_simplification` (order `25`).
+- Sequencing entry: `docs/project_management/packs/sequencing.json` → sprint id `policy_and_config_mental_model_simplification` (order `25`).
 - This sprint MUST land before `world_sync` to avoid implementing world-sync against legacy config/policy/env semantics.
-- Before implementing `world_sync` code, world-sync planning docs MUST be updated to match this ADR (at minimum `docs/project_management/next/world-sync/C0-spec.md` and `docs/project_management/next/world-sync/C1-spec.md`).
+- Before implementing `world_sync` code, world-sync planning docs MUST be updated to match this ADR (at minimum `docs/project_management/_archived/next/world-sync/C0-spec.md` and `docs/project_management/_archived/next/world-sync/C1-spec.md`).
 
 ## Security / Safety Posture
 
@@ -920,13 +920,13 @@ At minimum, tests MUST verify:
 
 ### Manual validation (explicit)
 
-Manual playbook: `docs/project_management/next/policy_and_config_mental_model_simplification/manual_testing_playbook.md`
+Manual playbook: `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/manual_testing_playbook.md`
 
 ### Smoke scripts (explicit)
 
-- Linux: `docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh`
-- macOS: `docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh`
-- Windows: `docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1`
+- Linux: `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1`
 
 ## Rollout / Backwards Compatibility
 
@@ -935,7 +935,7 @@ Manual playbook: `docs/project_management/next/policy_and_config_mental_model_si
 
 ## Decision Summary
 
-Decision Register: `docs/project_management/next/policy_and_config_mental_model_simplification/decision_register.md`
+Decision Register: `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/decision_register.md`
 
 Entries used by this ADR:
 

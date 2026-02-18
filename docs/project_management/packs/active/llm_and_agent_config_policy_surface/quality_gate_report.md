@@ -65,7 +65,7 @@ export FEATURE_DIR="docs/project_management/packs/active/llm_and_agent_config_po
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
 # exit: 0
 
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 # exit: 0
 
 # Planning lint (mechanical)
@@ -88,7 +88,7 @@ make planning-validate FEATURE_DIR="$FEATURE_DIR"
 - `impact_map.md` (if present/required): `YES`
 - `manual_testing_playbook.md` (if present/required): `YES`
 - Feature smoke scripts under `smoke/` (if required): `YES`
-- `docs/project_management/next/sequencing.json`: `YES`
+- `docs/project_management/packs/sequencing.json`: `YES`
 - Standards:
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
@@ -120,7 +120,7 @@ make planning-validate FEATURE_DIR="$FEATURE_DIR"
 ### 4) Sequencing and dependency alignment
 - Result: `PASS`
 - Evidence: `make planning-lint FEATURE_DIR="$FEATURE_DIR"` includes sequencing alignment checks and exits `0`.
-- Notes: `docs/project_management/next/sequencing.json` includes the sprint entry for this feature directory.
+- Notes: `docs/project_management/packs/sequencing.json` includes the sprint entry for this feature directory.
 
 ### 5) Testability and validation readiness
 - Result: `PASS`
@@ -160,7 +160,7 @@ make planning-validate FEATURE_DIR="$FEATURE_DIR"
 
 ### Finding 004 — Sequencing entry exists for the feature directory
 - Status: `VERIFIED`
-- Evidence: `docs/project_management/next/sequencing.json` contains an entry with `"directory": "docs/project_management/packs/active/llm_and_agent_config_policy_surface"`.
+- Evidence: `docs/project_management/packs/sequencing.json` contains an entry with `"directory": "docs/project_management/packs/active/llm_and_agent_config_policy_surface"`.
 - Impact: Enables deterministic task dependency alignment checks and prevents silent “unsequenced sprint” drift.
 - Fix required (exact): none
 - If DEFECT: Alternative (one viable): none
@@ -191,7 +191,7 @@ export FEATURE_DIR="docs/project_management/packs/active/llm_and_agent_config_po
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
 # exit: 0
 
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 # exit: 0
 
 # tasks.json required-field audit

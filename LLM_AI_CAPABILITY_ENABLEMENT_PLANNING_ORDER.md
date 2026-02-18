@@ -11,7 +11,7 @@ This document is a lightweight tracking plan for finalizing ADRs and their corre
 ## Phase 1 — Trace foundation (accept early)
 - ADR-0028: `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
 - Outputs (required):
-  - `docs/project_management/next/world_process_exec_tracing_parity/spec_manifest.md`
+  - `docs/project_management/_archived/next/world_process_exec_tracing_parity/spec_manifest.md`
   - Trace event schema spec (`world_process_*`)
   - Shared redaction spec (argv/env) + caps/truncation spec
   - World-agent API payload spec (`process_events`)
@@ -26,7 +26,7 @@ This document is a lightweight tracking plan for finalizing ADRs and their corre
 ## Phase 3 — Config/policy surface for LLM + agents (accept)
 - ADR-0027: `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
 - Outputs (required):
-  - `docs/project_management/next/llm_and_agent_config_policy_surface/contract.md`
+  - `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/contract.md`
   - Schema/specs for new `llm.*` and `agents.*` keys (config + policy)
   - Fail-closed defaults + precedence rules
 
@@ -58,7 +58,7 @@ This document is a lightweight tracking plan for finalizing ADRs and their corre
 - ADR-0022: `docs/project_management/adrs/draft/ADR-0022-forge-agent-loop-as-workflow-node.md`
 
 ## Phase 8 — Circle-back pass (additive-only): trace classifications + landing items
-- Phase 8 working registry (cross-cutting alignment): `docs/project_management/next/PHASE_8_CROSS_CUTTING_DECISION_REGISTRY.md`
+- Phase 8 working registry (cross-cutting alignment): `docs/project_management/packs/PHASE_8_CROSS_CUTTING_DECISION_REGISTRY.md`
 - Note (workflow composition):
   - ADR-0021 and ADR-0022 MUST remain `Draft` until we are closer to implementation.
   - We will defer solidifying remaining `workflow-engine` / `forge` contract details (beyond already-accepted DR items) until enough upstream foundations have landed (Phases 1–6) and we are ready to produce the Phase 7 Planning Packs.
@@ -95,10 +95,10 @@ This document is a lightweight tracking plan for finalizing ADRs and their corre
     - align the v1 trigger allowlist to the final event families and correlation fields emitted by LLM gateway, agent hub, and workflow engine,
     - ensure request/derived-event schemas reference stable join keys (cause/trigger refs) consistent with the final trace/span contract.
   - Decision registers that define correlation/attribution surfaces (verify naming + required/optional classification, additive-only):
-    - `docs/project_management/next/agent-hub-concurrent-execution-output-routing/decision_register.md`
-    - `docs/project_management/next/agent_hub_core/decision_register.md`
-    - `docs/project_management/next/llm_gateway_in_world/decision_register.md`
-    - `docs/project_management/next/llm_cli_backend_engine/decision_register.md`
-    - `docs/project_management/next/orchestration_mcp_toolbox/decision_register.md`
-    - `docs/project_management/next/workflow-engine/decision_register.md`
-    - `docs/project_management/next/forge/decision_register.md`
+    - `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/decision_register.md`
+    - `docs/project_management/_archived/next/agent_hub_core/decision_register.md`
+    - `docs/project_management/_archived/next/llm_gateway_in_world/decision_register.md`
+    - `docs/project_management/_archived/next/llm_cli_backend_engine/decision_register.md`
+    - `docs/project_management/_archived/next/orchestration_mcp_toolbox/decision_register.md`
+    - `docs/project_management/_archived/next/workflow-engine/decision_register.md`
+    - `docs/project_management/_archived/next/forge/decision_register.md`

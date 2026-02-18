@@ -5,7 +5,7 @@
 - Orchestration branch: `feat/world-deps-packages-bundles-contract`
 - Authoritative contract inputs (source of truth):
   - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
-  - `docs/project_management/next/world_deps_packages_bundles_contract.md`
+  - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
 - Upstream dependency ADRs (constraints; incorporated into slice acceptance criteria):
   - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md` (patch-only format + broker-canonical effective resolution)
   - `docs/project_management/adrs/implemented/ADR-0014-world-agent-policy-resolution-and-concurrency.md` (host-resolved policy snapshot input to world-agent)

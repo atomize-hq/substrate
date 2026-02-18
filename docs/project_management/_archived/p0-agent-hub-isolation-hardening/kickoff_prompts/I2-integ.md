@@ -25,9 +25,9 @@ make integ-checks
 ```
 
 ## Smoke Scripts (required)
-- Linux: `bash docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh`
-- macOS: `bash docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh`
-- Windows: `pwsh -File docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1`
+- Linux: `bash docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh`
+- macOS: `bash docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh`
+- Windows: `pwsh -File docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1`
 
 ## End Checklist
 1. Commit integration changes.

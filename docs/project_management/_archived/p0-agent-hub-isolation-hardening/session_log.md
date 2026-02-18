@@ -110,7 +110,7 @@ Template (START/END only):
   - cargo clippy --workspace --all-targets -- -D warnings
 - Results: pass
 - Scripts executed: n/a
-- Kickoff prompts created/verified: docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I1-code.md
+- Kickoff prompts created/verified: docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I1-code.md
 - Docs commit: (this commit)
 - Next steps / blockers: I1-integ can merge when I1-test is ready
 
@@ -388,7 +388,7 @@ Template (START/END only):
   - cargo clippy --workspace --all-targets -- -D warnings
 - Results: pass
 - Scripts executed: n/a
-- Kickoff prompts created/verified: docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I6-code.md
+- Kickoff prompts created/verified: docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I6-code.md
 - Docs commit: (this commit)
 - Next steps / blockers: I6-integ can merge with I6-test and un-ignore `crates/shell/tests/world_verify.rs`
 

@@ -2,7 +2,7 @@
 
 ## Scope
 - Remove retained worktrees and optionally prune task branches at feature end.
-- Tooling: `scripts/triad/feature_cleanup.sh`
+- Tooling: `make triad-feature-cleanup`
 
 ## Start Checklist
 Do not edit planning docs inside the worktree.
@@ -13,4 +13,3 @@ Do not edit planning docs inside the worktree.
 ## End Checklist
 1. Dry-run cleanup: `make triad-feature-cleanup FEATURE_DIR="docs/project_management/_archived/policy-patch-only-broker-effective-resolution" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1`
 2. Execute cleanup: `make triad-feature-cleanup FEATURE_DIR="docs/project_management/_archived/policy-patch-only-broker-effective-resolution" REMOVE_WORKTREES=1 PRUNE_LOCAL=1`
-

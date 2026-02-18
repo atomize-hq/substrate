@@ -51,7 +51,7 @@
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/decision_register.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/quality_gate_report.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/execution_preflight_report.md",
-        "docs/project_management/next/world_deps_packages_bundles_contract.md",
+        "docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md",
         "docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md"
       ],
       "start_checklist": [
@@ -92,7 +92,7 @@
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/impact_map.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/decision_register.md (DR-0001)",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/platform-parity-spec.md",
-        "docs/project_management/next/world_deps_packages_bundles_contract.md",
+        "docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md",
         "docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP0-spec.md"
       ],
@@ -138,7 +138,7 @@
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/impact_map.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/decision_register.md (DR-0001)",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/platform-parity-spec.md",
-        "docs/project_management/next/world_deps_packages_bundles_contract.md",
+        "docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md",
         "docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP0-spec.md"
       ],
@@ -191,7 +191,7 @@
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/manual_testing_playbook.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP0-spec.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP0-closeout_report.md",
-        "docs/project_management/next/world_deps_packages_bundles_contract.md"
+        "docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md"
       ],
       "required_make_targets": [
         "integ-checks"
@@ -235,7 +235,7 @@
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/impact_map.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/decision_register.md (DR-0001)",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/platform-parity-spec.md",
-        "docs/project_management/next/world_deps_packages_bundles_contract.md",
+        "docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md",
         "docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP1-spec.md"
       ],
@@ -281,7 +281,7 @@
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/impact_map.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/decision_register.md (DR-0001)",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/platform-parity-spec.md",
-        "docs/project_management/next/world_deps_packages_bundles_contract.md",
+        "docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP1-spec.md"
       ],
       "required_make_targets": [
@@ -333,7 +333,7 @@
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/manual_testing_playbook.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP1-spec.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP1-closeout_report.md",
-        "docs/project_management/next/world_deps_packages_bundles_contract.md"
+        "docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md"
       ],
       "required_make_targets": [
         "integ-checks"
@@ -378,7 +378,7 @@
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/ci_checkpoint_plan.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/decision_register.md (DR-0002)",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/platform-parity-spec.md",
-        "docs/project_management/next/world_deps_packages_bundles_contract.md",
+        "docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP2-spec.md"
       ],
       "required_make_targets": [
@@ -424,7 +424,7 @@
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/ci_checkpoint_plan.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/decision_register.md (DR-0002)",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/platform-parity-spec.md",
-        "docs/project_management/next/world_deps_packages_bundles_contract.md",
+        "docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP2-spec.md"
       ],
       "required_make_targets": [
@@ -474,7 +474,7 @@
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/manual_testing_playbook.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP2-spec.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP2-closeout_report.md",
-        "docs/project_management/next/world_deps_packages_bundles_contract.md"
+        "docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md"
       ],
       "required_make_targets": [
         "integ-checks"
@@ -516,7 +516,7 @@
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/ci_checkpoint_plan.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/manual_testing_playbook.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/platform-parity-spec.md",
-        "docs/project_management/next/world_deps_packages_bundles_contract.md"
+        "docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md"
       ],
       "start_checklist": [
         "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
@@ -712,7 +712,7 @@
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/impact_map.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/decision_register.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/platform-parity-spec.md",
-        "docs/project_management/next/world_deps_packages_bundles_contract.md",
+        "docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP3-spec.md"
       ],
       "required_make_targets": [
@@ -758,7 +758,7 @@
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/impact_map.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/decision_register.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/platform-parity-spec.md",
-        "docs/project_management/next/world_deps_packages_bundles_contract.md",
+        "docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP3-spec.md"
       ],
       "required_make_targets": [
@@ -810,7 +810,7 @@
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/manual_testing_playbook.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP3-spec.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP3-closeout_report.md",
-        "docs/project_management/next/world_deps_packages_bundles_contract.md"
+        "docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md"
       ],
       "required_make_targets": [
         "integ-checks"
@@ -854,7 +854,7 @@
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/impact_map.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/decision_register.md (DR-0003)",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/platform-parity-spec.md",
-        "docs/project_management/next/world_deps_packages_bundles_contract.md",
+        "docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP4-spec.md"
       ],
       "required_make_targets": [
@@ -899,7 +899,7 @@
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/impact_map.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/decision_register.md (DR-0003)",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/platform-parity-spec.md",
-        "docs/project_management/next/world_deps_packages_bundles_contract.md",
+        "docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP4-spec.md"
       ],
       "required_make_targets": [
@@ -951,7 +951,7 @@
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/manual_testing_playbook.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP4-spec.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP4-closeout_report.md",
-        "docs/project_management/next/world_deps_packages_bundles_contract.md"
+        "docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md"
       ],
       "required_make_targets": [
         "integ-checks"
@@ -996,7 +996,7 @@
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/ci_checkpoint_plan.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/decision_register.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/platform-parity-spec.md",
-        "docs/project_management/next/world_deps_packages_bundles_contract.md",
+        "docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP5-spec.md"
       ],
       "required_make_targets": [
@@ -1042,7 +1042,7 @@
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/ci_checkpoint_plan.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/decision_register.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/platform-parity-spec.md",
-        "docs/project_management/next/world_deps_packages_bundles_contract.md",
+        "docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP5-spec.md"
       ],
       "required_make_targets": [
@@ -1092,7 +1092,7 @@
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/manual_testing_playbook.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP5-spec.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP5-closeout_report.md",
-        "docs/project_management/next/world_deps_packages_bundles_contract.md"
+        "docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md"
       ],
       "required_make_targets": [
         "integ-checks"
@@ -1134,7 +1134,7 @@
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/ci_checkpoint_plan.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/manual_testing_playbook.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/platform-parity-spec.md",
-        "docs/project_management/next/world_deps_packages_bundles_contract.md"
+        "docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md"
       ],
       "start_checklist": [
         "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",
@@ -1326,7 +1326,7 @@
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/ci_checkpoint_plan.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/decision_register.md",
         "docs/project_management/packs/active/world-deps-packages-bundles-contract/platform-parity-spec.md",
-        "docs/project_management/next/world_deps_packages_bundles_contract.md"
+        "docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md"
       ],
       "start_checklist": [
         "git checkout feat/world-deps-packages-bundles-contract && git pull --ff-only",

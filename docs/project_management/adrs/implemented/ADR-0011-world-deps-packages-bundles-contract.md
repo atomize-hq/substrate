@@ -13,9 +13,9 @@
 
 ## Scope
 - Feature directories (impacted):
-  - `docs/project_management/next/` (this ADR; cross-cutting contract)
+  - `docs/project_management/_archived/next/` (this ADR; cross-cutting contract)
   - `docs/project_management/_archived/world_deps_selection_layer/` (related work; see notes under Sequencing)
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
@@ -24,14 +24,14 @@
 
 ## Related Docs
 - Source contract doc (must remain in parity with this ADR’s contract section):
-  - `docs/project_management/next/world_deps_packages_bundles_contract.md`
+  - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
 - Planning Pack (execution v4; this feature directory):
-  - `docs/project_management/next/world-deps-packages-bundles-contract/plan.md`
-  - `docs/project_management/next/world-deps-packages-bundles-contract/tasks.json`
-  - `docs/project_management/next/world-deps-packages-bundles-contract/spec_manifest.md`
-  - `docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md`
-  - `docs/project_management/next/world-deps-packages-bundles-contract/impact_map.md`
-  - `docs/project_management/next/world-deps-packages-bundles-contract/manual_testing_playbook.md`
+  - `docs/project_management/_archived/next/world-deps-packages-bundles-contract/plan.md`
+  - `docs/project_management/_archived/next/world-deps-packages-bundles-contract/tasks.json`
+  - `docs/project_management/_archived/next/world-deps-packages-bundles-contract/spec_manifest.md`
+  - `docs/project_management/_archived/next/world-deps-packages-bundles-contract/decision_register.md`
+  - `docs/project_management/_archived/next/world-deps-packages-bundles-contract/impact_map.md`
+  - `docs/project_management/_archived/next/world-deps-packages-bundles-contract/manual_testing_playbook.md`
 - Existing world-deps work (may be superseded / requires reconciliation if this ADR is Accepted):
   - `docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
   - `docs/project_management/_archived/world_deps_selection_layer/plan.md`
@@ -52,7 +52,7 @@ ADR_BODY_SHA256: 2b1783166231cc55d91de12770705f87fd3ea92737d1611e9a6e39a1fa3cdb1
   - New: `substrate world deps` is driven by an inventory directory model (`$SUBSTRATE_HOME/deps/`, `<workspace_root>/.substrate/deps/`) plus enabled patch keys in YAML (`$SUBSTRATE_HOME/config.yaml`, `<workspace_root>/.substrate/workspace.yaml`), with explicit `current|global|workspace` CLI scopes.
   - Why: makes “what exists / what you want / what is applied” explicit and scriptable; removes misleading “looks like a CLI but isn’t” cases.
   - Links:
-    - `docs/project_management/next/world_deps_packages_bundles_contract.md`
+    - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
     - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
     - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 
@@ -61,7 +61,7 @@ ADR_BODY_SHA256: 2b1783166231cc55d91de12770705f87fd3ea92737d1611e9a6e39a1fa3cdb1
   - New: `world deps` MUST NOT read (or be influenced by) any legacy world-deps paths; inventory/enabled sources are limited to the new directories/patch files plus built-in defaults.
   - Why: prevents silent drift, hidden overrides, and “it works on one machine” confusion; makes tests enforce the end state.
   - Links:
-    - `docs/project_management/next/world_deps_packages_bundles_contract.md`
+    - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
 
 ## Problem / Context
 - `substrate world deps` needs a stable, predictable, scope-aware contract for declaring and applying in-world dependencies.
@@ -83,7 +83,7 @@ ADR_BODY_SHA256: 2b1783166231cc55d91de12770705f87fd3ea92737d1611e9a6e39a1fa3cdb1
 ## User Contract (Authoritative)
 
 This section is a direct, parity-preserving conversion of:
-- `docs/project_management/next/world_deps_packages_bundles_contract.md`
+- `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
 
 It is authoritative; other sections in this ADR must not contradict it.
 
@@ -621,14 +621,14 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
   - `crates/shim/src/exec/logging.rs` and install scripts that read/copy `manager_hooks.yaml` / `world-deps.yaml` / selection files must be updated so `world deps` is not influenced by any legacy paths.
 
 ## Sequencing / Dependencies
-- Alignment target: `docs/project_management/next/sequencing.json` (this ADR introduces a contract that is not yet represented as a sprint entry).
+- Alignment target: `docs/project_management/packs/sequencing.json` (this ADR introduces a contract that is not yet represented as a sprint entry).
 - Hard dependencies (contract-level):
   - Patch-file scope semantics from `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md` (global/workspace patch files; preserve comment headers).
   - World backend availability semantics for commands that query/apply in-world state (exit `3` when backend is unavailable).
 - Coexistence note (separate bodies of work):
   - `docs/project_management/_archived/world_deps_selection_layer/` defines a selection-file-driven contract that conflicts with this ADR’s “enabled patch” model and “legacy selection file paths removed” requirement.
   - This ADR is a separate/add-on body of work and does not update that planning-pack directory.
-  - If/when we unify the world-deps operator contract, do it via a new planning pack and/or a new cross-cutting ADR under `docs/project_management/next/` (and update `docs/project_management/next/sequencing.json`), without authoring changes inside existing planning-pack directories.
+  - If/when we unify the world-deps operator contract, do it via a new planning pack and/or a new cross-cutting ADR under `docs/project_management/_archived/next/` (and update `docs/project_management/packs/sequencing.json`), without authoring changes inside existing planning-pack directories.
 
 ## Security / Safety Posture
 - Fail-closed vs degrade:
@@ -659,7 +659,7 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 
 ## Decision Summary
 - Decision register:
-  - `docs/project_management/next/world-deps-packages-bundles-contract/decision_register.md`
+  - `docs/project_management/_archived/next/world-deps-packages-bundles-contract/decision_register.md`
 
 ## Appendix A — Host-visible worlds: preventing “host deps” from satisfying world-deps
 

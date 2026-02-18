@@ -11,14 +11,14 @@ Summary:
 Focus files / context:
 - `crates/shell/src/lib.rs`, `crates/shell/src/commands` (command registration, argument parsing, output formatting)
 - Manager manifest + init helpers from `crates/common/src/manager_manifest.rs` and `crates/shell/src/manager_init.rs`
-- Planning docs in `docs/project_management/next/substrate_isolated_shell_plan.md`, `.../substrate_isolated_shell_data_map.md`, and `.../execution_plan.md`
+- Planning docs in `docs/project_management/_archived/next/substrate_isolated_shell_plan.md`, `.../substrate_isolated_shell_data_map.md`, and `.../execution_plan.md`
 
 Commands to run:
 1. `cargo fmt --all`
 2. `cargo check -p substrate-shell`
 
 Reminders:
-- Start at `AI_AGENT_START_HERE.md`, update `docs/project_management/next/tasks.json` + `session_log.md` on `feat/isolated-shell-plan`, and record START/END entries before/after coding.
+- Start at `AI_AGENT_START_HERE.md`, update `docs/project_management/_archived/next/tasks.json` + `session_log.md` on `feat/isolated-shell-plan`, and record START/END entries before/after coding.
 - Work entirely inside `wt/b2-doctor-code`; leave coordination artifacts untouched in that worktree. Do not write/run the integration tests—another agent owns that task.
 - Document any new CLI usage notes or env toggles in the referenced docs when you return to `feat/isolated-shell-plan`.
 - Finish steps checklist: (1) commit/push worktree changes, (2) switch back to `feat/isolated-shell-plan`, (3) update session log/tasks/kickoff prompt references, (4) commit/push coordination files.

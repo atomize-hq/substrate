@@ -44,9 +44,9 @@ World backend and overlay tracking:
 - `crates/world/src/overlayfs/utils.rs`: computes a pending diff by walking the overlay upper layer.
 
 Specs / planning-pack references (authoritative intent, but not the source of truth for this doc):
-- `docs/project_management/next/world-sync/filesystem-semantics-spec.md`
-- `docs/project_management/next/world-sync/WS2-spec.md`
-- `docs/project_management/next/world-sync/WS5-spec.md`
+- `docs/project_management/packs/active/world-sync/filesystem-semantics-spec.md`
+- `docs/project_management/packs/active/world-sync/WS2-spec.md`
+- `docs/project_management/packs/active/world-sync/WS5-spec.md`
 
 ## Key invariants (current reality)
 
@@ -78,7 +78,7 @@ The host apply path:
 
 If the clear step fails, Substrate must not clear “whatever is current”:
 - `crates/shell/src/execution/workspace_cmd.rs` (clear refusal path).
-- `docs/project_management/next/world-sync/filesystem-semantics-spec.md` (“Clear/ack semantics”).
+- `docs/project_management/packs/active/world-sync/filesystem-semantics-spec.md` (“Clear/ack semantics”).
 
 ### 4) Clearing pending diffs resets the world-only overlay state
 

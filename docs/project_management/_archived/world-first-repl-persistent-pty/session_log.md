@@ -20,11 +20,11 @@
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
   - `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
 - Commands planned (if any):
   - `make adr-check ADR=docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
   - `FEATURE_DIR="docs/project_management/_archived/world-first-repl-persistent-pty"; jq -e . "$FEATURE_DIR/tasks.json" >/dev/null`
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null`
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null`
   - `python - <<'PY' ... PY` (tasks.json required-field audit)
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/world-first-repl-persistent-pty"`
   - `make planning-validate FEATURE_DIR="docs/project_management/_archived/world-first-repl-persistent-pty"`
@@ -32,13 +32,13 @@
 ## END — 2026-01-26T16:11:12Z — planning — planning pack completion (ADR-0016)
 - Summary of changes (exhaustive):
   - Added full Planning Pack artifacts under `docs/project_management/_archived/world-first-repl-persistent-pty/` (spec slices, tasks.json, integration map, manual playbook, smoke scripts, kickoff prompts, traceability map, and quality gate report).
-  - Updated `docs/project_management/next/sequencing.json` to register the sprint (`world_first_repl_persistent_pty`, order `32`) and align slice specs (`C0`/`C1`/`C2`).
+  - Updated `docs/project_management/packs/sequencing.json` to register the sprint (`world_first_repl_persistent_pty`, order `32`) and align slice specs (`C0`/`C1`/`C2`).
   - Fixed ADR executive summary drift marker by updating `ADR_BODY_SHA256` in `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`.
   - Applied planning-lint-safe editorial tightening (no behavior drift) in the authoritative spec pack docs under the feature directory.
   - Removed a hard-ban lint violation caused by embedding a hard-ban scan pattern string in planning artifacts.
 - Files created/modified:
   - `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
   - `docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md`
   - `docs/project_management/_archived/world-first-repl-persistent-pty/STATE_MACHINE.md`
   - `docs/project_management/_archived/world-first-repl-persistent-pty/decision_register.md`
@@ -83,7 +83,7 @@
 - Rubric checks run (with results):
   - `make adr-check ADR=docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md` → `0` → executive summary hash matches
   - `FEATURE_DIR="docs/project_management/_archived/world-first-repl-persistent-pty"; jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` → `0` → valid JSON
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0` → valid JSON
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → `0` → valid JSON
   - `python - <<'PY' ... PY` (tasks.json required-field audit) → `0` → required fields present
   - `make planning-validate FEATURE_DIR="docs/project_management/_archived/world-first-repl-persistent-pty"` → `0` → tasks.json validation passed
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/world-first-repl-persistent-pty"` → `0` → planning lint passed (includes kickoff prompt sentinel and hard-ban scan)
@@ -113,7 +113,7 @@
   - `docs/project_management/_archived/world-first-repl-persistent-pty/manual_testing_playbook.md`
   - `docs/project_management/_archived/world-first-repl-persistent-pty/smoke/linux-smoke.sh`
   - `docs/project_management/_archived/world-first-repl-persistent-pty/smoke/macos-smoke.sh`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
   - `docs/project_management/standards/PLANNING_README.md`
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
@@ -122,7 +122,7 @@
   - `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`
   - `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`
 - Commands planned (if any):
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null`
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null`
   - `FEATURE_DIR="docs/project_management/_archived/world-first-repl-persistent-pty"; jq -e . "$FEATURE_DIR/tasks.json" >/dev/null`
   - `make adr-check ADR=docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
   - `make planning-validate FEATURE_DIR="docs/project_management/_archived/world-first-repl-persistent-pty"`
@@ -139,9 +139,9 @@
   - Rebuilt `tasks.json` to include triads for `C0`–`C5` using the platform-fix integration model (schema v3), with `C4` and `C5` able to execute concurrently after `C3`.
   - Expanded kickoff prompts to cover all new tasks (`C3`–`C5`) and updated affected existing prompts to match new slice ownership.
   - Updated supporting docs and validation artifacts (plan, integration map, smoke scripts, manual playbook, and requirements traceability) to match the new slice boundaries.
-  - Updated `docs/project_management/next/sequencing.json` to register `C3`–`C5` specs for the sprint.
+  - Updated `docs/project_management/packs/sequencing.json` to register `C3`–`C5` specs for the sprint.
 - Files created/modified:
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
   - `docs/project_management/_archived/world-first-repl-persistent-pty/plan.md`
   - `docs/project_management/_archived/world-first-repl-persistent-pty/tasks.json`
   - `docs/project_management/_archived/world-first-repl-persistent-pty/integration_map.md`
@@ -182,7 +182,7 @@
   - `docs/project_management/_archived/world-first-repl-persistent-pty/kickoff_prompts/C5-integ-windows.md`
   - `docs/project_management/_archived/world-first-repl-persistent-pty/kickoff_prompts/C5-integ.md`
 - Rubric checks run (with results):
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0` → valid JSON
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → `0` → valid JSON
   - `FEATURE_DIR="docs/project_management/_archived/world-first-repl-persistent-pty"; jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` → `0` → valid JSON
   - `make adr-check ADR=docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md` → `0` → executive summary hash matches
   - `make planning-validate FEATURE_DIR="docs/project_management/_archived/world-first-repl-persistent-pty"` → `0` → tasks.json validation passed
@@ -210,11 +210,11 @@
   - `docs/project_management/_archived/world-first-repl-persistent-pty/integration_map.md`
   - `docs/project_management/_archived/world-first-repl-persistent-pty/manual_testing_playbook.md`
   - `docs/project_management/_archived/world-first-repl-persistent-pty/smoke/*`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
   - Standard: `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
 - Commands planned (minimum):
   - `FEATURE_DIR="docs/project_management/_archived/world-first-repl-persistent-pty"; jq -e . "$FEATURE_DIR/tasks.json" >/dev/null`
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null`
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null`
   - `make planning-lint FEATURE_DIR="$FEATURE_DIR"`
 
 ## END — 2026-01-26T23:00:29Z — ops — execution preflight gate (F0-exec-preflight)
@@ -223,7 +223,7 @@
 - Report: `docs/project_management/_archived/world-first-repl-persistent-pty/execution_preflight_report.md`
 - Commands run (with exit codes):
   - `FEATURE_DIR="docs/project_management/_archived/world-first-repl-persistent-pty"; jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` → `0`
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0`
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → `0`
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/world-first-repl-persistent-pty"` → `0`
   - `make -n ci-compile-parity CI_WORKFLOW_REF="feat/world-first-repl-persistent-pty" CI_REMOTE=origin CI_CLEANUP=1` → `0`
   - `make -n feature-smoke FEATURE_DIR="docs/project_management/_archived/world-first-repl-persistent-pty" PLATFORM=behavior SMOKE_SLICE_ID="C0" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/world-first-repl-persistent-pty" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1` → `0`

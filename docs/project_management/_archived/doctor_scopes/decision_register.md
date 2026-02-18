@@ -118,21 +118,21 @@ Each decision entry follows the required template in:
 **Decision owner(s):** Substrate project maintainers  
 **Date:** 2026-01-08  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/sequencing.json`, `docs/project_management/_archived/doctor_scopes/tasks.json`, `docs/project_management/adrs/implemented/ADR-0007-host-and-world-doctor-scopes.md`
+**Related docs:** `docs/project_management/packs/sequencing.json`, `docs/project_management/_archived/doctor_scopes/tasks.json`, `docs/project_management/adrs/implemented/ADR-0007-host-and-world-doctor-scopes.md`
 
 **Problem / Context**
 - The planning pack declares an orchestration branch used by triad automation and CI dispatch commands; the branch name must match the sequencing entry and the integration workflow refs.
 
 **Option A — `feat/doctor_scopes`**
 - **Pros:** Matches the feature directory name; matches the default branch naming used by some planning tooling.
-- **Cons:** Conflicts with the sprint branch naming already recorded in `docs/project_management/next/sequencing.json`.
+- **Cons:** Conflicts with the sprint branch naming already recorded in `docs/project_management/packs/sequencing.json`.
 - **Cascading implications:** CI dispatch commands that use `CI_WORKFLOW_REF` drift from sequencing; operators lose a single authoritative branch name.
 - **Risks:** Mis-dispatching CI to the wrong ref or failing dispatch because the ref is missing.
 - **Unlocks:** Directory-aligned naming for tools that default to underscore-separated feature IDs.
 - **Quick wins / low-hanging fruit:** Minimal to type.
 
 **Option B — `feat/doctor-scopes`**
-- **Pros:** Matches `docs/project_management/next/sequencing.json` and ADR; aligns with existing hyphenated branch conventions; keeps CI dispatch refs consistent.
+- **Pros:** Matches `docs/project_management/packs/sequencing.json` and ADR; aligns with existing hyphenated branch conventions; keeps CI dispatch refs consistent.
 - **Cons:** Requires explicitly setting `meta.automation.orchestration_branch` in `tasks.json`.
 - **Cascading implications:** All CI dispatch commands use the same ref string; feature directory and sequencing remain aligned.
 - **Risks:** None beyond creating/pushing the branch before dispatch.

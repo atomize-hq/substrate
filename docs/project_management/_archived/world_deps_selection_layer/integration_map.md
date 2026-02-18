@@ -141,12 +141,12 @@ Composition:
 1) **Y0**: YAML settings migration (Y0-spec) must land before any WDL slices.
 2) **Hardening**: I2/I3 full cage must incorporate the world-deps prefix mount requirement before WDL2 is considered “full-cage compatible”.
 
-### Sequencing position in `docs/project_management/next/sequencing.json`
+### Sequencing position in `docs/project_management/packs/sequencing.json`
 This feature is executed as its own sprint (`id="world_deps_selection_layer"`) on its own orchestration branch (DR-0015):
 - Orchestration branch: `feat/world_deps_selection_layer`
 - It is sequenced before the `world-sync` sprint so later world-sync slices can rely on the WDL selection + install-class model being stable.
 
-Exact sequence entries (implemented in `docs/project_management/next/sequencing.json` for this sprint):
+Exact sequence entries (implemented in `docs/project_management/packs/sequencing.json` for this sprint):
 - `WDL0` → `S0-spec-selection-config-and-ux.md`
 - `WDL1` → `S1-spec-install-classes.md`
 - `WDL2` → `S2-spec-system-packages-provisioning.md`

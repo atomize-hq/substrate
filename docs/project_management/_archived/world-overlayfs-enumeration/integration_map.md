@@ -64,5 +64,5 @@ Outputs:
 
 ## Sequencing alignment
 
-- Sequencing entry: `docs/project_management/next/sequencing.json` → `world_overlayfs_enumeration` (`WO0`)
+- Sequencing entry: `docs/project_management/packs/sequencing.json` → `world_overlayfs_enumeration` (`WO0`)
 - This feature is sequenced before world-sync to avoid building new flows on an unreliable world filesystem contract.

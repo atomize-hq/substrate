@@ -4,10 +4,10 @@ set -euo pipefail
 usage() {
     cat <<'USAGE'
 Usage:
-  scripts/triad/task_start_integ_final.sh --feature-dir <path> --slice-id <slice> [options]
+  make triad-task-start-integ-final FEATURE_DIR=<path> SLICE_ID=<slice> [LAUNCH_CODEX=1] [CODEX_PROFILE=<p>] [CODEX_MODEL=<m>] [CODEX_JSONL=1] [DRY_RUN=1]
 
 Required:
-  --feature-dir <path>   Feature Planning Pack dir (docs/project_management/next/<feature> or equivalent)
+  --feature-dir <path>   Feature Planning Pack dir (docs/project_management/packs/active/<feature> or equivalent)
   --slice-id <slice>     Slice id (e.g., WCU0)
 
 Options:
@@ -32,9 +32,7 @@ Guardrails:
   - Refuses to start final integration unless all of its depends_on tasks are status=completed (for deterministic closure).
 
 Notes:
-  - Runs from the orchestration worktree (or repo root) and uses:
-    - `scripts/triad/orch_ensure.sh`
-    - `scripts/triad/task_start.sh`
+  - Runs from the orchestration worktree (or repo root) and uses `make triad-orch-ensure` and `make triad-task-start`.
 USAGE
 }
 

@@ -85,7 +85,7 @@ These are build-time/implementation pivots only. They MUST NOT be silently enabl
 - Drain implementation pivot: reorganize driver/handler event ordering, but preserve the single ordered stream and the DR-23 watermark barrier (`drain_design.md` §5).
 
 ## Sequencing alignment
-- This feature is registered in `docs/project_management/next/sequencing.json` under id `world_first_repl_persistent_pty`.
+- This feature is registered in `docs/project_management/packs/sequencing.json` under id `world_first_repl_persistent_pty`.
 - Slice dependencies:
   - `C1` depends on `C0`.
   - `C2` depends on `C1`.

@@ -10,7 +10,7 @@ Summary:
 Focus files:
 - `crates/shell/src/manager_init.rs`
 - `crates/shell/src/lib.rs`
-- `docs/project_management/next/kickoff_prompts/A2-test.md` (context on test scope)
+- `docs/project_management/_archived/next/kickoff_prompts/A2-test.md` (context on test scope)
 
 Commands to run:
 1. `cargo fmt --all`

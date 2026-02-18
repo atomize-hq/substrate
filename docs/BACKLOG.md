@@ -65,7 +65,7 @@ Keep concise, actionable, and security-focused.
   - Acceptance: parity with `policy global show` UX; message is shown only when a workspace override applies; docs/help updated if needed.
 
 - **P1 – World-sync continuation (internal git v2: per-command history + compaction)**
-  - Context: `docs/project_management/next/world-sync/` implements host-only `workspace checkpoint`/`workspace rollback` via `.substrate/git/repo.git/` and explicitly does not implement the richer internal history described in `docs/project_management/future/INTERNAL_GIT.md`.
+  - Context: `docs/project_management/packs/active/world-sync/` implements host-only `workspace checkpoint`/`workspace rollback` via `.substrate/git/repo.git/` and explicitly does not implement the richer internal history described in `docs/project_management/future/INTERNAL_GIT.md`.
   - Work:
     - Record per-command internal git commits for filesystem-mutating commands and persist a mapping (trace span / command id ↔ internal git commit) for review/debug.
     - Add session/checkpoint tagging semantics and user-facing UX for undo/rollback at multiple resolutions (command / checkpoint / session).
@@ -186,7 +186,7 @@ Keep concise, actionable, and security-focused.
     - Shell auto-selects TCP only when UDS is unavailable and the bridge is active, matching macOS/Windows behavior.
 
 - **P1.5 - JSON Mode Plan**
-  -  Plan: '/home/spenser/__Active_code/substrate/docs/project_management/next/json-mode/json_mode_plan.md'
+  - Plan: `docs/project_management/future/json-mode/json_mode_plan.md`
 
 - **P2 – World deps install UX cleanup**
   - `substrate world deps current install` only works for items defined in the world-deps inventory (built-ins plus `$SUBSTRATE_HOME/deps/` and `<workspace_root>/.substrate/deps/`). Users who try to install language-level packages (pip/npm) or tools missing from the inventory get confusing errors, especially on dev installs where `$HOME` is read-only inside the world.

@@ -25,7 +25,7 @@ Slice spec:
   - World probe parsing is resilient: if bulk probe stdout lacks per-item markers, it falls back to per-check exit-code probes.
   - `current list applied` expands enabled bundles to include their packages; `current show --explain` always includes an actionable hint.
 - Why:
-  - Align WDP5 slice behavior to `docs/project_management/next/world_deps_packages_bundles_contract.md` and unblock deterministic dependency application.
+  - Align WDP5 slice behavior to `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md` and unblock deterministic dependency application.
 - Links:
   - Integration core HEAD: `bd4429b3a2554ab5247024b4a58829e0975cb6e3`
   - Final slice merge HEAD: `3fac2e4c02ae7e8b8e14ebcd084e15e448ed9a9e`

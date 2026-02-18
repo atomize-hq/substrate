@@ -117,27 +117,13 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
   - Conflict: no (dependent; Phase 8 additive).
   - Resolution (explicit): router ADR must treat `workflow.router.*` as policy-owned gates and remain fail-closed by default.
 
-### Relevant Planning Packs (queued/unimplemented)
-- Planning Pack: `docs/project_management/next/llm_gateway_in_world/`
-  - Overlap surfaces: `llm.*` enable/routing keys; secret allowlist keys.
-  - Conflict: potential if gateway plans introduce new operator-facing key roots or duplicate policy gates.
-  - Resolution (explicit): use ADR-0027 keys only; record any additional required keys as additive ADR-0027 updates (Decision Register A/B) rather than local one-offs.
-- Planning Pack: `docs/project_management/next/llm_cli_backend_engine/`
-  - Overlap surfaces: backend id format; agent inventory schema; host credential read gate.
-  - Conflict: potential if engine plans introduce backend-specific key families in config/policy.
-  - Resolution (explicit): backend-specific configuration lives in inventory files; global/workspace config/policy remains shape-stable per ADR-0027.
-- Planning Pack: `docs/project_management/next/agent_hub_core/`
-  - Overlap surfaces: agent inventory discovery and overlay semantics.
-  - Conflict: no (dependent).
-  - Resolution (explicit): agent hub consumes inventory and overlay rules; it must not redefine overlay composition semantics.
-- Planning Pack: `docs/project_management/next/host_event_bus_router_daemon/`
-  - Overlap surfaces: router policy gates and allowlists.
-  - Conflict: no (dependent).
-  - Resolution (explicit): router planning owns runtime behavior but policy gate surfaces remain defined here.
-- Planning Pack: `docs/project_management/next/workflow-engine/`
-  - Overlap surfaces: workflow ids and cross-workspace safety model.
-  - Conflict: no (dependent).
-  - Resolution (explicit): workflow work must align ids/allowlists with `workflow.router.*` gating keys and must not create competing enablement keys.
+### Related Phase 8 tracks (cross-cutting; use ADRs/registry)
+- Phase 8 registry (cross-cutting lock): `docs/project_management/packs/PHASE_8_CROSS_CUTTING_DECISION_REGISTRY.md`
+- LLM gateway: `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md`
+- CLI backend engine: `docs/project_management/adrs/draft/ADR-0024-cli-backend-provider-engine.md`
+- Agent hub core: `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`
+- Router daemon: `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md`
+- Workflow engine: `docs/project_management/adrs/draft/ADR-0021-substrate-workflow-engine.md`
 
 ## Follow-ups (explicit)
 

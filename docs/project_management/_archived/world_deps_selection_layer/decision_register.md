@@ -11,8 +11,8 @@ Related docs (authoritative inputs):
 - `docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
 - `docs/project_management/_archived/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md` (D1/D2)
 - `docs/project_management/_archived/yaml-settings-migration/Y0-spec.md`
-- `docs/project_management/next/world-sync/C0-spec.md` (workspace init/gating)
-- `docs/project_management/next/world-sync/C2-spec.md` (filters/protected paths patterns)
+- `docs/project_management/_archived/next/world-sync/C0-spec.md` (workspace init/gating)
+- `docs/project_management/_archived/next/world-sync/C2-spec.md` (filters/protected paths patterns)
 
 Specs (this triad):
 - `docs/project_management/_archived/world_deps_selection_layer/S0-spec-selection-config-and-ux.md`
@@ -770,11 +770,11 @@ Specs (this triad):
 **Decision owner(s):** Project management / maintainers  
 **Date:** 2026-01-10  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/sequencing.json`, `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+**Related docs:** `docs/project_management/packs/sequencing.json`, `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 **Problem / Context**
 - This Planning Pack must be mechanically compatible with triad automation (worktrees + task finisher) and must not interleave unrelated feature work on the same orchestration branch.
-- `docs/project_management/next/sequencing.json` lists `world_deps_selection_layer` as a distinct sprint; branch naming must reflect that separation.
+- `docs/project_management/packs/sequencing.json` lists `world_deps_selection_layer` as a distinct sprint; branch naming must reflect that separation.
 
 **Option A — Share an orchestration branch with `world-sync` (`feat/world-sync`)**
 - **Pros:**
@@ -800,7 +800,7 @@ Specs (this triad):
 - **Cons:**
   - One additional long-lived branch while the feature is executed.
 - **Cascading implications:**
-  - Sequencing/dependencies remain explicit via `docs/project_management/next/sequencing.json` and `tasks.json` external task ids.
+  - Sequencing/dependencies remain explicit via `docs/project_management/packs/sequencing.json` and `tasks.json` external task ids.
 - **Risks:**
   - Minimal.
 - **Unlocks:**
@@ -813,7 +813,7 @@ Specs (this triad):
 - **Rationale (crisp):** It preserves a single, unambiguous execution spine for WDL triads and aligns mechanically with automation/worktree execution.
 
 **Follow-up tasks (explicit)**
-- Update `docs/project_management/next/sequencing.json` sprint entry `world_deps_selection_layer.branch` to `feat/world_deps_selection_layer`.
+- Update `docs/project_management/packs/sequencing.json` sprint entry `world_deps_selection_layer.branch` to `feat/world_deps_selection_layer`.
 - Set `tasks.json` meta automation `orchestration_branch` to `feat/world_deps_selection_layer` and ensure all smoke dispatch commands use `WORKFLOW_REF="feat/world_deps_selection_layer"`.
 
 ---

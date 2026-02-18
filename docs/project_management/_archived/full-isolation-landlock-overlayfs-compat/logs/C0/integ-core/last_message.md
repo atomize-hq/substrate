@@ -1,5 +1,5 @@
 **What I did**
-- Verified worktree/branch and `.taskmeta.json`; did not edit any planning docs under `docs/project_management/next/`.
+- Verified worktree/branch and `.taskmeta.json`; did not edit any planning docs under `docs/project_management/_archived/next/`.
 - Local gates green: `cargo fmt --all`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test` (via `make integ-checks`), `make integ-checks`.
 - Fixed CI compile-parity failure (non-Linux clippy) with `2883f19d` (`fix(world): appease clippy on non-linux`).
 - Ran `make triad-task-finish TASK_ID="C0-integ-core"` successfully.

@@ -11,7 +11,7 @@
 
 ## Behavior (authoritative)
 All behavior for commands in scope is defined by the contract doc:
-- `docs/project_management/next/world_deps_packages_bundles_contract.md`
+- `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
 
 Constraints enforced in this slice:
 - `--dry-run` produces no side effects.

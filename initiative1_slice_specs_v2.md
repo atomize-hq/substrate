@@ -17,7 +17,7 @@ Key changes:
 3. **Traceability contract**:
    - Slice specs contain AC IDs.
    - `tasks.json` tasks for that slice reference those AC IDs (either directly or by “covers all AC-*”).
-4. **Validator**: `scripts/planning/validate_slice_specs.py` runs in planning lint and blocks incomplete/oversized slice specs.
+4. **Validator**: `docs/project_management/system/scripts/planning/validate_slice_specs.py` runs in planning lint and blocks incomplete/oversized slice specs.
 5. **Checkpoint boundary sizing update** (because slices become smaller): update default `min/max triads per checkpoint` from **2–4** to **4–8** (details below). This is baked into templates + standards.
 
 ---
@@ -169,8 +169,8 @@ Notes:
 ### 4.2 Update planning feature scaffolding to use the template
 
 **Modify:**
-- `scripts/planning/new_feature.sh`
-- `scripts/planning/new_feature.ps1`
+- `docs/project_management/system/scripts/planning/new_feature.sh`
+- `docs/project_management/system/scripts/planning/new_feature.ps1`
 
 Change:
 - Replace the hardcoded heredoc that writes `<SLICE_ID>-spec.md` with a `render` call to the new template.
@@ -199,10 +199,10 @@ PowerShell (`new_feature.ps1`):
 ### 4.3 Add a slice spec validator
 
 **Add file:**
-- `scripts/planning/validate_slice_specs.py`
+- `docs/project_management/system/scripts/planning/validate_slice_specs.py`
 
 #### 4.3.1 Validator inputs
-- `--feature-dir <path>`: the Planning Pack directory (currently `docs/project_management/next/<feature>`; later Initiative 3 changes the root, but this validator must be path-agnostic).
+- `--feature-dir <path>`: the Planning Pack directory (currently `docs/project_management/_archived/next/<feature>`; later Initiative 3 changes the root, but this validator must be path-agnostic).
 
 #### 4.3.2 Validator discovery rules (compatible with current + future layouts)
 The validator MUST find slice specs in either of these ways:
@@ -275,14 +275,14 @@ Add an optional property to task items:
 ### 4.5 Add validator to planning lint
 
 **Modify:**
-- `scripts/planning/lint.sh`
-- `scripts/planning/lint.ps1`
+- `docs/project_management/system/scripts/planning/lint.sh`
+- `docs/project_management/system/scripts/planning/lint.ps1`
 
 Add a new step after `validate_spec_manifest.py` (ordering suggestion):
 
 ```bash
 echo "-- slice spec invariants"
-python3 scripts/planning/validate_slice_specs.py --feature-dir "${FEATURE_DIR}"
+python3 docs/project_management/system/scripts/planning/validate_slice_specs.py --feature-dir "${FEATURE_DIR}"
 ```
 
 PowerShell equivalent.
@@ -303,7 +303,7 @@ PowerShell equivalent.
   - Add a short rationale: “Slice Specs v2 reduces slice size, so checkpoint grouping expands.”
 
 No changes are required in:
-- `scripts/planning/validate_ci_checkpoint_plan.py`  
+- `docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py`  
 Because it reads the defaults from the file and enforces them.
 
 ---
@@ -338,10 +338,10 @@ Choose one of these strategies:
 ## 6. Test plan (how to verify implementation)
 
 ### 6.1 Local checks (must pass)
-For a sample feature dir (e.g., `docs/project_management/next/world-sync`):
+For a sample feature dir (e.g., `docs/project_management/_archived/next/world-sync`):
 
 - Run:
-  - `scripts/planning/lint.sh --feature-dir <feature_dir>`
+  - `docs/project_management/system/scripts/planning/lint.sh --feature-dir <feature_dir>`
 - Confirm failures until:
   - slice specs updated with AC IDs,
   - `ac_ids` added (if implementing Option A),
@@ -361,8 +361,8 @@ Validator must fail with actionable messages.
 
 ## 7. Acceptance criteria for this initiative
 
-- New features created via `scripts/planning/new_feature.*` include a v2 slice spec scaffold (no “None yet” placeholders).
-- `scripts/planning/validate_slice_specs.py` exists, is strict, and is invoked by planning lint.
+- New features created via `docs/project_management/system/scripts/planning/new_feature.*` include a v2 slice spec scaffold (no “None yet” placeholders).
+- `docs/project_management/system/scripts/planning/validate_slice_specs.py` exists, is strict, and is invoked by planning lint.
 - Slice specs must have AC IDs and ≤ 8 AC items, otherwise lint fails.
 - `ci_checkpoint_plan.md.tmpl` defaults updated to **4–8** and `PLANNING_CI_CHECKPOINT_STANDARD.md` reflects it.
 - At least one existing Planning Pack is migrated end-to-end as a proof point.

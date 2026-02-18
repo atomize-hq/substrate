@@ -5,7 +5,7 @@ usage() {
     cat <<'USAGE'
 Usage:
   scripts/ci/dispatch_feature_smoke.sh \
-    --feature-dir docs/project_management/next/<feature> \
+    --feature-dir docs/project_management/packs/active/<feature> \
     [--runner-kind github-hosted|self-hosted] \
     [--macos-runner-kind github-hosted|self-hosted] \
     --platform behavior|linux|macos|windows|wsl|all \

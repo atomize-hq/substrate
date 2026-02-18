@@ -74,7 +74,7 @@ The output is a recommendation: **SKIP** or **RUN**, plus a reasoned breakdown.
 Proposed command (example):
 ```bash
 scripts/ci-audit/ci_audit.sh \
-  --feature-dir docs/project_management/next/<feature> \
+  --feature-dir docs/project_management/_archived/next/<feature> \
   --orch-branch feat/<feature> \
   --kind feature-smoke \
   --head-sha "$(git rev-parse HEAD)"

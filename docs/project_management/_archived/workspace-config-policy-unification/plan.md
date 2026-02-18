@@ -43,7 +43,7 @@ Phase A/B from ADR-0012 must be completed in this body of work (not deferred):
 - Phase A: per-key merge strategies + multi-source provenance
 - Phase B: config editor supports `world.deps.enabled` (list merge key)
 
-Additionally, this pack MUST align to `docs/project_management/next/world_deps_packages_bundles_contract.md` for these world-deps config keys (schema allowlisting + editor set/reset + deterministic `--explain` provenance):
+Additionally, this pack MUST align to `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md` for these world-deps config keys (schema allowlisting + editor set/reset + deterministic `--explain` provenance):
 - `world.deps.inventory_mode` (`merged|workspace_only`, `merge_strategy=replace`)
 - `world.deps.builtins` (`enabled|disabled`, `merge_strategy=replace`)
 
@@ -52,7 +52,7 @@ See:
 
 ## Triad slices (high-level)
 This plan follows the sequencing spine entry:
-- `docs/project_management/next/sequencing.json` → `workspace_config_policy_unification`
+- `docs/project_management/packs/sequencing.json` → `workspace_config_policy_unification`
 
 Slices:
 - WCU1: Workspace directory + internal git unification

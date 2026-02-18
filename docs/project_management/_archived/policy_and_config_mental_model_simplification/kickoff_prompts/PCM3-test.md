@@ -9,8 +9,8 @@
 Do not edit planning docs inside the worktree.
 
 1. `git checkout feat/policy_and_config && git pull --ff-only`
-2. Read: `docs/project_management/next/policy_and_config_mental_model_simplification/plan.md`, `docs/project_management/next/policy_and_config_mental_model_simplification/tasks.json`, `docs/project_management/next/policy_and_config_mental_model_simplification/session_log.md`, `docs/project_management/next/policy_and_config_mental_model_simplification/PCM3-spec.md`, and this prompt.
-3. Set `PCM3-test` status to `in_progress` in `docs/project_management/next/policy_and_config_mental_model_simplification/tasks.json`; add a START entry to `docs/project_management/next/policy_and_config_mental_model_simplification/session_log.md`; commit docs (`docs: start PCM3-test`).
+2. Read: `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/plan.md`, `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/tasks.json`, `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/session_log.md`, `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM3-spec.md`, and this prompt.
+3. Set `PCM3-test` status to `in_progress` in `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/tasks.json`; add a START entry to `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/session_log.md`; commit docs (`docs: start PCM3-test`).
 4. Create branch and worktree:
    - `git checkout -b pcm-pcm3-env-test`
    - `git worktree add wt/pcm3-env-test pcm-pcm3-env-test`
@@ -31,5 +31,5 @@ Do not edit planning docs inside the worktree.
 1. Run required commands; capture outputs for the END entry.
 2. Commit worktree changes.
 3. Merge back to `feat/policy_and_config` (ff-only).
-4. Update `docs/project_management/next/policy_and_config_mental_model_simplification/tasks.json` + `docs/project_management/next/policy_and_config_mental_model_simplification/session_log.md` (END entry), commit docs (`docs: finish PCM3-test`).
+4. Update `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/tasks.json` + `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/session_log.md` (END entry), commit docs (`docs: finish PCM3-test`).
 5. Remove worktree.

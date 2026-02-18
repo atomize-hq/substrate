@@ -15,7 +15,7 @@ Purpose:
     - optionally run feature cleanup (remove retained worktrees/prune branches)
 
 Required:
-  --feature-dir <path>         Feature Planning Pack dir (docs/project_management/packs/active/<feature>; legacy: docs/project_management/next/<feature>)
+  --feature-dir <path>         Feature Planning Pack dir (docs/project_management/packs/active/<feature>)
 
 Options:
   --remote <name>              Git remote for CI temp branches and push (default: origin)

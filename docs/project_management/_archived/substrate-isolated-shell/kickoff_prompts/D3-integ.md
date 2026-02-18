@@ -5,7 +5,7 @@ Task ID: **D3-integ** (Integrate world env toggle audit)
 Summary / current state:
 - D3-code added the shared host-only helper (`scripts/dev/substrate_shell_driver`) plus the Rust-side `substrate_shell_driver()` fixture (crates/shell/tests/common.rs). All shell integration suites (`integration.rs`, `world_enable.rs`, `world_deps.rs`, `shim_doctor.rs`, `shim_health.rs`) now call the helper and rely on the shared TMPDIR wiring.
 - Host-only scripts now invoke the helper or explicitly export `SUBSTRATE_WORLD=disabled`/`SUBSTRATE_WORLD_ENABLED=0`: `scripts/validate_phase_d.sh`, `scripts/podman/log_rotation_sanity.sh`, `scripts/substrate/dev-shim-bootstrap.sh`, `scripts/substrate/dev-uninstall-substrate.sh`, and `scripts/windows/dev-uninstall-substrate.ps1`. Python REPL harnesses continue to pass `--no-world` directly.
-- Docs updated (`docs/CONFIGURATION.md`, `docs/project_management/next/substrate_isolated_shell_data_map.md`) with guidance to call the helper; D3-test validated the helper workflow and the required commands listed below.
+- Docs updated (`docs/CONFIGURATION.md`, `docs/project_management/_archived/next/substrate_isolated_shell_data_map.md`) with guidance to call the helper; D3-test validated the helper workflow and the required commands listed below.
 
 What you need to do:
 1. From `feat/isolated-shell-plan`, create/switch to the integration worktree (`wt/d3-world-audit-integ`). Merge the code (`wt/d3-world-audit-code`) and test (`wt/d3-world-audit-test`) changes, resolving any conflicts in the files above plus planning docs.

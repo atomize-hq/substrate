@@ -14,7 +14,7 @@ builds the dedicated `substrate config` subcommand family so operators can:
   `--json`).
 - Update any key dynamically with `substrate config set key=value [...]`.
 
-The workflow mirrors `docs/project_management/next/refactor` to keep agents in
+The workflow mirrors `docs/project_management/_archived/next/refactor` to keep agents in
 lock-step on `feat/config-subcommand`.
 
 ## Goals

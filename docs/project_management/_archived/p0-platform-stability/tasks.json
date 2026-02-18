@@ -8,7 +8,7 @@
       "status": "completed",
       "description": "Teach world-agent to consume LISTEN_FDS sockets, emit telemetry about inherited listeners, and preserve the direct-bind fallback path.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "docs/BACKLOG.md",
         "crates/world-agent",
         "crates/world-linux",
@@ -42,7 +42,7 @@
       ],
       "worktree": "wt/ps-s1a-agent-code",
       "integration_task": "S1a-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1a-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/S1a-code.md"
     },
     {
       "id": "S1a-test",
@@ -52,7 +52,7 @@
       "status": "completed",
       "description": "Add unit/integration tests that simulate LISTEN_FDS activation, verify telemetry, and guard the direct-bind fallback.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "docs/BACKLOG.md",
         "crates/world-agent",
         "crates/world/tests"
@@ -83,7 +83,7 @@
       ],
       "worktree": "wt/ps-s1a-agent-test",
       "integration_task": "S1a-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1a-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/S1a-test.md"
     },
     {
       "id": "S1a-integ",
@@ -93,7 +93,7 @@
       "status": "completed",
       "description": "Merge the S1a code/test branches, re-run fmt/lint/tests, and update docs/logs before unlocking shell work.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "crates/world-agent"
       ],
       "acceptance_criteria": [
@@ -122,7 +122,7 @@
       "concurrent_with": [],
       "worktree": "wt/ps-s1a-agent-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1a-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/S1a-integ.md"
     },
     {
       "id": "S1b-code",
@@ -132,7 +132,7 @@
       "status": "completed",
       "description": "Update shell/world orchestration (ensure_world_agent_ready, world_enable, shim status) to tolerate pre-bound sockets and emit socket-activation telemetry.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "crates/shell/src/world/ensure_world_agent_ready.rs",
         "crates/shell/src/world",
         "crates/shell/src/builtins",
@@ -166,7 +166,7 @@
       ],
       "worktree": "wt/ps-s1b-shell-code",
       "integration_task": "S1b-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1b-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/S1b-code.md"
     },
     {
       "id": "S1b-test",
@@ -176,7 +176,7 @@
       "status": "completed",
       "description": "Extend shell/world doctor tests to cover socket-activated readiness, telemetry output, and shim status flows.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "crates/shell/tests",
         "crates/world/tests",
         "docs/WORLD.md"
@@ -209,7 +209,7 @@
       ],
       "worktree": "wt/ps-s1b-shell-test",
       "integration_task": "S1b-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1b-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/S1b-test.md"
     },
     {
       "id": "S1b-integ",
@@ -219,7 +219,7 @@
       "status": "completed",
       "description": "Merge S1b code/test worktrees, re-run fmt/lint/tests, and update docs/logs before provisioning changes begin.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "crates/shell"
       ],
       "acceptance_criteria": [
@@ -248,7 +248,7 @@
       "concurrent_with": [],
       "worktree": "wt/ps-s1b-shell-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1b-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/S1b-integ.md"
     },
     {
       "id": "S1c-code",
@@ -258,7 +258,7 @@
       "status": "completed",
       "description": "Update Linux/Lima/WSL provisioning + uninstall scripts and documentation to deploy/manage .service + .socket units.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "scripts/linux/world-provision.sh",
         "scripts/mac/lima-warm.sh",
         "scripts/windows/wsl-warm.ps1",
@@ -294,7 +294,7 @@
       ],
       "worktree": "wt/ps-s1c-provision-code",
       "integration_task": "S1c-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1c-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/S1c-code.md"
     },
     {
       "id": "S1c-test",
@@ -304,7 +304,7 @@
       "status": "completed",
       "description": "Author harness coverage/dry-run verification for Linux/Lima/WSL installers/uninstallers plus world doctor scripts under socket activation.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "scripts/linux",
         "scripts/mac",
         "scripts/windows",
@@ -338,7 +338,7 @@
       ],
       "worktree": "wt/ps-s1c-provision-test",
       "integration_task": "S1c-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1c-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/S1c-test.md"
     },
     {
       "id": "S1c-integ",
@@ -348,7 +348,7 @@
       "status": "completed",
       "description": "Merge S1c code/test branches, verify fmt/lint/tests, and close out the socket activation program before replay work proceeds.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "scripts/linux",
         "scripts/mac",
         "scripts/windows",
@@ -380,7 +380,7 @@
       "concurrent_with": [],
       "worktree": "wt/ps-s1c-provision-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1c-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/S1c-integ.md"
     },
     {
       "id": "S1c-windows-dry-run",
@@ -393,7 +393,7 @@
         "scripts/windows/wsl-warm.ps1",
         "docs/cross-platform/wsl_world_setup.md",
         "docs/INSTALLATION.md#windows",
-        "docs/project_management/next/p0-platform-stability/session_log.md"
+        "docs/project_management/_archived/next/p0-platform-stability/session_log.md"
       ],
       "acceptance_criteria": [
         "Command is executed from the repo root using PowerShell 7 (pwsh) on Windows.",
@@ -419,7 +419,7 @@
       "concurrent_with": [],
       "worktree": null,
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1c-windows-dry-run.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/S1c-windows-dry-run.md"
     },
     {
       "id": "R1a-code",
@@ -429,7 +429,7 @@
       "status": "completed",
       "description": "Implement nft cgroup fallback, cleanup tooling for leftover netns/rules, and tie diagnostics into replay logs/docs.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "docs/BACKLOG.md",
         "crates/world-linux",
         "crates/replay",
@@ -465,7 +465,7 @@
       ],
       "worktree": "wt/ps-r1a-isolation-code",
       "integration_task": "R1a-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R1a-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R1a-code.md"
     },
     {
       "id": "R1a-test",
@@ -475,7 +475,7 @@
       "status": "completed",
       "description": "Add replay/world tests covering nft cgroup fallback paths, cleanup diagnostics, and regression coverage for existing isolation behavior.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "crates/replay/tests",
         "crates/shell/tests",
         "docs/REPLAY.md"
@@ -508,7 +508,7 @@
       ],
       "worktree": "wt/ps-r1a-isolation-test",
       "integration_task": "R1a-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R1a-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R1a-test.md"
     },
     {
       "id": "R1a-integ",
@@ -518,7 +518,7 @@
       "status": "completed",
       "description": "Merge R1a code/test branches, re-run fmt/lint/tests, and document readiness for verbose scope work.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "crates/replay",
         "docs/REPLAY.md"
       ],
@@ -548,7 +548,7 @@
       "concurrent_with": [],
       "worktree": "wt/ps-r1a-isolation-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R1a-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R1a-integ.md"
     },
     {
       "id": "R1b-code",
@@ -558,7 +558,7 @@
       "status": "completed",
       "description": "Implement the `scopes: [...]` verbose output, differentiate shell vs replay warnings, and update docs/help text.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "crates/replay",
         "crates/shell/src/execution/replay.rs",
         "docs/REPLAY.md",
@@ -592,7 +592,7 @@
       ],
       "worktree": "wt/ps-r1b-verbosity-code",
       "integration_task": "R1b-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R1b-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R1b-code.md"
     },
     {
       "id": "R1b-test",
@@ -602,7 +602,7 @@
       "status": "completed",
       "description": "Add replay CLI tests verifying verbose scope output, absence when flag disabled, and warning prefixes for shell vs replay contexts.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "crates/replay/tests",
         "crates/shell/tests",
         "docs/TRACE.md"
@@ -635,7 +635,7 @@
       ],
       "worktree": "wt/ps-r1b-verbosity-test",
       "integration_task": "R1b-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R1b-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R1b-test.md"
     },
     {
       "id": "R1b-integ",
@@ -645,7 +645,7 @@
       "status": "completed",
       "description": "Merge R1b code/test branches, rerun fmt/lint/tests, and prepare for the replay coverage phase.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "crates/replay",
         "docs/REPLAY.md",
         "docs/TRACE.md"
@@ -676,7 +676,7 @@
       "concurrent_with": [],
       "worktree": "wt/ps-r1b-verbosity-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R1b-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R1b-integ.md"
     },
     {
       "id": "R1c-code",
@@ -686,7 +686,7 @@
       "status": "completed",
       "description": "Add CLI/config plumbing to expose default world-on, `--no-world`, and env opt-out toggles to the test harness plus docs about their interactions.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "crates/shell/src/execution/replay.rs",
         "crates/shell/src/execution/settings.rs",
         "docs/REPLAY.md",
@@ -720,7 +720,7 @@
       ],
       "worktree": "wt/ps-r1c-coverage-code",
       "integration_task": "R1c-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R1c-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R1c-code.md"
     },
     {
       "id": "R1c-test",
@@ -730,7 +730,7 @@
       "status": "completed",
       "description": "Expand integration suites covering default world-on, `--no-world`, and env opt-out toggles plus verbose scope output expectations.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "crates/replay/tests",
         "crates/shell/tests",
         "docs/REPLAY.md"
@@ -763,7 +763,7 @@
       ],
       "worktree": "wt/ps-r1c-coverage-test",
       "integration_task": "R1c-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R1c-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R1c-test.md"
     },
     {
       "id": "R1c-integ",
@@ -773,7 +773,7 @@
       "status": "completed",
       "description": "Merge R1c code/test branches, re-run fmt/lint/tests, and document readiness for the health manager fixes.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "crates/replay",
         "crates/shell",
         "docs/REPLAY.md"
@@ -804,7 +804,7 @@
       "concurrent_with": [],
       "worktree": "wt/ps-r1c-coverage-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R1c-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R1c-integ.md"
     },
     {
       "id": "H1a-code",
@@ -814,7 +814,7 @@
       "status": "completed",
       "description": "Refine manager detection data structures and health aggregator logic so only host-present/world-missing managers trigger attention, with structured telemetry output.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "docs/BACKLOG.md",
         "crates/shell/src/builtins/health.rs",
         "crates/shell/src/manager_detection.rs",
@@ -848,7 +848,7 @@
       ],
       "worktree": "wt/ps-h1a-health-code",
       "integration_task": "H1a-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/H1a-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/H1a-code.md"
     },
     {
       "id": "H1a-test",
@@ -858,7 +858,7 @@
       "status": "completed",
       "description": "Add targeted tests for the refined health aggregator covering host/world presence combinations and telemetry serialization.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "crates/shell/tests",
         "docs/CONFIGURATION.md"
       ],
@@ -889,7 +889,7 @@
       ],
       "worktree": "wt/ps-h1a-health-test",
       "integration_task": "H1a-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/H1a-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/H1a-test.md"
     },
     {
       "id": "H1a-integ",
@@ -899,7 +899,7 @@
       "status": "completed",
       "description": "Merge H1a code/test branches, rerun fmt/lint/tests, and prep for the CLI/doc UX phase.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "crates/shell"
       ],
       "acceptance_criteria": [
@@ -928,7 +928,7 @@
       "concurrent_with": [],
       "worktree": "wt/ps-h1a-health-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/H1a-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/H1a-integ.md"
     },
     {
       "id": "H1b-code",
@@ -938,7 +938,7 @@
       "status": "completed",
       "description": "Polish CLI/JSON output, doctor summaries, and documentation so the refined manager logic is visible and actionable across platforms.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "docs/USAGE.md",
         "docs/CONFIGURATION.md",
         "crates/shell/src/builtins/health.rs"
@@ -971,7 +971,7 @@
       ],
       "worktree": "wt/ps-h1b-healthux-code",
       "integration_task": "H1b-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/H1b-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/H1b-code.md"
     },
     {
       "id": "H1b-test",
@@ -981,7 +981,7 @@
       "status": "completed",
       "description": "Add CLI/integration tests ensuring doctor + health commands emit the refined messages in both text and JSON modes across mocked manager scenarios.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "crates/shell/tests",
         "docs/USAGE.md"
       ],
@@ -1012,7 +1012,7 @@
       ],
       "worktree": "wt/ps-h1b-healthux-test",
       "integration_task": "H1b-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/H1b-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/H1b-test.md"
     },
     {
       "id": "H1b-integ",
@@ -1022,7 +1022,7 @@
       "status": "completed",
       "description": "Merge H1b code/test branches, re-run fmt/lint/tests, and close the P0 program with updated docs/logs/tasks.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "crates/shell",
         "docs/USAGE.md",
         "docs/CONFIGURATION.md"
@@ -1053,7 +1053,7 @@
       "concurrent_with": [],
       "worktree": "wt/ps-h1b-healthux-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/H1b-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/H1b-integ.md"
     },
     {
       "id": "S1d-code",
@@ -1063,7 +1063,7 @@
       "status": "completed",
       "description": "Update dev/prod installer scripts plus docs so socket-activated installs consistently provision the substrate group, apply lingering guidance, and reload the systemd units before prompting operators.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "scripts/substrate/dev-install-substrate.sh",
         "scripts/substrate/dev-uninstall-substrate.sh",
         "scripts/substrate/install-substrate.sh",
@@ -1102,7 +1102,7 @@
       ],
       "worktree": "wt/ps-s1d-devinstall-code",
       "integration_task": "S1d-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1d-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/S1d-code.md"
     },
     {
       "id": "S1d-test",
@@ -1112,7 +1112,7 @@
       "status": "completed",
       "description": "Extend the installer smoke harness with dev/prod scenarios that verify socket activation parity, record lingering guidance, and gracefully skip when systemd prerequisites are missing.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "tests/installers/install_smoke.sh",
         "scripts/substrate/dev-install-substrate.sh",
         "scripts/substrate/install-substrate.sh",
@@ -1147,7 +1147,7 @@
       ],
       "worktree": "wt/ps-s1d-devinstall-test",
       "integration_task": "S1d-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1d-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/S1d-test.md"
     },
     {
       "id": "S1d-integ",
@@ -1157,7 +1157,7 @@
       "status": "completed",
       "description": "Merge the S1d installer code/test work, re-run fmt/shellcheck plus both installer smoke scenarios, and document the group creation + lingering guidance for dev/prod installers before fast-forwarding feat/p0-platform-stability-follow-up.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "scripts/substrate/dev-install-substrate.sh",
         "scripts/substrate/install-substrate.sh",
         "scripts/substrate/dev-uninstall-substrate.sh",
@@ -1193,7 +1193,7 @@
       "concurrent_with": [],
       "worktree": "wt/ps-s1d-devinstall-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1d-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/S1d-integ.md"
     },
     {
       "id": "S1e-code",
@@ -1203,7 +1203,7 @@
       "status": "completed",
       "description": "Persist install-time host tweaks (substrate group membership, loginctl lingering, future interactive choices) and add opt-in uninstall cleanup so Substrate can restore the host to its prior state.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "scripts/substrate/install-substrate.sh",
         "scripts/substrate/dev-install-substrate.sh",
         "scripts/substrate/uninstall-substrate.sh",
@@ -1239,7 +1239,7 @@
       "concurrent_with": [],
       "worktree": "wt/ps-s1e-installer-code",
       "integration_task": "S1e-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1e-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/S1e-code.md"
     },
     {
       "id": "S1e-test",
@@ -1249,7 +1249,7 @@
       "status": "completed",
       "description": "Add installer harness coverage to validate the metadata schema, cleanup flag behavior, and edge cases (missing/corrupt files, multi-user entries) introduced in S1e-code.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "scripts/substrate/install-substrate.sh",
         "scripts/substrate/dev-install-substrate.sh",
         "scripts/substrate/uninstall-substrate.sh",
@@ -1282,7 +1282,7 @@
       "concurrent_with": [],
       "worktree": "wt/ps-s1e-installer-test",
       "integration_task": "S1e-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1e-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/S1e-test.md"
     },
     {
       "id": "S1e-integ",
@@ -1292,7 +1292,7 @@
       "status": "completed",
       "description": "Merge the S1e code/test branches, re-run fmt/shellcheck/tests, and land the installer metadata feature on feat/p0-platform-stability-follow-up with updated docs/logs.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "scripts/substrate",
         "docs/INSTALLATION.md",
         "docs/WORLD.md"
@@ -1322,7 +1322,7 @@
       "concurrent_with": [],
       "worktree": "wt/ps-s1e-installer-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1e-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/S1e-integ.md"
     },
     {
       "id": "R2a-code",
@@ -1332,7 +1332,7 @@
       "status": "completed",
       "description": "Add an agent-backed replay path with defaults/flags so replay prefers the world-agent when healthy.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "crates/replay",
         "crates/shell",
         "crates/world-agent",
@@ -1367,7 +1367,7 @@
       ],
       "worktree": "wt/ps-r2a-replay-agent-code",
       "integration_task": "R2a-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2a-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R2a-code.md"
     },
     {
       "id": "R2a-test",
@@ -1377,7 +1377,7 @@
       "status": "completed",
       "description": "Add tests covering agent-backed replay toggles, caging propagation, and host-only mode.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "crates/replay",
         "crates/shell/tests",
         "docs/TRACE.md"
@@ -1410,7 +1410,7 @@
       ],
       "worktree": "wt/ps-r2a-replay-agent-test",
       "integration_task": "R2a-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2a-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R2a-test.md"
     },
     {
       "id": "R2a-integ",
@@ -1420,7 +1420,7 @@
       "status": "completed",
       "description": "Merge the R2a code/test branches, rerun fmt/lint/tests, and document agent-backed defaults before fallback work begins.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "crates/replay",
         "crates/shell",
         "crates/world-agent"
@@ -1450,7 +1450,7 @@
       "concurrent_with": [],
       "worktree": "wt/ps-r2a-replay-agent-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2a-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R2a-integ.md"
     },
     {
       "id": "R2b-code",
@@ -1460,7 +1460,7 @@
       "status": "completed",
       "description": "Improve warning output and copy-diff fallback behavior (root retries, overrides, telemetry).",
       "references": [
-        "docs/project_management/next/p0-platform_stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform_stability/p0_platform_stability_plan.md",
         "crates/replay",
         "crates/shell",
         "crates/world-agent",
@@ -1494,7 +1494,7 @@
       ],
       "worktree": "wt/ps-r2b-replay-fallback-code",
       "integration_task": "R2b-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2b-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R2b-code.md"
     },
     {
       "id": "R2b-test",
@@ -1504,7 +1504,7 @@
       "status": "completed",
       "description": "Add tests covering warning de-duplication, copy-diff overrides, and ENOSPC retries.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "crates/replay",
         "crates/shell/tests"
       ],
@@ -1536,7 +1536,7 @@
       ],
       "worktree": "wt/ps-r2b-replay-fallback-test",
       "integration_task": "R2b-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2b-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R2b-test.md"
     },
     {
       "id": "R2b-integ",
@@ -1546,7 +1546,7 @@
       "status": "completed",
       "description": "Merge the R2b code/test branches, rerun fmt/lint/tests, and document fallback behavior before coverage work begins.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "crates/replay",
         "crates/shell"
       ],
@@ -1575,7 +1575,7 @@
       "concurrent_with": [],
       "worktree": "wt/ps-r2b-replay-fallback-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2b-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R2b-integ.md"
     },
     {
       "id": "R2c-code",
@@ -1585,7 +1585,7 @@
       "status": "completed",
       "description": "Polish CLI/docs/telemetry for replay toggles, capture manual agent vs no-world samples, and ensure warnings align with docs.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "docs/TRACE.md",
         "docs/WORLD.md",
         "crates/replay",
@@ -1619,7 +1619,7 @@
       ],
       "worktree": "wt/ps-r2c-replay-coverage-code",
       "integration_task": "R2c-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2c-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R2c-code.md"
     },
     {
       "id": "R2c-test",
@@ -1629,7 +1629,7 @@
       "status": "completed",
       "description": "Full coverage for agent path vs local fallback vs host-only, including ENOSPC retry and caged alignment.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "crates/replay",
         "crates/shell/tests",
         "crates/world/tests",
@@ -1663,7 +1663,7 @@
       ],
       "worktree": "wt/ps-r2c-replay-agent-test",
       "integration_task": "R2c-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2c-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R2c-test.md"
     },
     {
       "id": "R2c-integ",
@@ -1673,7 +1673,7 @@
       "status": "completed",
       "description": "Merge the R2c code/test branches, rerun fmt/lint/tests, and finalize agent-backed replay rollout.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "crates/replay",
         "crates/shell",
         "crates/world-agent",
@@ -1704,7 +1704,7 @@
       "concurrent_with": [],
       "worktree": "wt/ps-r2c-replay-agent-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2c-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R2c-integ.md"
     },
     {
       "id": "R2c-buffer",
@@ -1714,8 +1714,8 @@
       "status": "completed",
       "description": "Short buffer to resolve conflicts/skips after R2c-integ before starting R2d.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
-        "docs/project_management/next/p0-platform-stability/session_log.md"
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/session_log.md"
       ],
       "acceptance_criteria": [
         "R2c-integ merged into feat/p0-platform-stability-follow-up; no pending fmt/lint/test failures or unresolved skips.",
@@ -1747,7 +1747,7 @@
       "status": "completed",
       "description": "Record execution origin/transport in spans, default replays to the recorded origin, add a flip flag, and make world-mode replays prefer the agent socket with a clean fallback to the local backend.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "crates/replay",
         "crates/shell",
         "crates/world-agent",
@@ -1784,7 +1784,7 @@
       ],
       "worktree": "wt/ps-r2d-replay-origin-code",
       "integration_task": "R2d-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2d-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R2d-code.md"
     },
     {
       "id": "R2d-test",
@@ -1794,7 +1794,7 @@
       "status": "completed",
       "description": "Add tests for recorded-origin defaults, flip flag, agent-first world path with fallback, and copy-diff override/warning behavior.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "crates/replay",
         "crates/shell/tests",
         "crates/world/tests",
@@ -1828,7 +1828,7 @@
       ],
       "worktree": "wt/ps-r2d-replay-origin-test",
       "integration_task": "R2d-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2d-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R2d-test.md"
     },
     {
       "id": "R2d-integ",
@@ -1838,7 +1838,7 @@
       "status": "completed",
       "description": "Merge the R2d code/test branches, rerun fmt/lint/tests, and finalize the origin-aware agent-first replay rollout.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "crates/replay",
         "crates/shell",
         "crates/world-agent",
@@ -1870,7 +1870,7 @@
       "concurrent_with": [],
       "worktree": "wt/ps-r2d-replay-origin-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2d-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R2d-integ.md"
     },
     {
       "id": "R2e-code",
@@ -1880,7 +1880,7 @@
       "status": "completed",
       "description": "Add a broker policy toggle for read-only vs writable worlds, thread it through shell/world-agent, and document the knob so per-project/global policy controls world mutability.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "docs/CONFIGURATION.md",
         "crates/broker",
         "crates/shell",
@@ -1916,7 +1916,7 @@
       ],
       "worktree": "wt/ps-r2e-world-fs-code",
       "integration_task": "R2e-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2e-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R2e-code.md"
     },
     {
       "id": "R2e-test",
@@ -1926,7 +1926,7 @@
       "status": "completed",
       "description": "Add fixtures asserting policy-controlled read-only vs writable worlds (PTY + non-PTY) with trace/doctor coverage.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "docs/CONFIGURATION.md",
         "crates/shell/tests",
         "crates/world/tests"
@@ -1959,7 +1959,7 @@
       ],
       "worktree": "wt/ps-r2e-world-fs-test",
       "integration_task": "R2e-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2e-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R2e-test.md"
     },
     {
       "id": "R2e-integ",
@@ -1969,7 +1969,7 @@
       "status": "queued",
       "description": "Merge the policy-driven world fs mode code/test branches, rerun fmt/lint/tests, and document read-only vs writable policy behavior.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "docs/CONFIGURATION.md",
         "crates/broker",
         "crates/shell",
@@ -2000,7 +2000,7 @@
       "concurrent_with": [],
       "worktree": "wt/ps-r2e-world-fs-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2e-integ.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R2e-integ.md"
     },
     {
       "id": "R2f-code",
@@ -2010,7 +2010,7 @@
       "status": "completed",
       "description": "Emit replayable spans for host-only executions so host commands can be replayed with the same fidelity as world spans without probing the world backend.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "crates/shell",
         "crates/shim",
         "crates/replay",
@@ -2044,7 +2044,7 @@
       ],
       "worktree": "wt/ps-r2f-host-replay-code",
       "integration_task": "R2f-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2f-code.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R2f-code.md"
     },
     {
       "id": "R2f-test",
@@ -2054,7 +2054,7 @@
       "status": "completed",
       "description": "Add coverage ensuring host-only commands emit replayable spans and that replay defaults to host execution without touching the world backend.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "crates/shell/tests",
         "crates/replay",
         "crates/trace"
@@ -2087,7 +2087,7 @@
       ],
       "worktree": "wt/ps-r2f-host-replay-test",
       "integration_task": "R2f-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2f-test.md"
+      "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R2f-test.md"
     },
     {
       "id": "R2f-integ",
@@ -2097,7 +2097,7 @@
       "status": "completed",
       "description": "Merge the host span replay parity code/test branches, rerun fmt/lint/tests, and ensure host-only spans are replayable without world dependencies.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
         "crates/shell",
         "crates/shim",
         "crates/replay",
@@ -2128,7 +2128,7 @@
     "concurrent_with": [],
     "worktree": "wt/ps-r2f-host-replay-integ",
     "integration_task": null,
-    "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2f-integ.md"
+    "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/R2f-integ.md"
   },
   {
     "id": "LP1-code",
@@ -2138,8 +2138,8 @@
     "status": "completed",
     "description": "Align scripts/linux/world-provision.sh with installer behavior (SocketGroup=substrate, group add, linger guidance) so standalone provisioning yields usable sockets without dev-installer fixups.",
     "references": [
-      "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
-      "docs/project_management/next/p0-platform-stability/LP1-spec.md",
+      "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
+      "docs/project_management/_archived/next/p0-platform-stability/LP1-spec.md",
       "scripts/linux/world-provision.sh",
       "scripts/linux/world-socket-verify.sh",
       "docs/WORLD.md",
@@ -2174,7 +2174,7 @@
     ],
     "worktree": "wt/ps-lp1-provision-code",
     "integration_task": "LP1-integ",
-    "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/LP1-code.md"
+    "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/LP1-code.md"
   },
   {
     "id": "LP1-test",
@@ -2184,8 +2184,8 @@
     "status": "completed",
     "description": "Add tests/fixtures/harness coverage verifying the provisioner emits SocketGroup=substrate, group/linger guidance, and correct socket metadata without relying on installer fixups.",
     "references": [
-      "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
-      "docs/project_management/next/p0-platform-stability/LP1-spec.md",
+      "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
+      "docs/project_management/_archived/next/p0-platform-stability/LP1-spec.md",
       "scripts/linux/world-provision.sh",
       "scripts/linux/world-socket-verify.sh",
       "tests/installers/install_smoke.sh"
@@ -2217,7 +2217,7 @@
     ],
     "worktree": "wt/ps-lp1-provision-test",
     "integration_task": "LP1-integ",
-    "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/LP1-test.md"
+    "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/LP1-test.md"
   },
   {
     "id": "LP1-integ",
@@ -2227,8 +2227,8 @@
     "status": "completed",
     "description": "Merge LP1 code/test branches, reconcile to spec, and gate with fmt/clippy/tests + make integ-checks so standalone provisioning matches installer behavior.",
     "references": [
-      "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
-      "docs/project_management/next/p0-platform-stability/LP1-spec.md",
+      "docs/project_management/_archived/next/p0-platform-stability/p0_platform_stability_plan.md",
+      "docs/project_management/_archived/next/p0-platform-stability/LP1-spec.md",
       "scripts/linux/world-provision.sh",
       "scripts/linux/world-socket-verify.sh"
     ],
@@ -2259,7 +2259,7 @@
     "concurrent_with": [],
     "worktree": "wt/ps-lp1-provision-integ",
     "integration_task": null,
-    "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/LP1-integ.md"
+    "kickoff_prompt": "docs/project_management/_archived/next/p0-platform-stability/kickoff_prompts/LP1-integ.md"
   },
   {
     "id": "INV-overlay-consistency",
@@ -2269,7 +2269,7 @@
       "status": "queued",
       "description": "Root-cause inconsistent world state across fs_mode toggles (read_only vs writable) and PTY vs non-PTY execution; writable PTY writes leak to host while non-PTY uses overlay, causing divergent views.",
       "references": [
-        "docs/project_management/next/p0-platform-stability/INV-overlay-consistency.md",
+        "docs/project_management/_archived/next/p0-platform-stability/INV-overlay-consistency.md",
         "crates/world-agent/src/pty.rs",
         "crates/world/src/session.rs",
         "crates/shell/src/execution/routing/dispatch/exec.rs",

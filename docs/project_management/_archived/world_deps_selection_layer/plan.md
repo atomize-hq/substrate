@@ -94,7 +94,7 @@ Explicit non-dependency:
 
 Final sequencing changes are recorded in:
 - `docs/project_management/_archived/world_deps_selection_layer/integration_map.md`
-- `docs/project_management/next/sequencing.json`
+- `docs/project_management/packs/sequencing.json`
 
 ---
 

@@ -26,7 +26,7 @@ Command:
 
 Observed output:
 ```text
-scripts/planning/lint.sh --feature-dir "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX"
+PM_SYSTEM_SCRIPTS="docs/project_management/system/scripts" "${PM_SYSTEM_SCRIPTS}/planning/lint.sh" --feature-dir "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX"
 == Planning lint: docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX ==
 -- Smoke script scaffold scan
 -- Hard-ban scan
@@ -54,7 +54,7 @@ Command:
 
 Observed output:
 ```text
-python3 scripts/planning/validate_tasks_json.py --feature-dir "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX"
+PM_SYSTEM_SCRIPTS="docs/project_management/system/scripts" python3 "${PM_SYSTEM_SCRIPTS}/planning/validate_tasks_json.py" --feature-dir "docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX"
 OK: tasks.json validation passed: docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/tasks.json
 exit:0
 ```

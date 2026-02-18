@@ -19,10 +19,10 @@ Do not edit planning docs inside the worktree.
 - Merge code+tests; align behavior with C1-spec (stub command only).
 - Run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests (at least those added in C1-test), then `make integ-checks`.
 - You own resolving drift: adjust code/tests as needed to match spec.
-- Run the feature-local smoke script for your platform and record results in `docs/project_management/next/world-sync/session_log.md`:
-  - Linux: `bash docs/project_management/next/world-sync/smoke/linux-smoke.sh`
-  - macOS: `bash docs/project_management/next/world-sync/smoke/macos-smoke.sh`
-  - Windows: `pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1`
+- Run the feature-local smoke script for your platform and record results in `docs/project_management/_archived/next/world-sync/session_log.md`:
+  - Linux: `bash docs/project_management/_archived/next/world-sync/smoke/linux-smoke.sh`
+  - macOS: `bash docs/project_management/_archived/next/world-sync/smoke/macos-smoke.sh`
+  - Windows: `pwsh -File docs/project_management/_archived/next/world-sync/smoke/windows-smoke.ps1`
 
 ## End Checklist
 1. Ensure fmt/clippy/tests pass; ensure `make integ-checks` completes; capture outputs.

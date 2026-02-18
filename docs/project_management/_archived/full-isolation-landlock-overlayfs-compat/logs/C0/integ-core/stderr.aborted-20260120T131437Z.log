@@ -14,16 +14,16 @@ user
 
 ## Scope
 - Merge code + tests, resolve drift to spec, and make the slice green on the primary dev platform.
-- Spec: `docs/project_management/next/full-isolation-landlock-overlayfs-compat/C0-spec.md`
+- Spec: `docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/C0-spec.md`
 - Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Start Checklist
 Do not edit planning docs inside the worktree.
 
 1. Verify you are in the task worktree `wt/full-isolation-landlock-overlayfs-compat-c0-integ-core` on branch `full-isolation-landlock-overlayfs-compat-c0-integ-core` and that `.taskmeta.json` exists at the worktree root.
-2. Read: `docs/project_management/next/full-isolation-landlock-overlayfs-compat/plan.md`, `docs/project_management/next/full-isolation-landlock-overlayfs-compat/tasks.json`, `docs/project_management/next/full-isolation-landlock-overlayfs-compat/session_log.md`, spec, this prompt.
+2. Read: `docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/plan.md`, `docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/tasks.json`, `docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/session_log.md`, spec, this prompt.
 3. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run:
-   - `make triad-task-start FEATURE_DIR="docs/project_management/next/full-isolation-landlock-overlayfs-compat" TASK_ID="C0-integ-core"`
+   - `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat" TASK_ID="C0-integ-core"`
 
 ## Requirements
 - Reconcile code/tests to spec (spec wins).
@@ -37,10 +37,10 @@ Do not edit planning docs inside the worktree.
 
 ### Local behavioral smoke preflight (required when possible; fast fail before CI dispatch)
 
-If `docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/` exists and this machine matches a behavior platform for this feature, run the matching smoke script **locally** before dispatching compile parity or Feature Smoke.
+If `docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/smoke/` exists and this machine matches a behavior platform for this feature, run the matching smoke script **locally** before dispatching compile parity or Feature Smoke.
 
 Determine behavior platforms:
-- `jq -r '.meta.behavior_platforms_required // [] | join(\",\")' "docs/project_management/next/full-isolation-landlock-overlayfs-compat/tasks.json"`
+- `jq -r '.meta.behavior_platforms_required // [] | join(\",\")' "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/tasks.json"`
 
 Preflight steps (choose the block matching your current platform):
 
@@ -49,7 +49,7 @@ Linux:
 set -euo pipefail
 cargo build --bin substrate
 export PATH="$PWD/target/debug:$PATH"
-bash "docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh"
+bash "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh"
 ```
 
 macOS:
@@ -57,7 +57,7 @@ macOS:
 set -euo pipefail
 cargo build --bin substrate
 export PATH="$PWD/target/debug:$PATH"
-bash "docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/macos-smoke.sh"
+bash "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/smoke/macos-smoke.sh"
 ```
 
 Windows (PowerShell):
@@ -65,7 +65,7 @@ Windows (PowerShell):
 $ErrorActionPreference = "Stop"
 cargo build --bin substrate
 $env:Path = "$pwd\\target\\debug;$env:Path"
-pwsh -File "docs/project_management/next/full-isolation-landlock-overlayfs-compat\\smoke\\windows-smoke.ps1"
+pwsh -File "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat\\smoke\\windows-smoke.ps1"
 ```
 
 Expected:
@@ -91,7 +91,7 @@ Important (P3-008):
 Recommended dispatch (explicit params; leave `CLEANUP=1` on unless debugging temp branches):
 
 1) Dispatch behavioral smoke in a single run (preferred):
-   - `make feature-smoke FEATURE_DIR="docs/project_management/next/full-isolation-landlock-overlayfs-compat" PLATFORM=behavior SMOKE_SLICE_ID="<slice>" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/full-isolation-landlock-overlayfs-compat" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
+   - `make feature-smoke FEATURE_DIR="docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat" PLATFORM=behavior SMOKE_SLICE_ID="<slice>" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/full-isolation-landlock-overlayfs-compat" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
      - `SMOKE_SLICE_ID` is optional; when provided, the workflow exports `SUBSTRATE_SMOKE_SLICE_ID` for slice-scoped smoke scripts.
    - If WSL coverage is required for this feature, add `RUN_WSL=1`.
 
@@ -108,9 +108,9 @@ If any platform smoke fails:
 - Do not attempt platform-specific fixes in integ-core.
 - Ask the operator to start only the failing platform-fix tasks **from the orchestration checkout** (not from a task worktree):
   - If you have a single smoke run that covers multiple platforms (typical `PLATFORM=behavior` case):
-    - `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="docs/project_management/next/full-isolation-landlock-overlayfs-compat" SLICE_ID="<slice>" SMOKE_RUN_ID="<run-id>" LAUNCH_CODEX=1`
+    - `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat" SLICE_ID="<slice>" SMOKE_RUN_ID="<run-id>" LAUNCH_CODEX=1`
   - If you dispatched per-platform smoke (multiple run ids):
-    - `make triad-task-start-platform-fixes FEATURE_DIR="docs/project_management/next/full-isolation-landlock-overlayfs-compat" SLICE_ID="<slice>" PLATFORMS="<csv>" LAUNCH_CODEX=1`
+    - `make triad-task-start-platform-fixes FEATURE_DIR="docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat" SLICE_ID="<slice>" PLATFORMS="<csv>" LAUNCH_CODEX=1`
   - `<slice>` is the triad id prefix (e.g., `C0`, `C3`).
   - `<run-id>` is the `RUN_ID` from the failing smoke run (only used for `triad-task-start-platform-fixes-from-smoke`).
   - `<csv>` is the comma-separated list of platforms you need platform-fix tasks for (typically the failing behavior platforms, plus `wsl` if `wsl_task_mode="separate"`).
@@ -118,10 +118,10 @@ If any platform smoke fails:
 If behavioral smoke is green for all behavior platforms:
 - Platform-fix tasks (if present in the pack) may still be required for CI-only failures (e.g., clippy warnings on macOS/Windows), so do not mark them no-op yet.
 - The wrapper/final gate runs CI Testing; if CI Testing is green, then mark platform-fix tasks `completed` as no-ops to unblock the final aggregator’s `depends_on`:
-  - `scripts/triad/mark_noop_platform_fixes_completed.sh --feature-dir "docs/project_management/next/full-isolation-landlock-overlayfs-compat" --slice-id "<slice>"` (optional: add `--from-smoke-run "<run-id>"` for logging)
+  - `triad/mark_noop_platform_fixes_completed.sh --feature-dir "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat" --slice-id "<slice>"` (optional: add `--from-smoke-run "<run-id>"` for logging)
 
 Once all required platform-fix tasks are completed, ask the operator to start the final aggregator from the orchestration checkout:
-- `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/next/full-isolation-landlock-overlayfs-compat" SLICE_ID="<slice>" LAUNCH_CODEX=1`
+- `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat" SLICE_ID="<slice>" LAUNCH_CODEX=1`
   - Note: the final aggregator task id is `<slice>-integ` (the command name contains `integ-final`).
 
 ## End Checklist
@@ -181,7 +181,7 @@ cat .taskmeta.json' in /home/spenser/__Active_code/substrate/wt/full-isolation-l
 {
   "created_at_utc": "2026-01-20T12:13:17Z",
   "created_from_sha": "b215121257f3f53f461b0488e4bf313b83ef51b6",
-  "feature_dir": "docs/project_management/next/full-isolation-landlock-overlayfs-compat",
+  "feature_dir": "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat",
   "orchestration_branch": "feat/full-isolation-landlock-overlayfs-compat",
   "schema_version": 1,
   "task_branch": "full-isolation-landlock-overlayfs-compat-c0-integ-core",
@@ -189,8 +189,8 @@ cat .taskmeta.json' in /home/spenser/__Active_code/substrate/wt/full-isolation-l
 }
 exec
 /bin/bash -lc 'set -euo pipefail
-ls -la docs/project_management/next/full-isolation-landlock-overlayfs-compat || true
-ls -la docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke || true' in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 46ms:
+ls -la docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat || true
+ls -la docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/smoke || true' in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 46ms:
 total 116
 drwxr-xr-x  4 spenser spenser  4096 Jan 20 07:13 .
 drwxr-xr-x 10 spenser spenser  4096 Jan 20 07:13 ..
@@ -213,11 +213,11 @@ drwxr-xr-x 4 spenser spenser 4096 Jan 20 07:13 ..
 -rw-r--r-- 1 spenser spenser 3253 Jan 20 07:13 macos-smoke.sh
 exec
 /bin/bash -lc "set -euo pipefail
-sed -n '1,220p' docs/project_management/next/full-isolation-landlock-overlayfs-compat/plan.md" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 47ms:
+sed -n '1,220p' docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/plan.md" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 47ms:
 # full-isolation-landlock-overlayfs-compat — plan
 
 ## Scope
-- Feature directory: `docs/project_management/next/full-isolation-landlock-overlayfs-compat/`
+- Feature directory: `docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/`
 - Orchestration branch: `feat/full-isolation-landlock-overlayfs-compat`
 - ADR: `docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
 
@@ -236,7 +236,7 @@ sed -n '1,220p' docs/project_management/next/full-isolation-landlock-overlayfs-c
 
 exec
 /bin/bash -lc "set -euo pipefail
-jq -r '.meta' docs/project_management/next/full-isolation-landlock-overlayfs-compat/tasks.json" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 46ms:
+jq -r '.meta' docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/tasks.json" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 46ms:
 {
   "schema_version": 3,
   "feature": "full-isolation-landlock-overlayfs-compat",
@@ -258,7 +258,7 @@ jq -r '.meta' docs/project_management/next/full-isolation-landlock-overlayfs-com
 }
 exec
 /bin/bash -lc "set -euo pipefail
-jq -r '.tasks[] | select(.id|test(\""'^C0")) | {id, kind, branch, depends_on, platform, status}'"' docs/project_management/next/full-isolation-landlock-overlayfs-compat/tasks.json" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 40ms:
+jq -r '.tasks[] | select(.id|test(\""'^C0")) | {id, kind, branch, depends_on, platform, status}'"' docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/tasks.json" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 40ms:
 {
   "id": "C0-code",
   "kind": null,
@@ -281,11 +281,11 @@ jq -r '.tasks[] | select(.id|test(\""'^C0")) | {id, kind, branch, depends_on, pl
 }
 exec
 /bin/bash -lc "set -euo pipefail
-sed -n '1,260p' docs/project_management/next/full-isolation-landlock-overlayfs-compat/session_log.md" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 41ms:
+sed -n '1,260p' docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/session_log.md" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 41ms:
 # full-isolation-landlock-overlayfs-compat — session log
 
 ## START — 2026-01-20T01:52:53Z — planning — planning pack for ADR-0015 (full isolation Landlock ↔ overlayfs backing dirs)
-- Feature: `docs/project_management/next/full-isolation-landlock-overlayfs-compat/`
+- Feature: `docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/`
 - Branch: `testing`
 - Goal: Produce an execution-ready Planning Pack for ADR-0015 under the correct feature directory, with validated tasks/prompts/smoke and zero ambiguity in specs/contracts.
 - Inputs to read end-to-end:
@@ -296,15 +296,15 @@ sed -n '1,260p' docs/project_management/next/full-isolation-landlock-overlayfs-c
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
   - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
   - `docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
 - Commands planned (if any):
   - `make planning-new-feature FEATURE=full-isolation-landlock-overlayfs-compat DECISION_HEAVY=1 CROSS_PLATFORM=1 AUTOMATION=1 BEHAVIOR_PLATFORMS=linux CI_PARITY_PLATFORMS=linux,macos,windows`
-  - `python3 scripts/planning/validate_tasks_json.py --feature-dir "docs/project_management/next/full-isolation-landlock-overlayfs-compat"`
-  - `make planning-validate FEATURE_DIR="docs/project_management/next/full-isolation-landlock-overlayfs-compat"`
+  - `python3 planning/validate_tasks_json.py --feature-dir "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat"`
+  - `make planning-validate FEATURE_DIR="docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat"`
 exec
 /bin/bash -lc "set -euo pipefail
-sed -n '1,260p' docs/project_management/next/full-isolation-landlock-overlayfs-compat/C0-spec.md" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 40ms:
+sed -n '1,260p' docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/C0-spec.md" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 40ms:
 # C0-spec — Full isolation Landlock ↔ OverlayFS backing dirs allowlist
 
 Authoritative ADR:
@@ -338,8 +338,8 @@ It is a focused companion to:
 ## Operating assumptions (the situation you are in)
 
 When this standard applies, the operator started you with one of:
-- `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1` (preferred)
-- `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
+- `make triad-task-start-pair FEATURE_DIR="docs/project_management/_archived/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1` (preferred)
+- `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
 
 You are already:
 - in a git worktree (usually under `wt/...`)
@@ -679,7 +679,7 @@ e29fbb99 (origin/testing, origin/feat/full-isolation-landlock-overlayfs-compat, 
 exec
 /bin/bash -lc "set -euo pipefail
 # Ensure planning docs weren't changed by the cherry-picks
-CHANGED_DOCS="'$(git diff --name-only HEAD~2..HEAD | rg '"'"'^docs/project_management/next/'"' || true)
+CHANGED_DOCS="'$(git diff --name-only HEAD~2..HEAD | rg '"'"'^docs/project_management/_archived/next/'"' || true)
 if [ -n \""'$CHANGED_DOCS" ]; then echo "ERROR: planning docs changed"; echo "$CHANGED_DOCS"; exit 1; fi
 
 echo "PLANNING_DOCS_CHANGED=0"' in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 45ms:
@@ -3577,7 +3577,7 @@ exec
 /bin/bash -lc 'set -euo pipefail
 cargo build --bin substrate
 export PATH="$PWD/target/debug:$PATH"
-bash "docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh"' in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core exited 2 in 5.66s:
+bash "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh"' in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core exited 2 in 5.66s:
    Compiling ring v0.17.14
    Compiling rustls v0.22.4
    Compiling rustls-webpki v0.102.8
@@ -3783,7 +3783,7 @@ thinking
 I need to check the smoke script to see what's happening. It's located in the planning documents, so I can access it there. I think I should focus on the section that’s failing and then I can work with `sed` on the linux-smoke.sh file to see if I can make necessary adjustments. Let’s get to it and see what can be fixed!
 exec
 /bin/bash -lc "set -euo pipefail
-sed -n '1,220p' docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 39ms:
+sed -n '1,220p' docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 39ms:
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -6255,7 +6255,7 @@ exec
 /bin/bash -lc 'set -euo pipefail
 cargo build --bin substrate
 export PATH="$PWD/target/debug:$PATH"
-bash "docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh"' in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core exited 1 in 4.01s:
+bash "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh"' in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core exited 1 in 4.01s:
    Compiling substrate-shell v0.2.5 (/home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core/crates/shell)
    Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.07s
@@ -11877,13 +11877,13 @@ exec
 rg -n -F \"--command \\\"\" -S docs scripts crates tests | rg -n -F \"\\\\n\" | head -n 80 || true
 rg -n -F \"substrate --world --ci\" -S docs scripts crates tests | head -n 80" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 70ms:
 rg: unrecognized flag --command "
-docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/macos-smoke.sh:83:allow_out="$(substrate --world --ci --command "sh -lc 'set -eu\nmkdir -p writable/sub\necho OK > writable/sub/ok.txt\ncat writable/sub/ok.txt\n' " 2>&1)"
-docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/macos-smoke.sh:97:deny_out="$(substrate --world --ci --command "sh -lc 'set -eu\nif echo NOPE > denied.txt 2>/dev/null; then\n  echo UNEXPECTED_WRITE\n  exit 41\nelse\n  echo DENIED_WRITE\nfi\n' " 2>&1)"
-docs/project_management/next/world-agent-policy-snapshot/smoke/macos-smoke.sh:54:  substrate --world --ci --command "${cmd}" >"${out_path}" 2>"${err_path}"
-docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh:83:allow_out="$(substrate --world --ci --command "sh -lc 'set -eu\nmkdir -p writable/sub\necho OK > writable/sub/ok.txt\ncat writable/sub/ok.txt\n' " 2>&1)"
-docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh:97:deny_out="$(substrate --world --ci --command "sh -lc 'set -eu\nif echo NOPE > denied.txt 2>/dev/null; then\n  echo UNEXPECTED_WRITE\n  exit 41\nelse\n  echo DENIED_WRITE\nfi\n' " 2>&1)"
-docs/project_management/next/world-agent-policy-snapshot/smoke/linux-smoke.sh:33:  substrate --world --ci --command "${cmd}" >"${out_path}" 2>"${err_path}"
-docs/project_management/next/world-agent-policy-snapshot/DR_tasks.json:487:        "Fix the root cause of WSL world execution hangs/timeouts on the Windows self-hosted runner by applying targeted changes to the Windows WSL backend transport and runner preflight scripts so `substrate --world --ci --command \"true __waps_preflight__<run_id>__\"` completes consistently.",
+docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/smoke/macos-smoke.sh:83:allow_out="$(substrate --world --ci --command "sh -lc 'set -eu\nmkdir -p writable/sub\necho OK > writable/sub/ok.txt\ncat writable/sub/ok.txt\n' " 2>&1)"
+docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/smoke/macos-smoke.sh:97:deny_out="$(substrate --world --ci --command "sh -lc 'set -eu\nif echo NOPE > denied.txt 2>/dev/null; then\n  echo UNEXPECTED_WRITE\n  exit 41\nelse\n  echo DENIED_WRITE\nfi\n' " 2>&1)"
+docs/project_management/_archived/next/world-agent-policy-snapshot/smoke/macos-smoke.sh:54:  substrate --world --ci --command "${cmd}" >"${out_path}" 2>"${err_path}"
+docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh:83:allow_out="$(substrate --world --ci --command "sh -lc 'set -eu\nmkdir -p writable/sub\necho OK > writable/sub/ok.txt\ncat writable/sub/ok.txt\n' " 2>&1)"
+docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh:97:deny_out="$(substrate --world --ci --command "sh -lc 'set -eu\nif echo NOPE > denied.txt 2>/dev/null; then\n  echo UNEXPECTED_WRITE\n  exit 41\nelse\n  echo DENIED_WRITE\nfi\n' " 2>&1)"
+docs/project_management/_archived/next/world-agent-policy-snapshot/smoke/linux-smoke.sh:33:  substrate --world --ci --command "${cmd}" >"${out_path}" 2>"${err_path}"
+docs/project_management/_archived/next/world-agent-policy-snapshot/DR_tasks.json:487:        "Fix the root cause of WSL world execution hangs/timeouts on the Windows self-hosted runner by applying targeted changes to the Windows WSL backend transport and runner preflight scripts so `substrate --world --ci --command \"true __waps_preflight__<run_id>__\"` completes consistently.",
 file update:
 diff --git a/crates/shell/src/execution/cli.rs b/crates/shell/src/execution/cli.rs
 index 92aeea24cb9890831e2e93dac57ff529b4de9b1f..bdef2a29c2c98e2b1bd1692cb018dfa8ecc99742
@@ -14332,7 +14332,7 @@ exec
 /bin/bash -lc 'set -euo pipefail
 cargo build --bin substrate
 export PATH="$PWD/target/debug:$PATH"
-bash "docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh"' in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core exited 1 in 3.60s:
+bash "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh"' in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core exited 1 in 3.60s:
    Compiling substrate-shell v0.2.5 (/home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core/crates/shell)
    Compiling substrate v0.2.5 (/home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.74s
@@ -37882,7 +37882,7 @@ exec
 /bin/bash -lc 'set -euo pipefail
 cargo build --bin substrate
 export PATH="$PWD/target/debug:$PATH"
-bash "docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh"' in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core exited 1 in 6.30s:
+bash "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh"' in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core exited 1 in 6.30s:
    Compiling ring v0.17.14
    Compiling rustls v0.22.4
    Compiling rustls-webpki v0.102.8
@@ -39334,7 +39334,7 @@ trap cleanup EXIT
 export PATH="$PWD/target/debug:$PATH"
 export SUBSTRATE_WORLD_SOCKET="$SOCK"
 
-bash "docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh"' in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core exited 3 in 2.35s:
+bash "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh"' in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core exited 3 in 2.35s:
    Compiling world v0.1.1 (/home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core/crates/world)
    Compiling world-agent v0.2.5 (/home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core/crates/world-agent)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.86s
@@ -40299,7 +40299,7 @@ on:
   workflow_dispatch:
     inputs:
       feature_dir:
-        description: "Feature Planning Pack directory (e.g., docs/project_management/next/world-sync)"
+        description: "Feature Planning Pack directory (e.g., docs/project_management/_archived/next/world-sync)"
         required: true
         type: string
       checkout_ref:
@@ -44004,7 +44004,7 @@ full-isolation-landlock-overlayfs-compat-c0-integ-core
 {
   "created_at_utc": "2026-01-20T12:13:17Z",
   "created_from_sha": "b215121257f3f53f461b0488e4bf313b83ef51b6",
-  "feature_dir": "docs/project_management/next/full-isolation-landlock-overlayfs-compat",
+  "feature_dir": "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat",
   "orchestration_branch": "feat/full-isolation-landlock-overlayfs-compat",
   "schema_version": 1,
   "task_branch": "full-isolation-landlock-overlayfs-compat-c0-integ-core",

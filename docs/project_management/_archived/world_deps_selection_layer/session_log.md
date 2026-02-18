@@ -12,7 +12,7 @@
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
   - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
   - `docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
   - Planning Pack (existing): `docs/project_management/_archived/world_deps_selection_layer/plan.md`, `docs/project_management/_archived/world_deps_selection_layer/tasks.json`, `docs/project_management/_archived/world_deps_selection_layer/decision_register.md`, `docs/project_management/_archived/world_deps_selection_layer/integration_map.md`, `docs/project_management/_archived/world_deps_selection_layer/manual_testing_playbook.md`, `docs/project_management/_archived/world_deps_selection_layer/S0-spec-selection-config-and-ux.md`, `docs/project_management/_archived/world_deps_selection_layer/S1-spec-install-classes.md`, `docs/project_management/_archived/world_deps_selection_layer/S2-spec-system-packages-provisioning.md`
 - Commands planned (if any):
@@ -27,7 +27,7 @@
   - Made specs/playbook/smoke scripts internally consistent (SUBSTRATE_HOME isolation, explicit JSON fields, capability-gated smoke).
   - Preserved legacy session log entry in `docs/project_management/_archived/world_deps_selection_layer/session_log_legacy_2025-12-24.md`.
 - Files created/modified:
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
   - `docs/project_management/_archived/world_deps_selection_layer/decision_register.md`
   - `docs/project_management/_archived/world_deps_selection_layer/plan.md`
   - `docs/project_management/_archived/world_deps_selection_layer/tasks.json`
@@ -50,7 +50,7 @@
   - `jq -e . docs/project_management/_archived/world_deps_selection_layer/tasks.json` → `0` → `PASS`
   - `make planning-validate FEATURE_DIR="docs/project_management/_archived/world_deps_selection_layer"` → `0` → `PASS`
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/world_deps_selection_layer"` → `0` → `PASS`
-  - `jq -e . docs/project_management/next/sequencing.json` → `0` → `PASS`
+  - `jq -e . docs/project_management/packs/sequencing.json` → `0` → `PASS`
 - Sequencing alignment:
   - `sequencing.json` reviewed: `YES`
   - Changes required: updated `world_deps_selection_layer.branch` to `feat/world_deps_selection_layer`

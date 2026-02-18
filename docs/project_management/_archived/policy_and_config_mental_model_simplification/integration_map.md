@@ -79,10 +79,10 @@ Outputs:
 ## Composition with adjacent tracks (explicit dependencies)
 - `world_sync` planning and implementation depends on ADR-0003:
   - `world_sync` config/env contracts for sync keys and protected excludes must match ADR-0003.
-  - Update `docs/project_management/next/world-sync/C0-spec.md` and `docs/project_management/next/world-sync/C1-spec.md` before any `world_sync` execution triads begin.
+  - Update `docs/project_management/_archived/next/world-sync/C0-spec.md` and `docs/project_management/_archived/next/world-sync/C1-spec.md` before any `world_sync` execution triads begin.
 
 ## Sequencing alignment (final)
-- `docs/project_management/next/sequencing.json` order places this sprint before `world_sync`.
+- `docs/project_management/packs/sequencing.json` order places this sprint before `world_sync`.
 - Internal triad order is linear:
   - `PCM0-integ` before `PCM1-code`
   - `PCM1-integ` before `PCM2-code`

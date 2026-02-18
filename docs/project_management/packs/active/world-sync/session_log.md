@@ -42,13 +42,13 @@
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
   - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
   - `docs/project_management/packs/active/world-sync/spec_manifest.md`
   - `docs/project_management/packs/active/world-sync/impact_map.md`
 - Commands planned (if any):
-  - `python3 scripts/planning/validate_tasks_json.py --feature-dir docs/project_management/packs/active/world-sync`
-  - `python3 scripts/planning/validate_ci_checkpoint_plan.py --feature-dir docs/project_management/packs/active/world-sync`
-  - `scripts/planning/lint.sh --feature-dir docs/project_management/packs/active/world-sync`
+  - `make planning-validate FEATURE_DIR="docs/project_management/packs/active/world-sync"`
+  - `PM_SYSTEM_SCRIPTS="docs/project_management/system/scripts" python3 "${PM_SYSTEM_SCRIPTS}/planning/validate_ci_checkpoint_plan.py" --feature-dir "docs/project_management/packs/active/world-sync"`
+  - `make planning-lint FEATURE_DIR="docs/project_management/packs/active/world-sync"`
 
 ## END — 2026-02-10T19:11:52Z — planning — v4 refresh (full pack authoring)
 - Summary of changes (exhaustive):
@@ -56,7 +56,7 @@
   - Authored v4 specs and contract surfaces (contract/spec_manifest/impact_map/decision register/topic specs/slice specs).
   - Expanded `tasks.json` to WS0..WS7 with checkpoint-boundary platform-fix integration at WS2/WS5/WS7 and CI checkpoint ops tasks CP1/CP2/CP3.
   - Implemented slice-scoped smoke scripts (Linux/macOS) gated by `SUBSTRATE_SMOKE_SLICE_ID`.
-  - Updated `docs/project_management/next/sequencing.json` to align with WS* slice ids and new spec filenames.
+  - Updated `docs/project_management/packs/sequencing.json` to align with WS* slice ids and new spec filenames.
 - Files created/modified:
   - `docs/project_management/packs/active/world-sync/plan.md`
   - `docs/project_management/packs/active/world-sync/contract.md`
@@ -73,12 +73,12 @@
   - `docs/project_management/packs/active/world-sync/manual_testing_playbook.md`
   - `docs/project_management/packs/active/world-sync/smoke/`
   - `docs/project_management/packs/active/world-sync/quality_gate_report.md`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
 - Rubric checks run (with results):
-  - `python3 scripts/planning/validate_tasks_json.py --feature-dir docs/project_management/packs/active/world-sync` → `0` → `PASS`
-  - `python3 scripts/planning/validate_ci_checkpoint_plan.py --feature-dir docs/project_management/packs/active/world-sync` → `0` → `PASS`
-  - `python3 scripts/planning/validate_spec_manifest.py --feature-dir docs/project_management/packs/active/world-sync` → `0` → `PASS`
-  - `scripts/planning/lint.sh --feature-dir docs/project_management/packs/active/world-sync` → `0` → `PASS`
+  - `make planning-validate FEATURE_DIR="docs/project_management/packs/active/world-sync"` → `0` → `PASS`
+  - `PM_SYSTEM_SCRIPTS="docs/project_management/system/scripts" python3 "${PM_SYSTEM_SCRIPTS}/planning/validate_ci_checkpoint_plan.py" --feature-dir "docs/project_management/packs/active/world-sync"` → `0` → `PASS`
+  - `PM_SYSTEM_SCRIPTS="docs/project_management/system/scripts" python3 "${PM_SYSTEM_SCRIPTS}/planning/validate_spec_manifest.py" --feature-dir "docs/project_management/packs/active/world-sync"` → `0` → `PASS`
+  - `make planning-lint FEATURE_DIR="docs/project_management/packs/active/world-sync"` → `0` → `PASS`
 - Sequencing alignment:
   - `sequencing.json` reviewed: `YES`
   - Changes required: `APPLIED (world_sync sequence updated to WS0..WS7)`
@@ -99,8 +99,8 @@
   - `docs/project_management/packs/active/world-sync/tasks.json`
 - Commands planned (if any):
   - `rg -n "\\bTBD\\b|\\bTODO\\b|\\bWIP\\b|\\bTBA\\b" docs/project_management/packs/active/world-sync -S`
-  - `python3 scripts/planning/validate_tasks_json.py --feature-dir docs/project_management/packs/active/world-sync`
-  - `scripts/planning/lint.sh --feature-dir docs/project_management/packs/active/world-sync`
+  - `make planning-validate FEATURE_DIR="docs/project_management/packs/active/world-sync"`
+  - `make planning-lint FEATURE_DIR="docs/project_management/packs/active/world-sync"`
 
 ## END — 2026-02-10T19:29:35Z — planning — v4 pack polish (remove placeholders + scope cleanup)
 - Summary of changes (exhaustive):
@@ -126,10 +126,10 @@
   - `docs/project_management/packs/active/world-sync/kickoff_prompts/FZ-feature-cleanup.md`
   - `docs/project_management/packs/active/world-sync/session_log.md`
 - Rubric checks run (with results):
-  - `python3 scripts/planning/validate_tasks_json.py --feature-dir docs/project_management/packs/active/world-sync` → `0` → `PASS`
-  - `python3 scripts/planning/validate_ci_checkpoint_plan.py --feature-dir docs/project_management/packs/active/world-sync` → `0` → `PASS`
-  - `python3 scripts/planning/validate_spec_manifest.py --feature-dir docs/project_management/packs/active/world-sync` → `0` → `PASS`
-  - `scripts/planning/lint.sh --feature-dir docs/project_management/packs/active/world-sync` → `0` → `PASS`
+  - `make planning-validate FEATURE_DIR="docs/project_management/packs/active/world-sync"` → `0` → `PASS`
+  - `PM_SYSTEM_SCRIPTS="docs/project_management/system/scripts" python3 "${PM_SYSTEM_SCRIPTS}/planning/validate_ci_checkpoint_plan.py" --feature-dir "docs/project_management/packs/active/world-sync"` → `0` → `PASS`
+  - `PM_SYSTEM_SCRIPTS="docs/project_management/system/scripts" python3 "${PM_SYSTEM_SCRIPTS}/planning/validate_spec_manifest.py" --feature-dir "docs/project_management/packs/active/world-sync"` → `0` → `PASS`
+  - `make planning-lint FEATURE_DIR="docs/project_management/packs/active/world-sync"` → `0` → `PASS`
 - Sequencing alignment:
   - `sequencing.json` reviewed: `YES`
   - Changes required: `NONE`
@@ -160,7 +160,7 @@
   - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → `0`
   - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` → `0`
   - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` → `0`
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0`
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → `0`
 
 ## END — 2026-02-10T23:16:54Z — planning — quality gate remediation (resolve Pass 1 defects)
 - Summary of changes (exhaustive):
@@ -173,7 +173,7 @@
   - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → `0` → `PASS`
   - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` → `0` → `PASS`
   - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` → `0` → `PASS`
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0` → `PASS`
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → `0` → `PASS`
 - Blockers:
   - None recorded in `quality_gate_report.md` Pass 2 (recommendation is `ACCEPT`).
 
@@ -189,7 +189,7 @@
 - Commands run (with results):
   - `export FEATURE_DIR="docs/project_management/packs/active/world-sync"` → (env set)
   - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` → `0`
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0`
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → `0`
   - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → `0`
   - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` → `0`
 
@@ -198,7 +198,7 @@
   - Updated `manual_testing_playbook.md` WS6/WS7 to enforce the rollback safety rail: rollback without `--force` exits `5` and performs no mutations; rollback with `--force` exits `0` and deletes non-checkpointed paths.
 - Mechanical checks:
   - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` → `0` → `PASS`
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0` → `PASS`
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → `0` → `PASS`
   - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → `0` → `PASS`
   - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` → `0` → `PASS`
 
@@ -215,7 +215,7 @@
   - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → `0`
   - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` → `0`
   - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` → `0`
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0`
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → `0`
 
 ## END — 2026-02-11T01:19:58Z — planning — quality gate remediation (follow-up)
 - Summary of changes (exhaustive):
@@ -224,7 +224,7 @@
   - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → `0` → `PASS`
   - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` → `0` → `PASS`
   - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` → `0` → `PASS`
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0` → `PASS`
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → `0` → `PASS`
 
 ## START — 2026-02-11T18:51:06Z — ops — F0-exec-preflight (execution preflight gate)
 - Feature: `docs/project_management/packs/active/world-sync`

@@ -55,7 +55,7 @@ Template:
 - Worktree commits: f17dc27 (chore: integrate config init code+tests)
 - Commands: `cargo fmt`; `cargo clippy -p substrate-shell -- -D warnings`; `cargo test -p substrate-shell world_root`; `./tests/installers/install_smoke.sh`; `cargo run -p substrate --bin substrate -- config --help`
 - Results: fmt/clippy/tests passed; installer smoke initially failed because the script never mentioned `substrate config init`, added an unconditional hint in both macOS/Linux post-install logs and reran successfully; `cargo run ... config --help` spot-check confirmed the new subcommand is documented
-- Kickoff prompts created: docs/project_management/next/config-subcommand/kickoff_prompts/C2-code.md, docs/project_management/next/config-subcommand/kickoff_prompts/C2-test.md (already present; revalidated for next agents)
+- Kickoff prompts created: docs/project_management/_archived/next/config-subcommand/kickoff_prompts/C2-code.md, docs/project_management/_archived/next/config-subcommand/kickoff_prompts/C2-test.md (already present; revalidated for next agents)
 - Docs commit: (pending – will land as `docs: finish C1-integ`)
 - Next steps / blockers: feat/config-subcommand now fast-forwarded with merged code+tests; tasks still list C1-test as `in_progress`, consider reconciling status in a follow-up if needed
 
@@ -83,7 +83,7 @@ Template:
 - Worktree commits: c26b2c2 (`test: cover substrate config show output`)
 - Commands: `cargo fmt`; `cargo test -p substrate-shell world_root` (tests filtered to world_root subset; new config_show cases auto-skip until CLI exposes the subcommand)
 - Results: fmt clean; targeted tests passed; installer smoke script not run because scope limited to test harness additions
-- Kickoff prompts created: n/a (docs/project_management/next/config-subcommand/kickoff_prompts/C2-integ.md already present)
+- Kickoff prompts created: n/a (docs/project_management/_archived/next/config-subcommand/kickoff_prompts/C2-integ.md already present)
 - Docs commit: pending (`docs: finish C2-test`) after merging branch/status/log updates
 - Next steps / blockers: ready for integration once code + tests merged; config_show coverage enables TOML/JSON/redaction verification as soon as CLI lands
 
@@ -97,7 +97,7 @@ Template:
 - Worktree commits: n/a (cs-c2-show-code/test already merged; integration branch introduced no new changes)
 - Commands: `cargo fmt`; `cargo clippy -p substrate-shell -- -D warnings`; `cargo test -p substrate-shell world_root`; `cargo test -p substrate-shell world_enable`; `cargo run -p substrate --bin substrate -- config --help`
 - Results: fmt/clippy/tests all passed; CLI help confirms `config show` verb listed with TOML/JSON description; docs already highlight usage so no updates needed
-- Kickoff prompts created: docs/project_management/next/config-subcommand/kickoff_prompts/C3-code.md, docs/project_management/next/config-subcommand/kickoff_prompts/C3-test.md (revalidated contents for next agents)
+- Kickoff prompts created: docs/project_management/_archived/next/config-subcommand/kickoff_prompts/C3-code.md, docs/project_management/_archived/next/config-subcommand/kickoff_prompts/C3-test.md (revalidated contents for next agents)
 - Docs commit: pending (`docs: finish C2-integ`) to record tasks/session updates
 - Next steps / blockers: ready for C3-code/test to implement `config set`; no outstanding conflicts
 
@@ -111,7 +111,7 @@ Template:
 - Worktree commits: 377205d (`feat: add substrate config set command`)
 - Commands: `cargo fmt`; `cargo clippy -p substrate-shell -- -D warnings`; `cargo test -p substrate-shell world_root`; `cargo test -p substrate-shell world_enable`
 - Results: all commands passed; `config set` now validates dotted keys, writes atomically, and emits JSON summaries; docs updated with multi-key and Windows examples
-- Kickoff prompts created: docs/project_management/next/config-subcommand/kickoff_prompts/C3-test.md (referenced for the next role)
+- Kickoff prompts created: docs/project_management/_archived/next/config-subcommand/kickoff_prompts/C3-test.md (referenced for the next role)
 - Docs commit: pending (`docs: finish C3-code`) after merging tasks/log updates
 - Next steps / blockers: ready for C3-test to add coverage; no outstanding blockers
 
@@ -125,7 +125,7 @@ Template:
 - Worktree commits: 5cbea83 (`test: cover substrate config set CLI`)
 - Commands: `cargo fmt`; `cargo test -p substrate-shell --test config_set`; `cargo test -p substrate-shell world_root`; `env -u SUBSTRATE_MANAGER_ENV cargo test -p substrate-shell world_enable`
 - Results: fmt clean; config_set integration tests pass when the command is available; world_root suite green; world_enable required clearing `SUBSTRATE_MANAGER_ENV` (user env sets it globally and otherwise trips the manager-env path test); no installer smoke requested
-- Kickoff prompts created: n/a (`docs/project_management/next/config-subcommand/kickoff_prompts/C3-integ.md` already present)
+- Kickoff prompts created: n/a (`docs/project_management/_archived/next/config-subcommand/kickoff_prompts/C3-integ.md` already present)
 - Docs commit: pending (`docs: finish C3-test`)
 - Next steps / blockers: ready for C3-integ to merge code+tests once config-set implementation lands
 

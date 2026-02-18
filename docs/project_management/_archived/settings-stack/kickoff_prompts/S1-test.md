@@ -40,7 +40,7 @@ Run only what is required to validate the new tests.
 3. Return to `feat/settings-stack` and merge the worktree.
 4. Update `tasks.json` (status → `completed`) and append an END entry to the session log.
 5. Author the following kickoff prompts (place them under
-   `docs/project_management/next/settings-stack/kickoff_prompts/` and mention paths in the log):
+   `docs/project_management/_archived/next/settings-stack/kickoff_prompts/` and mention paths in the log):
    - `S1-integ`
    - `S2-code`
    - `S2-test` (note in the log that S2 tasks cannot begin until S1-integ merges)

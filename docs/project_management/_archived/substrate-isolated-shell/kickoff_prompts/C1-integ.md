@@ -13,7 +13,7 @@ What you need to do:
    - Successful runs create/repair `~/.substrate/config.json` with `{ "world_enabled": true }` and rewrite `manager_env.sh` with the two exports mentioned above.
    - Failures (helper exit non-zero or socket never appears) leave config/env untouched and bubble up the helper’s log path along with a `substrate world doctor` reminder.
 3. Manually sanity check `substrate world enable --dry-run --prefix <tmp> --profile release --verbose` using the new CLI to confirm it prints the command it would execute, the helper log location, and the follow-up doctor guidance.
-4. Once tests + manual check pass, return to `feat/isolated-shell-plan`, record the results in `docs/project_management/next/session_log.md`, flip the C1-task statuses in `tasks.json`, and ensure this prompt + any conflict resolutions are committed.
+4. Once tests + manual check pass, return to `feat/isolated-shell-plan`, record the results in `docs/project_management/_archived/next/session_log.md`, flip the C1-task statuses in `tasks.json`, and ensure this prompt + any conflict resolutions are committed.
 
 Notes/assumptions to keep in mind:
 - The tests rely on `python3` inside the helper script to create a fake UNIX socket; no additional tooling should be required, but make sure the CLI does not hard-code `/run/substrate.sock` without honoring `SUBSTRATE_WORLD_SOCKET`.

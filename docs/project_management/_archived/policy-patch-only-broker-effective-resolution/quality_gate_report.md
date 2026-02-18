@@ -18,7 +18,7 @@ export FEATURE_DIR="docs/project_management/_archived/policy-patch-only-broker-e
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
 # exit: 0
 
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 # exit: 0
 
 # tasks.json required-field audit
@@ -63,7 +63,7 @@ make planning-lint FEATURE_DIR="$FEATURE_DIR"
 
 ```bash
 jq -r '.sprints[] | select(.directory=="docs/project_management/_archived/policy-patch-only-broker-effective-resolution") | {order,id,branch,status,sequence}' \
-  docs/project_management/next/sequencing.json
+  docs/project_management/packs/sequencing.json
 ```
 
 ## Required Inputs Read End-to-End (checklist)
@@ -76,7 +76,7 @@ jq -r '.sprints[] | select(.directory=="docs/project_management/_archived/policy
 - `integration_map.md`: `YES`
 - `manual_testing_playbook.md`: `YES`
 - Feature smoke scripts under `smoke/`: `YES`
-- `docs/project_management/next/sequencing.json`: `YES`
+- `docs/project_management/packs/sequencing.json`: `YES`
 - Standards:
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
@@ -104,7 +104,7 @@ jq -r '.sprints[] | select(.directory=="docs/project_management/_archived/policy
 ### 4) Sequencing and dependency alignment
 - Result: `PASS`
 - Evidence:
-  - `docs/project_management/next/sequencing.json` sprint `policy_patch_only_broker_effective_resolution` lists `C0` then `C1`
+  - `docs/project_management/packs/sequencing.json` sprint `policy_patch_only_broker_effective_resolution` lists `C0` then `C1`
   - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/tasks.json` has `C1-*` depending on `C0-integ`
 - Notes: No task begins before its prerequisites.
 
@@ -147,7 +147,7 @@ jq -r '.sprints[] | select(.directory=="docs/project_management/_archived/policy
 ### Finding 003 — Sequencing and task dependencies are aligned
 - Status: `VERIFIED`
 - Evidence:
-  - `docs/project_management/next/sequencing.json` sprint `policy_patch_only_broker_effective_resolution`
+  - `docs/project_management/packs/sequencing.json` sprint `policy_patch_only_broker_effective_resolution`
   - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/tasks.json` (`C1-*` depends on `C0-integ`)
 - Impact: Work can proceed without dependency violations.
 - Fix required (exact): none
@@ -215,7 +215,7 @@ export FEATURE_DIR="docs/project_management/_archived/policy-patch-only-broker-e
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
 # exit: 0
 
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 # exit: 0
 
 make planning-validate FEATURE_DIR="$FEATURE_DIR"

@@ -12,7 +12,7 @@ This initiative turns `impact_map.md` from a planning artifact into an **enforce
 Key changes:
 
 1. **Impact map touch-set format becomes machine-parseable** by requiring repo-relative paths in backticks (`` `path/to/file` ``) under Create/Edit/Deprecate/Delete.
-2. **Planning validation**: add `scripts/planning/validate_impact_map.py` and run it via `scripts/planning/lint.*`.
+2. **Planning validation**: add `docs/project_management/system/scripts/planning/validate_impact_map.py` and run it via `docs/project_management/system/scripts/planning/lint.*`.
 3. **Execution enforcement**: modify `scripts/triad/task_finish.sh` to refuse completion if the worktree diff touches files outside the declared touch set.
 4. **Checkpoint boundary sizing update reminder**: as slices become smaller (Initiative 1), checkpoint groups default to **4–8** triads; touch-set enforcement is one of the safety levers that makes larger checkpoint groups viable.
 
@@ -78,7 +78,7 @@ If execution discovers a new necessary touch:
 ### 3.1 Add validator: validate_impact_map.py
 
 **Add file:**
-- `scripts/planning/validate_impact_map.py`
+- `docs/project_management/system/scripts/planning/validate_impact_map.py`
 
 #### 3.1.1 Inputs
 - `--feature-dir <path>`
@@ -126,14 +126,14 @@ This makes it easy for `task_finish.sh` to reuse the parser (avoids reimplementi
 ### 3.2 Wire validator into planning lint
 
 **Modify:**
-- `scripts/planning/lint.sh`
-- `scripts/planning/lint.ps1`
+- `docs/project_management/system/scripts/planning/lint.sh`
+- `docs/project_management/system/scripts/planning/lint.ps1`
 
 Add:
 
 ```bash
 echo "-- impact_map.md touch-set invariants"
-python3 scripts/planning/validate_impact_map.py --feature-dir "${FEATURE_DIR}"
+python3 docs/project_management/system/scripts/planning/validate_impact_map.py --feature-dir "${FEATURE_DIR}"
 ```
 
 Place it near other planning validators (after spec_manifest validation is fine).
@@ -168,7 +168,7 @@ Add a new step (unless `--verify-only` is used, in which case still run the enfo
 
 1) Load `FEATURE_DIR` from `.taskmeta.json` (already done).
 2) Parse allowed paths from `<feature_dir>/impact_map.md` by calling:
-   - `python3 scripts/planning/validate_impact_map.py --feature-dir "$FEATURE_DIR_ABS" --emit-json`
+   - `python3 docs/project_management/system/scripts/planning/validate_impact_map.py --feature-dir "$FEATURE_DIR_ABS" --emit-json`
 3) Compute actual touched paths in the worktree:
    - Use `git status --porcelain=v1` for tracked + untracked.
    - Include:
@@ -294,7 +294,7 @@ Do this as a mechanical-only commit.
 ## 8. Acceptance criteria for this initiative
 
 - `impact_map.md` touch set paths are backticked and parseable.
-- `scripts/planning/validate_impact_map.py` exists and runs in planning lint.
+- `docs/project_management/system/scripts/planning/validate_impact_map.py` exists and runs in planning lint.
 - `scripts/triad/task_finish.sh` blocks completion if unplanned file touches occur.
 - Override exists but requires explicit acknowledgement and reason.
 - At least one active Planning Pack successfully uses the enforcement without excessive friction.

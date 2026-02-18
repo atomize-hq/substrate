@@ -14,7 +14,7 @@ user
 
 ## Scope
 - Tests only; no production code.
-- Spec: `docs/project_management/next/workspace-config-policy-unification/WCU4-spec.md`
+- Spec: `docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-spec.md`
 - ADR: `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 - Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
@@ -24,7 +24,7 @@ Do not edit planning docs inside the worktree.
 1. Verify you are in the task worktree `wt/workspace_config_policy_unification-wcu4-test` on branch `workspace_config_policy_unification-wcu4-test` and that `.taskmeta.json` exists.
 2. Read: WCU4-spec, ADR-0008, plan/tasks/session log, this prompt.
 3. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run:
-   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" SLICE_ID="WCU4"`
+   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification" SLICE_ID="WCU4"`
 
 ## Requirements
 - Add/modify tests that enforce WCU4 acceptance criteria in `tasks.json`.
@@ -67,15 +67,15 @@ exec
 {
   "created_at_utc": "2026-01-16T14:19:43Z",
   "created_from_sha": "cbfa6ad466a36afd5cd493e8c980cde4efca5559",
-  "feature_dir": "docs/project_management/next/workspace-config-policy-unification",
+  "feature_dir": "docs/project_management/_archived/next/workspace-config-policy-unification",
   "orchestration_branch": "feat/workspace-config-policy-unification",
   "schema_version": 1,
   "task_branch": "workspace_config_policy_unification-wcu4-test",
   "task_id": "WCU4-test"
 }
 exec
-/bin/bash -lc 'ls docs/project_management/next/workspace-config-policy-unification || true
-ls docs/project_management/next || true' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-test succeeded in 35ms:
+/bin/bash -lc 'ls docs/project_management/_archived/next/workspace-config-policy-unification || true
+ls docs/project_management/_archived/next || true' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-test succeeded in 35ms:
 decision_register.md
 execution_preflight_report.md
 integration_map.md
@@ -97,11 +97,11 @@ WCU4-closeout_report.md
 WCU4-spec.md
 WCU5-closeout_report.md
 exec
-/bin/bash -lc 'ls docs/project_management/next/workspace-config-policy-unification/WCU4-spec.md 2>/dev/null && echo "WCU4 spec present" || echo "WCU4 spec missing"' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-test succeeded in 40ms:
-docs/project_management/next/workspace-config-policy-unification/WCU4-spec.md
+/bin/bash -lc 'ls docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-spec.md 2>/dev/null && echo "WCU4 spec present" || echo "WCU4 spec missing"' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-test succeeded in 40ms:
+docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-spec.md
 WCU4 spec present
 exec
-/bin/bash -lc "sed -n '1,200p' docs/project_management/next/workspace-config-policy-unification/WCU4-spec.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-test succeeded in 40ms:
+/bin/bash -lc "sed -n '1,200p' docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-spec.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-test succeeded in 40ms:
 # WCU4 Spec — Installer/dev env cleanup (stop exporting `SUBSTRATE_OVERRIDE_*` by default)
 
 References:
@@ -123,10 +123,10 @@ References:
   - a clean environment has no `SUBSTRATE_OVERRIDE_*` exports after running the relevant dev/install scripts, and
   - `config current show` behavior is not silently affected by unintended override exports.
 exec
-/bin/bash -lc "sed -n '1,220p' docs/project_management/next/workspace-config-policy-unification/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-test exited 2 in 40ms:
-sed: can't read docs/project_management/next/workspace-config-policy-unification/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md: No such file or directory
+/bin/bash -lc "sed -n '1,220p' docs/project_management/_archived/next/workspace-config-policy-unification/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-test exited 2 in 40ms:
+sed: can't read docs/project_management/_archived/next/workspace-config-policy-unification/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md: No such file or directory
 exec
-/bin/bash -lc "sed -n '1,220p' docs/project_management/next/workspace-config-policy-unification/plan.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-test succeeded in 44ms:
+/bin/bash -lc "sed -n '1,220p' docs/project_management/_archived/next/workspace-config-policy-unification/plan.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-test succeeded in 44ms:
 # Workspace Config/Policy Unification (ADR-0008) — Plan
 
 ## Context (why this exists)
@@ -137,7 +137,7 @@ This body of work also **must** implement the cross-cutting refinement defined b
 - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 
 Non-negotiable additional gating for this pack:
-- `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
+- `docs/project_management/_archived/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
 
 ## Execution model (triads + automation)
 - Standards:
@@ -148,7 +148,7 @@ Non-negotiable additional gating for this pack:
 - Docs discipline:
   - planning docs (`plan.md`, `tasks.json`, `session_log.md`, specs, prompts) are edited only on the orchestration branch
 exec
-/bin/bash -lc 'cat docs/project_management/next/workspace-config-policy-unification/tasks.json' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-test succeeded in 42ms:
+/bin/bash -lc 'cat docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-test succeeded in 42ms:
 {
   "meta": {
     "schema_version": 3,
@@ -170,11 +170,11 @@ exec
       "orchestration_branch": "feat/workspace-config-policy-unification"
     }
 exec
-/bin/bash -lc "sed -n '1,220p' docs/project_management/next/workspace-config-policy-unification/session_log.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-test succeeded in 38ms:
+/bin/bash -lc "sed -n '1,220p' docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-test succeeded in 38ms:
 # workspace-config-policy-unification — session log
 
 ## START — 2026-01-14T00:00:00Z — planning — Phase A/B gate scaffolding
-- Feature: `docs/project_management/next/workspace-config-policy-unification/`
+- Feature: `docs/project_management/_archived/next/workspace-config-policy-unification/`
 - Branch: `feat/workspace-config-policy-unification`
 - Goal: Add Phase A/B gates (ADR-0012) scaffolding and ensure it is mechanically encoded in the Planning Pack.
 - Inputs to read end-to-end:
@@ -183,27 +183,27 @@ exec
   - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
   - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 - Commands planned (if any):
-  - `make planning-lint FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification"`
+  - `make planning-lint FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification"`
 
 ## END — 2026-01-14T00:00:00Z — planning — Phase A/B gate scaffolding
 - Summary of changes (exhaustive):
   - Added explicit Phase A/B gate file for ADR-0012 and wired it as a non-negotiable Planning Pack input
   - Added Planning Pack scaffolding files (`plan.md`, `tasks.json`, `integration_map.md`, gate report templates, smoke stubs)
 - Files created/modified:
-  - `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
+  - `docs/project_management/_archived/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
 
 
 thinking
 **Reading project documents**
 
-I realized I didn't read ADR-0008 because the path differs. It’s located in docs/project_management/next/workspace-config-policy-unification. For WCU4, I need to access the correct file path, which I mistakenly omitted earlier. Now I have the right file name and will read it. I also need to check the task triads standard document and the kickoff prompt—I might skip the prompt for now. Additionally, I'll ensure the tests enforce that dev/install scripts don’t set certain environment variables.
+I realized I didn't read ADR-0008 because the path differs. It’s located in docs/project_management/_archived/next/workspace-config-policy-unification. For WCU4, I need to access the correct file path, which I mistakenly omitted earlier. Now I have the right file name and will read it. I also need to check the task triads standard document and the kickoff prompt—I might skip the prompt for now. Additionally, I'll ensure the tests enforce that dev/install scripts don’t set certain environment variables.
 thinking
 **Implementing test checks**
 
 The spec indicates that integration tests need to show there are no environment variables left after running the relevant scripts. I'll focus on scripts likely found in the `scripts/` directory, like `scripts/dev-entrypoint.sh`, to ensure exports are removed. The code should already be changed in the WCU4-code branch, so I'll just need to add tests to verify the current behavior. I plan to inspect existing scripts for any "SUBSTRATE_OVERRIDE_" exports and frequent test patterns, possibly in Bash or Rust that run shell processes.
 exec
-/bin/bash -lc "sed -n '1,260p' docs/project_management/next/workspace-config-policy-unification/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-test exited 2 in 39ms:
-sed: can't read docs/project_management/next/workspace-config-policy-unification/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md: No such file or directory
+/bin/bash -lc "sed -n '1,260p' docs/project_management/_archived/next/workspace-config-policy-unification/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-test exited 2 in 39ms:
+sed: can't read docs/project_management/_archived/next/workspace-config-policy-unification/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md: No such file or directory
 exec
 /bin/bash -lc "sed -n '1,220p' docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-test succeeded in 38ms:
 # Task Triads — Worktree Execution Standard (Automation + Concurrent Code/Test)
@@ -216,8 +216,8 @@ It is a focused companion to:
 ## Operating assumptions (the situation you are in)
 
 When this standard applies, the operator started you with one of:
-- `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1` (preferred)
-- `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
+- `make triad-task-start-pair FEATURE_DIR="docs/project_management/_archived/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1` (preferred)
+- `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
 
 You are already:
 - in a git worktree (usually under `wt/...`)
@@ -278,8 +278,8 @@ docs/VISION.md:79:  - "npm install *"
 scripts/linux/agent-hub-isolation-verify.sh:102:  - Linux: run scripts/linux/world-provision.sh (installs systemd socket/service)
 scripts/linux/world-socket-verify.sh:8:Provision the systemd-managed substrate world-agent socket via scripts/linux/world-provision.sh,
 exec
-/bin/bash -lc 'ls -1 docs/project_management/next/workspace-config-policy-unification | rg "ADR-0008" || true
-ls -1 docs/project_management/next/workspace-config-policy-unification | head' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-test succeeded in 41ms:
+/bin/bash -lc 'ls -1 docs/project_management/_archived/next/workspace-config-policy-unification | rg "ADR-0008" || true
+ls -1 docs/project_management/_archived/next/workspace-config-policy-unification | head' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-test succeeded in 41ms:
 decision_register.md
 execution_preflight_report.md
 integration_map.md
@@ -295,13 +295,13 @@ smoke
 thinking
 **Investigating ADR file issues**
 
-I'm exploring why ADRs aren't showing up. Earlier, I noted items like ADR-0008 after WCU specs, but now the head listing shows only the first 10 items. Maybe the ADR file is located deeper down, or `rg` didn’t match properly. I recall `ls docs/project_management/next/workspace-config-policy-unification` did list ADR-0008, but now it doesn’t. I wonder if the directory path issue could be due to using hyphens instead of underscores, which might explain the missing files.
+I'm exploring why ADRs aren't showing up. Earlier, I noted items like ADR-0008 after WCU specs, but now the head listing shows only the first 10 items. Maybe the ADR file is located deeper down, or `rg` didn’t match properly. I recall `ls docs/project_management/_archived/next/workspace-config-policy-unification` did list ADR-0008, but now it doesn’t. I wonder if the directory path issue could be due to using hyphens instead of underscores, which might explain the missing files.
 thinking
 **Checking directory outputs**
 
-Okay, I'm wondering about the output inconsistency. It seems that files like decision_register.md might have been affected by how `ls -1` sorts items, potentially putting ADRs after, but since `rg` didn't show them, maybe they aren't present at all. It's possible the previous output got truncated or combined with another directory list. To get clarity, I’ll rerun the command `ls docs/project_management/next/workspace-config-policy-unification | tail` and see what I find there.
+Okay, I'm wondering about the output inconsistency. It seems that files like decision_register.md might have been affected by how `ls -1` sorts items, potentially putting ADRs after, but since `rg` didn't show them, maybe they aren't present at all. It's possible the previous output got truncated or combined with another directory list. To get clarity, I’ll rerun the command `ls docs/project_management/_archived/next/workspace-config-policy-unification | tail` and see what I find there.
 exec
-/bin/bash -lc 'ls -1 docs/project_management/next/workspace-config-policy-unification | tail -n 40' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-test succeeded in 41ms:
+/bin/bash -lc 'ls -1 docs/project_management/_archived/next/workspace-config-policy-unification | tail -n 40' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-test succeeded in 41ms:
 decision_register.md
 execution_preflight_report.md
 integration_map.md
@@ -332,8 +332,8 @@ exec
 - Owner(s): spenser
 
 ## Scope
-- Feature directory: `docs/project_management/next/workspace-config-policy-unification/`
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Feature directory: `docs/project_management/_archived/next/workspace-config-policy-unification/`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
@@ -345,7 +345,7 @@ exec
 - Prior ADRs:
   - `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`
 exec
-/bin/bash -lc "jq '.tasks[] | select(.id==\"WCU4-test\")' docs/project_management/next/workspace-config-policy-unification/tasks.json" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-test succeeded in 44ms:
+/bin/bash -lc "jq '.tasks[] | select(.id==\"WCU4-test\")' docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json" in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-test succeeded in 44ms:
 {
   "id": "WCU4-test",
   "name": "WCU4 — Installer/dev env cleanup (test)",
@@ -355,16 +355,16 @@ exec
   "description": "Add/adjust tests for installer/env-script behavior so override exports are not required for correctness.",
   "references": [
     "docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
-    "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0007)",
-    "docs/project_management/next/workspace-config-policy-unification/plan.md",
-    "docs/project_management/next/workspace-config-policy-unification/WCU4-spec.md",
+    "docs/project_management/_archived/next/workspace-config-policy-unification/decision_register.md (DR-0007)",
+    "docs/project_management/_archived/next/workspace-config-policy-unification/plan.md",
+    "docs/project_management/_archived/next/workspace-config-policy-unification/WCU4-spec.md",
     "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
   ],
   "acceptance_criteria": [
     "Tests prove effective config does not require `SUBSTRATE_OVERRIDE_*` exports to behave correctly"
   ],
   "start_checklist": [
-    "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
+    "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/_archived/next/workspace-config-policy-unification\"",
     "Read: ADR-0008, plan.md, kickoff prompt",
 
 thinking
@@ -729,20 +729,20 @@ make -n triad-test-checks 2>/dev/null | head -n 200' in /home/spenser/__Active_c
 Makefile:270:.PHONY: triad-test-checks
 Makefile:271:triad-test-checks:
 docs/project_management/_archived/policy_and_config_precedence/tasks.json:128:      "required_make_targets": ["triad-test-checks"],
-scripts/planning/new_feature.sh:321:        task["required_make_targets"] = ["triad-test-checks"]
+planning/new_feature.sh:321:        task["required_make_targets"] = ["triad-test-checks"]
 docs/project_management/_archived/world-overlayfs-enumeration/tasks.json:133:        "triad-test-checks"
-scripts/planning/new_feature.ps1:225:$test.required_make_targets = if ($Automation.IsPresent) { @("triad-test-checks") } else { $null }
+planning/new_feature.ps1:225:$test.required_make_targets = if ($Automation.IsPresent) { @("triad-test-checks") } else { $null }
 docs/project_management/_archived/doctor_scopes/tasks.json:136:        "triad-test-checks"
 docs/project_management/_archived/env_var_taxonomy_and_override_split/tasks.json:150:        "triad-test-checks"
-docs/project_management/next/workspace-config-policy-unification/tasks.json:157:        "triad-test-checks"
-docs/project_management/next/workspace-config-policy-unification/tasks.json:522:        "triad-test-checks"
-docs/project_management/next/workspace-config-policy-unification/tasks.json:885:        "triad-test-checks"
-docs/project_management/next/workspace-config-policy-unification/tasks.json:1230:        "triad-test-checks"
-docs/project_management/next/workspace-config-policy-unification/tasks.json:1577:        "triad-test-checks"
-docs/project_management/next/world_deps_selection_layer/tasks.json:132:      "required_make_targets": ["triad-test-checks"]
-docs/project_management/next/world_deps_selection_layer/tasks.json:440:      "required_make_targets": ["triad-test-checks"]
-docs/project_management/next/world_deps_selection_layer/tasks.json:750:      "required_make_targets": ["triad-test-checks"]
-docs/project_management/next/world_deps_selection_layer/session_log.md:173:  - `CHECKS=make triad-test-checks`
+docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json:157:        "triad-test-checks"
+docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json:522:        "triad-test-checks"
+docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json:885:        "triad-test-checks"
+docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json:1230:        "triad-test-checks"
+docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json:1577:        "triad-test-checks"
+docs/project_management/_archived/next/world_deps_selection_layer/tasks.json:132:      "required_make_targets": ["triad-test-checks"]
+docs/project_management/_archived/next/world_deps_selection_layer/tasks.json:440:      "required_make_targets": ["triad-test-checks"]
+docs/project_management/_archived/next/world_deps_selection_layer/tasks.json:750:      "required_make_targets": ["triad-test-checks"]
+docs/project_management/_archived/next/world_deps_selection_layer/session_log.md:173:  - `CHECKS=make triad-test-checks`
 make[1]: Entering directory '/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-test'
 cargo fmt
 make[1]: Leaving directory '/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-test'

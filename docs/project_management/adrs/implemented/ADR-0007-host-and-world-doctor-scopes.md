@@ -7,7 +7,7 @@
 
 ## Scope
 - Feature directory: `docs/project_management/_archived/doctor_scopes/`
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Intended branch: `feat/doctor-scopes`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
@@ -136,7 +136,7 @@ Discriminator for exit `3` vs `4` when world is enabled:
   - JSON doctor output with stable `host`/`world` blocks and top-level `ok`
 
 ## Sequencing / Dependencies
-- Sequencing entry: `docs/project_management/next/sequencing.json` → sprint `doctor_scopes` (already present).
+- Sequencing entry: `docs/project_management/packs/sequencing.json` → sprint `doctor_scopes` (already present).
 - Prerequisite integration task IDs:
   - None; this work is an isolated CLI/API contract change. (It must still pass cross-platform smoke + CI.)
 

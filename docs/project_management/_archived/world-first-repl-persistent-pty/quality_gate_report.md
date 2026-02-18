@@ -15,7 +15,7 @@ FEATURE_DIR="docs/project_management/_archived/world-first-repl-persistent-pty"
 
 # JSON validity
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null          # exit 0
-jq -e . docs/project_management/next/sequencing.json >/dev/null  # exit 0
+jq -e . docs/project_management/packs/sequencing.json >/dev/null  # exit 0
 
 # tasks.json required-field audit
 python - <<'PY'                                      # exit 0
@@ -61,7 +61,7 @@ PY
 - `integration_map.md` (if present/required): `YES`
 - `manual_testing_playbook.md` (if present/required): `YES`
 - Feature smoke scripts under `smoke/` (if present/required): `YES`
-- `docs/project_management/next/sequencing.json`: `YES`
+- `docs/project_management/packs/sequencing.json`: `YES`
 - Standards:
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
@@ -84,7 +84,7 @@ PY
 ### 4) Sequencing and dependency alignment
 - Result: `PASS`
 - Evidence:
-  - `docs/project_management/next/sequencing.json` includes `world_first_repl_persistent_pty` (order `32`)
+  - `docs/project_management/packs/sequencing.json` includes `world_first_repl_persistent_pty` (order `32`)
   - `docs/project_management/_archived/world-first-repl-persistent-pty/tasks.json` aligns deps:
     - `C1-*` depends on `C0-integ`
     - `C2-*` depends on `C1-integ`
@@ -157,7 +157,7 @@ git rev-parse HEAD                                  # exit 0 → 5e4a6d061f6baeb
 git status --porcelain=v1                           # shows: M docs/project_management/_archived/world-first-repl-persistent-pty/tasks.json
 
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null         # exit 0
-jq -e . docs/project_management/next/sequencing.json >/dev/null # exit 0
+jq -e . docs/project_management/packs/sequencing.json >/dev/null # exit 0
 
 make planning-lint FEATURE_DIR="$FEATURE_DIR"        # exit 0 → planning lint passed
 

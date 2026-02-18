@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
     cat <<'USAGE'
 Usage:
-  scripts/planning/lint.sh --feature-dir docs/project_management/(next|packs/<bucket>)/<feature>
+  make planning-lint FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>
 
 Notes:
   - This is the mechanical Planning Pack lint runner used by the quality gate reviewer.
@@ -91,7 +91,6 @@ pm_roots_json="$(python3 "${PLANNING_SCRIPTS_DIR}/pm_paths.py" print-roots)"
 PM_ROOT="$(jq -r '.pm_root' <<<"${pm_roots_json}")"
 PM_PACKS_ROOT="$(jq -r '.pm_packs_root' <<<"${pm_roots_json}")"
 
-PM_NEXT_PREFIX="${PM_ROOT%/}/next/"
 PM_PACKS_PREFIX="${PM_PACKS_ROOT%/}/"
 
 schema_version="$(jq -r '.meta.schema_version // 1' "${FEATURE_DIR}/tasks.json")"
@@ -158,21 +157,10 @@ fi
 echo "-- JSON validity"
 jq -e . "${FEATURE_DIR}/tasks.json" >/dev/null
 
-sequencing_canonical="${PM_PACKS_ROOT%/}/sequencing.json"
-sequencing_legacy="${PM_ROOT%/}/next/sequencing.json"
-
-sequencing_json="${sequencing_canonical}"
+sequencing_json="${PM_PACKS_ROOT%/}/sequencing.json"
 if [[ ! -f "${sequencing_json}" ]]; then
-    echo "WARN: canonical sequencing.json not found; falling back to legacy mirror: ${sequencing_legacy}" >&2
-    sequencing_json="${sequencing_legacy}"
-fi
-
-if [[ -f "${sequencing_canonical}" && -f "${sequencing_legacy}" ]]; then
-    if ! diff -u <(jq -S . "${sequencing_canonical}") <(jq -S . "${sequencing_legacy}") >/dev/null; then
-        echo "FAIL: sequencing.json drift (canonical packs != legacy next)." >&2
-        echo "Fix: run \`make pm-sync-sequencing\` and commit the updated mirror." >&2
-        exit 1
-    fi
+    echo "FAIL: sequencing.json missing: ${sequencing_json}" >&2
+    exit 1
 fi
 
 jq -e . "${sequencing_json}" >/dev/null
@@ -260,14 +248,8 @@ if [[ -f "${FEATURE_DIR}/manual_testing_playbook.md" ]]; then
 fi
 
 echo "-- Sequencing alignment"
-if [[ "${FEATURE_DIR_RELPATH}" == "${PM_NEXT_PREFIX}"* ]]; then
+if [[ "${FEATURE_DIR_RELPATH}" == "${PM_PACKS_PREFIX}"* ]]; then
     jq -e --arg dir "${FEATURE_DIR_RELPATH}" '.sprints[] | select(.directory==$dir) | .id' "${sequencing_json}" >/dev/null
-elif [[ "${FEATURE_DIR_RELPATH}" == "${PM_PACKS_PREFIX}"* ]]; then
-    if [[ "${sequencing_json}" == "${sequencing_canonical}" ]]; then
-        jq -e --arg dir "${FEATURE_DIR_RELPATH}" '.sprints[] | select(.directory==$dir) | .id' "${sequencing_json}" >/dev/null
-    else
-        echo "SKIP: sequencing alignment (packs sequencing.json not present yet)"
-    fi
 else
     echo "SKIP: sequencing alignment (feature dir not under PM roots)"
 fi

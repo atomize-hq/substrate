@@ -20,6 +20,6 @@ Commands to run:
 3. `cargo test -p substrate-shell --test shim_health -- --nocapture` (adjust test binary/filter to match the new module name)
 
 Reminders:
-- Work inside `wt/d2-health-test`, set D2-test status to `in_progress` in `docs/project_management/next/tasks.json`, and log START/END entries referencing this prompt path (`docs/project_management/next/kickoff_prompts/D2-test.md`).
+- Work inside `wt/d2-health-test`, set D2-test status to `in_progress` in `docs/project_management/_archived/next/tasks.json`, and log START/END entries referencing this prompt path (`docs/project_management/_archived/next/kickoff_prompts/D2-test.md`).
 - Coordinate expectations with the Code agent via the session log: required env vars (`SUBSTRATE_MANAGER_INIT`, `SUBSTRATE_WORLD_SOCKET`, `SUBSTRATE_WORLD_ENABLE_SCRIPT`, etc.), fake world doctor responses, and any helper scripts.
 - Before handing off to Integration, document the exact `cargo test` commands plus any sample CLI runs so the next agent can reproduce the reports verbatim.

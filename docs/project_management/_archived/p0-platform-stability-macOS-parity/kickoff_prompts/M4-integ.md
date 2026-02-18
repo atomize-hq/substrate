@@ -7,10 +7,10 @@ Integration agent: merge code+tests, reconcile to spec, and own final green. Do 
 Integrate M4-code + M4-test and ensure behavior matches M4-spec; gate with fmt/clippy/tests and finish with `make integ-checks`.
 
 ## Read first
-- `docs/project_management/next/p0-platform-stability-macOS-parity/plan.md`
-- `docs/project_management/next/p0-platform-stability-macOS-parity/tasks.json`
-- `docs/project_management/next/p0-platform-stability-macOS-parity/session_log.md`
-- `docs/project_management/next/p0-platform-stability-macOS-parity/M4-spec.md`
+- `docs/project_management/_archived/next/p0-platform-stability-macOS-parity/plan.md`
+- `docs/project_management/_archived/next/p0-platform-stability-macOS-parity/tasks.json`
+- `docs/project_management/_archived/next/p0-platform-stability-macOS-parity/session_log.md`
+- `docs/project_management/_archived/next/p0-platform-stability-macOS-parity/M4-spec.md`
 
 ## Start checklist (must follow)
 1. `git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only`

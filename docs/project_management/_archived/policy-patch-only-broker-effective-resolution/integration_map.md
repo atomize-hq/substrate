@@ -69,5 +69,5 @@
   - update policy file locations and patch-only semantics; remove legacy discovery locations
 
 ## Sequencing alignment
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - This feature is sequenced after the patch-only policy contract is established (ADR-0008) and before any work that assumes broker/runtime policy semantics are aligned.

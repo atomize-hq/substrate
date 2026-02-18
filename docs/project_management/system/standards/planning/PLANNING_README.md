@@ -17,31 +17,31 @@ Run a planning pass when the next body of work requires any of:
 ## Planning outputs (required)
 
 Planning work must produce a Planning Pack under:
-- `docs/project_management/next/<feature>/`
+- `docs/project_management/packs/active/<feature>/`
 
 ## Planning Pack artifact index (canonical filenames)
 
 This is the quick “did we create everything?” checklist.
 
 Always required:
-- `docs/project_management/next/<feature>/plan.md`
-- `docs/project_management/next/<feature>/tasks.json`
-- `docs/project_management/next/<feature>/session_log.md`
-- `docs/project_management/next/<feature>/spec_manifest.md`
-- `docs/project_management/next/<feature>/kickoff_prompts/`
-- Specs: `docs/project_management/next/<feature>/*-spec*.md`
+- `docs/project_management/packs/active/<feature>/plan.md`
+- `docs/project_management/packs/active/<feature>/tasks.json`
+- `docs/project_management/packs/active/<feature>/session_log.md`
+- `docs/project_management/packs/active/<feature>/spec_manifest.md`
+- `docs/project_management/packs/active/<feature>/kickoff_prompts/`
+- Specs: `docs/project_management/packs/active/<feature>/*-spec*.md`
 
 Required for decision-heavy or cross-platform work:
-- `docs/project_management/next/<feature>/decision_register.md`
-- `docs/project_management/next/<feature>/impact_map.md`
-- `docs/project_management/next/<feature>/manual_testing_playbook.md`
-- `docs/project_management/next/<feature>/smoke/`
-  - `docs/project_management/next/<feature>/smoke/linux-smoke.sh`
-  - `docs/project_management/next/<feature>/smoke/macos-smoke.sh`
-  - `docs/project_management/next/<feature>/smoke/windows-smoke.ps1`
+- `docs/project_management/packs/active/<feature>/decision_register.md`
+- `docs/project_management/packs/active/<feature>/impact_map.md`
+- `docs/project_management/packs/active/<feature>/manual_testing_playbook.md`
+- `docs/project_management/packs/active/<feature>/smoke/`
+  - `docs/project_management/packs/active/<feature>/smoke/linux-smoke.sh`
+  - `docs/project_management/packs/active/<feature>/smoke/macos-smoke.sh`
+  - `docs/project_management/packs/active/<feature>/smoke/windows-smoke.ps1`
 
 Required before execution triads begin:
-- `docs/project_management/next/<feature>/quality_gate_report.md`
+- `docs/project_management/packs/active/<feature>/quality_gate_report.md`
   - must contain `RECOMMENDATION: ACCEPT`
 
 Minimum required:
@@ -78,13 +78,13 @@ Planning agents must read end-to-end:
 - `docs/project_management/system/templates/planning_pack/PLANNING_SESSION_LOG_TEMPLATE.md`
 - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
 - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
-- `docs/project_management/packs/sequencing.json` (legacy mirror during migration: `docs/project_management/next/sequencing.json`)
+- `docs/project_management/packs/sequencing.json`
 
 ## Quality gate (required)
 
 Planning is not “done” until a third-party reviewer:
 1) Runs the mechanical checks in `docs/project_management/system/standards/planning/PLANNING_LINT_CHECKLIST.md`.
-2) Produces `docs/project_management/next/<feature>/quality_gate_report.md` using `docs/project_management/system/templates/planning_pack/PLANNING_GATE_REPORT_TEMPLATE.md`.
+2) Produces `docs/project_management/packs/active/<feature>/quality_gate_report.md` using `docs/project_management/system/templates/planning_pack/PLANNING_GATE_REPORT_TEMPLATE.md`.
 3) Records `RECOMMENDATION: ACCEPT` or `RECOMMENDATION: FLAG FOR HUMAN REVIEW`.
 
 Execution triads must not begin until the recommendation is `ACCEPT`.

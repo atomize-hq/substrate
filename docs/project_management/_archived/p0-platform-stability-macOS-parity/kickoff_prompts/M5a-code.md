@@ -7,10 +7,10 @@ Code agent: production code/scripts only. No tests. Do not edit docs/tasks/sessi
 Implement M5a-spec: align the world deps tool inventory with shim doctor/health and make `world-deps.yaml` (installed + user overlay) behave as an override layer.
 
 ## Read first
-- `docs/project_management/next/p0-platform-stability-macOS-parity/plan.md`
-- `docs/project_management/next/p0-platform-stability-macOS-parity/tasks.json`
-- `docs/project_management/next/p0-platform-stability-macOS-parity/session_log.md`
-- `docs/project_management/next/p0-platform-stability-macOS-parity/M5a-spec.md`
+- `docs/project_management/_archived/next/p0-platform-stability-macOS-parity/plan.md`
+- `docs/project_management/_archived/next/p0-platform-stability-macOS-parity/tasks.json`
+- `docs/project_management/_archived/next/p0-platform-stability-macOS-parity/session_log.md`
+- `docs/project_management/_archived/next/p0-platform-stability-macOS-parity/M5a-spec.md`
 - `docs/USAGE.md`
 - `docs/CONFIGURATION.md`
 

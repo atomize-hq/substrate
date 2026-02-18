@@ -8,8 +8,8 @@
       "status": "completed",
       "description": "Convert the layered config/settings stack from TOML to YAML and update the `substrate config` subcommand.",
       "references": [
-        "docs/project_management/next/yaml-settings-migration/plan.md",
-        "docs/project_management/next/yaml-settings-migration/Y0-spec.md",
+        "docs/project_management/_archived/next/yaml-settings-migration/plan.md",
+        "docs/project_management/_archived/next/yaml-settings-migration/Y0-spec.md",
         "docs/CONFIGURATION.md",
         "crates/common/src/paths.rs",
         "crates/shell/src/execution/cli.rs",
@@ -38,7 +38,7 @@
       ],
       "worktree": "wt/ysm-y0-settings-code",
       "integration_task": "Y0-integ",
-      "kickoff_prompt": "docs/project_management/next/yaml-settings-migration/kickoff_prompts/Y0-code.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/yaml-settings-migration/kickoff_prompts/Y0-code.md",
       "depends_on": [],
       "concurrent_with": [
         "Y0-test"
@@ -52,7 +52,7 @@
       "status": "completed",
       "description": "Update and extend tests for YAML settings load/persist behavior and config CLI behavior.",
       "references": [
-        "docs/project_management/next/yaml-settings-migration/Y0-spec.md",
+        "docs/project_management/_archived/next/yaml-settings-migration/Y0-spec.md",
         "crates/shell/tests/config_init.rs",
         "crates/shell/tests/config_show.rs",
         "crates/shell/tests/config_set.rs",
@@ -81,7 +81,7 @@
       ],
       "worktree": "wt/ysm-y0-settings-test",
       "integration_task": "Y0-integ",
-      "kickoff_prompt": "docs/project_management/next/yaml-settings-migration/kickoff_prompts/Y0-test.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/yaml-settings-migration/kickoff_prompts/Y0-test.md",
       "depends_on": [],
       "concurrent_with": [
         "Y0-code"
@@ -95,12 +95,12 @@
       "status": "completed",
       "description": "Merge Y0 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
       "references": [
-        "docs/project_management/next/yaml-settings-migration/plan.md",
-        "docs/project_management/next/yaml-settings-migration/Y0-spec.md",
-        "docs/project_management/next/yaml-settings-migration/manual_testing_playbook.md",
-        "docs/project_management/next/yaml-settings-migration/smoke/linux-smoke.sh",
-        "docs/project_management/next/yaml-settings-migration/smoke/macos-smoke.sh",
-        "docs/project_management/next/yaml-settings-migration/smoke/windows-smoke.ps1",
+        "docs/project_management/_archived/next/yaml-settings-migration/plan.md",
+        "docs/project_management/_archived/next/yaml-settings-migration/Y0-spec.md",
+        "docs/project_management/_archived/next/yaml-settings-migration/manual_testing_playbook.md",
+        "docs/project_management/_archived/next/yaml-settings-migration/smoke/linux-smoke.sh",
+        "docs/project_management/_archived/next/yaml-settings-migration/smoke/macos-smoke.sh",
+        "docs/project_management/_archived/next/yaml-settings-migration/smoke/windows-smoke.ps1",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
         "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md"
       ],
@@ -127,7 +127,7 @@
       ],
       "worktree": "wt/ysm-y0-settings-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/yaml-settings-migration/kickoff_prompts/Y0-integ.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/yaml-settings-migration/kickoff_prompts/Y0-integ.md",
       "depends_on": [
         "Y0-code",
         "Y0-test"

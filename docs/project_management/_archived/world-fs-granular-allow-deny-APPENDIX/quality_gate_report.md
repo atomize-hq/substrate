@@ -26,7 +26,7 @@ export FEATURE_DIR="docs/project_management/_archived/world-fs-granular-allow-de
 # JSON validity
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
 echo "exit:$?"
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 echo "exit:$?"
 
 # tasks.json required-field audit
@@ -57,7 +57,7 @@ PY
 
 Observed results:
 - `jq -e . "$FEATURE_DIR/tasks.json"` → `exit:0`
-- `jq -e . docs/project_management/next/sequencing.json` → `exit:0`
+- `jq -e . docs/project_management/packs/sequencing.json` → `exit:0`
 - `tasks.json required-field audit` → `OK: tasks.json required fields present`
 
 ### Planning lint (mechanical)
@@ -85,7 +85,7 @@ Observed results:
 - `impact_map.md`: `YES`
 - `manual_testing_playbook.md`: `YES`
 - Feature smoke scripts under `smoke/` (if required): `YES` (`smoke/linux-smoke.sh`, plus reviewed `smoke/_core.sh`, `smoke/macos-smoke.sh`, `smoke/windows-smoke.ps1`)
-- `docs/project_management/next/sequencing.json`: `YES`
+- `docs/project_management/packs/sequencing.json`: `YES`
 - Standards:
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
@@ -125,7 +125,7 @@ Observed results:
 ### 4) Sequencing and dependency alignment
 - Result: `PASS`
 - Evidence:
-  - `docs/project_management/next/sequencing.json` includes the sprint `world_fs_granular_allow_deny_appendix` with `WFGADAX0..3`.
+  - `docs/project_management/packs/sequencing.json` includes the sprint `world_fs_granular_allow_deny_appendix` with `WFGADAX0..3`.
   - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/tasks.json` gates `WFGADAX2-*` on `CP1-ci-checkpoint` and uses schema v4 checkpoint boundaries.
 - Notes: Task deps prevent starting the next checkpoint group before completing the prior checkpoint ops task.
 
@@ -165,7 +165,7 @@ Observed results:
 ### Finding 002 — Sequencing + checkpoint wiring is correct (schema v4 boundary-only platform-fix)
 - Status: `VERIFIED`
 - Evidence:
-  - `docs/project_management/next/sequencing.json` sprint `world_fs_granular_allow_deny_appendix` lists `WFGADAX0..3`.
+  - `docs/project_management/packs/sequencing.json` sprint `world_fs_granular_allow_deny_appendix` lists `WFGADAX0..3`.
   - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/tasks.json` meta `schema_version=4` and `checkpoint_boundaries=["WFGADAX1","WFGADAX3"]`, with boundary slices defining `*-integ-core`/`*-integ-<platform>` tasks.
 - Impact: Execution cannot bypass planned CI checkpoints; cross-platform platform-fix task explosion is correctly bounded to checkpoint boundaries.
 - Fix required (exact): none
@@ -262,7 +262,7 @@ export FEATURE_DIR="docs/project_management/_archived/world-fs-granular-allow-de
 # JSON validity
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
 echo "exit:$?"
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 echo "exit:$?"
 
 # tasks.json required-field audit
@@ -299,7 +299,7 @@ echo "exit:$?"
 
 Observed results:
 - `jq -e . "$FEATURE_DIR/tasks.json"` → `exit:0`
-- `jq -e . docs/project_management/next/sequencing.json` → `exit:0`
+- `jq -e . docs/project_management/packs/sequencing.json` → `exit:0`
 - `tasks.json required-field audit` → `OK: tasks.json required fields present`
 - `make planning-lint ...` → `exit:0`
 - `make planning-validate ...` → `exit:0`
@@ -375,7 +375,7 @@ Observed results:
   - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/spec_manifest.md` states `impact_map.md` covers “cross-queue conflicts”.
   - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/impact_map.md` contains no “Cross-queue scan” or “conflict resolution” section.
 - Impact: Sequencing risk is not audited; overlapping queued work can cause conflicting changes to land concurrently, breaking determinism and forcing rework mid-execution.
-- Fix required (exact): Add a “Cross-queue scan” section to `impact_map.md` listing any overlapping ADRs/Planning Packs and stating an explicit resolution (no overlap boundary vs ordering dependency) consistent with `docs/project_management/next/sequencing.json`.
+- Fix required (exact): Add a “Cross-queue scan” section to `impact_map.md` listing any overlapping ADRs/Planning Packs and stating an explicit resolution (no overlap boundary vs ordering dependency) consistent with `docs/project_management/packs/sequencing.json`.
 - Alternative (one viable): If no overlaps exist, add a minimal cross-queue scan section stating “none found” and record the scan scope (directories searched + date).
 
 ### Finding 006 — CI checkpoint ops tasks are not runnable/auditable from acceptance criteria + kickoff prompts
@@ -422,7 +422,7 @@ export FEATURE_DIR="docs/project_management/_archived/world-fs-granular-allow-de
 # JSON validity
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
 echo "exit:$?"
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 echo "exit:$?"
 
 # tasks.json required-field audit
@@ -511,7 +511,7 @@ Observed results:
 - `impact_map.md`: `YES`
 - `manual_testing_playbook.md`: `YES`
 - Feature smoke scripts under `smoke/` (if required): `YES`
-- `docs/project_management/next/sequencing.json`: `YES`
+- `docs/project_management/packs/sequencing.json`: `YES`
 - Standards: `YES` (all required by the quality gate prompt)
 
 ## Gate Results (PASS/FAIL with evidence)
@@ -641,7 +641,7 @@ export FEATURE_DIR="docs/project_management/_archived/world-fs-granular-allow-de
 # JSON validity
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
 echo "exit:$?"
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 echo "exit:$?"
 
 # tasks.json required-field audit
@@ -679,7 +679,7 @@ echo "exit:$?"
 
 Observed results:
 - `jq -e . "$FEATURE_DIR/tasks.json"` → `exit:0`
-- `jq -e . docs/project_management/next/sequencing.json` → `exit:0`
+- `jq -e . docs/project_management/packs/sequencing.json` → `exit:0`
 - `tasks.json required-field audit` → `OK: tasks.json required fields present` (exit `0`)
 - `make planning-validate ...` → `exit:0`
 - `make planning-lint ...` → `exit:0` (planning lint passed)
@@ -695,7 +695,7 @@ Observed results:
 - `impact_map.md`: `YES`
 - `manual_testing_playbook.md`: `YES`
 - Feature smoke scripts under `smoke/` (if required): `YES` (required: `smoke/linux-smoke.sh`)
-- `docs/project_management/next/sequencing.json`: `YES`
+- `docs/project_management/packs/sequencing.json`: `YES`
 - Standards:
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
@@ -733,7 +733,7 @@ Observed results:
 ### 4) Sequencing and dependency alignment
 - Result: `PASS`
 - Evidence:
-  - `docs/project_management/next/sequencing.json` includes the sprint `world_fs_granular_allow_deny_appendix` with `WFGADAX0..3`.
+  - `docs/project_management/packs/sequencing.json` includes the sprint `world_fs_granular_allow_deny_appendix` with `WFGADAX0..3`.
   - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/tasks.json` gates checkpoint groups via `CP1-ci-checkpoint` / `CP2-ci-checkpoint`, consistent with schema v4 checkpoint boundaries.
 
 ### 5) Testability and validation readiness

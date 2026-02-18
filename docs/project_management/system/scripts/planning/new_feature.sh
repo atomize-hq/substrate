@@ -4,14 +4,13 @@ set -euo pipefail
 usage() {
     cat <<'USAGE'
 Usage:
-  scripts/planning/new_feature.sh --feature <feature_dir_name> [--slice-prefix <code>] [--decision-heavy] [--cross-platform] [--behavior-platforms <csv>] [--ci-parity-platforms <csv>] [--wsl-required] [--wsl-separate] [--automation]
+  make planning-new-feature FEATURE=<feature_dir_name> [DECISION_HEAVY=1] [CROSS_PLATFORM=1] [AUTOMATION=1] [...]
 
 Example:
-  scripts/planning/new_feature.sh --feature world-sync --decision-heavy --cross-platform
+  make planning-new-feature FEATURE=world-sync DECISION_HEAVY=1 CROSS_PLATFORM=1
 
 Creates:
   docs/project_management/packs/active/<feature>/   (canonical)
-  docs/project_management/next/<feature>/           (legacy compatibility during migration)
     plan.md
     tasks.json
     session_log.md
@@ -176,7 +175,7 @@ if [[ "${CROSS_PLATFORM}" -eq 1 ]]; then
     fi
 fi
 
-pm_roots_json="$(python3 scripts/planning/pm_paths.py print-roots 2>/dev/null)" || {
+pm_roots_json="$(python3 "${SCRIPT_DIR}/pm_paths.py" print-roots 2>/dev/null)" || {
     echo "ERROR: failed to resolve PM roots (pm_paths.py print-roots)" >&2
     exit 2
 }
@@ -189,7 +188,8 @@ if [[ -z "${PM_PACKS_ROOT}" ]]; then
 fi
 
 FEATURE_DIR="${PM_PACKS_ROOT%/}/active/${FEATURE}"
-TEMPLATES_DIR="docs/project_management/standards/templates"
+PLANNING_TEMPLATES_DIR="docs/project_management/system/templates/planning_pack"
+KICKOFF_TEMPLATES_DIR="docs/project_management/system/templates/kickoff"
 ORCH_BRANCH="feat/${FEATURE}"
 
 if [[ -e "${FEATURE_DIR}" ]]; then
@@ -226,26 +226,26 @@ render() {
 
 mkdir -p "${FEATURE_DIR}/kickoff_prompts"
 
-render "${TEMPLATES_DIR}/plan.md.tmpl" "${FEATURE_DIR}/plan.md"
-render "${TEMPLATES_DIR}/session_log.md.tmpl" "${FEATURE_DIR}/session_log.md"
-render "${TEMPLATES_DIR}/contract.md.tmpl" "${FEATURE_DIR}/contract.md"
-render "${TEMPLATES_DIR}/spec_manifest.md.tmpl" "${FEATURE_DIR}/spec_manifest.md"
-render "${TEMPLATES_DIR}/impact_map.md.tmpl" "${FEATURE_DIR}/impact_map.md"
+render "${PLANNING_TEMPLATES_DIR}/plan.md.tmpl" "${FEATURE_DIR}/plan.md"
+render "${PLANNING_TEMPLATES_DIR}/session_log.md.tmpl" "${FEATURE_DIR}/session_log.md"
+render "${PLANNING_TEMPLATES_DIR}/contract.md.tmpl" "${FEATURE_DIR}/contract.md"
+render "${PLANNING_TEMPLATES_DIR}/spec_manifest.md.tmpl" "${FEATURE_DIR}/spec_manifest.md"
+render "${PLANNING_TEMPLATES_DIR}/impact_map.md.tmpl" "${FEATURE_DIR}/impact_map.md"
 if [[ "${CROSS_PLATFORM}" -eq 1 && "${AUTOMATION}" -eq 1 ]]; then
-    render "${TEMPLATES_DIR}/ci_checkpoint_plan.md.tmpl" "${FEATURE_DIR}/ci_checkpoint_plan.md"
+    render "${PLANNING_TEMPLATES_DIR}/ci_checkpoint_plan.md.tmpl" "${FEATURE_DIR}/ci_checkpoint_plan.md"
 fi
 
-render "${TEMPLATES_DIR}/slice_spec.v2.md.tmpl" "${FEATURE_DIR}/${SLICE_ID}-spec.md"
+render "${PLANNING_TEMPLATES_DIR}/slice_spec.v2.md.tmpl" "${FEATURE_DIR}/${SLICE_ID}-spec.md"
 
-render "${TEMPLATES_DIR}/execution_preflight_report.md.tmpl" "${FEATURE_DIR}/execution_preflight_report.md"
-render "${TEMPLATES_DIR}/slice_closeout_report.md.tmpl" "${FEATURE_DIR}/${SLICE_ID}-closeout_report.md" "" "${SLICE_ID}-spec.md" "" "" "" "${SLICE_ID}"
+render "${PLANNING_TEMPLATES_DIR}/execution_preflight_report.md.tmpl" "${FEATURE_DIR}/execution_preflight_report.md"
+render "${PLANNING_TEMPLATES_DIR}/slice_closeout_report.md.tmpl" "${FEATURE_DIR}/${SLICE_ID}-closeout_report.md" "" "${SLICE_ID}-spec.md" "" "" "" "${SLICE_ID}"
 
-render "${TEMPLATES_DIR}/kickoff_exec_preflight.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/F0-exec-preflight.md" "F0-exec-preflight"
+render "${KICKOFF_TEMPLATES_DIR}/kickoff_exec_preflight.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/F0-exec-preflight.md" "F0-exec-preflight"
 if [[ "${AUTOMATION}" -eq 1 ]]; then
-    render "${TEMPLATES_DIR}/kickoff_feature_cleanup.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/FZ-feature-cleanup.md" "FZ-feature-cleanup"
+    render "${KICKOFF_TEMPLATES_DIR}/kickoff_feature_cleanup.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/FZ-feature-cleanup.md" "FZ-feature-cleanup"
 fi
 if [[ "${CROSS_PLATFORM}" -eq 1 && "${AUTOMATION}" -eq 1 ]]; then
-    render "${TEMPLATES_DIR}/kickoff_ci_checkpoint.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/CP1-ci-checkpoint.md" "CP1-ci-checkpoint"
+    render "${KICKOFF_TEMPLATES_DIR}/kickoff_ci_checkpoint.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/CP1-ci-checkpoint.md" "CP1-ci-checkpoint"
 fi
 
 FEATURE="${FEATURE}" FEATURE_DIR="${FEATURE_DIR}" SLICE_ID="${SLICE_ID}" SLICE_ID_LOWER="${SLICE_ID_LOWER}" CROSS_PLATFORM="${CROSS_PLATFORM}" BEHAVIOR_PLATFORMS="${BEHAVIOR_PLATFORMS}" CI_PARITY_PLATFORMS="${CI_PARITY_PLATFORMS}" WSL_REQUIRED="${WSL_REQUIRED}" WSL_SEPARATE="${WSL_SEPARATE}" AUTOMATION="${AUTOMATION}" \
@@ -803,12 +803,12 @@ if automation:
             "type": "ops",
             "phase": "FZ",
             "status": "pending",
-            "description": "At feature end, remove retained worktrees and optionally prune task branches via scripts/triad/feature_cleanup.sh.",
+            "description": "At feature end, remove retained worktrees and optionally prune task branches via make triad-feature-cleanup.",
             "references": [
                 os.path.join(feature_dir, "plan.md"),
                 os.path.join(feature_dir, "tasks.json"),
                 os.path.join(feature_dir, "session_log.md"),
-                "scripts/triad/feature_cleanup.sh",
+                "make triad-feature-cleanup",
             ],
             "acceptance_criteria": [
                 "All worktrees removed (or intentionally retained) and cleanup summary recorded in session_log.md",

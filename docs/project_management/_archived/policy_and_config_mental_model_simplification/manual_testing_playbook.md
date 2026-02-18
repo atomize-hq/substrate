@@ -9,9 +9,9 @@ This playbook validates the ADR-0003 CLI and on-disk contracts using disposable 
 ## Automation (preferred)
 
 Run the feature-local smoke scripts:
-- Linux: `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh` → exit `0`
-- macOS: `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh` → exit `0`
-- Windows: `pwsh -File docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1` → exit `0`
+- Linux: `bash docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh` → exit `0`
+- macOS: `bash docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh` → exit `0`
+- Windows: `pwsh -File docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1` → exit `0`
 
 ## Manual steps (debugging and deeper inspection)
 

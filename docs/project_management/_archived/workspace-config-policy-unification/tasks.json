@@ -850,7 +850,7 @@
         "docs/project_management/_archived/workspace-config-policy-unification/decision_register.md (DR-0013)",
         "docs/project_management/_archived/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md",
         "docs/project_management/_archived/workspace-config-policy-unification/WCU3-spec.md",
-        "docs/project_management/next/world_deps_packages_bundles_contract.md"
+        "docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md"
       ],
       "acceptance_criteria": [
         "Integration tests cover global + workspace `+=` and `-=` edits to `world.deps.enabled` and effective concat+dedupe ordered-set behavior (including a deliberate duplicate across scopes)",

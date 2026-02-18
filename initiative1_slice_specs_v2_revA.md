@@ -33,7 +33,7 @@ Key changes:
 3. **Traceability contract (machine-checkable)**:
    - Slice specs contain AC IDs.
    - `tasks.json` triad tasks contain an `ac_ids` list that maps to the slice spec’s AC IDs.
-4. **Validator**: `scripts/planning/validate_slice_specs.py` runs in planning lint and blocks invalid v2 slice specs (but only when opted in).
+4. **Validator**: `docs/project_management/system/scripts/planning/validate_slice_specs.py` runs in planning lint and blocks invalid v2 slice specs (but only when opted in).
 5. **Checkpoint boundary sizing update** (because slices become smaller): update default checkpoint group bounds from **2–4** to **4–8** triads (details below).
 
 ---
@@ -64,7 +64,7 @@ Key changes:
 
 ### 2.1 Why gating is required
 
-Planning lint (`scripts/planning/lint.*`) is intentionally strict and is used by the quality gate. If we add a new validator unconditionally, **existing packs** that contain legacy slice spec scaffolds (e.g., `None yet.`) will fail immediately.
+Planning lint (`docs/project_management/system/scripts/planning/lint.*`) is intentionally strict and is used by the quality gate. If we add a new validator unconditionally, **existing packs** that contain legacy slice spec scaffolds (e.g., `None yet.`) will fail immediately.
 
 So: **slice spec v2 enforcement must be explicitly opted-in per Planning Pack**.
 
@@ -220,8 +220,8 @@ Rationale:
 ### 4.2 Update planning feature scaffolding to use the template
 
 **Modify:**
-- `scripts/planning/new_feature.sh`
-- `scripts/planning/new_feature.ps1`
+- `docs/project_management/system/scripts/planning/new_feature.sh`
+- `docs/project_management/system/scripts/planning/new_feature.ps1`
 
 Changes:
 1. Replace the heredoc that writes `${SLICE_ID}-spec.md` with a `render` call:
@@ -250,10 +250,10 @@ So all new packs adopt v2 by default.
 ### 4.3 Add a slice spec validator (with gating)
 
 **Add file:**
-- `scripts/planning/validate_slice_specs.py`
+- `docs/project_management/system/scripts/planning/validate_slice_specs.py`
 
 #### 4.3.1 Validator inputs
-- `--feature-dir <path>`: the Planning Pack directory (currently `docs/project_management/next/<feature>`).
+- `--feature-dir <path>`: the Planning Pack directory (currently `docs/project_management/_archived/next/<feature>`).
 
 Optional:
 - `--force-v2` (future): enforce v2 regardless of meta.
@@ -377,14 +377,14 @@ This keeps `acceptance_criteria[]` human-readable while the validator keys off `
 ### 4.5 Add validator to planning lint (safe because gated)
 
 **Modify:**
-- `scripts/planning/lint.sh`
-- `scripts/planning/lint.ps1`
+- `docs/project_management/system/scripts/planning/lint.sh`
+- `docs/project_management/system/scripts/planning/lint.ps1`
 
 Add after `validate_spec_manifest.py`:
 
 ```bash
 echo "-- slice spec invariants (gated by meta.slice_spec_version)"
-python3 scripts/planning/validate_slice_specs.py --feature-dir "${FEATURE_DIR}"
+python3 docs/project_management/system/scripts/planning/validate_slice_specs.py --feature-dir "${FEATURE_DIR}"
 ```
 
 Because the validator is gated, this will not break existing packs that do not opt in.
@@ -434,7 +434,7 @@ Recommended: migrate “active” packs first; leave historical packs untouched.
 ### 6.1 Verify gating behavior
 - Pick an existing pack that does **not** set `meta.slice_spec_version`.
 - Run:
-  - `scripts/planning/lint.sh --feature-dir <pack>`
+  - `docs/project_management/system/scripts/planning/lint.sh --feature-dir <pack>`
 - Expected:
   - `validate_slice_specs.py` reports SKIP or runs in v1 mode and exits 0.
 
@@ -460,9 +460,9 @@ Validator must fail with actionable errors.
 
 ## 7. Acceptance criteria for this initiative
 
-- New features created via `scripts/planning/new_feature.*` include a v2 slice spec scaffold (template-based).
+- New features created via `docs/project_management/system/scripts/planning/new_feature.*` include a v2 slice spec scaffold (template-based).
 - The v2 scaffold includes `[[FILL]]` placeholders and cannot pass lint until filled.
-- `scripts/planning/validate_slice_specs.py` exists, is gated by `meta.slice_spec_version`, and is invoked by planning lint.
+- `docs/project_management/system/scripts/planning/validate_slice_specs.py` exists, is gated by `meta.slice_spec_version`, and is invoked by planning lint.
 - For v2 packs, slice specs must have AC IDs and ≤ 8 AC items; triad tasks must include `ac_ids` matching the spec.
 - Checkpoint sizing defaults updated to **4–8** in:
   - `ci_checkpoint_plan.md.tmpl`

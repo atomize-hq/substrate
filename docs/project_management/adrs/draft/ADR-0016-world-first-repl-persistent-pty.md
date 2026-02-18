@@ -7,7 +7,7 @@
 
 ## Scope
 - Feature directory: `docs/project_management/_archived/world-first-repl-persistent-pty/`
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
@@ -31,7 +31,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: b695a30f0ae29abcda629bf32a771fc67c717c9808c222694fdd09337d70b0b8
+ADR_BODY_SHA256: bf57359d419815ca41a2cc284c29b9270f49d63d09b3e27d5e6f198ba907cf59
 ### Changes (operator-facing)
 - Make interactive `substrate` behave like a normal in-world shell by default (persistent world PTY session)
   - Existing: In the REPL, most commands run in the world overlay view, but stateful builtins (`cd`, `pwd`, `export`, `unset`) run on the host and operate on host paths/env; this can yield surprising “exists in world but cd fails” behavior.
@@ -184,7 +184,7 @@ ADR_BODY_SHA256: b695a30f0ae29abcda629bf32a771fc67c717c9808c222694fdd09337d70b0b
 ## Sequencing / Dependencies
 - This ADR depends on the existing world-agent streaming (`/v1/stream`) and REPL routing layers but introduces a new “persistent session” requirement.
 - No explicit triad dependencies are declared in this Draft; once scheduled, this work must be integrated into:
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
   - `docs/project_management/_archived/world-first-repl-persistent-pty/tasks.json`
 
 ## Security / Safety Posture

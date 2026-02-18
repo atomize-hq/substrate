@@ -11,8 +11,8 @@
       "status": "pending",
       "description": "Implement substrate init and world gating per C0-spec (production code only).",
       "references": [
-        "docs/project_management/next/world-sync/plan.md",
-        "docs/project_management/next/world-sync/C0-spec.md",
+        "docs/project_management/_archived/next/world-sync/plan.md",
+        "docs/project_management/_archived/next/world-sync/C0-spec.md",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
         "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md"
       ],
@@ -35,7 +35,7 @@
       ],
       "worktree": "wt/ws-c0-init-code",
       "integration_task": "C0-integ",
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C0-code.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/world-sync/kickoff_prompts/C0-code.md",
       "depends_on": [],
       "concurrent_with": ["C0-test"]
     },
@@ -47,7 +47,7 @@
       "status": "pending",
       "description": "Add tests for substrate init and gating per C0-spec.",
       "references": [
-        "docs/project_management/next/world-sync/C0-spec.md",
+        "docs/project_management/_archived/next/world-sync/C0-spec.md",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -69,7 +69,7 @@
       ],
       "worktree": "wt/ws-c0-init-test",
       "integration_task": "C0-integ",
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C0-test.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/world-sync/kickoff_prompts/C0-test.md",
       "depends_on": [],
       "concurrent_with": ["C0-code"]
     },
@@ -81,11 +81,11 @@
       "status": "pending",
       "description": "Merge C0 code+tests, ensure fmt/clippy/tests and make integ-checks pass.",
       "references": [
-        "docs/project_management/next/world-sync/C0-spec.md",
-        "docs/project_management/next/world-sync/manual_testing_playbook.md",
-        "docs/project_management/next/world-sync/smoke/linux-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/macos-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "docs/project_management/_archived/next/world-sync/C0-spec.md",
+        "docs/project_management/_archived/next/world-sync/manual_testing_playbook.md",
+        "docs/project_management/_archived/next/world-sync/smoke/linux-smoke.sh",
+        "docs/project_management/_archived/next/world-sync/smoke/macos-smoke.sh",
+        "docs/project_management/_archived/next/world-sync/smoke/windows-smoke.ps1",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -101,14 +101,14 @@
       ],
       "end_checklist": [
         "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
-        "Run: bash docs/project_management/next/world-sync/smoke/linux-smoke.sh",
-        "Run: bash docs/project_management/next/world-sync/smoke/macos-smoke.sh",
-        "Run: pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "Run: bash docs/project_management/_archived/next/world-sync/smoke/linux-smoke.sh",
+        "Run: bash docs/project_management/_archived/next/world-sync/smoke/macos-smoke.sh",
+        "Run: pwsh -File docs/project_management/_archived/next/world-sync/smoke/windows-smoke.ps1",
         "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
       ],
       "worktree": "wt/ws-c0-init-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C0-integ.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/world-sync/kickoff_prompts/C0-integ.md",
       "depends_on": ["C0-code", "C0-test"],
       "concurrent_with": []
     },
@@ -120,8 +120,8 @@
       "status": "pending",
       "description": "Implement settings/CLI parsing and stub sync command per C1-spec (no behavior change).",
       "references": [
-        "docs/project_management/next/world-sync/plan.md",
-        "docs/project_management/next/world-sync/C1-spec.md",
+        "docs/project_management/_archived/next/world-sync/plan.md",
+        "docs/project_management/_archived/next/world-sync/C1-spec.md",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
         "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md"
       ],
@@ -144,7 +144,7 @@
       ],
       "worktree": "wt/ws-c1-config-code",
       "integration_task": "C1-integ",
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C1-code.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/world-sync/kickoff_prompts/C1-code.md",
       "depends_on": ["C0-integ"],
       "concurrent_with": ["C1-test"]
     },
@@ -156,7 +156,7 @@
       "status": "pending",
       "description": "Add tests/fixtures for settings/CLI precedence and defaults per C1-spec.",
       "references": [
-        "docs/project_management/next/world-sync/C1-spec.md",
+        "docs/project_management/_archived/next/world-sync/C1-spec.md",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -178,7 +178,7 @@
       ],
       "worktree": "wt/ws-c1-config-test",
       "integration_task": "C1-integ",
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C1-test.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/world-sync/kickoff_prompts/C1-test.md",
       "depends_on": ["C0-integ"],
       "concurrent_with": ["C1-code"]
     },
@@ -190,11 +190,11 @@
       "status": "pending",
       "description": "Merge C1 code+tests, ensure fmt/clippy/tests and make integ-checks pass.",
       "references": [
-        "docs/project_management/next/world-sync/C1-spec.md",
-        "docs/project_management/next/world-sync/manual_testing_playbook.md",
-        "docs/project_management/next/world-sync/smoke/linux-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/macos-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "docs/project_management/_archived/next/world-sync/C1-spec.md",
+        "docs/project_management/_archived/next/world-sync/manual_testing_playbook.md",
+        "docs/project_management/_archived/next/world-sync/smoke/linux-smoke.sh",
+        "docs/project_management/_archived/next/world-sync/smoke/macos-smoke.sh",
+        "docs/project_management/_archived/next/world-sync/smoke/windows-smoke.ps1",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -210,14 +210,14 @@
       ],
       "end_checklist": [
         "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
-        "Run: bash docs/project_management/next/world-sync/smoke/linux-smoke.sh",
-        "Run: bash docs/project_management/next/world-sync/smoke/macos-smoke.sh",
-        "Run: pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "Run: bash docs/project_management/_archived/next/world-sync/smoke/linux-smoke.sh",
+        "Run: bash docs/project_management/_archived/next/world-sync/smoke/macos-smoke.sh",
+        "Run: pwsh -File docs/project_management/_archived/next/world-sync/smoke/windows-smoke.ps1",
         "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
       ],
       "worktree": "wt/ws-c1-config-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C1-integ.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/world-sync/kickoff_prompts/C1-integ.md",
       "depends_on": ["C1-code", "C1-test"],
       "concurrent_with": []
     },
@@ -230,8 +230,8 @@
       "status": "pending",
       "description": "Implement manual world→host sync apply for non-PTY per C2-spec.",
       "references": [
-        "docs/project_management/next/world-sync/C2-spec.md",
-        "docs/project_management/next/world-sync/manual_testing_playbook.md",
+        "docs/project_management/_archived/next/world-sync/C2-spec.md",
+        "docs/project_management/_archived/next/world-sync/manual_testing_playbook.md",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -253,7 +253,7 @@
       ],
       "worktree": "wt/ws-c2-sync-code",
       "integration_task": "C2-integ",
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C2-code.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/world-sync/kickoff_prompts/C2-code.md",
       "depends_on": ["WDL2-integ"],
       "concurrent_with": ["C2-test"]
     },
@@ -265,7 +265,7 @@
       "status": "pending",
       "description": "Add tests for non-PTY world→host sync engine per C2-spec.",
       "references": [
-        "docs/project_management/next/world-sync/C2-spec.md",
+        "docs/project_management/_archived/next/world-sync/C2-spec.md",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -287,7 +287,7 @@
       ],
       "worktree": "wt/ws-c2-sync-test",
       "integration_task": "C2-integ",
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C2-test.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/world-sync/kickoff_prompts/C2-test.md",
       "depends_on": ["WDL2-integ"],
       "concurrent_with": ["C2-code"]
     },
@@ -299,11 +299,11 @@
       "status": "pending",
       "description": "Merge C2 code+tests, ensure fmt/clippy/tests and make integ-checks pass.",
       "references": [
-        "docs/project_management/next/world-sync/C2-spec.md",
-        "docs/project_management/next/world-sync/manual_testing_playbook.md",
-        "docs/project_management/next/world-sync/smoke/linux-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/macos-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "docs/project_management/_archived/next/world-sync/C2-spec.md",
+        "docs/project_management/_archived/next/world-sync/manual_testing_playbook.md",
+        "docs/project_management/_archived/next/world-sync/smoke/linux-smoke.sh",
+        "docs/project_management/_archived/next/world-sync/smoke/macos-smoke.sh",
+        "docs/project_management/_archived/next/world-sync/smoke/windows-smoke.ps1",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -319,14 +319,14 @@
       ],
       "end_checklist": [
         "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
-        "Run: bash docs/project_management/next/world-sync/smoke/linux-smoke.sh",
-        "Run: bash docs/project_management/next/world-sync/smoke/macos-smoke.sh",
-        "Run: pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "Run: bash docs/project_management/_archived/next/world-sync/smoke/linux-smoke.sh",
+        "Run: bash docs/project_management/_archived/next/world-sync/smoke/macos-smoke.sh",
+        "Run: pwsh -File docs/project_management/_archived/next/world-sync/smoke/windows-smoke.ps1",
         "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
       ],
       "worktree": "wt/ws-c2-sync-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C2-integ.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/world-sync/kickoff_prompts/C2-integ.md",
       "depends_on": ["C2-code", "C2-test"],
       "concurrent_with": []
     },
@@ -339,7 +339,7 @@
       "status": "pending",
       "description": "Add auto-sync on session close for non-PTY per C3-spec.",
       "references": [
-        "docs/project_management/next/world-sync/C3-spec.md",
+        "docs/project_management/_archived/next/world-sync/C3-spec.md",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -361,7 +361,7 @@
       ],
       "worktree": "wt/ws-c3-autosync-code",
       "integration_task": "C3-integ",
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C3-code.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/world-sync/kickoff_prompts/C3-code.md",
       "depends_on": ["C2-integ"],
       "concurrent_with": ["C3-test"]
     },
@@ -373,7 +373,7 @@
       "status": "pending",
       "description": "Add tests covering auto-sync hooks and safety rails per C3-spec.",
       "references": [
-        "docs/project_management/next/world-sync/C3-spec.md",
+        "docs/project_management/_archived/next/world-sync/C3-spec.md",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -395,7 +395,7 @@
       ],
       "worktree": "wt/ws-c3-autosync-test",
       "integration_task": "C3-integ",
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C3-test.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/world-sync/kickoff_prompts/C3-test.md",
       "depends_on": ["C2-integ"],
       "concurrent_with": ["C3-code"]
     },
@@ -407,11 +407,11 @@
       "status": "pending",
       "description": "Merge C3 code+tests, ensure fmt/clippy/tests and make integ-checks pass.",
       "references": [
-        "docs/project_management/next/world-sync/C3-spec.md",
-        "docs/project_management/next/world-sync/manual_testing_playbook.md",
-        "docs/project_management/next/world-sync/smoke/linux-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/macos-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "docs/project_management/_archived/next/world-sync/C3-spec.md",
+        "docs/project_management/_archived/next/world-sync/manual_testing_playbook.md",
+        "docs/project_management/_archived/next/world-sync/smoke/linux-smoke.sh",
+        "docs/project_management/_archived/next/world-sync/smoke/macos-smoke.sh",
+        "docs/project_management/_archived/next/world-sync/smoke/windows-smoke.ps1",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -427,14 +427,14 @@
       ],
       "end_checklist": [
         "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
-        "Run: bash docs/project_management/next/world-sync/smoke/linux-smoke.sh",
-        "Run: bash docs/project_management/next/world-sync/smoke/macos-smoke.sh",
-        "Run: pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "Run: bash docs/project_management/_archived/next/world-sync/smoke/linux-smoke.sh",
+        "Run: bash docs/project_management/_archived/next/world-sync/smoke/macos-smoke.sh",
+        "Run: pwsh -File docs/project_management/_archived/next/world-sync/smoke/windows-smoke.ps1",
         "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
       ],
       "worktree": "wt/ws-c3-autosync-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C3-integ.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/world-sync/kickoff_prompts/C3-integ.md",
       "depends_on": ["C3-code", "C3-test"],
       "concurrent_with": []
     },
@@ -447,7 +447,7 @@
       "status": "pending",
       "description": "Expose PTY diffs and enable PTY world→host sync per C4-spec.",
       "references": [
-        "docs/project_management/next/world-sync/C4-spec.md",
+        "docs/project_management/_archived/next/world-sync/C4-spec.md",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -469,7 +469,7 @@
       ],
       "worktree": "wt/ws-c4-pty-code",
       "integration_task": "C4-integ",
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C4-code.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/world-sync/kickoff_prompts/C4-code.md",
       "depends_on": ["C3-integ"],
       "concurrent_with": ["C4-test"]
     },
@@ -481,7 +481,7 @@
       "status": "pending",
       "description": "Add PTY-focused sync tests per C4-spec.",
       "references": [
-        "docs/project_management/next/world-sync/C4-spec.md",
+        "docs/project_management/_archived/next/world-sync/C4-spec.md",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -503,7 +503,7 @@
       ],
       "worktree": "wt/ws-c4-pty-test",
       "integration_task": "C4-integ",
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C4-test.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/world-sync/kickoff_prompts/C4-test.md",
       "depends_on": ["C3-integ"],
       "concurrent_with": ["C4-code"]
     },
@@ -515,11 +515,11 @@
       "status": "pending",
       "description": "Merge C4 code+tests, ensure fmt/clippy/tests and make integ-checks pass.",
       "references": [
-        "docs/project_management/next/world-sync/C4-spec.md",
-        "docs/project_management/next/world-sync/manual_testing_playbook.md",
-        "docs/project_management/next/world-sync/smoke/linux-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/macos-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "docs/project_management/_archived/next/world-sync/C4-spec.md",
+        "docs/project_management/_archived/next/world-sync/manual_testing_playbook.md",
+        "docs/project_management/_archived/next/world-sync/smoke/linux-smoke.sh",
+        "docs/project_management/_archived/next/world-sync/smoke/macos-smoke.sh",
+        "docs/project_management/_archived/next/world-sync/smoke/windows-smoke.ps1",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -535,14 +535,14 @@
       ],
       "end_checklist": [
         "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
-        "Run: bash docs/project_management/next/world-sync/smoke/linux-smoke.sh",
-        "Run: bash docs/project_management/next/world-sync/smoke/macos-smoke.sh",
-        "Run: pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "Run: bash docs/project_management/_archived/next/world-sync/smoke/linux-smoke.sh",
+        "Run: bash docs/project_management/_archived/next/world-sync/smoke/macos-smoke.sh",
+        "Run: pwsh -File docs/project_management/_archived/next/world-sync/smoke/windows-smoke.ps1",
         "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
       ],
       "worktree": "wt/ws-c4-pty-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C4-integ.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/world-sync/kickoff_prompts/C4-integ.md",
       "depends_on": ["C4-code", "C4-test"],
       "concurrent_with": []
     },
@@ -555,7 +555,7 @@
       "status": "pending",
       "description": "Implement host→world pre-sync and directionality per C5-spec.",
       "references": [
-        "docs/project_management/next/world-sync/C5-spec.md",
+        "docs/project_management/_archived/next/world-sync/C5-spec.md",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -577,7 +577,7 @@
       ],
       "worktree": "wt/ws-c5-hostsync-code",
       "integration_task": "C5-integ",
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C5-code.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/world-sync/kickoff_prompts/C5-code.md",
       "depends_on": ["C4-integ"],
       "concurrent_with": ["C5-test"]
     },
@@ -589,7 +589,7 @@
       "status": "pending",
       "description": "Add tests for host→world pre-sync per C5-spec.",
       "references": [
-        "docs/project_management/next/world-sync/C5-spec.md",
+        "docs/project_management/_archived/next/world-sync/C5-spec.md",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -611,7 +611,7 @@
       ],
       "worktree": "wt/ws-c5-hostsync-test",
       "integration_task": "C5-integ",
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C5-test.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/world-sync/kickoff_prompts/C5-test.md",
       "depends_on": ["C4-integ"],
       "concurrent_with": ["C5-code"]
     },
@@ -623,11 +623,11 @@
       "status": "pending",
       "description": "Merge C5 code+tests, ensure fmt/clippy/tests and make integ-checks pass.",
       "references": [
-        "docs/project_management/next/world-sync/C5-spec.md",
-        "docs/project_management/next/world-sync/manual_testing_playbook.md",
-        "docs/project_management/next/world-sync/smoke/linux-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/macos-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "docs/project_management/_archived/next/world-sync/C5-spec.md",
+        "docs/project_management/_archived/next/world-sync/manual_testing_playbook.md",
+        "docs/project_management/_archived/next/world-sync/smoke/linux-smoke.sh",
+        "docs/project_management/_archived/next/world-sync/smoke/macos-smoke.sh",
+        "docs/project_management/_archived/next/world-sync/smoke/windows-smoke.ps1",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -643,14 +643,14 @@
       ],
       "end_checklist": [
         "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
-        "Run: bash docs/project_management/next/world-sync/smoke/linux-smoke.sh",
-        "Run: bash docs/project_management/next/world-sync/smoke/macos-smoke.sh",
-        "Run: pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "Run: bash docs/project_management/_archived/next/world-sync/smoke/linux-smoke.sh",
+        "Run: bash docs/project_management/_archived/next/world-sync/smoke/macos-smoke.sh",
+        "Run: pwsh -File docs/project_management/_archived/next/world-sync/smoke/windows-smoke.ps1",
         "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
       ],
       "worktree": "wt/ws-c5-hostsync-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C5-integ.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/world-sync/kickoff_prompts/C5-integ.md",
       "depends_on": ["C5-code", "C5-test"],
       "concurrent_with": []
     },
@@ -663,7 +663,7 @@
       "status": "pending",
       "description": "Add host-side internal git init/commit/checkpoint hooks per C6-spec.",
       "references": [
-        "docs/project_management/next/world-sync/C6-spec.md",
+        "docs/project_management/_archived/next/world-sync/C6-spec.md",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -685,7 +685,7 @@
       ],
       "worktree": "wt/ws-c6-git-code",
       "integration_task": "C6-integ",
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C6-code.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/world-sync/kickoff_prompts/C6-code.md",
       "depends_on": ["C5-integ"],
       "concurrent_with": ["C6-test"]
     },
@@ -697,7 +697,7 @@
       "status": "pending",
       "description": "Add tests for host-side internal git init/commit/checkpoint per C6-spec.",
       "references": [
-        "docs/project_management/next/world-sync/C6-spec.md",
+        "docs/project_management/_archived/next/world-sync/C6-spec.md",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -719,7 +719,7 @@
       ],
       "worktree": "wt/ws-c6-git-test",
       "integration_task": "C6-integ",
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C6-test.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/world-sync/kickoff_prompts/C6-test.md",
       "depends_on": ["C5-integ"],
       "concurrent_with": ["C6-code"]
     },
@@ -731,11 +731,11 @@
       "status": "pending",
       "description": "Merge C6 code+tests, ensure fmt/clippy/tests and make integ-checks pass.",
       "references": [
-        "docs/project_management/next/world-sync/C6-spec.md",
-        "docs/project_management/next/world-sync/manual_testing_playbook.md",
-        "docs/project_management/next/world-sync/smoke/linux-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/macos-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "docs/project_management/_archived/next/world-sync/C6-spec.md",
+        "docs/project_management/_archived/next/world-sync/manual_testing_playbook.md",
+        "docs/project_management/_archived/next/world-sync/smoke/linux-smoke.sh",
+        "docs/project_management/_archived/next/world-sync/smoke/macos-smoke.sh",
+        "docs/project_management/_archived/next/world-sync/smoke/windows-smoke.ps1",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -751,14 +751,14 @@
       ],
       "end_checklist": [
         "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
-        "Run: bash docs/project_management/next/world-sync/smoke/linux-smoke.sh",
-        "Run: bash docs/project_management/next/world-sync/smoke/macos-smoke.sh",
-        "Run: pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "Run: bash docs/project_management/_archived/next/world-sync/smoke/linux-smoke.sh",
+        "Run: bash docs/project_management/_archived/next/world-sync/smoke/macos-smoke.sh",
+        "Run: pwsh -File docs/project_management/_archived/next/world-sync/smoke/windows-smoke.ps1",
         "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
       ],
       "worktree": "wt/ws-c6-git-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C6-integ.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/world-sync/kickoff_prompts/C6-integ.md",
       "depends_on": ["C6-code", "C6-test"],
       "concurrent_with": []
     },
@@ -771,7 +771,7 @@
       "status": "pending",
       "description": "Implement rollback CLI using internal git per C7-spec.",
       "references": [
-        "docs/project_management/next/world-sync/C7-spec.md",
+        "docs/project_management/_archived/next/world-sync/C7-spec.md",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -793,7 +793,7 @@
       ],
       "worktree": "wt/ws-c7-rollback-code",
       "integration_task": "C7-integ",
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C7-code.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/world-sync/kickoff_prompts/C7-code.md",
       "depends_on": ["C6-integ"],
       "concurrent_with": ["C7-test"]
     },
@@ -805,7 +805,7 @@
       "status": "pending",
       "description": "Add tests for rollback behavior per C7-spec.",
       "references": [
-        "docs/project_management/next/world-sync/C7-spec.md",
+        "docs/project_management/_archived/next/world-sync/C7-spec.md",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -827,7 +827,7 @@
       ],
       "worktree": "wt/ws-c7-rollback-test",
       "integration_task": "C7-integ",
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C7-test.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/world-sync/kickoff_prompts/C7-test.md",
       "depends_on": ["C6-integ"],
       "concurrent_with": ["C7-code"]
     },
@@ -839,11 +839,11 @@
       "status": "pending",
       "description": "Merge C7 code+tests, ensure fmt/clippy/tests and make integ-checks pass.",
       "references": [
-        "docs/project_management/next/world-sync/C7-spec.md",
-        "docs/project_management/next/world-sync/manual_testing_playbook.md",
-        "docs/project_management/next/world-sync/smoke/linux-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/macos-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "docs/project_management/_archived/next/world-sync/C7-spec.md",
+        "docs/project_management/_archived/next/world-sync/manual_testing_playbook.md",
+        "docs/project_management/_archived/next/world-sync/smoke/linux-smoke.sh",
+        "docs/project_management/_archived/next/world-sync/smoke/macos-smoke.sh",
+        "docs/project_management/_archived/next/world-sync/smoke/windows-smoke.ps1",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -859,14 +859,14 @@
       ],
       "end_checklist": [
         "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
-        "Run: bash docs/project_management/next/world-sync/smoke/linux-smoke.sh",
-        "Run: bash docs/project_management/next/world-sync/smoke/macos-smoke.sh",
-        "Run: pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "Run: bash docs/project_management/_archived/next/world-sync/smoke/linux-smoke.sh",
+        "Run: bash docs/project_management/_archived/next/world-sync/smoke/macos-smoke.sh",
+        "Run: pwsh -File docs/project_management/_archived/next/world-sync/smoke/windows-smoke.ps1",
         "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
       ],
       "worktree": "wt/ws-c7-rollback-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C7-integ.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/world-sync/kickoff_prompts/C7-integ.md",
       "depends_on": ["C7-code", "C7-test"],
       "concurrent_with": []
     },
@@ -878,7 +878,7 @@
       "status": "pending",
       "description": "Ensure world-side .substrate-git bootstrap/bridge per C8-spec.",
       "references": [
-        "docs/project_management/next/world-sync/C8-spec.md",
+        "docs/project_management/_archived/next/world-sync/C8-spec.md",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -900,7 +900,7 @@
       ],
       "worktree": "wt/ws-c8-worldgit-code",
       "integration_task": "C8-integ",
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C8-code.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/world-sync/kickoff_prompts/C8-code.md",
       "depends_on": ["C6-integ"],
       "concurrent_with": ["C8-test"]
     },
@@ -912,7 +912,7 @@
       "status": "pending",
       "description": "Add tests for world-side .substrate-git bootstrap/bridge per C8-spec.",
       "references": [
-        "docs/project_management/next/world-sync/C8-spec.md",
+        "docs/project_management/_archived/next/world-sync/C8-spec.md",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -934,7 +934,7 @@
       ],
       "worktree": "wt/ws-c8-worldgit-test",
       "integration_task": "C8-integ",
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C8-test.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/world-sync/kickoff_prompts/C8-test.md",
       "depends_on": ["C6-integ"],
       "concurrent_with": ["C8-code"]
     },
@@ -946,11 +946,11 @@
       "status": "pending",
       "description": "Merge C8 code+tests, ensure fmt/clippy/tests and make integ-checks pass.",
       "references": [
-        "docs/project_management/next/world-sync/C8-spec.md",
-        "docs/project_management/next/world-sync/manual_testing_playbook.md",
-        "docs/project_management/next/world-sync/smoke/linux-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/macos-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "docs/project_management/_archived/next/world-sync/C8-spec.md",
+        "docs/project_management/_archived/next/world-sync/manual_testing_playbook.md",
+        "docs/project_management/_archived/next/world-sync/smoke/linux-smoke.sh",
+        "docs/project_management/_archived/next/world-sync/smoke/macos-smoke.sh",
+        "docs/project_management/_archived/next/world-sync/smoke/windows-smoke.ps1",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -966,14 +966,14 @@
       ],
       "end_checklist": [
         "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
-        "Run: bash docs/project_management/next/world-sync/smoke/linux-smoke.sh",
-        "Run: bash docs/project_management/next/world-sync/smoke/macos-smoke.sh",
-        "Run: pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "Run: bash docs/project_management/_archived/next/world-sync/smoke/linux-smoke.sh",
+        "Run: bash docs/project_management/_archived/next/world-sync/smoke/macos-smoke.sh",
+        "Run: pwsh -File docs/project_management/_archived/next/world-sync/smoke/windows-smoke.ps1",
         "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
       ],
       "worktree": "wt/ws-c8-worldgit-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C8-integ.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/world-sync/kickoff_prompts/C8-integ.md",
       "depends_on": ["C8-code", "C8-test"],
       "concurrent_with": []
     },
@@ -985,7 +985,7 @@
       "status": "pending",
       "description": "Enhance init UX/migration per C9-spec (production code).",
       "references": [
-        "docs/project_management/next/world-sync/C9-spec.md",
+        "docs/project_management/_archived/next/world-sync/C9-spec.md",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -1007,7 +1007,7 @@
       ],
       "worktree": "wt/ws-c9-initux-code",
       "integration_task": "C9-integ",
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C9-code.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/world-sync/kickoff_prompts/C9-code.md",
       "depends_on": ["C0-integ"],
       "concurrent_with": ["C9-test"]
     },
@@ -1019,7 +1019,7 @@
       "status": "pending",
       "description": "Add tests for init UX/migration per C9-spec.",
       "references": [
-        "docs/project_management/next/world-sync/C9-spec.md",
+        "docs/project_management/_archived/next/world-sync/C9-spec.md",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -1041,7 +1041,7 @@
       ],
       "worktree": "wt/ws-c9-initux-test",
       "integration_task": "C9-integ",
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C9-test.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/world-sync/kickoff_prompts/C9-test.md",
       "depends_on": ["C0-integ"],
       "concurrent_with": ["C9-code"]
     },
@@ -1053,11 +1053,11 @@
       "status": "pending",
       "description": "Merge C9 code+tests, ensure fmt/clippy/tests and make integ-checks pass.",
       "references": [
-        "docs/project_management/next/world-sync/C9-spec.md",
-        "docs/project_management/next/world-sync/manual_testing_playbook.md",
-        "docs/project_management/next/world-sync/smoke/linux-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/macos-smoke.sh",
-        "docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "docs/project_management/_archived/next/world-sync/C9-spec.md",
+        "docs/project_management/_archived/next/world-sync/manual_testing_playbook.md",
+        "docs/project_management/_archived/next/world-sync/smoke/linux-smoke.sh",
+        "docs/project_management/_archived/next/world-sync/smoke/macos-smoke.sh",
+        "docs/project_management/_archived/next/world-sync/smoke/windows-smoke.ps1",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -1073,14 +1073,14 @@
       ],
       "end_checklist": [
         "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
-        "Run: bash docs/project_management/next/world-sync/smoke/linux-smoke.sh",
-        "Run: bash docs/project_management/next/world-sync/smoke/macos-smoke.sh",
-        "Run: pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "Run: bash docs/project_management/_archived/next/world-sync/smoke/linux-smoke.sh",
+        "Run: bash docs/project_management/_archived/next/world-sync/smoke/macos-smoke.sh",
+        "Run: pwsh -File docs/project_management/_archived/next/world-sync/smoke/windows-smoke.ps1",
         "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
       ],
       "worktree": "wt/ws-c9-initux-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C9-integ.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/world-sync/kickoff_prompts/C9-integ.md",
       "depends_on": ["C9-code", "C9-test"],
       "concurrent_with": []
     }

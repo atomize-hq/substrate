@@ -14,16 +14,16 @@ user
 
 ## Scope
 - Merge code + tests, resolve drift to spec, and make the slice green on the primary dev platform.
-- Spec: `docs/project_management/next/full-isolation-landlock-overlayfs-compat/C0-spec.md`
+- Spec: `docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/C0-spec.md`
 - Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Start Checklist
 Do not edit planning docs inside the worktree.
 
 1. Verify you are in the task worktree `wt/full-isolation-landlock-overlayfs-compat-c0-integ-core` on branch `full-isolation-landlock-overlayfs-compat-c0-integ-core` and that `.taskmeta.json` exists at the worktree root.
-2. Read: `docs/project_management/next/full-isolation-landlock-overlayfs-compat/plan.md`, `docs/project_management/next/full-isolation-landlock-overlayfs-compat/tasks.json`, `docs/project_management/next/full-isolation-landlock-overlayfs-compat/session_log.md`, spec, this prompt.
+2. Read: `docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/plan.md`, `docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/tasks.json`, `docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/session_log.md`, spec, this prompt.
 3. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run:
-   - `make triad-task-start FEATURE_DIR="docs/project_management/next/full-isolation-landlock-overlayfs-compat" TASK_ID="C0-integ-core"`
+   - `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat" TASK_ID="C0-integ-core"`
 
 ## Requirements
 - Reconcile code/tests to spec (spec wins).
@@ -37,10 +37,10 @@ Do not edit planning docs inside the worktree.
 
 ### Local behavioral smoke preflight (required when possible; fast fail before CI dispatch)
 
-If `docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/` exists and this machine matches a behavior platform for this feature, run the matching smoke script **locally** before dispatching compile parity or Feature Smoke.
+If `docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/smoke/` exists and this machine matches a behavior platform for this feature, run the matching smoke script **locally** before dispatching compile parity or Feature Smoke.
 
 Determine behavior platforms:
-- `jq -r '.meta.behavior_platforms_required // [] | join(\",\")' "docs/project_management/next/full-isolation-landlock-overlayfs-compat/tasks.json"`
+- `jq -r '.meta.behavior_platforms_required // [] | join(\",\")' "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/tasks.json"`
 
 Preflight steps (choose the block matching your current platform):
 
@@ -49,7 +49,7 @@ Linux:
 set -euo pipefail
 cargo build --bin substrate
 export PATH="$PWD/target/debug:$PATH"
-bash "docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh"
+bash "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh"
 ```
 
 macOS:
@@ -57,7 +57,7 @@ macOS:
 set -euo pipefail
 cargo build --bin substrate
 export PATH="$PWD/target/debug:$PATH"
-bash "docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/macos-smoke.sh"
+bash "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/smoke/macos-smoke.sh"
 ```
 
 Windows (PowerShell):
@@ -65,7 +65,7 @@ Windows (PowerShell):
 $ErrorActionPreference = "Stop"
 cargo build --bin substrate
 $env:Path = "$pwd\\target\\debug;$env:Path"
-pwsh -File "docs/project_management/next/full-isolation-landlock-overlayfs-compat\\smoke\\windows-smoke.ps1"
+pwsh -File "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat\\smoke\\windows-smoke.ps1"
 ```
 
 Expected:
@@ -91,7 +91,7 @@ Important (P3-008):
 Recommended dispatch (explicit params; leave `CLEANUP=1` on unless debugging temp branches):
 
 1) Dispatch behavioral smoke in a single run (preferred):
-   - `make feature-smoke FEATURE_DIR="docs/project_management/next/full-isolation-landlock-overlayfs-compat" PLATFORM=behavior SMOKE_SLICE_ID="<slice>" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/full-isolation-landlock-overlayfs-compat" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
+   - `make feature-smoke FEATURE_DIR="docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat" PLATFORM=behavior SMOKE_SLICE_ID="<slice>" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/full-isolation-landlock-overlayfs-compat" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
      - `SMOKE_SLICE_ID` is optional; when provided, the workflow exports `SUBSTRATE_SMOKE_SLICE_ID` for slice-scoped smoke scripts.
    - If WSL coverage is required for this feature, add `RUN_WSL=1`.
 
@@ -108,9 +108,9 @@ If any platform smoke fails:
 - Do not attempt platform-specific fixes in integ-core.
 - Ask the operator to start only the failing platform-fix tasks **from the orchestration checkout** (not from a task worktree):
   - If you have a single smoke run that covers multiple platforms (typical `PLATFORM=behavior` case):
-    - `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="docs/project_management/next/full-isolation-landlock-overlayfs-compat" SLICE_ID="<slice>" SMOKE_RUN_ID="<run-id>" LAUNCH_CODEX=1`
+    - `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat" SLICE_ID="<slice>" SMOKE_RUN_ID="<run-id>" LAUNCH_CODEX=1`
   - If you dispatched per-platform smoke (multiple run ids):
-    - `make triad-task-start-platform-fixes FEATURE_DIR="docs/project_management/next/full-isolation-landlock-overlayfs-compat" SLICE_ID="<slice>" PLATFORMS="<csv>" LAUNCH_CODEX=1`
+    - `make triad-task-start-platform-fixes FEATURE_DIR="docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat" SLICE_ID="<slice>" PLATFORMS="<csv>" LAUNCH_CODEX=1`
   - `<slice>` is the triad id prefix (e.g., `C0`, `C3`).
   - `<run-id>` is the `RUN_ID` from the failing smoke run (only used for `triad-task-start-platform-fixes-from-smoke`).
   - `<csv>` is the comma-separated list of platforms you need platform-fix tasks for (typically the failing behavior platforms, plus `wsl` if `wsl_task_mode="separate"`).
@@ -118,10 +118,10 @@ If any platform smoke fails:
 If behavioral smoke is green for all behavior platforms:
 - Platform-fix tasks (if present in the pack) may still be required for CI-only failures (e.g., clippy warnings on macOS/Windows), so do not mark them no-op yet.
 - The wrapper/final gate runs CI Testing; if CI Testing is green, then mark platform-fix tasks `completed` as no-ops to unblock the final aggregator’s `depends_on`:
-  - `scripts/triad/mark_noop_platform_fixes_completed.sh --feature-dir "docs/project_management/next/full-isolation-landlock-overlayfs-compat" --slice-id "<slice>"` (optional: add `--from-smoke-run "<run-id>"` for logging)
+  - `triad/mark_noop_platform_fixes_completed.sh --feature-dir "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat" --slice-id "<slice>"` (optional: add `--from-smoke-run "<run-id>"` for logging)
 
 Once all required platform-fix tasks are completed, ask the operator to start the final aggregator from the orchestration checkout:
-- `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/next/full-isolation-landlock-overlayfs-compat" SLICE_ID="<slice>" LAUNCH_CODEX=1`
+- `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat" SLICE_ID="<slice>" LAUNCH_CODEX=1`
   - Note: the final aggregator task id is `<slice>-integ` (the command name contains `integ-final`).
 
 ## End Checklist
@@ -171,7 +171,7 @@ exec
 {
   "created_at_utc": "2026-01-20T13:14:42Z",
   "created_from_sha": "b215121257f3f53f461b0488e4bf313b83ef51b6",
-  "feature_dir": "docs/project_management/next/full-isolation-landlock-overlayfs-compat",
+  "feature_dir": "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat",
   "orchestration_branch": "feat/full-isolation-landlock-overlayfs-compat",
   "schema_version": 1,
   "task_branch": "full-isolation-landlock-overlayfs-compat-c0-integ-core",
@@ -185,7 +185,7 @@ Plan update
   • Run fmt, clippy, tests, integ-checks
   • Run local smoke and dispatch CI
 exec
-/bin/bash -lc "ls -la docs/project_management/next/full-isolation-landlock-overlayfs-compat | sed -n '1,200p'" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 45ms:
+/bin/bash -lc "ls -la docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat | sed -n '1,200p'" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 45ms:
 total 116
 drwxr-xr-x  4 spenser spenser  4096 Jan 20 07:13 .
 drwxr-xr-x 10 spenser spenser  4096 Jan 20 07:13 ..
@@ -202,27 +202,27 @@ drwxr-xr-x  2 spenser spenser  4096 Jan 20 07:13 kickoff_prompts
 drwxr-xr-x  2 spenser spenser  4096 Jan 20 07:13 smoke
 -rw-r--r--  1 spenser spenser 26098 Jan 20 07:13 tasks.json
 exec
-/bin/bash -lc "rg -n \"\\bC0\\b|C0-integ-core|integ-core\" docs/project_management/next/full-isolation-landlock-overlayfs-compat/plan.md docs/project_management/next/full-isolation-landlock-overlayfs-compat/tasks.json docs/project_management/next/full-isolation-landlock-overlayfs-compat/session_log.md docs/project_management/next/full-isolation-landlock-overlayfs-compat/C0-spec.md" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 69ms:
-docs/project_management/next/full-isolation-landlock-overlayfs-compat/plan.md:30:- C0: Derive overlay backing dirs from procfs mountinfo and extend the full-isolation Landlock write allowlist at runtime; add fixture tests; validate via Linux smoke + CI parity.
-docs/project_management/next/full-isolation-landlock-overlayfs-compat/C0-spec.md:1:# C0-spec — Full isolation Landlock ↔ OverlayFS backing dirs allowlist
-docs/project_management/next/full-isolation-landlock-overlayfs-compat/session_log.md:25:  - Created an ADR-0015 Planning Pack in `docs/project_management/next/full-isolation-landlock-overlayfs-compat/` with a single slice `C0` scoped to overlayfs backing dir derivation and Landlock allowlist extension.
-docs/project_management/next/full-isolation-landlock-overlayfs-compat/session_log.md:27:  - Wrote an authoritative C0 spec with deterministic runtime derivation, fail-closed rules, and validation requirements.
-docs/project_management/next/full-isolation-landlock-overlayfs-compat/session_log.md:29:  - Updated `docs/project_management/next/sequencing.json` to include this feature directory and its C0 spec.
-docs/project_management/next/full-isolation-landlock-overlayfs-compat/session_log.md:34:  - `docs/project_management/next/full-isolation-landlock-overlayfs-compat/C0-spec.md`
-docs/project_management/next/full-isolation-landlock-overlayfs-compat/session_log.md:42:  - `docs/project_management/next/full-isolation-landlock-overlayfs-compat/C0-closeout_report.md`
-docs/project_management/next/full-isolation-landlock-overlayfs-compat/session_log.md:78:- Goal: Run the execution preflight gate before starting any triad work for C0.
-docs/project_management/next/full-isolation-landlock-overlayfs-compat/session_log.md:82:  - Planning Pack: `plan.md`, `tasks.json`, `session_log.md`, `C0-spec.md`, `decision_register.md`, `integration_map.md`, `manual_testing_playbook.md`, `smoke/*`
-docs/project_management/next/full-isolation-landlock-overlayfs-compat/session_log.md:99:- Required fixes before starting C0: none.
-docs/project_management/next/full-isolation-landlock-overlayfs-compat/session_log.md:101:## START — 2026-01-20T03:13:13Z — code — C0-code
-docs/project_management/next/full-isolation-landlock-overlayfs-compat/session_log.md:106:  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/full-isolation-landlock-overlayfs-compat" SLICE_ID="C0" LAUNCH_CODEX=1`
-docs/project_management/next/full-isolation-landlock-overlayfs-compat/session_log.md:108:## START — 2026-01-20T03:13:13Z — test — C0-test
-docs/project_management/next/full-isolation-landlock-overlayfs-compat/session_log.md:113:  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/full-isolation-landlock-overlayfs-compat" SLICE_ID="C0" LAUNCH_CODEX=1`
-docs/project_management/next/full-isolation-landlock-overlayfs-compat/session_log.md:115:## END — 2026-01-20T03:27:59Z — code — C0-code
-docs/project_management/next/full-isolation-landlock-overlayfs-compat/session_log.md:129:  - `CODEX_CODE_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/full-isolation-landlock-overlayfs-compat/logs/C0/code/last_message.md`
-docs/project_management/next/full-isolation-landlock-overlayfs-compat/session_log.md:130:  - `CODEX_CODE_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/full-isolation-landlock-overlayfs-compat/logs/C0/code/events.jsonl`
-docs/project_management/next/full-isolation-landlock-overlayfs-compat/session_log.md:131:  - `CODEX_CODE_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/full-isolation-landlock-overlayfs-compat/logs/C0/code/stderr.log`
-docs/project_management/next/full-isolation-landlock-overlayfs-compat/session_log.md:134:## END — 2026-01-20T03:27:59Z — test — C0-test
-docs/project_management/next/full-isolation-landlock-overlayfs-compat/session_log.md:148:  - `CODEX_TEST_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/full-isolation-landlock-overlayfs-compat/logs/C0/test/last_message.md`
+/bin/bash -lc "rg -n \"\\bC0\\b|C0-integ-core|integ-core\" docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/plan.md docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/tasks.json docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/session_log.md docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/C0-spec.md" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 69ms:
+docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/plan.md:30:- C0: Derive overlay backing dirs from procfs mountinfo and extend the full-isolation Landlock write allowlist at runtime; add fixture tests; validate via Linux smoke + CI parity.
+docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/C0-spec.md:1:# C0-spec — Full isolation Landlock ↔ OverlayFS backing dirs allowlist
+docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/session_log.md:25:  - Created an ADR-0015 Planning Pack in `docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/` with a single slice `C0` scoped to overlayfs backing dir derivation and Landlock allowlist extension.
+docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/session_log.md:27:  - Wrote an authoritative C0 spec with deterministic runtime derivation, fail-closed rules, and validation requirements.
+docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/session_log.md:29:  - Updated `docs/project_management/packs/sequencing.json` to include this feature directory and its C0 spec.
+docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/session_log.md:34:  - `docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/C0-spec.md`
+docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/session_log.md:42:  - `docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/C0-closeout_report.md`
+docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/session_log.md:78:- Goal: Run the execution preflight gate before starting any triad work for C0.
+docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/session_log.md:82:  - Planning Pack: `plan.md`, `tasks.json`, `session_log.md`, `C0-spec.md`, `decision_register.md`, `integration_map.md`, `manual_testing_playbook.md`, `smoke/*`
+docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/session_log.md:99:- Required fixes before starting C0: none.
+docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/session_log.md:101:## START — 2026-01-20T03:13:13Z — code — C0-code
+docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/session_log.md:106:  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat" SLICE_ID="C0" LAUNCH_CODEX=1`
+docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/session_log.md:108:## START — 2026-01-20T03:13:13Z — test — C0-test
+docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/session_log.md:113:  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat" SLICE_ID="C0" LAUNCH_CODEX=1`
+docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/session_log.md:115:## END — 2026-01-20T03:27:59Z — code — C0-code
+docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/session_log.md:129:  - `CODEX_CODE_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/logs/C0/code/last_message.md`
+docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/session_log.md:130:  - `CODEX_CODE_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/logs/C0/code/events.jsonl`
+docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/session_log.md:131:  - `CODEX_CODE_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/logs/C0/code/stderr.log`
+docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/session_log.md:134:## END — 2026-01-20T03:27:59Z — test — C0-test
+docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/session_log.md:148:  - `CODEX_TEST_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/logs/C0/test/last_message.md`
 exec
 /bin/bash -lc "sed -n '1,200p' docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 41ms:
 # Task Triads — Worktree Execution Standard (Automation + Concurrent Code/Test)
@@ -235,8 +235,8 @@ It is a focused companion to:
 ## Operating assumptions (the situation you are in)
 
 When this standard applies, the operator started you with one of:
-- `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1` (preferred)
-- `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
+- `make triad-task-start-pair FEATURE_DIR="docs/project_management/_archived/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1` (preferred)
+- `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
 
 You are already:
 - in a git worktree (usually under `wt/...`)
@@ -246,7 +246,7 @@ You are already:
 ## Non-negotiable safety rule
 
 exec
-/bin/bash -lc "sed -n '1,240p' docs/project_management/next/full-isolation-landlock-overlayfs-compat/C0-spec.md" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 52ms:
+/bin/bash -lc "sed -n '1,240p' docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/C0-spec.md" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 52ms:
 # C0-spec — Full isolation Landlock ↔ OverlayFS backing dirs allowlist
 
 Authoritative ADR:
@@ -268,11 +268,11 @@ Exit codes:
   - `upperdir`
   - `workdir`
 exec
-/bin/bash -lc "jq -r '.meta.behavior_platforms_required // [] | join(\",\")' docs/project_management/next/full-isolation-landlock-overlayfs-compat/tasks.json && jq -r '.meta.ci_parity_platforms_required // .meta.platforms_required // [] | join(\",\")' docs/project_management/next/full-isolation-landlock-overlayfs-compat/tasks.json" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 18ms:
+/bin/bash -lc "jq -r '.meta.behavior_platforms_required // [] | join(\",\")' docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/tasks.json && jq -r '.meta.ci_parity_platforms_required // .meta.platforms_required // [] | join(\",\")' docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/tasks.json" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 18ms:
 linux,macos
 linux,macos,windows
 exec
-/bin/bash -lc 'ls -la docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke || true' in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 44ms:
+/bin/bash -lc 'ls -la docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/smoke || true' in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 44ms:
 total 20
 drwxr-xr-x 2 spenser spenser 4096 Jan 20 07:13 .
 drwxr-xr-x 4 spenser spenser 4096 Jan 20 07:13 ..
@@ -285,11 +285,11 @@ thinking
 
 I'm checking if the code and test tasks have already been completed. My focus is on integrating the core, merging code and tests while resolving any drift from specifications. It seems likely this will be on a Linux platform. I need to consider running baseline tests, but maybe integration will handle the merges. I might consult the kickoff prompt for guidance, but the user has already provided instructions, so I’ll go ahead and first read `plan.md` and the `tasks.json` snippet for C0-integ-core. Then, I’ll use `jq` to extract the necessary information.
 exec
-/bin/bash -lc "sed -n '1,120p' docs/project_management/next/full-isolation-landlock-overlayfs-compat/plan.md" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 40ms:
+/bin/bash -lc "sed -n '1,120p' docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/plan.md" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 40ms:
 # full-isolation-landlock-overlayfs-compat — plan
 
 ## Scope
-- Feature directory: `docs/project_management/next/full-isolation-landlock-overlayfs-compat/`
+- Feature directory: `docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/`
 - Orchestration branch: `feat/full-isolation-landlock-overlayfs-compat`
 - ADR: `docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
 
@@ -307,7 +307,7 @@ exec
 - WSL coverage: not required.
 
 exec
-/bin/bash -lc "jq '.tasks[] | select(.id==\"C0-integ-core\")' docs/project_management/next/full-isolation-landlock-overlayfs-compat/tasks.json" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 45ms:
+/bin/bash -lc "jq '.tasks[] | select(.id==\"C0-integ-core\")' docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/tasks.json" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 45ms:
 {
   "id": "C0-integ-core",
   "name": "C0 slice (integration core)",
@@ -317,19 +317,19 @@ exec
   "description": "Merge C0 code+tests and make the slice green on the primary dev platform.",
   "references": [
     "docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md",
-    "docs/project_management/next/full-isolation-landlock-overlayfs-compat/plan.md",
-    "docs/project_management/next/full-isolation-landlock-overlayfs-compat/tasks.json",
-    "docs/project_management/next/full-isolation-landlock-overlayfs-compat/session_log.md",
-    "docs/project_management/next/full-isolation-landlock-overlayfs-compat/C0-spec.md",
-    "docs/project_management/next/full-isolation-landlock-overlayfs-compat/decision_register.md (DR-0001, DR-0002, DR-0003, DR-0004, DR-0005)",
-    "docs/project_management/next/full-isolation-landlock-overlayfs-compat/integration_map.md",
-    "docs/project_management/next/full-isolation-landlock-overlayfs-compat/manual_testing_playbook.md",
-    "docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh",
-    "docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/macos-smoke.sh",
+    "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/plan.md",
+    "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/tasks.json",
+    "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/session_log.md",
+    "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/C0-spec.md",
+    "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/decision_register.md (DR-0001, DR-0002, DR-0003, DR-0004, DR-0005)",
+    "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/integration_map.md",
+    "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/manual_testing_playbook.md",
+    "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh",
+    "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/smoke/macos-smoke.sh",
     "docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md"
   ],
 exec
-/bin/bash -lc "jq '.tasks[] | select(.id==\"C0-code\" or .id==\"C0-test\") | {id, branch: .branch_name, depends_on, accepts, kickoff: .kickoff_prompt}' docs/project_management/next/full-isolation-landlock-overlayfs-compat/tasks.json" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 44ms:
+/bin/bash -lc "jq '.tasks[] | select(.id==\"C0-code\" or .id==\"C0-test\") | {id, branch: .branch_name, depends_on, accepts, kickoff: .kickoff_prompt}' docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/tasks.json" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 44ms:
 {
   "id": "C0-code",
   "branch": null,
@@ -337,7 +337,7 @@ exec
     "F0-exec-preflight"
   ],
   "accepts": null,
-  "kickoff": "docs/project_management/next/full-isolation-landlock-overlayfs-compat/kickoff_prompts/C0-code.md"
+  "kickoff": "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/kickoff_prompts/C0-code.md"
 }
 {
   "id": "C0-test",
@@ -346,15 +346,15 @@ exec
     "F0-exec-preflight"
   ],
   "accepts": null,
-  "kickoff": "docs/project_management/next/full-isolation-landlock-overlayfs-compat/kickoff_prompts/C0-test.md"
+  "kickoff": "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/kickoff_prompts/C0-test.md"
 }
 exec
-/bin/bash -lc 'ls -la docs/project_management/next/full-isolation-landlock-overlayfs-compat/logs/C0/{code,test} || true' in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 46ms:
-ls: cannot access 'docs/project_management/next/full-isolation-landlock-overlayfs-compat/logs/C0/code': No such file or directory
-ls: cannot access 'docs/project_management/next/full-isolation-landlock-overlayfs-compat/logs/C0/test': No such file or directory
+/bin/bash -lc 'ls -la docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/logs/C0/{code,test} || true' in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 46ms:
+ls: cannot access 'docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/logs/C0/code': No such file or directory
+ls: cannot access 'docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/logs/C0/test': No such file or directory
 exec
-/bin/bash -lc 'ls -la docs/project_management/next/full-isolation-landlock-overlayfs-compat/logs || true' in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 48ms:
-ls: cannot access 'docs/project_management/next/full-isolation-landlock-overlayfs-compat/logs': No such file or directory
+/bin/bash -lc 'ls -la docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/logs || true' in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 48ms:
+ls: cannot access 'docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/logs': No such file or directory
 exec
 /bin/bash -lc "git branch --list \"*full-isolation-landlock-overlayfs-compat*\" \"*c0*\" \"*C0*\" | sed -n '1,200p'" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 40ms:
 + feat/full-isolation-landlock-overlayfs-compat
@@ -447,7 +447,7 @@ exec
 thinking
 **Evaluating git commit process**
 
-I'm thinking about how to handle commits and reverts for planning documents. If I cherry-pick a commit and then revert changes, the commit history will still show the modifications, even if the files appear reset. The finisher could flag these, particularly if it uses `git diff --name-only` between branches. To play it safe, I need to ensure that after merging, the files in `docs/project_management/next/...` remain identical to the base commit, which originated from the orchestration branch. I'll need to verify the content carefully.
+I'm thinking about how to handle commits and reverts for planning documents. If I cherry-pick a commit and then revert changes, the commit history will still show the modifications, even if the files appear reset. The finisher could flag these, particularly if it uses `git diff --name-only` between branches. To play it safe, I need to ensure that after merging, the files in `docs/project_management/_archived/next/...` remain identical to the base commit, which originated from the orchestration branch. I'll need to verify the content carefully.
 thinking
 **Clarifying planning document edits**
 
@@ -503,8 +503,8 @@ M	crates/world/tests/mountinfo_parsing.rs
 exec
 /bin/bash -lc "git show --name-status --oneline --decorate b2151212 | sed -n '1,120p'" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 45ms:
 b2151212 (feat/full-isolation-landlock-overlayfs-compat) docs: finish C0 code+test
-M	docs/project_management/next/full-isolation-landlock-overlayfs-compat/session_log.md
-M	docs/project_management/next/full-isolation-landlock-overlayfs-compat/tasks.json
+M	docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/session_log.md
+M	docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/tasks.json
 exec
 /bin/bash -lc 'git rev-list --parents -n 1 c9383284' in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 47ms:
 c9383284d249bdd0cb7b2ac864b68a6ede2ef0b1 c7129f092251e000c77b826f93bcd80db2707699
@@ -1074,7 +1074,7 @@ exec
 /bin/bash -lc 'set -euo pipefail
 cargo build --bin substrate
 export PATH="$PWD/target/debug:$PATH"
-bash "docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh"' in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core exited 1 in 6.51s:
+bash "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh"' in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core exited 1 in 6.51s:
    Compiling ring v0.17.14
    Compiling rustls v0.22.4
    Compiling rustls-webpki v0.102.8
@@ -1090,7 +1090,7 @@ Command tracing setup complete.
 mkdir: cannot create directory ‘writable/sub’: Operation not permitted
 FAIL: allowlisted write failed (expected exit 0)
 exec
-/bin/bash -lc "sed -n '1,220p' docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 50ms:
+/bin/bash -lc "sed -n '1,220p' docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 50ms:
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -2854,7 +2854,7 @@ index 62bd761f4ef2d9bc07f0b146568d95983bc00103..c388d0364ac704fc992875004c1e5f0a
      }
 
 exec
-/bin/bash -lc 'make feature-smoke FEATURE_DIR="docs/project_management/next/full-isolation-landlock-overlayfs-compat" PLATFORM=behavior SMOKE_SLICE_ID="C0" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/full-isolation-landlock-overlayfs-compat" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1' in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core exited 2 in 5m 20s:
+/bin/bash -lc 'make feature-smoke FEATURE_DIR="docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat" PLATFORM=behavior SMOKE_SLICE_ID="C0" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/full-isolation-landlock-overlayfs-compat" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1' in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core exited 2 in 5m 20s:
 make[1]: Entering directory '/home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core'
 HEAD: 2883f19d904e52dcae691f08b6100953f4f80607
 Temp branch: tmp/feature-smoke/full-isolation-landlock-overlayfs-compat/behavior/20260120T134409Z
@@ -2927,8 +2927,8 @@ I'm going through my final checklist: I need to ensure that the merged state is 
 I'll make sure everything is committed before finishing, and also check the CI smoke logs for any failures and potential root causes. Let's capture relevant details!
 exec
 /bin/bash -lc "gh run view 21173728283 --repo atomize-hq/substrate --log-failed | sed -n '1,200p'" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-integ-core succeeded in 927ms:
-linux_self_hosted	Run linux smoke	﻿2026-01-20T13:46:04.8710344Z ##[group]Run bash "docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh"
-linux_self_hosted	Run linux smoke	2026-01-20T13:46:04.8711152Z [36;1mbash "docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh"[0m
+linux_self_hosted	Run linux smoke	﻿2026-01-20T13:46:04.8710344Z ##[group]Run bash "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh"
+linux_self_hosted	Run linux smoke	2026-01-20T13:46:04.8711152Z [36;1mbash "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh"[0m
 linux_self_hosted	Run linux smoke	2026-01-20T13:46:04.8732794Z shell: /usr/bin/bash -e {0}
 linux_self_hosted	Run linux smoke	2026-01-20T13:46:04.8733009Z env:
 linux_self_hosted	Run linux smoke	2026-01-20T13:46:04.8733179Z   CARGO_TERM_COLOR: always
@@ -2943,8 +2943,8 @@ linux_self_hosted	Run linux smoke	2026-01-20T13:46:05.5874709Z Command tracing s
 linux_self_hosted	Run linux smoke	2026-01-20T13:46:05.5876559Z mkdir: cannot create directory ‘writable/sub’: Operation not permitted
 linux_self_hosted	Run linux smoke	2026-01-20T13:46:05.5877740Z FAIL: allowlisted write failed (expected exit 0)
 linux_self_hosted	Run linux smoke	2026-01-20T13:46:05.5941135Z ##[error]Process completed with exit code 1.
-macos_self_hosted	Run macOS smoke	﻿2026-01-20T13:49:16.8207870Z ##[group]Run bash "docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/macos-smoke.sh"
-macos_self_hosted	Run macOS smoke	2026-01-20T13:49:16.8208600Z [36;1mbash "docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/macos-smoke.sh"[0m
+macos_self_hosted	Run macOS smoke	﻿2026-01-20T13:49:16.8207870Z ##[group]Run bash "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/smoke/macos-smoke.sh"
+macos_self_hosted	Run macOS smoke	2026-01-20T13:49:16.8208600Z [36;1mbash "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/smoke/macos-smoke.sh"[0m
 macos_self_hosted	Run macOS smoke	2026-01-20T13:49:16.8242770Z shell: /bin/bash -e {0}
 macos_self_hosted	Run macOS smoke	2026-01-20T13:49:16.8242940Z env:
 file update:
@@ -3138,7 +3138,7 @@ index 62bd761f4ef2d9bc07f0b146568d95983bc00103..c388d0364ac704fc992875004c1e5f0a
 
 codex
 **What I did**
-- Verified worktree/branch and `.taskmeta.json`; did not edit any planning docs under `docs/project_management/next/`.
+- Verified worktree/branch and `.taskmeta.json`; did not edit any planning docs under `docs/project_management/_archived/next/`.
 - Local gates green: `cargo fmt --all`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test` (via `make integ-checks`), `make integ-checks`.
 - Fixed CI compile-parity failure (non-Linux clippy) with `2883f19d` (`fix(world): appease clippy on non-linux`).
 - Ran `make triad-task-finish TASK_ID="C0-integ-core"` successfully.
@@ -3154,7 +3154,7 @@ codex
 - `SMOKE_FAILED_PLATFORMS=linux,macos`
 
 **Operator next step (from orchestration checkout)**
-- Run: `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="docs/project_management/next/full-isolation-landlock-overlayfs-compat" SLICE_ID="C0" SMOKE_RUN_ID="21173728283" LAUNCH_CODEX=1`
+- Run: `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat" SLICE_ID="C0" SMOKE_RUN_ID="21173728283" LAUNCH_CODEX=1`
 file update:
 diff --git a/crates/world/src/netfilter.rs b/crates/world/src/netfilter.rs
 index 62bd761f4ef2d9bc07f0b146568d95983bc00103..c388d0364ac704fc992875004c1e5f0aaed7a414

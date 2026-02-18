@@ -14,17 +14,17 @@ user
 
 ## Scope
 - Production code only; no new tests.
-- Spec: `docs/project_management/next/full-isolation-landlock-overlayfs-compat/C0-spec.md`
+- Spec: `docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/C0-spec.md`
 - Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Start Checklist
 Do not edit planning docs inside the worktree.
 
 1. Verify you are in the task worktree `wt/full-isolation-landlock-overlayfs-compat-c0-code` on branch `full-isolation-landlock-overlayfs-compat-c0-code` and that `.taskmeta.json` exists at the worktree root.
-2. Read: `docs/project_management/next/full-isolation-landlock-overlayfs-compat/plan.md`, `docs/project_management/next/full-isolation-landlock-overlayfs-compat/tasks.json`, `docs/project_management/next/full-isolation-landlock-overlayfs-compat/session_log.md`, spec, this prompt.
+2. Read: `docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/plan.md`, `docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/tasks.json`, `docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/session_log.md`, spec, this prompt.
 3. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run:
-   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/full-isolation-landlock-overlayfs-compat" SLICE_ID="<slice>"` (preferred; starts code+test in parallel; `<slice>` is `C0-code` without `-code`)
-   - `make triad-task-start FEATURE_DIR="docs/project_management/next/full-isolation-landlock-overlayfs-compat" TASK_ID="C0-code"` (single task only)
+   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat" SLICE_ID="<slice>"` (preferred; starts code+test in parallel; `<slice>` is `C0-code` without `-code`)
+   - `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat" TASK_ID="C0-code"` (single task only)
 
 ## Requirements
 - Implement exactly the behaviors and error handling in the spec.
@@ -73,7 +73,7 @@ exec
 {
   "created_at_utc": "2026-01-20T03:13:59Z",
   "created_from_sha": "c7129f092251e000c77b826f93bcd80db2707699",
-  "feature_dir": "docs/project_management/next/full-isolation-landlock-overlayfs-compat",
+  "feature_dir": "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat",
   "orchestration_branch": "feat/full-isolation-landlock-overlayfs-compat",
   "schema_version": 1,
   "task_branch": "full-isolation-landlock-overlayfs-compat-c0-code",
@@ -92,11 +92,11 @@ Plan update
   • Run fmt, clippy, baseline tests
   • Finish triad task and summarize
 exec
-/bin/bash -lc "sed -n '1,200p' docs/project_management/next/full-isolation-landlock-overlayfs-compat/plan.md" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-code succeeded in 47ms:
+/bin/bash -lc "sed -n '1,200p' docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/plan.md" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-code succeeded in 47ms:
 # full-isolation-landlock-overlayfs-compat — plan
 
 ## Scope
-- Feature directory: `docs/project_management/next/full-isolation-landlock-overlayfs-compat/`
+- Feature directory: `docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/`
 - Orchestration branch: `feat/full-isolation-landlock-overlayfs-compat`
 - ADR: `docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
 
@@ -114,7 +114,7 @@ exec
 - WSL coverage: not required.
 
 exec
-/bin/bash -lc 'cat docs/project_management/next/full-isolation-landlock-overlayfs-compat/tasks.json' in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-code succeeded in 33ms:
+/bin/bash -lc 'cat docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/tasks.json' in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-code succeeded in 33ms:
 {
   "meta": {
     "schema_version": 3,
@@ -136,11 +136,11 @@ exec
     ]
   },
 exec
-/bin/bash -lc "sed -n '1,200p' docs/project_management/next/full-isolation-landlock-overlayfs-compat/session_log.md" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-code succeeded in 46ms:
+/bin/bash -lc "sed -n '1,200p' docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/session_log.md" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-code succeeded in 46ms:
 # full-isolation-landlock-overlayfs-compat — session log
 
 ## START — 2026-01-20T01:52:53Z — planning — planning pack for ADR-0015 (full isolation Landlock ↔ overlayfs backing dirs)
-- Feature: `docs/project_management/next/full-isolation-landlock-overlayfs-compat/`
+- Feature: `docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/`
 - Branch: `testing`
 - Goal: Produce an execution-ready Planning Pack for ADR-0015 under the correct feature directory, with validated tasks/prompts/smoke and zero ambiguity in specs/contracts.
 - Inputs to read end-to-end:
@@ -151,14 +151,14 @@ exec
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
   - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
   - `docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
 - Commands planned (if any):
   - `make planning-new-feature FEATURE=full-isolation-landlock-overlayfs-compat DECISION_HEAVY=1 CROSS_PLATFORM=1 AUTOMATION=1 BEHAVIOR_PLATFORMS=linux CI_PARITY_PLATFORMS=linux,macos,windows`
-  - `python3 scripts/planning/validate_tasks_json.py --feature-dir "docs/project_management/next/full-isolation-landlock-overlayfs-compat"`
-  - `make planning-validate FEATURE_DIR="docs/project_management/next/full-isolation-landlock-overlayfs-compat"`
+  - `python3 planning/validate_tasks_json.py --feature-dir "docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat"`
+  - `make planning-validate FEATURE_DIR="docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat"`
 exec
-/bin/bash -lc "sed -n '1,260p' docs/project_management/next/full-isolation-landlock-overlayfs-compat/C0-spec.md" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-code succeeded in 45ms:
+/bin/bash -lc "sed -n '1,260p' docs/project_management/_archived/next/full-isolation-landlock-overlayfs-compat/C0-spec.md" in /home/spenser/__Active_code/substrate/wt/full-isolation-landlock-overlayfs-compat-c0-code succeeded in 45ms:
 # C0-spec — Full isolation Landlock ↔ OverlayFS backing dirs allowlist
 
 Authoritative ADR:
@@ -191,8 +191,8 @@ It is a focused companion to:
 ## Operating assumptions (the situation you are in)
 
 When this standard applies, the operator started you with one of:
-- `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1` (preferred)
-- `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
+- `make triad-task-start-pair FEATURE_DIR="docs/project_management/_archived/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1` (preferred)
+- `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
 
 You are already:
 - in a git worktree (usually under `wt/...`)

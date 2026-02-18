@@ -14,7 +14,7 @@ user
 
 ## Scope
 - Merge any platform-fix branches, re-run integration gates, and complete the C0 closeout report.
-- Spec: `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
+- Spec: `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
 
 ## Start Checklist
 Do not edit planning docs inside the worktree.
@@ -25,7 +25,7 @@ Do not edit planning docs inside the worktree.
 ## End Checklist
 1. Run: `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, `make integ-checks`.
 2. Re-run CI compile parity and behavioral smoke per `tasks.json` and record run ids/URLs.
-3. Complete `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md`.
+3. Complete `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md`.
 4. From inside the worktree, run: `make triad-task-finish TASK_ID="C0-integ"`.
 
 
@@ -66,16 +66,16 @@ cat .taskmeta.json || true
 {
   "created_at_utc": "2026-01-17T14:52:48Z",
   "created_from_sha": "f7dfea5cdc0a02525f2fa5f2b9105e3bed49a09f",
-  "feature_dir": "docs/project_management/next/policy-patch-only-broker-effective-resolution",
+  "feature_dir": "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution",
   "orchestration_branch": "feat/policy-patch-only-broker-effective-resolution",
   "schema_version": 1,
   "task_branch": "policy-patch-only-broker-effective-resolution-c0-integ",
   "task_id": "C0-integ"
 }
 exec
-/bin/bash -lc 'ls -la docs/project_management/next/policy-patch-only-broker-effective-resolution || true
-ls -la docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md || true
-ls -la docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md || true
+/bin/bash -lc 'ls -la docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution || true
+ls -la docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-spec.md || true
+ls -la docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md || true
 ' in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ succeeded in 55ms:
 total 152
 drwxr-xr-x 4 spenser spenser  4096 Jan 17 09:52 .
@@ -94,8 +94,8 @@ drwxr-xr-x 2 spenser spenser  4096 Jan 17 09:52 kickoff_prompts
 -rw-r--r-- 1 spenser spenser 20818 Jan 17 09:52 session_log.md
 drwxr-xr-x 2 spenser spenser  4096 Jan 17 09:52 smoke
 -rw-r--r-- 1 spenser spenser 46958 Jan 17 09:52 tasks.json
--rw-r--r-- 1 spenser spenser 4476 Jan 17 09:52 docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md
--rw-r--r-- 1 spenser spenser 1259 Jan 17 09:52 docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+-rw-r--r-- 1 spenser spenser 4476 Jan 17 09:52 docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-spec.md
+-rw-r--r-- 1 spenser spenser 1259 Jan 17 09:52 docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 Plan update
   ✓ Verify worktree and metadata
   → Read spec and task context
@@ -104,7 +104,7 @@ Plan update
   • Update C0 closeout report
   • Run triad task finish
 exec
-/bin/bash -lc "sed -n '1,200p' docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ succeeded in 42ms:
+/bin/bash -lc "sed -n '1,200p' docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-spec.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ succeeded in 42ms:
 # C0-spec — Broker Canonical Policy Resolver + CLI Delegation
 
 Authoritative ADR:
@@ -126,11 +126,11 @@ Exit codes:
   - Path: `$SUBSTRATE_HOME/policy.yaml` (where `$SUBSTRATE_HOME` is the Substrate home directory).
 - Workspace policy patch file:
 exec
-/bin/bash -lc "sed -n '1,220p' docs/project_management/next/policy-patch-only-broker-effective-resolution/plan.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ succeeded in 40ms:
+/bin/bash -lc "sed -n '1,220p' docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/plan.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ succeeded in 40ms:
 # policy-patch-only-broker-effective-resolution — plan
 
 ## Scope
-- Feature directory: `docs/project_management/next/policy-patch-only-broker-effective-resolution/`
+- Feature directory: `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/`
 - Orchestration branch: `feat/policy-patch-only-broker-effective-resolution`
 - ADR: `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
 
@@ -148,9 +148,9 @@ exec
 ## Guardrails (non-negotiable)
 - Specs are the single source of truth.
 exec
-/bin/bash -lc "sed -n '1,260p' docs/project_management/next/policy-patch-only-broker-effective-resolution/session_log.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ succeeded in 39ms:
+/bin/bash -lc "sed -n '1,260p' docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/session_log.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ succeeded in 39ms:
 ## START — 2026-01-17T02:46:54Z — planning — planning pack for ADR-0013 (broker-canonical policy resolution)
-- Feature: `docs/project_management/next/policy-patch-only-broker-effective-resolution/`
+- Feature: `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/`
 - Branch: `testing`
 - Goal: Produce an execution-ready Planning Pack for ADR-0013 with zero ambiguity.
 - Inputs to read end-to-end:
@@ -167,10 +167,10 @@ exec
   - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
   - `docs/CONFIGURATION.md`
 exec
-/bin/bash -lc "sed -n '1,260p' docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ succeeded in 36ms:
+/bin/bash -lc "sed -n '1,260p' docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/tasks.json" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ succeeded in 36ms:
 {
   "meta": {
     "schema_version": 3,
@@ -197,7 +197,7 @@ thinking
 
 I’m examining tasks.json, which includes entries like C0-integ-core and various platform-specific integrations. My task is focused on C0-integ, likely revolving around final integration and aggregation. This may involve merging platform fix branches and generating a closeout report. I need to read through the remaining tasks to understand the required run ID. I'll also check the C0-closeout_report template and look further into tasks.json for the C0-integ aggregator. I'll use jq to inspect the tasks list.
 exec
-/bin/bash -lc "jq -r '.tasks[] | select(.phase==\"C0\") | [.id,.status,.type,.worktree // \"\", .git_branch // \"\"] | @tsv' docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ succeeded in 45ms:
+/bin/bash -lc "jq -r '.tasks[] | select(.phase==\"C0\") | [.id,.status,.type,.worktree // \"\", .git_branch // \"\"] | @tsv' docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/tasks.json" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ succeeded in 45ms:
 C0-code	completed	code	wt/policy-patch-only-broker-effective-resolution-c0-code	policy-patch-only-broker-effective-resolution-c0-code
 C0-test	completed	test	wt/policy-patch-only-broker-effective-resolution-c0-test	policy-patch-only-broker-effective-resolution-c0-test
 C0-integ-core	completed	integration	wt/policy-patch-only-broker-effective-resolution-c0-integ-core	policy-patch-only-broker-effective-resolution-c0-integ-core
@@ -211,7 +211,7 @@ thinking
 
 I've completed the platform-fix tasks, but the aggregator is still pending. Now, I need to merge those branches. Each platform fix likely has some changes, so I'll check the git log first. Once I see what needs to be merged, I'll proceed while making sure not to alter the planning documents. I'll stick to the tasks.json for the specifics related to C0-integ and extract the task details from there.
 exec
-/bin/bash -lc "jq '.tasks[] | select(.id==\"C0-integ\")' docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ succeeded in 47ms:
+/bin/bash -lc "jq '.tasks[] | select(.id==\"C0-integ\")' docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/tasks.json" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ succeeded in 47ms:
 {
   "id": "C0-integ",
   "name": "C0 — Final integration (aggregator)",
@@ -220,15 +220,15 @@ exec
   "status": "pending",
   "description": "Final integration: merge any platform fixes and confirm behavioral smoke + CI parity are green.",
   "references": [
-    "docs/project_management/next/policy-patch-only-broker-effective-resolution/plan.md",
-    "docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json",
-    "docs/project_management/next/policy-patch-only-broker-effective-resolution/session_log.md",
-    "docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md",
-    "docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md",
-    "docs/project_management/next/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md",
-    "docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh",
-    "docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/macos-smoke.sh",
-    "docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/windows-smoke.ps1"
+    "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/plan.md",
+    "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/tasks.json",
+    "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/session_log.md",
+    "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-spec.md",
+    "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md",
+    "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md",
+    "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh",
+    "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/smoke/macos-smoke.sh",
+    "docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/smoke/windows-smoke.ps1"
   ],
   "acceptance_criteria": [
     "All required platforms are green (smoke + CI parity) for this slice",
@@ -263,17 +263,17 @@ Makefile:359:triad-task-finish:
 ./docs/project_management/_archived/env_var_taxonomy_and_override_split/tasks.json:289:        "From inside the worktree: make triad-task-finish TASK_ID=\"EV0-integ-macos\""
 ./scripts/e2e/triad_e2e_phase1.sh:433:   - \`make triad-task-start-integ-final FEATURE_DIR="${FEATURE_DIR}" SLICE_ID="C0"\`
 ./scripts/e2e/triad_e2e_phase2.sh:446:start_final=(make triad-task-start-integ-final FEATURE_DIR="${FEATURE_DIR}" SLICE_ID="C0")
-./scripts/planning/new_feature.sh:354:            f"After all failing platforms are green: start final aggregator via: make triad-task-start-integ-final FEATURE_DIR=\"{feature_dir}\" SLICE_ID=\"C0\"",
+./planning/new_feature.sh:354:            f"After all failing platforms are green: start final aggregator via: make triad-task-start-integ-final FEATURE_DIR=\"{feature_dir}\" SLICE_ID=\"C0\"",
 ./Makefile:345:.PHONY: triad-task-start-integ-final
 ./Makefile:346:triad-task-start-integ-final:
-./scripts/planning/new_feature.ps1:273:        "After all failing platforms are green: start final aggregator via: make triad-task-start-integ-final FEATURE_DIR=`"$featureDir`" SLICE_ID=`"C0`"",
+./planning/new_feature.ps1:273:        "After all failing platforms are green: start final aggregator via: make triad-task-start-integ-final FEATURE_DIR=`"$featureDir`" SLICE_ID=`"C0`"",
 ./docs/project_management/_archived/policy_and_config_precedence/tasks.json:167:        "After failing platforms are green, start the final aggregator: make triad-task-start-integ-final FEATURE_DIR=\"docs/project_management/_archived/policy_and_config_precedence\" SLICE_ID=\"PCP0\"",
-./docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md:161:- `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1`
-./docs/project_management/standards/README.md:132:- `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="C0" LAUNCH_CODEX=1`
+./docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md:161:- `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/_archived/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1`
+./docs/project_management/standards/README.md:132:- `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/_archived/next/<feature>" SLICE_ID="C0" LAUNCH_CODEX=1`
 exec
 /bin/bash -lc "sed -n '320,430p' Makefile" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ succeeded in 41ms:
 	@set -euo pipefail; \
-	cmd="scripts/triad/task_start_platform_fixes.sh --feature-dir \"$(FEATURE_DIR)\" --slice-id \"$(SLICE_ID)\""; \
+	cmd="triad/task_start_platform_fixes.sh --feature-dir \"$(FEATURE_DIR)\" --slice-id \"$(SLICE_ID)\""; \
 	IFS=',' read -r -a platforms <<<"$(PLATFORMS)"; \
 	for p in "$${platforms[@]}"; do cmd="$$cmd --platform \"$$p\""; done; \
 	if [ "$(LAUNCH_CODEX)" = "1" ]; then cmd="$$cmd --launch-codex"; fi; \
@@ -285,22 +285,22 @@ exec
 
 .PHONY: triad-task-start-platform-fixes-from-smoke
 triad-task-start-platform-fixes-from-smoke:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/_archived/next/<feature>"; exit 2; fi
 	@if [ -z "$(SLICE_ID)" ]; then echo "ERROR: set SLICE_ID=<slice>"; exit 2; fi
 	@if [ -z "$(SMOKE_RUN_ID)" ]; then echo "ERROR: set SMOKE_RUN_ID=<gh-run-id>"; exit 2; fi
 	@set -euo pipefail; \
-	cmd="scripts/triad/task_start_platform_fixes.sh --feature-dir \"$(FEATURE_DIR)\" --slice-id \"$(SLICE_ID)\" --from-smoke-run \"$(SMOKE_RUN_ID)\""; \
+	cmd="triad/task_start_platform_fixes.sh --feature-dir \"$(FEATURE_DIR)\" --slice-id \"$(SLICE_ID)\" --from-smoke-run \"$(SMOKE_RUN_ID)\""; \
 	if [ "$(LAUNCH_CODEX)" = "1" ]; then cmd="$$cmd --launch-codex"; fi; \
 	if [ -n "$(CODEX_PROFILE)" ]; then cmd="$$cmd --codex-profile \"$(CODEX_PROFILE)\""; fi; \
 exec
-/bin/bash -lc "sed -n '1,260p' scripts/triad/task_finish.sh" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ succeeded in 40ms:
+/bin/bash -lc "sed -n '1,260p' triad/task_finish.sh" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ succeeded in 40ms:
 #!/usr/bin/env bash
 set -euo pipefail
 
 usage() {
     cat <<'USAGE'
 Usage:
-  scripts/triad/task_finish.sh --task-id <id> [options]
+  triad/task_finish.sh --task-id <id> [options]
 
 Required:
   --task-id <id>         Task id (must match .taskmeta.json in this worktree)
@@ -315,7 +315,7 @@ Options:
 Stdout contract (machine-parseable):
   TASK_BRANCH=<branch>
 exec
-/bin/bash -lc "sed -n '260,560p' scripts/triad/task_finish.sh" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ succeeded in 36ms:
+/bin/bash -lc "sed -n '260,560p' triad/task_finish.sh" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ succeeded in 36ms:
 
 find_orch_worktree() {
     git worktree list --porcelain | awk -v b="refs/heads/${ORCH_BRANCH}" '
@@ -337,12 +337,12 @@ merge_to_orchestration_ff_only() {
     if [[ "${#orch_matches[@]}" -gt 1 ]]; then
         die "Multiple worktrees have orchestration branch checked out (${ORCH_BRANCH}); cannot safely merge"
 exec
-/bin/bash -lc "sed -n '1,220p' docs/project_management/next/policy-patch-only-broker-effective-resolution/kickoff_prompts/C0-integ.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ succeeded in 35ms:
+/bin/bash -lc "sed -n '1,220p' docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/kickoff_prompts/C0-integ.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ succeeded in 35ms:
 # Kickoff: C0-integ (final integration / aggregator)
 
 ## Scope
 - Merge any platform-fix branches, re-run integration gates, and complete the C0 closeout report.
-- Spec: `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
+- Spec: `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
 
 ## Start Checklist
 Do not edit planning docs inside the worktree.
@@ -353,11 +353,11 @@ Do not edit planning docs inside the worktree.
 ## End Checklist
 1. Run: `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, `make integ-checks`.
 2. Re-run CI compile parity and behavioral smoke per `tasks.json` and record run ids/URLs.
-3. Complete `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md`.
+3. Complete `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md`.
 4. From inside the worktree, run: `make triad-task-finish TASK_ID="C0-integ"`.
 
 exec
-/bin/bash -lc "sed -n '1,220p' docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ succeeded in 46ms:
+/bin/bash -lc "sed -n '1,220p' docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ succeeded in 46ms:
 # Slice Closeout Gate Report — policy-patch-only-broker-effective-resolution / C0
 
 Date (UTC): 2026-01-17T02:46:54Z
@@ -367,10 +367,10 @@ Standards:
 - `docs/project_management/standards/EXECUTIVE_SUMMARY_STANDARD.md` (behavior delta format)
 
 Feature directory:
-- `docs/project_management/next/policy-patch-only-broker-effective-resolution/`
+- `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/`
 
 Slice spec:
-- `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
+- `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
 
 ## Behavior Delta (Existing → New → Why)
 
@@ -379,16 +379,16 @@ Slice spec:
 - Why:
 - Links:
 exec
-/bin/bash -lc "sed -n '1,200p' docs/project_management/next/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ succeeded in 44ms:
+/bin/bash -lc "sed -n '1,200p' docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md" in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ succeeded in 44ms:
 # Manual Testing Playbook — Policy Patch-only + Broker-Canonical Effective Resolution
 
 Exit codes:
 - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 
 Smoke scripts (minimal, runnable subset of this playbook):
-- Linux: `docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh`
-- macOS: `docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/macos-smoke.sh`
-- Windows: `docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/windows-smoke.ps1`
+- Linux: `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/smoke/windows-smoke.ps1`
 
 ## Preconditions
 - Repo is checked out and buildable.
@@ -774,7 +774,7 @@ TEMP_BRANCH=tmp/ci-compile-parity/20260117T145904Z
 RUN_ID=21096188673
 RUN_URL=https://github.com/atomize-hq/substrate/actions/runs/21096188673
 exec
-/bin/bash -lc 'make feature-smoke FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution" PLATFORM=behavior SMOKE_SLICE_ID="C0" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1' in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ exited 2 in 5m 00s:
+/bin/bash -lc 'make feature-smoke FEATURE_DIR="docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution" PLATFORM=behavior SMOKE_SLICE_ID="C0" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1' in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ exited 2 in 5m 00s:
 make[1]: Entering directory '/home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ'
 HEAD: 70bcc4e6592ea3f391651167316211a6b89674df
 Temp branch: tmp/feature-smoke/policy-patch-only-broker-effective-resolution/behavior/20260117T150055Z
@@ -838,15 +838,15 @@ scripts/e2e/triad_e2e_phase1.sh:429:   - \`make feature-smoke FEATURE_DIR="${FEA
 scripts/e2e/triad_e2e_phase1.sh:451:   - \`make feature-smoke FEATURE_DIR="${FEATURE_DIR}" PLATFORM=${p} WORKFLOW_REF="${ORCH_BRANCH}"\`
 scripts/e2e/triad_e2e_phase1.sh:469:   - \`make feature-smoke FEATURE_DIR="${FEATURE_DIR}" PLATFORM=wsl RUNNER_KIND=self-hosted WORKFLOW_REF="${ORCH_BRANCH}"\`
 scripts/e2e/triad_e2e_phase1.sh:485:- \`make feature-smoke FEATURE_DIR="${FEATURE_DIR}" PLATFORM=all WORKFLOW_REF="${ORCH_BRANCH}"\`
-scripts/planning/new_feature.sh:480:        "workflow": (".github/workflows/feature-smoke.yml" if smoke_required else ".github/workflows/ci-compile-parity.yml"),
-scripts/planning/new_feature.sh:844:      "workflow": ".github/workflows/feature-smoke.yml"
-scripts/planning/new_feature.sh:875:      "workflow": ".github/workflows/feature-smoke.yml"
-scripts/planning/new_feature.sh:906:      "workflow": ".github/workflows/feature-smoke.yml"
-scripts/planning/new_feature.sh:938:      "workflow": ".github/workflows/feature-smoke.yml"
-scripts/planning/new_feature.ps1:326:        $workflow = if ($smokeRequired) { ".github/workflows/feature-smoke.yml" } else { ".github/workflows/ci-compile-parity.yml" }
-scripts/planning/new_feature.ps1:603:      `"workflow`": `".github/workflows/feature-smoke.yml`"
-scripts/planning/new_feature.ps1:634:      `"workflow`": `".github/workflows/feature-smoke.yml`"
-scripts/planning/new_feature.ps1:665:      `"workflow`": `".github/workflows/feature-smoke.yml`"
+planning/new_feature.sh:480:        "workflow": (".github/workflows/feature-smoke.yml" if smoke_required else ".github/workflows/ci-compile-parity.yml"),
+planning/new_feature.sh:844:      "workflow": ".github/workflows/feature-smoke.yml"
+planning/new_feature.sh:875:      "workflow": ".github/workflows/feature-smoke.yml"
+planning/new_feature.sh:906:      "workflow": ".github/workflows/feature-smoke.yml"
+planning/new_feature.sh:938:      "workflow": ".github/workflows/feature-smoke.yml"
+planning/new_feature.ps1:326:        $workflow = if ($smokeRequired) { ".github/workflows/feature-smoke.yml" } else { ".github/workflows/ci-compile-parity.yml" }
+planning/new_feature.ps1:603:      `"workflow`": `".github/workflows/feature-smoke.yml`"
+planning/new_feature.ps1:634:      `"workflow`": `".github/workflows/feature-smoke.yml`"
+planning/new_feature.ps1:665:      `"workflow`": `".github/workflows/feature-smoke.yml`"
 
 
 thinking
@@ -3919,7 +3919,7 @@ index 795bd3c4ad501c9a4269219ebcad05c252a11dfb..c48dd37d24edd59d1bccb27ce3f72598
  
 
 exec
-/bin/bash -lc 'make feature-smoke FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution" PLATFORM=behavior SMOKE_SLICE_ID="C0" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1' in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ succeeded in 5m 03s:
+/bin/bash -lc 'make feature-smoke FEATURE_DIR="docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution" PLATFORM=behavior SMOKE_SLICE_ID="C0" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1' in /home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ succeeded in 5m 03s:
 make[1]: Entering directory '/home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-integ'
 HEAD: 7207939e900aac0b064abb04cbacdda23737aa9f
 Temp branch: tmp/feature-smoke/policy-patch-only-broker-effective-resolution/behavior/20260117T151840Z
@@ -4159,7 +4159,7 @@ I’m planning to use `apply_patch` with a relative path, but I’m uncertain if
 
 To be safe, I think using the absolute path like `/home/spenser/__Active_code/substrate/docs/project_management/.../C0-closeout_report.md` would ensure I’m editing the correct file in the Orch worktree. So, I’ll go ahead and patch with that absolute path, ensuring everything is clear.
 file update
-M /home/spenser/__Active_code/substrate/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+M /home/spenser/__Active_code/substrate/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 @@ -2,3 +2,3 @@
  
 -Date (UTC): 2026-01-17T02:46:54Z
@@ -4174,7 +4174,7 @@ M /home/spenser/__Active_code/substrate/docs/project_management/next/policy-patc
 +- New behavior: broker is the canonical effective-policy resolver (defaults → global patch → workspace patch), and `substrate policy current show` delegates to the broker.
 +- Why: a single resolver eliminates drift, keeps effective policy deterministic, and enforces the patch-only on-disk contract.
  - Links:
-+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
++  - `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
 +  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
  
 @@ -23,4 +25,4 @@
@@ -4218,7 +4218,7 @@ M /home/spenser/__Active_code/substrate/docs/project_management/next/policy-patc
 +- Smoke is dispatched via `make feature-smoke ... PLATFORM=behavior SMOKE_SLICE_ID=C0`, which runs the same slice scripts referenced by `manual_testing_playbook.md` for Linux/macOS/Windows.
 apply_patch(auto_approved=true) exited 0 in 32ms:
 Success. Updated the following files:
-M /home/spenser/__Active_code/substrate/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+M /home/spenser/__Active_code/substrate/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 file update:
 diff --git a/crates/shell/src/builtins/world_enable/runner/manager_env.rs b/crates/shell/src/builtins/world_enable/runner/manager_env.rs
 index 420f7afc5eeb608a8468e18940688b6672dd44be..d55b8e8ca812447d7cde96b86eca641e13c1524d
@@ -4307,10 +4307,10 @@ index 795bd3c4ad501c9a4269219ebcad05c252a11dfb..c48dd37d24edd59d1bccb27ce3f72598
      // Lock the mutex to ensure exclusive access to environment
      let _guard = TEST_ENV_MUTEX.lock().unwrap_or_else(|err| err.into_inner());
  
-diff --git a/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md b/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+diff --git a/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md b/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..8f3acc653bba50d63db18b3be9d90bf1f3a8415c
---- a/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
-+++ b/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+--- a/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
++++ b/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — policy-patch-only-broker-effective-resolution / C0
  
@@ -4330,7 +4330,7 @@ index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..8f3acc653bba50d63db18b3be9d90bf1
 +- New behavior: broker is the canonical effective-policy resolver (defaults → global patch → workspace patch), and `substrate policy current show` delegates to the broker.
 +- Why: a single resolver eliminates drift, keeps effective policy deterministic, and enforces the patch-only on-disk contract.
  - Links:
-+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
++  - `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
 +  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
  
  ## Spec Parity (No Drift)
@@ -4465,10 +4465,10 @@ index 795bd3c4ad501c9a4269219ebcad05c252a11dfb..c48dd37d24edd59d1bccb27ce3f72598
      // Lock the mutex to ensure exclusive access to environment
      let _guard = TEST_ENV_MUTEX.lock().unwrap_or_else(|err| err.into_inner());
  
-diff --git a/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md b/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+diff --git a/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md b/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..8f3acc653bba50d63db18b3be9d90bf1f3a8415c
---- a/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
-+++ b/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+--- a/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
++++ b/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — policy-patch-only-broker-effective-resolution / C0
  
@@ -4488,7 +4488,7 @@ index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..8f3acc653bba50d63db18b3be9d90bf1
 +- New behavior: broker is the canonical effective-policy resolver (defaults → global patch → workspace patch), and `substrate policy current show` delegates to the broker.
 +- Why: a single resolver eliminates drift, keeps effective policy deterministic, and enforces the patch-only on-disk contract.
  - Links:
-+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
++  - `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
 +  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
  
  ## Spec Parity (No Drift)
@@ -4541,7 +4541,7 @@ thinking
 
 I’ve updated the closeout report and need to check the parity checkboxes for smoke parity since they're still unchecked. I should evaluate and consider marking them. The instructions say to ensure scripts align, and they do. Since we've verified this in the manual playbook earlier, it seems justified to mark them as checked [x]. Alright, I’ll go ahead and assert that they're accurate and patch this quickly!
 file update
-M /home/spenser/__Active_code/substrate/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+M /home/spenser/__Active_code/substrate/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 @@ -49,4 +49,4 @@
  
 -- [ ] Smoke scripts run the same commands/workflows as the manual testing playbook (minimal viable subset)
@@ -4551,7 +4551,7 @@ M /home/spenser/__Active_code/substrate/docs/project_management/next/policy-patc
  
 apply_patch(auto_approved=true) exited 0 in 34ms:
 Success. Updated the following files:
-M /home/spenser/__Active_code/substrate/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+M /home/spenser/__Active_code/substrate/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 file update:
 diff --git a/crates/shell/src/builtins/world_enable/runner/manager_env.rs b/crates/shell/src/builtins/world_enable/runner/manager_env.rs
 index 420f7afc5eeb608a8468e18940688b6672dd44be..d55b8e8ca812447d7cde96b86eca641e13c1524d
@@ -4640,10 +4640,10 @@ index 795bd3c4ad501c9a4269219ebcad05c252a11dfb..c48dd37d24edd59d1bccb27ce3f72598
      // Lock the mutex to ensure exclusive access to environment
      let _guard = TEST_ENV_MUTEX.lock().unwrap_or_else(|err| err.into_inner());
  
-diff --git a/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md b/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+diff --git a/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md b/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365bfa042b5d
---- a/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
-+++ b/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+--- a/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
++++ b/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — policy-patch-only-broker-effective-resolution / C0
  
@@ -4663,7 +4663,7 @@ index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365b
 +- New behavior: broker is the canonical effective-policy resolver (defaults → global patch → workspace patch), and `substrate policy current show` delegates to the broker.
 +- Why: a single resolver eliminates drift, keeps effective policy deterministic, and enforces the patch-only on-disk contract.
  - Links:
-+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
++  - `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
 +  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
  
  ## Spec Parity (No Drift)
@@ -4800,10 +4800,10 @@ index 795bd3c4ad501c9a4269219ebcad05c252a11dfb..c48dd37d24edd59d1bccb27ce3f72598
      // Lock the mutex to ensure exclusive access to environment
      let _guard = TEST_ENV_MUTEX.lock().unwrap_or_else(|err| err.into_inner());
  
-diff --git a/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md b/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+diff --git a/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md b/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365bfa042b5d
---- a/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
-+++ b/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+--- a/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
++++ b/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — policy-patch-only-broker-effective-resolution / C0
  
@@ -4823,7 +4823,7 @@ index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365b
 +- New behavior: broker is the canonical effective-policy resolver (defaults → global patch → workspace patch), and `substrate policy current show` delegates to the broker.
 +- Why: a single resolver eliminates drift, keeps effective policy deterministic, and enforces the patch-only on-disk contract.
  - Links:
-+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
++  - `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
 +  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
  
  ## Spec Parity (No Drift)
@@ -4873,7 +4873,7 @@ index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365b
 +- Smoke is dispatched via `make feature-smoke ... PLATFORM=behavior SMOKE_SLICE_ID=C0`, which runs the same slice scripts referenced by `manual_testing_playbook.md` for Linux/macOS/Windows.
 
 exec
-/bin/bash -lc 'git add docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+/bin/bash -lc 'git add docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 
 git commit -m "docs: C0 closeout report"' in /home/spenser/__Active_code/substrate succeeded in 73ms:
 [feat/policy-patch-only-broker-effective-resolution 987c0c2] docs: C0 closeout report
@@ -4966,10 +4966,10 @@ index 795bd3c4ad501c9a4269219ebcad05c252a11dfb..c48dd37d24edd59d1bccb27ce3f72598
      // Lock the mutex to ensure exclusive access to environment
      let _guard = TEST_ENV_MUTEX.lock().unwrap_or_else(|err| err.into_inner());
  
-diff --git a/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md b/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+diff --git a/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md b/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365bfa042b5d
---- a/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
-+++ b/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+--- a/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
++++ b/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — policy-patch-only-broker-effective-resolution / C0
  
@@ -4989,7 +4989,7 @@ index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365b
 +- New behavior: broker is the canonical effective-policy resolver (defaults → global patch → workspace patch), and `substrate policy current show` delegates to the broker.
 +- Why: a single resolver eliminates drift, keeps effective policy deterministic, and enforces the patch-only on-disk contract.
  - Links:
-+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
++  - `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
 +  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
  
  ## Spec Parity (No Drift)
@@ -5134,10 +5134,10 @@ index 795bd3c4ad501c9a4269219ebcad05c252a11dfb..c48dd37d24edd59d1bccb27ce3f72598
      // Lock the mutex to ensure exclusive access to environment
      let _guard = TEST_ENV_MUTEX.lock().unwrap_or_else(|err| err.into_inner());
  
-diff --git a/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md b/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+diff --git a/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md b/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365bfa042b5d
---- a/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
-+++ b/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+--- a/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
++++ b/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — policy-patch-only-broker-effective-resolution / C0
  
@@ -5157,7 +5157,7 @@ index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365b
 +- New behavior: broker is the canonical effective-policy resolver (defaults → global patch → workspace patch), and `substrate policy current show` delegates to the broker.
 +- Why: a single resolver eliminates drift, keeps effective policy deterministic, and enforces the patch-only on-disk contract.
  - Links:
-+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
++  - `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
 +  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
  
  ## Spec Parity (No Drift)
@@ -5308,10 +5308,10 @@ index 795bd3c4ad501c9a4269219ebcad05c252a11dfb..c48dd37d24edd59d1bccb27ce3f72598
      // Lock the mutex to ensure exclusive access to environment
      let _guard = TEST_ENV_MUTEX.lock().unwrap_or_else(|err| err.into_inner());
  
-diff --git a/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md b/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+diff --git a/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md b/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365bfa042b5d
---- a/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
-+++ b/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+--- a/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
++++ b/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — policy-patch-only-broker-effective-resolution / C0
  
@@ -5331,7 +5331,7 @@ index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365b
 +- New behavior: broker is the canonical effective-policy resolver (defaults → global patch → workspace patch), and `substrate policy current show` delegates to the broker.
 +- Why: a single resolver eliminates drift, keeps effective policy deterministic, and enforces the patch-only on-disk contract.
  - Links:
-+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
++  - `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
 +  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
  
  ## Spec Parity (No Drift)
@@ -5475,10 +5475,10 @@ index 795bd3c4ad501c9a4269219ebcad05c252a11dfb..c48dd37d24edd59d1bccb27ce3f72598
      // Lock the mutex to ensure exclusive access to environment
      let _guard = TEST_ENV_MUTEX.lock().unwrap_or_else(|err| err.into_inner());
  
-diff --git a/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md b/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+diff --git a/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md b/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365bfa042b5d
---- a/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
-+++ b/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+--- a/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
++++ b/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — policy-patch-only-broker-effective-resolution / C0
  
@@ -5498,7 +5498,7 @@ index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365b
 +- New behavior: broker is the canonical effective-policy resolver (defaults → global patch → workspace patch), and `substrate policy current show` delegates to the broker.
 +- Why: a single resolver eliminates drift, keeps effective policy deterministic, and enforces the patch-only on-disk contract.
  - Links:
-+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
++  - `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
 +  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
  
  ## Spec Parity (No Drift)
@@ -5657,10 +5657,10 @@ index 795bd3c4ad501c9a4269219ebcad05c252a11dfb..c48dd37d24edd59d1bccb27ce3f72598
      // Lock the mutex to ensure exclusive access to environment
      let _guard = TEST_ENV_MUTEX.lock().unwrap_or_else(|err| err.into_inner());
  
-diff --git a/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md b/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+diff --git a/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md b/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365bfa042b5d
---- a/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
-+++ b/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+--- a/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
++++ b/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — policy-patch-only-broker-effective-resolution / C0
  
@@ -5680,7 +5680,7 @@ index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365b
 +- New behavior: broker is the canonical effective-policy resolver (defaults → global patch → workspace patch), and `substrate policy current show` delegates to the broker.
 +- Why: a single resolver eliminates drift, keeps effective policy deterministic, and enforces the patch-only on-disk contract.
  - Links:
-+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
++  - `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
 +  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
  
  ## Spec Parity (No Drift)
@@ -5829,10 +5829,10 @@ index 795bd3c4ad501c9a4269219ebcad05c252a11dfb..c48dd37d24edd59d1bccb27ce3f72598
      // Lock the mutex to ensure exclusive access to environment
      let _guard = TEST_ENV_MUTEX.lock().unwrap_or_else(|err| err.into_inner());
  
-diff --git a/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md b/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+diff --git a/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md b/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365bfa042b5d
---- a/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
-+++ b/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+--- a/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
++++ b/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — policy-patch-only-broker-effective-resolution / C0
  
@@ -5852,7 +5852,7 @@ index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365b
 +- New behavior: broker is the canonical effective-policy resolver (defaults → global patch → workspace patch), and `substrate policy current show` delegates to the broker.
 +- Why: a single resolver eliminates drift, keeps effective policy deterministic, and enforces the patch-only on-disk contract.
  - Links:
-+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
++  - `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
 +  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
  
  ## Spec Parity (No Drift)
@@ -6003,10 +6003,10 @@ index 795bd3c4ad501c9a4269219ebcad05c252a11dfb..c48dd37d24edd59d1bccb27ce3f72598
      // Lock the mutex to ensure exclusive access to environment
      let _guard = TEST_ENV_MUTEX.lock().unwrap_or_else(|err| err.into_inner());
  
-diff --git a/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md b/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+diff --git a/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md b/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365bfa042b5d
---- a/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
-+++ b/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+--- a/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
++++ b/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — policy-patch-only-broker-effective-resolution / C0
  
@@ -6026,7 +6026,7 @@ index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365b
 +- New behavior: broker is the canonical effective-policy resolver (defaults → global patch → workspace patch), and `substrate policy current show` delegates to the broker.
 +- Why: a single resolver eliminates drift, keeps effective policy deterministic, and enforces the patch-only on-disk contract.
  - Links:
-+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
++  - `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
 +  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
  
  ## Spec Parity (No Drift)
@@ -6172,10 +6172,10 @@ index 795bd3c4ad501c9a4269219ebcad05c252a11dfb..c48dd37d24edd59d1bccb27ce3f72598
      // Lock the mutex to ensure exclusive access to environment
      let _guard = TEST_ENV_MUTEX.lock().unwrap_or_else(|err| err.into_inner());
  
-diff --git a/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md b/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+diff --git a/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md b/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365bfa042b5d
---- a/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
-+++ b/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+--- a/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
++++ b/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — policy-patch-only-broker-effective-resolution / C0
  
@@ -6195,7 +6195,7 @@ index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365b
 +- New behavior: broker is the canonical effective-policy resolver (defaults → global patch → workspace patch), and `substrate policy current show` delegates to the broker.
 +- Why: a single resolver eliminates drift, keeps effective policy deterministic, and enforces the patch-only on-disk contract.
  - Links:
-+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
++  - `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
 +  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
  
  ## Spec Parity (No Drift)
@@ -6249,7 +6249,7 @@ codex
 - Re-ran gates in the worktree: `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, targeted tests, and `make integ-checks` (pass).
 - Re-ran CI compile parity: run `21096432455` (`https://github.com/atomize-hq/substrate/actions/runs/21096432455`) (success on ubuntu/macos/windows).
 - Re-ran behavioral smoke (C0): run `21096457624` (`https://github.com/atomize-hq/substrate/actions/runs/21096457624`) (linux/macos/windows all success).
-- Completed and committed `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md` on the orchestration branch.
+- Completed and committed `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md` on the orchestration branch.
 - Ran `make triad-task-finish TASK_ID="C0-integ"`; merged back to `feat/policy-patch-only-broker-effective-resolution` (merge commit `0cc8c10`) and pushed to `origin`.
 file update:
 diff --git a/crates/shell/src/builtins/world_enable/runner/manager_env.rs b/crates/shell/src/builtins/world_enable/runner/manager_env.rs
@@ -6339,10 +6339,10 @@ index 795bd3c4ad501c9a4269219ebcad05c252a11dfb..c48dd37d24edd59d1bccb27ce3f72598
      // Lock the mutex to ensure exclusive access to environment
      let _guard = TEST_ENV_MUTEX.lock().unwrap_or_else(|err| err.into_inner());
  
-diff --git a/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md b/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+diff --git a/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md b/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365bfa042b5d
---- a/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
-+++ b/docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
+--- a/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
++++ b/docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md
 @@ -1,6 +1,6 @@
  # Slice Closeout Gate Report — policy-patch-only-broker-effective-resolution / C0
  
@@ -6362,7 +6362,7 @@ index 84adcb4d2d6a14fe8c19a164ad7adb1e44fc1bb5..908e00dc02858e14a6c1c129167d365b
 +- New behavior: broker is the canonical effective-policy resolver (defaults → global patch → workspace patch), and `substrate policy current show` delegates to the broker.
 +- Why: a single resolver eliminates drift, keeps effective policy deterministic, and enforces the patch-only on-disk contract.
  - Links:
-+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
++  - `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
 +  - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
  
  ## Spec Parity (No Drift)

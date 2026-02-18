@@ -16,4 +16,4 @@ Guardrails for prompts:
   ensure combined behavior matches the spec before updating docs/tasks/logs on
   `feat/crate-refactor`.
 
-Follow the format used in `docs/project_management/next/settings-stack/kickoff_prompts/`.
+Follow the format used in `docs/project_management/_archived/next/settings-stack/kickoff_prompts/`.

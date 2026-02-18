@@ -43,7 +43,7 @@ If you already have crisp specs and only need to implement them, use the executi
 ## 3) Required Outputs (The “Planning Pack”)
 
 When you run a docs-first planning pass for a feature/track, you must produce a Planning Pack under:
-`docs/project_management/next/<feature>/`
+`docs/project_management/packs/active/<feature>/`
 
 ### 3.0 Supporting workflow docs (required references)
 
@@ -118,10 +118,10 @@ Add these files when the work introduces new user contracts, config, or platform
 4) Playbook automation scripts (required alongside the manual playbook)
 - Every `manual_testing_playbook.md` must be paired with runnable smoke script(s) so agents can execute validation automatically and humans can re-run without typing every command.
 - Scripts must live inside the feature directory they validate (not in the repo root `scripts/` tree):
-  - Directory: `docs/project_management/next/<feature>/smoke/`
-  - Linux: `docs/project_management/next/<feature>/smoke/linux-smoke.sh`
-  - macOS: `docs/project_management/next/<feature>/smoke/macos-smoke.sh`
-  - Windows: `docs/project_management/next/<feature>/smoke/windows-smoke.ps1`
+  - Directory: `docs/project_management/packs/active/<feature>/smoke/`
+  - Linux: `docs/project_management/packs/active/<feature>/smoke/linux-smoke.sh`
+  - macOS: `docs/project_management/packs/active/<feature>/smoke/macos-smoke.sh`
+  - Windows: `docs/project_management/packs/active/<feature>/smoke/windows-smoke.ps1`
 - The manual playbook must reference the scripts and describe how to run them, plus how to manually run subsections.
 - Triad integration tasks must run the relevant smoke scripts (where applicable) and record results in `session_log.md`.
 
@@ -129,10 +129,10 @@ Add these files when the work introduces new user contracts, config, or platform
 
 If the scope spans multiple tracks (or you are reconciling a backlog), produce:
 
-1) `docs/project_management/next/final_alignment_report.md`
+1) `docs/project_management/packs/final_alignment_report.md`
 - An auditable report of what was reviewed, what was changed, and what remains (must be “0 unresolved misalignments”).
 
-2) Update `docs/project_management/packs/sequencing.json` if needed (legacy mirror during migration: `docs/project_management/next/sequencing.json`)
+2) Update `docs/project_management/packs/sequencing.json` if needed
 - Sequencing is the execution spine; if tasks and sequencing disagree, fix one and record it.
 
 ---
@@ -142,7 +142,7 @@ If the scope spans multiple tracks (or you are reconciling a backlog), produce:
 Before any execution triad begins, a third-party quality gate reviewer must review the Planning Pack and produce an auditable report.
 
 Required output:
-- `docs/project_management/next/<feature>/quality_gate_report.md`
+- `docs/project_management/packs/active/<feature>/quality_gate_report.md`
   - must follow `docs/project_management/system/templates/planning_pack/PLANNING_GATE_REPORT_TEMPLATE.md`
   - must include evidence that `docs/project_management/system/standards/planning/PLANNING_LINT_CHECKLIST.md` was run
 
@@ -205,7 +205,7 @@ Every decision must be recorded as a Decision Register entry. Each entry must:
 Every Decision Register entry must be executable, not just readable. Therefore:
 - Every decision must have follow-up tasks that map to concrete triad task IDs in `tasks.json`.
 - Every triad task that implements a decision must list that decision in its `references` (by file path and DR id), e.g.:
-  - `docs/project_management/next/<feature>/decision_register.md (DR-00XX)`
+  - `docs/project_management/packs/active/<feature>/decision_register.md (DR-00XX)`
 - The integration task for the slice must confirm (in its END session log entry) that all referenced DR items are implemented and tested.
 
 ---
@@ -274,7 +274,7 @@ Encouraged:
 ## 7) Sequencing and Dependency Alignment
 
 You must reconcile three sources of truth:
-1) `docs/project_management/packs/sequencing.json` (macro-level order) (legacy mirror during migration: `docs/project_management/next/sequencing.json`)
+1) `docs/project_management/packs/sequencing.json` (macro-level order)
 2) each triad `tasks.json` (micro-level dependencies)
 3) the specs (prerequisites and invariants)
 
@@ -292,7 +292,7 @@ Rules:
 You must scan the scoped planning docs and remove violations. These are enforcement rules for *planning outputs*.
 
 Scope note:
-- Apply this rubric to feature planning outputs (ADRs/specs/plan/tasks/prompts/playbooks/reports) under `docs/project_management/next/…`, not to standards docs under `docs/project_management/system/standards/…`.
+- Apply this rubric to feature planning outputs (ADRs/specs/plan/tasks/prompts/playbooks/reports) under `docs/project_management/packs/…`, not to standards docs under `docs/project_management/system/standards/…`.
 
 ### 8.1 Hard bans (never allowed)
 
@@ -333,17 +333,17 @@ Forbidden in acceptance criteria and playbooks:
 Run these against the scoped directories:
 
 ```bash
-rg -n "\\b(TBD|TODO|WIP|TBA)\\b" docs/project_management/next/<feature>
-rg -n "open question" docs/project_management/next/<feature>
-rg -n "\\betc\\.\\b|and so on" docs/project_management/next/<feature>
-rg -n "\\b(should|could|might|maybe|optionally)\\b" docs/project_management/next/<feature>
+rg -n "\\b(TBD|TODO|WIP|TBA)\\b" "$FEATURE_DIR"
+rg -n "open question" "$FEATURE_DIR"
+rg -n "\\betc\\.\\b|and so on" "$FEATURE_DIR"
+rg -n "\\b(should|could|might|maybe|optionally)\\b" "$FEATURE_DIR"
 ```
 
 For JSON validity:
 
 ```bash
 jq . docs/project_management/packs/sequencing.json >/dev/null
-jq . docs/project_management/next/<feature>/tasks.json >/dev/null
+jq . "$FEATURE_DIR/tasks.json" >/dev/null
 ```
 
 ---

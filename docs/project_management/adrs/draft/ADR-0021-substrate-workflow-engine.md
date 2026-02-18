@@ -6,8 +6,8 @@
 - Owner(s): Substrate maintainers
 
 ## Scope
-- Feature directory: `docs/project_management/next/workflow-engine/`
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Feature directory: `docs/project_management/_archived/next/workflow-engine/`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
@@ -16,13 +16,13 @@
   - `docs/project_management/standards/CONTRACT_SURFACE_STANDARD.md`
 
 ## Related Docs
-- Plan: `docs/project_management/next/workflow-engine/plan.md` (not created; ADR draft phase)
-- Tasks: `docs/project_management/next/workflow-engine/tasks.json` (not created; ADR draft phase)
-- Spec manifest: `docs/project_management/next/workflow-engine/spec_manifest.md` (not created; ADR draft phase)
-- Contract (if present): `docs/project_management/next/workflow-engine/contract.md` (not created; ADR draft phase)
-- Decision Register: `docs/project_management/next/workflow-engine/decision_register.md` (required before Accepted)
-- Impact Map: `docs/project_management/next/workflow-engine/impact_map.md` (not created; ADR draft phase)
-- Manual Playbook: `docs/project_management/next/workflow-engine/manual_testing_playbook.md` (not created; ADR draft phase)
+- Plan: `docs/project_management/_archived/next/workflow-engine/plan.md` (not created; ADR draft phase)
+- Tasks: `docs/project_management/_archived/next/workflow-engine/tasks.json` (not created; ADR draft phase)
+- Spec manifest: `docs/project_management/_archived/next/workflow-engine/spec_manifest.md` (not created; ADR draft phase)
+- Contract (if present): `docs/project_management/_archived/next/workflow-engine/contract.md` (not created; ADR draft phase)
+- Decision Register: `docs/project_management/_archived/next/workflow-engine/decision_register.md` (required before Accepted)
+- Impact Map: `docs/project_management/_archived/next/workflow-engine/impact_map.md` (not created; ADR draft phase)
+- Manual Playbook: `docs/project_management/_archived/next/workflow-engine/manual_testing_playbook.md` (not created; ADR draft phase)
 - Dependency foundations (must remain compatible):
   - Trace + event foundations: `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
   - Output routing + attribution: `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
@@ -39,7 +39,7 @@ ADR_BODY_SHA256: ff1ed6ebaa33c86c483bbf053aa783e1fc10206f02a4b450b906995b96c1f5a
   - Why: make multi-step automation observable/replayable under the same policy+trace model, and provide a stable substrate for “agentic workflows” without coupling to any specific agent framework.
   - Links:
     - `docs/project_management/adrs/draft/ADR-0021-substrate-workflow-engine.md#L1`
-    - `docs/project_management/next/workflow-engine/decision_register.md`
+    - `docs/project_management/_archived/next/workflow-engine/decision_register.md`
     - `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md#L1`
 
 ## Problem / Context
@@ -166,7 +166,7 @@ ADR_BODY_SHA256: ff1ed6ebaa33c86c483bbf053aa783e1fc10206f02a4b450b906995b96c1f5a
     - trace spans written to `~/.substrate/trace.jsonl` (default path) with graph linkage.
 
 ## Sequencing / Dependencies
-- Sequencing entry: this ADR must add a `workflow-engine` entry to `docs/project_management/next/sequencing.json` before it can be marked `Accepted`.
+- Sequencing entry: this ADR must add a `workflow-engine` entry to `docs/project_management/packs/sequencing.json` before it can be marked `Accepted`.
 - Prerequisite integration task IDs: none yet (this ADR is Draft). Before `Accepted`, this section must be updated to reference the Planning Pack task IDs for workflow-engine.
 - Dependencies:
   - Reuse existing Agent API request/response + streaming frame model (`crates/agent-api-*`) for tool/script execution nodes.
@@ -213,7 +213,7 @@ ADR_BODY_SHA256: ff1ed6ebaa33c86c483bbf053aa783e1fc10206f02a4b450b906995b96c1f5a
   - fail with a clear “unsupported schema version” error and exit `2`.
 
 ## Decision Summary
-- Decision Register: `docs/project_management/next/workflow-engine/decision_register.md`
+- Decision Register: `docs/project_management/_archived/next/workflow-engine/decision_register.md`
   - DR-0001: Workflow spec file format + strictness
   - DR-0002: DAG dependency representation in the spec
   - DR-0003: Failure semantics (fail-fast vs allow_failure)

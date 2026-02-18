@@ -47,6 +47,6 @@
 - This change is a narrow correction that does not introduce new config keys and does not change workspace discovery.
 
 ## Sequencing alignment
-- Sequencing spine entry: `docs/project_management/next/sequencing.json` → `policy_and_config_precedence`
+- Sequencing spine entry: `docs/project_management/packs/sequencing.json` → `policy_and_config_precedence`
 - No prerequisite integration task IDs are required because ADR-0003 is already integrated; this sprint is a follow-up correction.
 

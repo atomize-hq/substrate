@@ -58,7 +58,7 @@ Template (copy/paste and fill in):
 - Worktree commits: 4a887e2 (chore: integrate R1 panic remediation)
 - Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings (first run failed: clippy items-after-test-module in telemetry-lib tests; moved tests below platform init arrays); cargo test -p broker (failed: package not found); cargo test -p substrate-broker; cargo test -p world; cargo test -p substrate-telemetry; cargo test -p substrate-forwarder
 - Results: fmt/clippy/tests passed; world tests emit cp warnings but succeed; telemetry tests log missing trace file warnings but pass; created stash `stash@{0}` capturing pre-existing telemetry-lib edits on feat/crate-refactor
-- Kickoff prompts created: docs/project_management/next/refactor/kickoff_prompts/R2-code.md; docs/project_management/next/refactor/kickoff_prompts/R2-test.md
+- Kickoff prompts created: docs/project_management/_archived/next/refactor/kickoff_prompts/R2-code.md; docs/project_management/_archived/next/refactor/kickoff_prompts/R2-test.md
 - Docs commit: 066b26b
 - Next steps / blockers: none
 
@@ -96,7 +96,7 @@ Template (copy/paste and fill in):
 - Worktree commits: a8b4cd6
 - Commands: cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable; ./tests/installers/install_smoke.sh (skipped: Linux-only harness)
 - Results: fmt clean; world_root/world_enable suites passed; installer smoke skipped per platform guard
-- Kickoff prompts created: docs/project_management/next/refactor/kickoff_prompts/R2-integ.md
+- Kickoff prompts created: docs/project_management/_archived/next/refactor/kickoff_prompts/R2-integ.md
 - Docs commit: 82ff270 (tasks/status + session log + R2-integ prompt)
 - Next steps / blockers: ready for R2 integration; remove worktree after merge
 
@@ -112,7 +112,7 @@ Template (copy/paste and fill in):
 - Worktree commits: none (R2 code/test already fast-forwarded on feat/crate-refactor)
 - Commands: cargo fmt; cargo clippy -p substrate-shell -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable; ./tests/installers/install_smoke.sh (skipped: non-Linux)
 - Results: fmt/clippy/tests passed; installer smoke auto-skipped with Linux-only message
-- Kickoff prompts created: docs/project_management/next/refactor/kickoff_prompts/R3-code.md; docs/project_management/next/refactor/kickoff_prompts/R3-test.md
+- Kickoff prompts created: docs/project_management/_archived/next/refactor/kickoff_prompts/R3-code.md; docs/project_management/_archived/next/refactor/kickoff_prompts/R3-test.md
 - Docs commit: (docs: finish R2-integ – tasks/status + session log + R3 prompts)
 - Next steps / blockers: remove integration worktree after merge; R3 tasks ready to start
 
@@ -127,7 +127,7 @@ Template (copy/paste and fill in):
 - Worktree commits: 31db976
 - Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-broker; cargo test -p substrate-trace; cargo test -p world-agent; cargo test -p host-proxy
 - Results: all commands passed (world-agent test rerun after initial timeout to capture doc-tests)
-- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R3-test.md
+- Kickoff prompts referenced: docs/project_management/_archived/next/refactor/kickoff_prompts/R3-test.md
 - Docs commit: pending (tasks/status + session log)
 - Next steps / blockers: merge worktree branch into feat/crate-refactor (done); remove worktree when handoff complete
 
@@ -142,7 +142,7 @@ Template (copy/paste and fill in):
 - Worktree commits: bd5abe9
 - Commands: cargo fmt; cargo test -p substrate-broker; cargo test -p substrate-trace; cargo test -p world-agent (initial run hit CLI timeout; reran with extended timeout); cargo test -p host-proxy
 - Results: all commands passed; world-agent/host-proxy entrypoint harnesses validate delegation without server startup
-- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R3-integ.md
+- Kickoff prompts referenced: docs/project_management/_archived/next/refactor/kickoff_prompts/R3-integ.md
 - Docs commit: pending (updated tasks + session log)
 - Next steps / blockers: ready for R3 integration; remove worktree when done
 
@@ -158,7 +158,7 @@ Template (copy/paste and fill in):
 - Worktree commits: none (code/test branches already aligned)
 - Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-broker; cargo test -p substrate-trace; cargo test -p world-agent; cargo test -p host-proxy
 - Results: all commands passed; no merge conflicts between code/test branches
-- Kickoff prompts created: docs/project_management/next/refactor/kickoff_prompts/R4-code.md; docs/project_management/next/refactor/kickoff_prompts/R4-test.md
+- Kickoff prompts created: docs/project_management/_archived/next/refactor/kickoff_prompts/R4-code.md; docs/project_management/_archived/next/refactor/kickoff_prompts/R4-test.md
 - Docs commit: pending (updated tasks + session log + R4 prompts)
 - Next steps / blockers: integration branch already matches feat/crate-refactor; remove worktree after docs commit
 
@@ -189,7 +189,7 @@ Template (copy/paste and fill in):
 - Worktree commits: 9d62e3f (trace/replay/common doctests + property tests), 1372ccb (world-windows-wsl path conversion coverage)
 - Commands: cargo fmt; cargo test -p substrate-trace; cargo test -p world-windows-wsl (0 tests, cfg windows-only); cargo test -p substrate-replay --all-targets; cargo test --doc -p substrate-replay; cargo test -p substrate-common --all-targets
 - Results: fmt clean; trace/replay/common suites and replay doctests passed; world-windows-wsl builds with tests skipped on non-Windows; property test added for common::dedupe_path and doctests validating trace/replay docs/prelude
-- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R4-integ.md
+- Kickoff prompts referenced: docs/project_management/_archived/next/refactor/kickoff_prompts/R4-integ.md
 - Next steps / blockers: ready for R4 integration; remove worktree after merge
 
 ## [2025-11-23 19:34 UTC] Integration – R4-integ – START
@@ -217,7 +217,7 @@ Template (copy/paste and fill in):
 - Worktree commits: n/a (docs-only on feat/crate-refactor)
 - Commands: none (doc edits only)
 - Results: Added R5–R7 tracks to refactor_plan.md; created R5/R6/R7 tasks in tasks.json with worktrees/branches; authored kickoff prompts (code/test/integ) for R5–R7; session log updated
-- Kickoff prompts created: docs/project_management/next/refactor/kickoff_prompts/R5-code.md; docs/project_management/next/refactor/kickoff_prompts/R5-test.md; docs/project_management/next/refactor/kickoff_prompts/R5-integ.md; docs/project_management/next/refactor/kickoff_prompts/R6-code.md; docs/project_management/next/refactor/kickoff_prompts/R6-test.md; docs/project_management/next/refactor/kickoff_prompts/R6-integ.md; docs/project_management/next/refactor/kickoff_prompts/R7-code.md; docs/project_management/next/refactor/kickoff_prompts/R7-test.md; docs/project_management/next/refactor/kickoff_prompts/R7-integ.md
+- Kickoff prompts created: docs/project_management/_archived/next/refactor/kickoff_prompts/R5-code.md; docs/project_management/_archived/next/refactor/kickoff_prompts/R5-test.md; docs/project_management/_archived/next/refactor/kickoff_prompts/R5-integ.md; docs/project_management/_archived/next/refactor/kickoff_prompts/R6-code.md; docs/project_management/_archived/next/refactor/kickoff_prompts/R6-test.md; docs/project_management/_archived/next/refactor/kickoff_prompts/R6-integ.md; docs/project_management/_archived/next/refactor/kickoff_prompts/R7-code.md; docs/project_management/_archived/next/refactor/kickoff_prompts/R7-test.md; docs/project_management/_archived/next/refactor/kickoff_prompts/R7-integ.md
 - Docs commit: 5cad6a6a (docs: add R5-R7 decomposition tasks)
 - Next steps / blockers: commit docs update on feat/crate-refactor; proceed with R5 tasks
 
@@ -232,7 +232,7 @@ Template (copy/paste and fill in):
 - Worktree commits: 9717cbc4 (cr-r5-exec-code)
 - Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Results: fmt/clippy clean; shell world_root/world_enable suites passed
-- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R5-test.md
+- Kickoff prompts referenced: docs/project_management/_archived/next/refactor/kickoff_prompts/R5-test.md
 - Next steps / blockers: ready for R5-test/integration; remove wt/cr-r5-exec-code after merge
 
 ## [2025-11-23 23:08 UTC] Test – R5-test – START
@@ -246,7 +246,7 @@ Template (copy/paste and fill in):
 - Worktree commits: 45f87412
 - Commands: cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Results: fmt clean; world_root/world_enable suites passed
-- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R5-integ.md
+- Kickoff prompts referenced: docs/project_management/_archived/next/refactor/kickoff_prompts/R5-integ.md
 - Docs commit: pending (updated tasks + session log)
 - Next steps / blockers: ready for R5 integration; remove wt/cr-r5-exec-test after merge
 
@@ -277,7 +277,7 @@ Template (copy/paste and fill in):
 - Worktree commits: c0b64ab2 (refactor: decompose bootstrap and builtins)
 - Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-common --all-targets; cargo test -p substrate-shim; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Results: fmt/clippy clean; common/shim/shell world_root/world_enable suites passed
-- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R6-test.md
+- Kickoff prompts referenced: docs/project_management/_archived/next/refactor/kickoff_prompts/R6-test.md
 - Next steps / blockers: merge branch into feat/crate-refactor (done); remove wt/cr-r6-bootstrap-code after cleanup
 
 ## [2025-11-24 01:57 UTC] Test – R6-test – START
@@ -291,7 +291,7 @@ Template (copy/paste and fill in):
 - Worktree commits: a6eb8e4f
 - Commands: cargo fmt; cargo test -p substrate-common --all-targets; cargo test -p substrate-shim; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Results: all commands passed (added property tests for manifest merges and shim exec coverage; fixed trace context init in shim policy test)
-- Kickoff prompts created: docs/project_management/next/refactor/kickoff_prompts/R6-integ.md
+- Kickoff prompts created: docs/project_management/_archived/next/refactor/kickoff_prompts/R6-integ.md
 - Docs commit: pending
 - Next steps / blockers: none
 
@@ -323,7 +323,7 @@ Template (copy/paste and fill in):
 - Worktree commits: 524eb391
 - Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p host-proxy; cargo test -p world; cargo test -p substrate-replay --all-targets
 - Results: all commands passed (world tests emit existing cp warnings but succeed)
-- Kickoff prompts created: docs/project_management/next/refactor/kickoff_prompts/R7-test.md
+- Kickoff prompts created: docs/project_management/_archived/next/refactor/kickoff_prompts/R7-test.md
 - Docs commit: pending (updated tasks + session log)
 - Next steps / blockers: merge cr-r7-services-code into feat/crate-refactor and remove wt/cr-r7-services-code after doc commit
 
@@ -338,7 +338,7 @@ Template (copy/paste and fill in):
 - Worktree commits: 5462efe8
 - Commands: cargo fmt; cargo test -p host-proxy; cargo test -p world; cargo test -p substrate-replay --all-targets
 - Results: fmt clean; host-proxy/world/replay suites passed (world tests emit existing cp warnings while copying fixtures)
-- Kickoff prompts created: docs/project_management/next/refactor/kickoff_prompts/R7-integ.md
+- Kickoff prompts created: docs/project_management/_archived/next/refactor/kickoff_prompts/R7-integ.md
 - Docs commit: pending (update tasks + session log)
 - Next steps / blockers: ready for integration; remove wt/cr-r7-services-test after merge
 
@@ -374,7 +374,7 @@ Template (copy/paste and fill in):
 - Worktree commits: f7826c9a (cr-r8-shell-slim-test)
 - Commands: cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Results: fmt clean; world_root/world_enable suites passed
-- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R8-integ.md
+- Kickoff prompts referenced: docs/project_management/_archived/next/refactor/kickoff_prompts/R8-integ.md
 - Docs commit: pending
 - Next steps / blockers: merge into feat/crate-refactor and remove wt/cr-r8-shell-slim-test after cleanup
 
@@ -404,7 +404,7 @@ Template (copy/paste and fill in):
 - Worktree commits: 1d86b53f (refactor: split routing dispatch)
 - Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Results: fmt/clippy clean; world_root/world_enable suites passed
-- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R9a-test.md
+- Kickoff prompts referenced: docs/project_management/_archived/next/refactor/kickoff_prompts/R9a-test.md
 - Next steps / blockers: none
 
 ## [2025-11-24 22:09 UTC] Test – R9a-test – START
@@ -418,7 +418,7 @@ Template (copy/paste and fill in):
 - Worktree commits: 59526758 (cr-r9a-routing-test)
 - Commands: cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Results: fmt clean; world_root/world_enable suites passed
-- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R9a-integ.md
+- Kickoff prompts referenced: docs/project_management/_archived/next/refactor/kickoff_prompts/R9a-integ.md
 - Next steps / blockers: ready for integration; remove wt/cr-r9a-routing-test after merge
 
 ## [2025-11-24 22:35 UTC] Integration – R9a-integ – START
@@ -447,7 +447,7 @@ Template (copy/paste and fill in):
 - Worktree commits: b096b160 (refactor: split routing env helpers)
 - Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Results: fmt/clippy clean; world_root/world_enable suites passed
-- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R9b-test.md
+- Kickoff prompts referenced: docs/project_management/_archived/next/refactor/kickoff_prompts/R9b-test.md
 - Next steps / blockers: none; ready for integration and worktree removal when finished
 
 ## [2025-11-25 01:34 UTC] Test – R9b-test – START
@@ -461,7 +461,7 @@ Template (copy/paste and fill in):
 - Worktree commits: 2d372aa1 (cr-r9b-routing-test)
 - Commands: cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Results: fmt clean; world_root/world_enable suites passed without warnings
-- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R9b-integ.md
+- Kickoff prompts referenced: docs/project_management/_archived/next/refactor/kickoff_prompts/R9b-integ.md
 - Next steps / blockers: ready for integration; remove wt/cr-r9b-routing-test after merge
 
 ## [2025-11-25 02:04 UTC] Integration – R9b-integ – START
@@ -490,7 +490,7 @@ Template (copy/paste and fill in):
 - Worktree commits: e6285217 (refactor: split routing world flows)
 - Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Results: fmt/clippy clean; world_root/world_enable suites passed
-- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R9c-test.md
+- Kickoff prompts referenced: docs/project_management/_archived/next/refactor/kickoff_prompts/R9c-test.md
 - Next steps / blockers: none (analysis doc still missing)
 
 ## [2025-11-25 02:40 UTC] Test – R9c-test – START
@@ -504,7 +504,7 @@ Template (copy/paste and fill in):
 - Worktree commits: 41eacc8a
 - Commands: cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Results: all commands passed
-- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R9c-integ.md
+- Kickoff prompts referenced: docs/project_management/_archived/next/refactor/kickoff_prompts/R9c-integ.md
 - Docs commit: pending (tasks/status + session log)
 - Next steps / blockers: ready for integration; remove wt/cr-r9c-routing-test after merge; CRATE_REFACTORING_ANALYSIS.md still missing
 
@@ -535,7 +535,7 @@ Template (copy/paste and fill in):
 - Worktree commits: 750330bc (refactor: split pty io modules)
 - Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Results: fmt/clippy clean; world_root/world_enable suites passed
-- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R10-test.md
+- Kickoff prompts referenced: docs/project_management/_archived/next/refactor/kickoff_prompts/R10-test.md
 - Next steps / blockers: none (CRATE_REFACTORING_ANALYSIS.md still missing)
 
 ## [2025-11-25 03:29 UTC] Test – R10-test – START
@@ -549,7 +549,7 @@ Template (copy/paste and fill in):
 - Worktree commits: b5767a4a (test: cover pty io split)
 - Commands: cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Results: fmt clean; world_root/world_enable suites passed
-- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R10-integ.md
+- Kickoff prompts referenced: docs/project_management/_archived/next/refactor/kickoff_prompts/R10-integ.md
 - Next steps / blockers: none
 
 ## [2025-11-25 03:46 UTC] Integration – R10-integ – START
@@ -577,7 +577,7 @@ Template (copy/paste and fill in):
 - Worktree commits: e659a85a (refactor: modularize routing dispatch)
 - Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Results: fmt/clippy clean; world_root/world_enable suites passed
-- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R11-test.md
+- Kickoff prompts referenced: docs/project_management/_archived/next/refactor/kickoff_prompts/R11-test.md
 - Docs commit: pending (tasks/status + session log)
 - Next steps / blockers: ready for integration; remove wt/cr-r11-routing-code after handoff
 
@@ -585,7 +585,7 @@ Template (copy/paste and fill in):
 - Worktree commits: 7733111b (cr-r11-routing-test)
 - Commands: cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Results: fmt clean; world_root/world_enable suites passed
-- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R11-integ.md
+- Kickoff prompts referenced: docs/project_management/_archived/next/refactor/kickoff_prompts/R11-integ.md
 - Next steps / blockers: ready for integration; remove wt/cr-r11-routing-test after merge; CRATE_REFACTORING_ANALYSIS.md still missing
 
 ## [2025-11-25 13:30 UTC] Test – R11-test – START
@@ -628,14 +628,14 @@ Template (copy/paste and fill in):
 - Worktree commits: d97b0623 (refactor: slim routing builtins)
 - Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable (rerun after rebasing onto feat/crate-refactor)
 - Results: fmt/clippy clean; world_root/world_enable suites passed
-- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R12-test.md
+- Kickoff prompts referenced: docs/project_management/_archived/next/refactor/kickoff_prompts/R12-test.md
 - Next steps / blockers: none; CRATE_REFACTORING_ANALYSIS.md still missing
 
 ## [2025-11-25 14:45 UTC] Test – R12-test – END
 - Worktree commits: 4ec817b2 (test: align routing builtin coverage)
 - Commands: cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Results: fmt clean; world_root/world_enable suites passed
-- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R12-integ.md
+- Kickoff prompts referenced: docs/project_management/_archived/next/refactor/kickoff_prompts/R12-integ.md
 - Next steps / blockers: branch rebased onto feat/crate-refactor and merged; CRATE_REFACTORING_ANALYSIS.md still missing
 
 ## [2025-11-25 14:55 UTC] Integration – R12-integ – START
@@ -663,14 +663,14 @@ Template (copy/paste and fill in):
 - Worktree commits: ffb45f3e (cr-r13-broker-test rebased on feat/crate-refactor)
 - Commands: cargo fmt; cargo test -p substrate-broker
 - Results: fmt clean; substrate-broker tests passed (20 tests)
-- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R13-integ.md
+- Kickoff prompts referenced: docs/project_management/_archived/next/refactor/kickoff_prompts/R13-integ.md
 - Notes: rebased branch to pick up broker module split; moved tests into module-aligned files
 
 ## [2025-11-25 15:19 UTC] Code – R13-code – END
 - Worktree commits: 0b7a3919 (refactor: split broker lib)
 - Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-broker
 - Results: fmt/clippy clean; substrate-broker tests passed
-- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R13-test.md
+- Kickoff prompts referenced: docs/project_management/_archived/next/refactor/kickoff_prompts/R13-test.md
 - Next steps / blockers: none; CRATE_REFACTORING_ANALYSIS.md still missing
 
 ## [2025-11-25 15:08 UTC] Test – R13-test – START
@@ -706,7 +706,7 @@ Template (copy/paste and fill in):
 - Worktree commits: c8c7af4c (refactor: slim routing dispatch mod)
 - Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Results: fmt/clippy clean; world_root/world_enable suites passed
-- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R14-test.md
+- Kickoff prompts referenced: docs/project_management/_archived/next/refactor/kickoff_prompts/R14-test.md
 - Next steps / blockers: none noted (CRATE_REFACTORING_ANALYSIS.md still absent)
 
 ## [2025-11-25 16:03 UTC] Test – R14-test – START
@@ -721,7 +721,7 @@ Template (copy/paste and fill in):
 - Commands: cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Results: fmt clean; substrate-shell world_root/world_enable suites passed
 - Merges: fast-forwarded cr-r14-routing-dispatch-test into feat/crate-refactor after rebasing on latest
-- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R14-integ.md
+- Kickoff prompts referenced: docs/project_management/_archived/next/refactor/kickoff_prompts/R14-integ.md
 - Blockers: CRATE_REFACTORING_ANALYSIS.md missing
 
 ## [2025-11-25 16:16 UTC] Integration – R14-integ – START
@@ -751,7 +751,7 @@ Template (copy/paste and fill in):
 - Worktree commits: 966dbe11
 - Commands: cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Results: fmt clean; world_root/world_enable suites passed after moving shared support into tests/support
-- Kickoff prompts created: docs/project_management/next/refactor/kickoff_prompts/R15-test.md
+- Kickoff prompts created: docs/project_management/_archived/next/refactor/kickoff_prompts/R15-test.md
 - Docs commit: pending (updated tasks + session log)
 - Next steps / blockers: none
 
@@ -760,7 +760,7 @@ Template (copy/paste and fill in):
 - Commands: cargo fmt; cargo fmt --all -- crates/shell/tests/integration.rs crates/shell/tests/integration/support.rs; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Results: fmt clean; world_root/world_enable suites passed
 - Merges: fast-forwarded cr-r15-shell-integration-test into feat/crate-refactor
-- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R15-integ.md
+- Kickoff prompts referenced: docs/project_management/_archived/next/refactor/kickoff_prompts/R15-integ.md
 - Blockers: CRATE_REFACTORING_ANALYSIS.md still missing
 
 ## [2025-11-25 16:29 UTC] Test – R15-test – START

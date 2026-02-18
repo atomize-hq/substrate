@@ -97,7 +97,7 @@ Each task description below includes:
 
 ## Documentation & Handoff
 
-- Each task’s code agent must update the relevant section in `docs/project_management/next/substrate_isolated_shell_plan.md` to mark completion.
+- Each task’s code agent must update the relevant section in `docs/project_management/_archived/next/substrate_isolated_shell_plan.md` to mark completion.
 - Test agents must annotate their MR/PR with explicit commands run so integration agent can replicate.
 - Integration agent owns the final verification: merges code+test branches, runs agreed commands, checks docs, and files bugs for regressions.
 

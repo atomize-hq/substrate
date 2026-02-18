@@ -27,7 +27,7 @@ Repo maintainers + engineers/agents running the planning/triad automation via `m
 - Add a **single-purpose planning agent dispatcher** exposed as a `make` target plus an underlying script.
 - Move PM scripts into the system, with wrappers preserved at old paths.
 - Migrate ADRs to `docs/project_management/adrs/<bucket>/`.
-- Migrate planning packs from `docs/project_management/next|future` to `docs/project_management/packs/<bucket>/`.
+- Migrate planning packs from `docs/project_management/_archived/next|future` to `docs/project_management/packs/<bucket>/`.
 - Introduce slice directories (`slices/<SLICE_ID>/...`) for spec/closeout + slice kickoff prompts.
 - Preserve CI checkpoint sizing defaults **4–8** in templates and standards.
 
@@ -59,7 +59,7 @@ Repo maintainers + engineers/agents running the planning/triad automation via `m
 ### Unknowns / risks
 - Active/in-flight worktrees store feature-dir paths in `.taskmeta.json` and registry files; moving packs can strand worktrees.
 - Mechanical rewrites across packs and logs can create large diffs and conflict with concurrent work.
-- Some scripts hardcode `docs/project_management/next/` in invariants and help text and must be made root-aware.
+- Some scripts hardcode `docs/project_management/_archived/next/` in invariants and help text and must be made root-aware.
 
 ---
 
@@ -72,13 +72,13 @@ Repo maintainers + engineers/agents running the planning/triad automation via `m
 **Scope**
 - In:
   - Define a compatibility contract and implement **stable entrypoints**:
-    - `scripts/planning/*` remains callable (including `scripts/planning/validate_impact_map.py`)
+    - `docs/project_management/system/scripts/planning/*` remains callable (including `docs/project_management/system/scripts/planning/validate_impact_map.py`)
     - `scripts/triad/*` remains callable (including worktree discovery behavior)
   - Introduce a shared “PM path resolver” used by:
     - planning lint + planning validators
     - triad scripts that interpret `.taskmeta.json feature_dir`
   - Accept both planning pack roots during migration:
-    - legacy: `docs/project_management/next/<feature>`
+    - legacy: `docs/project_management/_archived/next/<feature>`
     - new: `docs/project_management/packs/<bucket>/<feature>`
 - Out:
   - Moving any directories (scripts, packs, ADRs) in this slice.
@@ -86,7 +86,7 @@ Repo maintainers + engineers/agents running the planning/triad automation via `m
 **Acceptance criteria**
 - [ ] A single resolver exists with explicit outputs for: `PM_ROOT`, `PM_SYSTEM_ROOT`, `PM_ADRS_ROOT`, `PM_PACKS_ROOT`, and default packs bucket (`active`).
 - [ ] Existing `make planning-lint` / `make planning-validate` accepts `FEATURE_DIR` pointing at either `.../next/<feature>` or `.../packs/<bucket>/<feature>`.
-- [ ] Triad scripts that ban “planning doc edits inside worktrees” use the resolver-derived planning roots (not a hardcoded `docs/project_management/next/` string).
+- [ ] Triad scripts that ban “planning doc edits inside worktrees” use the resolver-derived planning roots (not a hardcoded `docs/project_management/_archived/next/` string).
 
 **Dependencies**
 - Blocks on: none
@@ -94,14 +94,14 @@ Repo maintainers + engineers/agents running the planning/triad automation via `m
 
 **Verification**
 - Automated:
-  - Run `make planning-lint FEATURE_DIR=docs/project_management/next/<feature>` on an existing pack.
+  - Run `make planning-lint FEATURE_DIR=docs/project_management/_archived/next/<feature>` on an existing pack.
   - Run `make planning-lint FEATURE_DIR=docs/project_management/packs/active/<feature>` on a staged test pack (once S5 introduces packs).
 - Manual/demo:
   - Run `scripts/triad/task_finish.sh --verify-only --task-id <id>` inside an existing worktree and confirm guardrails reference both roots.
 
 ### Task S1.T1: Define and implement PM root/path resolver
 
-**Outcome**: A single authoritative resolver used by scripts instead of hardcoded `docs/project_management/next/...` paths.
+**Outcome**: A single authoritative resolver used by scripts instead of hardcoded `docs/project_management/_archived/next/...` paths.
 
 **Inputs/outputs**
 - Inputs (prereqs):
@@ -113,11 +113,11 @@ Repo maintainers + engineers/agents running the planning/triad automation via `m
     - `PM_DEFAULT_PACK_BUCKET` (default `active`)
 - Outputs (artifacts):
   - Primary resolver implementation (Python):
-    - `scripts/planning/pm_paths.py`
+    - `docs/project_management/system/scripts/planning/pm_paths.py`
   - CLI contract (exact):
-    - `python3 scripts/planning/pm_paths.py print-roots` prints JSON to stdout with keys:
+    - `python3 docs/project_management/system/scripts/planning/pm_paths.py print-roots` prints JSON to stdout with keys:
       - `pm_root`, `pm_system_root`, `pm_adrs_root`, `pm_packs_root`, `pm_default_pack_bucket`
-    - `python3 scripts/planning/pm_paths.py resolve-feature-dir --feature-dir <path>` prints a normalized repo-relative feature dir to stdout
+    - `python3 docs/project_management/system/scripts/planning/pm_paths.py resolve-feature-dir --feature-dir <path>` prints a normalized repo-relative feature dir to stdout
   - A documented contract for “resolved feature dir” behavior:
     - If `--feature-dir` points at `.../next/<feature>`: accept as-is
     - If `--feature-dir` points at `.../packs/<bucket>/<feature>`: accept as-is
@@ -127,7 +127,7 @@ Repo maintainers + engineers/agents running the planning/triad automation via `m
 - [ ] Resolver fails with an actionable error when `PM_ROOT` is set but does not exist.
 
 **Implementation notes**
-- Where: `scripts/planning/*`, `scripts/triad/*`, and future `docs/project_management/system/scripts/...`
+- Where: `docs/project_management/system/scripts/planning/*`, `scripts/triad/*`, and future `docs/project_management/system/scripts/...`
 - Approach:
   - Use the Python resolver as the single source of truth; shell scripts call it to obtain roots/prefixes.
   - Keep error messages single-line and actionable (print expected env vars + example values).
@@ -162,7 +162,7 @@ Repo maintainers + engineers/agents running the planning/triad automation via `m
 - [ ] `scripts/triad/task_finish.sh` refuses worktree changes under either planning root with an updated, precise error message.
 
 **Checklist**
-- [ ] Replace hardcoded `^docs/project_management/next/` with resolver-derived prefixes
+- [ ] Replace hardcoded `^docs/project_management/_archived/next/` with resolver-derived prefixes
 - [ ] Update error messages to mention both roots
 - [ ] Run a local dry-run/verify-only path check in an existing worktree
 
@@ -252,7 +252,7 @@ Repo maintainers + engineers/agents running the planning/triad automation via `m
 
 **Scope**
 - In:
-  - Implement `docs/project_management/system/scripts/planning/run_planning_agent.sh` (and optional PowerShell equivalent).
+  - Implement `docs/project_management/system/docs/project_management/system/scripts/planning/run_planning_agent.sh` (and optional PowerShell equivalent).
   - Add a Make entrypoint named `pm-run-planning-agent` that calls the script.
   - Add initial planning prompts:
     - `spec_manifest_agent.md`
@@ -294,7 +294,7 @@ Repo maintainers + engineers/agents running the planning/triad automation via `m
     - `CODEX_JSONL` (optional, `1` to enable)
 
 **Acceptance criteria**
-- [ ] A single doc section in `system/scripts/planning/run_planning_agent.sh` (or adjacent README) lists supported agents and their exact output files.
+- [ ] A single doc section in `system/docs/project_management/system/scripts/planning/run_planning_agent.sh` (or adjacent README) lists supported agents and their exact output files.
 
 **Checklist**
 - [ ] Write contract into script help output (`--help`)
@@ -323,16 +323,16 @@ Repo maintainers + engineers/agents running the planning/triad automation via `m
 
 **Scope**
 - In:
-  - Move `scripts/planning/*` → `docs/project_management/system/scripts/planning/*`
+  - Move `docs/project_management/system/scripts/planning/*` → `docs/project_management/system/docs/project_management/system/scripts/planning/*`
   - Move `scripts/triad/*` → `docs/project_management/system/scripts/triad/*`
-  - Leave wrappers in `scripts/planning/*` and `scripts/triad/*` that `exec` the new locations.
+  - Leave wrappers in `docs/project_management/system/scripts/planning/*` and `scripts/triad/*` that `exec` the new locations.
 - Out:
   - Removing wrappers (handled in S9).
 
 **Acceptance criteria**
-- [ ] `scripts/planning/lint.sh` still works (as wrapper) and runs the moved implementation.
+- [ ] `docs/project_management/system/scripts/planning/lint.sh` still works (as wrapper) and runs the moved implementation.
 - [ ] `scripts/triad/task_finish.sh` still works (as wrapper) and runs the moved implementation.
-- [ ] Impact map validator remains callable from the stable path `scripts/planning/validate_impact_map.py` (wrapper).
+- [ ] Impact map validator remains callable from the stable path `docs/project_management/system/scripts/planning/validate_impact_map.py` (wrapper).
 
 **Dependencies**
 - Blocks on: S1, S2, S3 (for the target system script locations + resolver)
@@ -368,7 +368,7 @@ Repo maintainers + engineers/agents running the planning/triad automation via `m
 **Scope**
 - In:
   - Create `docs/project_management/packs/{draft,queued,active,implemented,superseded}/`.
-  - Copy `docs/project_management/next/sequencing.json` → `docs/project_management/packs/sequencing.json`.
+  - Copy `docs/project_management/packs/sequencing.json` → `docs/project_management/packs/sequencing.json`.
   - Update planning lint + other scripts to reference sequencing via resolver roots and accept both locations during transition.
 - Out:
   - Moving existing packs (handled in S7).
@@ -405,7 +405,7 @@ Repo maintainers + engineers/agents running the planning/triad automation via `m
 
 **Scope**
 - In:
-  - Move legacy ADRs from `docs/project_management/next/**` into `docs/project_management/adrs/{draft,queued,implemented,superseded}/`.
+  - Move legacy ADRs from `docs/project_management/_archived/next/**` into `docs/project_management/adrs/{draft,queued,implemented,superseded}/`.
   - Update references inside packs and docs.
   - Update ADR exec summary checker to accept new locations and reference patterns.
 - Out:
@@ -430,10 +430,10 @@ Repo maintainers + engineers/agents running the planning/triad automation via `m
 **Outcome**: ADR locations are canonical and references updated.
 
 **Checklist**
-- [ ] Move legacy ADRs from `docs/project_management/next/**` → `docs/project_management/adrs/implemented/` (or correct bucket)
-- [ ] Move `docs/project_management/next/<feature>/ADR-*.md` → correct ADR bucket
+- [ ] Move legacy ADRs from `docs/project_management/_archived/next/**` → `docs/project_management/adrs/implemented/` (or correct bucket)
+- [ ] Move `docs/project_management/_archived/next/<feature>/ADR-*.md` → correct ADR bucket
 - [ ] Rewrite references in packs and docs:
-  - legacy ADR paths under `docs/project_management/next/**` → canonical paths under `docs/project_management/adrs/<bucket>/`
+  - legacy ADR paths under `docs/project_management/_archived/next/**` → canonical paths under `docs/project_management/adrs/<bucket>/`
 - [ ] Update ADR README to document the new canonical root
 
 ---
@@ -444,11 +444,11 @@ Repo maintainers + engineers/agents running the planning/triad automation via `m
 
 **Scope**
 - In:
-  - Move active packs: `docs/project_management/next/<feature>` → `docs/project_management/packs/active/<feature>`
+  - Move active packs: `docs/project_management/_archived/next/<feature>` → `docs/project_management/packs/active/<feature>`
   - Move future **planning packs** currently under `docs/project_management/future/` (as identified and mapped in S7.T0) into `docs/project_management/packs/draft|queued/`
-  - Mechanical rewrite of pack-internal references (`docs/project_management/next/` → `docs/project_management/packs/active/`)
+  - Mechanical rewrite of pack-internal references (`docs/project_management/_archived/next/` → `docs/project_management/packs/active/`)
   - Safe handling for in-flight worktrees (exact rule):
-    - If any existing worktree’s `.taskmeta.json feature_dir` equals `docs/project_management/next/<feature>`, run the S7.T1 migration tool for that `<feature>` before moving the directory.
+    - If any existing worktree’s `.taskmeta.json feature_dir` equals `docs/project_management/_archived/next/<feature>`, run the S7.T1 migration tool for that `<feature>` before moving the directory.
     - Otherwise, proceed with the directory move.
 - Out:
   - Removing legacy support (handled in S9).
@@ -498,7 +498,7 @@ Repo maintainers + engineers/agents running the planning/triad automation via `m
     - `<worktree>/.taskmeta.json` field `feature_dir` from old to new
     - triad registry file `<git-common-dir>/triad/features/<feature>/worktrees.json` `feature_dir` field (and any per-entry derived paths if present)
   - Exact invocation contract (must be defined):
-    - `--from docs/project_management/next/<feature>`
+    - `--from docs/project_management/_archived/next/<feature>`
     - `--to docs/project_management/packs/active/<feature>`
     - `--dry-run` support
 
@@ -514,7 +514,7 @@ Repo maintainers + engineers/agents running the planning/triad automation via `m
 **Checklist**
 - [ ] Move `next/<feature>` → `packs/active/<feature>` (one feature at a time, then batch)
 - [ ] Rewrite pack-internal references:
-  - `docs/project_management/next/` → `docs/project_management/packs/active/`
+  - `docs/project_management/_archived/next/` → `docs/project_management/packs/active/`
 - [ ] Move future planning packs listed in `docs/project_management/packs/future_migration_plan.json` to their mapped `dst_dir`
 - [ ] Update `Makefile` examples and scripts that default to `next/` to default to `packs/active/` (keep legacy compatibility until S9)
 
@@ -538,7 +538,7 @@ Repo maintainers + engineers/agents running the planning/triad automation via `m
   - Removing old layout support immediately (handled in S9 after migration completes).
 
 **Acceptance criteria**
-- [ ] `scripts/planning/validate_tasks_json.py` accepts slice kickoff prompts in the new location.
+- [ ] `docs/project_management/system/scripts/planning/validate_tasks_json.py` accepts slice kickoff prompts in the new location.
 - [ ] Planning lint sentinel check scans all kickoff prompts recursively (feature + slices).
 - [ ] A migrated feature passes `make planning-lint FEATURE_DIR=...`.
 
@@ -563,7 +563,7 @@ Repo maintainers + engineers/agents running the planning/triad automation via `m
   - Create a temp pack directory with:
     - `tasks.json` that references a slice kickoff prompt path under `slices/<SLICE_ID>/kickoff_prompts/`
     - a kickoff prompt missing the sentinel line `Do not edit planning docs inside the worktree.`
-  - Run `scripts/planning/lint.sh --feature-dir <temp_pack_dir>` and confirm:
+  - Run `docs/project_management/system/scripts/planning/lint.sh --feature-dir <temp_pack_dir>` and confirm:
     - exit code is non-zero
     - stderr contains `Missing sentinel in kickoff prompt:`
 
@@ -589,13 +589,13 @@ Repo maintainers + engineers/agents running the planning/triad automation via `m
 **Scope**
 - In:
   - Remove wrappers in legacy `scripts/` once all callers are updated.
-  - Remove/retire `docs/project_management/next/` and any legacy notes.
+  - Remove/retire `docs/project_management/_archived/next/` and any legacy notes.
   - Update docs and Makefile help text to reference only `packs/` paths.
 - Out:
   - Further feature evolution (future initiatives).
 
 **Acceptance criteria**
-- [ ] No operational scripts rely on `docs/project_management/next/` existing.
+- [ ] No operational scripts rely on `docs/project_management/_archived/next/` existing.
 - [ ] Documentation references only `docs/project_management/system/`, `adrs/`, and `packs/`.
 
 **Dependencies**
@@ -603,7 +603,7 @@ Repo maintainers + engineers/agents running the planning/triad automation via `m
 
 **Verification**
 - Automated:
-  - `rg -n "docs/project_management/next" scripts docs Makefile` returns only archived/historical content (or zero).
+  - `rg -n "docs/project_management/_archived/next" scripts docs Makefile` returns only archived/historical content (or zero).
 
 ### Task S9.T1: Remove wrappers + legacy paths + update docs
 
@@ -611,7 +611,7 @@ Repo maintainers + engineers/agents running the planning/triad automation via `m
 
 **Checklist**
 - [ ] Remove legacy wrappers and any now-dead scripts
-- [ ] Remove or archive `docs/project_management/next/` after packs are migrated
+- [ ] Remove or archive `docs/project_management/_archived/next/` after packs are migrated
 - [ ] Update Makefile to require `FEATURE_DIR` under `packs/<bucket>/`
 - [ ] Run planning lint and at least one triad workflow end-to-end against a migrated feature
 
@@ -650,7 +650,7 @@ Repo maintainers + engineers/agents running the planning/triad automation via `m
 ### WS-COMPAT: Compatibility + path resolver
 **Scope**: Implement resolver, update guardrails and lint to be root-aware.
 **Touch surface**:
-- `scripts/planning/*`, `scripts/triad/*`, `Makefile`
+- `docs/project_management/system/scripts/planning/*`, `scripts/triad/*`, `Makefile`
 
 ### WS-SYSTEM: System root + prompt library
 **Scope**: Add `docs/project_management/system/` scaffold, prompts/standards/templates separation.
@@ -660,7 +660,7 @@ Repo maintainers + engineers/agents running the planning/triad automation via `m
 ### WS-DISPATCH: Planning agent dispatcher
 **Scope**: Add `pm-run-planning-agent` Make target and `run_planning_agent.*` scripts and initial prompts.
 **Touch surface**:
-- `Makefile`, `docs/project_management/system/scripts/planning/**`, `docs/project_management/system/prompts/planning/**`
+- `Makefile`, `docs/project_management/system/docs/project_management/system/scripts/planning/**`, `docs/project_management/system/prompts/planning/**`
 
 ### WS-MIGRATE: ADR + packs migrations
 **Scope**: Move ADRs and packs and rewrite references; build migration tooling for in-flight worktrees.
@@ -670,7 +670,7 @@ Repo maintainers + engineers/agents running the planning/triad automation via `m
 ### WS-VALIDATORS: Slice directory support in validators/lint
 **Scope**: Update validators and lint to support new slice directory layout and recursive kickoff prompt sentinel scanning.
 **Touch surface**:
-- `scripts/planning/*.py`, `docs/project_management/system/scripts/planning/**`
+- `docs/project_management/system/scripts/planning/*.py`, `docs/project_management/system/docs/project_management/system/scripts/planning/**`
 
 ### WS-INT: Integration
 **Scope**: Resolve cross-workstream coupling, run end-to-end validation (planning lint + triad start/finish) and ensure no legacy path regressions.

@@ -46,7 +46,7 @@ Keep test runs minimal; no new tests should be authored in this task.
 4. Update `tasks.json` (status → `completed`) and append an END entry to the
    session log summarizing commands, results, and any blockers.
 5. Ensure the S1-test kickoff prompt lives at
-   `docs/project_management/next/settings-stack/kickoff_prompts/S1-test.md`,
+   `docs/project_management/_archived/next/settings-stack/kickoff_prompts/S1-test.md`,
    reference it in the session log, and note any special guidance for the test
    agent.
 6. Commit doc updates on `feat/settings-stack`

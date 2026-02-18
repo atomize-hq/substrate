@@ -1,12 +1,12 @@
 # Planning Session Log Template (Docs-First Passes)
 
 This template is for **planning/research/documentation sessions** that modify a Planning Pack under:
-- `docs/project_management/next/<feature>/`
+- `docs/project_management/packs/active/<feature>/`
 
 The planning standard requires START/END entries only (no mid-stream commentary). Use this template to keep planning work as strict, traceable, auditable, and repeatable as execution triads.
 
 Apply inside the feature’s `session_log.md`:
-- `docs/project_management/next/<feature>/session_log.md`
+- `docs/project_management/packs/active/<feature>/session_log.md`
 
 ---
 
@@ -16,7 +16,7 @@ Paste a START entry like this:
 
 ```md
 ## START — <YYYY-MM-DDTHH:MM:SSZ> — planning — <short title>
-- Feature: `docs/project_management/next/<feature>/`
+- Feature: `docs/project_management/packs/active/<feature>/`
 - Branch: `<branch>`
 - Goal: <single sentence>
 - Inputs to read end-to-end:
@@ -57,4 +57,3 @@ Rules:
 - “Summary of changes” must be exhaustive.
 - “Rubric checks run” must list actual commands executed.
 - If you changed `tasks.json`, include a statement that required fields exist and that kickoff prompts exist.
-

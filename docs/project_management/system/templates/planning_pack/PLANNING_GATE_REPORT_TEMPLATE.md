@@ -2,7 +2,7 @@
 
 This file is a template. The **quality gate reviewer** must copy it into the feature Planning Pack as:
 
-- `docs/project_management/next/<feature>/quality_gate_report.md`
+- `docs/project_management/packs/active/<feature>/quality_gate_report.md`
 
 The report is an auditable artifact. It is required before execution triads begin.
 
@@ -11,7 +11,7 @@ The report is an auditable artifact. It is required before execution triads begi
 # Planning Quality Gate Report — <feature>
 
 ## Metadata
-- Feature directory: `docs/project_management/next/<feature>/`
+- Feature directory: `docs/project_management/packs/active/<feature>/`
 - Reviewed commit: `<git sha>`
 - Reviewer: `<name/role>`
 - Date (UTC): `<YYYY-MM-DD>`
@@ -77,7 +77,7 @@ Mark `YES` only if read end-to-end.
 - `impact_map.md` (if present/required): `YES|NO|N/A`
 - `manual_testing_playbook.md` (if present/required): `YES|NO|N/A`
 - Feature smoke scripts under `smoke/` (if required): `YES|NO|N/A`
-- `docs/project_management/packs/sequencing.json`: `YES|NO` (legacy mirror during migration: `docs/project_management/next/sequencing.json`)
+- `docs/project_management/packs/sequencing.json`: `YES|NO`
 - Standards:
   - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES|NO`
   - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES|NO`
@@ -104,7 +104,7 @@ Mark `YES` only if read end-to-end.
 - Result: `PASS|FAIL`
 - Evidence:
   - `docs/project_management/packs/sequencing.json` entries: `<ids>`
-  - `docs/project_management/next/<feature>/tasks.json` deps: `<ids>`
+  - `<FEATURE_DIR>/tasks.json` deps: `<ids>`
 - Notes:
 
 ### 5) Testability and validation readiness

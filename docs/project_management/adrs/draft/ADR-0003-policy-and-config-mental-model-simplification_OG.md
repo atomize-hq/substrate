@@ -7,7 +7,7 @@
 ## Executive Summary (Operator)
 
 ADR_BODY_SHA256: 693dfb346c0cf6caa6a83cf63917a112bf551b2bbe7ceab008f089126e416f3d
-ADR_BODY_SHA256: <run `python3 scripts/planning/check_adr_exec_summary.py --adr <this-file> --fix` after editing>
+ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after editing>
 
 - Existing: This file preserves the original (untemplated) ADR draft content that motivated the stricter, templated ADR.
 - New: Operator review should use the templated ADR’s `## Executive Summary (Operator)` and treat this file as archival context only.
@@ -832,8 +832,8 @@ Primary hot spots (current code reality that must be rewritten to satisfy this A
 
 Related planning docs that must be updated to match this ADR:
 
-- `docs/project_management/next/world-sync/C0-spec.md` (uses `substrate init`; must become `substrate workspace init`)
-- `docs/project_management/next/world-sync/C1-spec.md` (references `.substrate/settings.yaml`; must become `.substrate/workspace.yaml`)
+- `docs/project_management/_archived/next/world-sync/C0-spec.md` (uses `substrate init`; must become `substrate workspace init`)
+- `docs/project_management/_archived/next/world-sync/C1-spec.md` (references `.substrate/settings.yaml`; must become `.substrate/workspace.yaml`)
 
 ## Deferred (Explicitly out of scope for this ADR)
 

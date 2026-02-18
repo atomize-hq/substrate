@@ -11,14 +11,14 @@ Summary:
 Focus files / context:
 - `README.md`, `docs/INSTALLATION.md`, `docs/USAGE.md`, `docs/CONFIGURATION.md`
 - Any supporting references listed in the file audit (plan, data map, file audit itself, AI agent onboarding docs)
-- Recent implementation notes from `docs/project_management/next/substrate_isolated_shell_plan.md` + `.../data_map.md`
+- Recent implementation notes from `docs/project_management/_archived/next/substrate_isolated_shell_plan.md` + `.../data_map.md`
 
 Commands to run:
 1. `cargo fmt --all` (parity check even though this task is docs-only)
-2. `npx markdownlint-cli README.md docs/INSTALLATION.md docs/USAGE.md docs/CONFIGURATION.md docs/project_management/next/substrate_isolated_shell_plan.md docs/project_management/next/substrate_isolated_shell_data_map.md`
+2. `npx markdownlint-cli README.md docs/INSTALLATION.md docs/USAGE.md docs/CONFIGURATION.md docs/project_management/_archived/next/substrate_isolated_shell_plan.md docs/project_management/_archived/next/substrate_isolated_shell_data_map.md`
 
 Reminders:
-- Start at `AI_AGENT_START_HERE.md`, mark this task as `in_progress` in `docs/project_management/next/tasks.json`, and add a START entry in `docs/project_management/next/session_log.md` before editing.
+- Start at `AI_AGENT_START_HERE.md`, mark this task as `in_progress` in `docs/project_management/_archived/next/tasks.json`, and add a START entry in `docs/project_management/_archived/next/session_log.md` before editing.
 - Work inside git worktree `wt/b3-docs`; leave coordination files alone there except for logging the new kickoff references when you return to `feat/isolated-shell-plan`.
 - Ensure each doc clearly states how to use `substrate shim doctor`, what `--no-world` does, how manifests/overlays are located, and how to point CLI/testing at temporary HOME directories.
 - Capture any follow-up questions (e.g., pending world CLI behavior) in the session log so later phases can resolve them, and remember to link the Integration Agent to this prompt once the task is complete.

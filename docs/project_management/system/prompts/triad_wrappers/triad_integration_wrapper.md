@@ -126,8 +126,8 @@ LEDGER_PATH="$FEATURE_DIR/logs/$SLICE_ID/ci-audit/ledger.jsonl"
 7) Decide the platform-fix path:
    - If compile parity is green and `SMOKE_FAILED_PLATFORMS` is empty, then no platform-fix worktrees/branches are expected for this slice.
    - In that case, mark platform-fix tasks as `completed` no-ops to unblock the final aggregator’s `depends_on`:
-   - `scripts/triad/mark_noop_platform_fixes_completed.sh --feature-dir "$FEATURE_DIR" --slice-id "$SLICE_ID"`
-     - If smoke was dispatched and you have a run id, you may add: `--from-smoke-run "<run-id>"`
+   - `make triad-mark-noop-platform-fixes-completed FEATURE_DIR="$FEATURE_DIR" SLICE_ID="$SLICE_ID" SMOKE_RUN_ID="<run-id>"`
+     - If smoke was not dispatched, omit `SMOKE_RUN_ID` and record the reason in `session_log.md`.
    - Otherwise (smoke failed or compile parity failed), do not mark no-ops; platform-fix tasks must run and reach green.
 
 8) After platform fixes are complete (or marked no-op), start the final aggregator:

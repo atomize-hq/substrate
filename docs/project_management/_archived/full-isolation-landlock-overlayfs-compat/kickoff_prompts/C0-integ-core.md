@@ -106,7 +106,7 @@ If any platform smoke fails:
 If behavioral smoke is green for all behavior platforms:
 - Platform-fix tasks (if present in the pack) may still be required for CI-only failures (e.g., clippy warnings on macOS/Windows), so do not mark them no-op yet.
 - The wrapper/final gate runs CI Testing; if CI Testing is green, then mark platform-fix tasks `completed` as no-ops to unblock the final aggregator’s `depends_on`:
-  - `scripts/triad/mark_noop_platform_fixes_completed.sh --feature-dir "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat" --slice-id "<slice>"` (optional: add `--from-smoke-run "<run-id>"` for logging)
+  - `PM_SYSTEM_SCRIPTS="docs/project_management/system/scripts" bash "${PM_SYSTEM_SCRIPTS}/triad/mark_noop_platform_fixes_completed.sh" --feature-dir "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat" --slice-id "<slice>"` (optional: add `--from-smoke-run "<run-id>"` for logging)
 
 Once all required platform-fix tasks are completed, ask the operator to start the final aggregator from the orchestration checkout:
 - `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/_archived/full-isolation-landlock-overlayfs-compat" SLICE_ID="<slice>" LAUNCH_CODEX=1`

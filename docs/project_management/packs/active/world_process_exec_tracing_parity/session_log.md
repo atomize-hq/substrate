@@ -52,7 +52,7 @@
   - `make planning-lint FEATURE_DIR="docs/project_management/packs/active/world_process_exec_tracing_parity"` → exit 0
   - `make planning-validate FEATURE_DIR="docs/project_management/packs/active/world_process_exec_tracing_parity"` → exit 0
   - `jq -e . "docs/project_management/packs/active/world_process_exec_tracing_parity/tasks.json" >/dev/null` → exit 0
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → exit 0
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → exit 0
 
 ## START — 2026-02-14T23:31:06Z — remediation — fix quality gate DEFECT findings
 - Goal: Resolve DEFECT findings in `quality_gate_report.md` so the Planning Pack is implementation-ready for re-review.
@@ -70,8 +70,8 @@
   - `make planning-lint FEATURE_DIR="docs/project_management/packs/active/world_process_exec_tracing_parity"` → exit 2
   - `make planning-validate FEATURE_DIR="docs/project_management/packs/active/world_process_exec_tracing_parity"` → exit 2
   - `jq -e . "docs/project_management/packs/active/world_process_exec_tracing_parity/tasks.json" >/dev/null` → exit 0
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → exit 0
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → exit 0
   - `make planning-lint FEATURE_DIR="docs/project_management/packs/active/world_process_exec_tracing_parity"` → exit 0
   - `make planning-validate FEATURE_DIR="docs/project_management/packs/active/world_process_exec_tracing_parity"` → exit 0
   - `jq -e . "docs/project_management/packs/active/world_process_exec_tracing_parity/tasks.json" >/dev/null` → exit 0
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → exit 0
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → exit 0

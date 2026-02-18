@@ -36,7 +36,7 @@
         "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/decision_register.md (DR-0001, DR-0002, DR-0003, DR-0004, DR-0005)",
         "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/integration_map.md",
         "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/manual_testing_playbook.md",
-        "docs/project_management/next/sequencing.json",
+        "docs/project_management/packs/sequencing.json",
         "docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md"
       ],
       "acceptance_criteria": [
@@ -422,12 +422,12 @@
       "type": "ops",
       "phase": "FZ",
       "status": "pending",
-      "description": "At feature end, remove retained worktrees and prune local task branches via scripts/triad/feature_cleanup.sh.",
+      "description": "At feature end, remove retained worktrees and prune local task branches via make triad-feature-cleanup.",
       "references": [
         "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/plan.md",
         "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/tasks.json",
         "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/session_log.md",
-        "scripts/triad/feature_cleanup.sh"
+        "make triad-feature-cleanup"
       ],
       "acceptance_criteria": [
         "All worktrees removed (or intentionally retained) and cleanup summary recorded in session_log.md"

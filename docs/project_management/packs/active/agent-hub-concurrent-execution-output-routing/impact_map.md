@@ -56,7 +56,7 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
 - `crates/shell/src/execution/config_model.rs` — add `repl.max_pty_buffered_lines` to the strict config schema, precedence model, and explain surfaces
 - `docs/CONFIGURATION.md` — document `repl.max_pty_buffered_lines` (default, bounds, precedence, invalid handling)
 - `docs/TRACE.md` — document new trace record types (`agent_event`, warning codes) and required fields for correlation
-- `docs/project_management/next/sequencing.json` — add a sprint entry for this feature so task dependencies and sequencing are aligned before execution begins
+- `docs/project_management/packs/sequencing.json` — add a sprint entry for this feature so task dependencies and sequencing are aligned before execution begins
 - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md` — remove placeholder sequencing language and link to `tasks.json` and `ci_checkpoint_plan.md`
 
 ### Deprecate
@@ -117,19 +117,11 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
   - Conflict: no.
   - Resolution (explicit): CLI-backend routing defers to ADR-0017 for structured event envelope rules and to ADR-0028 for trace vocabulary.
 
-### Relevant Planning Packs (queued/unimplemented)
-- Planning Pack: `docs/project_management/next/llm_cli_backend_engine/`
-  - Overlap surfaces: correlation (`backend_id`, `orchestration_session_id`, `run_id`), structured event producers/consumers.
-  - Conflict: potential if schema fields drift.
-  - Resolution (explicit): keep `backend_id` and correlation field names aligned with ADR-0017 and ADR-0028; do not introduce alternate field spellings.
-- Planning Pack: `docs/project_management/next/host_event_bus_router_daemon/` (decision register)
-  - Overlap surfaces: routing based on structured events and correlation joins.
-  - Conflict: no (dependent).
-  - Resolution (explicit): router work consumes this envelope; it must not introduce a competing event schema.
-- Planning Pack: `docs/project_management/next/workflow-engine/` (decision register)
-  - Overlap surfaces: workflow correlation fields and event-plane joinability.
-  - Conflict: no (dependent).
-  - Resolution (explicit): workflow work uses `orchestration_session_id`/`run_id` and must not redefine core envelope fields.
+### Related Phase 8 tracks (cross-cutting; use ADRs/registry)
+- Phase 8 registry (cross-cutting lock): `docs/project_management/packs/PHASE_8_CROSS_CUTTING_DECISION_REGISTRY.md`
+- CLI backend engine: `docs/project_management/adrs/draft/ADR-0024-cli-backend-provider-engine.md`
+- Router daemon: `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md`
+- Workflow engine: `docs/project_management/adrs/draft/ADR-0021-substrate-workflow-engine.md`
 
 ## Follow-ups (explicit)
 

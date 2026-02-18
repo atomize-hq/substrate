@@ -14,7 +14,7 @@
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
   - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
   - `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
   - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
   - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/spec_manifest.md`
   - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/impact_map.md`
@@ -35,7 +35,7 @@
   - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/kickoff_prompts/*.md`
 - Commands planned (if any):
   - `jq -e . docs/project_management/packs/active/llm_and_agent_config_policy_surface/tasks.json >/dev/null`
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null`
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null`
   - `make planning-lint FEATURE_DIR="docs/project_management/packs/active/llm_and_agent_config_policy_surface"`
   - `make planning-validate FEATURE_DIR="docs/project_management/packs/active/llm_and_agent_config_policy_surface"`
   - `make adr-fix ADR="docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md"`
@@ -43,7 +43,7 @@
 ## END — 2026-02-15T03:20:45Z — planning — llm_and_agent_config_policy_surface pack completion
 - Summary of changes (exhaustive):
   - Added required Planning Pack artifacts: `session_log.md` and `quality_gate_report.md` (multi-pass; final `RECOMMENDATION: ACCEPT`).
-  - Updated `docs/project_management/next/sequencing.json` to include the `llm_and_agent_config_policy_surface` sprint entry and slice specs.
+  - Updated `docs/project_management/packs/sequencing.json` to include the `llm_and_agent_config_policy_surface` sprint entry and slice specs.
   - Removed ambiguity-word usage (`could`) from `decision_register.md`.
   - Fixed `spec_manifest.md` required-docs section to avoid backticked placeholder/example tokens and to ensure every required path exists.
   - Regenerated ADR executive summary hashes for referenced ADRs so mechanical lint passes:
@@ -52,7 +52,7 @@
 - Files created/modified:
   - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/session_log.md`
   - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/quality_gate_report.md`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
   - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/decision_register.md`
   - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/spec_manifest.md`
   - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`

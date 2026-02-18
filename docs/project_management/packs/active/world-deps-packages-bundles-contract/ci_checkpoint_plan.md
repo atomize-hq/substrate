@@ -62,7 +62,7 @@ Standard:
 - Code-grounded boundary:
   - Completes the operator read-only workflow: discover inventory → enable via patches → observe applied status.
 - Stabilized surfaces:
-  - `docs/project_management/next/world_deps_packages_bundles_contract.md` (CLI contract for list/show/add/remove/reset)
+  - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md` (CLI contract for list/show/add/remove/reset)
   - `docs/project_management/packs/active/world-deps-packages-bundles-contract/platform-parity-spec.md` (backend-unavailable posture)
 - Risk reduced:
   - Prevents platform drift in basic UX and exit codes before installs begin mutating the world.
@@ -71,7 +71,7 @@ Standard:
 - Code-grounded boundary:
   - Completes the mutation workflow: plan (`--dry-run`) → apply prefix scripts/wrappers → apply apt installs and sync enabled list.
 - Stabilized surfaces:
-  - `docs/project_management/next/world_deps_packages_bundles_contract.md` (install/sync ordering and exit codes)
+  - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md` (install/sync ordering and exit codes)
   - `docs/project_management/packs/active/world-deps-packages-bundles-contract/manual_testing_playbook.md` (smoke parity with operator workflow)
 - Risk reduced:
   - Ensures the highest-risk surfaces (apt + prefix installers + legacy removal) are validated across platforms at one bounded checkpoint.

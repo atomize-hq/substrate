@@ -9,10 +9,10 @@
       "description": "Implement workspace discovery/init and config schema/discovery/precedence and config CLI per PCM0 (production code only).",
       "references": [
         "docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md",
-        "docs/project_management/next/policy_and_config_mental_model_simplification/plan.md",
-        "docs/project_management/next/policy_and_config_mental_model_simplification/PCM0-spec.md",
-        "docs/project_management/next/policy_and_config_mental_model_simplification/decision_register.md (DR-0001, DR-0002, DR-0003, DR-0004, DR-0009, DR-0010)",
-        "docs/project_management/next/policy_and_config_mental_model_simplification/integration_map.md",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/plan.md",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM0-spec.md",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/decision_register.md (DR-0001, DR-0002, DR-0003, DR-0004, DR-0009, DR-0010)",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/integration_map.md",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
         "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md",
         "docs/project_management/standards/EXIT_CODE_TAXONOMY.md"
@@ -37,7 +37,7 @@
       ],
       "worktree": "wt/pcm0-config-code",
       "integration_task": "PCM0-integ",
-      "kickoff_prompt": "docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM0-code.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM0-code.md",
       "depends_on": [],
       "concurrent_with": [
         "PCM0-test"
@@ -51,8 +51,8 @@
       "status": "completed",
       "description": "Add and update tests that lock in workspace discovery/init and config precedence and strict parsing per PCM0.",
       "references": [
-        "docs/project_management/next/policy_and_config_mental_model_simplification/PCM0-spec.md",
-        "docs/project_management/next/policy_and_config_mental_model_simplification/decision_register.md (DR-0001, DR-0010)",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM0-spec.md",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/decision_register.md (DR-0001, DR-0010)",
         "docs/project_management/standards/EXIT_CODE_TAXONOMY.md",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
@@ -76,7 +76,7 @@
       ],
       "worktree": "wt/pcm0-config-test",
       "integration_task": "PCM0-integ",
-      "kickoff_prompt": "docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM0-test.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM0-test.md",
       "depends_on": [],
       "concurrent_with": [
         "PCM0-code"
@@ -90,11 +90,11 @@
       "status": "completed",
       "description": "Merge PCM0 code+tests, reconcile to PCM0-spec, and run fmt/clippy/tests/preflight plus smoke scripts.",
       "references": [
-        "docs/project_management/next/policy_and_config_mental_model_simplification/PCM0-spec.md",
-        "docs/project_management/next/policy_and_config_mental_model_simplification/manual_testing_playbook.md",
-        "docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh",
-        "docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh",
-        "docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM0-spec.md",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/manual_testing_playbook.md",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -110,14 +110,14 @@
       ],
       "end_checklist": [
         "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
-        "Run: bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh",
-        "Run: bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh",
-        "Run: pwsh -File docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1",
+        "Run: bash docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh",
+        "Run: bash docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh",
+        "Run: pwsh -File docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1",
         "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
       ],
       "worktree": "wt/pcm0-config-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM0-integ.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM0-integ.md",
       "depends_on": [
         "PCM0-code",
         "PCM0-test"
@@ -133,9 +133,9 @@
       "description": "Implement policy schema/discovery/strict parsing/invariants and policy CLI per PCM1 (production code only).",
       "references": [
         "docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md",
-        "docs/project_management/next/policy_and_config_mental_model_simplification/PCM1-spec.md",
-        "docs/project_management/next/policy_and_config_mental_model_simplification/decision_register.md (DR-0002, DR-0003, DR-0008)",
-        "docs/project_management/next/policy_and_config_mental_model_simplification/integration_map.md",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM1-spec.md",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/decision_register.md (DR-0002, DR-0003, DR-0008)",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/integration_map.md",
         "docs/project_management/standards/EXIT_CODE_TAXONOMY.md"
       ],
       "acceptance_criteria": [
@@ -157,7 +157,7 @@
       ],
       "worktree": "wt/pcm1-policy-code",
       "integration_task": "PCM1-integ",
-      "kickoff_prompt": "docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM1-code.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM1-code.md",
       "depends_on": [
         "PCM0-integ"
       ],
@@ -173,7 +173,7 @@
       "status": "completed",
       "description": "Add and update tests that lock in policy strict parsing, invariants, discovery, and CLI behavior per PCM1.",
       "references": [
-        "docs/project_management/next/policy_and_config_mental_model_simplification/PCM1-spec.md",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM1-spec.md",
         "docs/project_management/standards/EXIT_CODE_TAXONOMY.md"
       ],
       "acceptance_criteria": [
@@ -195,7 +195,7 @@
       ],
       "worktree": "wt/pcm1-policy-test",
       "integration_task": "PCM1-integ",
-      "kickoff_prompt": "docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM1-test.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM1-test.md",
       "depends_on": [
         "PCM0-integ"
       ],
@@ -211,11 +211,11 @@
       "status": "completed",
       "description": "Merge PCM1 code+tests, reconcile to PCM1-spec, and run fmt/clippy/tests/preflight plus smoke scripts.",
       "references": [
-        "docs/project_management/next/policy_and_config_mental_model_simplification/PCM1-spec.md",
-        "docs/project_management/next/policy_and_config_mental_model_simplification/manual_testing_playbook.md",
-        "docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh",
-        "docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh",
-        "docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM1-spec.md",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/manual_testing_playbook.md",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -231,14 +231,14 @@
       ],
       "end_checklist": [
         "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
-        "Run: bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh",
-        "Run: bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh",
-        "Run: pwsh -File docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1",
+        "Run: bash docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh",
+        "Run: bash docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh",
+        "Run: pwsh -File docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1",
         "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
       ],
       "worktree": "wt/pcm1-policy-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM1-integ.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM1-integ.md",
       "depends_on": [
         "PCM1-code",
         "PCM1-test"
@@ -254,8 +254,8 @@
       "description": "Implement policy.mode and routing semantics per PCM2 (production code only).",
       "references": [
         "docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md",
-        "docs/project_management/next/policy_and_config_mental_model_simplification/PCM2-spec.md",
-        "docs/project_management/next/policy_and_config_mental_model_simplification/decision_register.md (DR-0007, DR-0008)",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM2-spec.md",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/decision_register.md (DR-0007, DR-0008)",
         "docs/project_management/standards/EXIT_CODE_TAXONOMY.md"
       ],
       "acceptance_criteria": [
@@ -277,7 +277,7 @@
       ],
       "worktree": "wt/pcm2-routing-code",
       "integration_task": "PCM2-integ",
-      "kickoff_prompt": "docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM2-code.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM2-code.md",
       "depends_on": [
         "PCM1-integ"
       ],
@@ -293,7 +293,7 @@
       "status": "completed",
       "description": "Add and update tests that lock in policy.mode semantics, requires-world behavior, and approval write targeting per PCM2.",
       "references": [
-        "docs/project_management/next/policy_and_config_mental_model_simplification/PCM2-spec.md",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM2-spec.md",
         "docs/project_management/standards/EXIT_CODE_TAXONOMY.md"
       ],
       "acceptance_criteria": [
@@ -316,7 +316,7 @@
       ],
       "worktree": "wt/pcm2-routing-test",
       "integration_task": "PCM2-integ",
-      "kickoff_prompt": "docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM2-test.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM2-test.md",
       "depends_on": [
         "PCM1-integ"
       ],
@@ -332,11 +332,11 @@
       "status": "completed",
       "description": "Merge PCM2 code+tests, reconcile to PCM2-spec, and run fmt/clippy/tests/preflight plus smoke scripts.",
       "references": [
-        "docs/project_management/next/policy_and_config_mental_model_simplification/PCM2-spec.md",
-        "docs/project_management/next/policy_and_config_mental_model_simplification/manual_testing_playbook.md",
-        "docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh",
-        "docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh",
-        "docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM2-spec.md",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/manual_testing_playbook.md",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -352,14 +352,14 @@
       ],
       "end_checklist": [
         "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
-        "Run: bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh",
-        "Run: bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh",
-        "Run: pwsh -File docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1",
+        "Run: bash docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh",
+        "Run: bash docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh",
+        "Run: pwsh -File docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1",
         "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
       ],
       "worktree": "wt/pcm2-routing-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM2-integ.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM2-integ.md",
       "depends_on": [
         "PCM2-code",
         "PCM2-test"
@@ -375,8 +375,8 @@
       "description": "Implement env.sh/manager_env.sh behavior, world enable --home semantics, and legacy removals per PCM3 (production code only).",
       "references": [
         "docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md",
-        "docs/project_management/next/policy_and_config_mental_model_simplification/PCM3-spec.md",
-        "docs/project_management/next/policy_and_config_mental_model_simplification/decision_register.md (DR-0005, DR-0006)",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM3-spec.md",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/decision_register.md (DR-0005, DR-0006)",
         "docs/project_management/standards/EXIT_CODE_TAXONOMY.md"
       ],
       "acceptance_criteria": [
@@ -398,7 +398,7 @@
       ],
       "worktree": "wt/pcm3-env-code",
       "integration_task": "PCM3-integ",
-      "kickoff_prompt": "docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM3-code.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM3-code.md",
       "depends_on": [
         "PCM2-integ"
       ],
@@ -414,7 +414,7 @@
       "status": "completed",
       "description": "Add and update tests that lock in env script ownership rules, world enable home semantics, and legacy removals per PCM3.",
       "references": [
-        "docs/project_management/next/policy_and_config_mental_model_simplification/PCM3-spec.md",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM3-spec.md",
         "docs/project_management/standards/EXIT_CODE_TAXONOMY.md"
       ],
       "acceptance_criteria": [
@@ -437,7 +437,7 @@
       ],
       "worktree": "wt/pcm3-env-test",
       "integration_task": "PCM3-integ",
-      "kickoff_prompt": "docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM3-test.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM3-test.md",
       "depends_on": [
         "PCM2-integ"
       ],
@@ -453,11 +453,11 @@
       "status": "completed",
       "description": "Merge PCM3 code+tests, reconcile to PCM3-spec, and run fmt/clippy/tests/preflight plus smoke scripts.",
       "references": [
-        "docs/project_management/next/policy_and_config_mental_model_simplification/PCM3-spec.md",
-        "docs/project_management/next/policy_and_config_mental_model_simplification/manual_testing_playbook.md",
-        "docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh",
-        "docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh",
-        "docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/PCM3-spec.md",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/manual_testing_playbook.md",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh",
+        "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
@@ -473,14 +473,14 @@
       ],
       "end_checklist": [
         "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
-        "Run: bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh",
-        "Run: bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh",
-        "Run: pwsh -File docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1",
+        "Run: bash docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh",
+        "Run: bash docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh",
+        "Run: pwsh -File docs/project_management/_archived/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1",
         "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
       ],
       "worktree": "wt/pcm3-env-integ",
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM3-integ.md",
+      "kickoff_prompt": "docs/project_management/_archived/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM3-integ.md",
       "depends_on": [
         "PCM3-code",
         "PCM3-test"

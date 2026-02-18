@@ -6,16 +6,16 @@
 - Owner(s): Spenser McConnell (Substrate)
 
 ## Scope
-- Feature directory: `docs/project_management/next/agent_hub_core/`
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Feature directory: `docs/project_management/_archived/next/agent_hub_core/`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Related Docs
-- Decision Register: `docs/project_management/next/agent_hub_core/decision_register.md`
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Decision Register: `docs/project_management/_archived/next/agent_hub_core/decision_register.md`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 
 ## Executive Summary (Operator)
 
@@ -27,7 +27,7 @@ ADR_BODY_SHA256: 95d13ad2c1eb2c16813d7fc93cf16cda3f53f392568601c1f344e276980c71e
   - Why: Enable consistent orchestration across Codex/Claude/Gemini CLIs and API agents without hardcoding roles into types.
   - Links:
     - `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md#L1`
-    - `docs/project_management/next/agent_hub_core/decision_register.md`
+    - `docs/project_management/_archived/next/agent_hub_core/decision_register.md`
 
 ## Problem / Context
 - Substrate requires a central, deterministic orchestration layer that can assign roles and toolsets to agents.
@@ -130,7 +130,7 @@ Control-plane enablement gates (v1; fail closed):
 - This ADR does not define new config file families. It MUST use the Phase 3 config/policy surface defined by ADR-0027.
 - Source of truth (key paths + precedence + defaults):
   - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
-  - `docs/project_management/next/llm_and_agent_config_policy_surface/SCHEMA.md`
+  - `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/SCHEMA.md`
 - Agent backends are registered via the agent inventory directory (one file per backend), per ADR-0027:
   - Global: `$SUBSTRATE_HOME/agents/<agent_id>.yaml` (default `~/.substrate/agents/<agent_id>.yaml`)
   - Workspace: `<workspace_root>/.substrate/agents/<agent_id>.yaml`
@@ -250,7 +250,7 @@ Control-plane enablement gates (v1; fail closed):
     - event stream for UI/REPL
 
 ## Sequencing / Dependencies
-- Sequencing entry: `docs/project_management/next/sequencing.json` → `agent-hub-core` (to be scheduled)
+- Sequencing entry: `docs/project_management/packs/sequencing.json` → `agent-hub-core` (to be scheduled)
 - Prerequisite integration task IDs:
   - ADR-0017 (Output/Event Contract) is prerequisite (field set must include stable routing attribution).
   - ADR-0027 schema extension is prerequisite:
@@ -275,12 +275,12 @@ Control-plane enablement gates (v1; fail closed):
   - concurrent event routing does not misattribute sessions
 
 ### Manual validation
-- Manual playbook: `docs/project_management/next/agent_hub_core/manual_testing_playbook.md`
+- Manual playbook: `docs/project_management/_archived/next/agent_hub_core/manual_testing_playbook.md`
 
 ### Smoke scripts
-- Linux: `docs/project_management/next/agent_hub_core/smoke/linux-smoke.sh`
-- macOS: `docs/project_management/next/agent_hub_core/smoke/macos-smoke.sh`
-- Windows: `docs/project_management/next/agent_hub_core/smoke/windows-smoke.ps1`
+- Linux: `docs/project_management/_archived/next/agent_hub_core/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/_archived/next/agent_hub_core/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/_archived/next/agent_hub_core/smoke/windows-smoke.ps1`
 
 ## Rollout / Backwards Compatibility
 - Policy: greenfield breaking is allowed
@@ -288,7 +288,7 @@ Control-plane enablement gates (v1; fail closed):
 
 ## Decision Summary
 - Decision Register entries:
-  - `docs/project_management/next/agent_hub_core/decision_register.md`:
+  - `docs/project_management/_archived/next/agent_hub_core/decision_register.md`:
     - DR-0001 (Backend id mapping: derived vs explicit backend_id field)
     - DR-0002 (Registry persistence: in-memory vs file-backed runtime registry)
     - DR-0003 (Role assignment: explicit config selection vs implicit heuristics)

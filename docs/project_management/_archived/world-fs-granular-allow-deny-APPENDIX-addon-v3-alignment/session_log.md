@@ -38,7 +38,7 @@
   - Implemented deterministic smoke scripts for the declared behavior-platform scope (Linux) and parity helper (macOS) for Appendix A.6 + no-backcompat checks.
   - Added `quality_gate_report.md` (RECOMMENDATION: ACCEPT) and updated it with command evidence.
   - Fixed `tasks.json` dependency invariants for schema v4 boundary-only platform-fix (platform tasks depend on `WFGADAXA2-integ-core`).
-  - Registered the add-on feature directory in `docs/project_management/next/sequencing.json` (required by planning lint).
+  - Registered the add-on feature directory in `docs/project_management/packs/sequencing.json` (required by planning lint).
   - Fixed kickoff prompts to include the required sentinel line.
 - Files created/modified:
   - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/smoke/_core.sh`
@@ -50,7 +50,7 @@
   - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/kickoff_prompts/F0-exec-preflight.md`
   - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/kickoff_prompts/CP1-ci-checkpoint.md`
   - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/kickoff_prompts/FZ-feature-cleanup.md`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
 - Rubric checks run (with results):
   - `make planning-validate FEATURE_DIR="docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment"` → `0` → `PASS`
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment"` → `0` → `PASS`

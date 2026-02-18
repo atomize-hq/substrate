@@ -10,7 +10,7 @@ Summary:
 Focus files / context:
 - `crates/shell/tests/integration.rs` (new helper fixture + three `shell_env_*` tests)
 - Existing env code in `crates/shell/src/lib.rs`, `crates/shell/src/pty_exec.rs`, and PTY bootstrap scripts from A3-code
-- Docs: `docs/project_management/next/substrate_isolated_shell_plan.md`, `.../data_map.md` for reference if behavior needs re-checking
+- Docs: `docs/project_management/_archived/next/substrate_isolated_shell_plan.md`, `.../data_map.md` for reference if behavior needs re-checking
 
 Commands to run:
 1. `cargo fmt --all`

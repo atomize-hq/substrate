@@ -66,7 +66,7 @@
   - `docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md`
   - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
   - `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
   - `docs/project_management/adrs/implemented/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
   - `docs/project_management/_archived/world-overlayfs-enumeration/plan.md`
   - `docs/project_management/_archived/world-overlayfs-enumeration/tasks.json`
@@ -202,7 +202,7 @@
   - `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
   - `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`
   - `docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
   - `docs/project_management/adrs/implemented/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
   - `docs/project_management/_archived/world-overlayfs-enumeration/plan.md`
   - `docs/project_management/_archived/world-overlayfs-enumeration/tasks.json`
@@ -229,7 +229,7 @@
   - `docs/project_management/_archived/world-overlayfs-enumeration/quality_gate_report.md`
 - Rubric checks run (with results):
   - `jq -e . docs/project_management/_archived/world-overlayfs-enumeration/tasks.json` → `0` → `PASS`
-  - `jq -e . docs/project_management/next/sequencing.json` → `0` → `PASS`
+  - `jq -e . docs/project_management/packs/sequencing.json` → `0` → `PASS`
   - `make planning-validate FEATURE_DIR="docs/project_management/_archived/world-overlayfs-enumeration"` → `0` → `PASS`
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/world-overlayfs-enumeration"` → `0` → `PASS`
   - `bash -n docs/project_management/_archived/world-overlayfs-enumeration/smoke/linux-smoke.sh` → `0` → `PASS`

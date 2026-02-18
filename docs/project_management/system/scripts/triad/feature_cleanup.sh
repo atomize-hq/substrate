@@ -4,10 +4,10 @@ set -euo pipefail
 usage() {
     cat <<'USAGE'
 Usage:
-  scripts/triad/feature_cleanup.sh --feature-dir <path> [options]
+  make triad-feature-cleanup FEATURE_DIR=<path> [REMOVE_WORKTREES=1] [PRUNE_LOCAL=1] [PRUNE_REMOTE=<remote>] [FORCE=1] [DRY_RUN=1]
 
 Required:
-  --feature-dir <path>               Feature Planning Pack dir (docs/project_management/next/<feature>)
+  --feature-dir <path>               Feature Planning Pack dir (docs/project_management/packs/active/<feature>)
 
 Options:
   --remove-worktrees                Remove all registered task worktrees (git worktree remove)

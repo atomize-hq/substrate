@@ -14,7 +14,7 @@ user
 
 ## Scope
 - Tests only; no production code.
-- Spec: `docs/project_management/next/workspace-config-policy-unification/WCU5-spec.md`
+- Spec: `docs/project_management/_archived/next/workspace-config-policy-unification/WCU5-spec.md`
 - ADRs:
   - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
   - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
@@ -26,7 +26,7 @@ Do not edit planning docs inside the worktree.
 1. Verify you are in the task worktree `wt/workspace_config_policy_unification-wcu5-test` on branch `workspace_config_policy_unification-wcu5-test` and that `.taskmeta.json` exists.
 2. Read: WCU5-spec, manual_testing_playbook.md, PHASE_A_B_GATES, plan/tasks/session log, this prompt.
 3. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run:
-   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" SLICE_ID="WCU5"`
+   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification" SLICE_ID="WCU5"`
 
 ## Requirements
 - Add/modify tests that enforce WCU5 acceptance criteria in `tasks.json`.
@@ -57,7 +57,7 @@ First, I’ll verify the branch and check for the .taskmeta.json file. Next, I'l
 thinking
 **Clarifying tasks.json location**
 
-It looks like tasks.json isn’t just a planning document but a file that drives actions within the codebase. However, it does seem to be part of the project management slice. I’ll check its path, likely found in docs/project_management/next/workspace-config-policy-unification/tasks.json. I also need to read related documents like manual_testing_playbook.md and PHASE_A_B_GATES. My plan is to verify the setup, read the documentation, identify acceptance criteria, implement tests, run formatting and tests, then finish the task while ensuring all instructions are followed. Let's get started!
+It looks like tasks.json isn’t just a planning document but a file that drives actions within the codebase. However, it does seem to be part of the project management slice. I’ll check its path, likely found in docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json. I also need to read related documents like manual_testing_playbook.md and PHASE_A_B_GATES. My plan is to verify the setup, read the documentation, identify acceptance criteria, implement tests, run formatting and tests, then finish the task while ensuring all instructions are followed. Let's get started!
 Plan update
   → Verify worktree and taskmeta
   • Read WCU5 spec and ADRs
@@ -79,7 +79,7 @@ workspace_config_policy_unification-wcu5-test
 {
   "created_at_utc": "2026-01-16T17:06:39Z",
   "created_from_sha": "a6b9afdbfa773999cb52f56be2d409d1b1227080",
-  "feature_dir": "docs/project_management/next/workspace-config-policy-unification",
+  "feature_dir": "docs/project_management/_archived/next/workspace-config-policy-unification",
   "orchestration_branch": "feat/workspace-config-policy-unification",
   "schema_version": 1,
   "task_branch": "workspace_config_policy_unification-wcu5-test",
@@ -87,8 +87,8 @@ workspace_config_policy_unification-wcu5-test
 }
 exec
 /bin/bash -lc 'set -euo pipefail
-ls -la docs/project_management/next/workspace-config-policy-unification || true
-ls -la docs/project_management/next || true
+ls -la docs/project_management/_archived/next/workspace-config-policy-unification || true
+ls -la docs/project_management/_archived/next || true
 ' in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 44ms:
 total 300
 drwxr-xr-x 4 spenser spenser   4096 Jan 16 12:06 .
@@ -119,17 +119,17 @@ Plan update
   • Run triad task finish
 exec
 /bin/bash -lc "set -euo pipefail
-sed -n '1,220p' docs/project_management/next/workspace-config-policy-unification/WCU5-spec.md
+sed -n '1,220p' docs/project_management/_archived/next/workspace-config-policy-unification/WCU5-spec.md
 " in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 40ms:
 # WCU5 Spec — Docs + smoke + manual playbook parity (includes ADR-0012 Phase A/B validation)
 
 References:
-- `docs/project_management/next/workspace-config-policy-unification/plan.md`
-- `docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md`
-- `docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh`
-- `docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh`
-- `docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1`
-- `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
+- `docs/project_management/_archived/next/workspace-config-policy-unification/plan.md`
+- `docs/project_management/_archived/next/workspace-config-policy-unification/manual_testing_playbook.md`
+- `docs/project_management/_archived/next/workspace-config-policy-unification/smoke/linux-smoke.sh`
+- `docs/project_management/_archived/next/workspace-config-policy-unification/smoke/macos-smoke.sh`
+- `docs/project_management/_archived/next/workspace-config-policy-unification/smoke/windows-smoke.ps1`
+- `docs/project_management/_archived/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
 
 ## Scope
 - Ensure the feature-local manual testing playbook and all feature smoke scripts remain in parity.
@@ -153,8 +153,8 @@ sed -n '1,260p' docs/project_management/adrs/implemented/ADR-0008-workspace-conf
 - Owner(s): spenser
 
 ## Scope
-- Feature directory: `docs/project_management/next/workspace-config-policy-unification/`
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Feature directory: `docs/project_management/_archived/next/workspace-config-policy-unification/`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
@@ -178,9 +178,9 @@ sed -n '1,260p' docs/project_management/adrs/implemented/ADR-0012-config-schema-
 
 ## Scope
 - Feature directories (impacted):
-  - `docs/project_management/next/` (this ADR; cross-cutting contract)
-  - `docs/project_management/next/workspace-config-policy-unification/` (ADR-0008 implementation)
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+  - `docs/project_management/_archived/next/` (this ADR; cross-cutting contract)
+  - `docs/project_management/_archived/next/workspace-config-policy-unification/` (ADR-0008 implementation)
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
@@ -203,8 +203,8 @@ It is a focused companion to:
 ## Operating assumptions (the situation you are in)
 
 When this standard applies, the operator started you with one of:
-- `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1` (preferred)
-- `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
+- `make triad-task-start-pair FEATURE_DIR="docs/project_management/_archived/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1` (preferred)
+- `make triad-task-start FEATURE_DIR="docs/project_management/_archived/next/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
 
 You are already:
 - in a git worktree (usually under `wt/...`)
@@ -215,7 +215,7 @@ You are already:
 
 exec
 /bin/bash -lc "set -euo pipefail
-sed -n '1,220p' docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md
+sed -n '1,220p' docs/project_management/_archived/next/workspace-config-policy-unification/manual_testing_playbook.md
 " in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 42ms:
 # Manual Testing Playbook — Workspace Config/Policy Unification (ADR-0008)
 
@@ -226,9 +226,9 @@ This playbook validates the operator-facing contract in:
 All steps are written to be run in a scratch workspace directory and must not mutate any real project.
 
 Smoke scripts (automated counterpart; must remain in parity with this playbook):
-- Linux: `docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh`
-- macOS: `docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh`
-- Windows: `docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1`
+- Linux: `docs/project_management/_archived/next/workspace-config-policy-unification/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/_archived/next/workspace-config-policy-unification/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/_archived/next/workspace-config-policy-unification/smoke/windows-smoke.ps1`
 
 ## 0) Setup (all platforms)
 
@@ -239,12 +239,12 @@ Smoke scripts (automated counterpart; must remain in parity with this playbook):
 2. Enter the scratch workspace directory:
 exec
 /bin/bash -lc "set -euo pipefail
-sed -n '1,240p' docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md
+sed -n '1,240p' docs/project_management/_archived/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md
 " in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 43ms:
 # ADR-0008 Planning Pack — Phase A/B Gates (ADR-0012) (Non-negotiable)
 
 This file is an **additive execution constraint** for the Planning Pack under:
-- `docs/project_management/next/workspace-config-policy-unification/`
+- `docs/project_management/_archived/next/workspace-config-policy-unification/`
 
 It layers on top of all repo planning standards and must be treated as **non-negotiable acceptance criteria** for this body of work.
 
@@ -256,7 +256,7 @@ Authoritative ADRs:
 - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 
 Primary downstream consumer contract:
-- `docs/project_management/next/world_deps_packages_bundles_contract.md`
+- `docs/project_management/_archived/next/world_deps_packages_bundles_contract.md`
 
 ## Phase A (must complete) — Per-key merge strategies + multi-source provenance
 
@@ -265,7 +265,7 @@ exec
 /bin/bash -lc "set -euo pipefail
 python - <<'PY'
 import json
-path='docs/project_management/next/workspace-config-policy-unification/tasks.json'
+path='docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json'
 with open(path) as f:
     data=json.load(f)
 print('top keys:', list(data)[:20])
@@ -281,7 +281,7 @@ exec
 /bin/bash -lc "set -euo pipefail
 python - <<'PY'
 import json
-path='docs/project_management/next/workspace-config-policy-unification/tasks.json'
+path='docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json'
 with open(path) as f:
     data=json.load(f)
 items=data.get('items',[])
@@ -310,7 +310,7 @@ exec
 /bin/bash -lc "set -euo pipefail
 python - <<'PY'
 import json
-path='docs/project_management/next/workspace-config-policy-unification/tasks.json'
+path='docs/project_management/_archived/next/workspace-config-policy-unification/tasks.json'
 with open(path) as f:
     data=json.load(f)
 print('meta keys:', list(data.get('meta',{}).keys()))
@@ -573,7 +573,7 @@ drwxr-xr-x 2 spenser spenser  4096 Jan 16 12:06 integration
 -rw-r--r-- 1 spenser spenser  1616 Jan 16 12:06 profile_guardrails.rs
 exec
 /bin/bash -lc "set -euo pipefail
-sed -n '1,200p' docs/project_management/next/workspace-config-policy-unification/plan.md
+sed -n '1,200p' docs/project_management/_archived/next/workspace-config-policy-unification/plan.md
 " in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 42ms:
 # Workspace Config/Policy Unification (ADR-0008) — Plan
 
@@ -585,7 +585,7 @@ This body of work also **must** implement the cross-cutting refinement defined b
 - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 
 Non-negotiable additional gating for this pack:
-- `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
+- `docs/project_management/_archived/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
 
 ## Execution model (triads + automation)
 - Standards:
@@ -597,12 +597,12 @@ Non-negotiable additional gating for this pack:
   - planning docs (`plan.md`, `tasks.json`, `session_log.md`, specs, prompts) are edited only on the orchestration branch
 exec
 /bin/bash -lc "set -euo pipefail
-sed -n '1,120p' docs/project_management/next/workspace-config-policy-unification/session_log.md
+sed -n '1,120p' docs/project_management/_archived/next/workspace-config-policy-unification/session_log.md
 " in /home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu5-test succeeded in 41ms:
 # workspace-config-policy-unification — session log
 
 ## START — 2026-01-14T00:00:00Z — planning — Phase A/B gate scaffolding
-- Feature: `docs/project_management/next/workspace-config-policy-unification/`
+- Feature: `docs/project_management/_archived/next/workspace-config-policy-unification/`
 - Branch: `feat/workspace-config-policy-unification`
 - Goal: Add Phase A/B gates (ADR-0012) scaffolding and ensure it is mechanically encoded in the Planning Pack.
 - Inputs to read end-to-end:
@@ -611,14 +611,14 @@ sed -n '1,120p' docs/project_management/next/workspace-config-policy-unification
   - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
   - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 - Commands planned (if any):
-  - `make planning-lint FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification"`
+  - `make planning-lint FEATURE_DIR="docs/project_management/_archived/next/workspace-config-policy-unification"`
 
 ## END — 2026-01-14T00:00:00Z — planning — Phase A/B gate scaffolding
 - Summary of changes (exhaustive):
   - Added explicit Phase A/B gate file for ADR-0012 and wired it as a non-negotiable Planning Pack input
   - Added Planning Pack scaffolding files (`plan.md`, `tasks.json`, `integration_map.md`, gate report templates, smoke stubs)
 - Files created/modified:
-  - `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
+  - `docs/project_management/_archived/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
 
 thinking
 **Updating the plan**

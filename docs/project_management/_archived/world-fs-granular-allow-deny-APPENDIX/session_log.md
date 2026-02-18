@@ -43,7 +43,7 @@ Record after dispatch:
   - `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/quality_gate_report.md`
   - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
   - `docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
 
 ## END — 2026-02-06T19:39:38Z — planning — quality gate remediation
 - Findings addressed: Finding 003, Finding 004, Finding 005, Finding 006, Finding 007, Finding 008.
@@ -62,7 +62,7 @@ Record after dispatch:
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX"` → exit 0
   - `make planning-validate FEATURE_DIR="docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX"` → exit 0
   - `jq -e . docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/tasks.json >/dev/null` → exit 0
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → exit 0
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → exit 0
 - Blockers: `NONE`
 
 ---
@@ -91,7 +91,7 @@ Record after dispatch:
   - Aligned `ci_checkpoint_plan.md` gate fields with the checkpoint ops commands (`compile_parity` + `feature_smoke`; `ci_testing=skip`).
 - Commands run (verbatim) and exit codes:
   - `jq -e . docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/tasks.json >/dev/null` → exit 0
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → exit 0
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → exit 0
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX"` → exit 0
   - `make planning-validate FEATURE_DIR="docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX"` → exit 0
   - `make adr-fix ADR=docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md` → exit 0
@@ -124,7 +124,7 @@ Record after dispatch:
   - Added deterministic failure-path commands to start only failing platform-fix tasks when smoke fails.
 - Commands run (verbatim) and exit codes:
   - `jq -e . docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX/tasks.json >/dev/null` → exit 0
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → exit 0
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → exit 0
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX"` → exit 0
   - `make planning-validate FEATURE_DIR="docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX"` → exit 0
   - `checkpoint wiring check (final->cp and cp->core)` → exit 0

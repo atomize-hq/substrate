@@ -12,9 +12,9 @@ Developer / planning-pack author + quality gate reviewer — wants planning lint
 - Smaller slices imply checkpoint grouping should be larger; docs/templates currently drift.
 
 ## In scope
-- Gated `scripts/planning/validate_slice_specs.py` (v1 existence-only; v2 strict).
+- Gated `docs/project_management/system/scripts/planning/validate_slice_specs.py` (v1 existence-only; v2 strict).
 - v2 slice spec template + scaffolder updates (`new_feature.sh|ps1`).
-- `scripts/planning/lint.sh|ps1` wiring.
+- `docs/project_management/system/scripts/planning/lint.sh|ps1` wiring.
 - Standards/templates/docs drift fixes (checkpoint defaults, tasks schema + examples).
 - Proof-point migration of 1 existing pack to v2.
 
@@ -51,7 +51,7 @@ Developer / planning-pack author + quality gate reviewer — wants planning lint
 **Acceptance criteria**
 - [ ] If `meta.slice_spec_version` is missing, validator exits 0 after verifying slice spec files exist for discovered slices.
 - [ ] If `meta.slice_spec_version >= 2`, validator fails on missing headers, placeholders, AC-ID format/count/dup, missing out-of-scope bullets, and missing/mismatched `ac_ids`.
-- [ ] `scripts/planning/lint.sh` and `lint.ps1` call the validator safely (no break for legacy).
+- [ ] `docs/project_management/system/scripts/planning/lint.sh` and `lint.ps1` call the validator safely (no break for legacy).
 
 **Dependencies**
 - Blocks on: none
@@ -69,7 +69,7 @@ Developer / planning-pack author + quality gate reviewer — wants planning lint
 
 **Inputs/outputs**
 - Inputs: feature dir contains `tasks.json`; slice IDs derivable from `<SLICE>-code`/`<SLICE>-test`.
-- Outputs: `scripts/planning/validate_slice_specs.py`
+- Outputs: `docs/project_management/system/scripts/planning/validate_slice_specs.py`
 
 **Acceptance criteria**
 - [ ] Implements v1 mode (existence/readability only).
@@ -78,7 +78,7 @@ Developer / planning-pack author + quality gate reviewer — wants planning lint
 - [ ] Ignores code fences when scanning.
 
 **Implementation notes**
-- Where: `scripts/planning/`
+- Where: `docs/project_management/system/scripts/planning/`
 - Keep discovery scoped to slice triads (code/test), not “any `*-spec.md`”.
 
 **Test notes**
@@ -101,7 +101,7 @@ Developer / planning-pack author + quality gate reviewer — wants planning lint
 
 **Inputs/outputs**
 - Inputs: validator script path
-- Outputs: updated `scripts/planning/lint.sh`, `scripts/planning/lint.ps1`
+- Outputs: updated `docs/project_management/system/scripts/planning/lint.sh`, `docs/project_management/system/scripts/planning/lint.ps1`
 
 **Acceptance criteria**
 - [ ] Lint prints a clear section header for slice spec validation.
@@ -110,7 +110,7 @@ Developer / planning-pack author + quality gate reviewer — wants planning lint
 **Checklist**
 - [ ] Add call after `validate_spec_manifest.py`
 - [ ] Ensure consistent messaging across bash/ps1
-- [ ] Run `scripts/planning/lint.sh --feature-dir <legacy-pack>` locally
+- [ ] Run `docs/project_management/system/scripts/planning/lint.sh --feature-dir <legacy-pack>` locally
 
 ---
 
@@ -152,7 +152,7 @@ Developer / planning-pack author + quality gate reviewer — wants planning lint
 
 **Inputs/outputs**
 - Inputs: template path, tasks.json scaffolding logic
-- Outputs: updated `scripts/planning/new_feature.sh`, `scripts/planning/new_feature.ps1`
+- Outputs: updated `docs/project_management/system/scripts/planning/new_feature.sh`, `docs/project_management/system/scripts/planning/new_feature.ps1`
 
 **Acceptance criteria**
 - [ ] Replaces heredoc slice spec with render call.
@@ -287,7 +287,7 @@ Developer / planning-pack author + quality gate reviewer — wants planning lint
 
 ### WS-SCRIPTS: Planning validators + lint + scaffolder
 **Touch surface**
-- `scripts/planning/*`
+- `docs/project_management/system/scripts/planning/*`
 
 ### WS-DOCS: Standards/templates drift cleanup
 **Touch surface**
@@ -295,7 +295,7 @@ Developer / planning-pack author + quality gate reviewer — wants planning lint
 
 ### WS-MIGRATE: Proof-point pack migration
 **Touch surface**
-- One selected `docs/project_management/next/<feature>/...`
+- One selected `docs/project_management/_archived/next/<feature>/...`
 
 ### WS-INT: Integration
 **Depends on**

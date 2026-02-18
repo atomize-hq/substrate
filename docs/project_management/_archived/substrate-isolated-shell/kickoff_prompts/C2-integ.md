@@ -34,5 +34,5 @@ Notes / assumptions:
 
 Finish checklist:
 1. Commit/push the merged integration worktree after tests pass.
-2. Switch back to `feat/isolated-shell-plan`, append START/END entries for C2-integ, and mark `C2-code`/`C2-test`/`C2-integ` as appropriate in `docs/project_management/next/tasks.json`.
+2. Switch back to `feat/isolated-shell-plan`, append START/END entries for C2-integ, and mark `C2-code`/`C2-test`/`C2-integ` as appropriate in `docs/project_management/_archived/next/tasks.json`.
 3. Reference this prompt path plus the executed commands (`cargo fmt --all`, `cargo test -p substrate-shell world_deps`, optional manual status/install invocation) in the session log.

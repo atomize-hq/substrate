@@ -46,7 +46,7 @@ Policy:
 ## START — 2026-01-31T13:35:40Z — planning — v4 migration
 - Goal: Bring the Planning Pack up to schema v4 + checkpoint standard (spec manifest + impact map + CI checkpoint plan).
 - Commands run:
-  - `scripts/planning/lint.sh --feature-dir docs/project_management/packs/active/warn-config-global-show-workspace-overrides`
+- `make planning-lint FEATURE_DIR="docs/project_management/packs/active/warn-config-global-show-workspace-overrides"`
 
 ## END — 2026-01-31T13:35:40Z — planning — v4 migration
 - Summary of changes (exhaustive):
@@ -54,7 +54,7 @@ Policy:
   - Migrated `tasks.json` to `meta.schema_version=4` and added `CP1-ci-checkpoint` wiring and `meta.checkpoint_boundaries`.
   - Updated smoke linkage references and removed ambiguity-word lint failures.
 - Rubric checks run (with results):
-  - `scripts/planning/lint.sh --feature-dir docs/project_management/packs/active/warn-config-global-show-workspace-overrides` → `0` → `PASS`
-  - `python3 scripts/planning/validate_tasks_json.py --feature-dir docs/project_management/packs/active/warn-config-global-show-workspace-overrides` → `0` → `PASS`
-  - `python3 scripts/planning/validate_spec_manifest.py --feature-dir docs/project_management/packs/active/warn-config-global-show-workspace-overrides` → `0` → `PASS`
-  - `python3 scripts/planning/validate_ci_checkpoint_plan.py --feature-dir docs/project_management/packs/active/warn-config-global-show-workspace-overrides` → `0` → `PASS`
+- `make planning-lint FEATURE_DIR="docs/project_management/packs/active/warn-config-global-show-workspace-overrides"` → `0` → `PASS`
+- `make planning-validate FEATURE_DIR="docs/project_management/packs/active/warn-config-global-show-workspace-overrides"` → `0` → `PASS`
+- `python3 "$PM_SYSTEM_SCRIPTS/planning/validate_spec_manifest.py" --feature-dir docs/project_management/packs/active/warn-config-global-show-workspace-overrides` → `0` → `PASS`
+- `python3 "$PM_SYSTEM_SCRIPTS/planning/validate_ci_checkpoint_plan.py" --feature-dir docs/project_management/packs/active/warn-config-global-show-workspace-overrides` → `0` → `PASS`

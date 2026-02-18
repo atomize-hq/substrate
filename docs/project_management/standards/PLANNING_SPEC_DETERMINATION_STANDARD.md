@@ -31,7 +31,7 @@ Recommended ordering:
 ## Required output (new artifact)
 
 Create:
-- `docs/project_management/next/<feature>/spec_manifest.md`
+- `docs/project_management/packs/active/<feature>/spec_manifest.md`
 
 This file is authoritative for:
 - which spec documents exist for the feature, and
@@ -147,4 +147,3 @@ When creating domain-specific spec documents selected by `spec_manifest.md`, use
 Use this prompt to generate `spec_manifest.md` (and update the ADR’s `Related Docs` list).
 
 Canonical prompt: docs/project_management/system/prompts/planning/spec_manifest_agent.md
-

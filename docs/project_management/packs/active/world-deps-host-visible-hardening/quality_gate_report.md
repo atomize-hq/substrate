@@ -18,7 +18,7 @@ export FEATURE_DIR="docs/project_management/packs/active/world-deps-host-visible
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
 # exit=0
 
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 # exit=0
 
 # Mechanical planning lint (required)
@@ -89,7 +89,7 @@ export FEATURE_DIR="docs/project_management/packs/active/world-deps-host-visible
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
 # exit=0
 
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 # exit=0
 
 # Mechanical planning lint (required)
@@ -142,7 +142,7 @@ PY
 # exit=0
 
 # Sequencing membership (required by planning lint rubric)
-rg -n "world-deps-host-visible-hardening" docs/project_management/next/sequencing.json
+rg -n "world-deps-host-visible-hardening" docs/project_management/packs/sequencing.json
 # exit=1 (no matches)
 
 # Kickoff prompt sentinel coverage (required by planning lint rubric)
@@ -160,7 +160,7 @@ rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' '\\b(shoul
 - ADR(s): `YES`
   - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
   - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
-  - `docs/project_management/next/world_deps_packages_bundles_contract.md`
+  - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
 - `spec_manifest.md`: `YES`
 - `plan.md`: `YES`
 - `tasks.json`: `YES`
@@ -170,7 +170,7 @@ rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' '\\b(shoul
 - `impact_map.md`: `YES`
 - `manual_testing_playbook.md`: `YES`
 - Feature smoke scripts under `smoke/`: `YES`
-- `docs/project_management/next/sequencing.json`: `YES`
+- `docs/project_management/packs/sequencing.json`: `YES`
 - Standards:
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
@@ -208,7 +208,7 @@ rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' '\\b(shoul
 ### 4) Sequencing and dependency alignment
 - Result: `FAIL`
 - Evidence:
-  - `docs/project_management/next/sequencing.json` has no entry for `docs/project_management/packs/active/world-deps-host-visible-hardening`.
+  - `docs/project_management/packs/sequencing.json` has no entry for `docs/project_management/packs/active/world-deps-host-visible-hardening`.
   - `docs/project_management/packs/active/world-deps-host-visible-hardening/impact_map.md` explicitly states sequencing was not reviewed (`Sequencing alignment: reviewed: NO`).
 - Notes: Mechanical lint requires sequencing membership; missing entry blocks execution scheduling and violates rubric.
 
@@ -264,9 +264,9 @@ rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' '\\b(shoul
 ### Finding 003 — Feature is not present in `sequencing.json`
 - Status: `DEFECT`
 - Evidence:
-  - `rg -n "world-deps-host-visible-hardening" docs/project_management/next/sequencing.json` → exit `1` (no matches).
+  - `rg -n "world-deps-host-visible-hardening" docs/project_management/packs/sequencing.json` → exit `1` (no matches).
 - Impact: Mechanical lint fails; prerequisites cannot be reasoned about against the global sequencing spine; execution readiness cannot be certified.
-- Fix required (exact): Add a sprint entry in `docs/project_management/next/sequencing.json` that points at `docs/project_management/packs/active/world-deps-host-visible-hardening` and enumerates slice ids `WDH0..WDH3` in order.
+- Fix required (exact): Add a sprint entry in `docs/project_management/packs/sequencing.json` that points at `docs/project_management/packs/active/world-deps-host-visible-hardening` and enumerates slice ids `WDH0..WDH3` in order.
 - If DEFECT: Alternative (one viable): If this work is intentionally unscheduled, move the directory under `docs/project_management/_archived/` and reference it from sequencing as an archived pointer (but then it is not an execution-ready “next/” pack).
 
 ### Finding 004 — ADR-0011 executive summary hash drift (adr-check fails)
@@ -328,7 +328,7 @@ rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' '\\b(shoul
 - Required human decisions (explicit):
   - Confirm whether this pack is intended to be automation-enabled schema v4 with CI checkpoints; if yes, define checkpoints and required ops tasks; if no, disable automation and revise validation expectations.
   - Confirm the authoritative override surface for WDH2 (policy vs override env vars) and align with ADR-0018 env var taxonomy.
-  - Assign sequencing (which sprint/order) and add to `docs/project_management/next/sequencing.json`.
+  - Assign sequencing (which sprint/order) and add to `docs/project_management/packs/sequencing.json`.
 - Blockers to execution:
   - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` must exit `0`.
   - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` must exit `0`.
@@ -368,7 +368,7 @@ make planning-validate FEATURE_DIR="$FEATURE_DIR"
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
 # exit=0
 
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 # exit=0
 ```
 
@@ -376,7 +376,7 @@ jq -e . docs/project_management/next/sequencing.json >/dev/null
 - ADR(s): `YES`
   - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
   - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
-  - `docs/project_management/next/world_deps_packages_bundles_contract.md`
+  - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
 - `spec_manifest.md`: `YES`
 - `plan.md`: `YES`
 - `tasks.json`: `YES`
@@ -386,7 +386,7 @@ jq -e . docs/project_management/next/sequencing.json >/dev/null
 - `impact_map.md`: `YES`
 - `manual_testing_playbook.md`: `YES`
 - Feature smoke scripts under `smoke/`: `YES`
-- `docs/project_management/next/sequencing.json`: `YES`
+- `docs/project_management/packs/sequencing.json`: `YES`
 - Standards:
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
@@ -419,7 +419,7 @@ jq -e . docs/project_management/next/sequencing.json >/dev/null
 ### 4) Sequencing and dependency alignment
 - Result: `PASS`
 - Evidence:
-  - `docs/project_management/next/sequencing.json` includes `directory="docs/project_management/packs/active/world-deps-host-visible-hardening"` with slices `WDH0..WDH3` in order.
+  - `docs/project_management/packs/sequencing.json` includes `directory="docs/project_management/packs/active/world-deps-host-visible-hardening"` with slices `WDH0..WDH3` in order.
 
 ### 5) Testability and validation readiness
 - Result: `PASS`
@@ -454,7 +454,7 @@ jq -e . docs/project_management/next/sequencing.json >/dev/null
 ### Finding 003 — Feature is not present in `sequencing.json`
 - Status: `VERIFIED`
 - Fix applied:
-  - Added `docs/project_management/packs/active/world-deps-host-visible-hardening` sprint entry to `docs/project_management/next/sequencing.json`.
+  - Added `docs/project_management/packs/active/world-deps-host-visible-hardening` sprint entry to `docs/project_management/packs/sequencing.json`.
 
 ### Finding 004 — ADR-0011 executive summary hash drift (adr-check fails)
 - Status: `VERIFIED`
@@ -509,7 +509,7 @@ export FEATURE_DIR="docs/project_management/packs/active/world-deps-host-visible
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
 # exit=0
 
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 # exit=0
 
 # Mechanical planning lint (required)
@@ -564,7 +564,7 @@ rg -n 'SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR' "$FEATURE_DIR/spec_manifest.md"
 # Evidence for WDH1 present-semantics mismatch
 rg -n 'present iff' "$FEATURE_DIR/WDH1-spec.md"
 # exit=0
-rg -n 'For `runnable: true`' docs/project_management/next/world_deps_packages_bundles_contract.md
+rg -n 'For `runnable: true`' docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md
 # exit=0
 ```
 
@@ -572,7 +572,7 @@ rg -n 'For `runnable: true`' docs/project_management/next/world_deps_packages_bu
 - ADR(s): `YES`
   - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
   - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
-  - `docs/project_management/next/world_deps_packages_bundles_contract.md`
+  - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
 - `spec_manifest.md`: `YES`
 - `plan.md`: `YES`
 - `tasks.json`: `YES`
@@ -582,7 +582,7 @@ rg -n 'For `runnable: true`' docs/project_management/next/world_deps_packages_bu
 - `impact_map.md`: `YES`
 - `manual_testing_playbook.md`: `YES`
 - Feature smoke scripts under `smoke/`: `YES`
-- `docs/project_management/next/sequencing.json`: `YES`
+- `docs/project_management/packs/sequencing.json`: `YES`
 - Standards:
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
@@ -612,13 +612,13 @@ rg -n 'For `runnable: true`' docs/project_management/next/world_deps_packages_bu
 - Result: `FAIL`
 - Evidence:
   - `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH1-spec.md` “present” rule
-  - `docs/project_management/next/world_deps_packages_bundles_contract.md` default “present” semantics for runnable packages
+  - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md` default “present” semantics for runnable packages
 - Notes: The “present” definition is inconsistent across authoritative docs and is likely to misclassify common runnable tools.
 
 ### 4) Sequencing and dependency alignment
 - Result: `PASS`
 - Evidence:
-  - `docs/project_management/next/sequencing.json` includes `id=world_deps_host_visible_hardening` with `WDH0..WDH3`
+  - `docs/project_management/packs/sequencing.json` includes `id=world_deps_host_visible_hardening` with `WDH0..WDH3`
   - `docs/project_management/packs/active/world-deps-host-visible-hardening/tasks.json` depends_on edges enforce slice order + checkpoints
 - Notes: Schema v4 boundary-only platform-fix is correctly modeled.
 
@@ -671,7 +671,7 @@ rg -n 'For `runnable: true`' docs/project_management/next/world_deps_packages_bu
 - Status: `DEFECT`
 - Evidence:
   - `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH1-spec.md:34` defines default runnable “present” as executing the wrapper successfully.
-  - `docs/project_management/next/world_deps_packages_bundles_contract.md:205` defines default runnable “present” as invokable via `command -v <entrypoint>`.
+  - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md:205` defines default runnable “present” as invokable via `command -v <entrypoint>`.
 - Impact: Implementers and tests will not have a single authoritative meaning of “present”; additionally, “execute with no args must exit 0” is not true for many CLIs (risking “present” being reported as `missing` despite being installed/wrapped).
 - Fix required (exact): Choose one authoritative definition and align both documents:
   - Recommended minimal change: In `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH1-spec.md`, redefine the default runnable “present” check to be wrapper-exists + executable (or `command -v <entrypoint>` resolving to `/var/lib/substrate/world-deps/bin/<entrypoint>`), and reserve “execute probe” for the explicit `probe.command` path.
@@ -725,7 +725,7 @@ make planning-validate FEATURE_DIR="$FEATURE_DIR"
 jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
 # exit=0
 
-jq -e . docs/project_management/next/sequencing.json >/dev/null
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
 # exit=0
 
 # tasks.json required-field audit (template minimum)
@@ -771,7 +771,7 @@ rg -n 'command -v <entrypoint>' "$FEATURE_DIR/WDH1-spec.md"
 - ADR(s): `YES`
   - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
   - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
-  - `docs/project_management/next/world_deps_packages_bundles_contract.md`
+  - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
 - `spec_manifest.md`: `YES`
 - `plan.md`: `YES`
 - `tasks.json`: `YES`
@@ -781,7 +781,7 @@ rg -n 'command -v <entrypoint>' "$FEATURE_DIR/WDH1-spec.md"
 - `impact_map.md`: `YES`
 - `manual_testing_playbook.md`: `YES`
 - Feature smoke scripts under `smoke/`: `YES`
-- `docs/project_management/next/sequencing.json`: `YES`
+- `docs/project_management/packs/sequencing.json`: `YES`
 - Standards:
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
   - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
@@ -809,7 +809,7 @@ rg -n 'command -v <entrypoint>' "$FEATURE_DIR/WDH1-spec.md"
 - Result: `PASS`
 - Evidence:
   - `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH1-spec.md` default runnable “present” uses `command -v` semantics (wrapper path anchored)
-  - `docs/project_management/next/world_deps_packages_bundles_contract.md` default runnable “present” uses `command -v <entrypoint>` when `probe.command` is omitted
+  - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md` default runnable “present” uses `command -v <entrypoint>` when `probe.command` is omitted
   - `docs/project_management/packs/active/world-deps-host-visible-hardening/spec_manifest.md` enumerates the config/env-var surfaces owned by WDH0/WDH2
 
 ### 4) Sequencing and dependency alignment
@@ -847,7 +847,7 @@ rg -n 'command -v <entrypoint>' "$FEATURE_DIR/WDH1-spec.md"
 - Status: `VERIFIED`
 - Evidence:
   - `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH1-spec.md` default runnable “present” uses `command -v <entrypoint>` resolution to `/var/lib/substrate/world-deps/bin/<entrypoint>`.
-  - `docs/project_management/next/world_deps_packages_bundles_contract.md` default runnable “present” uses `command -v <entrypoint>` when `probe.command` is omitted.
+  - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md` default runnable “present” uses `command -v <entrypoint>` when `probe.command` is omitted.
 - Impact: Restores a single, deterministic meaning of “present” that matches wrapper-based behavior and avoids non-deterministic execution probes.
 - Fix required (exact): none
 

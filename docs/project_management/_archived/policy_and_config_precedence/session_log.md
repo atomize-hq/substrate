@@ -4,7 +4,7 @@
 - Goal: Produce an execution-ready Planning Pack for ADR-0005 with zero ambiguity.
 - Inputs to read end-to-end:
   - `docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/EXECUTIVE_SUMMARY_STANDARD.md`
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
@@ -25,12 +25,12 @@
 - Summary of changes (exhaustive):
   - Created a dedicated Planning Pack for ADR-0005 under `docs/project_management/_archived/policy_and_config_precedence/` (plan/tasks/specs/decision register/integration map/playbook/smoke scripts/kickoff prompts).
   - Updated `docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md` to reference the new feature directory and added the missing executive-summary drift guard.
-  - Updated `docs/project_management/next/sequencing.json` to add the `policy_and_config_precedence` sprint and PCP0 slice.
+  - Updated `docs/project_management/packs/sequencing.json` to add the `policy_and_config_precedence` sprint and PCP0 slice.
   - Fixed ADR executive summary hashes via `make adr-fix` where required for mechanical lint.
 - Files created/modified:
   - `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`
   - `docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
   - `docs/project_management/_archived/policy_and_config_precedence/plan.md`
   - `docs/project_management/_archived/policy_and_config_precedence/tasks.json`
   - `docs/project_management/_archived/policy_and_config_precedence/session_log.md`
@@ -47,7 +47,7 @@
   - `docs/project_management/_archived/policy_and_config_precedence/smoke/windows-smoke.ps1`
 - Rubric checks run (with results):
   - `jq -e . docs/project_management/_archived/policy_and_config_precedence/tasks.json >/dev/null` → `0` → pass
-  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0` → pass
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → `0` → pass
   - `make adr-check ADR=docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md` → `0` → pass
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/policy_and_config_precedence"` → `0` → pass
 - Sequencing alignment:

@@ -19,7 +19,7 @@
   - Upgraded `tasks.json` to schema v4 with triad automation enabled and added `FZ-feature-cleanup`.
   - Updated legacy `integration_map.md` references to `impact_map.md` and retained `integration_map.md` as deprecated.
   - Updated kickoff prompts to include the required sentinel and v4 automation workflow.
-  - Added the feature directory to `docs/project_management/next/sequencing.json`.
+  - Added the feature directory to `docs/project_management/packs/sequencing.json`.
 - Files created/modified:
   - `docs/project_management/_archived/world-fs-granular-allow-deny/spec_manifest.md`
   - `docs/project_management/_archived/world-fs-granular-allow-deny/impact_map.md`
@@ -54,7 +54,7 @@
   - `docs/project_management/_archived/world-fs-granular-allow-deny/kickoff_prompts/WFGAD5-integ.md`
   - `docs/project_management/_archived/world-fs-granular-allow-deny/kickoff_prompts/FZ-feature-cleanup.md`
   - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
 - Rubric checks run (with results):
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/world-fs-granular-allow-deny"` → `PASS`
 - Blockers:

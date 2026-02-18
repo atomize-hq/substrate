@@ -13,7 +13,7 @@
 5. Do not edit docs/tasks/session_log.md inside the worktree.
 
 ## Spec (shared with I2-test)
-- `docs/project_management/next/p0-agent-hub-isolation-hardening/I2-spec.md`
+- `docs/project_management/_archived/next/p0-agent-hub-isolation-hardening/I2-spec.md`
 
 ## Scope & Guardrails
 - Production code only (no tests).

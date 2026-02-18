@@ -23,12 +23,12 @@ Authoritative implementation docs:
   - `docs/project_management/_archived/world_deps_selection_layer/S0-spec-selection-config-and-ux.md`
   - `docs/project_management/_archived/world_deps_selection_layer/S1-spec-install-classes.md`
   - `docs/project_management/_archived/world_deps_selection_layer/S2-spec-system-packages-provisioning.md`
-- Sequencing: `docs/project_management/next/sequencing.json`
+- Sequencing: `docs/project_management/packs/sequencing.json`
 
 Related tracks:
 - YAML settings migration (Y0): `docs/project_management/_archived/yaml-settings-migration/Y0-spec.md`
 - Agent hub isolation hardening (I0–I5): `docs/project_management/_archived/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md`
-- World sync (C0–C9): `docs/project_management/next/world-sync/plan.md`
+- World sync (C0–C9): `docs/project_management/_archived/next/world-sync/plan.md`
 
 ## Executive Summary (Operator)
 
@@ -156,5 +156,5 @@ This ADR is implemented by the `world_deps_selection_layer` triad:
 - WDL1 → install classes
 - WDL2 → provisioning-time system packages
 
-Sequencing must match `docs/project_management/next/sequencing.json` and the prerequisites listed in
+Sequencing must match `docs/project_management/packs/sequencing.json` and the prerequisites listed in
 `docs/project_management/_archived/world_deps_selection_layer/integration_map.md`.

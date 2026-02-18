@@ -7,9 +7,9 @@
 
 ## Scope
 - Feature directories (impacted):
-  - `docs/project_management/next/` (this ADR; cross-cutting contract)
+  - `docs/project_management/_archived/next/` (this ADR; cross-cutting contract)
   - `docs/project_management/_archived/workspace-config-policy-unification/` (ADR-0008 implementation)
-- Sequencing spine: `docs/project_management/next/sequencing.json`
+- Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
@@ -18,7 +18,7 @@
 - Patch files + scope model:
   - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 - World-deps consumer contract:
-  - `docs/project_management/next/world_deps_packages_bundles_contract.md`
+  - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
 - World-deps ADR (consumer workstream; not modified by this ADR):
   - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
 
@@ -32,7 +32,7 @@ ADR_BODY_SHA256: c02625b896f88c310c67463006646740ce9fda7ef726f034262d2b67a74ec72
   - Why: enables additive config keys (like `world.deps.enabled`) without creating a second parallel config system or confusing precedence.
   - Links:
     - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-    - `docs/project_management/next/world_deps_packages_bundles_contract.md`
+    - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
 
 - Schema defines merge behavior per key
   - Existing: patch files imply a single merge rule (“workspace overrides global”) for all keys.

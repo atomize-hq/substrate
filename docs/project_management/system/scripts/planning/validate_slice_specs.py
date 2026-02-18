@@ -312,7 +312,11 @@ def _validate_task_ac_ids(task_id: str, task: dict[str, Any], expected: set[str]
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Validate slice spec invariants (v1 legacy-safe; v2 strict when opted in).")
-    ap.add_argument("--feature-dir", required=True, help="docs/project_management/next/<feature> (or any feature dir)")
+    ap.add_argument(
+        "--feature-dir",
+        required=True,
+        help="docs/project_management/packs/<bucket>/<feature> (or any feature dir)",
+    )
     ap.add_argument("--force-v2", action="store_true", help="Enforce v2 regardless of tasks.json meta.slice_spec_version")
     args = ap.parse_args()
 

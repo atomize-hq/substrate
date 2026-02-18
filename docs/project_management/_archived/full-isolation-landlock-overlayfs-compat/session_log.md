@@ -12,11 +12,11 @@
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
   - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
   - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
   - `docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
 - Commands planned (if any):
   - `make planning-new-feature FEATURE=full-isolation-landlock-overlayfs-compat DECISION_HEAVY=1 CROSS_PLATFORM=1 AUTOMATION=1 BEHAVIOR_PLATFORMS=linux CI_PARITY_PLATFORMS=linux,macos,windows`
-  - `python3 scripts/planning/validate_tasks_json.py --feature-dir "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat"`
+  - `PM_SYSTEM_SCRIPTS="docs/project_management/system/scripts" python3 "${PM_SYSTEM_SCRIPTS}/planning/validate_tasks_json.py" --feature-dir "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat"`
   - `make planning-validate FEATURE_DIR="docs/project_management/_archived/full-isolation-landlock-overlayfs-compat"`
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/full-isolation-landlock-overlayfs-compat"`
 
@@ -26,7 +26,7 @@
   - Expanded the decision register to cover helper placement, allowlist scope, failure mode, and platform scope as explicit A/B decisions (DR-0002..DR-0005).
   - Wrote an authoritative C0 spec with deterministic runtime derivation, fail-closed rules, and validation requirements.
   - Added Linux smoke that reproduces the pre-fix failure mode (allowlisted write) and validates the fix; added macOS/Windows no-op smoke scripts as defined by contract.
-  - Updated `docs/project_management/next/sequencing.json` to include this feature directory and its C0 spec.
+  - Updated `docs/project_management/packs/sequencing.json` to include this feature directory and its C0 spec.
 - Files created/modified:
   - `docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/plan.md`
   - `docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/tasks.json`
@@ -41,9 +41,9 @@
   - `docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/execution_preflight_report.md`
   - `docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/C0-closeout_report.md`
   - `docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/kickoff_prompts/*`
-  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/sequencing.json`
 - Rubric checks run (with results):
-  - `python3 scripts/planning/validate_tasks_json.py --feature-dir "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat"` → `0` → `OK`
+  - `PM_SYSTEM_SCRIPTS="docs/project_management/system/scripts" python3 "${PM_SYSTEM_SCRIPTS}/planning/validate_tasks_json.py" --feature-dir "docs/project_management/_archived/full-isolation-landlock-overlayfs-compat"` → `0` → `OK`
   - `make planning-validate FEATURE_DIR="docs/project_management/_archived/full-isolation-landlock-overlayfs-compat"` → `0` → `OK`
   - `make planning-lint FEATURE_DIR="docs/project_management/_archived/full-isolation-landlock-overlayfs-compat"` → `0` → `OK`
 - Sequencing alignment:

@@ -25,5 +25,5 @@ Test design notes:
 Reminders & finish steps:
 - Start at `AI_AGENT_START_HERE.md`, update `tasks.json` + `session_log.md` (START/END) from `feat/isolated-shell-plan`, then switch to `wt/c1-world-enable-test` for code.
 - Keep coordination artifacts untouched inside that worktree. Capture failing outputs if needed and document them in the END log entry.
-- Before finishing, craft the Integration Agent Kickoff Prompt for `C1-integ`, store it at `docs/project_management/next/kickoff_prompts/C1-integ.md`, and note the path in the session log.
+- Before finishing, craft the Integration Agent Kickoff Prompt for `C1-integ`, store it at `docs/project_management/_archived/next/kickoff_prompts/C1-integ.md`, and note the path in the session log.
 - Finish checklist: (1) commit/push `wt/c1-world-enable-test`, (2) return to `feat/isolated-shell-plan`, (3) append END entry + update `tasks.json`, (4) add/link the Integration prompt, (5) commit/push coordination updates.
