@@ -331,45 +331,45 @@
       "id": "world_sync",
       "title": "World sync + internal git checkpoints",
       "branch": "feat/world-sync",
-      "directory": "docs/project_management/next/world-sync",
-      "plan": "docs/project_management/next/world-sync/plan.md",
+      "directory": "docs/project_management/packs/active/world-sync",
+      "plan": "docs/project_management/packs/active/world-sync/plan.md",
       "status": "not_started",
       "sequence": [
         {
           "id": "WS0",
-          "spec": "docs/project_management/next/world-sync/WS0-spec.md"
+          "spec": "docs/project_management/packs/active/world-sync/WS0-spec.md"
         },
         {
           "id": "WS1",
-          "spec": "docs/project_management/next/world-sync/WS1-spec.md"
+          "spec": "docs/project_management/packs/active/world-sync/WS1-spec.md"
         },
         {
           "id": "WS2",
-          "spec": "docs/project_management/next/world-sync/WS2-spec.md"
+          "spec": "docs/project_management/packs/active/world-sync/WS2-spec.md"
         },
         {
           "id": "WS3",
-          "spec": "docs/project_management/next/world-sync/WS3-spec.md"
+          "spec": "docs/project_management/packs/active/world-sync/WS3-spec.md"
         },
         {
           "id": "WS4",
-          "spec": "docs/project_management/next/world-sync/WS4-spec.md"
+          "spec": "docs/project_management/packs/active/world-sync/WS4-spec.md"
         },
         {
           "id": "WS5",
-          "spec": "docs/project_management/next/world-sync/WS5-spec.md"
+          "spec": "docs/project_management/packs/active/world-sync/WS5-spec.md"
         },
         {
           "id": "WS6",
-          "spec": "docs/project_management/next/world-sync/WS6-spec.md"
+          "spec": "docs/project_management/packs/active/world-sync/WS6-spec.md"
         },
         {
           "id": "WS7",
-          "spec": "docs/project_management/next/world-sync/WS7-spec.md"
+          "spec": "docs/project_management/packs/active/world-sync/WS7-spec.md"
         }
       ],
       "notes": [
-        "This Planning Pack is triad/planning v4 (slice ids WS0..WS7) and uses bounded CI checkpoints per docs/project_management/next/world-sync/ci_checkpoint_plan.md.",
+        "This Planning Pack is triad/planning v4 (slice ids WS0..WS7) and uses bounded CI checkpoints per docs/project_management/packs/active/world-sync/ci_checkpoint_plan.md.",
         "Workspace layout and protected excludes must remain aligned with ADR-0008 (.substrate/ only; protected excludes are .git/** and .substrate/**)."
       ]
     },
@@ -378,33 +378,33 @@
       "id": "world_deps_packages_bundles_contract",
       "title": "World deps packages/bundles contract",
       "branch": "feat/world-deps-packages-bundles-contract",
-      "directory": "docs/project_management/next/world-deps-packages-bundles-contract",
-      "plan": "docs/project_management/next/world-deps-packages-bundles-contract/plan.md",
+      "directory": "docs/project_management/packs/active/world-deps-packages-bundles-contract",
+      "plan": "docs/project_management/packs/active/world-deps-packages-bundles-contract/plan.md",
       "status": "not_started",
       "sequence": [
         {
           "id": "WDP0",
-          "spec": "docs/project_management/next/world-deps-packages-bundles-contract/WDP0-spec.md"
+          "spec": "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP0-spec.md"
         },
         {
           "id": "WDP1",
-          "spec": "docs/project_management/next/world-deps-packages-bundles-contract/WDP1-spec.md"
+          "spec": "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP1-spec.md"
         },
         {
           "id": "WDP2",
-          "spec": "docs/project_management/next/world-deps-packages-bundles-contract/WDP2-spec.md"
+          "spec": "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP2-spec.md"
         },
         {
           "id": "WDP3",
-          "spec": "docs/project_management/next/world-deps-packages-bundles-contract/WDP3-spec.md"
+          "spec": "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP3-spec.md"
         },
         {
           "id": "WDP4",
-          "spec": "docs/project_management/next/world-deps-packages-bundles-contract/WDP4-spec.md"
+          "spec": "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP4-spec.md"
         },
         {
           "id": "WDP5",
-          "spec": "docs/project_management/next/world-deps-packages-bundles-contract/WDP5-spec.md"
+          "spec": "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP5-spec.md"
         }
       ],
       "notes": [
@@ -417,25 +417,25 @@
       "id": "world_deps_host_visible_hardening",
       "title": "World deps host-visible hardening",
       "branch": "feat/world-deps-host-visible-hardening",
-      "directory": "docs/project_management/next/world-deps-host-visible-hardening",
-      "plan": "docs/project_management/next/world-deps-host-visible-hardening/plan.md",
+      "directory": "docs/project_management/packs/active/world-deps-host-visible-hardening",
+      "plan": "docs/project_management/packs/active/world-deps-host-visible-hardening/plan.md",
       "status": "not_started",
       "sequence": [
         {
           "id": "WDH0",
-          "spec": "docs/project_management/next/world-deps-host-visible-hardening/WDH0-spec.md"
+          "spec": "docs/project_management/packs/active/world-deps-host-visible-hardening/WDH0-spec.md"
         },
         {
           "id": "WDH1",
-          "spec": "docs/project_management/next/world-deps-host-visible-hardening/WDH1-spec.md"
+          "spec": "docs/project_management/packs/active/world-deps-host-visible-hardening/WDH1-spec.md"
         },
         {
           "id": "WDH2",
-          "spec": "docs/project_management/next/world-deps-host-visible-hardening/WDH2-spec.md"
+          "spec": "docs/project_management/packs/active/world-deps-host-visible-hardening/WDH2-spec.md"
         },
         {
           "id": "WDH3",
-          "spec": "docs/project_management/next/world-deps-host-visible-hardening/WDH3-spec.md"
+          "spec": "docs/project_management/packs/active/world-deps-host-visible-hardening/WDH3-spec.md"
         }
       ],
       "notes": [
@@ -504,25 +504,25 @@
       "id": "world_process_exec_tracing_parity",
       "title": "World process exec/exit tracing parity",
       "branch": "feat/world-process-exec-tracing-parity",
-      "directory": "docs/project_management/next/world_process_exec_tracing_parity",
-      "plan": "docs/project_management/next/world_process_exec_tracing_parity/plan.md",
+      "directory": "docs/project_management/packs/active/world_process_exec_tracing_parity",
+      "plan": "docs/project_management/packs/active/world_process_exec_tracing_parity/plan.md",
       "status": "not_started",
       "sequence": [
         {
           "id": "WPEP0",
-          "spec": "docs/project_management/next/world_process_exec_tracing_parity/WPEP0-spec.md"
+          "spec": "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP0-spec.md"
         },
         {
           "id": "WPEP1",
-          "spec": "docs/project_management/next/world_process_exec_tracing_parity/WPEP1-spec.md"
+          "spec": "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP1-spec.md"
         },
         {
           "id": "WPEP2",
-          "spec": "docs/project_management/next/world_process_exec_tracing_parity/WPEP2-spec.md"
+          "spec": "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP2-spec.md"
         },
         {
           "id": "WPEP3",
-          "spec": "docs/project_management/next/world_process_exec_tracing_parity/WPEP3-spec.md"
+          "spec": "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP3-spec.md"
         }
       ],
       "notes": [
@@ -628,13 +628,13 @@
       "id": "warn_config_global_show_workspace_overrides",
       "title": "Warn on config global show when workspace config overrides",
       "branch": "feat/warn-config-global-show-workspace-overrides",
-      "directory": "docs/project_management/next/warn-config-global-show-workspace-overrides",
-      "plan": "docs/project_management/next/warn-config-global-show-workspace-overrides/plan.md",
+      "directory": "docs/project_management/packs/active/warn-config-global-show-workspace-overrides",
+      "plan": "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/plan.md",
       "status": "not_started",
       "sequence": [
         {
           "id": "C0",
-          "spec": "docs/project_management/next/warn-config-global-show-workspace-overrides/C0-spec.md"
+          "spec": "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/C0-spec.md"
         }
       ],
       "notes": [
@@ -681,17 +681,17 @@
       "id": "agent_hub_concurrent_execution_output_routing",
       "title": "Agent hub concurrent execution output routing",
       "branch": "feat/agent-hub-concurrent-execution-output-routing",
-      "directory": "docs/project_management/next/agent-hub-concurrent-execution-output-routing",
-      "plan": "docs/project_management/next/agent-hub-concurrent-execution-output-routing/plan.md",
+      "directory": "docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing",
+      "plan": "docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/plan.md",
       "status": "not_started",
       "sequence": [
         {
           "id": "OR0",
-          "spec": "docs/project_management/next/agent-hub-concurrent-execution-output-routing/OR0-spec.md"
+          "spec": "docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/OR0-spec.md"
         },
         {
           "id": "OR1",
-          "spec": "docs/project_management/next/agent-hub-concurrent-execution-output-routing/OR1-spec.md"
+          "spec": "docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/OR1-spec.md"
         }
       ],
       "notes": [
@@ -705,17 +705,17 @@
       "id": "llm_and_agent_config_policy_surface",
       "title": "LLM and agent config/policy surface",
       "branch": "feat/llm-and-agent-config-policy-surface",
-      "directory": "docs/project_management/next/llm_and_agent_config_policy_surface",
-      "plan": "docs/project_management/next/llm_and_agent_config_policy_surface/plan.md",
+      "directory": "docs/project_management/packs/active/llm_and_agent_config_policy_surface",
+      "plan": "docs/project_management/packs/active/llm_and_agent_config_policy_surface/plan.md",
       "status": "not_started",
       "sequence": [
         {
           "id": "LACP0",
-          "spec": "docs/project_management/next/llm_and_agent_config_policy_surface/LACP0-spec.md"
+          "spec": "docs/project_management/packs/active/llm_and_agent_config_policy_surface/LACP0-spec.md"
         },
         {
           "id": "LACP1",
-          "spec": "docs/project_management/next/llm_and_agent_config_policy_surface/LACP1-spec.md"
+          "spec": "docs/project_management/packs/active/llm_and_agent_config_policy_surface/LACP1-spec.md"
         }
       ],
       "notes": [

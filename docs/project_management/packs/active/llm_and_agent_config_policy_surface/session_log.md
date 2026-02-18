@@ -1,0 +1,72 @@
+## START — 2026-02-15T03:13:03Z — planning — llm_and_agent_config_policy_surface pack completion
+- Feature: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/`
+- Branch: `testing`
+- Goal: Produce an execution-ready Planning Pack for `llm_and_agent_config_policy_surface` with zero ambiguity and triad execution compatibility.
+- Inputs to read end-to-end:
+  - `docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md`
+  - `docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md`
+  - `docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md`
+  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+  - `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`
+  - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
+  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+  - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
+  - `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`
+  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
+  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/spec_manifest.md`
+  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/impact_map.md`
+  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/plan.md`
+  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/tasks.json`
+  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/ci_checkpoint_plan.md`
+  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/contract.md`
+  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/SCHEMA.md`
+  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/decision_register.md`
+  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/LACP0-spec.md`
+  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/LACP1-spec.md`
+  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/manual_testing_playbook.md`
+  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/smoke/_core.sh`
+  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/smoke/linux-smoke.sh`
+  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/smoke/macos-smoke.sh`
+  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/smoke/windows-smoke.ps1`
+  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/kickoff_prompts/README.md`
+  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/kickoff_prompts/*.md`
+- Commands planned (if any):
+  - `jq -e . docs/project_management/packs/active/llm_and_agent_config_policy_surface/tasks.json >/dev/null`
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null`
+  - `make planning-lint FEATURE_DIR="docs/project_management/packs/active/llm_and_agent_config_policy_surface"`
+  - `make planning-validate FEATURE_DIR="docs/project_management/packs/active/llm_and_agent_config_policy_surface"`
+  - `make adr-fix ADR="docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md"`
+
+## END — 2026-02-15T03:20:45Z — planning — llm_and_agent_config_policy_surface pack completion
+- Summary of changes (exhaustive):
+  - Added required Planning Pack artifacts: `session_log.md` and `quality_gate_report.md` (multi-pass; final `RECOMMENDATION: ACCEPT`).
+  - Updated `docs/project_management/next/sequencing.json` to include the `llm_and_agent_config_policy_surface` sprint entry and slice specs.
+  - Removed ambiguity-word usage (`could`) from `decision_register.md`.
+  - Fixed `spec_manifest.md` required-docs section to avoid backticked placeholder/example tokens and to ensure every required path exists.
+  - Regenerated ADR executive summary hashes for referenced ADRs so mechanical lint passes:
+    - `ADR-0027-llm-and-agent-config-policy-surface.md`
+    - `ADR-0029-host-event-bus-and-router-daemon.md`
+- Files created/modified:
+  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/session_log.md`
+  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/quality_gate_report.md`
+  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/decision_register.md`
+  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/spec_manifest.md`
+  - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
+  - `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md`
+- Rubric checks run (with results):
+  - `make adr-fix ADR="docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md"` → `0` → hash updated and verified
+  - `make adr-fix ADR="docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md"` → `0` → hash updated and verified
+  - `make planning-lint FEATURE_DIR="docs/project_management/packs/active/llm_and_agent_config_policy_surface"` → `0` → pass
+  - `make planning-validate FEATURE_DIR="docs/project_management/packs/active/llm_and_agent_config_policy_surface"` → `0` → pass
+- Sequencing alignment:
+  - `sequencing.json` reviewed: `YES`
+  - Changes required: Added `llm_and_agent_config_policy_surface` sprint entry with slice specs `LACP0` and `LACP1`.
+- Blockers:
+  - `NONE`
+- Next steps:
+  - LACP0 triad executes: `LACP0-code`, `LACP0-test`, `LACP0-integ`.
+  - LACP1 triad executes: `LACP1-code`, `LACP1-test`, then boundary integration via `LACP1-integ-core` → `CP1-ci-checkpoint` → `LACP1-integ-linux` + `LACP1-integ-macos` → `LACP1-integ`.

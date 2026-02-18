@@ -13,7 +13,7 @@ Example:
 Notes:
   - Everything before `--` is passed to Phase 1.
   - Everything after `--` is passed to Phase 2.
-  - Phase 2 always receives `--feature-dir docs/project_management/next/<feature>` based on Phase 1 output.
+  - Phase 2 always receives `--feature-dir docs/project_management/packs/active/<feature>` based on Phase 1 output.
 USAGE
 }
 
@@ -58,4 +58,3 @@ if [[ -z "${feature_dir}" ]]; then
 fi
 
 scripts/e2e/triad_e2e_phase2.sh --feature-dir "${feature_dir}" "${phase2_args[@]}"
-

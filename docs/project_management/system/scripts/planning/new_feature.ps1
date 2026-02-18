@@ -16,8 +16,11 @@ $ErrorActionPreference = "Stop"
 $repoRoot = (& git -C $PSScriptRoot rev-parse --show-toplevel).Trim()
 if (-not $repoRoot) { throw "ERROR: failed to locate repo root via git" }
 Set-Location $repoRoot
+$pmRootsJson = (& python3 scripts/planning/pm_paths.py print-roots) | Out-String
+$pmRoots = $pmRootsJson | ConvertFrom-Json
+if (-not $pmRoots.pm_packs_root) { throw "ERROR: pm_paths.py print-roots returned empty pm_packs_root" }
 
-$featureDir = Join-Path "docs/project_management/next" $Feature
+$featureDir = "$($pmRoots.pm_packs_root)/active/$Feature"
 $templatesDir = "docs/project_management/standards/templates"
 
 if (Test-Path -LiteralPath $featureDir) {

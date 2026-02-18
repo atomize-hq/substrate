@@ -19,7 +19,7 @@ Operational notes (important for correct orchestration):
   - In checkpointed packs, dispatch these gates from the orchestration checkout (repo root) at the planned checkpoint task (`CPk-ci-checkpoint`), not from each `X-integ-core` worktree.
 - Platform-fix tasks should begin by merging the `X-integ-core` task branch into their own branch before running smoke or making fixes.
 - Before any CI dispatch, run a **local behavioral smoke preflight** (fast fail) on the current platform when possible:
-  - Build `substrate` in the integration worktree, add `target/debug` to `PATH`, and run the matching feature-local smoke script from `docs/project_management/next/<feature>/smoke/` (or `"$FEATURE_DIR/smoke/"` if you set `FEATURE_DIR`).
+  - Build `substrate` in the integration worktree, add `target/debug` to `PATH`, and run the matching feature-local smoke script from `docs/project_management/packs/active/<feature>/smoke/` (legacy during migration: `docs/project_management/next/<feature>/smoke/`; or `"$FEATURE_DIR/smoke/"` if you set `FEATURE_DIR`).
   - This catches obvious smoke-script/behavior drift before burning runner time and creating throwaway branches.
 - At each CI checkpoint, validate cross-platform compile parity before Feature Smoke dispatch to avoid discovering macOS/Windows compilation breaks only after consuming self-hosted runner time:
   - `make ci-compile-parity CI_WORKFLOW_REF="$ORCH_BRANCH" CI_REMOTE=origin CI_CLEANUP=1` (dispatches CI Testing in `mode=compile-parity` via `scripts/ci/dispatch_ci_testing.sh`).

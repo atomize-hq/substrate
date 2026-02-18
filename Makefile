@@ -305,7 +305,7 @@ triad-test-checks:
 
 .PHONY: triad-task-start
 triad-task-start:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/active/<feature> (legacy: docs/project_management/next/<feature>)"; exit 2; fi
 	@if [ -z "$(TASK_ID)" ]; then echo "ERROR: set TASK_ID=<task-id>"; exit 2; fi
 	@set -euo pipefail; \
 	cmd="scripts/triad/task_start.sh --feature-dir \"$(FEATURE_DIR)\" --task-id \"$(TASK_ID)\""; \
@@ -319,10 +319,10 @@ triad-task-start:
 
 .PHONY: triad-task-start-pair
 triad-task-start-pair:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/active/<feature> (legacy: docs/project_management/next/<feature>)"; exit 2; fi
 	@if [ -z "$(SLICE_ID)" ] && ( [ -z "$(CODE_TASK_ID)" ] || [ -z "$(TEST_TASK_ID)" ] ); then \
-	  echo "ERROR: set SLICE_ID=<slice> OR set CODE_TASK_ID=<id> TEST_TASK_ID=<id>"; exit 2; \
-	fi
+		  echo "ERROR: set SLICE_ID=<slice> OR set CODE_TASK_ID=<id> TEST_TASK_ID=<id>"; exit 2; \
+		fi
 	@set -euo pipefail; \
 	cmd="scripts/triad/task_start_pair.sh --feature-dir \"$(FEATURE_DIR)\""; \
 	if [ -n "$(SLICE_ID)" ]; then cmd="$$cmd --slice-id \"$(SLICE_ID)\""; fi; \
@@ -337,7 +337,7 @@ triad-task-start-pair:
 
 .PHONY: triad-task-start-complete
 triad-task-start-complete:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/active/<feature> (legacy: docs/project_management/next/<feature>)"; exit 2; fi
 	@if [ -z "$(SLICE_ID)" ]; then echo "ERROR: set SLICE_ID=<slice>"; exit 2; fi
 	@set -euo pipefail; \
 	cmd="scripts/triad/task_start_complete.sh --feature-dir \"$(FEATURE_DIR)\" --slice-id \"$(SLICE_ID)\""; \
@@ -349,7 +349,7 @@ triad-task-start-complete:
 
 .PHONY: triad-orch-ensure
 triad-orch-ensure:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/active/<feature> (legacy: docs/project_management/next/<feature>)"; exit 2; fi
 	@set -euo pipefail; \
 	cmd="scripts/triad/orch_ensure.sh --feature-dir \"$(FEATURE_DIR)\""; \
 	if [ -n "$(FROM_BRANCH)" ]; then cmd="$$cmd --from-branch \"$(FROM_BRANCH)\""; fi; \
@@ -358,7 +358,7 @@ triad-orch-ensure:
 
 .PHONY: triad-task-start-platform-fixes
 triad-task-start-platform-fixes:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/active/<feature> (legacy: docs/project_management/next/<feature>)"; exit 2; fi
 	@if [ -z "$(SLICE_ID)" ]; then echo "ERROR: set SLICE_ID=<slice>"; exit 2; fi
 	@if [ -z "$(PLATFORMS)" ]; then echo "ERROR: set PLATFORMS=linux,macos,windows[,wsl]"; exit 2; fi
 	@set -euo pipefail; \
@@ -374,7 +374,7 @@ triad-task-start-platform-fixes:
 
 .PHONY: triad-task-start-platform-fixes-from-smoke
 triad-task-start-platform-fixes-from-smoke:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/active/<feature> (legacy: docs/project_management/next/<feature>)"; exit 2; fi
 	@if [ -z "$(SLICE_ID)" ]; then echo "ERROR: set SLICE_ID=<slice>"; exit 2; fi
 	@if [ -z "$(SMOKE_RUN_ID)" ]; then echo "ERROR: set SMOKE_RUN_ID=<gh-run-id>"; exit 2; fi
 	@set -euo pipefail; \
@@ -388,7 +388,7 @@ triad-task-start-platform-fixes-from-smoke:
 
 .PHONY: triad-task-start-integ-final
 triad-task-start-integ-final:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/active/<feature> (legacy: docs/project_management/next/<feature>)"; exit 2; fi
 	@if [ -z "$(SLICE_ID)" ]; then echo "ERROR: set SLICE_ID=<slice>"; exit 2; fi
 	@set -euo pipefail; \
 	cmd="scripts/triad/task_start_integ_final.sh --feature-dir \"$(FEATURE_DIR)\" --slice-id \"$(SLICE_ID)\""; \
@@ -401,7 +401,7 @@ triad-task-start-integ-final:
 
 .PHONY: triad-mark-noop-platform-fixes-completed
 triad-mark-noop-platform-fixes-completed:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/active/<feature> (legacy: docs/project_management/next/<feature>)"; exit 2; fi
 	@if [ -z "$(SLICE_ID)" ]; then echo "ERROR: set SLICE_ID=<slice>"; exit 2; fi
 	@set -euo pipefail; \
 	cmd="scripts/triad/mark_noop_platform_fixes_completed.sh --feature-dir \"$(FEATURE_DIR)\" --slice-id \"$(SLICE_ID)\""; \
@@ -423,7 +423,7 @@ triad-task-finish:
 
 .PHONY: triad-feature-cleanup
 triad-feature-cleanup:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/active/<feature> (legacy: docs/project_management/next/<feature>)"; exit 2; fi
 	@set -euo pipefail; \
 	cmd="scripts/triad/feature_cleanup.sh --feature-dir \"$(FEATURE_DIR)\""; \
 	if [ "$(REMOVE_WORKTREES)" = "1" ]; then cmd="$$cmd --remove-worktrees"; fi; \

@@ -32,7 +32,7 @@ Use this rule:
 - Decision Register: **all** architectural decisions recorded as exactly two options (A/B) with explicit tradeoffs and one selection.
 
 If the work has more than one meaningful decision, the Planning Pack must include:
-- `docs/project_management/next/<feature>/decision_register.md`
+- `docs/project_management/packs/active/<feature>/decision_register.md` (legacy during migration: `docs/project_management/next/<feature>/decision_register.md`)
 
 The ADR must link to that decision register and must not duplicate decision entries.
 
@@ -41,7 +41,7 @@ If the Planning Pack uses `contract.md` (see `docs/project_management/system/sta
 ## Accepted ADR requirements (non-negotiable)
 
 If an ADR status is `Accepted`, it must include:
-- the exact feature directory path(s) under `docs/project_management/next/<feature>/`, and
+- the exact feature directory path(s) under `docs/project_management/packs/active/<feature>/` (legacy during migration: `docs/project_management/next/<feature>/`), and
 - the intended branch name(s) (e.g., `feat/<feature>`).
 
 ## Executive Summary (Operator) (required)
@@ -70,7 +70,7 @@ Every ADR must include all sections below. Every behavior statement must be sing
 - Status: `Draft` or `Accepted`
 - Date (UTC)
 - Owner(s)
-- Feature directory path under `docs/project_management/next/<feature>/`
+- Feature directory path under `docs/project_management/packs/active/<feature>/` (legacy during migration: `docs/project_management/next/<feature>/`)
 - Related documents (links to plan/specs/decision register/sequencing)
 
 ### Required sections
@@ -145,7 +145,7 @@ If both a cross-cutting ADR and a feature-local ADR exist, the cross-cutting ADR
 - Owner(s): <names/roles>
 
 ## Scope
-- Feature directory: `docs/project_management/next/<feature>/`
+- Feature directory: `docs/project_management/packs/active/<feature>/` (legacy during migration: `docs/project_management/next/<feature>/`)
 - Sequencing spine: `docs/project_management/packs/sequencing.json` (legacy mirror during migration: `docs/project_management/next/sequencing.json`)
 - Standards:
   - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
@@ -153,14 +153,14 @@ If both a cross-cutting ADR and a feature-local ADR exist, the cross-cutting ADR
   - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
 
 ## Related Docs
-- Plan: `docs/project_management/next/<feature>/plan.md`
-- Tasks: `docs/project_management/next/<feature>/tasks.json`
-- Spec manifest: `docs/project_management/next/<feature>/spec_manifest.md`
+- Plan: `docs/project_management/packs/active/<feature>/plan.md`
+- Tasks: `docs/project_management/packs/active/<feature>/tasks.json`
+- Spec manifest: `docs/project_management/packs/active/<feature>/spec_manifest.md`
 - Specs: <list spec paths>
-- Contract (if present): `docs/project_management/next/<feature>/contract.md`
-- Decision Register: `docs/project_management/next/<feature>/decision_register.md` (if required)
-- Impact Map: `docs/project_management/next/<feature>/impact_map.md` (if required)
-- Manual Playbook: `docs/project_management/next/<feature>/manual_testing_playbook.md` (if required)
+- Contract (if present): `docs/project_management/packs/active/<feature>/contract.md`
+- Decision Register: `docs/project_management/packs/active/<feature>/decision_register.md` (if required)
+- Impact Map: `docs/project_management/packs/active/<feature>/impact_map.md` (if required)
+- Manual Playbook: `docs/project_management/packs/active/<feature>/manual_testing_playbook.md` (if required)
 
 ## Executive Summary (Operator)
 
@@ -238,12 +238,12 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
 - Integration tests: <where and what>
 
 ### Manual validation
-- Manual playbook: `docs/project_management/next/<feature>/manual_testing_playbook.md`
+- Manual playbook: `docs/project_management/packs/active/<feature>/manual_testing_playbook.md`
 
 ### Smoke scripts
-- Linux: `docs/project_management/next/<feature>/smoke/linux-smoke.sh`
-- macOS: `docs/project_management/next/<feature>/smoke/macos-smoke.sh`
-- Windows: `docs/project_management/next/<feature>/smoke/windows-smoke.ps1`
+- Linux: `docs/project_management/packs/active/<feature>/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/packs/active/<feature>/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/packs/active/<feature>/smoke/windows-smoke.ps1`
 
 ## Rollout / Backwards Compatibility
 - Policy: greenfield breaking is allowed
@@ -251,6 +251,6 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
 
 ## Decision Summary
 - Decision Register entries:
-  - `docs/project_management/next/<feature>/decision_register.md`:
+  - `docs/project_management/packs/active/<feature>/decision_register.md`:
     - DR-0001, DR-0002, …
 ```

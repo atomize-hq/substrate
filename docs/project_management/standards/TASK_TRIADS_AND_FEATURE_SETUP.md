@@ -10,7 +10,7 @@ This document explains, step by step, how to create a new feature directory, def
 - Test agent: tests only (plus minimal test-only helpers/fixtures/mocks if absolutely needed). No production code. Runs `cargo fmt` and the targeted tests they add/touch; not responsible for full suite.
   - Passing is owned by integration; test-only branches may be red until the code branch lands, but tests must compile and fail deterministically for spec-driven reasons.
 - Integration agent: merges code+tests, resolves drift to the spec, ensures behavior matches the spec, runs `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, all relevant tests, and finishes with `make integ-checks` (required). They own the final green state.
-- Execution triads must not begin until the Planning Pack has a quality gate report with `RECOMMENDATION: ACCEPT` at `docs/project_management/next/<feature>/quality_gate_report.md` (see `docs/project_management/system/prompts/planning/quality_gate_reviewer.md`).
+- Execution triads must not begin until the Planning Pack has a quality gate report with `RECOMMENDATION: ACCEPT` at `docs/project_management/packs/active/<feature>/quality_gate_report.md` (legacy during migration: `docs/project_management/next/<feature>/quality_gate_report.md`; see `docs/project_management/system/prompts/planning/quality_gate_reviewer.md`).
 - If the feature opts into execution gates (`tasks.json` meta: `execution_gates: true`), triads must not begin until the execution preflight gate is completed (see `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`).
 - Docs/tasks/session log edits happen **only** on the orchestration branch (never in worktrees).
 - Specs are the single source of truth; integration reconciles code/tests to the spec.
@@ -50,7 +50,7 @@ When tasks are started via triad automation (preferred) and agents run inside an
 
 ## Creating a New Feature Directory (from scratch)
 1. Choose orchestration branch name (e.g., `feat/<feature>`). Create/pull it.
-2. Create directory: `docs/project_management/next/<feature>/`.
+2. Create directory: `docs/project_management/packs/active/<feature>/` (legacy during migration: `docs/project_management/next/<feature>/`).
 3. Add files:
    - `plan.md` (runbook/guardrails/triad overview).
    - `tasks.json` (all tasks with ids, worktrees, deps, prompts).
@@ -92,7 +92,7 @@ When tasks are started via triad automation (preferred) and agents run inside an
   "phase": "<SLICE_ID>",
   "status": "pending",
   "description": "Implement <SLICE_ID> spec (production code only).",
-  "references": ["docs/project_management/next/<feature>/<SLICE_ID>-spec.md"],
+  "references": ["docs/project_management/packs/active/<feature>/<SLICE_ID>-spec.md"],
   "ac_ids": ["AC-<SLICE_ID>-01", "AC-<SLICE_ID>-02", "AC-<SLICE_ID>-03"],
   "acceptance_criteria": [
     "Implements the behaviors required by ac_ids (see <SLICE_ID>-spec.md)"
@@ -100,7 +100,7 @@ When tasks are started via triad automation (preferred) and agents run inside an
   "start_checklist": [
     "Checkout feat/<feature>, pull ff-only",
     "Set status to in_progress, log START, commit docs",
-    "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/<feature>\" SLICE_ID=\"<SLICE_ID>\""
+    "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/active/<feature>\" SLICE_ID=\"<SLICE_ID>\""
   ],
   "end_checklist": [
     "Run fmt/clippy",
@@ -111,7 +111,7 @@ When tasks are started via triad automation (preferred) and agents run inside an
   "git_branch": "<feature>-<slice>-code",
   "required_make_targets": ["triad-code-checks"],
   "integration_task": "<SLICE_ID>-integ",
-  "kickoff_prompt": "docs/project_management/next/<feature>/kickoff_prompts/<SLICE_ID>-code.md",
+  "kickoff_prompt": "docs/project_management/packs/active/<feature>/kickoff_prompts/<SLICE_ID>-code.md",
   "depends_on": ["<PREV_SLICE_ID>-integ"],
   "concurrent_with": ["<SLICE_ID>-test"]
 }
@@ -139,7 +139,7 @@ Purpose:
 
 Mechanics:
 - Use the task `F0-exec-preflight` (type `ops`) and fill:
-  - `docs/project_management/next/<feature>/execution_preflight_report.md`
+  - `docs/project_management/packs/active/<feature>/execution_preflight_report.md`
 - Standard:
   - `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
 
@@ -150,7 +150,7 @@ Purpose:
 
 Mechanics:
 - At the end of `<triad>-integ`, fill:
-  - `docs/project_management/next/<feature>/<triad>-closeout_report.md`
+  - `docs/project_management/packs/active/<feature>/<triad>-closeout_report.md`
 - Standard:
   - `docs/project_management/standards/SLICE_CLOSEOUT_GATE_STANDARD.md`
 
@@ -169,25 +169,25 @@ Note: `make triad-task-start` / `make triad-task-finish` require an automation-e
 
 Start (all tasks):
 1. Ensure the orchestration branch exists and is checked out:
-   - Automation packs: `make triad-orch-ensure FEATURE_DIR="docs/project_management/next/<feature>"`
+  - Automation packs: `make triad-orch-ensure FEATURE_DIR="docs/project_management/packs/active/<feature>"`
    - Legacy packs: `git checkout <orchestration-branch> && git pull --ff-only`
 2. Read plan/tasks/session_log/spec/prompt.
 3. Set task status to `in_progress` in tasks.json.
 4. Add START entry to session_log.md; commit docs (`docs: start <task-id>`).
 5. Create task branch + worktrees via the task runner:
-   - Code+test (always parallel): `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>"`
-   - Integration (single task): `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="<task-id>"`
+  - Code+test (always parallel): `make triad-task-start-pair FEATURE_DIR="docs/project_management/packs/active/<feature>" SLICE_ID="<slice>"`
+  - Integration (single task): `make triad-task-start FEATURE_DIR="docs/project_management/packs/active/<feature>" TASK_ID="<task-id>"`
 6. Do not edit planning docs inside the worktree.
 
 Optional: also launch Codex headless for both code+test tasks:
 - Preferred (for reliable artifact reporting): `docs/project_management/system/prompts/triad_wrappers/triad_wrapper.md`
-- `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1`
+- `make triad-task-start-pair FEATURE_DIR="docs/project_management/packs/active/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1`
 
 Optional: start only the failing platform-fix integration tasks (after smoke results are known):
-- `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>" SMOKE_RUN_ID="<run-id>" LAUNCH_CODEX=1`
+- `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="docs/project_management/packs/active/<feature>" SLICE_ID="<slice>" SMOKE_RUN_ID="<run-id>" LAUNCH_CODEX=1`
 
 Optional: start the final aggregator integration task for a slice (requires its deps are completed):
-- `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1`
+- `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/packs/active/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1`
   - Note: the final aggregator task id is `<slice>-integ` (the command name contains `integ-final`).
 
 End (code/test):
@@ -209,7 +209,7 @@ End (integration):
 
 ### Feature cleanup (worktree retention model)
 Worktrees are removed only by a feature-level cleanup task (recommended id: `FZ-feature-cleanup`) using:
-- `make triad-feature-cleanup FEATURE_DIR="docs/project_management/next/<feature>" REMOVE_WORKTREES=1 PRUNE_LOCAL=1`
+- `make triad-feature-cleanup FEATURE_DIR="docs/project_management/packs/active/<feature>" REMOVE_WORKTREES=1 PRUNE_LOCAL=1`
 
 Cleanup consumes the deterministic registry created by `task_start`:
 - `<git-common-dir>/triad/features/<feature>/worktrees.json`
@@ -227,8 +227,8 @@ Optional flags (when needed):
 - `--json` (emit JSONL events to stdout; redirect to a file for auditability)
 
 Automation wrapper:
-- `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
-- `make triad-task-start-complete FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>"` (code+test in parallel, then runs the integration task wired via `<slice>-code.integration_task`; writes wrapper summary; does not run CI checkpoint ops tasks)
+- `make triad-task-start FEATURE_DIR="docs/project_management/packs/active/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
+- `make triad-task-start-complete FEATURE_DIR="docs/project_management/packs/active/<feature>" SLICE_ID="<slice>"` (code+test in parallel, then runs the integration task wired via `<slice>-code.integration_task`; writes wrapper summary; does not run CI checkpoint ops tasks)
 
 ## Role Command Requirements
 - Code: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; optional targeted/manual sanity checks allowed but not required; no unit/integration suite requirement.

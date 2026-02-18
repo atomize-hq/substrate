@@ -15,7 +15,7 @@ Purpose:
     - finish first-slice code + test (commit to their task branches; no merge to orchestration)
 
 Options:
-  --feature <name>            Feature dir name under docs/project_management/next/ (default: e2e-triad-smoke-<utc>)
+  --feature <name>            Feature dir name under docs/project_management/packs/active/ (default: e2e-triad-smoke-<utc>)
   --remote <name>             Git remote for pushes/CI (default: origin)
   --runner-kind <kind>        github-hosted|self-hosted (default: self-hosted)
   --run-wsl                   Include WSL coverage in smoke (requires self-hosted runners)
@@ -247,7 +247,7 @@ REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || die "Not in a git re
 cd "${REPO_ROOT}"
 
 ORCH_BRANCH="feat/${FEATURE}"
-FEATURE_DIR="docs/project_management/next/${FEATURE}"
+FEATURE_DIR="docs/project_management/packs/active/${FEATURE}"
 FEATURE_DIR_ABS="$(python_abs_path "${FEATURE_DIR}")"
 
 SLICE_PREFIX="E2E"

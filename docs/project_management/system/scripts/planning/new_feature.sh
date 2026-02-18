@@ -10,7 +10,8 @@ Example:
   scripts/planning/new_feature.sh --feature world-sync --decision-heavy --cross-platform
 
 Creates:
-  docs/project_management/next/<feature>/
+  docs/project_management/packs/active/<feature>/   (canonical)
+  docs/project_management/next/<feature>/           (legacy compatibility during migration)
     plan.md
     tasks.json
     session_log.md
@@ -175,7 +176,19 @@ if [[ "${CROSS_PLATFORM}" -eq 1 ]]; then
     fi
 fi
 
-FEATURE_DIR="docs/project_management/next/${FEATURE}"
+pm_roots_json="$(python3 scripts/planning/pm_paths.py print-roots 2>/dev/null)" || {
+    echo "ERROR: failed to resolve PM roots (pm_paths.py print-roots)" >&2
+    exit 2
+}
+PM_PACKS_ROOT="$(
+    python3 -c 'import json,sys; print(json.load(sys.stdin)["pm_packs_root"])' <<<"${pm_roots_json}" 2>/dev/null || true
+)"
+if [[ -z "${PM_PACKS_ROOT}" ]]; then
+    echo "ERROR: pm_paths.py print-roots returned empty pm_packs_root" >&2
+    exit 2
+fi
+
+FEATURE_DIR="${PM_PACKS_ROOT%/}/active/${FEATURE}"
 TEMPLATES_DIR="docs/project_management/standards/templates"
 ORCH_BRANCH="feat/${FEATURE}"
 
