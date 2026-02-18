@@ -164,9 +164,10 @@ def _validate_execution_gates(
             slice_ids.add(task_id[: -len("-integ")])
 
     for slice_id in sorted(slice_ids):
-        closeout_report = os.path.join(feature_dir, f"{slice_id}-closeout_report.md")
-        if not os.path.isfile(closeout_report):
-            _error(errors, f"{path}: meta.execution_gates=true requires {closeout_report!r} to exist")
+        closeout_legacy = os.path.join(feature_dir, f"{slice_id}-closeout_report.md")
+        closeout_slices = os.path.join(feature_dir, "slices", slice_id, f"{slice_id}-closeout_report.md")
+        if not os.path.isfile(closeout_legacy) and not os.path.isfile(closeout_slices):
+            _error(errors, f"{path}: meta.execution_gates=true requires {closeout_legacy!r} or {closeout_slices!r} to exist")
 
         final_id = f"{slice_id}-integ"
         final_task = tasks_by_id.get(final_id)
@@ -414,6 +415,7 @@ def _validate_references(
     all_task_ids: Set[str] = {task.get("id") for task in tasks if isinstance(task.get("id"), str)}
     tasks_by_id: Dict[str, Dict[str, Any]] = {task["id"]: task for task in tasks if isinstance(task.get("id"), str)}
     kickoff_dir = os.path.abspath(os.path.join(feature_dir, "kickoff_prompts"))
+    slices_root = os.path.abspath(os.path.join(feature_dir, "slices"))
 
     for index, task in enumerate(tasks):
         prefix = f"{path}:tasks[{index}]({task.get('id', '<missing id>')})"
@@ -424,8 +426,26 @@ def _validate_references(
                 _error(errors, f"{prefix}.kickoff_prompt: file does not exist: {kickoff_prompt!r}")
             else:
                 kickoff_prompt_abs = os.path.abspath(kickoff_prompt)
-                if os.path.commonpath([kickoff_prompt_abs, kickoff_dir]) != kickoff_dir:
-                    _error(errors, f"{prefix}.kickoff_prompt: must live under feature_dir/kickoff_prompts: {kickoff_prompt!r}")
+                under_feature_kickoff = os.path.commonpath([kickoff_prompt_abs, kickoff_dir]) == kickoff_dir
+                under_slice_kickoff = False
+
+                if not under_feature_kickoff:
+                    try:
+                        under_slices_root = os.path.commonpath([kickoff_prompt_abs, slices_root]) == slices_root
+                    except ValueError:
+                        under_slices_root = False
+                    if under_slices_root:
+                        rel = os.path.relpath(kickoff_prompt_abs, slices_root)
+                        parts = [p for p in rel.replace("\\", "/").split("/") if p]
+                        if len(parts) >= 3 and parts[1] == "kickoff_prompts":
+                            under_slice_kickoff = True
+
+                if not under_feature_kickoff and not under_slice_kickoff:
+                    _error(
+                        errors,
+                        f"{prefix}.kickoff_prompt: must live under feature_dir/kickoff_prompts or "
+                        f"feature_dir/slices/<slice>/kickoff_prompts: {kickoff_prompt!r}",
+                    )
 
         for dep in task.get("depends_on", []):
             if dep in all_task_ids or dep in external_task_ids:
@@ -869,7 +889,11 @@ def validate_tasks_json(feature_dir: str) -> Tuple[List[ValidationError], str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate Planning Pack tasks.json invariants.")
-    parser.add_argument("--feature-dir", required=True, help="Feature Planning Pack directory under docs/project_management/next/...")
+    parser.add_argument(
+        "--feature-dir",
+        required=True,
+        help="Feature Planning Pack directory under docs/project_management/(next|packs/<bucket>)/<feature>",
+    )
     args = parser.parse_args()
 
     feature_dir = args.feature_dir.rstrip("/").rstrip("\\")

@@ -20,7 +20,7 @@ Spec templates:
 - `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/ci_checkpoint_plan.md` — cross-platform CI cadence (automation + cross-platform)
 - `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/plan.md` — execution runbook
 - `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/tasks.json` — triad task graph + acceptance criteria
-- `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/C0-spec.md` — slice behavior + acceptance criteria
+- `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/C0-spec.md` — slice behavior + acceptance criteria
 - `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/contract.md` — CLI contract (stdout/stderr/exit codes) + path semantics
 - `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/decision_register.md` — A/B decisions and selections
 - `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/manual_testing_playbook.md` — manual validation (authoritative)
@@ -40,7 +40,7 @@ Spec templates:
 | Platform parity | `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/contract.md` | note emits a platform-native path display for `<workspace_root>/.substrate/workspace.yaml` |
 | Validation (manual) | `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/manual_testing_playbook.md` | deterministic cases and expected outputs |
 | Validation (automation smoke) | `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/smoke/*` | smoke mirrors manual cases and asserts stdout is uncontaminated |
-| Slice acceptance | `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/C0-spec.md` | exact trigger conditions and invariants for the new note |
+| Slice acceptance | `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/C0-spec.md` | exact trigger conditions and invariants for the new note |
 
 ## Determinism checklist (must be satisfied before quality gate)
 

@@ -181,14 +181,17 @@ if ($adrPaths.Count -gt 0) {
 Write-Host "-- Kickoff prompt sentinel"
 $sentinel = "Do not edit planning docs inside the worktree\."
 $missing = @()
-Get-ChildItem -LiteralPath (Join-Path $FeatureDir "kickoff_prompts") -Filter *.md | Where-Object { $_.Name -ne "README.md" } | ForEach-Object {
-    $content = Get-Content -LiteralPath $_.FullName -Raw
-    if ($content -notmatch $sentinel) {
-        $missing += $_.FullName
+Get-ChildItem -LiteralPath $FeatureDir -Recurse -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq "kickoff_prompts" } | ForEach-Object {
+    $kickoffDir = $_.FullName
+    Get-ChildItem -LiteralPath $kickoffDir -Filter *.md -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne "README.md" } | ForEach-Object {
+        $content = Get-Content -LiteralPath $_.FullName -Raw
+        if ($content -notmatch $sentinel) {
+            $missing += ("Missing sentinel in kickoff prompt: " + $_.FullName)
+        }
     }
 }
 if ($missing.Count -gt 0) {
-    throw ("Missing sentinel in kickoff prompts:`n" + ($missing -join "`n"))
+    throw ($missing -join "`n")
 }
 
 Write-Host "-- Manual playbook smoke linkage (if present)"

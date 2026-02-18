@@ -35,7 +35,7 @@
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/execution_preflight_report.md",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/plan.md",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/spec_manifest.md",
-        "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/C0-spec.md",
+        "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/C0-spec.md",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/contract.md",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/decision_register.md (DR-0001, DR-0002, DR-0003)",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/impact_map.md",
@@ -74,7 +74,7 @@
       "references": [
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/plan.md",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/spec_manifest.md",
-        "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/C0-spec.md",
+        "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/C0-spec.md",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/contract.md",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/decision_register.md (DR-0001, DR-0002, DR-0003)",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/impact_map.md",
@@ -110,7 +110,7 @@
       ],
       "worktree": "wt/warn-config-global-show-workspace-overrides-c0-code",
       "integration_task": "C0-integ-core",
-      "kickoff_prompt": "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/kickoff_prompts/C0-code.md",
+      "kickoff_prompt": "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/kickoff_prompts/C0-code.md",
       "depends_on": [
         "F0-exec-preflight"
       ],
@@ -132,7 +132,7 @@
       "references": [
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/plan.md",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/spec_manifest.md",
-        "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/C0-spec.md",
+        "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/C0-spec.md",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/contract.md",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/decision_register.md (DR-0001, DR-0002, DR-0003)",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/impact_map.md",
@@ -167,7 +167,7 @@
       ],
       "worktree": "wt/warn-config-global-show-workspace-overrides-c0-test",
       "integration_task": "C0-integ-core",
-      "kickoff_prompt": "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/kickoff_prompts/C0-test.md",
+      "kickoff_prompt": "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/kickoff_prompts/C0-test.md",
       "depends_on": [
         "F0-exec-preflight"
       ],
@@ -189,7 +189,7 @@
       "references": [
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/plan.md",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/spec_manifest.md",
-        "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/C0-spec.md",
+        "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/C0-spec.md",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/contract.md",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/decision_register.md (DR-0001, DR-0002, DR-0003)",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/impact_map.md",
@@ -221,7 +221,7 @@
       ],
       "worktree": "wt/warn-config-global-show-workspace-overrides-c0-integ-core",
       "integration_task": "C0-integ-core",
-      "kickoff_prompt": "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/kickoff_prompts/C0-integ-core.md",
+      "kickoff_prompt": "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/kickoff_prompts/C0-integ-core.md",
       "depends_on": [
         "C0-code",
         "C0-test"
@@ -283,7 +283,7 @@
       "references": [
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/plan.md",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/spec_manifest.md",
-        "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/C0-spec.md",
+        "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/C0-spec.md",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/contract.md",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/decision_register.md (DR-0001, DR-0002, DR-0003)",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/impact_map.md",
@@ -313,7 +313,7 @@
       ],
       "worktree": "wt/warn-config-global-show-workspace-overrides-c0-integ-linux",
       "integration_task": "C0-integ-linux",
-      "kickoff_prompt": "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/kickoff_prompts/C0-integ-linux.md",
+      "kickoff_prompt": "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/kickoff_prompts/C0-integ-linux.md",
       "depends_on": [
         "C0-integ-core",
         "CP1-ci-checkpoint"
@@ -338,7 +338,7 @@
       "references": [
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/plan.md",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/spec_manifest.md",
-        "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/C0-spec.md",
+        "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/C0-spec.md",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/contract.md",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/decision_register.md (DR-0001, DR-0002, DR-0003)",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/impact_map.md",
@@ -368,7 +368,7 @@
       ],
       "worktree": "wt/warn-config-global-show-workspace-overrides-c0-integ-macos",
       "integration_task": "C0-integ-macos",
-      "kickoff_prompt": "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/kickoff_prompts/C0-integ-macos.md",
+      "kickoff_prompt": "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/kickoff_prompts/C0-integ-macos.md",
       "depends_on": [
         "C0-integ-core",
         "CP1-ci-checkpoint"
@@ -393,7 +393,7 @@
       "references": [
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/plan.md",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/spec_manifest.md",
-        "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/C0-spec.md",
+        "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/C0-spec.md",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/contract.md",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/decision_register.md (DR-0001, DR-0002, DR-0003)",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/impact_map.md",
@@ -423,7 +423,7 @@
       ],
       "worktree": "wt/warn-config-global-show-workspace-overrides-c0-integ-windows",
       "integration_task": "C0-integ-windows",
-      "kickoff_prompt": "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/kickoff_prompts/C0-integ-windows.md",
+      "kickoff_prompt": "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/kickoff_prompts/C0-integ-windows.md",
       "depends_on": [
         "C0-integ-core",
         "CP1-ci-checkpoint"
@@ -448,7 +448,7 @@
       "references": [
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/plan.md",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/spec_manifest.md",
-        "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/C0-spec.md",
+        "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/C0-spec.md",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/contract.md",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/decision_register.md (DR-0001, DR-0002, DR-0003)",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/impact_map.md",
@@ -492,7 +492,7 @@
       ],
       "worktree": "wt/warn-config-global-show-workspace-overrides-c0-integ",
       "integration_task": "C0-integ",
-      "kickoff_prompt": "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/kickoff_prompts/C0-integ.md",
+      "kickoff_prompt": "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/kickoff_prompts/C0-integ.md",
       "depends_on": [
         "C0-integ-core",
         "CP1-ci-checkpoint",
@@ -515,10 +515,10 @@
       "status": "pending",
       "description": "Close out the feature (documentation, closeout report, and cleanup).",
       "references": [
-        "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/C0-closeout_report.md",
+        "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/C0-closeout_report.md",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/plan.md",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/spec_manifest.md",
-        "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/C0-spec.md",
+        "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/C0-spec.md",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/contract.md",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/decision_register.md (DR-0001, DR-0002, DR-0003)",
         "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/impact_map.md",

@@ -220,12 +220,14 @@ fi
 
 echo "-- Kickoff prompt sentinel"
 missing=0
-while IFS= read -r -d '' f; do
-    if ! rg -q 'Do not edit planning docs inside the worktree\.' "$f"; then
-        echo "Missing sentinel in kickoff prompt: $f" >&2
-        missing=1
-    fi
-done < <(find "${FEATURE_DIR}/kickoff_prompts" -maxdepth 1 -type f -name '*.md' ! -name 'README.md' -print0)
+while IFS= read -r -d '' kickoff_dir; do
+    while IFS= read -r -d '' f; do
+        if ! rg -q 'Do not edit planning docs inside the worktree\.' "$f"; then
+            echo "Missing sentinel in kickoff prompt: $f" >&2
+            missing=1
+        fi
+    done < <(find "${kickoff_dir}" -maxdepth 1 -type f -name '*.md' ! -name 'README.md' -print0)
+done < <(find "${FEATURE_DIR}" -type d -name 'kickoff_prompts' -print0)
 if [[ "${missing}" -ne 0 ]]; then
     exit 1
 fi
