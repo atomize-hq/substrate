@@ -1,0 +1,23 @@
+version: 1
+name: nvm
+description: Node Version Manager installed under the Substrate world-deps prefix.
+runnable: true
+entrypoints: ["nvm"]
+
+# `nvm` is a bash function, so we expose it via a wrapper generated under:
+#   /var/lib/substrate/world-deps/bin/nvm
+wrappers:
+  - name: nvm
+    kind: bash_function
+    # Wrapper fields are treated as literal strings (no ${VAR} expansion).
+    bash_source: "/var/lib/substrate/world-deps/nvm/nvm.sh"
+    function: nvm
+
+install:
+  method: script
+  script_path: ../scripts/nvm.sh
+
+probe:
+  # The world may not source any user rcfiles; always source nvm explicitly.
+  command: "bash -lc 'source /var/lib/substrate/world-deps/nvm/nvm.sh && nvm --version'"
+

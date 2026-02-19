@@ -8,3 +8,7 @@ This directory is scaffolding: it is intended to hold the stable operator contra
 Existing related docs (top-level):
 - `docs/WORLD.md`
 
+## World Deps
+
+Operator documentation for `substrate world deps` lives under:
+- `docs/reference/world/deps/README.md`

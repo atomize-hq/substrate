@@ -8,3 +8,4 @@ Existing related docs (top-level):
 
 Additional internal docs:
 - `docs/internals/world/workspace_sync_filesystem_model.md`
+- `docs/internals/world/deps.md`

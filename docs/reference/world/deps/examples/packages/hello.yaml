@@ -1,0 +1,13 @@
+version: 1
+name: hello
+description: Minimal script-installed example that writes only to /var/lib/substrate/world-deps.
+runnable: true
+entrypoints: ["hello"]
+
+install:
+  method: script
+  script_path: ../scripts/hello.sh
+
+probe:
+  command: "hello"
+
