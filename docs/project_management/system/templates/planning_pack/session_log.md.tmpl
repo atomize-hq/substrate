@@ -16,7 +16,9 @@
   - `{{FEATURE_DIR}}/plan.md`
   - `{{FEATURE_DIR}}/tasks.json`
   - `{{FEATURE_DIR}}/session_log.md`
-  - `{{FEATURE_DIR}}/kickoff_prompts/`
+  - Kickoff prompts (as referenced by `{{FEATURE_DIR}}/tasks.json` `kickoff_prompt`):
+    - `{{FEATURE_DIR}}/kickoff_prompts/`
+    - `{{FEATURE_DIR}}/slices/<SLICE_ID>/kickoff_prompts/`
 - Rubric checks run (with results):
   - `jq -e . tasks.json` → `0` → `PASS`
 - Sequencing alignment:

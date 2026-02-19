@@ -9,7 +9,7 @@ Standard:
 - Feature directory: `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/`
 - `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/impact_map.md`
 - `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/spec_manifest.md`
-- Slice specs: `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/*-spec*.md`
+- Slice specs: see `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/spec_manifest.md` (slice specs live under `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/<SLICE_ID>/<SLICE_ID>-spec.md`).
 
 ## Operator rules
 - This plan is authoritative for CI cadence.

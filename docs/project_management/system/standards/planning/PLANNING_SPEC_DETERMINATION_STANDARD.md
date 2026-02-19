@@ -65,7 +65,8 @@ Scaffolding:
 Always create:
 - `plan.md` (overall execution runbook)
 - `tasks.json` (triad tasks)
-- One or more slice specs: `<SLICE_ID>-spec*.md` (and later slices as needed)
+- One or more slice specs (canonical): `slices/<SLICE_ID>/<SLICE_ID>-spec.md` (and later slices as needed)
+- Legacy (flat; only if explicitly chosen): `<SLICE_ID>-spec.md`
 
 Create `contract.md` when the ADR defines or changes any user-facing contract:
 - CLI commands/flags/defaults

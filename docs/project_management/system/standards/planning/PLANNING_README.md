@@ -29,7 +29,7 @@ Always required:
 - `docs/project_management/packs/active/<feature>/session_log.md`
 - `docs/project_management/packs/active/<feature>/spec_manifest.md`
 - `docs/project_management/packs/active/<feature>/kickoff_prompts/`
-- Specs: `docs/project_management/packs/active/<feature>/*-spec*.md`
+- Specs: the exact docs listed in `docs/project_management/packs/active/<feature>/spec_manifest.md` (including slice specs under `slices/<SLICE_ID>/...`).
 
 Required for decision-heavy or cross-platform work:
 - `docs/project_management/packs/active/<feature>/decision_register.md`

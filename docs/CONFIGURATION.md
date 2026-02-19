@@ -139,7 +139,8 @@ world:
 
 ### Host-only driver helpers
 
-- Use `scripts/dev/substrate_shell_driver` when invoking `target/debug/substrate` from shell scripts or automation. It resolves the workspace binary and injects `--no-world` unless `--world/--no-world` is already provided.
+- Unix (bash): use `scripts/dev/substrate_shell_driver` when invoking `target/debug/substrate` from shell scripts or automation. It resolves the workspace binary and injects `--no-world` unless `--world/--no-world` is already provided.
+- Windows (PowerShell): use `pwsh -File scripts\\dev\\substrate_shell_driver.ps1` with the same behavior (`--bin` / `SUBSTRATE_BIN` override; injects `--no-world` unless explicitly overridden).
 - Rust integration tests rely on `crates/shell/tests/common.rs::substrate_shell_driver()` to obtain an `assert_cmd::Command` with the same environment overrides. Reuse that helper instead of reimplementing binary lookup or TMPDIR wiring.
 
 ## Install Metadata (`~/.substrate/config.yaml`)

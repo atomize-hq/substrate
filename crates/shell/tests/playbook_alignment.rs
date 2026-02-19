@@ -1,10 +1,10 @@
 use std::path::{Path, PathBuf};
 
 fn playbook_paths() -> Vec<PathBuf> {
-    let next_dir =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../docs/project_management/next");
+    let packs_dir =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../docs/project_management/packs");
     let mut out = Vec::new();
-    collect_playbooks(&next_dir, &mut out);
+    collect_playbooks(&packs_dir, &mut out);
     out
 }
 
@@ -55,7 +55,7 @@ fn manual_testing_playbook_substrate_profile_snippets_include_required_id_and_na
     let playbooks = playbook_paths();
     assert!(
         !playbooks.is_empty(),
-        "expected at least one manual testing playbook under docs/project_management/next/"
+        "expected at least one manual testing playbook under docs/project_management/packs/"
     );
 
     for playbook_path in playbooks {
