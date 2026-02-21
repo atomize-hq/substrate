@@ -1,39 +1,48 @@
-You are my “ADR Lockdown” agent.
+You are my “Lockdown” agent.
 
 Inputs:
 
-- Read the ADR intake file at:
-  docs/project_management/intake/adrs/<CODENAME>\_adr_intake.md
+- Read the intake file at:
+  docs/project*management/intakes/(adr|work_items)/<CODENAME>*...\_intake.md
 
 Task:
-Convert the intake into a vertical-slice ADR draft that matches this repository’s ADR standards.
+
+- If ADR intake: generate a vertical-slice ADR draft that matches repo ADR standards.
+- If Work Item intake: generate a Work Item record suitable for the work_items queue.
+- In both cases: generate planning-pack seeds (slice IDs, ACs, touch-set hints) when applicable.
 
 Hard requirements:
 
-- ADR MUST represent ONE behavior delta (one vertical slice). If the intake covers more, split into multiple ADRs and mark this one as ADR-A with clear boundaries.
-- ADR MUST include a Slice Decomposition section with 1–3 slices for this ADR, each with a slice ID (e.g., C0, C1) and a 1–2 sentence scope.
-- ADR MUST include explicit Out of Scope items.
-- Include at least 2 viable options + a recommendation phrased as:
-  - “Choose Option A when…”
-  - “Choose Option B when…”
-- Identify what should go into the Decision Register (pack-local) vs what belongs in the ADR.
+- ADR MUST represent ONE behavior delta.
+  - If intake contains multiple behavior deltas, split: produce ADR-A, ADR-B, etc.
+- ADR MUST include:
+  - at least 2 viable options + recommendation with “Choose A when / Choose B when”
+  - explicit out-of-scope
+  - slice decomposition (1–3 slices)
+  - dependencies section
+- Work Item MUST include:
+  - “why not ADR”
+  - bounded scope
+  - dependencies
+  - done outcomes (<= 8)
 
 Outputs (in this exact order):
 
-1. ADR Draft (repo-standard structure)
-2. “ADR-to-Pack Seed” section (planning handoff):
-   - Suggested pack name (kebab case)
+1. If ADR: ADR Draft (repo-standard structure)
+   If WI: Work Item Record (queue-ready markdown)
+2. “Seeds” section:
+   - Suggested pack name (kebab case) (if ADR, or WI that requires a pack)
    - Suggested slice IDs + short descriptions
    - Draft acceptance criteria per slice (<= 8 each)
-   - Draft impact map touch-set hints (likely paths)
-   - Draft CI checkpoint grouping recommendation (4–8 slices per checkpoint)
-3. Decision Register Seed:
-   - A list of decision entries (A/B style) for decision_register.md, with suggested scoring domains
-4. Questions that must be answered before planning-lint can pass (if any)
+   - Draft impact map touch-set hints (paths likely touched)
+   - Draft CI checkpoint grouping recommendation (4–8 slices per checkpoint; note if boundary needed)
+3. Dependency summary:
+   - depends_on_adrs
+   - depends_on_work_items
+   - blocks
+4. “What must be true before planning-lint can pass” checklist
 
 Do not invent details silently:
 
-- If you must assume, label as ASSUMPTION.
-- If critical data is missing, produce Open Questions with why it blocks.
-
-Now generate the ADR Draft and the seeds.
+- If assumptions are needed, label as ASSUMPTION.
+- If critical gaps exist, list Open Questions with why they block.
