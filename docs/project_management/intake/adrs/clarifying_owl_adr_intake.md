@@ -1,3 +1,15 @@
+---
+codename: clarifying_owl
+created: "2026-02-20T01:32:05Z"
+status: brainstorming
+depends_on: []
+execution_order: 80
+adr: ADR-0037
+adr_path: docs/project_management/adrs/draft/ADR-0037-clarifying-owl.md
+workstream_id: WS-clarifying_owl
+lockdown_prompt: docs/project_management/system/prompts/discovery/adr_lockdown.md
+---
+
 # ADR Intake Sheet
 
 ## 1. Codename + Created + Status
@@ -5,7 +17,8 @@
 - Codename: `clarifying_owl`
 - Created: 2026-02-20T01:32:05Z
 - Status: brainstorming
-- Dependencies: [`replaying_raccoon`] (follow-up ADR)
+- Dependencies: []
+- Related intakes (coordination only): `replaying_raccoon`
 
 ## 2. Working Title (tentative)
 

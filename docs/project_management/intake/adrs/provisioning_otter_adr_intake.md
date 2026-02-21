@@ -1,3 +1,15 @@
+---
+codename: provisioning_otter
+created: "2026-02-19T23:25:00Z"
+status: ready_for_lockdown
+depends_on: []
+execution_order: 10
+adr: ADR-0030
+adr_path: docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md
+workstream_id: WS-provisioning_otter
+lockdown_prompt: docs/project_management/system/prompts/discovery/adr_lockdown.md
+---
+
 # ADR Intake Sheet — provisioning_otter
 
 1. **Codename:** `provisioning_otter`  

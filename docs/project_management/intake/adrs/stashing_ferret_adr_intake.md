@@ -1,3 +1,16 @@
+---
+codename: stashing_ferret
+created: "2026-02-20T19:09:29Z"
+status: ready_for_lockdown
+depends_on:
+  - detecting_badger
+execution_order: 30
+adr: ADR-0032
+adr_path: docs/project_management/adrs/draft/ADR-0032-stashing-ferret.md
+workstream_id: WS-stashing_ferret
+lockdown_prompt: docs/project_management/system/prompts/discovery/adr_lockdown.md
+---
+
 # ADR Intake Sheet
 
 ## 1. Codename + Created date/time + Status

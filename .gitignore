@@ -17,6 +17,7 @@ wt/
 .taskmeta.json
 __pycache__/
 *.pyc
+.runs
 
 # Triad/Codex artifacts (store under feature planning packs to survive `cargo clean`)
 docs/project_management/next/**/logs/

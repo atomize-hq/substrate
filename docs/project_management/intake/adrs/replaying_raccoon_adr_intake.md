@@ -1,3 +1,16 @@
+---
+codename: replaying_raccoon
+created: "2026-02-20T01:32:05Z"
+status: brainstorming
+depends_on:
+  - clarifying_owl
+execution_order: 90
+adr: ADR-0038
+adr_path: docs/project_management/adrs/draft/ADR-0038-replaying-raccoon.md
+workstream_id: WS-replaying_raccoon
+lockdown_prompt: docs/project_management/system/prompts/discovery/adr_lockdown.md
+---
+
 # ADR Intake Sheet
 
 ## 1. Codename + Created + Status
@@ -5,7 +18,7 @@
 - Codename: `replaying_raccoon`
 - Created: 2026-02-20T01:32:05Z
 - Status: brainstorming
-- Dependencies: []
+- Dependencies: [`clarifying_owl`]
 
 ## 2. Working Title (tentative)
 
@@ -97,4 +110,3 @@ Choose Option 2 only as a temporary bridge if refactor scope blocks shipping.
 - [ ] Scope of replay messaging surfaces is enumerated.
 - [ ] Shared helper vs local duplication is chosen.
 - [ ] Test coverage plan is explicit.
-

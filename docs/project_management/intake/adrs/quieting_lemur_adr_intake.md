@@ -1,3 +1,15 @@
+---
+codename: quieting_lemur
+created: "2026-02-20T01:32:05Z"
+status: brainstorming
+depends_on: []
+execution_order: 70
+adr: ADR-0036
+adr_path: docs/project_management/adrs/draft/ADR-0036-quieting-lemur.md
+workstream_id: WS-quieting_lemur
+lockdown_prompt: docs/project_management/system/prompts/discovery/adr_lockdown.md
+---
+
 # ADR Intake Sheet
 
 ## 1. Codename + Created + Status

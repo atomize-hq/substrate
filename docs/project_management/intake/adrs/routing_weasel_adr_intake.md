@@ -1,3 +1,16 @@
+---
+codename: routing_weasel
+created: "2026-02-20T20:11:06Z"
+status: ready_for_lockdown
+depends_on:
+  - provisioning_otter
+execution_order: 40
+adr: ADR-0033
+adr_path: docs/project_management/adrs/draft/ADR-0033-routing-weasel.md
+workstream_id: WS-routing_weasel
+lockdown_prompt: docs/project_management/system/prompts/discovery/adr_lockdown.md
+---
+
 # ADR Intake Sheet
 
 ## 1. Codename + Created date/time + Status

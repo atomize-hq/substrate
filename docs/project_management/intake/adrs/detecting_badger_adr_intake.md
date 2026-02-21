@@ -1,3 +1,15 @@
+---
+codename: detecting_badger
+created: "2026-02-20T18:57:43Z"
+status: ready_for_lockdown
+depends_on: []
+execution_order: 20
+adr: ADR-0031
+adr_path: docs/project_management/adrs/draft/ADR-0031-detecting-badger.md
+workstream_id: WS-detecting_badger
+lockdown_prompt: docs/project_management/system/prompts/discovery/adr_lockdown.md
+---
+
 # ADR Intake Sheet
 
 ## 1. Codename + Created date/time + Status

@@ -1,3 +1,15 @@
+---
+codename: summoning_wombat
+created: "2026-02-20T00:48:09Z"
+status: brainstorming
+depends_on: []
+execution_order: 60
+adr: ADR-0035
+adr_path: docs/project_management/adrs/draft/ADR-0035-summoning-wombat.md
+workstream_id: WS-summoning_wombat
+lockdown_prompt: docs/project_management/system/prompts/discovery/adr_lockdown.md
+---
+
 # ADR Intake Sheet
 
 ## 1. Codename + Created + Status
@@ -5,6 +17,7 @@
 - Codename: `summoning_wombat`
 - Created: 2026-02-20T00:48:09Z
 - Status: brainstorming
+- Dependencies: []
 
 ## 2. Working Title (tentative)
 
