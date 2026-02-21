@@ -25,7 +25,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/adrs/draft/ADR-0034-staging-beaver.md` after drafting>
+ADR_BODY_SHA256: ba73da79c588468e27c35124c2bcbaaf16245d35b3b5b9479d4e9472c220b627
 
 ### Changes (operator-facing)
 - Dev installs become robust to `cargo clean` for `substrate world enable` helper discovery.

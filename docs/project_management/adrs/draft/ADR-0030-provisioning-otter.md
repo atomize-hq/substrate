@@ -28,7 +28,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md` after drafting>
+ADR_BODY_SHA256: 3ddfa54caddc36674c0df1d61e6768857b78e15df4b8b9578e1cfb0fb671c833
 
 ### Changes (operator-facing)
 - APT-backed world-deps become provisioning-time; runtime sync/install is user-space-only

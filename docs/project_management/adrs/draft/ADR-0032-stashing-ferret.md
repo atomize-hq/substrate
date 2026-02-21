@@ -24,7 +24,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/adrs/draft/ADR-0032-stashing-ferret.md` after drafting>
+ADR_BODY_SHA256: 15e89953c706d4cd18c33deffa2e73428e1f339ff5c935ae09844868481a711f
 
 ### Changes (operator-facing)
 - Linux installer writes stable host-detection metadata to `$SUBSTRATE_HOME/install_state.json`

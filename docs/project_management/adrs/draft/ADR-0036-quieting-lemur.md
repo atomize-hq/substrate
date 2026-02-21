@@ -23,7 +23,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/adrs/draft/ADR-0036-quieting-lemur.md` after drafting>
+ADR_BODY_SHA256: f516fe2187c58f3d1175c35acdf7ceaa47bb4a1beca17ed6b1b16e59141eeb3a
 
 ### Changes (operator-facing)
 - Quiet diagnostics when world isolation is intentionally disabled

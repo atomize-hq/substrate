@@ -23,8 +23,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/adrs/draft/ADR-0037-clarifying-owl.md` after drafting>
-
+ADR_BODY_SHA256: 42e0ad3a6a50d2d90cf989e7b2f18e110caef1abe2fc571f8f3ecc900cc47ded
 ### Changes (operator-facing)
 - Doctor/health output explains *why* world isolation is disabled (flag vs env vs config), without changing behavior.
   - Existing: `substrate host doctor`, `substrate world doctor`, and sometimes `substrate health` can report “world isolation disabled by effective config (--no-world)” even when the actual disablement source is persisted config (`$SUBSTRATE_HOME/config.yaml` / workspace `.substrate/workspace.yaml`) or an override env var (`SUBSTRATE_OVERRIDE_WORLD=disabled`). This misleads operators and increases debug time.
@@ -204,4 +203,3 @@ ASSUMPTION: `path_display` intentionally uses a stable tokenized display path ra
 - ADR vs Decision Register split:
   - ADR contains the authoritative behavior contract (what doctor/health must print/emit).
   - Decision Register contains the A/B choices that select implementation strategy and schema details (with tradeoffs/scoring), and any follow-on schema/compat commitments.
-

@@ -25,7 +25,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/adrs/draft/ADR-0035-summoning-wombat.md` after drafting>
+ADR_BODY_SHA256: 89350dcda00b0c344925c44f3e317899bfc254a0b9a7308163801f89767f0666
 
 ### Changes (operator-facing)
 - Linux dev installs done with `--no-world` become “enable later” ready without extra manual build steps.

@@ -23,7 +23,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/adrs/draft/ADR-0031-detecting-badger.md` after drafting>
+ADR_BODY_SHA256: a7e0e960300cb3ae065964311b001c40db2f664bbe55426171b6226ff39f3f85
 
 ### Changes (operator-facing)
 - Linux installer prints detected distro and chosen package manager, and supports explicit override

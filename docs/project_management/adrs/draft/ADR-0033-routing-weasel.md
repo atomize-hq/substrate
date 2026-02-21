@@ -29,7 +29,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/adrs/draft/ADR-0033-routing-weasel.md` after drafting>
+ADR_BODY_SHA256: c6d2733547461a8cddb57df3acded514df9ec47047b4b75f1942347284c8ea55
 
 ### Changes (operator-facing)
 - Add Arch-family (pacman) provisioning-time support for world-deps system packages

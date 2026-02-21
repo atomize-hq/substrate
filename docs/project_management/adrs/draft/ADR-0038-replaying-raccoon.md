@@ -24,8 +24,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/adrs/draft/ADR-0038-replaying-raccoon.md` after drafting>
-
+ADR_BODY_SHA256: 8e95bf0b87643ce85662a41d645bb0bb87a416addd4e4b175d9efec4ca2aba7b
 ### Changes (operator-facing)
 - Replay output reuses the same “world disabled reason attribution” as doctor/health, so replay does not imply `--no-world` when the actual cause is config/env.
   - Existing: `substrate --replay <span_id>` can emit replay origin/warning text that either (a) attributes host-only replay to `--no-world` when the true cause is persisted config/env, or (b) leaves operators guessing which layer disabled world (flag vs env override vs workspace/global config).
@@ -163,4 +162,3 @@ Implement the same precedence mapping and formatting in replay routing without s
 - ADR vs Decision Register split:
   - ADR defines the authoritative behavior contract: which replay surfaces must attribute disablement and the required precedence/redaction rules.
   - Decision Register captures A/B choices about code structure and schema/field-level tradeoffs (with scoring), without duplicating the end-user contract text.
-
