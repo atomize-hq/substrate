@@ -47,16 +47,26 @@ Best-effort distro + package-manager discovery during install (with explicit ove
 Linux installer (`scripts/substrate/install-substrate.sh`):
 - Add flags (names tentative):
   - `--pkg-manager <apt-get|dnf|yum|pacman|zypper>`
-  - (optional) `--distro <id>` or `--distro-id <id>` (primarily for debugging; not required for the first slice)
 - Detection behavior (best-effort):
   - Read `/etc/os-release` when present and extract `ID` / `ID_LIKE` for diagnostics.
   - Choose a package manager using:
     1) explicit `--pkg-manager` (if provided),
     2) env `PKG_MANAGER` (existing),
-    3) distro-family mapping (best-effort),
+    3) distro-family mapping (best-effort; locked mapping set below),
     4) command-exists fallback (current behavior).
 - Output contract:
   - Print: `Detected distro: <id> (like: <id_like>), using package manager: <pkg_manager>`
+
+Locked initial distro-family mapping set (Candidate A):
+- Debian/Ubuntu family → `apt-get`
+  - Match if `ID` in `{debian,ubuntu,linuxmint,pop}` or `ID_LIKE` contains `debian` or `ubuntu`.
+- Fedora/RHEL family → prefer `dnf` (fallback `yum` if `dnf` missing)
+  - Match if `ID` in `{fedora,rhel,centos,rocky,almalinux,ol,amzn}` or `ID_LIKE` contains `fedora` or `rhel`.
+- Arch family → `pacman`
+  - Match if `ID` in `{arch,manjaro,endeavouros,arcolinux,artix,garuda}` or `ID_LIKE` contains `arch`.
+  - Note: popular “alternatives” like `yay`, `paru`, and `pamac` are wrappers/AUR helpers around `pacman`, not the base system package manager. Candidate A provisions prerequisites via `pacman` only; AUR support is out-of-scope.
+- SUSE family → `zypper`
+  - Match if `ID` contains `suse` or `opensuse` OR `ID_LIKE` contains `suse` or `opensuse`.
 
 ## 8. Options (at least 2)
 
@@ -121,7 +131,11 @@ Choose Option 1 when we want the smallest safe improvement (override + visibilit
 - ADR Candidate A (this one): installer prints distro + supports `--pkg-manager` override (best-effort mapping + fallback).
   - Slice 1: Add `/etc/os-release` parsing + “detected/selected” output; keep current behavior as fallback.
   - Slice 2: Add `--pkg-manager` flag and ensure it overrides env + autodetection.
-  - Slice 3: Add a small test harness or self-check mode (e.g. `--dry-run` output assertions) for common distros in CI.
+  - Slice 3 (locked): Add a hermetic smoke test under `tests/installers/` that:
+    - feeds fake `/etc/os-release` content (temp file),
+    - uses a controlled `PATH` with stub `apt-get|dnf|yum|pacman|zypper` commands, and
+    - asserts chosen `PKG_MANAGER` + `source` (`flag|env|os_release|path_probe`).
+    Optional (not required): add a local container smoke harness (2 images: `ubuntu` + `archlinux`) runnable via `make installers-container-smoke` (do not run in CI by default).
 - Candidate B (follow-up): persist detected distro/pkg-manager into `$SUBSTRATE_HOME/install_state.json` for later consumers (see `stashing_ferret`).
 - Candidate C (follow-up): propagate the same detection/override semantics to dev-install flows where applicable (only if they install host prereqs).
 
@@ -136,18 +150,15 @@ Choose Option 1 when we want the smallest safe improvement (override + visibilit
 
 ## 12. Open Questions / Unknowns (with priority)
 
-- P0: Confirm initial distro-family mapping set for Candidate A (proposal):
-  - Debian/Ubuntu (`ID`/`ID_LIKE` contains `debian`/`ubuntu`) → `apt-get`
-  - Fedora/RHEL (`ID`/`ID_LIKE` contains `fedora`/`rhel`) → `dnf` (fallback `yum` if `dnf` missing)
-  - Arch/Manjaro (`ID`/`ID_LIKE` contains `arch`/`manjaro`) → `pacman`
-  - openSUSE/SUSE (`ID`/`ID_LIKE` contains `suse`/`opensuse`) → `zypper`
-- P0: Do we want `--distro-id` as a debugging override, or keep only `--pkg-manager` for now? (proposal: keep only `--pkg-manager` in Candidate A)
-- P1: Do we want to add Alpine support (`apk`) in Candidate A, or keep it as Candidate B?
-- P1: How should we test mapping in CI (container matrix vs unit tests on parser)?
+- (Locked) Initial distro-family mapping set is defined in Interfaces/Contracts.
+- (Locked) No `--distro-id` flag in Candidate A; keep only `--pkg-manager` override.
+- (Locked) Defer Alpine support (`apk`) to Candidate B.
+- (Locked) Testing strategy: hermetic test under `tests/installers/`; optional container smoke in `.github/workflows/ci-testing.yml`.
+- (Locked) Optional container smoke runs locally via `make installers-container-smoke` (not CI).
 
 ## 13. “Ready to Draft ADR?” checklist (yes/no with reasons)
 
 - [x] Candidate A behavior delta is locked (Option 2).
 - [x] Flag names are locked (`--pkg-manager` required).
-- [ ] Initial distro-family mapping set is agreed (proposal listed in Open Questions P0).
+- [x] Initial distro-family mapping set is agreed (defined in Interfaces/Contracts).
 - [x] Acceptance criteria align with the desired “best-effort + override” UX.

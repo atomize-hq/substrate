@@ -171,6 +171,10 @@ ci-testing:
 ci-compile-parity:
 	@$(MAKE) ci-testing CI_WORKFLOW=.github/workflows/ci-testing.yml CI_MODE=compile-parity
 
+.PHONY: installers-container-smoke
+installers-container-smoke:
+	@bash tests/installers/pkg_manager_container_smoke.sh
+
 # Dispatch defaults (override as needed)
 PLATFORM ?= linux
 	RUNNER_KIND ?= self-hosted

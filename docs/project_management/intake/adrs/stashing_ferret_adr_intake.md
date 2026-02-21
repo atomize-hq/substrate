@@ -4,7 +4,7 @@
 
 - Codename: `stashing_ferret`
 - Created: 2026-02-20T19:09:29Z
-- Status: brainstorming
+- Status: ready_for_lockdown
 - Dependencies: [`detecting_badger`]
 - Related intakes (coordination only): `provisioning_otter`
 
@@ -111,7 +111,7 @@ Persist distro/pkg-manager detection into `$SUBSTRATE_HOME/config.yaml` as a nor
 
 ## 9. Recommendation (tentative) + “Choose Option X when…”
 
-Tentative: **Option 1**.
+Locked proposal: **Option 1**.
 
 Choose Option 1 when we want one canonical, documented metadata store and can keep it additive.
 Choose Option 2 only if we decide `install_state.json` must remain “event-only”.
@@ -135,13 +135,13 @@ Choose Option 2 only if we decide `install_state.json` must remain “event-only
 
 ## 12. Open Questions / Unknowns (with priority)
 
-- P0: Should installs with `--no-world` also write `install_state.json` platform metadata (proposal: yes; it’s host metadata, not world provisioning)?
-- P0: Exact field naming + nesting under `host_state` (prefer `host_state.platform.*` as above).
+- (Locked) Installs with `--no-world` still write `install_state.json` platform metadata.
+- (Locked) Field naming + nesting under `host_state.platform.*` as specified in Interfaces/Contracts.
 - P1: Should we record `VERSION_TAG` / installer version in `install_state.json` for debugging, or keep that elsewhere?
 
 ## 13. “Ready to Draft ADR?” checklist (yes/no with reasons)
 
-- [ ] Option is locked (Option 1 vs 2).
-- [ ] Field names are locked (stable JSON keys).
-- [ ] Decision on `--no-world` write semantics is locked.
-- [ ] Acceptance criteria match desired support/debug UX.
+- [x] Option is locked (Option 1).
+- [x] Field names are locked (stable JSON keys).
+- [x] Decision on `--no-world` write semantics is locked (still write metadata).
+- [x] Acceptance criteria match desired support/debug UX.
