@@ -71,6 +71,15 @@ Both packs and ADRs are organized into buckets (examples):
 
 Bucket changes are usually done via `git mv` (and sometimes helper migration scripts), not by the triad execution scripts.
 
+### Workstreams and Work Items (optional)
+
+When a body of work spans **multiple packs** or needs a lightweight cross-pack backlog, use the registries:
+
+- Workstreams: `docs/project_management/workstreams/` (`WS-YYYYMM-codename`) — umbrella grouping across many packs/ADRs.
+- Work items: `docs/project_management/work_items/` (`WI-YYYYMM-codename`) — execution units / follow-ups that don’t need to be ADRs.
+
+Link them from a pack via `tasks.json meta.workstream_id`, `meta.work_item_refs`, and `meta.depends_on` / `meta.blocks`. For strict packs (`meta.slice_spec_version >= 2`), referenced IDs must resolve to on-disk records in those registries.
+
 ---
 
 ## Required tools and assumptions

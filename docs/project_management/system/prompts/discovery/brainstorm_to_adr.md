@@ -9,9 +9,9 @@ FIRST: Determine record type:
 SECOND: Create (or update) the intake file in the correct canonical intake directory:
 
 - If ADR:
-  - Path: docs/project_management/intakes/adr/<CODENAME>\_adr_intake.md
+  - Path: docs/project_management/intake/adrs/<CODENAME>\_adr_intake.md
 - If Work Item:
-  - Path: docs/project_management/intakes/work_items/<CODENAME>\_work_item_intake.md
+  - Path: docs/project_management/intake/work_items/<CODENAME>\_work_item_intake.md
 - Choose <CODENAME> as fun verb_animal (snake_case), e.g. dancing_monkey.
 - If that filename exists, append **2, **3, etc.
 - Print the final chosen path at the top of your response every time.

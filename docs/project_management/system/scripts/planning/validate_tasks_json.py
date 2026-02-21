@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 
 import argparse
+import glob
 import json
 import os
+import re
+import subprocess
 import sys
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -16,6 +19,10 @@ ALLOWED_RUNNERS = {"local", "github-actions", "manual"}
 DEFAULT_SCHEMA_VERSION = 1
 ALLOWED_WSL_TASK_MODES = {"bundled", "separate"}
 AUTOMATION_SCHEMA_VERSION = 3
+WORKSTREAM_ID_RE = re.compile(r"^WS-[0-9]{6}-[a-z0-9_]+$")
+WORK_ITEM_ID_RE = re.compile(r"^WI-[0-9]{6}-[a-z0-9_]+$")
+PACK_ROOT_RE = re.compile(r"^docs/project_management/packs/[^/]+/[^/]+/?$")
+ADR_REF_RE = re.compile(r"^ADR-[0-9]{4}(?:-[a-z0-9_-]+)?$")
 
 
 @dataclass(frozen=True)
@@ -34,6 +41,275 @@ def _read_json(path: str) -> Any:
 
 def _error(errors: List[ValidationError], message: str) -> None:
     errors.append(ValidationError(message=message))
+
+
+def _duplicates(items: List[str]) -> List[str]:
+    seen: Set[str] = set()
+    dupes: Set[str] = set()
+    for item in items:
+        if item in seen:
+            dupes.add(item)
+        else:
+            seen.add(item)
+    return sorted(dupes)
+
+
+def _repo_root_for_path(start_dir: str) -> Optional[str]:
+    try:
+        out = subprocess.check_output(
+            ["git", "-C", start_dir, "rev-parse", "--show-toplevel"],
+            text=True,
+            stderr=subprocess.STDOUT,
+        ).strip()
+    except Exception:
+        return None
+    return out or None
+
+
+def _abspath_in_repo(repo_root: str, raw: str) -> str:
+    repo_root_abs = os.path.abspath(repo_root)
+    raw_path = raw.strip()
+    abs_path = os.path.abspath(os.path.join(repo_root_abs, raw_path)) if not os.path.isabs(raw_path) else os.path.abspath(raw_path)
+    try:
+        common = os.path.commonpath([repo_root_abs, abs_path])
+    except Exception:
+        raise ValueError(f"path resolves outside repo root: {raw!r} -> {abs_path}")
+    if common != repo_root_abs:
+        raise ValueError(f"path resolves outside repo root: {raw!r} -> {abs_path}")
+    return abs_path
+
+
+def _relposix(repo_root: str, abs_path: str) -> str:
+    repo_root_abs = os.path.abspath(repo_root)
+    abs_path_norm = os.path.abspath(abs_path)
+    rel = os.path.relpath(abs_path_norm, repo_root_abs)
+    return rel.replace(os.sep, "/")
+
+
+def _is_strict_pack(meta: Dict[str, Any], errors: List[ValidationError], path: str) -> bool:
+    v = meta.get("slice_spec_version")
+    if v is None:
+        return False
+    if isinstance(v, int):
+        return v >= 2
+    _error(errors, f"{path}: meta.slice_spec_version must be an integer when present")
+    return False
+
+
+def _match_registry_md(registry_root_abs: str, record_id: str) -> List[str]:
+    direct = glob.glob(os.path.join(registry_root_abs, f"{record_id}.md"))
+    prefixed = glob.glob(os.path.join(registry_root_abs, f"{record_id}-*.md"))
+    matches = sorted({os.path.abspath(p) for p in (direct + prefixed) if os.path.isfile(p)})
+    return matches
+
+
+def _resolve_adr_ref(adrs_root_abs: str, adr_ref: str) -> List[str]:
+    matches = glob.glob(os.path.join(adrs_root_abs, "**", f"{adr_ref}*.md"), recursive=True)
+    return sorted({os.path.abspath(p) for p in matches if os.path.isfile(p)})
+
+
+def _validate_pm_external_tracking(
+    feature_dir: str, meta: Dict[str, Any], errors: List[ValidationError], path: str
+) -> None:
+    """
+    Planning Pack-level workstream/work item/dependency tracking (optional).
+
+    Always (legacy + strict):
+      - Validate formats and uniqueness when fields are present.
+
+    Strict mode only (meta.slice_spec_version >= 2):
+      - Validate referenced records/paths exist in the canonical registries.
+    """
+    strict = _is_strict_pack(meta, errors, path)
+
+    workstream_id = meta.get("workstream_id", "__missing__")
+    if workstream_id != "__missing__":
+        if workstream_id is None:
+            pass
+        elif not isinstance(workstream_id, str) or not WORKSTREAM_ID_RE.match(workstream_id):
+            _error(errors, f"{path}: meta.workstream_id must be null or match {WORKSTREAM_ID_RE.pattern!r}")
+
+    work_item_refs = meta.get("work_item_refs", "__missing__")
+    if work_item_refs != "__missing__":
+        if work_item_refs is None:
+            # Back-compat: allow null (treated as empty).
+            pass
+        elif not isinstance(work_item_refs, list) or not all(isinstance(x, str) for x in work_item_refs):
+            _error(errors, f"{path}: meta.work_item_refs must be an array of strings when present")
+        else:
+            bad = sorted({x for x in work_item_refs if not WORK_ITEM_ID_RE.match(x)})
+            if bad:
+                _error(errors, f"{path}: meta.work_item_refs contains invalid work item id(s): {', '.join(bad)} (expected {WORK_ITEM_ID_RE.pattern!r})")
+            dupes = _duplicates(work_item_refs)
+            if dupes:
+                _error(errors, f"{path}: meta.work_item_refs contains duplicates: {', '.join(dupes)}")
+
+    def _validate_dep_block(obj_name: str) -> Dict[str, List[str]]:
+        raw = meta.get(obj_name, "__missing__")
+        if raw == "__missing__":
+            return {}
+        if raw is None:
+            # Back-compat: allow null (treated as absent).
+            return {}
+        if not isinstance(raw, dict):
+            _error(errors, f"{path}: meta.{obj_name} must be an object when present")
+            return {}
+
+        out: Dict[str, List[str]] = {}
+        for field, regex, label in (
+            ("adrs", ADR_REF_RE, "ADR ref"),
+            ("work_items", WORK_ITEM_ID_RE, "work item id"),
+            ("workstreams", WORKSTREAM_ID_RE, "workstream id"),
+            ("packs", PACK_ROOT_RE, "pack root path"),
+        ):
+            v = raw.get(field, [])
+            if v is None:
+                v = []
+            if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
+                _error(errors, f"{path}: meta.{obj_name}.{field} must be an array of strings")
+                continue
+
+            dupes = _duplicates(v)
+            if dupes:
+                _error(errors, f"{path}: meta.{obj_name}.{field} contains duplicates: {', '.join(dupes)}")
+
+            bad = sorted({x for x in v if not regex.match(x)})
+            if bad:
+                _error(errors, f"{path}: meta.{obj_name}.{field} contains invalid {label}(s): {', '.join(bad)} (expected {regex.pattern!r})")
+
+            out[field] = v
+        return out
+
+    depends_on = _validate_dep_block("depends_on")
+    blocks = _validate_dep_block("blocks")
+
+    if not strict:
+        return
+
+    repo_root = _repo_root_for_path(os.path.abspath(feature_dir))
+    if repo_root is None:
+        # Strict existence checks depend on being inside a git repo; format validation already ran.
+        _error(errors, f"{path}: strict pack (meta.slice_spec_version >= 2) requires git repo context to validate external registries (git rev-parse failed)")
+        return
+
+    pm_root = (os.environ.get("PM_ROOT") or "docs/project_management").strip() or "docs/project_management"
+    adrs_root = (os.environ.get("PM_ADRS_ROOT") or f"{pm_root}/adrs").strip() or f"{pm_root}/adrs"
+    workstreams_root = (os.environ.get("PM_WORKSTREAMS_ROOT") or f"{pm_root}/workstreams").strip() or f"{pm_root}/workstreams"
+    work_items_root = (os.environ.get("PM_WORK_ITEMS_ROOT") or f"{pm_root}/work_items").strip() or f"{pm_root}/work_items"
+
+    try:
+        adrs_root_abs = _abspath_in_repo(repo_root, adrs_root)
+        workstreams_root_abs = _abspath_in_repo(repo_root, workstreams_root)
+        work_items_root_abs = _abspath_in_repo(repo_root, work_items_root)
+    except ValueError as exc:
+        _error(errors, f"{path}: strict pack registry root resolves outside repo: {exc}")
+        return
+
+    if isinstance(workstream_id, str) and WORKSTREAM_ID_RE.match(workstream_id):
+        matches = _match_registry_md(workstreams_root_abs, workstream_id)
+        if not matches:
+            expected = _relposix(repo_root, os.path.join(workstreams_root_abs, f"{workstream_id}.md"))
+            _error(
+                errors,
+                f"{path}: meta.workstream_id={workstream_id!r} is missing a workstream record; expected {expected!r} (or {expected[:-3]}-*.md) (pack={feature_dir})",
+            )
+
+    strict_work_item_ids: Set[str] = set()
+    if isinstance(work_item_refs, list):
+        for x in work_item_refs:
+            if isinstance(x, str) and WORK_ITEM_ID_RE.match(x):
+                strict_work_item_ids.add(x)
+
+    for src in (depends_on, blocks):
+        for x in src.get("work_items", []):
+            if WORK_ITEM_ID_RE.match(x):
+                strict_work_item_ids.add(x)
+
+    for wid in sorted(strict_work_item_ids):
+        matches = _match_registry_md(work_items_root_abs, wid)
+        if not matches:
+            expected = _relposix(repo_root, os.path.join(work_items_root_abs, f"{wid}.md"))
+            _error(
+                errors,
+                f"{path}: missing work item record for {wid!r}; expected {expected!r} (or {expected[:-3]}-*.md) (pack={feature_dir})",
+            )
+
+    strict_workstream_ids: Set[str] = set()
+    for src in (depends_on, blocks):
+        for x in src.get("workstreams", []):
+            if WORKSTREAM_ID_RE.match(x):
+                strict_workstream_ids.add(x)
+
+    for wsid in sorted(strict_workstream_ids):
+        matches = _match_registry_md(workstreams_root_abs, wsid)
+        if not matches:
+            expected = _relposix(repo_root, os.path.join(workstreams_root_abs, f"{wsid}.md"))
+            _error(
+                errors,
+                f"{path}: missing workstream record for {wsid!r}; expected {expected!r} (or {expected[:-3]}-*.md) (pack={feature_dir})",
+            )
+
+    def _validate_pack_paths(kind: str, rel_paths: List[str]) -> None:
+        for raw in rel_paths:
+            try:
+                abs_root = _abspath_in_repo(repo_root, raw)
+            except ValueError as exc:
+                _error(errors, f"{path}: meta.{kind}.packs contains path outside repo: {exc} (pack={feature_dir})")
+                continue
+            if not os.path.isdir(abs_root):
+                _error(
+                    errors,
+                    f"{path}: meta.{kind}.packs references missing pack directory {raw!r} (resolved to {_relposix(repo_root, abs_root)!r}) (pack={feature_dir})",
+                )
+                continue
+            tasks_json = os.path.join(abs_root, "tasks.json")
+            if not os.path.isfile(tasks_json):
+                _error(
+                    errors,
+                    f"{path}: meta.{kind}.packs entry {raw!r} is not a pack root (missing tasks.json at {_relposix(repo_root, tasks_json)!r}) (pack={feature_dir})",
+                )
+
+    _validate_pack_paths("depends_on", depends_on.get("packs", []))
+    _validate_pack_paths("blocks", blocks.get("packs", []))
+
+    # ADR existence validation for strict packs:
+    # - validate meta.adr_refs (when present)
+    # - validate depends_on/blocks ADR refs
+    adr_refs: Set[str] = set()
+    raw_adr_refs = meta.get("adr_refs")
+    if raw_adr_refs is not None:
+        if not isinstance(raw_adr_refs, list) or not all(isinstance(x, str) for x in raw_adr_refs):
+            _error(errors, f"{path}: meta.adr_refs must be an array of strings when present")
+        else:
+            dupes = _duplicates(raw_adr_refs)
+            if dupes:
+                _error(errors, f"{path}: meta.adr_refs contains duplicates: {', '.join(dupes)}")
+            bad = sorted({x for x in raw_adr_refs if not ADR_REF_RE.match(x)})
+            if bad:
+                _error(errors, f"{path}: meta.adr_refs contains invalid ADR ref(s): {', '.join(bad)} (expected {ADR_REF_RE.pattern!r})")
+            for x in raw_adr_refs:
+                if ADR_REF_RE.match(x):
+                    adr_refs.add(x)
+
+    for src in (depends_on, blocks):
+        for x in src.get("adrs", []):
+            if ADR_REF_RE.match(x):
+                adr_refs.add(x)
+
+    for adr_ref in sorted(adr_refs):
+        matches = _resolve_adr_ref(adrs_root_abs, adr_ref)
+        if not matches:
+            _error(
+                errors,
+                f"{path}: missing ADR for ref {adr_ref!r}; expected exactly one match under {_relposix(repo_root, adrs_root_abs)!r} (pack={feature_dir})",
+            )
+        elif len(matches) > 1:
+            shown = ", ".join(_relposix(repo_root, p) for p in matches[:5])
+            extra = "" if len(matches) <= 5 else f" (+{len(matches) - 5} more)"
+            _error(
+                errors,
+                f"{path}: ambiguous ADR ref {adr_ref!r}; matches: {shown}{extra} (ensure only one exists under {_relposix(repo_root, adrs_root_abs)!r}) (pack={feature_dir})",
+            )
 
 
 def _validate_tasks_shape(data: Any, errors: List[ValidationError], path: str) -> Optional[List[Dict[str, Any]]]:
@@ -867,6 +1143,7 @@ def validate_tasks_json(feature_dir: str) -> Tuple[List[ValidationError], str]:
         return errors, tasks_path
 
     meta = _validate_meta(data, errors, tasks_path)
+    _validate_pm_external_tracking(feature_dir, meta, errors, tasks_path)
 
     tasks = _validate_tasks_shape(data, errors, tasks_path)
     if tasks is None:

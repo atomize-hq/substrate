@@ -76,17 +76,23 @@ def _compute_roots(repo_root: Path) -> dict[str, str]:
     pm_system_root_raw = _env_value("PM_SYSTEM_ROOT") or f"{pm_root}/system"
     pm_adrs_root_raw = _env_value("PM_ADRS_ROOT") or f"{pm_root}/adrs"
     pm_packs_root_raw = _env_value("PM_PACKS_ROOT") or f"{pm_root}/packs"
+    pm_workstreams_root_raw = _env_value("PM_WORKSTREAMS_ROOT") or f"{pm_root}/workstreams"
+    pm_work_items_root_raw = _env_value("PM_WORK_ITEMS_ROOT") or f"{pm_root}/work_items"
     pm_default_pack_bucket = _env_value("PM_DEFAULT_PACK_BUCKET") or "active"
 
     pm_system_root_abs = _abspath_in_repo(repo_root, pm_system_root_raw)
     pm_adrs_root_abs = _abspath_in_repo(repo_root, pm_adrs_root_raw)
     pm_packs_root_abs = _abspath_in_repo(repo_root, pm_packs_root_raw)
+    pm_workstreams_root_abs = _abspath_in_repo(repo_root, pm_workstreams_root_raw)
+    pm_work_items_root_abs = _abspath_in_repo(repo_root, pm_work_items_root_raw)
 
     return {
         "pm_root": pm_root,
         "pm_system_root": _relposix(repo_root, pm_system_root_abs),
         "pm_adrs_root": _relposix(repo_root, pm_adrs_root_abs),
         "pm_packs_root": _relposix(repo_root, pm_packs_root_abs),
+        "pm_workstreams_root": _relposix(repo_root, pm_workstreams_root_abs),
+        "pm_work_items_root": _relposix(repo_root, pm_work_items_root_abs),
         "pm_default_pack_bucket": pm_default_pack_bucket,
     }
 
@@ -130,6 +136,20 @@ def cmd_resolve_sequencing_json() -> int:
     return 0
 
 
+def cmd_resolve_workstreams_root() -> int:
+    repo_root = _repo_root()
+    roots = _compute_roots(repo_root)
+    print(roots["pm_workstreams_root"])
+    return 0
+
+
+def cmd_resolve_work_items_root() -> int:
+    repo_root = _repo_root()
+    roots = _compute_roots(repo_root)
+    print(roots["pm_work_items_root"])
+    return 0
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(
         description="Resolve project_management roots and normalize feature dirs (repo-relative POSIX paths)."
@@ -145,6 +165,8 @@ def main(argv: list[str]) -> int:
         "resolve-sequencing-json",
         help="Print the canonical sequencing.json path under packs.",
     )
+    sub.add_parser("resolve-workstreams-root", help="Print the workstreams registry root (repo-relative POSIX path).")
+    sub.add_parser("resolve-work-items-root", help="Print the work_items registry root (repo-relative POSIX path).")
 
     args = ap.parse_args(argv)
 
@@ -154,6 +176,10 @@ def main(argv: list[str]) -> int:
         return cmd_resolve_feature_dir(args.feature_dir)
     if args.cmd == "resolve-sequencing-json":
         return cmd_resolve_sequencing_json()
+    if args.cmd == "resolve-workstreams-root":
+        return cmd_resolve_workstreams_root()
+    if args.cmd == "resolve-work-items-root":
+        return cmd_resolve_work_items_root()
 
     _usage_error(f"unknown command: {args.cmd}")
     return 2

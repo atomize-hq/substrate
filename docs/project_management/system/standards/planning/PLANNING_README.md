@@ -22,6 +22,28 @@ Planning work must produce a Planning Pack under:
 
 - `docs/project_management/packs/active/<feature>/`
 
+## Workstreams, Work Items, and dependencies
+
+Planning Packs can optionally track **cross-pack coordination** and **external dependencies** at the `tasks.json` `meta` level:
+
+- `meta.workstream_id` (optional): umbrella workstream for this pack (e.g., `WS-202602-dancing_monkey`; may be `null`)
+- `meta.work_item_refs` (optional): related work item IDs (e.g., `WI-202602-provisioning_otter`)
+- `meta.depends_on` / `meta.blocks` (optional): external dependencies and blockers
+  - `adrs`: ADR refs (project convention; typically `ADR-XXXX`)
+  - `work_items`: work item IDs (`WI-YYYYMM-codename`)
+  - `workstreams`: workstream IDs (`WS-YYYYMM-codename`)
+  - `packs`: repo-relative pack root paths (e.g., `docs/project_management/packs/active/foo-bar`)
+
+Canonical registries:
+
+- Workstreams: `docs/project_management/workstreams/`
+- Work items: `docs/project_management/work_items/`
+
+Validation behavior:
+
+- Legacy packs (`meta.slice_spec_version` missing or `< 2`): these fields are optional and only validated when present (format + uniqueness).
+- Strict packs (`meta.slice_spec_version >= 2`): referenced IDs/paths must resolve to on-disk records under the registries above.
+
 ## Automation vs manual packs (`AUTOMATION=1`)
 
 `AUTOMATION=1` enables the **automation (triad-runner) planning pack mode**. It does **not** run any agents or start work automatically; it only changes what the planning scaffold generates and what the validators expect. In automation mode, `tasks.json` is scaffolded as an **automation pack** (schema v3/v4), slice triad tasks include triad-friendly metadata (branches/merge behavior/required checks), and the pack’s checklists assume you will execute work via the triad commands (`make triad-task-start*`, `make triad-task-finish`, `make triad-orch-ensure`, etc.). Actual execution only happens when you run those triad commands (and **`LAUNCH_CODEX=1`** is what launches Codex during task start); without that, the automation pack still sets up worktrees/metadata but you drive Codex manually.

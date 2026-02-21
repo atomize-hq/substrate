@@ -97,6 +97,9 @@ When tasks are started via triad automation (preferred) and agents run inside an
   - `depends_on` (list), `concurrent_with` (list)
 - Slice Spec v2 traceability:
   - `ac_ids` is required for slice triad tasks (`<SLICE_ID>-code`, `<SLICE_ID>-test`, `<SLICE_ID>-integ`) when `tasks.json` `meta.slice_spec_version >= 2`.
+- Optional pack-level coordination (workstreams / work items / cross-pack deps):
+  - `tasks.json meta.workstream_id` can tag the pack with a workstream umbrella (optional; may be `null`).
+  - See `docs/project_management/system/standards/planning/PLANNING_README.md` for the full `meta.work_item_refs`, `meta.depends_on`, and `meta.blocks` shape.
 - Optional (required when triad automation is enabled; schema v3):
   - `git_branch` (deterministic task branch name)
   - `required_make_targets` (array of make targets for `task_finish`)

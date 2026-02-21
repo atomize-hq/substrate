@@ -3,6 +3,38 @@
     "title": "Substrate Planning Pack tasks.json",
     "type": "object",
     "additionalProperties": true,
+    "$defs": {
+        "workstream_id": {
+            "type": "string",
+            "pattern": "^WS-[0-9]{6}-[a-z0-9_]+$",
+            "description": "Workstream registry ID (WS-YYYYMM-codename)."
+        },
+        "work_item_id": {
+            "type": "string",
+            "pattern": "^WI-[0-9]{6}-[a-z0-9_]+$",
+            "description": "Work item registry ID (WI-YYYYMM-codename)."
+        },
+        "adr_ref": {
+            "type": "string",
+            "pattern": "^ADR-[0-9]{4}(?:-[a-z0-9_-]+)?$",
+            "description": "ADR reference ID/prefix (project convention; typically ADR-XXXX)."
+        },
+        "pack_root_path": {
+            "type": "string",
+            "pattern": "^docs/project_management/packs/[^/]+/[^/]+/?$",
+            "description": "Repo-relative path to a Planning Pack root directory."
+        },
+        "pm_dependency_set": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "adrs": { "type": "array", "items": { "$ref": "#/$defs/adr_ref" }, "uniqueItems": true, "default": [] },
+                "work_items": { "type": "array", "items": { "$ref": "#/$defs/work_item_id" }, "uniqueItems": true, "default": [] },
+                "workstreams": { "type": "array", "items": { "$ref": "#/$defs/workstream_id" }, "uniqueItems": true, "default": [] },
+                "packs": { "type": "array", "items": { "$ref": "#/$defs/pack_root_path" }, "uniqueItems": true, "default": [] }
+            }
+        }
+    },
     "properties": {
         "meta": {
             "type": "object",
@@ -29,6 +61,26 @@
                     "type": "integer",
                     "minimum": 1,
                     "description": "Slice spec format version for this Planning Pack. When >= 2, planning lint may enforce Slice Spec v2 invariants (headers, AC IDs, and ac_ids traceability). When missing, treated as legacy v1 (no v2 enforcement)."
+                },
+                "workstream_id": {
+                    "type": ["string", "null"],
+                    "pattern": "^WS-[0-9]{6}-[a-z0-9_]+$",
+                    "description": "Optional wrapper workstream ID for this Planning Pack. null means 'not assigned'. Strict packs (meta.slice_spec_version >= 2) may enforce that this resolves to an on-disk workstream record."
+                },
+                "work_item_refs": {
+                    "type": "array",
+                    "items": { "$ref": "#/$defs/work_item_id" },
+                    "uniqueItems": true,
+                    "default": [],
+                    "description": "Optional work item IDs related to this Planning Pack. Strict packs may enforce that these resolve to on-disk work item records."
+                },
+                "depends_on": {
+                    "$ref": "#/$defs/pm_dependency_set",
+                    "description": "Optional external dependencies for this Planning Pack (ADRs, work items, workstreams, and other packs). Strict packs may enforce that all references resolve on disk."
+                },
+                "blocks": {
+                    "$ref": "#/$defs/pm_dependency_set",
+                    "description": "Optional external records blocked by this Planning Pack (ADRs, work items, workstreams, and other packs). Strict packs may enforce that all references resolve on disk."
                 },
                 "notes": { "type": "string" },
                 "external_task_ids": { "type": "array", "items": { "type": "string" } }

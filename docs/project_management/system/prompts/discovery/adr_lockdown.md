@@ -3,7 +3,7 @@ You are my “Lockdown” agent.
 Inputs:
 
 - Read the intake file at:
-  docs/project*management/intakes/(adr|work_items)/<CODENAME>*...\_intake.md
+  docs/project_management/intake/(adrs|work_items)/<CODENAME>*...\_intake.md
 
 Task:
 

@@ -724,6 +724,11 @@ meta = {
     "cross_platform": cross_platform,
     "execution_gates": True,
     "slice_spec_version": 2,
+    # Optional registries / external dependency tracking (Planning Pack-level).
+    "workstream_id": None,
+    "work_item_refs": [],
+    "depends_on": {"adrs": [], "work_items": [], "workstreams": [], "packs": []},
+    "blocks": {"adrs": [], "work_items": [], "workstreams": [], "packs": []},
 }
 if automation:
     meta["automation"] = {"enabled": True, "orchestration_branch": f"feat/{feature}"}

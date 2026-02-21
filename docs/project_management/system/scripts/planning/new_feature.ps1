@@ -212,6 +212,20 @@ $meta = @{
     cross_platform = [bool]$CrossPlatform.IsPresent
     execution_gates = $true
     slice_spec_version = 2
+    workstream_id = $null
+    work_item_refs = @()
+    depends_on = @{
+        adrs = @()
+        work_items = @()
+        workstreams = @()
+        packs = @()
+    }
+    blocks = @{
+        adrs = @()
+        work_items = @()
+        workstreams = @()
+        packs = @()
+    }
 }
 
 if ($Automation.IsPresent) {
