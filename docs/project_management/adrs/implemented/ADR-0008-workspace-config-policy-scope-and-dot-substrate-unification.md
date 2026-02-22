@@ -9,11 +9,11 @@
 - Feature directory: `docs/project_management/_archived/workspace-config-policy-unification/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
-  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+  - `docs/project_management/system/standards/adr/ADR_STANDARD_AND_TEMPLATE.md`
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+  - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 
 ## Related Docs
 - Prior ADRs:
@@ -26,7 +26,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 957869d03b6b5e51184f84de7a77ef189f9e16b63f21e7139d47a11d1eda6b1e
+ADR_BODY_SHA256: c71df99fe654bfafa8627979fb744ffda05c2a7f495205eecfe39959659c5daf
 ### Changes (operator-facing)
 - Config and policy commands become explicit about scope and effective views
   - Existing: `config show` vs `config global show` can disagree because `config show` is an effective/merged view and can be affected by persistent `SUBSTRATE_OVERRIDE_*` env exports from install/dev scripts in directories with no enabled workspace.
@@ -159,7 +159,7 @@ Policy patch header template (global/workspace):
   - Source labels include:
     - `cli_flag`, `override_env`, `workspace_patch`, `global_patch`, `default`, `injected_protected`.
 - Exit codes:
-  - Taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+  - Taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
   - `0`: success
   - `2`: invalid config file YAML, invalid override value, or other actionable user error
   - `1`: unexpected failure

@@ -9,9 +9,9 @@
 - Feature directory: `docs/project_management/packs/active/detecting-badger/` (ASSUMPTION: created during planning)
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Related Docs
 - Intake: `docs/project_management/intake/adrs/detecting_badger_adr_intake.md`
@@ -23,7 +23,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: a7e0e960300cb3ae065964311b001c40db2f664bbe55426171b6226ff39f3f85
+ADR_BODY_SHA256: 3addde3fb1ef0912fc83c4f6dcd82e438b33222cf23b72adb3f7bae9264913f2
 
 ### Changes (operator-facing)
 - Linux installer prints detected distro and chosen package manager, and supports explicit override
@@ -129,7 +129,7 @@ Add a hermetic test under `tests/installers/` that exercises the precedence rule
   - If `/etc/os-release` is missing/unreadable, `<id>` / `<id_like>` must be rendered as `<unknown>`.
 
 - Exit codes:
-  - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+  - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
   - `0`: install completed successfully (or no-op by contract, e.g., prerequisites already present and no world/shims requested)
   - `2`: invalid CLI usage or invalid override value (unknown `--pkg-manager` value, invalid `PKG_MANAGER` value)
   - `3`: required dependency unavailable (forced package manager missing from `PATH`; prerequisite executable cannot be installed due to missing package-manager binary)

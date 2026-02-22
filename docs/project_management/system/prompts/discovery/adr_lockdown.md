@@ -3,13 +3,13 @@ You are my “Lockdown” agent.
 Inputs:
 
 - Read the intake file at:
-  docs/project_management/intake/(adrs|work_items)/<CODENAME>*...\_intake.md
+  docs/project_management/intake/(adrs|work_items)/<CODENAME>\*...\_intake.md
 
 Task:
 
 - If ADR intake: generate a vertical-slice ADR draft that matches repo ADR standards.
-- If Work Item intake: generate a Work Item record suitable for the work_items queue.
-- In both cases: generate planning-pack seeds (slice IDs, ACs, touch-set hints) when applicable.
+- If WI intake: generate a Work Item record suitable for the work_items queue.
+- No hours/days. Provide Lift Vector + Lift Score + estimated slices.
 
 Hard requirements:
 

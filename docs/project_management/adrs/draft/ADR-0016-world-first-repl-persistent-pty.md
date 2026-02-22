@@ -9,9 +9,9 @@
 - Feature directory: `docs/project_management/_archived/world-first-repl-persistent-pty/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
-  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
-  - `docs/project_management/standards/EXECUTIVE_SUMMARY_STANDARD.md`
+  - `docs/project_management/system/standards/adr/ADR_STANDARD_AND_TEMPLATE.md`
+  - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
+  - `docs/project_management/system/standards/adr/EXECUTIVE_SUMMARY_STANDARD.md`
 
 ## Related Docs
 - Plan: `docs/project_management/_archived/world-first-repl-persistent-pty/plan.md`
@@ -31,7 +31,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: bf57359d419815ca41a2cc284c29b9270f49d63d09b3e27d5e6f198ba907cf59
+ADR_BODY_SHA256: 339caac9c2e14856e07f9f2d2af15038207bc67717c1b81d736717267a279c45
 ### Changes (operator-facing)
 - Make interactive `substrate` behave like a normal in-world shell by default (persistent world PTY session)
   - Existing: In the REPL, most commands run in the world overlay view, but stateful builtins (`cd`, `pwd`, `export`, `unset`) run on the host and operate on host paths/env; this can yield surprising “exists in world but cd fails” behavior.
@@ -108,7 +108,7 @@ ADR_BODY_SHA256: bf57359d419815ca41a2cc284c29b9270f49d63d09b3e27d5e6f198ba907cf5
   - Snapshot-driven restart note: Substrate MUST restart the world session when the effective policy snapshot hash (or workspace root) changes, before executing the next submission (see decision register DR-09 and `docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md` “Policy Snapshot Drift”). It attempts best-effort cwd continuity, but other in-session state (exported env mutations, history, shell-local state) may be lost (see decision register DR-17).
   - Hardened protocol invariant (DR-22): user-submitted programs MUST NOT be able to access session infrastructure or control-plane endpoints/handles (e.g., inherited `/v1/stream` WebSocket FDs or other session control endpoints). Close-on-exec alone is necessary but not sufficient; the evaluator execution context must not have access in the first place. See decision register DR-22 and `docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md`.
   - `exit` / `quit`: exits the REPL; Substrate shuts down the world session as part of cleanup.
-    - `exit` may include an optional numeric argument (e.g., `exit 2`), but this is treated as an operator request to end the REPL (it is not sent into the world session as a command). The REPL process exit code remains `0` on normal user exit (see `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`).
+    - `exit` may include an optional numeric argument (e.g., `exit 2`), but this is treated as an operator request to end the REPL (it is not sent into the world session as a command). The REPL process exit code remains `0` on normal user exit (see `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`).
   - Protocol and state machine are authoritative:
     - `docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md`
     - `docs/project_management/_archived/world-first-repl-persistent-pty/STATE_MACHINE.md`
@@ -138,7 +138,7 @@ ADR_BODY_SHA256: bf57359d419815ca41a2cc284c29b9270f49d63d09b3e27d5e6f198ba907cf5
   - World-enabled fail-closed posture remains: if world execution is enabled but unavailable, the REPL must not fall back to host execution (see decision register DR-18).
 
 - Exit codes:
-  - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+  - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
   - The interactive REPL process exit code remains `0` on normal `exit`/`quit`, and non-zero only on startup/config errors that prevent starting the REPL.
   - Per-command exit codes are surfaced via existing REPL printing behavior and recorded in trace spans.
 

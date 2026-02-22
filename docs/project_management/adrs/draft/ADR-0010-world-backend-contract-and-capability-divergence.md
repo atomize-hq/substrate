@@ -13,12 +13,12 @@
 ## Related Docs
 - Isolation support matrix (Linux vs macOS/Lima): `docs/ISOLATION_SUPPORT_MATRIX.md`
 - World architecture + doctor: `docs/WORLD.md`
-- Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
-- ADR standard/template: `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
+- Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
+- ADR standard/template: `docs/project_management/system/standards/adr/ADR_STANDARD_AND_TEMPLATE.md`
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 8085cef34daab77959bda538b56106a62c84460226a761c4b923c3cef7688ce5
+ADR_BODY_SHA256: 4df0dfb5a41af82c44d7061d52c87eb3dd85bc6c956fbb7dbb7eff931c0e4800
 
 ADR_BODY_SHA256: <intentionally omitted while Status=Proposed>
 
@@ -70,7 +70,7 @@ Each executed command span SHOULD include:
 - `fs_diff.present` and a reason when absent (`unsupported | empty | error`)
 
 ### Exit codes
-- Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+- Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 - `4` is the canonical “unsupported/missing prerequisites” outcome for capability gaps.
 
 ## Backend Contract Checklist (Proposed)

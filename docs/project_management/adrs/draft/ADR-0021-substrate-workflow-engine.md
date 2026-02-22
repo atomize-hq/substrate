@@ -9,11 +9,11 @@
 - Feature directory: `docs/project_management/_archived/next/workflow-engine/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
-  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
-  - `docs/project_management/standards/CONTRACT_SURFACE_STANDARD.md`
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+  - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
+  - `docs/project_management/system/standards/shared/CONTRACT_SURFACE_STANDARD.md`
 
 ## Related Docs
 - Plan: `docs/project_management/_archived/next/workflow-engine/plan.md` (not created; ADR draft phase)
@@ -31,7 +31,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: ff1ed6ebaa33c86c483bbf053aa783e1fc10206f02a4b450b906995b96c1f5a7
+ADR_BODY_SHA256: 0e7a75f2761d8bab7aa43ea95c05e6ab5eed4da516d7c1fdcce7c489a0e305fa
 ### Changes (operator-facing)
 - Add a first-class “workflow run” capability to Substrate
   - Existing: Substrate executes single commands (interactive or non-interactive) and records spans for replay/audit; operators orchestrate multi-step flows outside of Substrate (scripts, makefiles, ad-hoc tooling).
@@ -90,7 +90,7 @@ ADR_BODY_SHA256: ff1ed6ebaa33c86c483bbf053aa783e1fc10206f02a4b450b906995b96c1f5a
       - `4`: workflow denied by policy (a node requested execution that was denied and the workflow is fail-closed)
       - `5`: unexpected internal error
 - Exit codes:
-  - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md` (unless explicitly overridden here)
+  - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md` (unless explicitly overridden here)
 
 ### Config
 - Workflow spec file:

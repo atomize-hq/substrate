@@ -9,13 +9,13 @@
 - Feature directory: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
-  - `docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md`
-  - `docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md`
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
-  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+  - `docs/project_management/system/standards/adr/ADR_STANDARD_AND_TEMPLATE.md`
+  - `docs/project_management/system/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`
+  - `docs/project_management/system/standards/planning/PLANNING_IMPACT_MAP_STANDARD.md`
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+  - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 
 ## Related Docs
 - Plan: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/plan.md`
@@ -48,7 +48,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 4058747309ca90a3c940d76e4a7d8026e0e3eaf5b7b8dc4b08b85d6c91c1864d
+ADR_BODY_SHA256: 07ca369b18fb8965c9c8c3e84bbb54937bc69b1ffae1c1397cd829bb691df5cf
 ### Changes (operator-facing)
 - LLM + agent behavior is configured and governed via the existing config/policy files (new keys only)
   - Existing: There is no repo-wide, stable config/policy surface for LLM gateway routing, CLI agent backends, or agent role selection, which invites ad-hoc files/env vars and inconsistent enforcement boundaries.
@@ -109,7 +109,7 @@ This ADR defines the config/policy *key paths* and file locations used by LLM + 
   - `substrate policy current show` (effective merged policy; YAML by default; JSON with `--json`; provenance on stderr with `--explain`)
 
 Exit codes:
-- Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+- Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 - `0`: success
 - `2`: user/config/policy error (unknown keys, invalid YAML, invalid values, schema violations)
 - `1`: unexpected/runtime failure (I/O errors, internal errors)

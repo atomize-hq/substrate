@@ -3,7 +3,7 @@
 This directory is the canonical home for ADRs (Architecture Decision Records) across the repo.
 
 It exists to make cross-queue discovery deterministic for planning steps like:
-- `docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md`
+- `docs/project_management/system/standards/planning/PLANNING_IMPACT_MAP_STANDARD.md`
 
 ## Directory taxonomy
 

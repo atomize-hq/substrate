@@ -9,9 +9,9 @@
 - Feature directory: `docs/project_management/packs/active/stashing-ferret/` (to be created during planning)
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Related Docs
 - Intake: `docs/project_management/intake/adrs/stashing_ferret_adr_intake.md`
@@ -24,7 +24,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 15e89953c706d4cd18c33deffa2e73428e1f339ff5c935ae09844868481a711f
+ADR_BODY_SHA256: fd7159c30e9a134154397264008dfa2d8f36ef9f4f246f7563e17aeb4685616c
 
 ### Changes (operator-facing)
 - Linux installer writes stable host-detection metadata to `$SUBSTRATE_HOME/install_state.json`
@@ -67,7 +67,7 @@ ADR_BODY_SHA256: 15e89953c706d4cd18c33deffa2e73428e1f339ff5c935ae09844868481a711
 - Commands:
   - No new CLI commands or flags are introduced by this ADR.
 - Exit codes:
-  - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+  - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
   - No changes to existing installer exit code behavior are introduced by this ADR.
 
 ### Config

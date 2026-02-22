@@ -2,18 +2,25 @@
 
 import argparse
 import hashlib
+import os
 import re
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 
-EXEC_HEADING_RE = re.compile(r"^##\s+Executive Summary\s+\(Operator\)\s*$", re.MULTILINE)
-HASH_LINE_RE = re.compile(r"^ADR_BODY_SHA256:\s*([0-9a-f]{64})\s*$", re.MULTILINE)
+EXEC_HEADING_RE = re.compile(r"^##[ \t]+Executive Summary[ \t]+\((?:Operator)\)[ \t]*\r?$", re.MULTILINE)
+HASH_LINE_RE = re.compile(r"^ADR_BODY_SHA256:[ \t]*([0-9a-f]{64})[ \t]*\r?$", re.MULTILINE)
 
 EXISTING_RE = re.compile(r"(?mi)^\s*-\s*Existing:\s+\S")
 NEW_RE = re.compile(r"(?mi)^\s*-\s*New:\s+\S")
 WHY_RE = re.compile(r"(?mi)^\s*-\s*Why:\s+\S")
+
+LEGACY_STANDARDS_PREFIX = "docs/project_management/standards/"
+LEGACY_STANDARDS_REF_RE = re.compile(r"docs/project_management/standards/[A-Za-z0-9_./-]+\.md")
+CANONICAL_STANDARDS_ROOT = Path("docs/project_management/system/standards")
+CANONICAL_STANDARDS_MANIFEST = CANONICAL_STANDARDS_ROOT / "MANIFEST.yaml"
 
 
 @dataclass(frozen=True)
@@ -73,8 +80,191 @@ def _validate_exec_summary_structure(path: Path, exec_text: str) -> int:
     return 0
 
 
+def _repo_root_for_path(start_dir: Path) -> Optional[Path]:
+    try:
+        out = subprocess.check_output(
+            ["git", "-C", str(start_dir), "rev-parse", "--show-toplevel"],
+            text=True,
+            stderr=subprocess.STDOUT,
+        ).strip()
+    except Exception:
+        out = ""
+    if out:
+        return Path(out)
+
+    # Fallback: walk upwards looking for the canonical standards manifest.
+    current = start_dir.resolve()
+    for parent in (current, *current.parents):
+        manifest = parent / CANONICAL_STANDARDS_MANIFEST
+        if manifest.is_file():
+            return parent
+    return None
+
+
+def _strip_yaml_scalar(value: str) -> str:
+    v = value.strip()
+    if len(v) >= 2 and ((v[0] == v[-1] == '"') or (v[0] == v[-1] == "'")):
+        return v[1:-1]
+    return v
+
+
+def _load_manifest_standard_paths(repo_root: Path) -> List[str]:
+    """
+    Extract `path:` entries from docs/project_management/system/standards/MANIFEST.yaml.
+
+    We intentionally do a minimal parse to avoid adding dependencies (PyYAML).
+    """
+    manifest_path = repo_root / CANONICAL_STANDARDS_MANIFEST
+    if not manifest_path.is_file():
+        return []
+
+    out: List[str] = []
+    for raw in manifest_path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if not line.startswith("path:"):
+            continue
+        _, value = line.split("path:", 1)
+        path_value = _strip_yaml_scalar(value)
+        if path_value:
+            out.append(path_value)
+    return out
+
+
+def _build_manifest_index(paths: Sequence[str]) -> Dict[str, Set[str]]:
+    index: Dict[str, Set[str]] = {}
+    for p in paths:
+        base = os.path.basename(p)
+        if not base:
+            continue
+        index.setdefault(base, set()).add(p)
+    return index
+
+
+def _canonical_candidates_for_basename(repo_root: Path, basename: str, manifest_index: Dict[str, Set[str]]) -> List[str]:
+    candidates: Set[str] = set()
+    candidates.update(manifest_index.get(basename, set()))
+
+    # Filesystem fallback: allow canonical resolution even if MANIFEST.yaml is missing/out of date.
+    standards_root = repo_root / CANONICAL_STANDARDS_ROOT
+    if standards_root.is_dir():
+        for p in standards_root.rglob(basename):
+            if p.is_file():
+                try:
+                    candidates.add(p.relative_to(repo_root).as_posix())
+                except Exception:
+                    # Shouldn't happen if under repo_root, but keep defensive.
+                    candidates.add(str(p))
+
+    return sorted(candidates)
+
+
+def _find_legacy_standards_refs(text: str) -> List[str]:
+    return sorted(set(LEGACY_STANDARDS_REF_RE.findall(text)))
+
+
+def _rewrite_legacy_standards_refs(
+    *,
+    path: Path,
+    text: str,
+    repo_root: Path,
+) -> Tuple[str, bool, List[str], Dict[str, str]]:
+    legacy_refs = _find_legacy_standards_refs(text)
+    if not legacy_refs:
+        return text, False, [], {}
+
+    manifest_paths = _load_manifest_standard_paths(repo_root)
+    manifest_index = _build_manifest_index(manifest_paths)
+
+    mapping: Dict[str, str] = {}
+    errors: List[str] = []
+
+    for legacy in legacy_refs:
+        basename = os.path.basename(legacy)
+        candidates = _canonical_candidates_for_basename(repo_root, basename, manifest_index)
+        if not candidates:
+            errors.append(
+                f"{path}: legacy standards ref {legacy!r} has no canonical match under {CANONICAL_STANDARDS_ROOT.as_posix()!r} (basename={basename!r})"
+            )
+            continue
+        if len(candidates) > 1:
+            shown = ", ".join(candidates[:5])
+            extra = "" if len(candidates) <= 5 else f" (+{len(candidates) - 5} more)"
+            errors.append(
+                f"{path}: legacy standards ref {legacy!r} is ambiguous for basename {basename!r}; candidates: {shown}{extra}"
+            )
+            continue
+        mapping[legacy] = candidates[0]
+
+    if errors:
+        return text, False, errors, {}
+
+    updated = text
+    for old, new in mapping.items():
+        updated = updated.replace(old, new)
+
+    return updated, updated != text, [], mapping
+
+
+def _print_legacy_standards_failure(*, path: Path, text: str, repo_root: Optional[Path]) -> None:
+    refs = _find_legacy_standards_refs(text)
+    if not refs:
+        return
+
+    print(
+        f"{path}: legacy standards paths are not allowed; use 'docs/project_management/system/standards/...'",
+        flush=True,
+    )
+
+    manifest_index: Dict[str, Set[str]] = {}
+    if repo_root is not None:
+        manifest_index = _build_manifest_index(_load_manifest_standard_paths(repo_root))
+
+    for legacy in refs:
+        print(f"- found: {legacy}", flush=True)
+        if repo_root is None:
+            print("  -> cannot suggest replacement (repo root not found)", flush=True)
+            continue
+        basename = os.path.basename(legacy)
+        candidates = _canonical_candidates_for_basename(repo_root, basename, manifest_index)
+        if len(candidates) == 1:
+            print(f"  -> replace with: {candidates[0]}", flush=True)
+        elif not candidates:
+            print(
+                f"  -> no canonical match under {CANONICAL_STANDARDS_ROOT.as_posix()}/**/{basename}",
+                flush=True,
+            )
+        else:
+            shown = ", ".join(candidates[:5])
+            extra = "" if len(candidates) <= 5 else f" (+{len(candidates) - 5} more)"
+            print(f"  -> ambiguous; candidates: {shown}{extra}", flush=True)
+
+
 def check_adr(path: Path, fix: bool) -> int:
     text = path.read_text(encoding="utf-8")
+
+    legacy_refs = _find_legacy_standards_refs(text)
+    repo_root = _repo_root_for_path(path.parent) if legacy_refs or fix else None
+    if legacy_refs and not fix:
+        _print_legacy_standards_failure(path=path, text=text, repo_root=repo_root)
+        return 1
+
+    legacy_changed = False
+    legacy_mapping: Dict[str, str] = {}
+    if legacy_refs and fix:
+        if repo_root is None:
+            print(f"{path}: cannot rewrite legacy standards refs (repo root not found)", flush=True)
+            return 1
+        rewritten, changed, errors, mapping = _rewrite_legacy_standards_refs(path=path, text=text, repo_root=repo_root)
+        if errors:
+            for e in errors:
+                print(e, flush=True)
+            return 1
+        text = rewritten
+        legacy_changed = changed
+        legacy_mapping = mapping
+
     section = _find_exec_section(text)
     if section is None:
         print(f"{path}: missing `## Executive Summary (Operator)` section", flush=True)
@@ -86,10 +276,18 @@ def check_adr(path: Path, fix: bool) -> int:
 
     body_hash = _adr_body_hash(text, section)
     if section.hash_value == body_hash:
-        print(f"OK: {path} executive summary hash matches", flush=True)
+        if fix and legacy_changed:
+            # Rewrite happened but the body hash might not require an update if changes were confined to exec section.
+            path.write_text(text, encoding="utf-8")
+            print(f"FIXED: {path} rewrote {len(legacy_mapping)} legacy standards reference(s)", flush=True)
+        else:
+            print(f"OK: {path} executive summary hash matches", flush=True)
         return 0
 
     if not fix:
+        # If we're not fixing, also prefer reporting legacy standards refs when present.
+        if legacy_refs:
+            _print_legacy_standards_failure(path=path, text=text, repo_root=repo_root)
         if section.hash_value is None:
             print(f"{path}: missing ADR_BODY_SHA256 (expected {body_hash})", flush=True)
         else:
@@ -103,6 +301,8 @@ def check_adr(path: Path, fix: bool) -> int:
 
     updated = text[: section.start] + updated_exec_text + text[section.end :]
     path.write_text(updated, encoding="utf-8")
+    if legacy_changed:
+        print(f"FIXED: {path} rewrote {len(legacy_mapping)} legacy standards reference(s)", flush=True)
     print(f"FIXED: {path} updated ADR_BODY_SHA256 to {body_hash}", flush=True)
     return 0
 
@@ -123,4 +323,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

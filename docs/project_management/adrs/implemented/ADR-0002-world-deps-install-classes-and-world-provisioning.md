@@ -13,7 +13,7 @@ Intended execution branch:
 - `feat/world_deps_selection_layer`
 
 Exit code taxonomy:
-- `docs/project_management/standards/EXIT_CODE_TAXONOMY.md` (this ADR’s exit-code meanings must remain consistent with this taxonomy)
+- `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md` (this ADR’s exit-code meanings must remain consistent with this taxonomy)
 
 Authoritative implementation docs:
 - Decision register: `docs/project_management/_archived/world_deps_selection_layer/decision_register.md`
@@ -32,7 +32,7 @@ Related tracks:
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 52c2b836df2158e5f0b15392e7604d1a9d314f34b1bd66068c00b10bbb67838b
+ADR_BODY_SHA256: b5e6c8db5287133403d15b2553604291471bd611d6307c52d140a78a6752f29b
 
 - Existing: `substrate world deps *` behavior is not fully selection-driven; some operations risk feeling “implicit” or “surprising” across platforms.
 - New: `substrate world deps status|sync|install|provision` is selection-driven and no-ops (exit `0`, no world calls) when no selection file exists.

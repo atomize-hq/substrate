@@ -9,9 +9,9 @@
 - Feature directory: `docs/project_management/_archived/next/orchestration_mcp_toolbox/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Related Docs
 - Decision Register: `docs/project_management/_archived/next/orchestration_mcp_toolbox/decision_register.md`
@@ -20,7 +20,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 486da7f019f858ac7a373d6692b4ea0a9bae3acd98325ad78a415b992d2952a5
+ADR_BODY_SHA256: fb909753c2550d697895759d7e68567ba2536457086afb5414d34bbfa8448889
 ### Changes (operator-facing)
 - Substrate exposes an internal orchestration toolbox providing orchestrator-only tools (speaks MCP)
   - Existing: Orchestration context and levers are primarily internal; agents cannot uniformly access Substrate orchestration functions.
@@ -68,7 +68,7 @@ ADR_BODY_SHA256: 486da7f019f858ac7a373d6692b4ea0a9bae3acd98325ad78a415b992d2952a
         - `tcp://127.0.0.1:<port>` (loopback)
       - orchestrator identity and scope (`agent_id`, `role=orchestrator`, `execution.scope=host`)
     - Exit codes:
-      - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+      - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
       - `0`: success (including “disabled”)
       - `2`: config/schema error (strict parsing)
       - `3`: required dependency unavailable (e.g., world boundary required but unavailable)
@@ -81,7 +81,7 @@ ADR_BODY_SHA256: 486da7f019f858ac7a373d6692b4ea0a9bae3acd98325ad78a415b992d2952a
       - `SUBSTRATE_AGENT_TOOLBOX_ENDPOINT`: `unix://...` or `tcp://127.0.0.1:...`
       - `SUBSTRATE_AGENT_TOOLBOX_VERSION`: `1`
     - Exit codes:
-      - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+      - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
       - `0`: success
       - `2`: config/schema error (strict parsing)
       - `3`: required dependency unavailable (world boundary required but unavailable)

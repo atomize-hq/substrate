@@ -9,9 +9,9 @@
 - Feature directory: `docs/project_management/packs/active/replaying-raccoon/` (ASSUMPTION: created during planning)
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
 
 ## Related Docs
 - Intake: `docs/project_management/intake/adrs/replaying_raccoon_adr_intake.md`
@@ -24,7 +24,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 8e95bf0b87643ce85662a41d645bb0bb87a416addd4e4b175d9efec4ca2aba7b
+ADR_BODY_SHA256: 1fd6090f3bbe83104a53846107c49e92aab168d95055089e33112a6b1d74ac3c
 ### Changes (operator-facing)
 - Replay output reuses the same “world disabled reason attribution” as doctor/health, so replay does not imply `--no-world` when the actual cause is config/env.
   - Existing: `substrate --replay <span_id>` can emit replay origin/warning text that either (a) attributes host-only replay to `--no-world` when the true cause is persisted config/env, or (b) leaves operators guessing which layer disabled world (flag vs env override vs workspace/global config).

@@ -9,9 +9,9 @@
 - Feature directory: `docs/project_management/packs/active/dev-install-helper-discovery/` (ASSUMPTION)
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
 
 ## Related Docs
 - Plan: `docs/project_management/packs/active/dev-install-helper-discovery/plan.md` (TBD)
@@ -25,7 +25,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: ba73da79c588468e27c35124c2bcbaaf16245d35b3b5b9479d4e9472c220b627
+ADR_BODY_SHA256: 8f980bd66ef3c723d3924abaa21a044e50b26933fb53685877f86d3dd1cf19e3
 
 ### Changes (operator-facing)
 - Dev installs become robust to `cargo clean` for `substrate world enable` helper discovery.
@@ -86,7 +86,7 @@ Adopt a production-like bundle root (`bin/`, `scripts/`, `config/`) under `$SUBS
       2) `$SUBSTRATE_HOME/scripts/substrate/world-enable.sh`
     - Dev installs guarantee that (2) exists post-install, so `cargo clean` does not break helper discovery.
 - Exit codes:
-  - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md` (no overrides in this ADR).
+  - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md` (no overrides in this ADR).
 
 ### Config
 - Files and locations (precedence): no changes in this ADR.

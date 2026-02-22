@@ -10,9 +10,9 @@
 - Intended branch name(s): `feat/world-process-exec-tracing-parity`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Related Docs
 - Plan: `docs/project_management/_archived/next/world_process_exec_tracing_parity/plan.md`
@@ -30,7 +30,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 9885e07dbbc2521060b85029518193d6619dddfc27c6f3ddd5bf0c18dfa97cba
+ADR_BODY_SHA256: ef913d97dd8c4a9789080513f362ee40d84cdc55c4a509effe2dbf00ec9c205c
 ### Changes (operator-facing)
 - World executions gain subprocess-level visibility (exec/exit telemetry) comparable to host shim tracing
   - Existing: host execution is richly observable via shims, but world execution is observable primarily at “one command per world execute/stream” granularity (no structured visibility into spawned subprocess trees).

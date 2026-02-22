@@ -17,10 +17,10 @@
   - `docs/project_management/_archived/world_deps_selection_layer/` (related work; see notes under Sequencing)
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
+  - `docs/project_management/system/standards/adr/ADR_STANDARD_AND_TEMPLATE.md`
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
 
 ## Related Docs
 - Source contract doc (must remain in parity with this ADR’s contract section):
@@ -41,11 +41,11 @@
 - Per-key merge strategies + multi-source provenance (for `world.deps.*` keys):
   - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 - Exit codes:
-  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+  - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 2b1783166231cc55d91de12770705f87fd3ea92737d1611e9a6e39a1fa3cdb15
+ADR_BODY_SHA256: d66ae560a90cdad0241a8e8fd0557c898d4f3e5596ca3f21a6828c5fda506d15
 ### Changes (operator-facing)
 - World deps becomes “inventory + enabled patches”
   - Existing: world-deps behavior is anchored on legacy manifest/overlay/selection files (`manager_hooks.yaml`, `world-deps.yaml`, `world-deps.selection.yaml`) with semantics that are easy to misread and hard to reason about across scopes.

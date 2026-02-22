@@ -9,9 +9,9 @@
 - Feature directory: `docs/project_management/_archived/next/llm_gateway_in_world/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Related Docs
 - Plan: `docs/project_management/_archived/next/llm_gateway_in_world/plan.md`
@@ -25,7 +25,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: e4484d14e3cfad79300a982b445f3dbbb04375c34023000505221aede57fa6da
+ADR_BODY_SHA256: 2d669369caf458811d33597c36c4bcbbbe9bed1e5da4115e3b31e89eec1c0e3a
 ### Changes (operator-facing)
 - Substrate-owned LLM gateway runs inside the world boundary
   - Existing: CLI agents and tooling may egress directly, or egress may transit a host-level proxy with unclear policy boundary.
@@ -84,7 +84,7 @@ ADR_BODY_SHA256: e4484d14e3cfad79300a982b445f3dbbb04375c34023000505221aede57fa6d
     - Behavior: restart the gateway for the current world session; used for secret rotation.
 
 - Exit codes:
-  - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+  - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
   - `0`: success
   - `2`: user input/usage error (invalid flags, invalid config)
   - `3`: recoverable runtime error (transient failure; retry may succeed)

@@ -9,8 +9,8 @@
 - Feature directory: `docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
-  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+  - `docs/project_management/system/standards/adr/ADR_STANDARD_AND_TEMPLATE.md`
+  - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 
 ## Related Docs
 - Policy snapshot spec: `docs/project_management/_archived/world-agent-policy-snapshot/policy-snapshot-spec.md`
@@ -24,7 +24,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 7fb450fcafcf3cb53fd576b167a8bc26ab6aded352f141b91afec7f08cb50d77
+ADR_BODY_SHA256: 87c75c5c6a66e71783be1d1c033f8791711165b4de6dff5a1555d04c9e4eb61a
 ### Changes (operator-facing)
 - Full isolation writable allowlists stop failing with EPERM on Linux
   - Existing: With `world_fs.isolation=full` and `world_fs.mode=writable`, project writes can fail with `Operation not permitted` even when `world_fs.write_allowlist` explicitly allows the target project prefix.

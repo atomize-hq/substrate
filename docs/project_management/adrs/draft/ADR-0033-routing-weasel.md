@@ -9,9 +9,9 @@
 - Feature directory: `docs/project_management/packs/active/world-deps-pacman-provisioning/` (ASSUMPTION: new pack)
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
 
 ## Related Docs
 - Internals (current behavior notes): `docs/internals/world/deps.md`
@@ -29,7 +29,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: c6d2733547461a8cddb57df3acded514df9ec47047b4b75f1942347284c8ea55
+ADR_BODY_SHA256: 7683fd74ffb42702987a6cbf8224e36e2f6e1ff2fe0f806f9e22800cbf981706
 
 ### Changes (operator-facing)
 - Add Arch-family (pacman) provisioning-time support for world-deps system packages
@@ -100,7 +100,7 @@ Introduce an abstract system-packages method and have Substrate translate packag
       - Remediation MUST include the exact command: `substrate world enable --provision-deps`.
       - On backends where provisioning is unsupported, remediation MUST provide manual guidance and explicitly state that the host OS will not be mutated by Substrate.
 - Exit codes:
-  - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md` (authoritative unless explicitly overridden here)
+  - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md` (authoritative unless explicitly overridden here)
   - `0`: success
   - `2`: invalid inventory/config schema (including unsupported `install.method` / invalid `install.pacman` shape)
   - `3`: world backend unavailable / cannot connect to world-agent

@@ -9,10 +9,10 @@
 - Feature directory: `docs/project_management/_archived/next/forge/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
-  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+  - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 
 ## Related Docs
 - Plan: `docs/project_management/_archived/next/forge/plan.md` (not created; ADR draft phase)
@@ -31,7 +31,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: ebc465112d409c333a645c9a8e5c6a3218c267dd57f42c76c1e3da3360d6487b
+ADR_BODY_SHA256: 22f105ab816130a537072cd0fca3a75dec6c106edd965fc161ad57b34d1f22fe
 ### Changes (operator-facing)
 - Introduce Forge as a first-class “agent loop” node kind usable inside Substrate workflows
   - Existing: Substrate does not provide a native “LLM-driven critique/refine/review loop” runner; operators wire together agent loops externally.

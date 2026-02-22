@@ -9,8 +9,8 @@
 - Feature directory: `docs/project_management/_archived/world-fs-granular-allow-deny/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
-  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+  - `docs/project_management/system/standards/adr/ADR_STANDARD_AND_TEMPLATE.md`
+  - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
   - `docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md`
 
 ## Related Docs
@@ -42,7 +42,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: ecc7cd31fbfb530e57ca93a53f192e8cac0462c05630c98eee56515fbdcc1ed4
+ADR_BODY_SHA256: 2666072c19bbbc3e87633e97c357fc93ef0617688c518b83a1dd6debdb7b4896
 ### Changes (operator-facing)
 - Add granular `allow_list` + `deny_list` for world filesystem reads/writes (and optional directory visibility)
   - Existing: `world_fs.read_allowlist` / `world_fs.write_allowlist` are allowlist-only; invalid patterns (e.g., `..`) can be accepted but ignored; there is no deny list; “allow all except secrets” cannot be expressed.
@@ -105,7 +105,7 @@ ADR_BODY_SHA256: ecc7cd31fbfb530e57ca93a53f192e8cac0462c05630c98eee56515fbdcc1ed
     - `world_fs.discover.allow_list`, `world_fs.discover.deny_list` (optional; default mirrors `read`)
     - `world_fs.write.allow_list`, `world_fs.write.deny_list` (required only when `mode=writable`)
 - Exit codes:
-  - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+  - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
   - `0`: policy set/show succeeded / execution succeeded
   - `2`: user/config error (invalid schema, invalid pattern, disallowed mode combination)
   - `4`: world enforcement failure (e.g., strict deny prerequisites not met and `require_world=true`)
@@ -356,7 +356,7 @@ world_fs:
   - Exception: `deny_enforcement=prefer_strict` explicitly allows downgrade without failing.
 - Policy deny decisions that are enforced by Substrate **before** executing a command (for example, broker-level command
   denies) MUST use the canonical “safety/policy violation” exit code `5` per
-  `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`.
+  `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`.
 - Filesystem deny rules in this ADR are enforced in-world via OS mechanisms (Landlock + deny masking). Therefore they MUST
   manifest as deterministic errno strings (e.g., `Permission denied`, `Read-only file system`, `Operation not permitted`)
   and the workload MUST exit non-zero, but the exact numeric exit code is workload-defined (Substrate MUST NOT attempt to

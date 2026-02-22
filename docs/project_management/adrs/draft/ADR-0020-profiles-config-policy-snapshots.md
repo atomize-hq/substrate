@@ -10,8 +10,8 @@
   - `docs/project_management/_archived/next/` (this ADR; cross-cutting contract)
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
-  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+  - `docs/project_management/system/standards/adr/ADR_STANDARD_AND_TEMPLATE.md`
+  - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 
 ## Related Docs
 - Policy/config scope + patch files:
@@ -23,7 +23,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 4ac5c6b1469c172baef599cbafcb281d35137b4822d01a99b93bb3a6c49d4d52
+ADR_BODY_SHA256: 954c6e25ffe2599ff28304e9a842cae35f5806b60450ee221e4f2fce4909e939
 ### Changes (operator-facing)
 - Profiles can pin full behavior across config + policy
   - Existing: effective policy/config are derived by merging defaults + global + workspace patches (plus CLI/env overrides) based on the current directory.
@@ -116,7 +116,7 @@ New commands (draft contract; exact UX strings may iterate, behavior is normativ
 - `substrate profile show <name>`: show the profile’s config/policy snapshots as stored.
 
 Exit codes:
-- Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+- Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 - Profile errors MUST be fail-closed for the affected invocation:
   - Invalid/missing active profile contents (missing files, invalid YAML, schema mismatch, incomplete snapshot) MUST be a hard error.
   - Disabled profile activation MUST be a hard error.

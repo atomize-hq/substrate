@@ -9,9 +9,9 @@
 - Feature directory: `docs/project_management/_archived/next/agent_hub_core/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Related Docs
 - Decision Register: `docs/project_management/_archived/next/agent_hub_core/decision_register.md`
@@ -19,7 +19,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 95d13ad2c1eb2c16813d7fc93cf16cda3f53f392568601c1f344e276980c71e5
+ADR_BODY_SHA256: ac9ed0f58ba23a1e4d8cbc764dd5af4f66117872ee45093fbba815b704d95a0a
 ### Changes (operator-facing)
 - Agent Hub provides a stable registry + session router for CLI and API agents
   - Existing: Substrate can run worlds, trace commands, and call a world-agent API, but “agents” are not uniformly registered/routed as role-swappable backends.
@@ -93,7 +93,7 @@ Control-plane enablement gates (v1; fail closed):
         - `--scope` is a view filter based on each agent’s configured `execution.scope` (it MUST NOT change global world isolation toggles)
         - `--role` filters by assigned `role` (taxonomy label)
     - Exit codes:
-      - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+      - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
       - `0`: success (including “agents disabled” with empty list and an explicit `disabled=true` flag in `--json`)
       - `2`: config/schema error in agent inventory or effective config (strict parsing)
       - `4`: feature unavailable on this platform/build
@@ -108,7 +108,7 @@ Control-plane enablement gates (v1; fail closed):
       - filter semantics:
         - `--scope` and `--role` apply as view filters to the returned sessions/agents
     - Exit codes:
-      - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+      - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
       - `0`: success (including “agents disabled”)
       - `2`: config/schema error (strict parsing) or invalid orchestrator selection
       - `4`: feature unavailable on this platform/build
@@ -119,7 +119,7 @@ Control-plane enablement gates (v1; fail closed):
       - policy allowlist contains the orchestrator backend id
       - if any member agents are configured `execution.scope=world` and `agents.fail_closed.routing=true`, the world boundary is available
     - Exit codes:
-      - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+      - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
       - `0`: all checks pass
       - `2`: config/schema error or invalid orchestrator selection
       - `3`: required dependency unavailable (e.g., world backend/socket missing when required)

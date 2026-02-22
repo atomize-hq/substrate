@@ -9,12 +9,12 @@
 - Feature directory: `docs/project_management/_archived/env_var_taxonomy_and_override_split/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
-  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
-  - `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`
+  - `docs/project_management/system/standards/adr/ADR_STANDARD_AND_TEMPLATE.md`
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+  - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
+  - `docs/project_management/system/standards/ci/PLATFORM_INTEGRATION_AND_CI.md`
 
 ## Related Docs
 - Prior ADRs:
@@ -35,7 +35,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 878cc1d007c83254cff8881b120d132493f8f9d634a7d56e3dc47fc93497a039
+ADR_BODY_SHA256: 5a5e7ad83f9a3cfa6067168e0ee16e031321d3b1d056b7ee36055ad05a507cb9
 ### Changes (operator-facing)
 - Split exported state from override inputs
   - Existing: `SUBSTRATE_*` values can be present in the environment because they are exported by `$SUBSTRATE_HOME/env.sh` (stable exports), but some of those same variables are also treated as operator overrides by config resolution. This creates “stale export” surprises where config edits appear not to take effect without re-sourcing.
@@ -82,7 +82,7 @@ ADR_BODY_SHA256: 878cc1d007c83254cff8881b120d132493f8f9d634a7d56e3dc47fc93497a03
 ### CLI
 - Commands and behavior are unchanged unless explicitly noted here; precedence semantics change as described below.
 - Exit codes:
-  - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+  - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
   - `0`: success
   - `1`: unexpected failure
   - `2`: actionable user error (invalid config, invalid override value, missing workspace for workspace-scoped commands)

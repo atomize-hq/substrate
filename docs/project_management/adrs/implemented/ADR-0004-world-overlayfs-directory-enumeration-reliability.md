@@ -10,8 +10,8 @@
 - Orchestration branch: `feat/world-overlayfs-enumeration`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
 
 ## Related Docs
 - Plan: `docs/project_management/_archived/world-overlayfs-enumeration/plan.md`
@@ -24,7 +24,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: d7ca7b07d4b30d283dcd9abd9a829fa388df25aeeb9f1fc34ca3ebf136adffbf
+ADR_BODY_SHA256: 303e62553b96905fe574f3a0257d4295ac845c9926dad20c91ccc67e5db2ab1d
 ### Changes (operator-facing)
 - World overlay directory enumeration reliability (Linux)
   - Existing: On some Linux hosts, a world overlay mount can succeed but directory enumeration in the merged view is broken (e.g., `ls` shows empty even though `stat` works), making worlds unsafe/confusing.
@@ -77,7 +77,7 @@ ADR_BODY_SHA256: d7ca7b07d4b30d283dcd9abd9a829fa388df25aeeb9f1fc34ca3ebf136adffb
       - command matched `allow_with_restrictions` (isolated match)
   - World is **optional** otherwise.
 - Exit codes:
-  - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+  - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
   - `0`: command succeeded (in world, or in host fallback when world is optional)
   - `2`: usage/config error (invalid flags/config that prevent execution)
   - `3`: world filesystem strategy unavailable when required (no viable in-world strategy passes the enumeration health check)

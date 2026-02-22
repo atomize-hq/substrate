@@ -9,9 +9,9 @@
 - Feature directory: `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
-  - `docs/project_management/standards/EXECUTIVE_SUMMARY_STANDARD.md`
-  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+  - `docs/project_management/system/standards/adr/ADR_STANDARD_AND_TEMPLATE.md`
+  - `docs/project_management/system/standards/adr/EXECUTIVE_SUMMARY_STANDARD.md`
+  - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 
 ## Related Docs
 - Plan: `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/plan.md`
@@ -48,7 +48,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: e0a117970d68fb6e19affbce5ecd34c22ef1db8dc37a861e6d7203146e4eab24
+ADR_BODY_SHA256: d5d6a84d7e059276d0ec4312ffe030c4234089ff419b31f86f8f5cef1a7f055b
 ### Changes (operator-facing)
 - Make concurrent outputs predictable and non-corrupting when multiple agents run
   - Existing: Substrate can render concurrent **structured** agent output during the REPL (e.g., `:demo-agent`), but there is no explicit output contract that separates:
@@ -96,7 +96,7 @@ ADR_BODY_SHA256: e0a117970d68fb6e19affbce5ecd34c22ef1db8dc37a861e6d7203146e4eab2
 - Commands and flags: no new top-level `substrate` commands or flags are introduced by this ADR.
 - Interactive scope: this ADR defines output routing behavior for the interactive REPL and any execution path that enters PTY passthrough (as defined by ADR-0016).
 - Exit codes:
-  - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+  - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
   - `0`: success
   - `1`: unexpected failure
   - `2`: actionable user error (including invalid config types/values at the CLI/config boundary)

@@ -9,9 +9,9 @@
 - Feature directory: `docs/project_management/packs/active/dev-install-world-agent-staging/` (ASSUMPTION)
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
 
 ## Related Docs
 - Plan: `docs/project_management/packs/active/dev-install-world-agent-staging/plan.md` (TBD)
@@ -25,7 +25,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 89350dcda00b0c344925c44f3e317899bfc254a0b9a7308163801f89767f0666
+ADR_BODY_SHA256: 2c07ccf5df09ef6097c09bec91824cf180fbeb8043c2819a2baf78021f235047
 
 ### Changes (operator-facing)
 - Linux dev installs done with `--no-world` become “enable later” ready without extra manual build steps.
@@ -97,7 +97,7 @@ Do not change build/stage behavior. Instead, add preflight checks so enable dete
       - `cargo build -p world-agent --release` and re-run `scripts/substrate/dev-install-substrate.sh --no-world`, or
       - re-run dev install without `--no-world` if the user wants the installer to manage the artifact end-to-end.
 - Exit codes:
-  - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md` (no overrides in this ADR).
+  - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md` (no overrides in this ADR).
 
 ### Config
 - Files and locations (precedence):

@@ -11,9 +11,9 @@
 - Feature directory: `docs/project_management/_archived/next/policy_and_config_mental_model_simplification/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/system/standards/adr/ADR_STANDARD_AND_TEMPLATE.md`
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
 
 ## Related Docs
 
@@ -37,7 +37,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 6599e2c4c0c757e864a3e06076dd6abc9ec206b06cb6664159c0c23edcf36c52
+ADR_BODY_SHA256: bdf4abf76ffb48dc129f0f5ba5640b7c32e01546ca880055d2d0657f0bf7e07b
 ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after editing>
 
 - Existing: Config/policy discovery and naming is ambiguous (multiple file names, “settings vs config vs policy”, and colliding terms like `cage/caged` and `root/anchor`).
@@ -153,7 +153,7 @@ The following legacy artifacts MUST be removed from loader/CLI logic:
 
 ### Exit codes
 
-Exit code taxonomy reference (unless overridden here): `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`.
+Exit code taxonomy reference (unless overridden here): `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`.
 
 This ADR explicitly defines exit codes for the commands it specifies:
 

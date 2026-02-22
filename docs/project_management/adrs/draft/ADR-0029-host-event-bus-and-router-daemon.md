@@ -9,9 +9,9 @@
 - Feature directory: `docs/project_management/_archived/next/host_event_bus_router_daemon/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Related Docs
 - Decision Register: `docs/project_management/_archived/next/host_event_bus_router_daemon/decision_register.md`
@@ -29,7 +29,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 86af8acb4a4b7843b575b3738e111e54212356be41b3e0709b4ae82d3d506e48
+ADR_BODY_SHA256: af9cb004268a0a6cbf00a7981662d531b51f11c2afca77201becae5583feb9da
 ### Changes (operator-facing)
 - Substrate gains an always-on host router that can trigger policy-gated actions from trace events (including cross-workspace)
   - Existing: Substrate records trace events (`~/.substrate/trace.jsonl`), but there is no always-on host service that can “listen” for specific events and route them into follow-on work.
@@ -225,7 +225,7 @@ Only an explicit allowlist of event families is triggerable. v1 supports:
 - `substrate workflow serve [--foreground]`
   - Behavior: runs the workflow router service.
   - Exit codes:
-    - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+    - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
     - `0`: clean shutdown
     - `4`: service cannot start due to platform prerequisites
 - `substrate workflow status [--json]`
@@ -240,7 +240,7 @@ Only an explicit allowlist of event families is triggerable. v1 supports:
     - workspace registry is readable and workspace roots are resolvable
     - rule files parse strictly (schema) and only use the v1 trigger allowlist families
   - Exit codes:
-    - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+    - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
     - `0`: all checks pass
     - `2`: config/schema error
     - `3`: required dependency unavailable (trace path missing/unreadable, registry missing)

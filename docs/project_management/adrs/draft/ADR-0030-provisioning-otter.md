@@ -9,9 +9,9 @@
 - Feature directory: `docs/project_management/packs/active/world-deps-apt-provisioning/` (ASSUMPTION: new pack)
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
 
 ## Related Docs
 - Internals (current behavior notes): `docs/internals/world/deps.md`
@@ -28,7 +28,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 3ddfa54caddc36674c0df1d61e6768857b78e15df4b8b9578e1cfb0fb671c833
+ADR_BODY_SHA256: 73799aea312b8f9ed6cf90908dedcd06f0a6238d50e4b0273fbed7278a80862e
 
 ### Changes (operator-facing)
 - APT-backed world-deps become provisioning-time; runtime sync/install is user-space-only
@@ -94,7 +94,7 @@ Add a `substrate world deps provision` command that provisions APT/system packag
       - Remediation MUST include the exact command: `substrate world enable --provision-deps`.
       - On backends where provisioning is unsupported, remediation MUST provide manual guidance and explicitly state that the host OS will not be mutated by Substrate.
 - Exit codes:
-  - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md` (authoritative unless explicitly overridden here)
+  - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md` (authoritative unless explicitly overridden here)
   - `0`: success
   - `3`: world backend unavailable / cannot connect to world-agent
   - `4`: unmet prerequisites or unsupported operation (includes: APT provisioning not supported on this backend; runtime sync/install encountered APT items and requires provisioning)

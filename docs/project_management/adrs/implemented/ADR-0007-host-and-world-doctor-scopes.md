@@ -10,9 +10,9 @@
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Intended branch: `feat/doctor-scopes`
 - Standards:
-  - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
-  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
-  - `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`
+  - `docs/project_management/system/standards/adr/ADR_STANDARD_AND_TEMPLATE.md`
+  - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
+  - `docs/project_management/system/standards/ci/PLATFORM_INTEGRATION_AND_CI.md`
 
 ## Related Docs
 - Plan: `docs/project_management/_archived/doctor_scopes/plan.md`
@@ -23,7 +23,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: f9d8246487eaecff83a45b600b8218480a38cb5a0e43181577735c7e34b860f6
+ADR_BODY_SHA256: aac6d834bacc2c3ee4699c19512380a00740ed494d50998c519ef5b493d44943
 ### Changes (operator-facing)
 - Split doctor into host vs world scopes (without requiring a guest-installed `substrate` CLI)
   - Existing: `substrate world doctor` is host-oriented on macOS (Lima/transport/service checks) and kernel-oriented on Linux (overlay/nft/cgroup + Landlock probe). On macOS it cannot report guest-kernel facts like Landlock ABI/support without manually running commands inside the VM.
@@ -77,7 +77,7 @@ ADR_BODY_SHA256: f9d8246487eaecff83a45b600b8218480a38cb5a0e43181577735c7e34b860f
     - JSON output includes separate `host` and `world` objects (stable field names), plus top-level `ok`.
 
 Exit codes:
-- Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+- Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 - `0`: doctor report `ok=true` (all required checks passed)
 - `1`: unexpected internal error (bug, panic, unhandled I/O)
 - `2`: CLI usage/config error (invalid flags/args)

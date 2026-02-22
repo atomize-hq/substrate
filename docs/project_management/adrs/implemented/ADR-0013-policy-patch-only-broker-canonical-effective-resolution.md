@@ -12,8 +12,8 @@
   - `docs/project_management/_archived/workspace-config-policy-unification/` (ADR-0008 baseline contract this work enforces)
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
-  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+  - `docs/project_management/system/standards/adr/ADR_STANDARD_AND_TEMPLATE.md`
+  - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 
 ## Related Docs
 - Baseline scope/file contract:
@@ -27,7 +27,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: f0b4c723a9a5beaec2917380e50321c6e9df75a7d8d35aaa4b004e8c1d7a2dd1
+ADR_BODY_SHA256: 4b2bcc738568e0b50245ab5d8696d62404ed11ee38eda9369739c8df10becfc7
 Run `make adr-fix ADR=docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md` after drafting.
 
 ### Changes (operator-facing)
@@ -87,7 +87,7 @@ Run `make adr-fix ADR=docs/project_management/adrs/implemented/ADR-0013-policy-p
     - MUST render the on-disk patch file for that scope (not the effective merged policy).
     - MUST treat missing patch files as “empty patch” by contract (equivalent to `{}`), without creating files as a side effect.
 - Exit codes:
-  - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+  - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
   - `0`: command succeeds (including “no policy file present; defaults apply” views)
   - `2`: invalid YAML, invalid schema/type, unknown keys, or unreadable patch file for the requested scope
   - `5`: policy deny decisions for command execution (as enforced by the broker/shim), not policy-parse failures

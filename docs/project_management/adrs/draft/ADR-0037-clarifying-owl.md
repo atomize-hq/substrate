@@ -9,9 +9,9 @@
 - Feature directory: `docs/project_management/packs/active/clarifying-owl/` (ASSUMPTION: created during planning)
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
 
 ## Related Docs
 - Intake: `docs/project_management/intake/adrs/clarifying_owl_adr_intake.md`
@@ -23,7 +23,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 42e0ad3a6a50d2d90cf989e7b2f18e110caef1abe2fc571f8f3ecc900cc47ded
+ADR_BODY_SHA256: 6b7e5820cdad220f41174d94c53bc5a1642d1dac515cded5795b938f8f490cba
 ### Changes (operator-facing)
 - Doctor/health output explains *why* world isolation is disabled (flag vs env vs config), without changing behavior.
   - Existing: `substrate host doctor`, `substrate world doctor`, and sometimes `substrate health` can report “world isolation disabled by effective config (--no-world)” even when the actual disablement source is persisted config (`$SUBSTRATE_HOME/config.yaml` / workspace `.substrate/workspace.yaml`) or an override env var (`SUBSTRATE_OVERRIDE_WORLD=disabled`). This misleads operators and increases debug time.
@@ -106,7 +106,7 @@ Compute the reason with a local priority check (e.g., if `--no-world` passed →
   - `substrate health`:
     - When world is disabled (`world_enabled=false`), the health summary must display the same attribution string (no change to world enable/disable behavior).
 - Exit codes:
-  - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md` (no overrides in this ADR).
+  - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md` (no overrides in this ADR).
 
 ### Config
 - Files and locations (precedence is defined by current config resolution; this ADR must reflect the effective winner):

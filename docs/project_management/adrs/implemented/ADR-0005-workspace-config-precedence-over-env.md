@@ -10,9 +10,9 @@
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Intended branch: `feat/policy_and_config_precedence`
 - Standards:
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/system/standards/ci/PLATFORM_INTEGRATION_AND_CI.md`
 
 ## Related Docs
 - Prior ADR (baseline semantics): `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`
@@ -28,7 +28,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 5d5d5ac9f145855329ca4fb98b17a5d8e5ef6c98dddbe85c1e6ea99fb0c3f3bf
+ADR_BODY_SHA256: 8d172cf13539c74060f84605af8f9b244d7b5ffc6d4c4413b0db0126b882876a
 ### Changes (operator-facing)
 - Workspace config always wins over sourced exports
   - Existing: If your shell environment contains `SUBSTRATE_*` values (often because `$SUBSTRATE_HOME/env.sh` is sourced), those env vars override `.substrate/workspace.yaml`, so workspace settings like `world.caged: false` can appear “ignored”.
@@ -78,7 +78,7 @@ ADR_BODY_SHA256: 5d5d5ac9f145855329ca4fb98b17a5d8e5ef6c98dddbe85c1e6ea99fb0c3f3b
   - It MUST NOT print “effective config for `cwd`”, and it MUST NOT incorporate workspace config, env vars, or CLI flags.
 
 Exit codes:
-- Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+- Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 - `0`: success (including no-op)
 - `2`: actionable user error (missing workspace for workspace-scoped commands; invalid update syntax; invalid value/type)
 - `1`: unexpected failure

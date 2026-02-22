@@ -9,9 +9,9 @@
 - Feature directory: `docs/project_management/packs/active/world-disabled-diagnostics/` (ASSUMPTION: new pack)
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
 
 ## Related Docs
 - Intake: `docs/project_management/intake/adrs/quieting_lemur_adr_intake.md`
@@ -23,7 +23,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: f516fe2187c58f3d1175c35acdf7ceaa47bb4a1beca17ed6b1b16e59141eeb3a
+ADR_BODY_SHA256: eca85e8a7a65e0ca27cfcb7c46f5f001cde40e534bb2c17f7a4758bd412f9a73
 
 ### Changes (operator-facing)
 - Quiet diagnostics when world isolation is intentionally disabled
@@ -101,7 +101,7 @@ Keep shim-doctor behavior largely intact, but in `crates/shell/src/builtins/heal
   - MUST treat effective `world.enabled: true` and world-backend failures as “attention required”, with clear error details.
 
 - Exit codes:
-  - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md` (authoritative unless explicitly overridden here)
+  - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md` (authoritative unless explicitly overridden here)
   - ASSUMPTION: `substrate health` and `substrate shim doctor` remain informational surfaces where successful report generation exits `0`, regardless of “attention required” classification; non-zero exit is reserved for command execution failures (e.g., invalid flags, serialization errors).
 
 ### Config

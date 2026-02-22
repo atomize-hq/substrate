@@ -11,8 +11,8 @@
   - `docs/project_management/_archived/workspace-config-policy-unification/` (ADR-0008 implementation)
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
-  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+  - `docs/project_management/system/standards/adr/ADR_STANDARD_AND_TEMPLATE.md`
+  - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 
 ## Related Docs
 - Patch files + scope model:
@@ -24,7 +24,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: c02625b896f88c310c67463006646740ce9fda7ef726f034262d2b67a74ec722
+ADR_BODY_SHA256: 9f5ad467af8c83056bf9e06e1f6f2b3f1e9be8a58a0f35fc56b832fa957e9640
 ### Changes (operator-facing)
 - Config “effective/current” views can explain multi-layer keys
   - Existing: `current show --explain` assumes each effective key comes from exactly one source layer.

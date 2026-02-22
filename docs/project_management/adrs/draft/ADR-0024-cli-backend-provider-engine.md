@@ -9,9 +9,9 @@
 - Feature directory: `docs/project_management/_archived/next/llm_cli_backend_engine/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Related Docs
 - Plan: `docs/project_management/_archived/next/llm_cli_backend_engine/plan.md`
@@ -23,7 +23,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 83c2ee5d41e7267d169627b560639bbd375101df356b4525f8437ff3e6bf885c
+ADR_BODY_SHA256: 0e7889cf9241c33071cef5a595bf027c9e47496bba8075f66d3f0faee9cae1f4
 ### Changes (operator-facing)
 - Treat subscription-authenticated CLIs (starting with Codex) as LLM “provider backends”
   - Existing: Cross-provider routing typically requires API keys or external proxies; subscription-authenticated CLIs cannot be used as provider backends in a controlled way.

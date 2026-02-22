@@ -9,9 +9,9 @@
 - Feature directory: `docs/project_management/_archived/next/linux_guest_rootfs_backend/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
 
 ## Related Docs
 - Prior ADR (world-deps provisioning posture): `docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
@@ -25,7 +25,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: a182aa49a069eb96e6534633f39fa13f3853af9b9c4fed3141763b5dc9cff4b3
+ADR_BODY_SHA256: a253781bcf9a23768d525e62ff91b771be1b3aa4594ad4c30fd48b2e7ccda3c7
 
 ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/adrs/draft/ADR-0009-linux-guest-rootfs-backend-and-linux-system-packages-provisioning.md` after drafting>
 
@@ -81,7 +81,7 @@ If `world deps provision` requires guest rootfs and it is missing/unready, Subst
   - Package manager support remains apt-only in this ship (Ubuntu/Debian-family guest rootfs).
 
 Exit codes:
-- Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+- Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 - `0`: success (including “no system packages required”)
 - `2`: configuration/usage error (invalid selection YAML, unknown tool id, schema mismatch)
 - `3`: world backend unavailable when required (e.g., world-agent/socket unavailable)
