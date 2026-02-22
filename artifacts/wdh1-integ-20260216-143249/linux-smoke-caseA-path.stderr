@@ -1,3 +1,0 @@
-substrate: info: no config file at /tmp/substrate-wdh1-smoke-env-iFHaZX/substrate-home/config.yaml; run `substrate config global init` to create defaults
-Setting up command tracing (one-time setup)...
-Command tracing setup complete.

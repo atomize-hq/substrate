@@ -646,8 +646,8 @@
       "id": "json_mode",
       "title": "JSON mode (structured CLI I/O)",
       "branch": "feat/json-mode",
-      "directory": "docs/project_management/future/json-mode",
-      "plan": "docs/project_management/future/json-mode/json_mode_plan.md",
+      "directory": "docs/project_management/packs/draft/json-mode",
+      "plan": "docs/project_management/packs/draft/json-mode/json_mode_plan.md",
       "status": "not_started",
       "sequence": [
         {

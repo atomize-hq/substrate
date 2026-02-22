@@ -1,7 +1,0 @@
-== Setup: smoke inventory override (no network) ==
-== Preflight: world doctor ==
-== Setup: host-visible policy ==
-== Case A: PATH is sanitized and prefixed with world-deps bin ==
-substrate: info: no config file at /tmp/tmp.xDAlrHg0PN/substrate-home/config.yaml; run `substrate config global init` to create defaults
-Setting up command tracing (one-time setup)...
-Command tracing setup complete.

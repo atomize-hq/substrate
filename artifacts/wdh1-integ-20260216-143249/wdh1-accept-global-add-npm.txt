@@ -1,2 +1,0 @@
-Enabled deps updated (global): added: npm
-substrate: note: enabled deps changes apply to the world only after 'substrate world deps current sync'

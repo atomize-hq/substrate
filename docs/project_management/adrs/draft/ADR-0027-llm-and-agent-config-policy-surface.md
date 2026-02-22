@@ -44,11 +44,11 @@
   - `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`
   - `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`
 - Global JSON mode plan (separate track; do not duplicate):
-  - `docs/project_management/future/json-mode/json_mode_plan.md`
+  - `docs/project_management/packs/draft/json-mode/json_mode_plan.md`
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 07ca369b18fb8965c9c8c3e84bbb54937bc69b1ffae1c1397cd829bb691df5cf
+ADR_BODY_SHA256: bceb2cda66397248d4b6109f362435cfdc4241b28b1366e35ebedd7f881ffdcb
 ### Changes (operator-facing)
 - LLM + agent behavior is configured and governed via the existing config/policy files (new keys only)
   - Existing: There is no repo-wide, stable config/policy surface for LLM gateway routing, CLI agent backends, or agent role selection, which invites ad-hoc files/env vars and inconsistent enforcement boundaries.
@@ -92,7 +92,7 @@ ADR_BODY_SHA256: 07ca369b18fb8965c9c8c3e84bbb54937bc69b1ffae1c1397cd829bb691df5c
 - Implementing the LLM gateway, routing engine, or agent hub (those are separate ADRs).
 - Defining a new config file format (e.g., TOML) or introducing new config roots.
 - Storing secrets (API keys, tokens) in Substrate config files.
-- Defining the global JSON-mode envelope for all commands (tracked by `docs/project_management/future/json-mode/json_mode_plan.md`).
+- Defining the global JSON-mode envelope for all commands (tracked by `docs/project_management/packs/draft/json-mode/json_mode_plan.md`).
 
 ## User Contract (Authoritative)
 
