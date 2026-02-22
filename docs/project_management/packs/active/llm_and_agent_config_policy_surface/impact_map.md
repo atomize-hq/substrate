@@ -3,10 +3,12 @@
 This file replaces the legacy `integration_map.md`.
 
 Authoring standards:
-- `docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md`
-- `docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md`
+
+- `docs/project_management/system/standards/planning/PLANNING_IMPACT_MAP_STANDARD.md`
+- `docs/project_management/system/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`
 
 ## Inputs
+
 - Feature directory: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/`
 - ADR(s):
   - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
@@ -18,6 +20,7 @@ Authoring standards:
 List every file expected to be created/edited/deprecated/removed. Use repo-relative paths.
 
 ### Create
+
 - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/spec_manifest.md` — required spec ownership map (planning v4)
 - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/impact_map.md` — impact map (planning v4)
 - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/LACP0-spec.md` — Phase 3a slice spec + acceptance criteria
@@ -35,6 +38,7 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
   - `crates/shell/tests/adr_0027_agent_inventory.rs` (or similar) — strict agent file parsing + overlay broadening rejection
 
 ### Edit
+
 - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md` — update `Related Docs` to include `spec_manifest.md`, `impact_map.md`, plan/tasks, and slice specs; keep links internally consistent
 - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/SCHEMA.md` — keep `policy_overlay` composition rules aligned with DR-0007 and keep the overlay allowed-key subset explicit
 - `docs/CONFIGURATION.md` — document new key families and strictness posture for `llm.*`, `agents.*`, and `workflow.router.*`
@@ -47,14 +51,17 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
 - `crates/broker/src/profile.rs` — ensure default/built-in policy/config structures remain valid with new keys (no missing defaults)
 
 ### Deprecate
+
 - None (ADR-0027 is additive: new keys only; no legacy key families are removed).
 
 ### Delete
+
 - None.
 
 ## Cascading implications (behavior/UX)
 
 ### CLI / UX
+
 - Change: operators can enable/configure LLM + agent features via existing patch-management CLIs (new keys only).
   - Direct impact:
     - No new file families to learn; operators set `llm.*` / `agents.*` keys using familiar commands.
@@ -65,6 +72,7 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
     - Any component or doc that implies a separate config/policy file family for LLM/agents would contradict this ADR and must be corrected.
 
 ### Config / env vars / paths
+
 - Change: new key families are introduced into the strict config schema (`llm.*`, `agents.*`) with disabled-by-default defaults.
   - Direct impact:
     - Effective config gains new sections with deterministic defaults.
@@ -84,6 +92,7 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
     - Allowing agent file overlays to broaden policy would silently create per-agent privilege escalation.
 
 ### Policy / isolation / security posture
+
 - Change: policy gains explicit allowlists + fail-closed routing controls for LLM/agents, plus additive `workflow.router.*` gates.
   - Direct impact:
     - Deny-by-default posture becomes explicit and explainable (`allowed_backends=[]` denies; router disabled by default).
@@ -96,6 +105,7 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
 ## Cross-queue scan (ADRs + Planning Packs)
 
 ### Relevant ADRs (queued/unimplemented)
+
 - ADR: `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md`
   - Overlap surfaces: config/policy key paths for gateway enablement/routing; secret sourcing allowlists.
   - Conflict: no (dependent).
@@ -118,6 +128,7 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
   - Resolution (explicit): router ADR must treat `workflow.router.*` as policy-owned gates and remain fail-closed by default.
 
 ### Related Phase 8 tracks (cross-cutting; use ADRs/registry)
+
 - Phase 8 registry (cross-cutting lock): `docs/project_management/packs/PHASE_8_CROSS_CUTTING_DECISION_REGISTRY.md`
 - LLM gateway: `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md`
 - CLI backend engine: `docs/project_management/adrs/draft/ADR-0024-cli-backend-provider-engine.md`

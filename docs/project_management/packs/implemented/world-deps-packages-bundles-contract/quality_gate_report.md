@@ -3,6 +3,7 @@
 RECOMMENDATION: FLAG FOR HUMAN REVIEW
 
 ## Metadata
+
 - Feature directory: `docs/project_management/packs/active/world-deps-packages-bundles-contract/`
 - Reviewed commit: `aae8f707da0bccff835b708cb79dbc5102b15f49`
 - Reviewer: `Codex (GPT-5.2), third-party reviewer`
@@ -52,7 +53,8 @@ PY
 ```
 
 ### Planning lint (mechanical)
-Reference: `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
+
+Reference: `docs/project_management/system/standards/planning/PLANNING_LINT_CHECKLIST.md`
 
 ```bash
 export FEATURE_DIR="docs/project_management/packs/active/world-deps-packages-bundles-contract"
@@ -71,6 +73,7 @@ make adr-check ADR=docs/project_management/adrs/draft/ADR-0017-agent-hub-concurr
 ```
 
 ## Required Inputs Read End-to-End (checklist)
+
 Mark `YES` only if read end-to-end.
 
 - ADR(s): `YES`
@@ -85,23 +88,26 @@ Mark `YES` only if read end-to-end.
 - Feature smoke scripts under `smoke/` (if required): `YES`
 - `docs/project_management/packs/sequencing.json`: `YES`
 - Standards:
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
-  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`: `YES`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`: `YES`
 
 ## Gate Results (PASS/FAIL with evidence)
 
 ### 1) Zero-ambiguity contracts
+
 - Result: `PASS`
 - Evidence: `make planning-lint FEATURE_DIR="docs/project_management/packs/active/world-deps-packages-bundles-contract"` ran hard-ban + ambiguity scans and did not report violations (it failed later due to ADR hash drift).
 - Notes: Hard-ban and ambiguity scans were executed as part of planning lint.
 
 ### 2) Decision quality (2 options, explicit tradeoffs, explicit selection)
+
 - Result: `FAIL`
 - Evidence: `docs/project_management/packs/active/world-deps-packages-bundles-contract/decision_register.md` (DR-0002, DR-0003).
 - Notes: DR-0002 and DR-0003 do not meet the Decision Register template requirements (missing required sections and explicit follow-up task mapping to task IDs).
 
 ### 3) Cross-doc consistency (CLI/config/exit codes/paths)
+
 - Result: `PASS`
 - Evidence:
   - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
@@ -111,6 +117,7 @@ Mark `YES` only if read end-to-end.
 - Notes: CLI surface, config paths, and exit-code taxonomy references are consistent across the reviewed documents.
 
 ### 4) Sequencing and dependency alignment
+
 - Result: `PASS`
 - Evidence:
   - `docs/project_management/packs/sequencing.json` sprint id: `world_deps_packages_bundles_contract`
@@ -121,6 +128,7 @@ Mark `YES` only if read end-to-end.
 - Notes: `tasks.json` ordering and checkpoint gating align with `sequencing.json`.
 
 ### 5) Testability and validation readiness
+
 - Result: `PASS`
 - Evidence:
   - Playbook: `docs/project_management/packs/active/world-deps-packages-bundles-contract/manual_testing_playbook.md`
@@ -128,6 +136,7 @@ Mark `YES` only if read end-to-end.
 - Notes: Smoke scripts exist, are referenced by the playbook, and encode exit-code assertions for key fail-closed paths.
 
 ### 5.1) Cross-platform parity task structure (schema v2/v3/v4)
+
 - Result: `PASS`
 - Evidence:
   - `docs/project_management/packs/active/world-deps-packages-bundles-contract/tasks.json` meta:
@@ -141,6 +150,7 @@ Mark `YES` only if read end-to-end.
 - Notes: Task model matches schema v4+ boundary-only platform-fix.
 
 ### 6) Triad interoperability (execution workflow)
+
 - Result: `PASS`
 - Evidence:
   - Kickoff prompt sentinel present in all prompts under `docs/project_management/packs/active/world-deps-packages-bundles-contract/kickoff_prompts/`.
@@ -150,6 +160,7 @@ Mark `YES` only if read end-to-end.
 ## Findings (must be exhaustive)
 
 ### Finding 001 — Mechanical lint failure: ADR-0017 executive summary hash drift
+
 - Status: `DEFECT`
 - Evidence:
   - `make planning-lint FEATURE_DIR="docs/project_management/packs/active/world-deps-packages-bundles-contract"` fails with:
@@ -160,16 +171,18 @@ Mark `YES` only if read end-to-end.
 - If DEFECT: Alternative (one viable): Remove references to ADR-0017 from this Planning Pack’s required inputs if it is not actually a constraint for this feature; then re-run planning lint.
 
 ### Finding 002 — Decision register entries do not meet the 2-option decision standard
+
 - Status: `DEFECT`
 - Evidence:
   - `docs/project_management/packs/active/world-deps-packages-bundles-contract/decision_register.md`:
     - DR-0002 lacks required sections (`Unlocks`, `Quick wins / low-hanging fruit`) for both options and has no explicit follow-up task mapping.
     - DR-0003 lacks required sections (`Cascading implications`, `Risks`, `Unlocks`, `Quick wins / low-hanging fruit`) and has no explicit follow-up tasks section.
 - Impact: The plan is not implementation-ready because major execution-shaping choices are not fully justified/auditable; downstream tasks cannot reliably trace why specific tradeoffs were chosen.
-- Fix required (exact): Update DR-0002 and DR-0003 to match the required template in `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md` (include all required sections for Option A and Option B and add explicit “Follow-up tasks (explicit)” mapping to concrete `tasks.json` task IDs).
+- Fix required (exact): Update DR-0002 and DR-0003 to match the required template in `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md` (include all required sections for Option A and Option B and add explicit “Follow-up tasks (explicit)” mapping to concrete `tasks.json` task IDs).
 - If DEFECT: Alternative (one viable): If a decision is not actually required to execute ADR-0011, mark it as `Superseded` and remove it from task references; keep only decisions that are execution-critical.
 
 ### Finding 003 — Decision-to-task traceability is missing in tasks.json
+
 - Status: `DEFECT`
 - Evidence:
   - `docs/project_management/packs/active/world-deps-packages-bundles-contract/tasks.json` contains references to `decision_register.md` but does not reference specific DR ids (no `DR-` references).
@@ -179,6 +192,7 @@ Mark `YES` only if read end-to-end.
 - If DEFECT: Alternative (one viable): Add a “Decision → Tasks” mapping table to `decision_register.md` (per DR) and ensure each task references the relevant DR by id at least once (either in `tasks.json` references or in the integration END checklist requirements).
 
 ### Finding 004 — Checkpoint prompts do not close the dependency loop for non-failing platform-fix tasks
+
 - Status: `DEFECT`
 - Evidence:
   - `docs/project_management/packs/active/world-deps-packages-bundles-contract/tasks.json`: boundary final integration depends on platform-fix tasks:
@@ -192,6 +206,7 @@ Mark `YES` only if read end-to-end.
 ## Decision: ACCEPT or FLAG
 
 ### If FLAG FOR HUMAN REVIEW
+
 - Summary: Mechanical planning lint fails, and decision/auditability/workflow gaps remain; this pack is not execution-ready.
 - Required human decisions (explicit):
   - Confirm whether ADR-0017 is truly a required dependency for this feature; if yes, fix its `ADR_BODY_SHA256` drift; if no, remove it from the Planning Pack’s required inputs.
@@ -207,6 +222,7 @@ Mark `YES` only if read end-to-end.
 RECOMMENDATION: ACCEPT
 
 ## Metadata
+
 - Feature directory: `docs/project_management/packs/active/world-deps-packages-bundles-contract/`
 - Reviewed commit: `0b16de9ed66813e838bfa3c5f7743294f3839f4d`
 - Reviewer: `Codex (GPT-5.2), third-party reviewer`
@@ -255,7 +271,8 @@ PY
 ```
 
 ### Planning lint (mechanical)
-Reference: `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
+
+Reference: `docs/project_management/system/standards/planning/PLANNING_LINT_CHECKLIST.md`
 
 ```bash
 export FEATURE_DIR="docs/project_management/packs/active/world-deps-packages-bundles-contract"
@@ -272,6 +289,7 @@ make planning-validate FEATURE_DIR="$FEATURE_DIR"
 ```
 
 ## Required Inputs Read End-to-End (checklist)
+
 Mark `YES` only if read end-to-end.
 
 - ADR(s): `YES`
@@ -286,23 +304,26 @@ Mark `YES` only if read end-to-end.
 - Feature smoke scripts under `smoke/` (if required): `YES`
 - `docs/project_management/packs/sequencing.json`: `YES`
 - Standards:
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
-  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`: `YES`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`: `YES`
 
 ## Gate Results (PASS/FAIL with evidence)
 
 ### 1) Zero-ambiguity contracts
+
 - Result: `PASS`
 - Evidence: `make planning-lint FEATURE_DIR="docs/project_management/packs/active/world-deps-packages-bundles-contract"` (exit `0`)
 - Notes: Hard-ban + ambiguity scans passed; no prohibited planning language found in scoped planning outputs.
 
 ### 2) Decision quality (2 options, explicit tradeoffs, explicit selection)
+
 - Result: `PASS`
 - Evidence: `docs/project_management/packs/active/world-deps-packages-bundles-contract/decision_register.md` (DR-0001, DR-0002, DR-0003)
 - Notes: Each decision has exactly two viable options, explicit tradeoffs, and a single selected option with rationale.
 
 ### 3) Cross-doc consistency (CLI/config/exit codes/paths)
+
 - Result: `PASS`
 - Evidence:
   - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
@@ -312,6 +333,7 @@ Mark `YES` only if read end-to-end.
 - Notes: CLI spelling/flags, backend-unavailable exit `3` posture, and legacy-path removal semantics are consistent across docs.
 
 ### 4) Sequencing and dependency alignment
+
 - Result: `PASS`
 - Evidence:
   - `docs/project_management/packs/sequencing.json` entry: `world_deps_packages_bundles_contract` (WDP0..WDP5)
@@ -324,6 +346,7 @@ Mark `YES` only if read end-to-end.
 - Notes: No slice can start before prior slice integration and required checkpoint gates complete.
 
 ### 5) Testability and validation readiness
+
 - Result: `PASS`
 - Evidence:
   - Manual playbook: `docs/project_management/packs/active/world-deps-packages-bundles-contract/manual_testing_playbook.md`
@@ -331,6 +354,7 @@ Mark `YES` only if read end-to-end.
 - Notes: Smoke encodes explicit exit codes and key output assertions (backend unavailable, JSON stability, legacy-path ignore).
 
 ### 5.1) Cross-platform parity task structure (schema v2/v3/v4)
+
 - Result: `PASS`
 - Evidence:
   - `tasks.json` meta:
@@ -345,6 +369,7 @@ Mark `YES` only if read end-to-end.
 - Notes: CI checkpoints are wired so execution cannot bypass the boundary gates.
 
 ### 6) Triad interoperability (execution workflow)
+
 - Result: `PASS`
 - Evidence:
   - `make planning-lint FEATURE_DIR="docs/project_management/packs/active/world-deps-packages-bundles-contract"` includes kickoff prompt sentinel scan (exit `0`)
@@ -356,6 +381,7 @@ Mark `YES` only if read end-to-end.
 ## Findings (must be exhaustive)
 
 ### Finding 001 — Mechanical lint and validation passed
+
 - Status: `VERIFIED`
 - Evidence: `make planning-lint FEATURE_DIR="docs/project_management/packs/active/world-deps-packages-bundles-contract"` (exit `0`); `make planning-validate FEATURE_DIR="docs/project_management/packs/active/world-deps-packages-bundles-contract"` (exit `0`)
 - Impact: Establishes the plan meets mechanical gate requirements and task graph invariants.
@@ -363,6 +389,7 @@ Mark `YES` only if read end-to-end.
 - If DEFECT: Alternative (one viable): N/A
 
 ### Finding 002 — Decision register meets the 2-option decision standard
+
 - Status: `VERIFIED`
 - Evidence: `docs/project_management/packs/active/world-deps-packages-bundles-contract/decision_register.md` (DR-0001..DR-0003)
 - Impact: Decisions are auditable and justify execution-shaping tradeoffs.
@@ -370,6 +397,7 @@ Mark `YES` only if read end-to-end.
 - If DEFECT: Alternative (one viable): N/A
 
 ### Finding 003 — Cross-platform checkpoint wiring is deterministic (schema v4+ boundary-only platform-fix)
+
 - Status: `VERIFIED`
 - Evidence: `docs/project_management/packs/active/world-deps-packages-bundles-contract/tasks.json` meta + deps; `docs/project_management/packs/active/world-deps-packages-bundles-contract/ci_checkpoint_plan.md`
 - Impact: Execution cannot proceed past CI checkpoints without completing the bounded cross-platform gates.
@@ -377,6 +405,7 @@ Mark `YES` only if read end-to-end.
 - If DEFECT: Alternative (one viable): N/A
 
 ### Finding 004 — Manual testing playbook and smoke scripts are present and runnable
+
 - Status: `VERIFIED`
 - Evidence: `docs/project_management/packs/active/world-deps-packages-bundles-contract/manual_testing_playbook.md`; `docs/project_management/packs/active/world-deps-packages-bundles-contract/smoke/*`
 - Impact: Acceptance criteria are runnable and encode expected exit codes/output for critical paths (backend unavailable, JSON shape, legacy ignore).
@@ -386,5 +415,6 @@ Mark `YES` only if read end-to-end.
 ## Decision: ACCEPT or FLAG
 
 ### If ACCEPT
+
 - Summary: Mechanical checks pass; docs/specs/playbook/smoke/task graph are consistent; checkpoint model is wired and non-stalling. This Planning Pack is implementation-ready.
 - Next step: “Execution triads may begin.”

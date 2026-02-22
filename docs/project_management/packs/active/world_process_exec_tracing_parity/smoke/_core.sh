@@ -7,7 +7,7 @@ set -euo pipefail
 # - Ensure `substrate` is available via `$SUBSTRATE_BIN` (default: `substrate`).
 # - Ensure the world backend is healthy (`substrate world doctor`).
 #
-# Exit codes (aligned to `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`):
+# Exit codes (aligned to `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`):
 # - 0: smoke passed
 # - 1: smoke assertion failed / unexpected script error
 # - 2: invalid inputs (e.g., unknown SUBSTRATE_SMOKE_SLICE_ID)

@@ -1,12 +1,14 @@
 # Kickoff: WPEP0-code (code)
 
 ## Scope
+
 - Production code only; add tests only if required to maintain correctness.
 - Spec: `docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP0-spec.md`
 - Related contracts: `docs/project_management/packs/active/world_process_exec_tracing_parity/SCHEMA.md`, `docs/project_management/packs/active/world_process_exec_tracing_parity/SECURITY.md`
-- Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+- Execution workflow standard: `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Start Checklist
+
 Do not edit planning docs inside the worktree.
 
 1. Verify you are in worktree `wt/world-process-exec-tracing-parity-wpep0-code` on branch `world-process-exec-tracing-parity-wpep0-code` and `.taskmeta.json` exists at the worktree root.
@@ -16,11 +18,12 @@ Do not edit planning docs inside the worktree.
    - `make triad-task-start FEATURE_DIR="docs/project_management/packs/active/world_process_exec_tracing_parity" TASK_ID="WPEP0-code"`
 
 ## Requirements
+
 - Implement exactly the behaviors in `WPEP0-spec.md`.
 - Run: `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`
 
 ## End Checklist
+
 1. Run required commands; capture outputs.
 2. From inside the worktree, run: `make triad-task-finish TASK_ID="WPEP0-code"`
 3. Hand off validation notes to the operator (do not edit planning docs inside the worktree).
-

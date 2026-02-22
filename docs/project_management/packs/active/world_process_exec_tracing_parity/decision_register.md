@@ -1,9 +1,11 @@
 # Decision Register — world_process_exec_tracing_parity
 
 Standard:
-- `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md` (Decision Register Standard)
+
+- `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md` (Decision Register Standard)
 
 Scope:
+
 - This decision register supports `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`.
 - Each decision is recorded as exactly two viable options (A/B) with explicit tradeoffs and a single selection.
 
@@ -17,9 +19,11 @@ Scope:
 **Related docs:** `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
 
 **Problem / Context**
+
 - We need subprocess-level exec/exit telemetry for commands executed inside the world boundary, including parent/child relationships, without weakening the security posture or requiring invasive changes to the world filesystem.
 
 **Option A — ptrace-based process tree capture (Linux backend)**
+
 - **Pros:**
   - Captures parent/child relationships deterministically (we own the root process launch).
   - Avoids mutating the world filesystem or PATH to deploy shims.
@@ -40,6 +44,7 @@ Scope:
   - Start with batched capture (return on `/v1/execute` and stream Exit frame) and tighten later.
 
 **Option B — In-world shim deployment + PATH interception (world filesystem mutation)**
+
 - **Pros:**
   - Reuses existing shim logging mechanics and redaction patterns.
   - Avoids ptrace restrictions in environments where ptrace is disabled.
@@ -58,10 +63,12 @@ Scope:
   - None that preserve the ADR’s “no world mutation” posture.
 
 **Recommendation**
+
 - **Selected:** Option A — ptrace-based process tree capture (Linux backend).
 - **Rationale (crisp):** It provides structured, complete-enough process tree telemetry without mutating world PATH/filesystem, keeping the world boundary posture coherent.
 
 **Follow-up tasks (explicit)**
+
 - WPEP2: extend world backend execution path to capture exec/exit events (ptrace) with caps + truncation summaries and explicit `argv_omitted: true`.
 - WPEP1/WPEP2: extend world-agent response types to return `process_events` plus deterministic diagnostics.
 - WPEP2: add a Linux-backed smoke command that deterministically spawns children and asserts parent/child relationships are present.
@@ -76,9 +83,11 @@ Scope:
 **Related docs:** `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
 
 **Problem / Context**
+
 - Per-process env capture is high-risk for secret leakage. We need a deterministic policy that is safe by default and still useful for debugging.
 
 **Option A — Allowlist-only env capture (redacted values)**
+
 - **Pros:**
   - Strong safety posture: dramatically reduces the chance of persisting secrets.
   - Keeps event sizes bounded and predictable.
@@ -96,6 +105,7 @@ Scope:
   - Start with no env capture (or allowlist-only) and add allowlisted keys incrementally.
 
 **Option B — Full env map capture with redaction**
+
 - **Pros:**
   - Maximizes debugging information.
 - **Cons:**
@@ -111,10 +121,12 @@ Scope:
   - None aligned with safe defaults.
 
 **Recommendation**
+
 - **Selected:** Option A — Allowlist-only env capture (redacted values).
 - **Rationale (crisp):** The safety posture dominates; full env capture is too risky to be a default trace surface.
 
 **Follow-up tasks (explicit)**
+
 - WPEP3: define the env allowlist contract and redaction rules in the schema/spec docs.
 - WPEP3: add unit tests asserting (a) non-allowlisted keys are omitted and (b) allowlisted proxy vars redact credentials.
 
@@ -128,9 +140,11 @@ Scope:
 **Related docs:** `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
 
 **Problem / Context**
+
 - Subprocess tracing is observability. Command execution correctness must not depend on tracing availability (ptrace restrictions, kernel variance, or transient internal failures).
 
 **Option A — Degrade gracefully (execution succeeds; events omitted; explicit diagnostics)**
+
 - **Pros:**
   - Preserves command execution correctness and avoids breaking workflows.
   - Works across environments where ptrace is restricted.
@@ -148,6 +162,7 @@ Scope:
   - Implement diagnostics first even before ptrace capture is complete (plumbing path).
 
 **Option B — Fail execution when tracing fails/unavailable**
+
 - **Pros:**
   - Guarantees process events exist for every execution (if it runs at all).
 - **Cons:**
@@ -164,10 +179,12 @@ Scope:
   - None compatible with Substrate’s “secure execution layer” UX.
 
 **Recommendation**
+
 - **Selected:** Option A — Degrade gracefully (execution succeeds; events omitted; explicit diagnostics).
 - **Rationale (crisp):** Observability must not become an availability gate; “explicit degrade” preserves workflow and keeps auditability honest.
 
 **Follow-up tasks (explicit)**
+
 - Implement deterministic `process_events_status` + `process_events_reason` plumbing for both `/v1/execute` and `/v1/stream` Exit frames.
 - Ensure shell trace writes include a single, structured indicator when process events were unavailable for a run.
 
@@ -181,9 +198,11 @@ Scope:
 **Related docs:** `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
 
 **Problem / Context**
+
 - `ActiveSpan.finish()` currently reads `SHIM_PARENT_SPAN` at finish time. Since span start can mutate `SHIM_PARENT_SPAN`, this can yield self-parent spans and break trace tree reconstruction. Process events depend on stable parent linkage to attach correctly.
 
 **Option A — Capture parent at span start; enforce env stack discipline**
+
 - **Pros:**
   - Eliminates self-parent bugs deterministically.
   - Produces stable span trees required for correlating subprocess events.
@@ -201,6 +220,7 @@ Scope:
   - Fix can land independently and immediately improves replay/graph reconstruction.
 
 **Option B — Continue reading `SHIM_PARENT_SPAN` at finish time**
+
 - **Pros:**
   - No code changes.
 - **Cons:**
@@ -216,10 +236,12 @@ Scope:
   - None.
 
 **Recommendation**
+
 - **Selected:** Option A — Capture parent at span start; enforce env stack discipline.
 - **Rationale (crisp):** Without correct parent linkage, process events cannot be correlated reliably; the fix is small and broadly beneficial.
 
 **Follow-up tasks (explicit)**
+
 - Update `crates/trace/src/span.rs` to store parent span id at start and reuse it on finish.
 - Add tests proving no self-parent spans and correct parent restoration for nested spans.
 
@@ -233,9 +255,11 @@ Scope:
 **Related docs:** `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
 
 **Problem / Context**
+
 - Analysts need to join shell command summary events (`cmd_id`) to shim spans (`span_id`) and world process events without relying on “IDs look similar” heuristics. This becomes mandatory once we add high-volume process events.
 
 **Option A — Add explicit bridge fields (incremental, additive)**
+
 - **Pros:**
   - Minimal change surface; no refactor of existing IDs.
   - Enables deterministic joins in `jq`/SQL: shell `command_*` → `span_id`, and shim spans → `parent_cmd_id`.
@@ -253,6 +277,7 @@ Scope:
   - Add `SHIM_PARENT_CMD_ID` propagation to script mode.
 
 **Option B — Introduce a new unified ID and refactor all emitters**
+
 - **Pros:**
   - One canonical identifier for everything.
 - **Cons:**
@@ -268,10 +293,12 @@ Scope:
   - None.
 
 **Recommendation**
+
 - **Selected:** Option A — Add explicit bridge fields (incremental, additive).
 - **Rationale (crisp):** It solves joinability now with minimal risk and without delaying the core parity work.
 
 **Follow-up tasks (explicit)**
+
 - Add `span_id` to shell `command_*` events when a span exists.
 - Add `parent_cmd_id` to span records when `SHIM_PARENT_CMD_ID` is present.
 - Ensure script mode sets `SHIM_PARENT_CMD_ID` and emits world-fs-strategy contract fields.
@@ -286,10 +313,12 @@ Scope:
 **Related docs:** `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
 
 **Problem / Context**
+
 - Completion records currently can be misread for policy denies (e.g., `execution_origin: host`, `exit: 126`) unless the reader joins to the start record.
 - This becomes higher-stakes once ADR-0029 lands: the host router daemon’s v1 trigger set includes `command_complete` / root span completion events, so “deny vs executed” must be detectable from a single completion record to avoid accidentally triggering follow-on work from denied commands.
 
 **Option A — Add `outcome` to completion spans (set explicitly on deny)**
+
 - **Pros:**
   - Minimal change and easy for analysts to filter: `outcome == "denied"`.
   - Avoids redefining what `execution_origin` means.
@@ -307,6 +336,7 @@ Scope:
   - Add a unit/integration test that asserts deny completion includes `outcome: "denied"`.
 
 **Option B — Split `execution_origin` into planned vs actual**
+
 - **Pros:**
   - More expressive for nuanced routing decisions.
 - **Cons:**
@@ -322,10 +352,12 @@ Scope:
   - None.
 
 **Recommendation**
+
 - **Selected:** Option A — Add `outcome` to completion spans (set explicitly on deny).
 - **Rationale (crisp):** It resolves the ambiguity with the smallest change surface and clear analyst ergonomics.
 
 **Follow-up tasks (explicit)**
+
 - Add optional `outcome` field to span schema and set it on deny completion paths.
 
 ---
@@ -338,9 +370,11 @@ Scope:
 **Related docs:** `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
 
 **Problem / Context**
+
 - Many consumers summarize outcomes from `command_complete` only. If policy decision detail is present only on `command_start`, deny/allow-with-restrictions reasoning is easy to miss.
 
 **Option A — Duplicate `policy_decision` onto completion spans**
+
 - **Pros:**
   - Maximizes usability: one record contains both outcome and “why”.
   - Avoids inventing a parallel “summary” schema.
@@ -356,6 +390,7 @@ Scope:
   - Add a test that asserts completion spans include policy decision when set at start.
 
 **Option B — Add minimal completion fields (`policy_action`, `policy_reason`, `policy_restrictions_count`)**
+
 - **Pros:**
   - Smaller record size than duplicating the object.
 - **Cons:**
@@ -371,10 +406,12 @@ Scope:
   - None.
 
 **Recommendation**
+
 - **Selected:** Option A — Duplicate `policy_decision` onto completion spans.
 - **Rationale (crisp):** Usability and auditability dominate; the duplicated bytes are worth the clarity.
 
 **Follow-up tasks (explicit)**
+
 - Persist `policy_decision` on both `command_start` and `command_complete` spans when known.
 
 ---
@@ -387,9 +424,11 @@ Scope:
 **Related docs:** `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
 
 **Problem / Context**
+
 - Shell command summaries include `duration_ms`, but shim completion spans do not. Deriving duration from timestamps is possible but brittle when timestamps are inconsistent in precision/format or when clocks skew across emitters.
 
 **Option A — Emit `duration_ms` on `command_complete` spans**
+
 - **Pros:**
   - Improves analyst ergonomics and avoids timestamp parsing pitfalls.
   - Uses monotonic time (`Instant`) for correctness.
@@ -405,6 +444,7 @@ Scope:
   - Add a basic test that `duration_ms` exists and is non-negative.
 
 **Option B — Derive duration from `ts` fields**
+
 - **Pros:**
   - No schema changes.
 - **Cons:**
@@ -420,10 +460,12 @@ Scope:
   - None.
 
 **Recommendation**
+
 - **Selected:** Option A — Emit `duration_ms` on `command_complete` spans.
 - **Rationale (crisp):** It is a low-effort improvement with high usability and correctness value.
 
 **Follow-up tasks (explicit)**
+
 - Add optional `duration_ms` field to completion spans and compute it using a monotonic clock.
 
 ---
@@ -436,9 +478,11 @@ Scope:
 **Related docs:** `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
 
 **Problem / Context**
+
 - When `SUBSTRATE_ENABLE_PREEXEC=1`, the bash preexec hook can emit `builtin_command` records containing raw `BASH_COMMAND`. This can leak credentials/tokens unless we provide explicit, queryable safety metadata.
 
 **Option A — Omit command body from canonical trace (metadata-only) + optional raw debug log**
+
 - **Pros:**
   - Eliminates the primary secret-leak risk from canonical `trace.jsonl` (no `BASH_COMMAND` body recorded).
   - Still preserves attribution/value: metadata + correlation (`parent_cmd_id`) is enough for “what was happening” joins and noise scoping.
@@ -457,6 +501,7 @@ Scope:
   - Implement metadata-only canonical records immediately; raw debug log stays opt-in.
 
 **Option B — Include command body, but require hardened redaction (codebase-wide)**
+
 - **Pros:**
   - Retains maximum debug value in the canonical trace (exact command string).
 - **Cons:**
@@ -473,10 +518,12 @@ Scope:
   - None; redaction hardening is the prerequisite.
 
 **Recommendation**
+
 - **Selected:** Option A — Omit command body from canonical trace (metadata-only) + optional raw debug log.
 - **Rationale (crisp):** Canonical trace must be safe-by-default; raw preexec capture is too likely to contain secrets to record without a hardened redaction system.
 
 **Follow-up tasks (explicit)**
+
 - Update bash preexec `builtin_command` emission in `trace.jsonl` to omit the body while preserving correlation (`parent_cmd_id`) + `command_omitted: true`.
 - Add an explicit opt-in env var for raw debug logging to a separate file (not `trace.jsonl`).
 - Add a backlog item to support “include body with hardened redaction” in the future (codebase-wide redaction improvements).

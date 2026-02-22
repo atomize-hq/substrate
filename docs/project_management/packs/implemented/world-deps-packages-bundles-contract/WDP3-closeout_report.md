@@ -3,13 +3,16 @@
 Date (UTC): 2026-02-14T18:44:25Z
 
 Standards:
-- `docs/project_management/standards/SLICE_CLOSEOUT_GATE_STANDARD.md`
-- `docs/project_management/standards/EXECUTIVE_SUMMARY_STANDARD.md` (behavior delta format)
+
+- `docs/project_management/system/standards/execution/SLICE_CLOSEOUT_GATE_STANDARD.md`
+- `docs/project_management/system/standards/adr/EXECUTIVE_SUMMARY_STANDARD.md` (behavior delta format)
 
 Feature directory:
+
 - `docs/project_management/packs/active/world-deps-packages-bundles-contract`
 
 Slice spec:
+
 - `docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP3-spec.md`
 
 ## Behavior Delta (Existing → New → Why)
@@ -46,6 +49,7 @@ Slice spec:
 ## Cross-Platform Smoke (if applicable)
 
 Record run ids/URLs for required platforms:
+
 - Linux: n/a (not required for WDP3-integ)
 - macOS: n/a (not required for WDP3-integ)
 - WSL: n/a (not required for WDP3-integ)
@@ -56,4 +60,5 @@ Record run ids/URLs for required platforms:
 - [ ] Smoke scripts validate exit codes and key output (not just “command ran”) (n/a for WDP3-integ)
 
 Notes:
- - Integrated via `make triad-task-finish TASK_ID="WDP3-integ"` (merged to `feat/world-deps-packages-bundles-contract`).
+
+- Integrated via `make triad-task-finish TASK_ID="WDP3-integ"` (merged to `feat/world-deps-packages-bundles-contract`).

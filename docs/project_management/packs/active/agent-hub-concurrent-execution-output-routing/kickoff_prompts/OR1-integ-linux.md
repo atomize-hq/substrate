@@ -1,13 +1,15 @@
 # Kickoff: OR1-integ-linux (integration platform-fix — linux)
 
 ## Scope
+
 - Ensure the OR1 slice is green on linux.
 - This task may change production code and tests as needed to fix linux failures.
 - This task must not merge back to the orchestration branch; OR1-integ final performs the merge once all platforms are green.
 - Spec: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/OR1-spec.md`
-- Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+- Execution workflow standard: `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Start Checklist
+
 Do not edit planning docs inside the worktree.
 
 1. Run this task on a linux machine.
@@ -17,6 +19,7 @@ Do not edit planning docs inside the worktree.
    - `make triad-task-start FEATURE_DIR="docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing" TASK_ID="OR1-integ-linux" TASK_PLATFORM=linux`
 
 ## Requirements
+
 - Merge the slice core integration branch into this worktree:
   - `CORE_BRANCH="$(jq -r --arg id "OR1-integ-core" '.tasks[] | select(.id==$id) | .git_branch' "docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/tasks.json")"`
   - `git merge "$CORE_BRANCH"`
@@ -30,7 +33,7 @@ Do not edit planning docs inside the worktree.
 - If smoke fails: apply a minimal fix, then re-run smoke until green.
 
 ## End Checklist
+
 1. Ensure linux smoke is green and capture the run id/URL.
 2. From inside the worktree, run: `make triad-task-finish TASK_ID="OR1-integ-linux"`
 3. Hand off run id/URL and linux-specific notes to the operator (do not edit planning docs inside the worktree).
-

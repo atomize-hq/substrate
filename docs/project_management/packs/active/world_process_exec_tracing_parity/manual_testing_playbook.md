@@ -1,15 +1,18 @@
 # world_process_exec_tracing_parity — manual testing playbook (Authoritative)
 
 Standard:
-- `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md` (section 6)
+
+- `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md` (section 6)
 
 ## Scope
+
 - Validates ADR-0028 operator-visible behavior:
   - in-world process exec/exit telemetry persistence into canonical trace,
   - explicit degrade diagnostics on unsupported platforms,
   - span correctness/joinability ergonomics and preexec safety posture.
 
 ## Prerequisites
+
 - `substrate` available on PATH, or set `SUBSTRATE_BIN=/path/to/substrate`.
 - World backend healthy for the platform under test:
   - Run `substrate world doctor` and fix any reported issues before proceeding.
@@ -19,49 +22,61 @@ Standard:
   - PowerShell (Windows)
 
 Exit code taxonomy for the smoke scripts:
-- `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+
+- `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 
 ## Smoke scripts (required)
+
 - Linux: `docs/project_management/packs/active/world_process_exec_tracing_parity/smoke/linux-smoke.sh`
 - macOS: `docs/project_management/packs/active/world_process_exec_tracing_parity/smoke/macos-smoke.sh`
 - Windows: `docs/project_management/packs/active/world_process_exec_tracing_parity/smoke/windows-smoke.ps1`
 
 ## Case 1 — Smoke (Linux)
+
 Run:
+
 ```bash
 export SUBSTRATE_BIN="${SUBSTRATE_BIN:-substrate}"
 bash docs/project_management/packs/active/world_process_exec_tracing_parity/smoke/linux-smoke.sh
 ```
 
 Expected:
+
 - Exit code `0`.
 - Output contains an `OK:` line.
 
 ## Case 2 — Smoke (macOS)
+
 Run:
+
 ```bash
 export SUBSTRATE_BIN="${SUBSTRATE_BIN:-substrate}"
 bash docs/project_management/packs/active/world_process_exec_tracing_parity/smoke/macos-smoke.sh
 ```
 
 Expected:
+
 - Exit code `0`.
 - Output contains an `OK:` line.
 
 ## Case 3 — Smoke (Windows)
+
 Run:
+
 ```powershell
 $env:SUBSTRATE_BIN = $env:SUBSTRATE_BIN ?? "substrate"
 pwsh -File docs/project_management/packs/active/world_process_exec_tracing_parity/smoke/windows-smoke.ps1
 ```
 
 Expected:
+
 - Exit code `0`.
 - Output contains an `OK:` line.
 
 ## Case 4 — Manual validation: process events persisted and joinable (Linux)
 
 Run in a temp home/workspace:
+
 ```bash
 set -euo pipefail
 tmp_root="$(mktemp -d)"
@@ -80,10 +95,12 @@ test -f "$trace"
 ```
 
 Assertions:
+
 - A shell `command_complete` record exists for the world command and contains `span_id`.
 - At least one `world_process_start` record exists with `parent_span` equal to that `span_id`.
 
 Example jq probes:
+
 ```bash
 span_id="$(
   jq -r 'select(.component=="shell" and .event_type=="command_complete" and (.command|tostring|contains("bash -lc"))) | .span_id' \
@@ -97,14 +114,17 @@ jq -e --arg sp "$span_id" '
 ```
 
 Expected:
+
 - Both probes succeed (exit `0`).
 
 ## Case 5 — Manual validation: argv omission vs argv capture (Linux-backed backends)
 
 WPEP2 expectation:
+
 - `world_process_*` records emit `argv_omitted: true`.
 
 WPEP3 expectation:
+
 - At least one `world_process_start` record includes `argv` (array) and no `argv_omitted` fields exist.
 
 ## Case 6 — Manual validation: explicit degrade diagnostics (Windows)
@@ -112,6 +132,7 @@ WPEP3 expectation:
 Run a simple world command and confirm the shell completion record includes an explicit “unavailable” diagnostic for process telemetry.
 
 Expected:
+
 - World command completes successfully.
 - The corresponding `component: "shell"` `event_type: "command_complete"` record includes:
   - `process_events_status: "unavailable"`
@@ -120,6 +141,7 @@ Expected:
 ## Case 7 — Manual validation: preexec canonical trace omits bodies
 
 Run:
+
 ```bash
 set -euo pipefail
 tmp_root="$(mktemp -d)"
@@ -140,4 +162,5 @@ jq -e '
 ```
 
 Expected:
+
 - Exit code `0` and at least one `builtin_command` record has `command_omitted: true`.

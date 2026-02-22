@@ -3,13 +3,16 @@
 Date (UTC): 2026-02-12T00:05:39Z
 
 Standards:
-- `docs/project_management/standards/SLICE_CLOSEOUT_GATE_STANDARD.md`
-- `docs/project_management/standards/EXECUTIVE_SUMMARY_STANDARD.md` (behavior delta format)
+
+- `docs/project_management/system/standards/execution/SLICE_CLOSEOUT_GATE_STANDARD.md`
+- `docs/project_management/system/standards/adr/EXECUTIVE_SUMMARY_STANDARD.md` (behavior delta format)
 
 Feature directory:
+
 - `docs/project_management/packs/active/world-sync`
 
 Slice spec:
+
 - `docs/project_management/packs/active/world-sync/WS2-spec.md`
 
 ## Behavior Delta (Existing → New → Why)
@@ -37,15 +40,18 @@ Slice spec:
 ## Cross-Platform Smoke (if applicable)
 
 Record run ids/URLs for required platforms:
+
 - Linux: `21927790446` (success) — https://github.com/atomize-hq/substrate/actions/runs/21927790446
 - macOS: `21927790446` (success) — https://github.com/atomize-hq/substrate/actions/runs/21927790446
 
 If smoke/CI was intentionally skipped:
+
 - Reason (e.g., `ci-audit: DIFF_CLASS=docs_only`):
 - Last-green run evidence (run id/URL, if available):
 - Evidence ledger path (if used): `docs/project_management/packs/active/world-sync/logs/WS2/ci-audit/ledger.jsonl`
 
 If any platform-fix work was required:
+
 - What failed:
 - What was changed:
 - Why the change is safe (guards, cfg, feature flags):
@@ -56,4 +62,5 @@ If any platform-fix work was required:
 - [ ] Smoke scripts validate exit codes and key output (not just “command ran”)
 
 Notes:
+
 - Checkpoint CP1 gates (compile parity + Feature Smoke + ci-testing quick) were validated for `CHECKOUT_SHA=136d6814a650066c58e09c43a1d849da1cdbbb8f` and recorded in `docs/project_management/packs/active/world-sync/session_log.md`.

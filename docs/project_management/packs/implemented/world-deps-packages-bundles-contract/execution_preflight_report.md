@@ -3,9 +3,11 @@
 Date (UTC): 2026-02-14T02:59:35Z
 
 Standard:
-- `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
+
+- `docs/project_management/system/standards/execution/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
 
 Feature directory:
+
 - `docs/project_management/packs/active/world-deps-packages-bundles-contract`
 
 ## Recommendation
@@ -30,6 +32,7 @@ RECOMMENDATION: **ACCEPT**
 ## 1) Cross-Platform Coverage (explicit and correct)
 
 From `docs/project_management/packs/active/world-deps-packages-bundles-contract/tasks.json` meta:
+
 - Declared behavior platforms (smoke required): `linux, macos`
 - Declared CI parity platforms (parity required): `linux, macos`
 - WSL required: `true` (bundled into Linux smoke via `RUN_WSL=1`)
@@ -37,14 +40,17 @@ From `docs/project_management/packs/active/world-deps-packages-bundles-contract/
 ## 2) Smoke Scripts Are Not “Toy” Checks
 
 Manual playbook:
+
 - `docs/project_management/packs/active/world-deps-packages-bundles-contract/manual_testing_playbook.md`
 
 Smoke scripts to validate:
+
 - Linux smoke: `docs/project_management/packs/active/world-deps-packages-bundles-contract/smoke/linux-smoke.sh`
 - macOS smoke: `docs/project_management/packs/active/world-deps-packages-bundles-contract/smoke/macos-smoke.sh`
 - WSL smoke: run the Linux smoke inside WSL (CI dispatch via `RUN_WSL=1`)
 
 Evidence (static review):
+
 - The shared smoke core (`docs/project_management/packs/active/world-deps-packages-bundles-contract/smoke/_core.sh`) runs real `substrate world deps ...` workflows, asserts exit codes, and validates key output (including backend-unavailable fail-closed exit `3`, legacy-path ignore via intentionally-invalid YAML fixtures, and `--json` shape stability via Python parsing).
 
 ## 3) CI Dispatch Path Is Runnable
@@ -53,6 +59,7 @@ Evidence (static review):
   - `docs/project_management/packs/active/world-deps-packages-bundles-contract/ci_checkpoint_plan.md`
 
 Evidence (static review):
+
 - Dispatch commands are concrete and map to repo Make targets:
   - `make ci-compile-parity ...` (cross-platform compile parity)
   - `make feature-smoke ...` (cross-platform feature smoke, behavior platforms only; WSL bundled via `RUN_WSL=1`)

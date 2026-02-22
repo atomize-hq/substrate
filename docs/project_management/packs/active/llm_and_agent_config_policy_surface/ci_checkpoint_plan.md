@@ -3,9 +3,11 @@
 This file defines when cross-platform validation gates run for this feature.
 
 Standard:
-- `docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md`
+
+- `docs/project_management/system/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md`
 
 ## Inputs
+
 - Feature directory: `docs/project_management/packs/active/llm_and_agent_config_policy_surface`
 - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/impact_map.md`
 - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/spec_manifest.md`
@@ -14,11 +16,12 @@ Standard:
   - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/LACP1-spec.md`
 
 ## Operator rules
+
 - This plan is authoritative for CI cadence.
 - Any change to slices or platform requirements MUST update:
-  1) this file,
-  2) `tasks.json` meta.checkpoint_boundaries, and
-  3) checkpoint tasks (`CP*-ci-checkpoint`).
+  1. this file,
+  2. `tasks.json` meta.checkpoint_boundaries, and
+  3. checkpoint tasks (`CP*-ci-checkpoint`).
 
 ## Machine-readable plan (linted)
 
@@ -48,6 +51,6 @@ Standard:
 ## Human-readable rationale
 
 CP1:
+
 - Stabilizes the operator-facing config/policy surface (new key families + strictness + `--explain`) and the agent inventory file format and overlay restriction rules.
 - Runs feature smoke on Linux and macOS only (Windows is out of scope for this Planning Pack).
-

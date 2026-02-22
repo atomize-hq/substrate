@@ -3,9 +3,11 @@
 This file defines **when** cross-platform CI gates run for this feature.
 
 Standard:
-- `docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md`
+
+- `docs/project_management/system/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md`
 
 ## Inputs
+
 - Feature directory: `docs/project_management/packs/active/world-deps-host-visible-hardening`
 - `docs/project_management/packs/active/world-deps-host-visible-hardening/impact_map.md`
 - `docs/project_management/packs/active/world-deps-host-visible-hardening/spec_manifest.md`
@@ -16,6 +18,7 @@ Standard:
   - WSL coverage: `tasks.json` → `meta.wsl_required=true` (`bundled` via Linux smoke)
 
 ## Operator rules
+
 - This plan is authoritative for **CI cadence**.
 - If you discover a mismatch between the plan and reality (new slice added, new platform scope, new contract surface), update this plan first, then update `tasks.json` and kickoff prompts.
 - For schema v4+ cross-platform automation packs: update `tasks.json` `meta.checkpoint_boundaries` to list the **last slice** in each checkpoint group (this is linted).
@@ -59,6 +62,7 @@ Standard:
 ## Human-readable rationale (required)
 
 ### CP1 — env normalization + wrappers/present seam
+
 - Code-grounded boundary:
   - Completes deterministic PATH/HOME/XDG construction and wrapper-anchored runnable semantics.
 - Stabilized surfaces:
@@ -68,6 +72,7 @@ Standard:
   - Prevents host toolchain leakage via PATH on required platforms and makes `present/missing/blocked` meaningful under `world_fs.host_visible=true`.
 
 ### CP2 — exec-guard + installer scaffold seam
+
 - Code-grounded boundary:
   - Completes the explicit-path bypass closure and the operator-facing inventory scaffolding UX.
 - Stabilized surfaces:

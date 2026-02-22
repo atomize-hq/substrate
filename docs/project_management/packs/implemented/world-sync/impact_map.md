@@ -3,10 +3,12 @@
 This file replaces the legacy `integration_map.md`.
 
 Authoring standards:
-- `docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md`
-- `docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md`
+
+- `docs/project_management/system/standards/planning/PLANNING_IMPACT_MAP_STANDARD.md`
+- `docs/project_management/system/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`
 
 ## Inputs
+
 - Feature directory: `docs/project_management/packs/active/world-sync`
 - ADR(s) / upstream contracts:
   - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
@@ -21,6 +23,7 @@ Authoring standards:
 List every file expected to be created/edited/deprecated/removed. Use repo-relative paths.
 
 ### Create
+
 - `docs/project_management/packs/active/world-sync/filesystem-semantics-spec.md` — authoritative path/diff semantics for sync
 - `docs/project_management/packs/active/world-sync/platform-parity-spec.md` — authoritative per-platform support contract
 - `docs/project_management/packs/active/world-sync/internal-git-spec.md` — authoritative internal git contract
@@ -36,6 +39,7 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
   - `crates/world/src/sync_apply.rs` (or similar) — apply pending overlay diffs to workspace (Linux/macOS)
 
 ### Edit
+
 - `docs/project_management/packs/sequencing.json` — update `world_sync` sprint sequence ids/paths to `WS*`
 - `crates/shell/src/execution/cli.rs` — add `workspace sync|checkpoint|rollback` subcommands + flags
 - `crates/shell/src/execution/workspace_cmd.rs` — route new `WorkspaceAction` variants; shared guardrails for workspace errors
@@ -47,19 +51,23 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
 - `docs/reference/paths/layout.md` — ensure internal git path is documented as `.substrate/git/repo.git/`
 
 ### Deprecate
+
 - None (greenfield; no compatibility surfaces are introduced by this feature).
 
 ### Delete
+
 - None.
 
 ## Cascading implications (behavior/UX)
 
 For each externally visible change, list:
+
 - direct impact (what the operator experiences),
 - cascading impact (what else must change to stay coherent),
 - contradiction risks (what existing semantics would conflict).
 
 ### CLI / UX
+
 - Change: new workspace-scoped commands `workspace sync|checkpoint|rollback`
   - Direct impact:
     - Operators can explicitly apply pending world-session diffs to the host workspace (or preview via `--dry-run`).
@@ -73,6 +81,7 @@ For each externally visible change, list:
     - Any lingering references to legacy `substrate sync` or legacy `.substrate-git/` paths create operator confusion; those references must not appear in the world-sync specs.
 
 ### Config / env vars / paths
+
 - Change: `sync.*` config keys become execution-relevant for workspace sync behavior.
   - Direct impact:
     - Effective config values determine default direction/conflict policy and auto-sync behavior.
@@ -83,6 +92,7 @@ For each externally visible change, list:
     - Any docs claiming protected excludes include `.substrate-git/**` conflict with current code (`PROTECTED_EXCLUDES`).
 
 ### Policy / isolation / security posture
+
 - Change: applying pending world diffs is a security-sensitive mutation operation.
   - Direct impact:
     - Sync apply MUST refuse protected-path mutations and large diffs (exit `5`).
@@ -97,6 +107,7 @@ For each externally visible change, list:
 List overlaps/conflicts with other in-flight work and resolve them deterministically.
 
 ### Relevant ADRs (queued/unimplemented)
+
 - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
   - Overlap surfaces: workspace root discovery, `.substrate/` layout, protected excludes
   - Conflict: **no** (world-sync adopts ADR-0008 invariants)
@@ -107,6 +118,7 @@ List overlaps/conflicts with other in-flight work and resolve them deterministic
   - Resolution: WS3/WS4/WS5 explicitly define non-PTY vs PTY behavior and required retrieval semantics.
 
 ### Relevant Planning Packs (queued/unimplemented)
+
 - `docs/project_management/_archived/world-fs-granular-allow-deny/` (implemented/active track)
   - Overlap surfaces: filesystem enforcement, allow/deny semantics, “what paths can be written”
   - Conflict: **potential** if sync apply semantics attempt to bypass enforced policy

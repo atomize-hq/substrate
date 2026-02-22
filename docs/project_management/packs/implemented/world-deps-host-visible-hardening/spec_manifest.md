@@ -1,9 +1,11 @@
 # world-deps-host-visible-hardening — spec manifest
 
 Authoring standard:
-- `docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md`
+
+- `docs/project_management/system/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`
 
 ## Inputs
+
 - Feature directory: `docs/project_management/packs/active/world-deps-host-visible-hardening`
 - ADR(s) / upstream contracts (inputs; not owned by this Planning Pack):
   - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md` (Appendix A)
@@ -34,22 +36,23 @@ Authoring standard:
 
 ## Coverage matrix (surface → authoritative doc)
 
-| Surface | Authoritative doc | What must be explicitly defined |
-| --- | --- | --- |
-| In-world env construction for `--world` | `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH0-spec.md` | baseline PATH, sanitization rules, env var allow/deny list |
-| Config key `world.env.inherit_from_host` | `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH0-spec.md` | schema, default, precedence, forwarded host env keys, reserved keys, warning emission |
-| Env var `SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR` | `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH0-spec.md` | exact value, relationship to PATH construction, propagation rules |
-| Runnable apt wrapper requirement | `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH1-spec.md` | wrapper form, creation/update/remove rules, collision semantics |
-| “present/missing/blocked” semantics (host-visible) | `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH1-spec.md` | default probe strategy, wrapper-based presence, no inherited PATH dependency |
-| Override env var `SUBSTRATE_OVERRIDE_WORLD_EXEC_GUARD` | `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH2-spec.md` | allowed values, default, effect on deny behavior when `world_fs.host_visible=true` |
-| Override env var `SUBSTRATE_OVERRIDE_WORLD_EXEC_GUARD_DENY_CONTAINS` | `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH2-spec.md` | format, precedence, replacement semantics for the denylist |
-| Host-binary execution guardrails | `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH2-spec.md` | default posture, default denylist, override env vars, exit codes, error messages |
-| Installer scaffolding for `$SUBSTRATE_HOME/deps/` | `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH3-spec.md` | when created, exact layout, example contents, non-enabling rule |
-| Manual validation workflow | `docs/project_management/packs/active/world-deps-host-visible-hardening/manual_testing_playbook.md` | commands + expected outputs/exit codes |
+| Surface                                                              | Authoritative doc                                                                                   | What must be explicitly defined                                                       |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| In-world env construction for `--world`                              | `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH0-spec.md`               | baseline PATH, sanitization rules, env var allow/deny list                            |
+| Config key `world.env.inherit_from_host`                             | `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH0-spec.md`               | schema, default, precedence, forwarded host env keys, reserved keys, warning emission |
+| Env var `SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR`                         | `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH0-spec.md`               | exact value, relationship to PATH construction, propagation rules                     |
+| Runnable apt wrapper requirement                                     | `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH1-spec.md`               | wrapper form, creation/update/remove rules, collision semantics                       |
+| “present/missing/blocked” semantics (host-visible)                   | `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH1-spec.md`               | default probe strategy, wrapper-based presence, no inherited PATH dependency          |
+| Override env var `SUBSTRATE_OVERRIDE_WORLD_EXEC_GUARD`               | `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH2-spec.md`               | allowed values, default, effect on deny behavior when `world_fs.host_visible=true`    |
+| Override env var `SUBSTRATE_OVERRIDE_WORLD_EXEC_GUARD_DENY_CONTAINS` | `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH2-spec.md`               | format, precedence, replacement semantics for the denylist                            |
+| Host-binary execution guardrails                                     | `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH2-spec.md`               | default posture, default denylist, override env vars, exit codes, error messages      |
+| Installer scaffolding for `$SUBSTRATE_HOME/deps/`                    | `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH3-spec.md`               | when created, exact layout, example contents, non-enabling rule                       |
+| Manual validation workflow                                           | `docs/project_management/packs/active/world-deps-host-visible-hardening/manual_testing_playbook.md` | commands + expected outputs/exit codes                                                |
 
 ## Determinism checklist (must be satisfied before quality gate)
 
 For every selected spec document, confirm it explicitly defines:
+
 - Inputs (all) + precedence (if multiple inputs exist)
 - Defaults (all) + absence semantics
 - Data model boundaries (types/constraints) for any serialized surface added/changed

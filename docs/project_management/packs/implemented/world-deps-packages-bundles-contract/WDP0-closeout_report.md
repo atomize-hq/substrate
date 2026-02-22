@@ -3,13 +3,16 @@
 Date (UTC): 2026-02-13T04:21:36Z
 
 Standards:
-- `docs/project_management/standards/SLICE_CLOSEOUT_GATE_STANDARD.md`
-- `docs/project_management/standards/EXECUTIVE_SUMMARY_STANDARD.md` (behavior delta format)
+
+- `docs/project_management/system/standards/execution/SLICE_CLOSEOUT_GATE_STANDARD.md`
+- `docs/project_management/system/standards/adr/EXECUTIVE_SUMMARY_STANDARD.md` (behavior delta format)
 
 Feature directory:
+
 - `docs/project_management/packs/active/world-deps-packages-bundles-contract`
 
 Slice spec:
+
 - `docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP0-spec.md`
 
 ## Behavior Delta (Existing → New → Why)
@@ -34,6 +37,7 @@ Slice spec:
 ## Cross-Platform Smoke (if applicable)
 
 Record run ids/URLs for required platforms:
+
 - Linux:
 - macOS:
 - WSL:

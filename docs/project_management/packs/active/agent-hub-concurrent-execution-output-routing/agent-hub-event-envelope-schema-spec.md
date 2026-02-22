@@ -1,20 +1,24 @@
 # agent-hub-concurrent-execution-output-routing — agent hub event envelope schema spec
 
 Owner standard:
-- `docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md`
+
+- `docs/project_management/system/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`
 
 ## Scope
+
 - This spec is authoritative for the structured agent event envelope used for:
   - host-side structured printing in the REPL, and
   - durable persistence of agent events to canonical trace.
 
 ## Format
+
 - Format: JSON
 - Canonical file name(s): N/A (events are trace records)
 - Canonical location(s):
   - `~/.substrate/trace.jsonl` (or `SHIM_TRACE_LOG`) as `event_type="agent_event"` records (see `telemetry-spec.md`)
 
 ## Compatibility policy (explicit)
+
 - Forward compatibility: additive-only changes (new non-required fields, new `kind` values, additive `data` fields).
 - Backward compatibility: existing required fields MUST NOT be removed or renamed.
 - Unknown fields handling: consumers MUST ignore unknown fields.
@@ -46,6 +50,7 @@ All structured agent events are JSON objects with:
   - Schema: depends on `kind` (see below)
 
 Attribution + correlation fields:
+
 - `agent_id`
   - Type: string
   - Required: yes
@@ -80,6 +85,7 @@ Attribution + correlation fields:
   - Required: no
 
 Routing hint:
+
 - `channel`
   - Type: string
   - Required: no
@@ -90,6 +96,7 @@ Routing hint:
     - MUST NOT affect policy gating decisions.
 
 Legacy field (reserved; not required by ADR-0017):
+
 - `project`
   - Type: string
   - Required: no
@@ -98,12 +105,14 @@ Legacy field (reserved; not required by ADR-0017):
 ### Per-kind `data` schema (v1)
 
 #### `kind="registered" | "status" | "task_start" | "task_progress" | "task_end"`
+
 - `data.message`
   - Type: string
   - Required: no
   - If present, it is safe to print and persist.
 
 #### `kind="pty_data"`
+
 - `data.stream`
   - Type: string enum
   - Required: yes
@@ -114,6 +123,7 @@ Legacy field (reserved; not required by ADR-0017):
   - Note: this is a structured representation for non-PTY “chunked” producer output; it MUST NOT be treated as a substitute for raw PTY bytes.
 
 #### `kind="alert"`
+
 - `data.code`
   - Type: string
   - Required: yes
@@ -125,6 +135,7 @@ Legacy field (reserved; not required by ADR-0017):
   - Required: yes (human-readable; safe to print/persist)
 
 Additional fields for `data.code="world_restarted"`:
+
 - `data.reason` (string; required; one of DR-0008 taxonomy strings)
 - `data.on_drift` (string; required; `auto_restart`)
 - `data.previous_world_id` (string; required)
@@ -133,9 +144,11 @@ Additional fields for `data.code="world_restarted"`:
 - `data.new_world_generation` (int; required)
 
 Additional fields for `data.code="world_restart_required"`:
+
 - Schema is authoritative in `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0009).
 
 ### Canonicalization rules (explicit)
+
 - Producers MUST emit all required top-level fields.
 - Producers MUST keep attribution/correlation fields at the top level (no nested attribution object).
 - Consumers MUST treat the envelope as unordered JSON; no stable field ordering is required.
@@ -143,6 +156,7 @@ Additional fields for `data.code="world_restart_required"`:
 ## Examples (authoritative)
 
 ### Minimal valid (status)
+
 ```json
 {
   "ts": "2026-02-15T00:00:00Z",
@@ -155,6 +169,7 @@ Additional fields for `data.code="world_restart_required"`:
 ```
 
 ### PTY-style chunk (structured)
+
 ```json
 {
   "ts": "2026-02-15T00:00:00Z",
@@ -167,6 +182,7 @@ Additional fields for `data.code="world_restart_required"`:
 ```
 
 ### Alert: world restarted
+
 ```json
 {
   "ts": "2026-02-15T00:00:00Z",
@@ -190,6 +206,7 @@ Additional fields for `data.code="world_restart_required"`:
 ```
 
 ### Invalid (missing required correlation fields)
+
 ```json
 {
   "ts": "2026-02-15T00:00:00Z",
@@ -200,16 +217,19 @@ Additional fields for `data.code="world_restart_required"`:
 ```
 
 ## Error model (explicit)
+
 - Producers MUST NOT emit envelopes missing required fields.
 - Consumers MUST treat malformed payloads as non-fatal and MUST NOT crash; they MAY emit a structured warning.
 
 ## Security / redaction (explicit)
+
 - Producers MUST NOT place secrets into:
   - `channel`, or
   - any other top-level attribution/correlation field.
 - Any field that can contain secrets MUST live under `data` with an explicit redaction policy in a future schema revision; v1 disallows secrets entirely.
 
 ## Acceptance criteria (testable)
+
 - Every emitted structured agent event contains the required top-level fields (`ts`, `kind`, `agent_id`, `orchestration_session_id`, `run_id`, `data`).
 - Producers emit only `kind` values from the allowed taxonomy; consumers ignore unknown `kind` values without crashing.
 - `channel` is producer-declared, bounded, and safe-to-print (unsafe values are dropped).

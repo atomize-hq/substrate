@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-# Exit codes (aligned to docs/project_management/standards/EXIT_CODE_TAXONOMY.md):
+# Exit codes (aligned to docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md):
 # 0: smoke passed
 # 3: required dependency unavailable
 # 4: not supported / missing prerequisites

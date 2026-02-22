@@ -3,9 +3,11 @@
 This file enumerates every contract/protocol/schema/env-var surface for this feature and assigns each surface to exactly one authoritative document.
 
 Authoring standard:
-- `docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md`
+
+- `docs/project_management/system/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`
 
 ## Inputs
+
 - Feature directory: `docs/project_management/packs/active/world-deps-packages-bundles-contract`
 - ADR(s) / upstream contracts (inputs; not owned by this Planning Pack):
   - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
@@ -50,21 +52,22 @@ List the exact spec documents that must exist. These documents are owned by this
 
 ## Coverage matrix (surface → authoritative doc)
 
-| Surface | Authoritative doc | What must be explicitly defined |
-| --- | --- | --- |
-| CLI commands/flags/defaults | `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md` | names, defaults, examples, exit codes |
-| Config file paths/precedence/keys | `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md` | file paths, precedence, key set + defaults |
-| Inventory directory layout + schema | `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md` | file layout, item schema, merge semantics |
-| World shell contract for “runnable” deps | `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md` | interactive vs non-interactive evaluator, no rcfiles |
-| World status semantics (`present|missing|blocked`) | `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md` | probe/blocked rules, exit codes |
-| Cross-platform support/unsupported contract | `docs/project_management/packs/active/world-deps-packages-bundles-contract/platform-parity-spec.md` | guaranteed behavior, fail-closed posture |
-| Slicing + acceptance criteria per increment | `docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP*-spec.md` | slice scope, explicit unsupported surfaces, acceptance |
-| CI cadence + checkpoint boundaries | `docs/project_management/packs/active/world-deps-packages-bundles-contract/ci_checkpoint_plan.md` | checkpoint groups, gates, rationale |
-| Manual validation workflow | `docs/project_management/packs/active/world-deps-packages-bundles-contract/manual_testing_playbook.md` | commands, assertions, exit codes |
+| Surface                                     | Authoritative doc                                                                                      | What must be explicitly defined                        |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------ | --------------------------------------------------------------------------------------- | ------------------------------- |
+| CLI commands/flags/defaults                 | `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`                | names, defaults, examples, exit codes                  |
+| Config file paths/precedence/keys           | `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`                | file paths, precedence, key set + defaults             |
+| Inventory directory layout + schema         | `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`                | file layout, item schema, merge semantics              |
+| World shell contract for “runnable” deps    | `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`                | interactive vs non-interactive evaluator, no rcfiles   |
+| World status semantics (`present            | missing                                                                                                | blocked`)                                              | `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md` | probe/blocked rules, exit codes |
+| Cross-platform support/unsupported contract | `docs/project_management/packs/active/world-deps-packages-bundles-contract/platform-parity-spec.md`    | guaranteed behavior, fail-closed posture               |
+| Slicing + acceptance criteria per increment | `docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP*-spec.md`               | slice scope, explicit unsupported surfaces, acceptance |
+| CI cadence + checkpoint boundaries          | `docs/project_management/packs/active/world-deps-packages-bundles-contract/ci_checkpoint_plan.md`      | checkpoint groups, gates, rationale                    |
+| Manual validation workflow                  | `docs/project_management/packs/active/world-deps-packages-bundles-contract/manual_testing_playbook.md` | commands, assertions, exit codes                       |
 
 ## Determinism checklist (must be satisfied before quality gate)
 
 For every selected spec document, confirm it explicitly defines:
+
 - Inputs (all) + precedence order (if multiple inputs exist)
 - Defaults (all) + absence semantics
 - Data model (types/constraints) for every serialized boundary

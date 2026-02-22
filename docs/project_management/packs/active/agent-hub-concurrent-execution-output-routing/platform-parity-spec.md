@@ -1,12 +1,15 @@
 # agent-hub-concurrent-execution-output-routing — platform parity spec
 
 Owner standard:
-- `docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md`
+
+- `docs/project_management/system/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`
 
 ## Scope
+
 - This spec is authoritative for platform guarantees and permitted divergences for ADR-0017 output routing behavior.
 
 ## Required platforms
+
 - Behavior platforms (smoke required): `linux`, `macos`, `windows`
 - CI parity platforms (parity required): `linux`, `macos`, `windows`
 - WSL required: `false`
@@ -14,6 +17,7 @@ Owner standard:
 ## Guarantees (explicit)
 
 What must behave identically across platforms:
+
 - Structured agent events are never injected into PTY byte streams during PTY passthrough.
 - PTY bytes are forwarded as raw bytes (no UTF-8 assumption; no re-encoding).
 - During PTY passthrough, structured agent events are buffered up to the configured cap and dropped beyond the cap.
@@ -21,14 +25,17 @@ What must behave identically across platforms:
 - While idle (prompt active), out-of-band PTY bytes and structured events do not corrupt the input buffer.
 
 What may diverge (explicit list + rationale):
+
 - Exact terminal redraw escape sequences while idle are not specified; the observable invariant is prompt/input correctness and absence of injected structured output into PTY bytes.
 - On platforms where Substrate does not support PTY passthrough (currently Windows), PTY-specific guarantees are not applicable; envelope + trace persistence guarantees remain required.
 
 ## Known platform hazards (explicit)
+
 - Windows terminals and PTY emulation differ; prompt redraw tests must be resilient while still detecting input corruption regressions.
 - Non-UTF8 PTY byte output must not panic or corrupt rendering on any platform.
 
 ## Validation evidence (explicit)
+
 - Smoke scripts required:
   - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/smoke/linux-smoke.sh`
   - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/smoke/macos-smoke.sh`
@@ -41,6 +48,7 @@ What may diverge (explicit list + rationale):
   - Out-of-band PTY bytes during prompt wait without input corruption
 
 ## Acceptance criteria (testable)
+
 - Linux and macOS:
   - A PTY passthrough command runs while demo structured events are emitted without terminal corruption or prompt corruption.
   - If structured events are emitted during PTY passthrough, the canonical trace contains:

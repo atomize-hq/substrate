@@ -1,15 +1,17 @@
 # Kickoff: WS5-integ-macos (integration platform-fix — macos)
 
 ## Scope
+
 - Ensure the slice is green for **macos** in the way required by the Planning Pack:
   - If `macos` is in `tasks.json` meta `behavior_platforms_required`: this is a **behavioral** platform-fix task (smoke required).
   - Otherwise: this is a **CI parity** platform-fix task (compile/test/lint parity required; smoke not required).
 - This task is allowed to make production-code and/or test changes as needed to achieve the required platform green state, but must not edit planning docs inside the worktree.
 - Spec: `docs/project_management/packs/active/world-sync/WS5-spec.md`
-- Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+- Execution workflow standard: `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 - This task must not merge back to the orchestration branch; the final aggregator integration task performs the merge once all platforms are green.
 
 ## Start Checklist
+
 Do not edit planning docs inside the worktree.
 
 1. Run this task on a machine that matches the required platform: **macos**.
@@ -20,6 +22,7 @@ Do not edit planning docs inside the worktree.
    - `make triad-task-start FEATURE_DIR="docs/project_management/packs/active/world-sync" TASK_ID="WS5-integ-macos" TASK_PLATFORM=macos`
 
 ## Requirements
+
 - Before validating smoke or making fixes, merge the slice’s core integration branch into this worktree:
   - Find the core integration task for this slice in `tasks.json` (e.g., `WS5-integ-core`) and merge its task branch into your current branch.
   - This ensures your platform-fix work starts from the merged code+test state that passed local integration gates.
@@ -56,6 +59,7 @@ Do not edit planning docs inside the worktree.
     - Fix compile/test/lint parity failures for this platform and re-run until green.
 
 ## End Checklist
+
 1. Ensure the required gate is green for macos (smoke for behavior platforms; CI parity gates otherwise) and capture the run id/URL.
    - If you intentionally skipped dispatch due to ci-audit (`RECOMMEND=skip`), include the ci-audit output lines + last-green run evidence in your handoff.
 2. From inside the worktree, run: `make triad-task-finish TASK_ID="WS5-integ-macos"`

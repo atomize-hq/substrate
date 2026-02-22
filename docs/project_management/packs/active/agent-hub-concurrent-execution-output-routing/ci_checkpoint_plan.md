@@ -3,9 +3,11 @@
 This file defines when cross-platform CI gates run for this feature.
 
 Standard:
-- `docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md`
+
+- `docs/project_management/system/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md`
 
 ## Inputs
+
 - Feature directory: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing`
 - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/impact_map.md`
 - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/spec_manifest.md`
@@ -14,11 +16,12 @@ Standard:
   - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/OR1-spec.md`
 
 ## Operator rules
+
 - This plan is authoritative for cross-platform CI cadence.
 - Any change to slices or platform requirements MUST update:
-  1) this file,
-  2) `tasks.json` `meta.checkpoint_boundaries`, and
-  3) checkpoint tasks (`CP*-ci-checkpoint`).
+  1. this file,
+  2. `tasks.json` `meta.checkpoint_boundaries`, and
+  3. checkpoint tasks (`CP*-ci-checkpoint`).
 
 ## Machine-readable plan (linted)
 
@@ -48,5 +51,6 @@ Standard:
 ## Human-readable rationale
 
 CP1:
+
 - Validates that the end-to-end interactive routing seam is correct across platforms after the contract is fully implemented.
 - Avoids dispatching cross-platform CI during OR0, because OR0 alone does not exercise PTY passthrough routing and would produce redundant parity runs.

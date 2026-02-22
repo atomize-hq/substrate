@@ -3,9 +3,11 @@
 This file defines when cross-platform CI gates run for this feature.
 
 Standard:
-- `docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md`
+
+- `docs/project_management/system/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md`
 
 ## Inputs
+
 - Feature directory: `docs/project_management/packs/active/world_process_exec_tracing_parity`
 - `docs/project_management/packs/active/world_process_exec_tracing_parity/impact_map.md`
 - `docs/project_management/packs/active/world_process_exec_tracing_parity/spec_manifest.md`
@@ -16,11 +18,12 @@ Standard:
   - `docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP3-spec.md`
 
 ## Operator rules
+
 - This plan is authoritative for CI cadence.
 - Any change to slices or platform requirements MUST update:
-  1) this file,
-  2) `tasks.json` meta.checkpoint_boundaries, and
-  3) checkpoint tasks (`CP*-ci-checkpoint`).
+  1. this file,
+  2. `tasks.json` meta.checkpoint_boundaries, and
+  3. checkpoint tasks (`CP*-ci-checkpoint`).
 
 ## Machine-readable plan (linted)
 
@@ -60,12 +63,15 @@ Standard:
 
 ## Human-readable rationale
 
-Bounds override justification (explicit; required by `docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md`):
+Bounds override justification (explicit; required by `docs/project_management/system/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md`):
+
 - Defaults are set to `min_triads_per_checkpoint=1` and `max_triads_per_checkpoint=3` to permit a one-slice CP1 checkpoint at the WPEP0 seam and a three-slice CP2 checkpoint for the remaining slices.
 - CP1 isolates WPEP0 because it is a high-risk contract seam (span parent linkage correctness and joinability) and subsequent slices add high-volume process telemetry that must not land on top of broken trace trees.
 
 CP1:
+
 - Prevents shipping additional trace volume on top of span hierarchy corruption and missing join keys.
 
 CP2:
+
 - Ensures API transport, persistence, and Linux capture are validated together with smoke coverage.

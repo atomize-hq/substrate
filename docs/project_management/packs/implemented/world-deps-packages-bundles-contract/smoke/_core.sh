@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Shared behavior smoke for world-deps-packages-bundles-contract.
 #
-# Exit codes (aligned to `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`):
+# Exit codes (aligned to `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`):
 # - 0: smoke passed
 # - 1: smoke assertion failed / unexpected script error
 # - 2: invalid inputs (e.g., unknown SUBSTRATE_SMOKE_SLICE_ID)

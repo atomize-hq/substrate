@@ -1,17 +1,19 @@
 # Plan — agent-hub-concurrent-execution-output-routing
 
 Anchors (authoritative):
+
 - ADR: `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 - Decision register: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/decision_register.md`
 - Contract: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/contract.md`
 - Spec manifest: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/spec_manifest.md`
 
 Execution standards (non-negotiable):
-- `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
-- `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
-- `docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md`
-- `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`
-- `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+
+- `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
+- `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+- `docs/project_management/system/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md`
+- `docs/project_management/system/standards/ci/PLATFORM_INTEGRATION_AND_CI.md`
+- `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 
 ## Guardrails (non-negotiable)
 
@@ -24,6 +26,7 @@ Execution standards (non-negotiable):
 ## Platforms (authoritative)
 
 Declared in `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/tasks.json` meta:
+
 - Behavior platforms (smoke required): `linux`, `macos`, `windows`
 - CI parity platforms (compile parity required): `linux`, `macos`, `windows`
 - WSL required: `false`
@@ -43,21 +46,25 @@ Each slice is exactly one behavior delta and has one slice spec.
 ## CI checkpoints (authoritative)
 
 Source of truth:
+
 - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/ci_checkpoint_plan.md`
 
 This feature has one bounded checkpoint:
+
 - CP1 (`CP1-ci-checkpoint`) after `OR1-integ-core`, before platform-fix tasks and `OR1-integ` final.
 
 ## Execution order (operator runbook)
 
 Execution is allowed only after planning quality gate `ACCEPT`:
+
 - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/quality_gate_report.md`
 
 Then run, in order:
-1) `F0-exec-preflight` (fills `execution_preflight_report.md`)
-2) OR0 triad: `OR0-code` + `OR0-test` (concurrent) → `OR0-integ` → `OR0-closeout_report.md`
-3) OR1 triad: `OR1-code` + `OR1-test` (concurrent) → `OR1-integ-core`
-4) CP1 checkpoint: `CP1-ci-checkpoint`
-5) Platform-fix tasks when a platform gate fails: `OR1-integ-linux|macos|windows`
-6) Final aggregator: `OR1-integ` → `OR1-closeout_report.md`
-7) Feature cleanup: `FZ-feature-cleanup`
+
+1. `F0-exec-preflight` (fills `execution_preflight_report.md`)
+2. OR0 triad: `OR0-code` + `OR0-test` (concurrent) → `OR0-integ` → `OR0-closeout_report.md`
+3. OR1 triad: `OR1-code` + `OR1-test` (concurrent) → `OR1-integ-core`
+4. CP1 checkpoint: `CP1-ci-checkpoint`
+5. Platform-fix tasks when a platform gate fails: `OR1-integ-linux|macos|windows`
+6. Final aggregator: `OR1-integ` → `OR1-closeout_report.md`
+7. Feature cleanup: `FZ-feature-cleanup`

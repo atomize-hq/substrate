@@ -3,13 +3,16 @@
 Date (UTC): 2026-02-14T21:50:00Z
 
 Standards:
-- `docs/project_management/standards/SLICE_CLOSEOUT_GATE_STANDARD.md`
-- `docs/project_management/standards/EXECUTIVE_SUMMARY_STANDARD.md` (behavior delta format)
+
+- `docs/project_management/system/standards/execution/SLICE_CLOSEOUT_GATE_STANDARD.md`
+- `docs/project_management/system/standards/adr/EXECUTIVE_SUMMARY_STANDARD.md` (behavior delta format)
 
 Feature directory:
+
 - `docs/project_management/packs/active/world-deps-packages-bundles-contract`
 
 Slice spec:
+
 - `docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP5-spec.md`
 
 ## Behavior Delta (Existing → New → Why)
@@ -50,6 +53,7 @@ Slice spec:
 ## Cross-Platform Smoke (if applicable)
 
 Record run ids/URLs for required platforms:
+
 - Linux: Feature Smoke run `22024645441` — https://github.com/atomize-hq/substrate/actions/runs/22024645441 (success)
 - macOS: Feature Smoke run `22024645441` — https://github.com/atomize-hq/substrate/actions/runs/22024645441 (success)
 - WSL: Feature Smoke run `22024645441` — https://github.com/atomize-hq/substrate/actions/runs/22024645441 (success)
@@ -60,5 +64,6 @@ Record run ids/URLs for required platforms:
 - [x] Smoke scripts validate exit codes and key output (not just “command ran”)
 
 Notes:
+
 - Checkpoint CP2 evidence: CI compile parity run `22024610209` — https://github.com/atomize-hq/substrate/actions/runs/22024610209 (success)
 - Platform-fix tasks `WDP5-integ-linux` and `WDP5-integ-macos` were marked completed as deterministic no-ops based on all-green Feature Smoke for `CHECKOUT_SHA=bd4429b3a2554ab5247024b4a58829e0975cb6e3`.

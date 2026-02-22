@@ -3,9 +3,11 @@
 This file defines **when** cross-platform CI gates run for this feature.
 
 Standard:
-- `docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md`
+
+- `docs/project_management/system/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md`
 
 ## Inputs
+
 - Feature directory: `docs/project_management/packs/active/world-deps-packages-bundles-contract`
 - `docs/project_management/packs/active/world-deps-packages-bundles-contract/impact_map.md`
 - `docs/project_management/packs/active/world-deps-packages-bundles-contract/spec_manifest.md`
@@ -16,6 +18,7 @@ Standard:
   - WSL coverage: `tasks.json` → `meta.wsl_required=true` (bundled into Linux smoke via `RUN_WSL=1`)
 
 ## Operator rules
+
 - This plan is authoritative for **CI cadence**.
 - If you discover a mismatch between the plan and reality (new slice added, new platform scope, new contract surface), update this plan first, then update `tasks.json` and kickoff prompts.
 - For schema v4+ cross-platform automation packs: update `tasks.json` `meta.checkpoint_boundaries` to list the **last slice** in each checkpoint group (this is linted).
@@ -59,6 +62,7 @@ Standard:
 ## Human-readable rationale (required)
 
 ### CP1 — inventory + enabled + applied status seam
+
 - Code-grounded boundary:
   - Completes the operator read-only workflow: discover inventory → enable via patches → observe applied status.
 - Stabilized surfaces:
@@ -68,6 +72,7 @@ Standard:
   - Prevents platform drift in basic UX and exit codes before installs begin mutating the world.
 
 ### CP2 — install/sync mutation seam
+
 - Code-grounded boundary:
   - Completes the mutation workflow: plan (`--dry-run`) → apply prefix scripts/wrappers → apply apt installs and sync enabled list.
 - Stabilized surfaces:

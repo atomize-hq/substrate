@@ -1,11 +1,13 @@
 # Kickoff: WS4-code (code)
 
 ## Scope
+
 - Production code only; no new tests.
 - Spec: `docs/project_management/packs/active/world-sync/WS4-spec.md`
-- Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+- Execution workflow standard: `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Start Checklist
+
 Do not edit planning docs inside the worktree.
 
 1. Verify you are in the task worktree `wt/world-sync-ws4-code` on branch `world-sync-ws4-code` and that `.taskmeta.json` exists at the worktree root.
@@ -15,6 +17,7 @@ Do not edit planning docs inside the worktree.
    - `make triad-task-start FEATURE_DIR="docs/project_management/packs/active/world-sync" TASK_ID="WS4-code"` (single task only)
 
 ## Requirements
+
 - Implement exactly the behaviors and error handling in the spec.
 - If the spec requires broad refactors or multiple independent behavior changes, stop and ask the operator to split the slice into smaller triads before proceeding.
 - If completing this task requires more than 108,800 tokens of context (40% of a 272k token window), stop and ask the operator to split the slice before proceeding.
@@ -26,6 +29,7 @@ Do not edit planning docs inside the worktree.
   - Run a targeted baseline test set before making changes, then re-run the same test set after your changes and ensure results are unchanged (or improved).
 
 ## End Checklist
+
 1. Run required commands; capture outputs.
 2. From inside the worktree, run: `make triad-task-finish TASK_ID="WS4-code"`
 3. Hand off the baseline test command(s) and outcomes to the operator (do not edit planning docs inside the worktree).

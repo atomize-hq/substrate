@@ -1,11 +1,13 @@
 # agent-hub-concurrent-execution-output-routing — manual testing playbook (Authoritative)
 
 Standard:
-- `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md` (section 6)
+
+- `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md` (section 6)
 
 ## Scope
 
 Validates ADR-0017 operator-visible behavior for concurrent structured agent events during interactive use:
+
 - structured agent events are persisted to canonical trace as `event_type="agent_event"` records with stable join keys,
 - PTY passthrough never receives injected structured output,
 - structured events during PTY passthrough are buffered up to a deterministic cap and dropped beyond the cap,
@@ -22,7 +24,8 @@ Validates ADR-0017 operator-visible behavior for concurrent structured agent eve
   - PowerShell 7 (`pwsh`) (Windows)
 
 Exit code taxonomy for Substrate CLI behavior:
-- `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+
+- `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 
 ## Smoke scripts (required)
 
@@ -33,42 +36,49 @@ Exit code taxonomy for Substrate CLI behavior:
 ## Case 1 — Smoke (Linux)
 
 Run:
+
 ```bash
 export SUBSTRATE_BIN="${SUBSTRATE_BIN:-substrate}"
 bash docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/smoke/linux-smoke.sh
 ```
 
 Expected:
+
 - Exit code `0`.
 - Output contains an `OK:` line.
 
 ## Case 2 — Smoke (macOS)
 
 Run:
+
 ```bash
 export SUBSTRATE_BIN="${SUBSTRATE_BIN:-substrate}"
 bash docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/smoke/macos-smoke.sh
 ```
 
 Expected:
+
 - Exit code `0`.
 - Output contains an `OK:` line.
 
 ## Case 3 — Smoke (Windows)
 
 Run:
+
 ```powershell
 $env:SUBSTRATE_BIN = $env:SUBSTRATE_BIN ?? "substrate"
 pwsh -NoProfile -File docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/smoke/windows-smoke.ps1
 ```
 
 Expected:
+
 - Exit code `0`.
 - Output contains an `OK:` line.
 
 ## Case 4 — Interactive validation (Linux/macOS): no PTY injection + drop warning emitted
 
 Run in a temporary workspace and temporary Substrate home:
+
 ```bash
 set -euo pipefail
 tmp_root="$(mktemp -d)"
@@ -89,18 +99,21 @@ substrate --no-world
 ```
 
 In the interactive REPL session, run:
-1) Start the demo structured-event producer:
+
+1. Start the demo structured-event producer:
    - `:demo-agent`
-2) Immediately start a PTY passthrough command that overlaps with demo output:
+2. Immediately start a PTY passthrough command that overlaps with demo output:
    - `:pty bash -lc 'echo PTY_START; sleep 2; echo PTY_END'`
-3) Exit the REPL:
+3. Exit the REPL:
    - `:quit`
 
 Expected:
+
 - Between `PTY_START` and `PTY_END`, no structured agent event lines are printed.
 - After `PTY_END`, a human-readable warning line is printed indicating structured output was suppressed during PTY passthrough.
 
 Trace assertions (after exiting REPL):
+
 ```bash
 trace="$SUBSTRATE_HOME/trace.jsonl"
 test -f "$trace"
@@ -115,11 +128,13 @@ jq -e 'any(select(.event_type=="warning" and .component=="shell" and .code=="pty
 ```
 
 Expected:
+
 - Both `jq -e` probes succeed (exit `0`).
 
 ## Case 5 — Windows validation: agent_event persistence (PTY passthrough not applicable)
 
 Run in a temporary workspace and temporary Substrate home:
+
 ```powershell
 $ErrorActionPreference = "Stop"
 $tmp = New-Item -ItemType Directory -Force -Path ([System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), [System.Guid]::NewGuid().ToString()))
@@ -138,5 +153,6 @@ Get-Content $trace | jq -e 'any(select(.event_type=="agent_event" and .component
 ```
 
 Expected:
+
 - Exit code `0`.
 - At least one `event_type="agent_event"` record exists.

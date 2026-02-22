@@ -1,9 +1,11 @@
 # Decision Register — Agent Hub Concurrent Execution Output Routing
 
 Standard:
-- `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md` (Decision Register Standard)
+
+- `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md` (Decision Register Standard)
 
 Scope:
+
 - This decision register supports `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`.
 - Each decision is recorded as exactly two viable options (A/B) with explicit tradeoffs and a single selection.
 
@@ -17,6 +19,7 @@ Scope:
 **Related docs:** `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 
 **Problem / Context**
+
 - Substrate needs a deterministic output contract for concurrent agent activity that preserves PTY correctness (TUIs) and avoids corrupting the interactive line editor.
 - Repo grounding (already exists today; extend it, do not rebuild in parallel):
   - Structured out-of-band events are already handled during the REPL prompt wait loop (used by `:demo-agent`):
@@ -24,6 +27,7 @@ Scope:
     - `crates/shell/src/execution/agent_events.rs` (`schedule_demo_events()` publishes demo events)
 
 **Option A — Two output classes with explicit rendering separation**
+
 - **Pros:**
   - Prevents terminal corruption during TUIs / PTY passthrough.
   - Preserves PTY byte fidelity (binary-safe) by treating PTY as bytes, not strings.
@@ -41,6 +45,7 @@ Scope:
   - Reuse Reedline external printer + external byte printer APIs for safe output.
 
 **Option B — Single string channel for all output**
+
 - **Pros:**
   - Simplest mental model: one printer/stream.
 - **Cons:**
@@ -56,10 +61,12 @@ Scope:
   - None compatible with safe interactive behavior.
 
 **Recommendation**
+
 - **Selected:** Option A — Two output classes with explicit rendering separation.
 - **Rationale (crisp):** PTY correctness and binary fidelity are non-negotiable; structured events must not corrupt TUIs or the line editor.
 
 **Follow-up tasks (explicit)**
+
 - Ensure REPL rendering uses a byte-safe PTY output path and a separate structured-event printer path.
 - Add tests that assert structured events do not inject into PTY passthrough.
 
@@ -73,9 +80,11 @@ Scope:
 **Related docs:** `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 
 **Problem / Context**
+
 - During PTY passthrough (TUIs), structured agent events must not be injected into the PTY byte stream, but we still need deterministic behavior for concurrent structured output.
 
 **Option A — Bounded buffer + drop-with-summary (UI path)**
+
 - **Pros:**
   - Avoids liveness coupling: structured output cannot stall execution.
   - Deterministic memory bound; prevents OOM during long passthrough sessions.
@@ -93,6 +102,7 @@ Scope:
   - Implement buffer with a fixed default and add a later config knob (see DR-0004).
 
 **Option B — Backpressure (block producers; never drop)**
+
 - **Pros:**
   - No structured events are dropped.
 - **Cons:**
@@ -108,10 +118,12 @@ Scope:
   - None without significant correctness risk.
 
 **Recommendation**
+
 - **Selected:** Option A — Bounded buffer + drop-with-summary (UI path).
 - **Rationale (crisp):** Rendering must not become an availability dependency; bounded buffering preserves PTY correctness without risking stalls/deadlocks.
 
 **Follow-up tasks (explicit)**
+
 - Define and test deterministic overflow signaling for structured events during passthrough.
 
 ---
@@ -124,9 +136,11 @@ Scope:
 **Related docs:** `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 
 **Problem / Context**
+
 - When the bounded structured-event buffer overflows during PTY passthrough, Substrate must provide an explicit, programmatically extractable signal describing what was suppressed, without injecting messages into the PTY byte stream.
 
 **Option A — Single marker line only**
+
 - **Pros:**
   - Minimal implementation.
   - Provides a human-visible “something was dropped” hint after passthrough ends.
@@ -143,6 +157,7 @@ Scope:
   - None that preserve structured extraction.
 
 **Option B — Emit an explicit dropped-count summary (structured)**
+
 - **Pros:**
   - Programmatically extractable: downstream consumers can render accurate summaries and link to durable sinks.
   - Keeps the UI contract honest: “N lines suppressed” is explicit and deterministic.
@@ -161,10 +176,12 @@ Scope:
   - Implement as a single shell warning record emitted once per passthrough session when drops occurred (consistent with existing `substrate: warning:` emission patterns).
 
 **Recommendation**
+
 - **Selected:** Option B — Emit an explicit dropped-count summary (structured).
 - **Rationale (crisp):** Downstream tools (session logs, block UIs, router-era consumers) need deterministic, machine-readable suppression metrics; a marker-only string is insufficient.
 
 **Follow-up tasks (explicit)**
+
 - Track `dropped_structured_event_lines` during PTY passthrough once the buffer cap is hit.
 - After passthrough ends (before returning to the prompt), emit exactly one structured summary warning containing:
   - `dropped_structured_event_lines: <int>`
@@ -187,9 +204,11 @@ Scope:
 **Related docs:** `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 
 **Problem / Context**
+
 - Upcoming LLM/agent/workflow/router ADRs require stable correlation fields to support trace-driven routing, session logging, and multi-agent attribution without heuristics.
 
 **Option A — Minimal required attribution (extend later)**
+
 - **Pros:**
   - Lower initial coupling and smaller immediate change surface.
 - **Cons:**
@@ -205,6 +224,7 @@ Scope:
   - None that preserve long-term contract stability.
 
 **Option B — Rich required attribution (correlation-first)**
+
 - **Pros:**
   - Enables deterministic joins across LLM gateway, agent hub, workflow engine, and router daemon.
   - Reduces future churn by locking correlation surfaces early.
@@ -220,10 +240,12 @@ Scope:
   - Define field requirements now and enforce via tests/validation in subsequent planning packs.
 
 **Recommendation**
+
 - **Selected:** Option B — Rich required attribution (correlation-first).
 - **Rationale (crisp):** Later ADRs (LLM gateway/engines, agent hub, workflow engine, router daemon) require stable joins; locking attribution now avoids drift and heuristic routing.
 
 **Follow-up tasks (explicit)**
+
 - Require structured events to include (at minimum) correlation fields such as:
   - `orchestration_session_id`
   - `run_id`
@@ -268,9 +290,11 @@ Scope:
 **Related docs:** `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 
 **Problem / Context**
+
 - The PTY passthrough structured-event buffer must be bounded by default, but operators may need to tune it per workspace/global context (CI vs local dev, noisy agents vs quiet agents).
 
 **Option A — Fixed constant only**
+
 - **Pros:**
   - No new config surface; simplest.
   - Deterministic behavior across environments.
@@ -286,6 +310,7 @@ Scope:
   - Ship quickly with a constant.
 
 **Option B — Config knob in existing global + workspace YAML config**
+
 - **Pros:**
   - Tunable without changing code; aligns with existing config layering model.
   - Workspace-specific overrides allow “project policy” for noisy vs quiet workflows.
@@ -301,10 +326,12 @@ Scope:
   - Default remains the current constant; if the key is absent, the default applies.
 
 **Recommendation**
+
 - **Selected:** Option B — Config knob in existing global + workspace YAML config.
 - **Rationale (crisp):** Keep a safe default but allow deterministic tuning through the standard config surfaces without inventing new env-var one-offs.
 
 **Follow-up tasks (explicit)**
+
 - Add config key:
   - Global: `$SUBSTRATE_HOME/config.yaml`
   - Workspace: `<workspace_root>/.substrate/workspace.yaml`
@@ -322,12 +349,14 @@ Scope:
 **Related docs:** `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 
 **Problem / Context**
+
 - While the line editor is active (`Idle`), PTY output may arrive out-of-band. Substrate must render this output without corrupting the current input buffer.
 - Repo grounding (already exists today; extend it, do not rebuild in parallel):
   - PTY bytes already use a byte-safe printer when the prompt is active:
     - `crates/shell/src/repl/async_repl.rs` (`make_world_stdout_callback(...)` uses `ExternalBytePrinter` when `prompt_active` is true)
 
 **Option A — Safe render (escape/encode output)**
+
 - **Pros:**
   - Minimizes risk of terminal/prompt corruption by treating out-of-band bytes as data.
   - Simpler to reason about for arbitrary input (non-UTF8, control sequences).
@@ -343,6 +372,7 @@ Scope:
   - None without accepting fidelity loss.
 
 **Option B — Raw bytes + prompt/input redraw (fidelity render)**
+
 - **Pros:**
   - Preserves PTY byte fidelity (binary-safe) and terminal semantics.
   - Aligns with the core output contract: PTY output is bytes.
@@ -358,10 +388,12 @@ Scope:
   - Reuse Reedline’s external byte printer APIs to render bytes while preserving the input buffer.
 
 **Recommendation**
+
 - **Selected:** Option B — Raw bytes + prompt/input redraw (fidelity render).
 - **Rationale (crisp):** PTY fidelity is a core contract; rendering out-of-band bytes must preserve terminal semantics while keeping the line editor stable.
 
 **Follow-up tasks (explicit)**
+
 - Ensure out-of-band PTY bytes are routed through a byte-safe printer that restores prompt/input (no “string channel” fallback).
 
 ---
@@ -374,9 +406,11 @@ Scope:
 **Related docs:** `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 
 **Problem / Context**
+
 - The buffer cap value will vary across machines, workloads, and environments (CI vs local dev). We must keep the system safe-by-default while preserving deterministic behavior and avoiding “footgun” values that cause unbounded memory growth.
 
 **Option A — Hard error on any invalid or out-of-range value**
+
 - **Pros:**
   - Strict and predictable: operators must provide a valid value or execution fails fast.
   - No silent behavior changes.
@@ -393,6 +427,7 @@ Scope:
   - Use default serde/YAML validation and add explicit bounds checks.
 
 **Option B — Hard error on invalid type, clamp out-of-range values with a structured warning**
+
 - **Pros:**
   - Safe-by-default: the runtime never uses an unbounded value.
   - Operationally resilient: users can set “too big” and still run; behavior is deterministic via clamping.
@@ -410,10 +445,12 @@ Scope:
   - Emit a single shell warning record when clamping occurs (include raw value and clamped value).
 
 **Recommendation**
+
 - **Selected:** Option B — Hard error on invalid type, clamp out-of-range values with a structured warning.
 - **Rationale (crisp):** The knob is tuning, not correctness; clamping preserves safety and determinism without turning tuning into workflow failure.
 
 **Follow-up tasks (explicit)**
+
 - Bounds (non-negotiable): `min=0`, `max=16384`.
 - Invalid handling:
   - Invalid type / parse failure: hard error (exit code `2` at CLI/config boundary).
@@ -446,9 +483,11 @@ Scope:
 **Related docs:** `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 
 **Problem / Context**
+
 - Downstream consumers (router daemon, session logs, block UIs) need deterministic, low-friction extraction of attribution fields. Field placement must avoid drift and minimize ad-hoc JSON parsing.
 
 **Option A — Top-level envelope fields (schema-first)**
+
 - **Pros:**
   - Easy to query (`jq`, SQL) without nested-path fragility.
   - Schema enforcement is simpler (required fields are clearly required).
@@ -465,6 +504,7 @@ Scope:
   - Start with required subset; extend additively in the circle-back pass.
 
 **Option B — Nested `data.attribution` object**
+
 - **Pros:**
   - Flexible payload evolution inside `data`.
 - **Cons:**
@@ -480,10 +520,12 @@ Scope:
   - None that preserve determinism.
 
 **Recommendation**
+
 - **Selected:** Option A — Top-level envelope fields (schema-first).
 - **Rationale (crisp):** Programmatic extraction and schema enforcement dominate; nested attribution is too easy to drift.
 
 **Follow-up tasks (explicit)**
+
 - Ensure all required attribution fields are top-level keys on serialized agent events (per DR-0003).
 
 ---
@@ -496,9 +538,11 @@ Scope:
 **Related docs:** `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 
 **Problem / Context**
+
 - Substrate is both an interactive REPL and a backend engine for other applications. Structured agent events must be available programmatically and durably; the canonical local source of truth is `trace.jsonl`.
 
 **Option A — Persist every structured agent event to canonical trace**
+
 - **Pros:**
   - Durable, programmatically extractable event stream for session logs and UIs.
   - Enables cross-component joins with LLM gateway, workflow engine, and router daemon.
@@ -515,6 +559,7 @@ Scope:
   - Start with a single `event_type` (e.g., `agent_event`) and include `kind` + envelope fields; extend additively.
 
 **Option B — UI-only events (no canonical trace persistence)**
+
 - **Pros:**
   - Lower trace volume.
 - **Cons:**
@@ -530,10 +575,12 @@ Scope:
   - None.
 
 **Recommendation**
+
 - **Selected:** Option A — Persist every structured agent event to canonical trace.
 - **Rationale (crisp):** Trace is the durable, programmatic substrate; UI rendering must not be the only place events exist.
 
 **Follow-up tasks (explicit)**
+
 - Canonical trace record shape (v1; additive-only extensions allowed):
   - `component: "agent-hub"`
   - `event_type: "agent_event"`
@@ -551,9 +598,11 @@ Scope:
 **Related docs:** `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 
 **Problem / Context**
+
 - PTY passthrough can be entered explicitly (e.g., `:pty`) or implicitly (commands that require a PTY). Buffering/suppression semantics must be consistent regardless of how passthrough starts.
 
 **Option A — Apply only to explicit `:pty` passthrough**
+
 - **Pros:**
   - Smaller initial touch surface.
 - **Cons:**
@@ -569,6 +618,7 @@ Scope:
   - None that preserve consistency.
 
 **Option B — Apply to any PTY passthrough session**
+
 - **Pros:**
   - Consistent, predictable behavior across the REPL.
   - Simplifies documentation and downstream consumers.
@@ -584,10 +634,12 @@ Scope:
   - Reuse the existing `:pty` handling as the reference implementation.
 
 **Recommendation**
+
 - **Selected:** Option B — Apply to any PTY passthrough session.
 - **Rationale (crisp):** Consistency across explicit and implicit PTY passthrough is required for predictable UX and programmatic consumption.
 
 **Follow-up tasks (explicit)**
+
 - Ensure all PTY passthrough entry points use the same buffering/suppression logic and honor `repl.max_pty_buffered_lines`.
 
 ---
@@ -600,9 +652,11 @@ Scope:
 **Related docs:** `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`, `docs/TRACE.md`
 
 **Problem / Context**
+
 - Phase 8 correlation vocabulary requires join keys to be present as top-level fields on trace records (operator queryability via `jq`, router/workflow joins, and auditability).
 
 **Option A — Flatten envelope fields into the trace record (recommended)**
+
 - **Pros:**
   - Join keys are top-level fields on the `agent_event` record (Phase 8-compatible).
   - Queries do not require nested-path handling.
@@ -620,6 +674,7 @@ Scope:
   - Emit one record family (`event_type="agent_event"`) with stable `component="agent-hub"`.
 
 **Option B — Nest the envelope under a `payload` object**
+
 - **Pros:**
   - Reduces top-level key count.
 - **Cons:**
@@ -635,10 +690,12 @@ Scope:
   - None.
 
 **Recommendation**
+
 - **Selected:** Option A — Flatten envelope fields into the trace record.
 - **Rationale (crisp):** Phase 8 joinability requires top-level correlation fields; nested payloads create needless tooling friction and drift risk.
 
 **Follow-up tasks (explicit)**
+
 - In `telemetry-spec.md`, define `agent_event` records as flattened envelope fields + trace-required keys (`ts`, `event_type`, `session_id`, `component`).
 
 ---
@@ -651,10 +708,12 @@ Scope:
 **Related docs:** `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/agent-hub-event-envelope-schema-spec.md`
 
 **Problem / Context**
+
 - The `channel` field is persisted to canonical trace and may be printed. It must be secrets-safe.
 - If a producer attempts to set an unsafe channel value, the system must respond deterministically without leaking the unsafe value.
 
 **Option A — Drop unsafe values silently (recommended)**
+
 - **Pros:**
   - No risk of re-emitting secret material via warnings.
   - No new warning code or telemetry family required.
@@ -671,6 +730,7 @@ Scope:
   - Implement drop in a single validation helper used by all producers.
 
 **Option B — Drop unsafe values and emit a warning record**
+
 - **Pros:**
   - Producers/operators get explicit signal that channel validation occurred.
 - **Cons:**
@@ -686,10 +746,12 @@ Scope:
   - None compatible with a minimal v1.
 
 **Recommendation**
+
 - **Selected:** Option A — Drop unsafe values silently.
 - **Rationale (crisp):** Safety dominates; channel is not required for joins and must not expand the warning surface in v1.
 
 **Follow-up tasks (explicit)**
+
 - Enforce: unsafe channel values are dropped, and the dropped value is never emitted in any warning/log/trace field.
 
 ---
@@ -702,9 +764,11 @@ Scope:
 **Related docs:** `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/telemetry-spec.md`
 
 **Problem / Context**
+
 - When structured output is suppressed during PTY passthrough, the warning record must be deterministic and bounded.
 
 **Option A — Total-only suppression record (recommended)**
+
 - **Pros:**
   - Minimal, bounded payload that is easy to validate and query.
   - Avoids expanding the surface area that includes `channel` values.
@@ -721,6 +785,7 @@ Scope:
   - Implement dropped counter and emit one record at passthrough end.
 
 **Option B — Include per-channel breakdown (bounded buckets)**
+
 - **Pros:**
   - More explainable summaries for human and UI consumers.
 - **Cons:**
@@ -736,8 +801,10 @@ Scope:
   - None in a minimal v1.
 
 **Recommendation**
+
 - **Selected:** Option A — Total-only suppression record.
 - **Rationale (crisp):** The durable `agent_event` stream remains the source of truth; suppression summaries remain minimal and secrets-safe.
 
 **Follow-up tasks (explicit)**
+
 - In `telemetry-spec.md`, omit any per-channel breakdown fields from the v1 suppression warning record schema.

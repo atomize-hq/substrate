@@ -1,12 +1,14 @@
 # Kickoff: WS2-integ (integration final — cross-platform merge)
 
 ## Scope
+
 - Merge platform-fix branches (if any) and finalize the slice with a clean, auditable merged state.
 - Spec: `docs/project_management/packs/active/world-sync/WS2-spec.md`
-- Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+- Execution workflow standard: `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 - This task is responsible for merging back to the orchestration branch after all platforms are green (fast-forward when possible; otherwise a merge commit, preserving the orchestration branch’s Planning Pack files under the feature dir).
 
 ## Start Checklist
+
 Do not edit planning docs inside the worktree.
 
 1. Verify you are in the task worktree `wt/world-sync-ws2-integ` on branch `world-sync-ws2-integ` and that `.taskmeta.json` exists at the worktree root.
@@ -15,6 +17,7 @@ Do not edit planning docs inside the worktree.
    - `make triad-task-start FEATURE_DIR="docs/project_management/packs/active/world-sync" TASK_ID="WS2-integ"`
 
 ## Requirements
+
 - Merge the relevant integration branches for this slice:
   - The core integration branch (e.g., `*-integ-core`) and any platform-fix integration branches (`*-integ-linux|macos`) that produced commits.
 - Do not merge the orchestration branch into this worktree to “pick up task status/docs updates”; the finisher merges back while preserving the orchestration branch’s Planning Pack files.
@@ -28,19 +31,23 @@ Do not edit planning docs inside the worktree.
 ### CI checkpoints (required; cross-platform CI is not a per-slice step)
 
 For cross-platform automation packs, cross-platform CI gates (compile parity + Feature Smoke) run only at the checkpoint boundaries defined in:
+
 - `docs/project_management/packs/active/world-sync/ci_checkpoint_plan.md`
 
 Rules:
+
 - Do not dispatch cross-platform CI from this integration-final task.
 - Verify that the checkpoint(s) that cover this slice are completed and that run ids/URLs are recorded in `docs/project_management/packs/active/world-sync/session_log.md`.
 - Complete the slice closeout gate report:
   - `docs/project_management/packs/active/world-sync/WS2-closeout_report.md` (e.g., `docs/project_management/packs/active/world-sync/WS2-closeout_report.md`)
 
 ## End Checklist
+
 1. Ensure your merged state is committed and local integration gates are green:
    - From inside the worktree, run: `make triad-task-finish TASK_ID="WS2-integ"`
 2. Hand off closeout report completion and any remaining checkpoint requirements to the operator (do not edit planning docs inside the worktree).
 3. Do not delete the worktree (feature cleanup removes worktrees at feature end).
 
 Naming note:
+
 - The task id for the final aggregator is `WS2-integ` (this prompt’s `WS2-integ`). The helper command to start it is named `triad-task-start-integ-final`.

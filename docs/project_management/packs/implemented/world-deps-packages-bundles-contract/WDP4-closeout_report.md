@@ -3,13 +3,16 @@
 Date (UTC): 2026-02-14T19:56:55Z
 
 Standards:
-- `docs/project_management/standards/SLICE_CLOSEOUT_GATE_STANDARD.md`
-- `docs/project_management/standards/EXECUTIVE_SUMMARY_STANDARD.md` (behavior delta format)
+
+- `docs/project_management/system/standards/execution/SLICE_CLOSEOUT_GATE_STANDARD.md`
+- `docs/project_management/system/standards/adr/EXECUTIVE_SUMMARY_STANDARD.md` (behavior delta format)
 
 Feature directory:
+
 - `docs/project_management/packs/active/world-deps-packages-bundles-contract`
 
 Slice spec:
+
 - `docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP4-spec.md`
 
 ## Behavior Delta (Existing → New → Why)
@@ -43,6 +46,7 @@ Slice spec:
 ## Cross-Platform Smoke (if applicable)
 
 Record run ids/URLs for required platforms:
+
 - Linux: not run (not required for WDP4)
 - macOS: not run (not required for WDP4)
 - WSL: not run (not required for WDP4)
@@ -53,4 +57,5 @@ Record run ids/URLs for required platforms:
 - [ ] Smoke scripts validate exit codes and key output (not just “command ran”) (not evaluated for WDP4)
 
 Notes:
+
 - WDP4 validates script install + wrapper generation via a host-execute world-agent stub and ensures wrappers are deterministic and fail with actionable stderr when wrapper sources are invalid.

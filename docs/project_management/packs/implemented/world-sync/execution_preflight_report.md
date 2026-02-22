@@ -3,9 +3,11 @@
 Date (UTC): 2026-02-11T18:54:27Z
 
 Standard:
-- `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
+
+- `docs/project_management/system/standards/execution/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
 
 Feature directory:
+
 - `docs/project_management/packs/active/world-sync`
 
 ## Recommendation
@@ -13,6 +15,7 @@ Feature directory:
 RECOMMENDATION: **ACCEPT**
 
 Reason:
+
 - Planning Pack inputs are coherent, cross-platform coverage is explicit and consistent across plan/contract/tasks, smoke scripts exercise real workflows with assertions, and CI dispatch/audit tooling is present and referenced by integration kickoff prompts.
 
 ## Inputs Reviewed
@@ -41,10 +44,12 @@ Reason:
 ## 1) Cross-Platform Coverage (explicit and correct)
 
 From `docs/project_management/packs/active/world-sync/tasks.json` meta:
+
 - Declared behavior platforms (smoke required): `["linux", "macos"]`
 - Declared CI parity platforms (parity required): `["linux", "macos"]` (legacy alias: `platforms_required`)
 
 Notes:
+
 - Schema v4+ platform-fix model (boundary-only):
   - Normal slices have only `X-integ` (single merge task).
   - Checkpoint-boundary slices (`WS2`, `WS5`, `WS7`) have `X-integ-core`, `X-integ-linux` / `X-integ-macos`, and `X-integ` final.
@@ -54,13 +59,16 @@ Notes:
 Smoke scripts must be a runnable, minimal version of how a careful human would validate the feature.
 
 Manual playbook (when required):
+
 - `docs/project_management/packs/active/world-sync/manual_testing_playbook.md`
 
 Smoke scripts to validate (only required for behavior platforms; parity-only platforms may be explicit no-ops):
+
 - Linux smoke: `docs/project_management/packs/active/world-sync/smoke/linux-smoke.sh`
 - macOS smoke: `docs/project_management/packs/active/world-sync/smoke/macos-smoke.sh`
 
 Parity notes (map smoke ↔ manual; include concrete assertions):
+
 - Manual step(s):
   - WS2: create world change → `workspace sync --verbose` includes the touched path and apply makes the host file exist
   - WS7: rollback safety rail refusal without `--force` (exit `5`), then forced rollback succeeds (exit `0`) and removes the mutated file
@@ -72,11 +80,13 @@ Parity notes (map smoke ↔ manual; include concrete assertions):
   - Rollback refusal path returns exit `5` and the forced path returns exit `0`.
 
 Gaps (must fix before execution begins):
+
 - None.
 
 ## 3) CI Dispatch Path Is Runnable (if applicable)
 
 Integration task dispatch commands (copy verbatim from `tasks.json` integration checklists):
+
 - CI compile parity:
   - `make ci-compile-parity CI_WORKFLOW_REF="feat/world-sync" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF="$CHECKOUT_SHA"`
 - Feature Smoke dispatch:
@@ -93,14 +103,17 @@ Integration task dispatch commands (copy verbatim from `tasks.json` integration 
     - `scripts/ci-audit/ci_audit_record.sh --ledger-path "$LEDGER_PATH" --kind feature-smoke --orch-branch "feat/world-sync" --run-id "$RUN_ID" --tested-sha "$CHECKOUT_SHA" --feature-dir "docs/project_management/packs/active/world-sync"`
 
 Policy note:
+
 - Docs/planning-only changes (anything under `docs/`) may skip all CI/smoke **only when** the advisory audit outputs `DIFF_CLASS=docs_only` and `RECOMMEND=skip`.
 
 Runner readiness:
+
 - Required self-hosted runners exist and are labeled correctly:
   - `Feature Smoke (self-hosted linux)`: `runs-on: [self-hosted, Linux, linux-host]`
   - `Feature Smoke (self-hosted macos)`: `runs-on: [self-hosted, macOS]`
 
 Run ids/URLs (if executed during preflight):
+
 - CI compile parity:
 - Linux smoke:
 - macOS smoke:

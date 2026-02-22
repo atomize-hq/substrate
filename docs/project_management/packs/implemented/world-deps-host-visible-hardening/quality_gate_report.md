@@ -1,6 +1,7 @@
 # Planning Quality Gate Report — world-deps-host-visible-hardening
 
 ## Metadata
+
 - Feature directory: `docs/project_management/packs/active/world-deps-host-visible-hardening/`
 - Reviewed commit: `11a6c9207da1b80a6db53467fa68cbb2a5ba6024`
 - Reviewer: third-party planning pack reviewer (external)
@@ -157,6 +158,7 @@ rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' '\\b(shoul
 ```
 
 ## Required Inputs Read End-to-End (checklist)
+
 - ADR(s): `YES`
   - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
   - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
@@ -172,20 +174,21 @@ rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' '\\b(shoul
 - Feature smoke scripts under `smoke/`: `YES`
 - `docs/project_management/packs/sequencing.json`: `YES`
 - Standards:
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
-  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`: `YES`
-  - `docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md`: `YES`
-  - `docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md`: `YES`
-  - `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`: `YES`
-  - `docs/project_management/standards/TRIAD_WORKFLOW_CROSS_PLATFORM_INTEG.md`: `YES`
-  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`: `YES`
-  - `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`: `YES`
-  - `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`: `YES`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`: `YES`
+  - `docs/project_management/system/standards/planning/PLANNING_IMPACT_MAP_STANDARD.md`: `YES`
+  - `docs/project_management/system/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md`: `YES`
+  - `docs/project_management/system/standards/ci/PLATFORM_INTEGRATION_AND_CI.md`: `YES`
+  - `docs/project_management/system/standards/triad/TRIAD_WORKFLOW_CROSS_PLATFORM_INTEG.md`: `YES`
+  - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`: `YES`
+  - `docs/project_management/system/standards/planning/PLANNING_LINT_CHECKLIST.md`: `YES`
+  - `docs/project_management/system/standards/planning/PLANNING_GATE_REPORT_TEMPLATE.md`: `YES`
 
 ## Gate Results (PASS/FAIL with evidence)
 
 ### 1) Zero-ambiguity contracts
+
 - Result: `FAIL`
 - Evidence:
   - `docs/project_management/packs/active/world-deps-host-visible-hardening/impact_map.md` contains banned ambiguity word(s).
@@ -193,12 +196,14 @@ rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' '\\b(shoul
 - Notes: Planning lint ambiguity scan is violated (`should` present outside `decision_register.md`).
 
 ### 2) Decision quality (2 options, explicit tradeoffs, explicit selection)
+
 - Result: `FAIL`
 - Evidence:
   - `docs/project_management/packs/active/world-deps-host-visible-hardening/decision_register.md` DR-0001/DR-0002/DR-0003/DR-0004/DR-0005: Option B is documented as not meeting the contract (“does not solve the problem” / “fails the contract” / “unlocks none”).
 - Notes: Standard requires two viable options; several Option B entries are explicitly non-viable strawmen.
 
 ### 3) Cross-doc consistency (CLI/config/exit codes/paths)
+
 - Result: `FAIL`
 - Evidence:
   - `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH2-spec.md` states “unless explicitly allowed by policy” but defines only env-var overrides (no policy key).
@@ -206,6 +211,7 @@ rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' '\\b(shoul
 - Notes: Override surface and taxonomy are not consistent across authoritative inputs/specs.
 
 ### 4) Sequencing and dependency alignment
+
 - Result: `FAIL`
 - Evidence:
   - `docs/project_management/packs/sequencing.json` has no entry for `docs/project_management/packs/active/world-deps-host-visible-hardening`.
@@ -213,6 +219,7 @@ rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' '\\b(shoul
 - Notes: Mechanical lint requires sequencing membership; missing entry blocks execution scheduling and violates rubric.
 
 ### 5) Testability and validation readiness
+
 - Result: `FAIL`
 - Evidence:
   - `docs/project_management/packs/active/world-deps-host-visible-hardening/manual_testing_playbook.md` exists and is runnable, but `tasks.json` fails mechanical validation, so automation and checkpoint execution cannot proceed deterministically.
@@ -220,6 +227,7 @@ rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' '\\b(shoul
 - Notes: Validation artifacts exist, but task graph + automation metadata are not execution-ready.
 
 ### 5.1) Cross-platform parity task structure (schema v4)
+
 - Result: `FAIL`
 - Evidence:
   - `docs/project_management/packs/active/world-deps-host-visible-hardening/tasks.json` meta: `schema_version=4`, `cross_platform=true`, `automation.enabled=true`, `checkpoint_boundaries=["WDH1","WDH3"]`.
@@ -228,6 +236,7 @@ rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' '\\b(shoul
 - Notes: Required checkpoint plan + deterministic wiring are not present.
 
 ### 6) Triad interoperability (execution workflow)
+
 - Result: `FAIL`
 - Evidence:
   - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` fails (automation-required task fields missing).
@@ -237,6 +246,7 @@ rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' '\\b(shoul
 ## Findings (must be exhaustive)
 
 ### Finding 001 — Missing `ci_checkpoint_plan.md` (required for cross-platform automation packs)
+
 - Status: `DEFECT`
 - Evidence:
   - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → `Missing required path: docs/project_management/packs/active/world-deps-host-visible-hardening/ci_checkpoint_plan.md`
@@ -245,6 +255,7 @@ rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' '\\b(shoul
 - If DEFECT: Alternative (one viable): Disable checkpoints/automation by setting `tasks.json` `meta.automation.enabled=false` (and aligning schema/validation expectations accordingly), accepting higher manual orchestration cost.
 
 ### Finding 002 — `tasks.json` fails mechanical validation for schema v4 + automation
+
 - Status: `DEFECT`
 - Evidence:
   - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` reports:
@@ -262,6 +273,7 @@ rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' '\\b(shoul
 - If DEFECT: Alternative (one viable): Reduce to a non-automation pack (manual execution) by disabling automation and removing schema v4 checkpoint expectations; keep cross-platform behavior smoke in manual playbook.
 
 ### Finding 003 — Feature is not present in `sequencing.json`
+
 - Status: `DEFECT`
 - Evidence:
   - `rg -n "world-deps-host-visible-hardening" docs/project_management/packs/sequencing.json` → exit `1` (no matches).
@@ -270,6 +282,7 @@ rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' '\\b(shoul
 - If DEFECT: Alternative (one viable): If this work is intentionally unscheduled, move the directory under `docs/project_management/_archived/` and reference it from sequencing as an archived pointer (but then it is not an execution-ready “next/” pack).
 
 ### Finding 004 — ADR-0011 executive summary hash drift (adr-check fails)
+
 - Status: `DEFECT`
 - Evidence:
   - `make adr-check ADR=docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md` fails with `ADR_BODY_SHA256 mismatch`.
@@ -278,6 +291,7 @@ rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' '\\b(shoul
 - If DEFECT: Alternative (one viable): If the body changes are intentional, re-run the standard ADR hash update workflow and record the reason for change in the ADR history/notes.
 
 ### Finding 005 — Ambiguity scan violation (`should` in feature directory)
+
 - Status: `DEFECT`
 - Evidence:
   - `docs/project_management/packs/active/world-deps-host-visible-hardening/impact_map.md:48` contains `should`.
@@ -289,6 +303,7 @@ rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' '\\b(shoul
 - If DEFECT: Alternative (one viable): Move any non-normative language into `decision_register.md` (which is excluded from the ambiguity scan), keeping other artifacts strictly unambiguous.
 
 ### Finding 006 — Kickoff prompt sentinel missing in most kickoff prompts
+
 - Status: `DEFECT`
 - Evidence:
   - Sentinel appears only in:
@@ -303,6 +318,7 @@ rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' '\\b(shoul
 - If DEFECT: Alternative (one viable): Remove automation enablement and enforce “no docs edits” via manual workflow only (higher risk; not recommended).
 
 ### Finding 007 — Decision register violates “two viable options” rule for major decisions
+
 - Status: `DEFECT`
 - Evidence:
   - `docs/project_management/packs/active/world-deps-host-visible-hardening/decision_register.md` DR-0001/DR-0002/DR-0003/DR-0004/DR-0005 Option B is described as failing to meet the contract (“does not solve the problem”, “fails the contract”, “unlocks none”).
@@ -311,10 +327,11 @@ rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' '\\b(shoul
 - If DEFECT: Alternative (one viable): Escalate the decision(s) into a small ADR addendum for any DR where only one viable option exists, explicitly overriding the “two viable options” requirement.
 
 ### Finding 008 — WDH2 override surface conflicts with inputs and its own stated posture (“allowed by policy”)
+
 - Status: `DEFECT`
 - Evidence:
   - `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH2-spec.md:12-34` says “unless explicitly allowed by policy” but defines only env-var overrides (`SUBSTRATE_WORLD_EXEC_GUARD*`).
-  - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` (Appendix B.2.*) states override inputs remain `SUBSTRATE_OVERRIDE_*`.
+  - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` (Appendix B.2._) states override inputs remain `SUBSTRATE*OVERRIDE*_`.
 - Impact: Cross-doc contract inconsistency; introduces a new env var surface that may violate established override taxonomy, and leaves “policy allow” unspecified.
 - Fix required (exact): Choose and specify one authoritative override surface for WDH2 and make it consistent everywhere (spec + manual playbook + smoke + tasks):
   - either define a policy key (and remove/rename env vars accordingly), or
@@ -324,6 +341,7 @@ rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' '\\b(shoul
 ## Decision: ACCEPT or FLAG
 
 ### If FLAG FOR HUMAN REVIEW
+
 - Summary: Mechanical lint/validation fails (missing `ci_checkpoint_plan.md`, invalid `tasks.json`, missing sequencing entry, ADR hash drift, kickoff prompt sentinel gaps, ambiguity scan violations). This Planning Pack is not execution-ready.
 - Required human decisions (explicit):
   - Confirm whether this pack is intended to be automation-enabled schema v4 with CI checkpoints; if yes, define checkpoints and required ops tasks; if no, disable automation and revise validation expectations.
@@ -341,6 +359,7 @@ rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' '\\b(shoul
 RECOMMENDATION: ACCEPT
 
 ## Metadata (Pass 2)
+
 - Feature directory: `docs/project_management/packs/active/world-deps-host-visible-hardening/`
 - Reviewed commit: `ab279a546d5f810a579c323b3a7a40122fc7f177`
 - Reviewer: remediation agent
@@ -373,6 +392,7 @@ jq -e . docs/project_management/packs/sequencing.json >/dev/null
 ```
 
 ## Required Inputs Read End-to-End (Pass 2 checklist)
+
 - ADR(s): `YES`
   - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
   - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
@@ -388,52 +408,59 @@ jq -e . docs/project_management/packs/sequencing.json >/dev/null
 - Feature smoke scripts under `smoke/`: `YES`
 - `docs/project_management/packs/sequencing.json`: `YES`
 - Standards:
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
-  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`: `YES`
-  - `docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md`: `YES`
-  - `docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md`: `YES`
-  - `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`: `YES`
-  - `docs/project_management/standards/TRIAD_WORKFLOW_CROSS_PLATFORM_INTEG.md`: `YES`
-  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`: `YES`
-  - `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`: `YES`
-  - `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`: `YES`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`: `YES`
+  - `docs/project_management/system/standards/planning/PLANNING_IMPACT_MAP_STANDARD.md`: `YES`
+  - `docs/project_management/system/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md`: `YES`
+  - `docs/project_management/system/standards/ci/PLATFORM_INTEGRATION_AND_CI.md`: `YES`
+  - `docs/project_management/system/standards/triad/TRIAD_WORKFLOW_CROSS_PLATFORM_INTEG.md`: `YES`
+  - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`: `YES`
+  - `docs/project_management/system/standards/planning/PLANNING_LINT_CHECKLIST.md`: `YES`
+  - `docs/project_management/system/standards/planning/PLANNING_GATE_REPORT_TEMPLATE.md`: `YES`
 
 ## Gate Results (PASS/FAIL with evidence) — Pass 2
 
 ### 1) Zero-ambiguity contracts
+
 - Result: `PASS`
 - Evidence:
   - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` ambiguity scan passes (exit `0`).
 
 ### 2) Decision quality (2 options, explicit tradeoffs, explicit selection)
+
 - Result: `PASS`
 - Evidence:
   - `docs/project_management/packs/active/world-deps-host-visible-hardening/decision_register.md` DR-0001..DR-0005 Option B entries are viable alternatives with explicit tradeoffs and a single selection.
 
 ### 3) Cross-doc consistency (CLI/config/exit codes/paths)
+
 - Result: `PASS`
 - Evidence:
   - WDH2 override inputs use `SUBSTRATE_OVERRIDE_*` taxonomy (ADR-0006/ADR-0018 alignment) and no longer claim unspecified policy allow.
 
 ### 4) Sequencing and dependency alignment
+
 - Result: `PASS`
 - Evidence:
   - `docs/project_management/packs/sequencing.json` includes `directory="docs/project_management/packs/active/world-deps-host-visible-hardening"` with slices `WDH0..WDH3` in order.
 
 ### 5) Testability and validation readiness
+
 - Result: `PASS`
 - Evidence:
   - `manual_testing_playbook.md` references required smoke scripts.
   - Smoke scripts exist for behavior platforms and are referenced from integration tasks.
 
 ### 5.1) Cross-platform parity task structure (schema v4)
+
 - Result: `PASS`
 - Evidence:
   - `tasks.json` meta: `schema_version=4`, `cross_platform=true`, `automation.enabled=true`, `checkpoint_boundaries=["WDH1","WDH3"]`.
   - `ci_checkpoint_plan.md` exists and validates; checkpoint ops tasks exist and are wired.
 
 ### 6) Triad interoperability (execution workflow)
+
 - Result: `PASS`
 - Evidence:
   - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` exits `0`.
@@ -442,41 +469,49 @@ jq -e . docs/project_management/packs/sequencing.json >/dev/null
 ## Findings (Pass 2 status)
 
 ### Finding 001 — Missing `ci_checkpoint_plan.md` (required for cross-platform automation packs)
+
 - Status: `VERIFIED`
 - Fix applied:
   - Added `docs/project_management/packs/active/world-deps-host-visible-hardening/ci_checkpoint_plan.md`.
 
 ### Finding 002 — `tasks.json` fails mechanical validation for schema v4 + automation
+
 - Status: `VERIFIED`
 - Fix applied:
   - Updated `docs/project_management/packs/active/world-deps-host-visible-hardening/tasks.json` to satisfy `make planning-validate` and schema v4 checkpoint wiring.
 
 ### Finding 003 — Feature is not present in `sequencing.json`
+
 - Status: `VERIFIED`
 - Fix applied:
   - Added `docs/project_management/packs/active/world-deps-host-visible-hardening` sprint entry to `docs/project_management/packs/sequencing.json`.
 
 ### Finding 004 — ADR-0011 executive summary hash drift (adr-check fails)
+
 - Status: `VERIFIED`
 - Fix applied:
   - Updated `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md` `ADR_BODY_SHA256` via `make adr-fix`.
 
 ### Finding 005 — Ambiguity scan violation (`should` in feature directory)
+
 - Status: `VERIFIED`
 - Fix applied:
   - Rewrote ambiguity matches in `impact_map.md` and `smoke/_core.sh`.
 
 ### Finding 006 — Kickoff prompt sentinel missing in most kickoff prompts
+
 - Status: `VERIFIED`
 - Fix applied:
   - Added the sentinel line to every file under `kickoff_prompts/` (including new checkpoint/cleanup prompts).
 
 ### Finding 007 — Decision register violates “two viable options” rule for major decisions
+
 - Status: `VERIFIED`
 - Fix applied:
   - Rewrote Option B entries for DR-0001..DR-0005 in `decision_register.md` as viable alternatives.
 
 ### Finding 008 — WDH2 override surface conflicts with inputs and its own stated posture (“allowed by policy”)
+
 - Status: `VERIFIED`
 - Fix applied:
   - Aligned override inputs to `SUBSTRATE_OVERRIDE_*` taxonomy and removed unspecified policy-allow claims (`WDH2-spec.md`, dependent prompts/docs).
@@ -484,6 +519,7 @@ jq -e . docs/project_management/packs/sequencing.json >/dev/null
 ## Decision: ACCEPT or FLAG (Pass 2)
 
 ### If ACCEPT
+
 - Summary: Mechanical lint and validation pass; cross-doc contracts are consistent; checkpoints are defined and wired; sequencing entry exists; kickoff prompt sentinels and ambiguity rubric checks pass.
 - Next step: Execution triads may begin.
 
@@ -494,6 +530,7 @@ jq -e . docs/project_management/packs/sequencing.json >/dev/null
 RECOMMENDATION: FLAG FOR HUMAN REVIEW
 
 ## Metadata (Pass 3)
+
 - Feature directory: `docs/project_management/packs/active/world-deps-host-visible-hardening/`
 - Reviewed commit: `32a34b585ce4918da9e8895e6b136e85317eae63`
 - Reviewer: third-party planning pack reviewer (fresh)
@@ -569,6 +606,7 @@ rg -n 'For `runnable: true`' docs/project_management/packs/active/world-deps-pac
 ```
 
 ## Required Inputs Read End-to-End (Pass 3 checklist)
+
 - ADR(s): `YES`
   - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
   - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
@@ -584,31 +622,34 @@ rg -n 'For `runnable: true`' docs/project_management/packs/active/world-deps-pac
 - Feature smoke scripts under `smoke/`: `YES`
 - `docs/project_management/packs/sequencing.json`: `YES`
 - Standards:
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
-  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`: `YES`
-  - `docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md`: `YES`
-  - `docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md`: `YES`
-  - `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`: `YES`
-  - `docs/project_management/standards/TRIAD_WORKFLOW_CROSS_PLATFORM_INTEG.md`: `YES`
-  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`: `YES`
-  - `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`: `YES`
-  - `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`: `YES`
-  - `docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md`: `YES`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`: `YES`
+  - `docs/project_management/system/standards/planning/PLANNING_IMPACT_MAP_STANDARD.md`: `YES`
+  - `docs/project_management/system/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md`: `YES`
+  - `docs/project_management/system/standards/ci/PLATFORM_INTEGRATION_AND_CI.md`: `YES`
+  - `docs/project_management/system/standards/triad/TRIAD_WORKFLOW_CROSS_PLATFORM_INTEG.md`: `YES`
+  - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`: `YES`
+  - `docs/project_management/system/standards/planning/PLANNING_LINT_CHECKLIST.md`: `YES`
+  - `docs/project_management/system/standards/planning/PLANNING_GATE_REPORT_TEMPLATE.md`: `YES`
+  - `docs/project_management/system/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`: `YES`
 
 ## Gate Results (PASS/FAIL with evidence) — Pass 3
 
 ### 1) Zero-ambiguity contracts
+
 - Result: `PASS`
 - Evidence: `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → exit `0`
 - Notes: Hard-ban + ambiguity scans pass mechanically.
 
 ### 2) Decision quality (2 options, explicit tradeoffs, explicit selection)
+
 - Result: `PASS`
 - Evidence: `docs/project_management/packs/active/world-deps-host-visible-hardening/decision_register.md` DR-0001..DR-0010
 - Notes: Exactly two viable options per DR; explicit selection and follow-up mapping.
 
 ### 3) Cross-doc consistency (CLI/config/exit codes/paths)
+
 - Result: `FAIL`
 - Evidence:
   - `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH1-spec.md` “present” rule
@@ -616,6 +657,7 @@ rg -n 'For `runnable: true`' docs/project_management/packs/active/world-deps-pac
 - Notes: The “present” definition is inconsistent across authoritative docs and is likely to misclassify common runnable tools.
 
 ### 4) Sequencing and dependency alignment
+
 - Result: `PASS`
 - Evidence:
   - `docs/project_management/packs/sequencing.json` includes `id=world_deps_host_visible_hardening` with `WDH0..WDH3`
@@ -623,6 +665,7 @@ rg -n 'For `runnable: true`' docs/project_management/packs/active/world-deps-pac
 - Notes: Schema v4 boundary-only platform-fix is correctly modeled.
 
 ### 5) Testability and validation readiness
+
 - Result: `PASS`
 - Evidence:
   - `docs/project_management/packs/active/world-deps-host-visible-hardening/manual_testing_playbook.md` references required smoke scripts
@@ -630,6 +673,7 @@ rg -n 'For `runnable: true`' docs/project_management/packs/active/world-deps-pac
 - Notes: Manual and smoke validation are runnable, but contract-level inconsistencies must be resolved first (Gate 3).
 
 ### 5.1) Cross-platform parity task structure (schema v4)
+
 - Result: `PASS`
 - Evidence:
   - `tasks.json` meta: `schema_version=4`, `cross_platform=true`, `checkpoint_boundaries=["WDH1","WDH3"]`
@@ -637,6 +681,7 @@ rg -n 'For `runnable: true`' docs/project_management/packs/active/world-deps-pac
 - Notes: Checkpoint ops tasks are present and wired to boundary `*-integ-core`.
 
 ### 6) Triad interoperability (execution workflow)
+
 - Result: `PASS`
 - Evidence:
   - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` → exit `0`
@@ -646,12 +691,14 @@ rg -n 'For `runnable: true`' docs/project_management/packs/active/world-deps-pac
 ## Findings (Pass 3)
 
 ### Finding 001 — Mechanical quality gates pass
+
 - Status: `VERIFIED`
 - Evidence: `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → exit `0`; `make planning-validate FEATURE_DIR="$FEATURE_DIR"` → exit `0`
 - Impact: Confirms the pack meets the repo’s mechanical lint/validation requirements.
 - Fix required (exact): none
 
 ### Finding 002 — `spec_manifest.md` coverage matrix does not enumerate new config/env-var surfaces
+
 - Status: `DEFECT`
 - Evidence:
   - No matches for `world.env.inherit_from_host` / `SUBSTRATE_OVERRIDE_WORLD_EXEC_GUARD*` / `SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR` in `docs/project_management/packs/active/world-deps-host-visible-hardening/spec_manifest.md` (see evidence commands).
@@ -659,7 +706,7 @@ rg -n 'For `runnable: true`' docs/project_management/packs/active/world-deps-pac
   - Those surfaces are defined in:
     - `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH0-spec.md`
     - `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH2-spec.md`
-- Impact: Violates `docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md` rule “no implied surfaces”; increases drift risk because externally visible surfaces are not explicitly owned in the manifest.
+- Impact: Violates `docs/project_management/system/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md` rule “no implied surfaces”; increases drift risk because externally visible surfaces are not explicitly owned in the manifest.
 - Fix required (exact): Update `docs/project_management/packs/active/world-deps-host-visible-hardening/spec_manifest.md` coverage matrix to explicitly enumerate:
   - config key `world.env.inherit_from_host` (authoritative: `WDH0-spec.md`),
   - override env vars `SUBSTRATE_OVERRIDE_WORLD_EXEC_GUARD` and `SUBSTRATE_OVERRIDE_WORLD_EXEC_GUARD_DENY_CONTAINS` (authoritative: `WDH2-spec.md`),
@@ -668,6 +715,7 @@ rg -n 'For `runnable: true`' docs/project_management/packs/active/world-deps-pac
 - If DEFECT: Alternative (one viable): Add a feature-local env-var contract doc (e.g., `env-vars-spec.md`) and list it as authoritative for these surfaces in `spec_manifest.md` (higher overhead, but keeps slice specs smaller).
 
 ### Finding 003 — WDH1 “present” semantics conflict with the upstream world-deps contract and are likely unsound
+
 - Status: `DEFECT`
 - Evidence:
   - `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH1-spec.md:34` defines default runnable “present” as executing the wrapper successfully.
@@ -678,6 +726,7 @@ rg -n 'For `runnable: true`' docs/project_management/packs/active/world-deps-pac
 - If DEFECT: Alternative (one viable): Keep the “execute probe” approach but require every runnable package to define a deterministic `probe.command` (e.g., `<entrypoint> --version`) and update the upstream contract doc to match (more intrusive; higher inventory burden).
 
 ### Finding 004 — CI checkpoint plan and schema v4 wiring are coherent
+
 - Status: `VERIFIED`
 - Evidence:
   - `docs/project_management/packs/active/world-deps-host-visible-hardening/ci_checkpoint_plan.md` groups slices into CP1 (WDH0/WDH1) and CP2 (WDH2/WDH3) within bounds
@@ -688,6 +737,7 @@ rg -n 'For `runnable: true`' docs/project_management/packs/active/world-deps-pac
 ## Decision: ACCEPT or FLAG (Pass 3)
 
 ### If FLAG FOR HUMAN REVIEW
+
 - Summary: Mechanical gates pass, but authoritative contract coverage and runnable “present” semantics are inconsistent across docs and likely incorrect for common tools; these must be resolved before execution triads begin.
 - Required human decisions (explicit):
   - Confirm the authoritative “present” semantics for runnable packages (wrapper existence vs wrapper execution vs mandatory probes) and align the contract doc + WDH1 spec.
@@ -702,6 +752,7 @@ rg -n 'For `runnable: true`' docs/project_management/packs/active/world-deps-pac
 RECOMMENDATION: ACCEPT
 
 ## Metadata (Pass 4)
+
 - Feature directory: `docs/project_management/packs/active/world-deps-host-visible-hardening/`
 - Reviewed commit: `32a34b585ce4918da9e8895e6b136e85317eae63` (plus working tree remediation edits)
 - Reviewer: remediation agent
@@ -768,6 +819,7 @@ rg -n 'command -v <entrypoint>' "$FEATURE_DIR/WDH1-spec.md"
 ```
 
 ## Required Inputs Read End-to-End (Pass 4 checklist)
+
 - ADR(s): `YES`
   - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
   - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
@@ -783,29 +835,32 @@ rg -n 'command -v <entrypoint>' "$FEATURE_DIR/WDH1-spec.md"
 - Feature smoke scripts under `smoke/`: `YES`
 - `docs/project_management/packs/sequencing.json`: `YES`
 - Standards:
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
-  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`: `YES`
-  - `docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md`: `YES`
-  - `docs/project_management/standards/PLANNING_CI_CHECKPOINT_STANDARD.md`: `YES`
-  - `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`: `YES`
-  - `docs/project_management/standards/TRIAD_WORKFLOW_CROSS_PLATFORM_INTEG.md`: `YES`
-  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`: `YES`
-  - `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`: `YES`
-  - `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`: `YES`
-  - `docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md`: `YES`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`: `YES`
+  - `docs/project_management/system/standards/planning/PLANNING_IMPACT_MAP_STANDARD.md`: `YES`
+  - `docs/project_management/system/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md`: `YES`
+  - `docs/project_management/system/standards/ci/PLATFORM_INTEGRATION_AND_CI.md`: `YES`
+  - `docs/project_management/system/standards/triad/TRIAD_WORKFLOW_CROSS_PLATFORM_INTEG.md`: `YES`
+  - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`: `YES`
+  - `docs/project_management/system/standards/planning/PLANNING_LINT_CHECKLIST.md`: `YES`
+  - `docs/project_management/system/standards/planning/PLANNING_GATE_REPORT_TEMPLATE.md`: `YES`
+  - `docs/project_management/system/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`: `YES`
 
 ## Gate Results (PASS/FAIL with evidence) — Pass 4
 
 ### 1) Zero-ambiguity contracts
+
 - Result: `PASS`
 - Evidence: `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → exit `0`
 
 ### 2) Decision quality (2 options, explicit tradeoffs, explicit selection)
+
 - Result: `PASS`
 - Evidence: `docs/project_management/packs/active/world-deps-host-visible-hardening/decision_register.md` DR-0001..DR-0010
 
 ### 3) Cross-doc consistency (CLI/config/exit codes/paths)
+
 - Result: `PASS`
 - Evidence:
   - `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH1-spec.md` default runnable “present” uses `command -v` semantics (wrapper path anchored)
@@ -813,30 +868,36 @@ rg -n 'command -v <entrypoint>' "$FEATURE_DIR/WDH1-spec.md"
   - `docs/project_management/packs/active/world-deps-host-visible-hardening/spec_manifest.md` enumerates the config/env-var surfaces owned by WDH0/WDH2
 
 ### 4) Sequencing and dependency alignment
+
 - Result: `PASS`
 - Evidence: `make planning-lint FEATURE_DIR="$FEATURE_DIR"` sequencing alignment checks → exit `0`
 
 ### 5) Testability and validation readiness
+
 - Result: `PASS`
 - Evidence: `make planning-lint FEATURE_DIR="$FEATURE_DIR"` smoke/playbook linkage checks → exit `0`
 
 ### 5.1) Cross-platform parity task structure (schema v4)
+
 - Result: `PASS`
 - Evidence: `make planning-validate FEATURE_DIR="$FEATURE_DIR"` → exit `0`
 
 ### 6) Triad interoperability (execution workflow)
+
 - Result: `PASS`
 - Evidence: kickoff prompt sentinel scan in `make planning-lint` → exit `0`
 
 ## Findings (Pass 4)
 
 ### Finding 001 — Mechanical quality gates pass
+
 - Status: `VERIFIED`
 - Evidence: `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → exit `0`; `make planning-validate FEATURE_DIR="$FEATURE_DIR"` → exit `0`
 - Impact: Confirms the pack meets the repo’s mechanical lint/validation requirements.
 - Fix required (exact): none
 
 ### Finding 002 — `spec_manifest.md` enumerates externally visible config/env-var surfaces
+
 - Status: `VERIFIED`
 - Evidence:
   - `docs/project_management/packs/active/world-deps-host-visible-hardening/spec_manifest.md` includes `world.env.inherit_from_host`, `SUBSTRATE_OVERRIDE_WORLD_EXEC_GUARD*`, and `SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR`.
@@ -844,6 +905,7 @@ rg -n 'command -v <entrypoint>' "$FEATURE_DIR/WDH1-spec.md"
 - Fix required (exact): none
 
 ### Finding 003 — WDH1 “present” semantics align with the upstream world-deps contract
+
 - Status: `VERIFIED`
 - Evidence:
   - `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH1-spec.md` default runnable “present” uses `command -v <entrypoint>` resolution to `/var/lib/substrate/world-deps/bin/<entrypoint>`.
@@ -854,5 +916,6 @@ rg -n 'command -v <entrypoint>' "$FEATURE_DIR/WDH1-spec.md"
 ## Decision: ACCEPT or FLAG (Pass 4)
 
 ### If ACCEPT
+
 - Summary: Mechanical gates pass; `spec_manifest.md` explicitly owns the new surfaces; runnable “present” semantics are consistent with the upstream contract.
 - Next step: Execution triads may begin.

@@ -1,11 +1,13 @@
 # Kickoff: OR0-code (code)
 
 ## Scope
+
 - Production code only; no new tests.
 - Spec: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/OR0-spec.md`
-- Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+- Execution workflow standard: `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Start Checklist
+
 Do not edit planning docs inside the worktree.
 
 1. Verify you are in the task worktree `wt/agent-hub-concurrent-execution-output-routing-or0-code` on branch `agent-hub-concurrent-execution-output-routing-or0-code` and that `.taskmeta.json` exists at the worktree root.
@@ -14,6 +16,7 @@ Do not edit planning docs inside the worktree.
    - `make triad-task-start-pair FEATURE_DIR="docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing" SLICE_ID="OR0"`
 
 ## Requirements
+
 - Implement exactly OR0 behavior and invariants:
   - Envelope schema: `agent-hub-event-envelope-schema-spec.md`
   - Canonical trace record shapes: `telemetry-spec.md`
@@ -24,7 +27,7 @@ Do not edit planning docs inside the worktree.
     - `cargo test -p shell --tests -- --nocapture`
 
 ## End Checklist
+
 1. Run required commands; capture outputs.
 2. From inside the worktree, run: `make triad-task-finish TASK_ID="OR0-code"`
 3. Hand off baseline test commands and outcomes to the operator (do not edit planning docs inside the worktree).
-

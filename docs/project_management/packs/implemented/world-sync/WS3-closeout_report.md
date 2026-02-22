@@ -3,13 +3,16 @@
 Date (UTC): 2026-02-12T01:19:53Z
 
 Standards:
-- `docs/project_management/standards/SLICE_CLOSEOUT_GATE_STANDARD.md`
-- `docs/project_management/standards/EXECUTIVE_SUMMARY_STANDARD.md` (behavior delta format)
+
+- `docs/project_management/system/standards/execution/SLICE_CLOSEOUT_GATE_STANDARD.md`
+- `docs/project_management/system/standards/adr/EXECUTIVE_SUMMARY_STANDARD.md` (behavior delta format)
 
 Feature directory:
+
 - `docs/project_management/packs/active/world-sync`
 
 Slice spec:
+
 - `docs/project_management/packs/active/world-sync/WS3-spec.md`
 
 ## Behavior Delta (Existing → New → Why)
@@ -49,15 +52,18 @@ Slice spec:
 ## Cross-Platform Smoke (if applicable)
 
 Record run ids/URLs for required platforms:
+
 - Linux:
 - macOS:
 
 If smoke/CI was intentionally skipped:
+
 - Reason (e.g., `ci-audit: DIFF_CLASS=docs_only`): `CI dispatch is restricted to planned checkpoint ops tasks (see ci_checkpoint_plan.md); this slice did not dispatch cross-platform smoke.`
 - Last-green run evidence (run id/URL, if available):
 - Evidence ledger path (if used): `docs/project_management/packs/active/world-sync/logs/WS3/ci-audit/ledger.jsonl`
 
 If any platform-fix work was required:
+
 - What failed:
 - What was changed:
 - Why the change is safe (guards, cfg, feature flags):
@@ -68,4 +74,5 @@ If any platform-fix work was required:
 - [ ] Smoke scripts validate exit codes and key output (not just “command ran”)
 
 Notes:
+
 - Auto-sync coverage is enforced by `crates/shell/tests/workspace_auto_sync_ws3.rs` (contract-level stub world-agent).

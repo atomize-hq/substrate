@@ -3,10 +3,12 @@
 This file replaces the legacy `integration_map.md`.
 
 Authoring standards:
-- `docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md`
-- `docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md`
+
+- `docs/project_management/system/standards/planning/PLANNING_IMPACT_MAP_STANDARD.md`
+- `docs/project_management/system/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`
 
 ## Inputs
+
 - Feature directory: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/`
 - ADR(s):
   - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
@@ -18,6 +20,7 @@ Authoring standards:
 List every file expected to be created/edited/deprecated/removed. Use repo-relative paths.
 
 ### Create
+
 - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/spec_manifest.md` — required spec ownership map (planning v4)
 - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/impact_map.md` — impact map (planning v4)
 - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/contract.md` — operator-facing output routing + config contract
@@ -48,6 +51,7 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
   - `crates/common/tests/agent_event_schema.rs` (or similar) — serde/schema invariants for envelope fields and required keys
 
 ### Edit
+
 - `crates/common/src/agent_events.rs` — expand structured agent event envelope to include required attribution/correlation fields (ADR-0017 / DR-0003 / DR-0008)
 - `crates/shell/src/execution/agent_events.rs` — ensure event creation helpers can populate the enriched envelope; keep formatting stable for human rendering
 - `crates/shell/src/repl/async_repl.rs` — enforce “no PTY injection”, bounded buffering + drop-count summary, and trace persistence hooks during passthrough
@@ -60,14 +64,17 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
 - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md` — remove placeholder sequencing language and link to `tasks.json` and `ci_checkpoint_plan.md`
 
 ### Deprecate
+
 - None (this ADR refines interactive behavior; no stable public APIs are deprecated).
 
 ### Delete
+
 - None.
 
 ## Cascading implications (behavior/UX)
 
 ### CLI / UX
+
 - Change: PTY passthrough no longer prints live structured agent events; it buffers/drops and flushes after passthrough ends.
   - Direct impact:
     - TUIs remain correct (no corruption from host-printed structured lines).
@@ -79,6 +86,7 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
     - Existing behavior appends a single marker string (`structured output dropped during :pty (buffer full)`); this is not sufficiently deterministic for programmatic consumers and conflicts with the “dropped-count summary” requirement.
 
 ### Config / env vars / paths
+
 - Change: `repl.max_pty_buffered_lines` becomes an operator-tunable config key in the strict schema.
   - Direct impact:
     - Operators can tune suppression behavior per workspace (noisy agents) vs globally (defaults).
@@ -89,6 +97,7 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
     - If the key is added without strict schema updates (`deny_unknown_fields`), the config system will fail closed in unexpected places; schema + error posture must be updated together.
 
 ### Policy / isolation / security posture
+
 - Change: structured event channels and attribution fields become audit-relevant surfaces.
   - Direct impact:
     - Structured events must be safe-to-print and must not leak secrets.
@@ -100,6 +109,7 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
 ## Cross-queue scan (ADRs + Planning Packs)
 
 ### Relevant ADRs (queued/unimplemented)
+
 - ADR: `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
   - Overlap surfaces: PTY passthrough contract, out-of-band PTY bytes during prompt, “no injection” invariant.
   - Conflict: no.
@@ -118,6 +128,7 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
   - Resolution (explicit): CLI-backend routing defers to ADR-0017 for structured event envelope rules and to ADR-0028 for trace vocabulary.
 
 ### Related Phase 8 tracks (cross-cutting; use ADRs/registry)
+
 - Phase 8 registry (cross-cutting lock): `docs/project_management/packs/PHASE_8_CROSS_CUTTING_DECISION_REGISTRY.md`
 - CLI backend engine: `docs/project_management/adrs/draft/ADR-0024-cli-backend-provider-engine.md`
 - Router daemon: `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md`

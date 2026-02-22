@@ -3,7 +3,8 @@ RECOMMENDATION: ACCEPT
 # Planning Quality Gate Report — agent-hub-concurrent-execution-output-routing
 
 Template source:
-- `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`
+
+- `docs/project_management/system/standards/planning/PLANNING_GATE_REPORT_TEMPLATE.md`
 
 This report includes multiple passes. Each pass appends findings without mutating earlier pass text.
 
@@ -12,6 +13,7 @@ This report includes multiple passes. Each pass appends findings without mutatin
 ## Pass 1 — 2026-02-15 — Recommendation: ACCEPT
 
 ## Metadata
+
 - Feature directory: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/`
 - Reviewed commit: `64b6cc9a3ab2d2e03c56697a194dac8de590fb46`
 - Reviewer: `Codex (quality gate review)`
@@ -50,6 +52,7 @@ jq -r '.tasks[] | select(.id=="CP1-ci-checkpoint") | {id, depends_on}' "$FEATURE
 ## Findings (must be exhaustive)
 
 ### Finding 001 — Mechanical planning lint passed (required)
+
 - Status: `VERIFIED`
 - Evidence: `make planning-lint FEATURE_DIR="docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing"` output
 - Impact: Confirms baseline pack completeness and mechanical invariants.
@@ -57,6 +60,7 @@ jq -r '.tasks[] | select(.id=="CP1-ci-checkpoint") | {id, depends_on}' "$FEATURE
 - If DEFECT: Alternative (one viable): none
 
 ### Finding 002 — Mechanical tasks.json validation passed (required)
+
 - Status: `VERIFIED`
 - Evidence: `make planning-validate FEATURE_DIR="docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing"` output
 - Impact: Confirms `tasks.json` matches the validator’s schema and invariants.
@@ -64,6 +68,7 @@ jq -r '.tasks[] | select(.id=="CP1-ci-checkpoint") | {id, depends_on}' "$FEATURE
 - If DEFECT: Alternative (one viable): none
 
 ### Finding 003 — Sequencing spine JSON is valid (required)
+
 - Status: `VERIFIED`
 - Evidence: `docs/project_management/packs/sequencing.json` parses (`jq -e` exit `0`)
 - Impact: Confirms sequencing spine is mechanically valid.
@@ -71,6 +76,7 @@ jq -r '.tasks[] | select(.id=="CP1-ci-checkpoint") | {id, depends_on}' "$FEATURE
 - If DEFECT: Alternative (one viable): none
 
 ### Finding 004 — Cross-platform checkpoint and integration model is schema v4 boundary-only and is wired deterministically
+
 - Status: `VERIFIED`
 - Evidence:
   - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/tasks.json` task ids include `OR0-integ` and boundary-only `OR1-integ-core` plus per-platform `OR1-integ-<platform>` tasks.
@@ -81,6 +87,7 @@ jq -r '.tasks[] | select(.id=="CP1-ci-checkpoint") | {id, depends_on}' "$FEATURE
 - If DEFECT: Alternative (one viable): none
 
 ### Finding 005 — Decision→task traceability exists via references (auditability)
+
 - Status: `VERIFIED`
 - Evidence: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/tasks.json` `references` entries include `decision_register.md` DR ranges and the authoritative ADR.
 - Impact: Enables deterministic audit of why a task exists and which accepted decision(s) it implements.
@@ -88,6 +95,7 @@ jq -r '.tasks[] | select(.id=="CP1-ci-checkpoint") | {id, depends_on}' "$FEATURE
 - If DEFECT: Alternative (one viable): none
 
 ### Finding 006 — Manual playbook and smoke scripts exist and are cross-linked (testability)
+
 - Status: `VERIFIED`
 - Evidence:
   - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/manual_testing_playbook.md` references all three smoke scripts.
@@ -97,6 +105,7 @@ jq -r '.tasks[] | select(.id=="CP1-ci-checkpoint") | {id, depends_on}' "$FEATURE
 - If DEFECT: Alternative (one viable): none
 
 ### Finding 007 — Quality gate report created/updated (required artifact)
+
 - Status: `VERIFIED`
 - Evidence: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/quality_gate_report.md`
 - Impact: Provides auditable quality gate evidence and an ACCEPT/FLAG decision.
@@ -106,6 +115,7 @@ jq -r '.tasks[] | select(.id=="CP1-ci-checkpoint") | {id, depends_on}' "$FEATURE
 ## Decision: ACCEPT or FLAG
 
 ### If ACCEPT
+
 - Summary: Planning Pack is implementation-ready; mechanical checks pass; contracts/specs/tasks/playbooks are present and consistent per reviewed evidence.
 - Required human decisions (explicit): None.
 - Blockers to execution: None.

@@ -3,7 +3,7 @@
 ## Scope
 - Merge code + tests, resolve drift to spec, and make the slice green.
 - Spec: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/OR0-spec.md`
-- Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+- Execution workflow standard: `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Start Checklist
 Do not edit planning docs inside the worktree.

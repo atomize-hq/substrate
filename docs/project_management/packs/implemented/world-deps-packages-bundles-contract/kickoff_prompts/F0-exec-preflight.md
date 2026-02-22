@@ -1,9 +1,10 @@
 # Kickoff: F0-exec-preflight (execution preflight gate)
 
 ## Scope
+
 - Run the feature-level start gate before any triad work begins.
 - This task is **docs-only** and must be performed on the orchestration branch (no worktrees).
-- Standard: `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
+- Standard: `docs/project_management/system/standards/execution/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
 - Report: `docs/project_management/packs/active/world-deps-packages-bundles-contract/execution_preflight_report.md`
 
 ## Start Checklist
@@ -18,10 +19,12 @@ Do not edit planning docs inside the worktree.
 ## Requirements
 
 Fill `docs/project_management/packs/active/world-deps-packages-bundles-contract/execution_preflight_report.md` with a concrete recommendation:
+
 - **ACCEPT**: triads may begin.
 - **REVISE**: do not start triads until the listed issues are fixed and the preflight is re-run.
 
 At minimum, verify:
+
 - The cross-platform plan is explicit and matches the spec/contract (platforms).
 - Smoke scripts mimic the manual testing playbook by running real commands/workflows and validating exit codes + key output.
 - Any CI dispatch commands embedded in integration tasks are runnable with the expected runners.
@@ -34,4 +37,3 @@ At minimum, verify:
 
 1. Set `F0-exec-preflight` status to `completed` in `tasks.json`; add END entry to `session_log.md` (include the recommendation and any required fixes).
 2. Commit docs (`docs: finish F0-exec-preflight`).
-

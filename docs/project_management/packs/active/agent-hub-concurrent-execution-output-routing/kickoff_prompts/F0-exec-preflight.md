@@ -1,9 +1,10 @@
 # Kickoff: F0-exec-preflight (execution preflight gate)
 
 ## Scope
+
 - Run the feature-level start gate before any triad work begins.
 - This task is docs-only and must be performed on the orchestration branch (no worktrees).
-- Standard: `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
+- Standard: `docs/project_management/system/standards/execution/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
 - Report: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/execution_preflight_report.md`
 
 ## Start Checklist
@@ -18,10 +19,12 @@ Do not edit planning docs inside the worktree.
 ## Requirements
 
 Fill `execution_preflight_report.md` with a concrete recommendation:
+
 - ACCEPT: triads may begin.
 - REVISE: do not start triads until the listed issues are fixed and the preflight is re-run.
 
 Verify at minimum:
+
 - `tasks.json` meta: schema v4, cross_platform=true, execution_gates=true, automation.enabled=true, platforms lists correct.
 - `ci_checkpoint_plan.md` machine-readable JSON is valid and boundaries match:
   - `tasks.json` `meta.checkpoint_boundaries == ["OR1"]`

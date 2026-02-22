@@ -1,11 +1,13 @@
 # Kickoff: WDP0-integ (integration)
 
 ## Scope
+
 - Merge code + tests, resolve drift to spec, and make the slice green.
 - Spec: `docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP0-spec.md`
-- Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+- Execution workflow standard: `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Start Checklist
+
 Do not edit planning docs inside the worktree.
 
 1. Verify you are in the task worktree `wt/world-deps-packages-bundles-contract-wdp0-integ` on branch `world-deps-packages-bundles-contract-wdp0-integ` and that `.taskmeta.json` exists at the worktree root.
@@ -14,6 +16,7 @@ Do not edit planning docs inside the worktree.
    - `make triad-task-start FEATURE_DIR="docs/project_management/packs/active/world-deps-packages-bundles-contract" TASK_ID="WDP0-integ"`
 
 ## Requirements
+
 - Reconcile code/tests to spec (spec wins).
 - If completing this task requires more than 108,800 tokens of context, stop and ask the operator to split the slice before proceeding.
 - Run: `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, then `make integ-checks`.
@@ -23,12 +26,13 @@ Do not edit planning docs inside the worktree.
 ### CI checkpoints
 
 For cross-platform automation packs:
+
 - Do not dispatch cross-platform CI (compile parity / Feature Smoke / CI Testing) from this task.
 - Cross-platform CI runs only at the planned checkpoint ops tasks (`CPk-ci-checkpoint`) defined by `ci_checkpoint_plan.md`.
 
 ## End Checklist
+
 1. Run required commands; capture outputs.
 2. From inside the worktree, run: `make triad-task-finish TASK_ID="WDP0-integ"`
 3. Hand off closeout report completion and any key outputs to the operator (do not edit planning docs inside the worktree).
 4. Do not delete the worktree (feature cleanup removes worktrees at feature end).
-

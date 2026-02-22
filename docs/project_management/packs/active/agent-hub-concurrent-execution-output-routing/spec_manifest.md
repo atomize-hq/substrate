@@ -3,9 +3,11 @@
 This file enumerates every contract surface for this feature and assigns each surface to exactly one authoritative document.
 
 Authoring standard:
-- `docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md`
+
+- `docs/project_management/system/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`
 
 ## Inputs
+
 - Feature directory: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/`
 - ADR(s):
   - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
@@ -13,6 +15,7 @@ Authoring standard:
 ## Required spec documents (authoritative)
 
 Spec templates:
+
 - `docs/project_management/system/templates/spec/`
 
 - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/spec_manifest.md` — spec selection + ownership map (this file)
@@ -34,22 +37,23 @@ Spec templates:
 
 ## Coverage matrix (surface → authoritative doc)
 
-| Surface | Authoritative doc | What is explicitly defined |
-| --- | --- | --- |
-| REPL output routing contract (PTY bytes vs structured events) | `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/contract.md` | routing rules per mode (idle vs passthrough), non-injection invariants, drop behavior |
-| Structured agent event envelope | `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/agent-hub-event-envelope-schema-spec.md` | required top-level fields, kind taxonomy, per-kind `data` schema, channel constraints |
-| Config key `repl.max_pty_buffered_lines` | `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/contract.md` | default, precedence, bounds, invalid/out-of-range handling, warning emission rules |
-| Exit/error posture (config parse failures, warnings) | `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/contract.md` | exit code mapping, “warnings do not change exit code”, hard-error conditions |
-| Trace record types for structured agent events and suppression summaries | `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/telemetry-spec.md` | record `event_type`s, required correlation fields, stability/redaction rules |
-| Platform parity | `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/platform-parity-spec.md` | required behavior parity, permitted divergences, required validation evidence |
-| Manual validation | `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/manual_testing_playbook.md` | deterministic manual cases and expected outcomes |
-| Automation smoke validation | `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/smoke/*` | smoke mirrors manual cases and asserts invariants (no PTY injection, no prompt corruption) |
-| Slice acceptance (OR0) | `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/OR0-spec.md` | per-slice scope, acceptance criteria, regression protections |
-| Slice acceptance (OR1) | `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/OR1-spec.md` | per-slice scope, acceptance criteria, regression protections |
+| Surface                                                                  | Authoritative doc                                                                                                            | What is explicitly defined                                                                 |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| REPL output routing contract (PTY bytes vs structured events)            | `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/contract.md`                             | routing rules per mode (idle vs passthrough), non-injection invariants, drop behavior      |
+| Structured agent event envelope                                          | `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/agent-hub-event-envelope-schema-spec.md` | required top-level fields, kind taxonomy, per-kind `data` schema, channel constraints      |
+| Config key `repl.max_pty_buffered_lines`                                 | `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/contract.md`                             | default, precedence, bounds, invalid/out-of-range handling, warning emission rules         |
+| Exit/error posture (config parse failures, warnings)                     | `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/contract.md`                             | exit code mapping, “warnings do not change exit code”, hard-error conditions               |
+| Trace record types for structured agent events and suppression summaries | `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/telemetry-spec.md`                       | record `event_type`s, required correlation fields, stability/redaction rules               |
+| Platform parity                                                          | `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/platform-parity-spec.md`                 | required behavior parity, permitted divergences, required validation evidence              |
+| Manual validation                                                        | `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/manual_testing_playbook.md`              | deterministic manual cases and expected outcomes                                           |
+| Automation smoke validation                                              | `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/smoke/*`                                 | smoke mirrors manual cases and asserts invariants (no PTY injection, no prompt corruption) |
+| Slice acceptance (OR0)                                                   | `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/OR0-spec.md`                             | per-slice scope, acceptance criteria, regression protections                               |
+| Slice acceptance (OR1)                                                   | `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/OR1-spec.md`                             | per-slice scope, acceptance criteria, regression protections                               |
 
 ## Determinism checklist (must be satisfied before quality gate)
 
 For the docs above, confirm they explicitly define:
+
 - Inputs and precedence (PTY bytes vs structured events; config layering).
 - Defaults and absence semantics (default cap; unset/missing fields; missing non-required correlation fields).
 - Data model (schema) for every serialized boundary (event envelope, trace record payload).

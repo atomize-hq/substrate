@@ -3,9 +3,11 @@
 Date (UTC): 2026-02-15T02:13:44Z
 
 Standard:
-- `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
+
+- `docs/project_management/system/standards/execution/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
 
 Feature directory:
+
 - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing`
 
 ## Recommendation
@@ -29,6 +31,7 @@ RECOMMENDATION: **ACCEPT** | **REVISE**
 ## 1) Cross-Platform Coverage (explicit and correct)
 
 From `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/tasks.json` meta:
+
 - Declared behavior platforms (smoke required): `linux, macos, windows`
 - Declared CI parity platforms (parity required): `linux, macos, windows`
 - WSL required: `false`
@@ -38,24 +41,27 @@ From `docs/project_management/packs/active/agent-hub-concurrent-execution-output
 Smoke scripts must be a runnable, minimal version of how a careful human validates the feature.
 
 Manual playbook:
+
 - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/manual_testing_playbook.md`
 
 Smoke scripts:
+
 - Linux smoke: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/smoke/linux-smoke.sh`
 - macOS smoke: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/smoke/macos-smoke.sh`
 - Windows smoke: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/smoke/windows-smoke.ps1`
 
 Parity notes (map smoke ↔ manual; include concrete assertions):
+
 - Manual step(s):
   - Smoke command(s):
   - Expected output/assertion(s):
 
-Gaps (must fix before execution begins):
--
+## Gaps (must fix before execution begins):
 
 ## 3) CI Dispatch Path Is Runnable
 
 Checkpoint task dispatch commands (copy verbatim from `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/kickoff_prompts/CP1-ci-checkpoint.md`):
+
 - CI compile parity:
 - Feature Smoke dispatch:
 - Advisory CI audit (recommended before dispatch):
@@ -65,12 +71,15 @@ Checkpoint task dispatch commands (copy verbatim from `docs/project_management/p
     - `scripts/ci-audit/ci_audit_record.sh --ledger-path "docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/logs/<slice>/ci-audit/ledger.jsonl" --kind <ci-testing|feature-smoke> --orch-branch "<orch-branch>" --run-id "<id>" --tested-sha "<sha>" --feature-dir "docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing"`
 
 Policy note:
+
 - Docs/planning-only changes (anything under `docs/`) may skip CI and smoke only when `ci_audit.sh` outputs `DIFF_CLASS=docs_only` and `RECOMMEND=skip`.
 
 Runner readiness:
+
 - Required self-hosted runners exist and are labeled correctly:
 
 Run ids/URLs (if executed during preflight):
+
 - CI compile parity:
 - Linux smoke:
 - macOS smoke:
@@ -79,4 +88,3 @@ Run ids/URLs (if executed during preflight):
 ## 4) Required Fixes Before Starting OR0 (if any)
 
 -
-

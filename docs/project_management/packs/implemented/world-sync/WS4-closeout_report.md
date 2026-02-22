@@ -3,13 +3,16 @@
 Date (UTC): 2026-02-12T02:56:55Z
 
 Standards:
-- `docs/project_management/standards/SLICE_CLOSEOUT_GATE_STANDARD.md`
-- `docs/project_management/standards/EXECUTIVE_SUMMARY_STANDARD.md` (behavior delta format)
+
+- `docs/project_management/system/standards/execution/SLICE_CLOSEOUT_GATE_STANDARD.md`
+- `docs/project_management/system/standards/adr/EXECUTIVE_SUMMARY_STANDARD.md` (behavior delta format)
 
 Feature directory:
+
 - `docs/project_management/packs/active/world-sync`
 
 Slice spec:
+
 - `docs/project_management/packs/active/world-sync/WS4-spec.md`
 
 ## Behavior Delta (Existing → New → Why)
@@ -48,15 +51,18 @@ Slice spec:
 ## Cross-Platform Smoke (if applicable)
 
 Record run ids/URLs for required platforms:
+
 - Linux:
 - macOS:
 
 If smoke/CI was intentionally skipped:
+
 - Reason (e.g., `ci-audit: DIFF_CLASS=docs_only`): not a CI checkpoint task; cross-platform gates run at `CP2-ci-checkpoint` after WS5
 - Last-green run evidence (run id/URL, if available):
 - Evidence ledger path (if used): `docs/project_management/packs/active/world-sync/logs/WS4/ci-audit/ledger.jsonl`
 
 If any platform-fix work was required:
+
 - What failed:
 - What was changed:
 - Why the change is safe (guards, cfg, feature flags):
@@ -67,4 +73,5 @@ If any platform-fix work was required:
 - [ ] Smoke scripts validate exit codes and key output (not just “command ran”)
 
 Notes:
+
 - `make integ-checks` initially failed due to host disk exhaustion (`ENOSPC`); reran after clearing build artifacts via `cargo clean` in large historical worktrees.

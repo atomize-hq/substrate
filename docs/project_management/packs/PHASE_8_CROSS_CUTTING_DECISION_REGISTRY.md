@@ -67,6 +67,7 @@ Each item below is written as: **Decision/contract to lock**, **current sources*
 ### CC-0001 — Canonical correlation field set (trace-wide vocabulary + required/optional classification)
 
 **Decision/contract to lock**
+
 - Define the canonical set of correlation identifiers and their required/optional classification, by event family, across:
   - command spans (`command_start` / `command_complete`)
   - in-world process tree events (`world_process_*`)
@@ -77,15 +78,18 @@ Each item below is written as: **Decision/contract to lock**, **current sources*
   - MCP/toolbox tool-call events
 
 **Current sources**
+
 - Attribution envelope draft: `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003)
 - Workflow trace intent: `docs/project_management/_archived/next/workflow-engine/decision_register.md` (DR-0005)
 - Router derived events: `docs/project_management/_archived/next/host_event_bus_router_daemon/decision_register.md` (DR-0003, DR-0007, DR-0008)
 - LLM gateway correlation intent: `docs/project_management/_archived/next/llm_gateway_in_world/contract.md`
 
 **Gap**
+
 - Historically, downstream ADRs/DRs asserted “must carry” fields without a single authoritative matrix (drift risk).
 
 **Alignment action**
+
 - Phase 8: addressed by the additive “Correlation vocabulary + required/optional matrix” section in ADR-0028:
   - field vocabulary (names + meanings),
   - required/optional matrix per event family,
@@ -96,20 +100,24 @@ Each item below is written as: **Decision/contract to lock**, **current sources*
 ### CC-0002 — `session_id` vs `orchestration_session_id` semantics (no heuristic joins)
 
 **Decision/contract to lock**
+
 - Define whether:
   - `session_id` remains the shell trace session identifier, and
   - `orchestration_session_id` is the multi-agent orchestration session identifier,
   - and when both must appear on a record (or whether one supersedes the other for certain families).
 
 **Current sources**
+
 - Existing trace docs use `session_id`: `docs/TRACE.md`
 - Structured agent events require `orchestration_session_id`: `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003)
 - LLM gateway wants `orchestration_session_id`/`run_id`/`thread_id`: `docs/project_management/_archived/next/llm_gateway_in_world/contract.md`
 
 **Gap**
+
 - Without an explicit mapping story, consumers (router, session loggers, UIs) risk heuristic “best-effort” joins between trace sessions and orchestration sessions.
 
 **Alignment action**
+
 - Phase 8: addressed by ADR-0028 Phase 8 additive vocabulary + required/optional matrix:
   - `session_id` remains mandatory on all canonical trace records,
   - `orchestration_session_id` is required on any record family that participates in multi-agent orchestration joins,
@@ -120,6 +128,7 @@ Each item below is written as: **Decision/contract to lock**, **current sources*
 ### CC-0003 — `agent_id` meaning (principal identity vs backend identity)
 
 **Decision/contract to lock**
+
 - Decide a single semantic meaning for `agent_id` across:
   - trace command spans,
   - structured agent events,
@@ -128,14 +137,17 @@ Each item below is written as: **Decision/contract to lock**, **current sources*
   - toolbox tool-call events.
 
 **Current sources**
+
 - Trace example uses `agent_id` as a generic “who ran this” label: `docs/TRACE.md`
 - Structured agent event envelope defines `agent_id` as the actor/principal identifier and relies on `backend_id` for backend selection identity: `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003)
 - Agent hub derives `backend_id` (`<kind>:<agent_id>`): `docs/project_management/_archived/next/agent_hub_core/decision_register.md` (DR-0001)
 
 **Gap**
+
 - Historically, ambiguity between “human/actor principal” and “agent backend identity” created downstream join and audit confusion.
 
 **Alignment action**
+
 - Phase 8 additive alignment:
   - Define `agent_id` as the **principal/actor identifier** (`human` for operator actions; agent inventory id for agent-driven actions/events).
   - Define `backend_id` as the **backend identifier** in `<kind>:<name>` form when a specific backend is involved.
@@ -150,19 +162,23 @@ Each item below is written as: **Decision/contract to lock**, **current sources*
 ### CC-0004 — Structured agent event envelope extensions (world attribution + routing hints)
 
 **Decision/contract to lock**
+
 - Extend the structured agent event envelope additively to support:
   - `world_id` attribution (when `execution.scope=world`)
   - an event-plane routing hint (`channel`/`topic`) suitable for subscribe/filter semantics
 
 **Current sources**
+
 - Initial envelope shape: `docs/project_management/_archived/next/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003)
 - World session reuse decision requires surfacing `world_id`: `docs/project_management/_archived/next/agent_hub_core/decision_register.md` (DR-0004)
 - Phase 8 explicit discussion points: `LLM_AI_CAPABILITY_ENABLEMENT_PLANNING_ORDER.md` (Phase 8 section)
 
 **Gap**
+
 - Historically, ADR-0017 referenced envelope fields only via decision registers, creating drift risk between ADR text and the DR-defined envelope extensions.
 
 **Alignment action**
+
 - Phase 8: addressed additively by:
   - adding an explicit “Structured agent event envelope (v1; Phase 8 additive clarifications)” section to ADR-0017 that lists the envelope fields and their required/conditional/optional semantics (`backend_id`, conditional `world_id`, optional `channel`),
   - locking `channel` constraints in ADR-0017 as non-negotiable (producer-declared, capped, no secrets, not a join key, not used for policy gating),
@@ -173,19 +189,23 @@ Each item below is written as: **Decision/contract to lock**, **current sources*
 ### CC-0005 — Agent Hub control plane vs event plane (explicit separation + policy gates)
 
 **Decision/contract to lock**
+
 - Explicitly define:
   - the **control plane** (task assignment, cancel, steering RPCs) and its policy gates
   - the **event plane** (structured events/telemetry) and its routing/attribution contract
 
 **Current sources**
+
 - Phase 8 discussion point: `LLM_AI_CAPABILITY_ENABLEMENT_PLANNING_ORDER.md`
 - ADR-0026 already insists tools must not create a second execution plane: `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`
 - Router indirect execution is separately gated by `workflow.router.*`: `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md` and router DR-0017
 
 **Gap**
+
 - Historically, “control plane” vs “event plane” was referenced as a risk, but not locked as an explicit contract with surfaces, gates, and audit records.
 
 **Alignment action**
+
 - Phase 8: addressed by explicitly locking the two-plane model and its gates:
   - Agent Hub core defines control-plane vs event-plane separation and forbids treating event-plane records as a general-purpose execution trigger (ADR-0025).
   - The internal toolbox is the v1 control-plane surface and is introspection-only (no mutating tools), preventing “second execution plane” drift (ADR-0026; DR-0010).
@@ -200,40 +220,45 @@ Each item below is written as: **Decision/contract to lock**, **current sources*
 ### CC-0006 — Secrets delivery channel rubric (FD/pipe vs env vars; cross-track standard)
 
 **Decision/contract to lock**
+
 - Establish a reusable rubric for secrets delivery between Substrate-managed components:
   - prefer inherited one-time FD/pipe channels where Substrate spawns and controls both endpoints,
   - allow env var injection where interop requires it (3rd-party tools/SDKs) or where transport constraints make FD/pipe infeasible.
 
 **Current sources**
+
 - Toolbox token explicitly chooses FD/pipe: `docs/project_management/_archived/next/orchestration_mcp_toolbox/decision_register.md` (DR-0009)
 - LLM gateway chooses env injection (v1): `docs/project_management/_archived/next/llm_gateway_in_world/specs/env_injection.md`
-- Cross-track rubric (authoritative): `docs/project_management/standards/SECRETS_DELIVERY_CHANNEL_RUBRIC.md`
+- Cross-track rubric (authoritative): `docs/project_management/system/standards/shared/SECRETS_DELIVERY_CHANNEL_RUBRIC.md`
 
 **Gap**
+
 - Historically, secret-handling decisions were scattered across tracks, creating ad-hoc env var expansion risk and inconsistent operator expectations.
 
 **Alignment action**
-- Phase 8: addressed by introducing the shared standard `docs/project_management/standards/SECRETS_DELIVERY_CHANNEL_RUBRIC.md` and updating relevant ADRs/DRs/specs to reference it as the shared rationale.
+
+- Phase 8: addressed by introducing the shared standard `docs/project_management/system/standards/shared/SECRETS_DELIVERY_CHANNEL_RUBRIC.md` and updating relevant ADRs/DRs/specs to reference it as the shared rationale.
 
 **Inventory (Phase 8 circle-back; host→world secret channel surfaces)**
 
-| Secret values (examples) | Source of truth (host) | Transport (host→world) | In-world consumer | In-world delivery (current) | Current policy gates | Recommendation (Phase 8) |
-|---|---|---|---|---|---|---|
-| Provider API keys for `api:*` backends (e.g., host `OPENAI_API_KEY`) | Host process env (names declared in agent inventory `config.api.auth.env`) | World-agent spawn request (gateway ensure/sync) | In-world gateway/engine | **v1:** secret-bearing env vars on the gateway/engine process (`SUBSTRATE_LLM_BACKEND_AUTH_API_<NAME>_<FIELD>`) | `llm.secrets.env_allowed` (deny-by-default) + `llm.allowed_backends` + `net_allowed` | Keep host env as the source, but upgrade host→world to a **secret-channel payload** and deliver to the in-world gateway/manager via **FD/pipe by default** (no secret values in in-world process env). |
-| Codex subscription auth for `cli:codex` (e.g., account id + access token extracted from `~/.codex/auth.json`) | Host credential file read (with optional env override if specified) | World-agent spawn request (gateway ensure/sync) | In-world gateway/manager and/or Substrate-owned wrapper | **v1:** secret-bearing env vars on the gateway/manager process (`SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_*`) | `agents.host_credentials.read.allowed_backends` (deny-by-default) + `llm.allowed_backends` + `net_allowed` | Keep host credential reads narrow + policy-gated, but upgrade host→world to a **secret-channel payload** and deliver to the in-world gateway/manager via **FD/pipe by default** (no secret values in in-world process env). |
-| Gateway/manager → Substrate-spawned wrapper/engine auth propagation | In-world gateway/manager memory | In-world inherited FD/pipe | Substrate-owned wrapper/engine process | **v1:** FD/pipe by default (env var fallback only when required) | N/A (internal propagation; still subject to redaction/caps invariants) | Keep FD/pipe as the default for Substrate-spawned processes; ensure the same “no secret env by default” posture holds for host→world delivery. |
+| Secret values (examples)                                                                                      | Source of truth (host)                                                     | Transport (host→world)                          | In-world consumer                                       | In-world delivery (current)                                                                                     | Current policy gates                                                                                       | Recommendation (Phase 8)                                                                                                                                                                                                    |
+| ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Provider API keys for `api:*` backends (e.g., host `OPENAI_API_KEY`)                                          | Host process env (names declared in agent inventory `config.api.auth.env`) | World-agent spawn request (gateway ensure/sync) | In-world gateway/engine                                 | **v1:** secret-bearing env vars on the gateway/engine process (`SUBSTRATE_LLM_BACKEND_AUTH_API_<NAME>_<FIELD>`) | `llm.secrets.env_allowed` (deny-by-default) + `llm.allowed_backends` + `net_allowed`                       | Keep host env as the source, but upgrade host→world to a **secret-channel payload** and deliver to the in-world gateway/manager via **FD/pipe by default** (no secret values in in-world process env).                      |
+| Codex subscription auth for `cli:codex` (e.g., account id + access token extracted from `~/.codex/auth.json`) | Host credential file read (with optional env override if specified)        | World-agent spawn request (gateway ensure/sync) | In-world gateway/manager and/or Substrate-owned wrapper | **v1:** secret-bearing env vars on the gateway/manager process (`SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_*`)       | `agents.host_credentials.read.allowed_backends` (deny-by-default) + `llm.allowed_backends` + `net_allowed` | Keep host credential reads narrow + policy-gated, but upgrade host→world to a **secret-channel payload** and deliver to the in-world gateway/manager via **FD/pipe by default** (no secret values in in-world process env). |
+| Gateway/manager → Substrate-spawned wrapper/engine auth propagation                                           | In-world gateway/manager memory                                            | In-world inherited FD/pipe                      | Substrate-owned wrapper/engine process                  | **v1:** FD/pipe by default (env var fallback only when required)                                                | N/A (internal propagation; still subject to redaction/caps invariants)                                     | Keep FD/pipe as the default for Substrate-spawned processes; ensure the same “no secret env by default” posture holds for host→world delivery.                                                                              |
 
 **Inventory (Phase 8 circle-back; canonical `SUBSTRATE_LLM_BACKEND_AUTH_*` field-name set)**
 
 These identifiers are the canonical **auth field names** (even when values are delivered via FD/pipe bundles rather than env vars). Any field name in this family MUST be treated as secret-bearing for redaction/caps purposes.
 
-| Auth field name (`SUBSTRATE_LLM_BACKEND_AUTH_*`) | Scope | Source of value | Notes |
-|---|---|---|---|
-| `SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID` | `cli:codex` | Host credential read (default) and/or explicit env override (if supported by adapter) | Fixed, closed set for `cli:codex` v1. |
-| `SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN` | `cli:codex` | Host credential read (default) and/or explicit env override (if supported by adapter) | Fixed, closed set for `cli:codex` v1. |
-| `SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY` | `api:openai` | Host env read (`OPENAI_API_KEY`), gated by `llm.secrets.env_allowed` | Current v1 “quick win” example; `api:*` backends may add additional fields additively per-inventory. |
+| Auth field name (`SUBSTRATE_LLM_BACKEND_AUTH_*`)    | Scope        | Source of value                                                                       | Notes                                                                                                |
+| --------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID`   | `cli:codex`  | Host credential read (default) and/or explicit env override (if supported by adapter) | Fixed, closed set for `cli:codex` v1.                                                                |
+| `SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN` | `cli:codex`  | Host credential read (default) and/or explicit env override (if supported by adapter) | Fixed, closed set for `cli:codex` v1.                                                                |
+| `SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY`     | `api:openai` | Host env read (`OPENAI_API_KEY`), gated by `llm.secrets.env_allowed`                  | Current v1 “quick win” example; `api:*` backends may add additional fields additively per-inventory. |
 
 For `api:*` backends, the canonical field-name family is defined by:
+
 - `SUBSTRATE_LLM_BACKEND_AUTH_API_<BACKEND_NAME>_<FIELD>`
 - `BACKEND_NAME` is the backend id name component (e.g., `api:openai` → `OPENAI`).
 - `FIELD` is the backend’s declared auth field name (v1: derived from the declared host env var name(s) in `config.api.auth.env` per the gateway spec/DR; must be deterministic and documented per backend).
@@ -243,6 +268,7 @@ For `api:*` backends, the canonical field-name family is defined by:
 ### CC-0007 — Workflow-router derived event families + correlation keys (trace-aligned)
 
 **Decision/contract to lock**
+
 - Define the derived router event families (at minimum):
   - `rule_match`
   - `request_enqueued`
@@ -254,13 +280,16 @@ For `api:*` backends, the canonical field-name family is defined by:
   - `rule_id`, `request_id`, `idempotency_key`
 
 **Current sources**
+
 - Derived events appended to `trace.jsonl`: `docs/project_management/_archived/next/host_event_bus_router_daemon/decision_register.md` (DR-0003)
 - Trigger allowlist + recursion guard: `docs/project_management/_archived/next/host_event_bus_router_daemon/decision_register.md` (DR-0007)
 
 **Gap**
+
 - Historically, router DRs chose “append derived events to trace” before the canonical trace vocabulary explicitly enumerated router-derived families/keys.
 
 **Alignment action**
+
 - Phase 8: addressed additively by:
   - router DR-0016 enumerating the v1 `workflow_router_*` derived event types and required correlation keys,
   - ADR-0028 listing router-derived families and requiring explicit cause references (`source_span_id`/`source_cmd_id`) and stable join keys (`workspace_id`, `request_id`, `idempotency_key`, `rule_id`),
@@ -271,18 +300,22 @@ For `api:*` backends, the canonical field-name family is defined by:
 ### CC-0008 — Workflow trace classification additions (future, but must be reserved additively)
 
 **Decision/contract to lock**
+
 - Reserve and define the workflow trace families/fields needed by:
   - a workflow root span (`workflow_run`)
   - workflow node spans (`workflow_node`)
   - linkage between node spans and underlying command spans
 
 **Current sources**
+
 - Workflow spans decision: `docs/project_management/_archived/next/workflow-engine/decision_register.md` (DR-0005)
 
 **Gap**
+
 - Historically, workflow fields were assumed downstream without explicit reservation in the canonical vocabulary.
 
 **Alignment action**
+
 - Phase 8: addressed additively by reserving `workflow_run_id` and `workflow_node_id` in ADR-0028’s correlation vocabulary (no reshapes; future workflow composition remains Draft).
 
 ---
@@ -290,18 +323,22 @@ For `api:*` backends, the canonical field-name family is defined by:
 ### CC-0009 — MCP/toolbox tool-call correlation (`tool_call_id` and trace visibility)
 
 **Decision/contract to lock**
+
 - Define `tool_call_id` (and related fields) and ensure tool invocations are:
   - attributable to `(orchestration_session_id, agent_id, role, world_id?)`
   - persisted in trace in a stable family suitable for router/analytics (even if router v1 cannot trigger on it)
 
 **Current sources**
+
 - Toolbox exists and requires attribution: `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`
 - Phase 8 explicitly calls out `tool_call_id`: `LLM_AI_CAPABILITY_ENABLEMENT_PLANNING_ORDER.md`
 
 **Gap**
+
 - `tool_call_id` was reserved in ADR-0028’s correlation vocabulary, but the end-to-end tool-call trace family and required join keys were not previously locked as a persisted record family.
 
 **Alignment action**
+
 - Phase 8: addressed by introducing a dedicated toolbox tool-call trace family and wiring it into the correlation vocabulary:
   - `toolbox_tool_call_start` / `toolbox_tool_call_complete` (ADR-0026; v1 additive list),
   - `tool_call_id` is required on these records (ADR-0028 matrix),
@@ -312,20 +349,24 @@ For `api:*` backends, the canonical field-name family is defined by:
 ### CC-0010 — World session reuse + restart attribution (operator-verifiable)
 
 **Decision/contract to lock**
+
 - Ensure operators can verify:
   - whether multiple agents shared the same world boundary (same `world_id`), and
   - when/why a world was restarted.
 
 **Current sources**
+
 - Shared-world default + required `world_restarted` event: `docs/project_management/_archived/next/agent_hub_core/decision_register.md` (DR-0004)
 - Drift handling + reason taxonomy: `docs/project_management/_archived/next/agent_hub_core/decision_register.md` (DR-0008)
 - `world_restarted` alert event schema: `docs/project_management/_archived/next/agent_hub_core/decision_register.md` (DR-0010)
 - `docs/TRACE.md` (operator-facing trace family overview; Phase 8 alignment)
 
 **Gap**
+
 - Historically, `world_id` and restart attribution were asserted in Agent Hub DRs but not clearly surfaced as an operator-facing, persisted contract across the Phase 2 envelope and trace docs.
 
 **Alignment action**
+
 - Phase 8: addressed additively by:
   - requiring `world_id` on structured events for world-scoped agents (ADR-0017 envelope + DR-0003),
   - locking the `world_restarted` alert schema (`kind=alert` + `data.code="world_restarted"`; required world id/generation fields) and reason taxonomy (DR-0008/DR-0010),
@@ -336,15 +377,19 @@ For `api:*` backends, the canonical field-name family is defined by:
 ### CC-0011 — Workflow-router rules surface in ADR-0027 (`workflow.*` keys + gating)
 
 **Decision/contract to lock**
+
 - Define the minimal `workflow.*` config and policy surfaces needed by ADR-0029 without introducing new file families.
 
 **Current sources**
+
 - Router DR requires adding `workflow.*` keys to ADR-0027 surfaces: `docs/project_management/_archived/next/host_event_bus_router_daemon/decision_register.md` (DR-0006 follow-up)
 
 **Gap**
+
 - Historically, ADR-0027 scoped to `llm.*` and `agents.*`; ADR-0029 required `workflow.router.*` gating keys.
 
 **Alignment action**
+
 - Phase 8: addressed by adding `workflow.router.*` policy keys to ADR-0027 and syncing them into the schema/contract planning outputs (fail-closed defaults; deny-by-default allowlists).
 
 ---
@@ -352,6 +397,7 @@ For `api:*` backends, the canonical field-name family is defined by:
 ### CC-0012 — `docs/TRACE.md` alignment to Phase 1–6 contracts (Phase 8 documentation pointers)
 
 **Decision/contract to lock**
+
 - Update `docs/TRACE.md` to reflect:
   - the new correlation vocabulary (once CC-0001..CC-0003 are resolved),
   - the router derived families (CC-0007),
@@ -359,12 +405,15 @@ For `api:*` backends, the canonical field-name family is defined by:
   - plus any explicit redaction/caps rules for LLM/agent/toolbox event families.
 
 **Current sources**
+
 - Phase 8 requires documentation pointers/updates: `LLM_AI_CAPABILITY_ENABLEMENT_PLANNING_ORDER.md`
 
 **Gap**
+
 - `docs/TRACE.md` historically documented a command-span-centric schema and did not describe Phase 1–6 planned event-family expansions (LLM/agents/router/workflows).
 
 **Alignment action**
+
 - Phase 8: addressed by updating `docs/TRACE.md` to:
   - link to ADR-0028 as canonical for correlation vocabulary/matrix,
   - document router-derived `workflow_router_*` event types and required join keys,

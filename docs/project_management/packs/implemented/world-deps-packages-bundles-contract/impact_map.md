@@ -3,10 +3,12 @@
 This file replaces the legacy `integration_map.md`.
 
 Authoring standards:
-- `docs/project_management/standards/PLANNING_IMPACT_MAP_STANDARD.md`
-- `docs/project_management/standards/PLANNING_SPEC_DETERMINATION_STANDARD.md`
+
+- `docs/project_management/system/standards/planning/PLANNING_IMPACT_MAP_STANDARD.md`
+- `docs/project_management/system/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`
 
 ## Inputs
+
 - Feature directory: `docs/project_management/packs/active/world-deps-packages-bundles-contract`
 - ADR(s):
   - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
@@ -18,6 +20,7 @@ Authoring standards:
 ## Touch set (explicit)
 
 ### Create
+
 - `docs/project_management/packs/active/world-deps-packages-bundles-contract/plan.md` — v4 plan and slice model
 - `docs/project_management/packs/active/world-deps-packages-bundles-contract/tasks.json` — v4 task graph (automation + checkpoints)
 - `docs/project_management/packs/active/world-deps-packages-bundles-contract/spec_manifest.md` — spec ownership map
@@ -35,25 +38,31 @@ Authoring standards:
 - `docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP*-closeout_report.md` — slice closeout gate reports
 
 ### Edit
+
 - `docs/project_management/packs/sequencing.json` — add this feature directory as a sprint entry
 - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md` — link to this Planning Pack (spec manifest + tasks + decision register)
 - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md` — align “World Shell Contract” wording with ADR-0016 and implemented REPL evaluator behavior
 
 ### Edit (execution scope; non-doc)
+
 Execution triads under this Planning Pack are expected to edit:
+
 - `crates/shell/src/builtins/world_deps/*` — replace legacy selection/manifest plumbing with inventory+enabled-patch contract
 - `crates/common/src/world_deps_manifest.rs` — replace/extend manifest model to parse package/bundle inventory definitions
 - `crates/world-agent/*` — implement in-world probe + install execution for packages/bundles (apt + script + manual blocked)
 - Installer scripts that stage legacy world-deps files — stop copying/reading legacy paths
 
 ### Delete (execution scope; end state)
+
 When execution completes, delete legacy world-deps selection/overlay plumbing so `world deps` cannot be influenced by old paths:
+
 - legacy selection file semantics and paths
 - legacy manager hooks / overlay file semantics for world-deps
 
 ## Cascading implications (behavior/UX)
 
 ### CLI / UX
+
 - Change:
   - Replace legacy `substrate world deps status|init|select|provision` selection-file UX with `current|global|workspace` scoped inventory/enabled UX.
 - Direct impact:
@@ -68,6 +77,7 @@ When execution completes, delete legacy world-deps selection/overlay plumbing so
   - Existing selection-file semantics and “tool” naming conflicts with packages/bundles naming; legacy must be removed from plumbing (tests enforce).
 
 ### Config / env vars / paths
+
 - Change:
   - Enabled deps move to patch keys (`world.deps.*`) under `$SUBSTRATE_HOME/config.yaml` and `<workspace_root>/.substrate/workspace.yaml`.
 - Direct impact:
@@ -78,6 +88,7 @@ When execution completes, delete legacy world-deps selection/overlay plumbing so
   - Any remaining legacy file reads create silent drift; replacement completeness tests are required.
 
 ### Policy / isolation / security posture
+
 - Change:
   - World-backed operations (`applied`, `install`, `sync`) fail closed when the world backend is unavailable (exit `3`).
 - Direct impact:
@@ -90,6 +101,7 @@ When execution completes, delete legacy world-deps selection/overlay plumbing so
 ## Cross-queue scan (ADRs + Planning Packs)
 
 ### Relevant ADRs (cross-cutting constraints)
+
 - ADR: `docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
   - Overlap surfaces: world-deps install/provision semantics, install classes
   - Conflict: yes
@@ -121,11 +133,13 @@ When execution completes, delete legacy world-deps selection/overlay plumbing so
   - Resolution (explicit): `world deps` world-backed behavior remains compatible with policy snapshot + full-isolation enforcement posture and does not introduce any policy-bypass execution path
 
 ### Relevant Planning Packs (queued/unimplemented)
+
 - Planning Pack: `docs/project_management/_archived/world_deps_selection_layer`
   - Overlap surfaces: world-deps selection model, file path semantics
   - Conflict: yes
   - Resolution (explicit): do not edit the archived Planning Pack; implement ADR-0011 under this new Planning Pack and enforce “legacy paths removed” via tests
 
 ## Follow-ups (explicit)
+
 - ADR cross-link update required:
   - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md` related docs list includes this Planning Pack entrypoints
