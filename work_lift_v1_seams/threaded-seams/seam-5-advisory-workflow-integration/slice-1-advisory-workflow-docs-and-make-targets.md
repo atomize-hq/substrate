@@ -42,15 +42,15 @@
     - `work_lift_v1_seams/scope_brief.md`
     - `work_lift_v1_seams/threading.md` (contracts + dependency edges)
     - `WORKSTREAM_TRIAGE_AND_LIFT_DECISIONS.md` (reference-only)
-  - Outputs (choose one; keep minimal):
-    - Add `docs/project_management/system/standards/planning/PLANNING_WORK_LIFT_ADVISORY.md`, and link it from:
-      - `docs/project_management/system/standards/planning/PLANNING_WORKFLOW_OVERVIEW.md`
-      - `docs/project_management/system/standards/planning/PLANNING_README.md`
+  - Outputs (pinned):
+    - Add `docs/project_management/system/standards/planning/PLANNING_WORK_LIFT_ADVISORY.md`.
+    - Edit `docs/project_management/system/standards/planning/PLANNING_WORKFLOW_OVERVIEW.md` to link to the advisory doc.
+    - Edit `docs/project_management/system/standards/planning/PLANNING_README.md` to link to the advisory doc.
   - **Implementation notes**:
     - Include three “how to run” recipes:
-      - intake/ADR: `pm_lift.py from-intake <path>`
-      - Planning Pack: `pm_lift.py from-impact-map <pack_dir>`
-      - calibration: `pm_lift.py from-git-diff --git-range <base>..<head>` (or equivalent)
+      - intake/ADR: `python3 docs/project_management/system/scripts/planning/pm_lift.py from-intake --intake <path> [--emit-json]`
+      - Planning Pack: `python3 docs/project_management/system/scripts/planning/pm_lift.py from-impact-map --feature-dir <pack_dir> [--emit-json]`
+      - calibration: `python3 docs/project_management/system/scripts/planning/pm_lift.py from-git-diff --git-range <base>..<head> [--emit-json]`
     - Include a short interpretation guide:
       - score is advisory,
       - triggers are the primary split signal,

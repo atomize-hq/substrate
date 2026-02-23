@@ -10,7 +10,7 @@
   - In:
     - Derive Touch Set counts from `impact_map.md` using `validate_impact_map.py --emit-json` (CONTRACT-4).
     - Count directory/prefix tokens as **1** in raw counts (for the Lift Vector inputs).
-    - Optionally expand prefixes deterministically from the repo file list (e.g., `git ls-files <prefix>`) for *lift estimation only*, discounted and capped per prefix entry.
+    - Expand prefixes deterministically from the repo file list (repo-root-relative) using `git ls-files <prefix>` for *lift estimation only*, discounted and capped per prefix entry.
     - Degrade confidence when prefix entries are present (since expansion reflects current `HEAD`).
     - Surface diagnostics so reviewers can see how prefixes influenced the estimate.
   - Out:
@@ -68,4 +68,3 @@
     - S2 can land largely independently (fixtures/tests/spec for prefix counting/expansion), with no need to change `pm_lift.py` wiring inside this seam.
   - What must coordinate:
     - Any change to `validate_impact_map.py --emit-json` field names/types/semantics must be coordinated with SEAM-3 consumption (CONTRACT-3/derived signals), to avoid silent drift.
-

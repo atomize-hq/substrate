@@ -14,7 +14,7 @@
       - optional lint output in existing planning scripts (non-fatal by default).
     - Define a strict-mode onramp plan:
       - gating keyed off `tasks.json meta.slice_spec_version >= 2`,
-      - initial candidate invariants to enforce after calibration (e.g., `contract.behavior_deltas == 1`, `estimated_slices <= 3` for single ADR candidates).
+      - strict-mode invariants and promotion criteria pinned in `threaded-seams/seam-5-advisory-workflow-integration/slice-3-strict-mode-onramp-plan.md`.
   - Out:
     - Turning split triggers into hard errors immediately.
     - Requiring lift blocks for all legacy packs.
@@ -24,8 +24,8 @@
   - Outputs:
     - Planning workflow documentation and stable UX expectations for what lift means and how it’s used.
 - **Key invariants / rules**
-  - Advisory-first: lift computation should inform, not block, until explicitly promoted.
-  - Legacy compatibility: strict requirements must be gated and opt-in.
+  - Advisory-first: lift computation MUST inform, not block, until explicitly promoted via an explicit strict-mode opt-in.
+  - Legacy compatibility: strict requirements MUST be gated and opt-in.
 - **Dependencies**
   - Blocks:
     - None (this seam can draft docs/targets early), but “final wiring” depends on stable `pm_lift` outputs.
@@ -34,7 +34,11 @@
 - **Touch surface**
   - `Makefile`
   - `docs/project_management/system/standards/shared/WORK_LIFT_RUBRIC.md`
-  - `docs/project_management/system/standards/planning/*` (as needed for “where lift fits”)
+  - `docs/project_management/system/standards/planning/PLANNING_WORK_LIFT_ADVISORY.md` (new)
+  - `docs/project_management/system/standards/planning/PLANNING_WORK_LIFT_STRICT_MODE.md` (new; opt-in)
+  - `docs/project_management/system/standards/planning/PLANNING_README.md` (edit: add links)
+  - `docs/project_management/system/standards/planning/PLANNING_WORKFLOW_OVERVIEW.md` (edit: add links)
+  - `docs/project_management/system/standards/planning/PLANNING_IMPACT_MAP_STANDARD.md` (edit: add directory/prefix guidance cross-linking CONTRACT-4/SEAM-4)
   - `WORKSTREAM_TRIAGE_AND_LIFT_DECISIONS.md` (reference only; avoid duplicating canonical rules)
 - **Verification**
   - A short “happy path” walkthrough:
@@ -48,5 +52,4 @@
   - De-risk plan: rubric emphasizes triggers + decomposition, not precision; confidence and missing-input warnings are front-and-center.
 - **Rollout / safety**
   - Stage 1: docs + advisory targets + optional report output
-  - Stage 2: strict-mode enforcement for a minimal set of invariants (explicitly approved)
-
+  - Stage 2: strict-mode enforcement (opt-in) for an explicitly defined invariant set (defined and versioned in SEAM-5 S3)

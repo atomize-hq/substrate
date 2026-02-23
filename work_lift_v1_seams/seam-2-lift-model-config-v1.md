@@ -20,9 +20,9 @@
   - Outputs:
     - A deterministic mapping from vector → score/triggers/slices/confidence.
 - **Key invariants / rules**
-  - The config must encode the canonical v1 rules in `WORKSTREAM_TRIAGE_AND_LIFT_DECISIONS.md` (D7–D9).
-  - The config must be “auditable”: readable by humans; no hidden code paths.
-  - Once shipped, `work_lift_model.v1.json` should be treated as stable/immutable; changes should introduce a new versioned file.
+  - The config MUST encode the canonical v1 rules in `WORKSTREAM_TRIAGE_AND_LIFT_DECISIONS.md` (D7–D9).
+  - The config MUST be “auditable”: readable by humans; no hidden code paths.
+  - Once shipped, `work_lift_model.v1.json` MUST be treated as immutable; changes to scoring semantics require a new versioned file (e.g., `work_lift_model.v2.json`).
 - **Dependencies**
   - Blocks:
     - SEAM-3 by providing config-backed scoring.
@@ -38,4 +38,4 @@
   - Risk: config grows too complex and becomes a second programming language.
   - De-risk plan: keep v1 minimal (weights + thresholds + multipliers); reserve derived rules for code with explicit documentation and stable outputs.
 - **Rollout / safety**
-  - Tools should fall back to baked-in defaults only when config is missing (bootstrap); once present, config is required for strict mode (gated).
+  - Tools MUST fall back to baked-in defaults only when the config is missing (bootstrap). When strict mode is enabled (opt-in), config presence is required.

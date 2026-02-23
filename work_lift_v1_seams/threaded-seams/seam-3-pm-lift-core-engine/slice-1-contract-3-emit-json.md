@@ -14,8 +14,8 @@
     - `model_version`, `lift_score`, `estimated_slices`, `confidence`,
     - `triggers`, `missing_inputs`,
     - `vector`, `derived`.
-  - Key semantics are documented:
-    - `confidence` is a low-cardinality string enum (e.g., `high|medium|low`) and is deterministic for a given input/config.
+- Key semantics are documented:
+    - `confidence` is a low-cardinality string enum (`high|low` in v1) and is deterministic for a given input/config.
     - `triggers` and `missing_inputs` are stable, machine-friendly strings (no human prose), and ordering is deterministic.
     - `derived` contains intermediate values useful for debugging/auditing; additive keys only.
   - Exit codes are stable:
@@ -61,8 +61,57 @@ Checklist:
   - Add at least one example JSON output.
 - Validate:
   - Cross-check against `work_lift_v1_seams/threading.md` CONTRACT-3 language.
-- Cleanup:
-  - Keep spec colocated with the script for discoverability.
+  - Cleanup:
+    - Keep spec colocated with the script for discoverability.
+
+##### CONTRACT-3: `pm_lift.py ... --emit-json` concrete contract (v1, normative)
+
+When `--emit-json` is provided, `pm_lift.py` MUST:
+
+- write **JSON only** to stdout,
+- write nothing to stdout on any non-zero exit,
+- write all warnings/errors to stderr (no JSON on stderr),
+- exit `0` on success,
+- exit non-zero on failure (usage errors exit `2`; runtime/validation errors exit `1`).
+
+The stdout JSON MUST conform to this v1 schema (pseudo JSON Schema; types are normative):
+
+```json
+{
+  "model_version": "integer (>=1)",
+  "lift_score": "integer (>=0)",
+  "estimated_slices": "integer (>=1)",
+  "confidence": "\"high\" | \"low\"",
+  "triggers": "array<string> (sorted asc, unique)",
+  "missing_inputs": "array<string> (sorted asc, unique)",
+  "vector": "object (the input Lift Vector, see CONTRACT-1)",
+  "derived": "object (debug/audit; additive keys allowed)"
+}
+```
+
+Stable semantics (v1):
+
+- `confidence`:
+  - `low` iff `missing_inputs` is non-empty OR the derived-pack input indicates prefix entries (`dir_prefixes` non-empty from CONTRACT-4).
+  - `high` otherwise.
+- `missing_inputs` entries are Lift Vector JSON paths, e.g. `touch.crates_touched`.
+- For every `missing_inputs` entry `X`, `triggers` MUST contain `missing_inputs:X`.
+- `triggers` contains only machine tokens (no prose). V1 tokens are:
+  - `split_required:behavior_deltas>1`
+  - `likely_split:crates_touched>2`
+  - `likely_split:touch_files_sum>12`
+  - `likely_split:contract_surface_sum>4`
+  - `likely_split:lift_score>24`
+  - `split_required:estimated_slices>3`
+  - `touch_set_contains_prefix_entries`
+  - plus any number of `missing_inputs:<json_path>` entries.
+- `derived` MUST include:
+  - `base_points` (number)
+  - `risk_multiplier` (number)
+  - For `from-impact-map` mode only:
+    - `impact_map_touch_counts` (object)
+    - `touch_effective_for_scoring` (object)
+  - Additional `derived` keys are allowed and MUST be treated as non-breaking additive evolution.
 
 #### S1.T2 — Normalize `pm_lift.py --emit-json` behavior to match CONTRACT-3
 
@@ -72,7 +121,7 @@ Checklist:
     - Existing `pm_lift.py` emit logic
     - CONTRACT-3 spec from S1.T1
   - Output:
-    - Updated `pm_lift.py` output emission and error handling as needed to meet the contract.
+    - Updated `pm_lift.py` output emission and error handling to meet the CONTRACT-3 requirements exactly (required keys/types/enums/exit codes; additive-only evolution).
 - **Implementation notes**:
   - Enforce determinism:
     - sort `triggers`/`missing_inputs`,
@@ -126,4 +175,3 @@ Checklist:
   - Run the test locally and confirm stability across runs.
 - Cleanup:
   - Keep the fixture minimal and human-readable.
-

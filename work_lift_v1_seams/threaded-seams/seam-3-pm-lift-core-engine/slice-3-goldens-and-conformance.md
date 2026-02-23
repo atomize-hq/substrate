@@ -13,7 +13,9 @@
     - End-to-end workflow integration (owned by SEAM-5).
     - Revising schema/config artifacts (owned by SEAM-1/SEAM-2).
 - **Acceptance criteria**:
-  - A single command (python test invocation for planning scripts) runs:
+  - A single command runs the planning-script test suite:
+    - `python3 -m unittest discover -s docs/project_management/system/scripts/planning/tests -p 'test_*.py'`
+  - The suite includes:
     - golden cases (assert expected `lift_score`, `estimated_slices`, `confidence`, selected triggers),
     - negative cases (assert non-zero exit + actionable stderr).
   - Tests tolerate additive JSON keys:
@@ -27,7 +29,7 @@
   - Run the new tests locally.
   - Spot-check example outputs in the goldens for readability and debuggability.
 - **Rollout/safety**:
-  - Additive-only guardrails: tests should fail on breaking changes, not on benign additive enhancements.
+  - Additive-only guardrails: tests MUST fail on breaking changes and MUST NOT fail on benign additive enhancements.
 
 #### S3.T1 — Add golden fixtures + expected outputs (intake vectors)
 
@@ -48,7 +50,7 @@
 - **Acceptance criteria**:
   - Goldens pass deterministically and fail on scoring or trigger-string drift.
 - **Test notes**:
-  - Run `pm_lift.py from-intake --emit-json` on each fixture and compare selected fields.
+  - Run `python3 docs/project_management/system/scripts/planning/pm_lift.py from-intake --intake <fixture.md> --emit-json` on each fixture and compare selected fields.
 - **Risk/rollback notes**:
   - If scoring must change, update CONTRACT-2 version (v2) instead of mutating v1; then add new goldens.
 
@@ -81,7 +83,7 @@ Checklist:
 - **Test notes**:
   - Assert both `confidence` and the presence of a stable trigger string.
 - **Risk/rollback notes**:
-  - If prefix policy changes, that should be a model config version bump (v2) and new goldens.
+  - If prefix policy changes, it MUST be a model config version bump (v2) and MUST include new goldens.
 
 Checklist:
 - Implement:
@@ -122,4 +124,3 @@ Checklist:
   - Confirm exit codes and stderr are stable/actionable.
 - Cleanup:
   - Keep fixtures small and names descriptive.
-

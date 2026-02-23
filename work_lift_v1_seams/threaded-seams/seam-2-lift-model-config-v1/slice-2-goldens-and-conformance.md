@@ -38,9 +38,8 @@
   - Inputs:
     - `docs/project_management/system/schemas/work_lift_vector.schema.json` (SEAM-1)
     - `docs/project_management/system/schemas/work_lift_model.v1.json` (S1)
-  - Outputs (choose one, keep it simple):
-    - Option A (single file): `docs/project_management/system/standards/shared/WORK_LIFT_MODEL_V1_GOLDENS.md`
-    - Option B (machine-readable + doc): `docs/project_management/system/standards/shared/work_lift_model_v1_goldens.json` + a short README section pointing to it
+  - Outputs (pinned):
+    - `docs/project_management/system/standards/shared/WORK_LIFT_MODEL_V1_GOLDENS.md`
 - **Implementation notes**:
   - Include at least one “small vector” golden that exercises:
     - base weights,
@@ -82,7 +81,7 @@ Checklist:
     - A “Conformance” section in the chosen golden doc (S2.T1), or a short standalone:
       - `docs/project_management/system/standards/shared/WORK_LIFT_MODEL_V1.md`
 - **Implementation notes**:
-  - Checklist items should be copy/paste-verifiable:
+  - Checklist items MUST be copy/paste-verifiable:
     - “No edits to v1 scoring constants; create v2 instead.”
     - “Selection semantics are explicit and forbid ‘latest’.”
     - “All constants trace to D7–D9 (or explicitly justified as a default).”
@@ -92,7 +91,7 @@ Checklist:
   - Reviewers can detect drift without reading SEAM-3 code.
   - Checklist explicitly names the contracts it is guarding (`CONTRACT-1`, `CONTRACT-2`).
 - **Test notes**:
-  - N/A (documentation-only), but checklist should be verified once against the shipped files.
+  - N/A (documentation-only), but checklist MUST be verified once against the shipped files.
 - **Risk/rollback notes**:
   - None.
 
@@ -105,4 +104,3 @@ Checklist:
   - Confirm it does not restate scoring constants (keep those in the JSON contract).
 - Cleanup:
   - Keep the checklist short and stable (future versions add new docs rather than rewriting v1 guidance).
-

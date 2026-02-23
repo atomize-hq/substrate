@@ -22,12 +22,15 @@
     - Turning split triggers into hard errors immediately.
     - Requiring lift blocks for all legacy packs.
 - **Key invariants / rules**
-  - Advisory-first: lift computation should inform, not block, until explicitly promoted.
-  - Legacy compatibility: strict requirements must be gated and opt-in.
+  - Advisory-first: lift computation MUST inform, not block, until explicitly promoted via an explicit strict-mode opt-in.
+  - Legacy compatibility: strict requirements MUST be gated and opt-in.
   - Avoid “single-number overfitting”: emphasize triggers + missing inputs + confidence over score precision.
 - **Touch surface**
   - `Makefile`
-  - `docs/project_management/system/standards/planning/*` (workflow placement, checklists)
+  - `docs/project_management/system/standards/planning/PLANNING_WORK_LIFT_ADVISORY.md` (new)
+  - `docs/project_management/system/standards/planning/PLANNING_WORK_LIFT_STRICT_MODE.md` (new; opt-in)
+  - `docs/project_management/system/standards/planning/PLANNING_README.md` (edit: add links)
+  - `docs/project_management/system/standards/planning/PLANNING_WORKFLOW_OVERVIEW.md` (edit: add links)
   - `docs/project_management/system/scripts/planning/lint.{sh,ps1}` (optional non-fatal hook only; avoid changing `pm_lift.py` behavior here)
   - `WORKSTREAM_TRIAGE_AND_LIFT_DECISIONS.md` (reference only; avoid duplicating canonical rules)
 - **Verification**
@@ -76,4 +79,3 @@
     - S3 can land as a plan/spec (no enforcement enabled).
   - What must coordinate:
     - Any wrapper/hook that parses JSON must track `CONTRACT-3` (additive keys only; never depend on debug-only fields unless documented as stable).
-

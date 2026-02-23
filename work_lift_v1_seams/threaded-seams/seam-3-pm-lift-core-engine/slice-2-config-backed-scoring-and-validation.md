@@ -8,7 +8,7 @@
     - Ensure missing inputs (`null`) degrade confidence and emit `missing_inputs:*` triggers without crashing.
     - Ensure pack-derived inputs (impact map emit JSON; CONTRACT-4) propagate “prefix entry” signals into confidence/triggers consistently.
   - Out:
-    - Changing the model semantics in code (should live in CONTRACT-2 data).
+    - Changing the model semantics in code (model semantics MUST live in CONTRACT-2 data).
     - Adding enforcement gates; this remains advisory-first.
 - **Acceptance criteria**:
   - When `docs/project_management/system/schemas/work_lift_model.v1.json` is present, `pm_lift` uses it (and does not rely on baked-in constants for v1).
@@ -35,8 +35,13 @@
     - an invalid vector fixture and assert error class + actionable guidance,
     - a derived-pack fixture (mocked validator output) and assert prefix-driven confidence/triggers.
 - **Rollout/safety**:
-  - Advisory-first defaults:
-    - if config/schema missing, fail with actionable guidance in strict modes; otherwise fall back conservatively (documented).
+  - Advisory vs strict is explicit and deterministic:
+    - `pm_lift.py` is an advisory tool; it MUST compute outputs whenever it can, and it MUST represent unknowns via `missing_inputs` + `confidence=low` (CONTRACT-3).
+    - The strict posture (non-advisory failures) is implemented by a wrapper script (SEAM-5 S3) that consumes `pm_lift.py --emit-json`.
+  - Missing-artifact behavior (v1):
+    - If `docs/project_management/system/schemas/work_lift_model.v1.json` is missing, `pm_lift.py` MUST use the baked-in D7 constants and still emit CONTRACT-3 output.
+    - If `docs/project_management/system/schemas/work_lift_vector.schema.json` is missing, `pm_lift.py` MUST still parse and type-check the embedded vector (markers + JSON object + section type checks); schema-backed validation is skipped.
+    - In strict wrapper mode, missing required artifacts MUST be treated as an error with non-zero exit and actionable stderr (exact exit codes/messages are defined in SEAM-5 S3).
 
 #### S2.T1 — Implement model config application (CONTRACT-2) end-to-end
 
@@ -61,7 +66,7 @@
   - With config present, altering a weight in the config changes results without code edits.
   - `derived` includes enough to audit config application (no hidden math).
 - **Test notes**:
-  - Golden cases in S3 should pin expected results for a known config + vector set.
+  - Golden cases in S3 MUST pin expected results for a known config + vector set.
 - **Risk/rollback notes**:
   - If config shape is still evolving, keep a temporary backward-compat parser layer, but do not fork semantics.
 
@@ -87,7 +92,7 @@ Checklist:
     - `pm_lift.py` validates embedded vector JSON against schema (when present), or performs conservative structural validation with clear instructions when schema is missing.
 - **Implementation notes**:
   - If adding a dependency like `jsonschema` is undesirable, implement minimal validation for required fields/types aligned with CONTRACT-1 (but do not diverge from schema semantics).
-  - Error messages should point to:
+  - Error messages MUST point to:
     - missing markers / missing fenced block,
     - JSON parse error location,
     - schema violation paths (json pointer-like paths).
@@ -95,7 +100,7 @@ Checklist:
   - Invalid vectors fail fast with actionable errors.
   - `null` numeric inputs remain allowed and do not crash; they degrade confidence + emit missing_inputs triggers (per seam brief).
 - **Test notes**:
-  - S3 negative fixtures should cover: wrong types, missing required keys, invalid JSON, missing markers.
+  - S3 negative fixtures MUST cover: wrong types, missing required keys, invalid JSON, missing markers.
 - **Risk/rollback notes**:
   - Avoid making validation stricter than CONTRACT-1 without a strict mode toggle (advisory-first).
 
@@ -145,4 +150,3 @@ Checklist:
   - Confirm stdout remains JSON-only for `--emit-json`.
 - Cleanup:
   - Keep derived fields stable and additive.
-

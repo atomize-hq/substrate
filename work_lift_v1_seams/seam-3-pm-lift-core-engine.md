@@ -38,7 +38,7 @@
     - JSON output shape stability.
   - Negative cases: invalid JSON block, missing markers, wrong types.
 - **Risks / unknowns**
-  - Risk: multiple model versions introduce ambiguity (“which version should I use?”).
-  - De-risk plan: explicit selection rule (use `model_version` in the vector when present; default to 1 if missing; future strict mode may require explicit pinning).
+  - Risk: multiple model versions can introduce ambiguity if version selection is implicit.
+  - De-risk plan (v1): tools support only `model_version = 1` and MUST NOT implement “pick latest file” selection. Version selection semantics live in `CONTRACT-2` and are pinned in the model config.
 - **Rollout / safety**
-  - Advisory-first; if strict mode enforcement is later added, it should be keyed off `tasks.json meta.slice_spec_version >= 2`.
+  - Advisory-first; strict enforcement is opt-in and gated per the strict-mode plan (SEAM-5 S3).

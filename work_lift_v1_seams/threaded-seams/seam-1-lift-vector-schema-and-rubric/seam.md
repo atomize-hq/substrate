@@ -51,5 +51,4 @@
   - What can proceed now:
     - All work in this seam can land independently (new files only under the seam’s touch surface).
   - What must wait:
-    - Nothing for this seam; consumers (SEAM-3/SEAM-5) should wait to rely on CONTRACT-1 until S1/S2 land.
-
+    - Nothing for this seam; consumers (SEAM-3/SEAM-5) MUST NOT rely on CONTRACT-1 until S1/S2 land.

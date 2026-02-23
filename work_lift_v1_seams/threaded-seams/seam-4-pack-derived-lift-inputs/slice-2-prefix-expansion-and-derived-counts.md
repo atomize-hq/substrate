@@ -72,7 +72,7 @@ Checklist:
     - sort all output lists/maps by key,
     - treat missing keys as empty arrays (but prefer enforcing presence via S1 tests),
     - never read the filesystem directly; expansion comes from injected provider.
-  - Output should include at minimum:
+  - Output MUST include at minimum:
     - per-section: explicit count, prefix entry count, raw count, effective count, per-prefix expanded counts,
     - an overall “prefix present” boolean or derived `dir_prefixes` passthrough.
   - This helper is a seam-owned artifact; SEAM-3 may choose to import it for `pm_lift from-impact-map` wiring.
@@ -113,4 +113,3 @@ Checklist:
   - Ensure assertions are resilient to additive fields but strict on required semantics.
 - Cleanup:
   - Keep fixtures minimal; avoid “giant” expansion lists (use counts).
-

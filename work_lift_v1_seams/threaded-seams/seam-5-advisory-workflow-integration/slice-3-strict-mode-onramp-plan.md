@@ -44,14 +44,26 @@
 - **Implementation notes**:
   - Define eligibility:
     - strict gating applies only when `meta.slice_spec_version >= 2` (new format).
-  - Define candidate invariants (initial list; do not enable by default):
-    - `vector.contract.behavior_deltas == 1` (Lift Vector v1; canonical field name defined in `WORKSTREAM_TRIAGE_AND_LIFT_DECISIONS.md` → D6),
-    - `estimated_slices <= 3` for single ADR candidates (example),
-    - “no missing required inputs” once schema/rubric is stable.
-  - Define promotion criteria:
-    - N calibration runs over real packs,
-    - acceptable false positive rate,
-    - documented exceptions.
+  - Define the strict opt-in mechanism (pinned):
+    - Environment variable: `PM_LIFT_STRICT=1`
+    - Makefile target: `pm-lift-strict`
+  - Define the invariant set as an explicit, versioned list (v1 strict):
+    - The strict checker MUST support two contexts:
+      - `--intake <path>` (ADR/intake markdown strict check)
+      - `--feature-dir <pack_dir>` (Planning Pack strict check)
+    - Intake strict invariants (all MUST pass):
+      - `confidence == "high"`
+      - `missing_inputs` is empty
+      - `vector.contract.behavior_deltas == 1`
+      - `estimated_slices <= 3`
+    - Pack strict invariants (all MUST pass):
+      - Pack eligibility: `tasks.json.meta.slice_spec_version >= 2` (otherwise: print “not eligible” and exit 0)
+      - `validate_impact_map.py --emit-json` reports `dir_prefixes == []` (prefix entries are forbidden in strict pack checks)
+      - `python3 docs/project_management/system/scripts/planning/pm_lift.py from-impact-map --feature-dir <pack_dir> --emit-json` succeeds and conforms to CONTRACT-3
+  - Define promotion criteria for enabling strict checks by default (pinned, measurable):
+    - Promotion requires >= 20 calibration runs across >= 10 distinct eligible packs.
+    - Acceptable false-positive rate for strict failures is <= 5% across those runs.
+    - Any exceptions MUST be documented as an explicit allowlist entry (path + rationale) in the strict-mode standard doc.
 - **Acceptance criteria**:
   - Strict mode is clearly described as opt-in and post-calibration.
 
@@ -79,8 +91,12 @@ Checklist:
 - **Implementation notes**:
   - Default behavior:
     - if pack is legacy (`meta.slice_spec_version < 2`): print “not eligible” and exit 0.
-    - if pack is eligible but strict opt-in not set: exit 0 (advisory).
-    - if strict opt-in set: enforce the invariant set selected by a config file or hard-coded minimal list (documented).
+    - if strict opt-in not set (`PM_LIFT_STRICT!=1`): exit 0 (advisory).
+    - if strict opt-in set (`PM_LIFT_STRICT=1`): enforce the v1 strict invariants defined in S3.T1 and fail with exit code `1` if any invariant fails.
+  - Exit codes (pinned):
+    - `0` = pass (or not eligible, by design)
+    - `1` = strict invariant failure
+    - `2` = usage/tooling error (missing args, tool execution failure, non-JSON output)
 - **Acceptance criteria**:
   - No enforcement happens without explicit opt-in.
 

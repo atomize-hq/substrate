@@ -61,5 +61,4 @@
   - What can proceed now:
     - S1 can land without SEAM-1/SEAM-2 being fully complete, as long as it does not hard-code semantics that contradict CONTRACT-1/2 and it keeps validation/scoring conservative (advisory-first).
   - What must wait:
-    - S2/S3 should not claim “steady-state config-backed scoring” until SEAM-2 publishes `work_lift_model.v1.json`, and schema-backed validation until SEAM-1 publishes `work_lift_vector.schema.json`.
-
+    - S2/S3 MUST NOT claim “steady-state config-backed scoring” until SEAM-2 publishes `work_lift_model.v1.json`, and MUST NOT claim schema-backed validation until SEAM-1 publishes `work_lift_vector.schema.json`.

@@ -18,7 +18,12 @@
     - JSON schema for the object.
     - Rubric explaining each field, with examples and “what counts as null/unknown”.
 - **Key invariants / rules**
-  - Numeric count inputs may be represented as `null` to mean “unknown” (discovery-time); scoring must treat `null` as 0, degrade `confidence`, and emit deterministic `missing_inputs:<field>` triggers.
+  - Any numeric Lift Vector field MAY be `null` or omitted to mean “unknown” (discovery-time).
+  - Tools MUST treat missing and `null` equivalently:
+    - score the missing value as `0`,
+    - set `confidence = low`,
+    - include the corresponding `missing_inputs:<json_path>` trigger, and
+    - include the `<json_path>` entry in the `missing_inputs` output array (CONTRACT-3).
   - Schema and rubric must match the canonical Lift Vector fields in `WORKSTREAM_TRIAGE_AND_LIFT_DECISIONS.md` (D6).
 - **Dependencies**
   - Blocks:

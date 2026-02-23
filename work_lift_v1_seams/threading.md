@@ -14,7 +14,7 @@ This file makes coupling explicit: contracts, dependency edges, and conflict-saf
     - `<!-- PM_LIFT_VECTOR:BEGIN -->`
     - `<!-- PM_LIFT_VECTOR:END -->`
   - Within markers, a ` ```json { ... } ``` ` object matching `docs/project_management/system/schemas/work_lift_vector.schema.json`.
-- **Versioning/compat**: schema should be versioned (e.g., `model_version` field) and allow additive evolution; strict validation can be gated by pack strict mode when appropriate.
+- **Versioning/compat**: schema MUST be versioned (via `model_version`) and allow additive evolution; strict validation MUST be opt-in and gated (see SEAM-5 S3).
 
 ### CONTRACT-2 — Lift model config v1
 - **Contract ID**: `CONTRACT-2:work_lift_model_v1`
@@ -27,7 +27,7 @@ This file makes coupling explicit: contracts, dependency edges, and conflict-saf
   - split trigger thresholds,
   - mapping constants (e.g., lift→estimated_slices divisor),
   - confidence rules for missing inputs and directory/prefix tokens.
-- **Versioning/compat**: immutable `v1` file once published; future revisions add new versioned config files and explicit selection rules.
+- **Versioning/compat**: `work_lift_model.v1.json` is immutable once published; future revisions MUST add a new versioned config file and explicit selection rules (no “latest” scanning).
 
 ### CONTRACT-3 — `pm_lift --emit-json` output shape
 - **Contract ID**: `CONTRACT-3:pm_lift_emit_json_v1`
@@ -75,5 +75,4 @@ The work can be parallelized safely with a thin-contract-first approach:
   - verify error messages and JSON output stability,
   - confirm legacy packs are unaffected.
 
-To reduce merge conflicts, WS-A should land first (new files only). WS-C can proceed in parallel with WS-B if it only references the stable `pm_lift` CLI/JSON contract (CONTRACT-3) without requiring implementation details.
-
+To reduce merge conflicts, WS-A MUST land first (new files only). WS-C can proceed in parallel with WS-B only if it references the stable `pm_lift` CLI/JSON contract (CONTRACT-3) without requiring implementation details.

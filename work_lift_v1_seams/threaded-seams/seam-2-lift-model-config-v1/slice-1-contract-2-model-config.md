@@ -29,7 +29,7 @@
     - Config can be read top-to-bottom without needing to infer hidden logic.
   - Downstream verification (owned by SEAM-3): `pm_lift --emit-json` produces expected outputs when driven by the config.
 - **Rollout/safety**:
-  - Bootstrap: tools may fall back to baked-in defaults only when the config file is missing (documented behavior); strict mode requires config presence (gated downstream).
+  - Bootstrap: tools MUST fall back to baked-in defaults only when the config file is missing (documented behavior); strict mode requires config presence (gated downstream).
 
 #### S1.T1 — Define the v1 config structure and invariants
 
@@ -53,12 +53,121 @@
     - mapping constants: numeric constants,
     - confidence degradation: explicit penalties keyed by “missing input”/“prefix token present” signals.
   - Avoid polymorphic rule graphs or embedded expression strings (de-risk “config becomes a programming language”).
+
+##### CONTRACT-2: `work_lift_model.v1.json` concrete shape (v1, normative)
+
+For v1, `docs/project_management/system/schemas/work_lift_model.v1.json` MUST be a single JSON object with this shape:
+
+```json
+{
+  "model_version": 1,
+  "summary": "Short human-readable summary",
+  "sources": {
+    "decision_log": "WORKSTREAM_TRIAGE_AND_LIFT_DECISIONS.md",
+    "scoring": "D7",
+    "split_triggers": "D8",
+    "lift_to_slices": "D9"
+  },
+  "selection": {
+    "supported_model_versions": [1],
+    "default_model_version": 1,
+    "vector_model_version_policy": "require_equal",
+    "unknown_version_behavior": "error"
+  },
+  "weights": {
+    "touch": {
+      "create_files": 3,
+      "edit_files": 2,
+      "delete_files": 1,
+      "deprecate_files": 1,
+      "crates_touched": 4,
+      "boundary_crossings": 3
+    },
+    "contract": {
+      "cli_flags": 3,
+      "config_keys": 3,
+      "exit_codes": 4,
+      "file_formats": 5,
+      "behavior_deltas_blowup": 10
+    },
+    "qa": {
+      "new_test_files": 2,
+      "new_test_cases": 1
+    },
+    "docs": {
+      "new_docs_files": 2
+    },
+    "ops": {
+      "new_smoke_steps": 3,
+      "ci_changes": 3
+    }
+  },
+  "risk_multipliers": {
+    "cross_platform": 1.15,
+    "security_sensitive": 1.2,
+    "concurrency_or_ordering": 1.15,
+    "migration_or_backfill": 1.25
+  },
+  "unknowns_add": {
+    "unknowns_high_multiplier": 2
+  },
+  "rounding": {
+    "score": "ceil"
+  },
+  "estimated_slices": {
+    "divisor": 12,
+    "min": 1,
+    "rounding": "ceil"
+  },
+  "confidence": {
+    "enum": ["high", "low"],
+    "rules": [
+      { "when": "missing_inputs_nonempty", "confidence": "low" },
+      { "when": "touch_set_contains_prefix_entries", "confidence": "low" },
+      { "when": "otherwise", "confidence": "high" }
+    ]
+  },
+  "split_triggers": {
+    "adr_candidate": [
+      { "id": "split_required:behavior_deltas>1", "when": "contract.behavior_deltas > 1" },
+      { "id": "likely_split:crates_touched>2", "when": "touch.crates_touched > 2" },
+      { "id": "likely_split:touch_files_sum>12", "when": "touch.create_files + touch.edit_files + touch.delete_files > 12" },
+      { "id": "likely_split:contract_surface_sum>4", "when": "contract.cli_flags + contract.config_keys + contract.exit_codes + contract.file_formats > 4" },
+      { "id": "likely_split:lift_score>24", "when": "lift_score > 24" },
+      { "id": "split_required:estimated_slices>3", "when": "estimated_slices > 3" }
+    ],
+    "workstream": [
+      { "id": "likely_split:lift_score>60", "when": "lift_score > 60" }
+    ]
+  },
+  "prefix_expansion": {
+    "enabled_by_default": true,
+    "expand_discount": 0.2,
+    "expand_cap": 10
+  }
+}
+```
+
+Interpretation requirements:
+
+- All numeric Lift Vector inputs that are missing or `null` MUST be treated as `0` for scoring and MUST generate missing-input outputs per CONTRACT-1/CONTRACT-3.
+- `behavior_deltas_blowup` MUST apply as: `+ behavior_deltas_blowup * max(0, contract.behavior_deltas - 1)` (D7).
+- `vector_model_version_policy = require_equal` means:
+  - if the input vector includes `model_version`, it MUST equal `selection.default_model_version` for v1 (i.e., `1`);
+  - otherwise the tool resolves the model version to `1`.
+- `unknown_version_behavior = error` means: if a caller selects a model version other than `1` in v1, the tool MUST exit non-zero with actionable stderr (CONTRACT-3 exit code taxonomy).
+
+Prefix expansion math (normative, v1):
+
+- For a single prefix entry, compute `expanded_files` as the number of repo files returned by `git ls-files <prefix>`.
+- The effective contribution of that prefix to lift scoring is:
+  - `min(expanded_files, expand_cap) * expand_discount`
 - **Acceptance criteria**:
   - JSON structure is readable and grouped by concept.
   - No field requires code to interpret precedence ambiguously (ordering or precedence is explicit in JSON).
   - Field names align with `CONTRACT-1` schema keys (no ad-hoc renames).
 - **Test notes**:
-  - JSON parses cleanly; schema validation for the config itself (if desired) can be added later, but v1 should remain simple enough to review manually.
+  - JSON parses cleanly; schema validation for the config itself can be added later, but v1 MUST remain simple enough to review manually.
 - **Risk/rollback notes**:
   - If config structure starts to grow unreviewable, that is a signal to cut scope (move derived logic into SEAM-3 with stable debug outputs) rather than add more config machinery.
 
@@ -116,7 +225,7 @@ Checklist:
     - Contract registry (`CONTRACT-2:work_lift_model_v1`) in `work_lift_v1_seams/threading.md`
   - Outputs:
     - A `selection` section in `work_lift_model.v1.json` that states the intended selection semantics.
-    - (Optional supporting doc in S2) describing how tools should select versions.
+    - (Optional supporting doc in S2) describing how tools select versions.
 - **Implementation notes**:
   - Required semantics:
     - Version is always explicit (either via tool default pin to `1`, or via an explicit CLI flag / input field); never “latest file in directory”.
@@ -138,4 +247,3 @@ Checklist:
   - Confirm alignment with the contract registry and seam brief.
 - Cleanup:
   - Keep language tool-agnostic (don’t hardcode CLI flag names that may change).
-

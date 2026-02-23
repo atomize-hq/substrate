@@ -40,8 +40,8 @@
     - “How to add a Lift Vector block” (markers + fenced JSON)
     - “Field-by-field rubric” grouped by: `touch`, `contract`, `qa`, `docs`, `ops`, `risk`, `notes`
     - “Null / unknown guidance”:
-      - explicitly call out `touch.crates_touched` / `touch.boundary_crossings` as `null`-allowed,
-      - explain that `null` means “unknown” (discovery-time) and should not be replaced with invented precision.
+      - explicitly call out that all numeric fields allow `null` or omission to mean “unknown” (CONTRACT-1),
+      - explain that `null` means “unknown” (discovery-time) and MUST NOT be replaced with invented precision.
     - “Example”:
       - include one end-to-end example block matching the schema (can reuse the D3 example).
     - “Conformance checklist” (from S1.T2)
@@ -79,7 +79,7 @@ Checklist:
     - Rubric “Conformance checklist” verified and updated if needed.
     - A short note in the rubric about how to validate examples (tool-agnostic).
 - **Implementation notes**:
-  - Checklist should include a mechanical comparison:
+  - Checklist MUST include a mechanical comparison:
     - “Rubric field list == schema properties”
     - “Null allowances == schema union types”
     - “Markers == CONTRACT-1 definition”
@@ -100,4 +100,3 @@ Checklist:
   - Confirm no new coupling to other seams’ touch surfaces.
 - Cleanup:
   - None.
-

@@ -53,5 +53,4 @@
   - What can proceed now:
     - All work in this seam can land independently (new files under `docs/project_management/system/schemas/` and optional supporting docs under `docs/project_management/system/standards/shared/`).
   - What must wait:
-    - SEAM-3/SEAM-5 should not rely on the config semantics until S1 (and ideally S2 goldens) land.
-
+    - SEAM-3/SEAM-5 MUST NOT rely on the config semantics until S1 lands. S2 goldens are required before any strict-mode enablement work.

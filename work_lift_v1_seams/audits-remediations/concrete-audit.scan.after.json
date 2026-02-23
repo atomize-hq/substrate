@@ -1,0 +1,202 @@
+{
+  "meta": {
+    "paths": [
+      "work_lift_v1_seams"
+    ],
+    "extensions": [
+      ".md"
+    ],
+    "files_scanned": [
+      "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/README.md",
+      "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/scope_brief.md",
+      "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/seam-1-lift-vector-schema-and-rubric.md",
+      "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/seam-2-lift-model-config-v1.md",
+      "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/seam-3-pm-lift-core-engine.md",
+      "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/seam-4-pack-derived-lift-inputs.md",
+      "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/seam-5-advisory-workflow-integration.md",
+      "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/seam_map.md",
+      "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/README.md",
+      "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-1-lift-vector-schema-and-rubric/seam.md",
+      "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-1-lift-vector-schema-and-rubric/slice-1-contract-1-schema.md",
+      "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-1-lift-vector-schema-and-rubric/slice-2-human-rubric-and-conformance.md",
+      "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-2-lift-model-config-v1/seam.md",
+      "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-2-lift-model-config-v1/slice-1-contract-2-model-config.md",
+      "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-2-lift-model-config-v1/slice-2-goldens-and-conformance.md",
+      "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-3-pm-lift-core-engine/seam.md",
+      "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-3-pm-lift-core-engine/slice-1-contract-3-emit-json.md",
+      "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-3-pm-lift-core-engine/slice-2-config-backed-scoring-and-validation.md",
+      "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-3-pm-lift-core-engine/slice-3-goldens-and-conformance.md",
+      "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-4-pack-derived-lift-inputs/seam.md",
+      "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-4-pack-derived-lift-inputs/slice-1-contract-4-impact-map-emit-json.md",
+      "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-4-pack-derived-lift-inputs/slice-2-prefix-expansion-and-derived-counts.md",
+      "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-5-advisory-workflow-integration/seam.md",
+      "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-5-advisory-workflow-integration/slice-1-advisory-workflow-docs-and-make-targets.md",
+      "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-5-advisory-workflow-integration/slice-2-advisory-report-hook-and-lint-integration.md",
+      "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-5-advisory-workflow-integration/slice-3-strict-mode-onramp-plan.md",
+      "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threading.md"
+    ],
+    "match_count": 20
+  },
+  "matches": [
+    {
+      "file_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/scope_brief.md",
+      "line": 39,
+      "col": 76,
+      "kind": "hedge",
+      "text": "may",
+      "line_text": "- `pm_lift.py` is the initial reference implementation; future refactors may split core logic into a library module without changing public CLI output contracts."
+    },
+    {
+      "file_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/seam-1-lift-vector-schema-and-rubric.md",
+      "line": 21,
+      "col": 35,
+      "kind": "hedge",
+      "text": "MAY",
+      "line_text": "- Any numeric Lift Vector field MAY be `null` or omitted to mean “unknown” (discovery-time)."
+    },
+    {
+      "file_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/seam-2-lift-model-config-v1.md",
+      "line": 36,
+      "col": 172,
+      "kind": "hedge",
+      "text": "may",
+      "line_text": "- A “golden cases” artifact (vector + expected outputs) owned by SEAM-2 S2 (see `threaded-seams/seam-2-lift-model-config-v1/slice-2-goldens-and-conformance.md`); SEAM-1 may later choose to embed a subset into the human rubric, but SEAM-2 does not edit the rubric directly."
+    },
+    {
+      "file_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/seam-2-lift-model-config-v1.md",
+      "line": 39,
+      "col": 27,
+      "kind": "vague_quantity",
+      "text": "minimal",
+      "line_text": "- De-risk plan: keep v1 minimal (weights + thresholds + multipliers); reserve derived rules for code with explicit documentation and stable outputs."
+    },
+    {
+      "file_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/seam-5-advisory-workflow-integration.md",
+      "line": 51,
+      "col": 52,
+      "kind": "hedge",
+      "text": "might",
+      "line_text": "- Risk: if lift becomes “the only number”, teams might overfit to the score rather than use it as a trigger signal."
+    },
+    {
+      "file_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-2-lift-model-config-v1/slice-1-contract-2-model-config.md",
+      "line": 249,
+      "col": 69,
+      "kind": "hedge",
+      "text": "may",
+      "line_text": "- Keep language tool-agnostic (don’t hardcode CLI flag names that may change)."
+    },
+    {
+      "file_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-2-lift-model-config-v1/slice-2-goldens-and-conformance.md",
+      "line": 13,
+      "col": 9,
+      "kind": "vague_quantity",
+      "text": "minimal",
+      "line_text": "- a minimal Lift Vector (v1),"
+    },
+    {
+      "file_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-2-lift-model-config-v1/slice-2-goldens-and-conformance.md",
+      "line": 53,
+      "col": 47,
+      "kind": "vague_quantity",
+      "text": "approximately",
+      "line_text": "- Expected outputs are fully specified (no “approximately”)."
+    },
+    {
+      "file_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-3-pm-lift-core-engine/slice-1-contract-3-emit-json.md",
+      "line": 29,
+      "col": 41,
+      "kind": "vague_quantity",
+      "text": "minimal",
+      "line_text": "- Add a contract conformance test (or minimal fixture + assertion) that checks key presence/types and stable ordering behavior."
+    },
+    {
+      "file_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-3-pm-lift-core-engine/slice-1-contract-3-emit-json.md",
+      "line": 147,
+      "col": 20,
+      "kind": "vague_quantity",
+      "text": "minimal",
+      "line_text": "#### S1.T3 — Add a minimal contract conformance test for CONTRACT-3"
+    },
+    {
+      "file_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-3-pm-lift-core-engine/slice-1-contract-3-emit-json.md",
+      "line": 153,
+      "col": 9,
+      "kind": "vague_quantity",
+      "text": "minimal",
+      "line_text": "- A minimal fixture input (either a tiny markdown with a Lift Vector block, or a mocked `from-git-diff` call)"
+    },
+    {
+      "file_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-3-pm-lift-core-engine/slice-1-contract-3-emit-json.md",
+      "line": 176,
+      "col": 22,
+      "kind": "vague_quantity",
+      "text": "minimal",
+      "line_text": "- Keep the fixture minimal and human-readable."
+    },
+    {
+      "file_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-3-pm-lift-core-engine/slice-2-config-backed-scoring-and-validation.md",
+      "line": 94,
+      "col": 72,
+      "kind": "vague_quantity",
+      "text": "minimal",
+      "line_text": "- If adding a dependency like `jsonschema` is undesirable, implement minimal validation for required fields/types aligned with CONTRACT-1 (but do not diverge from schema semantics)."
+    },
+    {
+      "file_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-3-pm-lift-core-engine/slice-3-goldens-and-conformance.md",
+      "line": 95,
+      "col": 16,
+      "kind": "vague_quantity",
+      "text": "minimal",
+      "line_text": "- Keep stubs minimal and localized to tests."
+    },
+    {
+      "file_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-4-pack-derived-lift-inputs/slice-1-contract-4-impact-map-emit-json.md",
+      "line": 141,
+      "col": 7,
+      "kind": "vague_quantity",
+      "text": "Minimal",
+      "line_text": "- Minimal fixture pack(s) with `tasks.json` + `impact_map.md`"
+    },
+    {
+      "file_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-4-pack-derived-lift-inputs/slice-1-contract-4-impact-map-emit-json.md",
+      "line": 162,
+      "col": 19,
+      "kind": "vague_quantity",
+      "text": "minimal",
+      "line_text": "- Keep fixtures minimal and readable."
+    },
+    {
+      "file_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-4-pack-derived-lift-inputs/slice-2-prefix-expansion-and-derived-counts.md",
+      "line": 78,
+      "col": 50,
+      "kind": "hedge",
+      "text": "may",
+      "line_text": "- This helper is a seam-owned artifact; SEAM-3 may choose to import it for `pm_lift from-impact-map` wiring."
+    },
+    {
+      "file_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-4-pack-derived-lift-inputs/slice-2-prefix-expansion-and-derived-counts.md",
+      "line": 89,
+      "col": 47,
+      "kind": "vague_quantity",
+      "text": "minimal",
+      "line_text": "- Keep public function signature stable and minimal."
+    },
+    {
+      "file_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-4-pack-derived-lift-inputs/slice-2-prefix-expansion-and-derived-counts.md",
+      "line": 115,
+      "col": 19,
+      "kind": "vague_quantity",
+      "text": "minimal",
+      "line_text": "- Keep fixtures minimal; avoid “giant” expansion lists (use counts)."
+    },
+    {
+      "file_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/work_lift_v1_seams/threaded-seams/seam-5-advisory-workflow-integration/slice-1-advisory-workflow-docs-and-make-targets.md",
+      "line": 97,
+      "col": 18,
+      "kind": "vague_quantity",
+      "text": "minimal",
+      "line_text": "- **Outcome**: A minimal tutorial that proves the workflow is coherent."
+    }
+  ]
+}

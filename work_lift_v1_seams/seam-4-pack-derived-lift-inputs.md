@@ -7,8 +7,11 @@
   - In:
     - Derive Touch Set counts from `impact_map.md` using `validate_impact_map.py --emit-json`.
     - Count directory/prefix tokens as 1 in raw counts (for the vector).
-    - Optionally expand prefixes deterministically from the repo file list (e.g., `git ls-files <prefix>`) for *lift estimation only*, discounted and capped per prefix entry.
-    - Degrade confidence when prefix entries are present (since expansion reflects current HEAD).
+    - Expand prefixes deterministically from the repo file list using `git ls-files <prefix>` for *lift estimation only* (no artifact rewrites):
+      - Expansion is enabled by default for `pm_lift.py from-impact-map`.
+      - Expansion is repo-root-relative and prefix tokens MUST end with `/`.
+      - If `git ls-files` fails for a prefix, the expansion for that prefix is treated as empty (0 matches) and scoring proceeds using explicit tokens only.
+    - Degrade confidence when prefix entries are present (because expansion reflects current `HEAD`).
   - Out:
     - Editing/reformatting `impact_map.md` or rewriting Touch Sets.
     - Attempting to “predict” future files beyond current repo state.
@@ -50,4 +53,3 @@
   - De-risk plan: ensure diagnostics are surfaced in `--emit-json` so reviewers can see the influence.
 - **Rollout / safety**
   - Advisory-only; do not tie prefix expansion to enforcement until calibrated and explicitly approved.
-

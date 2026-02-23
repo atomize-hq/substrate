@@ -28,7 +28,55 @@
     - ordering/determinism (sorted arrays) is stable,
     - legacy mode returns the same shape with empty arrays.
 - **Rollout/safety**:
-  - Advisory-first: this contract is an internal interface for tooling; it should not introduce new enforcement behavior on its own.
+  - Advisory-first: this contract is an internal interface for tooling; it MUST NOT introduce new enforcement behavior on its own.
+
+##### CONTRACT-4: `validate_impact_map.py --emit-json` concrete contract (v1, normative)
+
+When invoked with `--emit-json`, `docs/project_management/system/scripts/planning/validate_impact_map.py` MUST:
+
+- write **JSON only** to stdout,
+- write nothing to stdout on any non-zero exit,
+- write warnings/errors to stderr,
+- exit `0` on success,
+- exit `1` on validation failure,
+- exit `2` on usage errors (missing/invalid args, invalid/missing `tasks.json`, invalid JSON).
+
+The stdout JSON MUST be a single object with these required keys (always present, even in legacy mode):
+
+```json
+{
+  "create": "array<string> (sorted asc, unique)",
+  "edit": "array<string> (sorted asc, unique)",
+  "deprecate": "array<string> (sorted asc, unique)",
+  "delete": "array<string> (sorted asc, unique)",
+  "dir_prefixes": "array<string> (sorted asc, unique; each ends with \"/\")"
+}
+```
+
+Token semantics (strict mode):
+
+- Every token is a repo-root-relative path token (relative to `git rev-parse --show-toplevel`).
+- Normalization MUST remove any leading `./` segments until none remain.
+- Tokens MUST NOT contain:
+  - `..` path segments,
+  - absolute paths (`/…`),
+  - home-relative paths (`~…`),
+  - drive-letter paths (`C:…`),
+  - backslashes (`\\`),
+  - double slashes (`//`),
+  - glob characters (`* ? [ ] { }`).
+- Directory allowlist entries MUST end with `/`.
+
+Mode gating:
+
+- `--mode` is one of `strict|legacy`.
+- Without `--mode`, the tool derives mode from `tasks.json` under `--feature-dir`:
+  - strict iff `tasks.json.meta.slice_spec_version >= 2`
+  - legacy otherwise
+
+Legacy mode contract:
+
+- If mode is legacy and `--emit-json` is set, stdout MUST still be JSON-only and MUST have the full key set above, with all arrays empty (including `dir_prefixes`).
 
 #### S1.T1 — Write the CONTRACT-4 specification (keys, semantics, evolution)
 
@@ -125,7 +173,7 @@ Checklist:
     - Updated standard doc section describing:
       - directory tokens must end with `/`,
       - they count as 1 in raw counts,
-      - they may be expanded deterministically for lift estimation only,
+      - prefix tokens are expanded deterministically for lift estimation only (per SEAM-4; no rewrites),
       - confidence is degraded when prefixes are present.
 - **Acceptance criteria**:
   - Standard doc aligns with both validator behavior and lift semantics (no contradictions).
@@ -137,4 +185,3 @@ Checklist:
   - Cross-check language matches CONTRACT-4 and SEAM-4 invariants.
 - Cleanup:
   - Keep it advisory-first; avoid enforcement language unless it already exists.
-

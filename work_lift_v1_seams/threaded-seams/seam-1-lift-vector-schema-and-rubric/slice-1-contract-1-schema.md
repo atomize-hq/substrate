@@ -29,10 +29,57 @@
   - Output: `docs/project_management/system/schemas/work_lift_vector.schema.json`
 - **Implementation notes**:
   - Required top-level keys (v1): `touch`, `contract`, `qa`, `docs`, `ops`, `risk`, `notes`.
-  - `model_version` is optional; if missing, consumers/tools default to `1` (and should emit the resolved `model_version` in machine outputs).
+  - `model_version` is optional; if missing, consumers/tools default to `1` (and MUST emit the resolved `model_version` in machine outputs).
   - Use `minimum: 0` for count fields where meaningful.
-  - Allow discovery-time unknowns by using `integer | null` for numeric count fields; `null` means “unknown” and must be treated as 0 for scoring while degrading confidence and emitting `missing_inputs:<field>`.
-  - Keep additional fields additive-friendly (avoid schema patterns that would break when new optional keys appear).
+  - Allow discovery-time unknowns by using `integer | null` for numeric count fields; missing and `null` both mean “unknown”.
+  - Tools MUST treat missing/`null` as `0` for scoring while:
+    - setting `confidence = low`, and
+    - emitting `missing_inputs:<json_path>` triggers (and `missing_inputs` array entries) per CONTRACT-3.
+  - Schema policy for unknown keys:
+    - For Lift Vector v1, schema validation MUST reject unknown keys (`additionalProperties: false`) at the root and inside each section object.
+    - Additive evolution happens by publishing a new schema version that adds new optional keys; old vectors continue to validate because the new keys are optional.
+
+##### Contract-1 field inventory (v1, normative)
+
+The schema MUST define exactly these JSON paths (and no others) for v1:
+
+- Root
+  - `model_version` (integer, optional; if present MUST equal `1`)
+  - `touch` (object, required; `additionalProperties: false`)
+    - `create_files` (integer|null; minimum 0 when integer)
+    - `edit_files` (integer|null; minimum 0 when integer)
+    - `delete_files` (integer|null; minimum 0 when integer)
+    - `deprecate_files` (integer|null; minimum 0 when integer)
+    - `crates_touched` (integer|null; minimum 0 when integer)
+    - `boundary_crossings` (integer|null; minimum 0 when integer)
+  - `contract` (object, required; `additionalProperties: false`)
+    - `cli_flags` (integer|null; minimum 0 when integer)
+    - `config_keys` (integer|null; minimum 0 when integer)
+    - `exit_codes` (integer|null; minimum 0 when integer)
+    - `file_formats` (integer|null; minimum 0 when integer)
+    - `behavior_deltas` (integer|null; minimum 1 when integer)
+  - `qa` (object, required; `additionalProperties: false`)
+    - `new_test_files` (integer|null; minimum 0 when integer)
+    - `new_test_cases` (integer|null; minimum 0 when integer)
+  - `docs` (object, required; `additionalProperties: false`)
+    - `new_docs_files` (integer|null; minimum 0 when integer)
+  - `ops` (object, required; `additionalProperties: false`)
+    - `new_smoke_steps` (integer|null; minimum 0 when integer)
+    - `ci_changes` (integer|null; minimum 0 when integer)
+  - `risk` (object, required; `additionalProperties: false`)
+    - `cross_platform` (boolean; default `false` if omitted by producer tooling)
+    - `security_sensitive` (boolean; default `false` if omitted by producer tooling)
+    - `concurrency_or_ordering` (boolean; default `false` if omitted by producer tooling)
+    - `migration_or_backfill` (boolean; default `false` if omitted by producer tooling)
+    - `unknowns_high` (integer|null; minimum 0 when integer)
+  - `notes` (string; can be empty)
+
+##### Missing-input trigger naming (v1, normative)
+
+When a numeric value is missing or `null`, the tool MUST:
+
+- append `<json_path>` (e.g., `touch.crates_touched`) to the `missing_inputs` array, and
+- append `missing_inputs:<json_path>` (e.g., `missing_inputs:touch.crates_touched`) to the `triggers` array (CONTRACT-3).
 - **Acceptance criteria**:
   - Schema property names/types match D6.
   - Null allowances match D6.
@@ -40,7 +87,7 @@
 - **Test notes**:
   - Validate against the D3 sample and at least one “fully specified” example.
 - **Risk/rollback notes**:
-  - If strict validation becomes too brittle early, consumers can gate validation by strict mode; schema should still be correct and well-described.
+  - If schema-backed validation needs gating, consumers MUST gate it behind an explicit strict-mode opt-in and MUST still enforce marker+JSON parsing and section type checks.
 
 Checklist:
 - Implement:
@@ -70,7 +117,7 @@ Checklist:
 - **Acceptance criteria**:
   - Checklist exists and is copy/paste-verifiable during PR review.
 - **Test notes**:
-  - N/A (documentation-only), but checklist should be verified against the schema once.
+  - N/A (documentation-only), but checklist MUST be verified against the schema once.
 - **Risk/rollback notes**:
   - None.
 

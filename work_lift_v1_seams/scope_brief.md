@@ -3,7 +3,7 @@
 - **Goal (1 sentence)**: Materialize Work Lift v1 as a deterministic, advisory-first sizing/splitting signal that can be computed from intake/ADR markdown and Planning Pack artifacts.
 - **Why now**: Current workstream triage needs a stable “time-free” proxy for complexity to drive splitting decisions (ADR vs workstream) and map to execution primitives (slices/checkpoints) without inventing time estimates.
 - **Primary user(s) + JTBD**:
-  - PM / planning owners: quickly assess whether an ADR candidate should be split and roughly how many slices/checkpoints it implies.
+  - PM / planning owners: assess whether an ADR candidate requires splitting and compute an estimated slice count using the v1 mapping (`WORKSTREAM_TRIAGE_AND_LIFT_DECISIONS.md` D8–D9).
   - Agents: fill a structured lift vector in intake/ADR; compute lift deterministically from Planning Packs.
 - **In-scope**:
   - Define v1 artifacts under `docs/project_management/system/*`:
