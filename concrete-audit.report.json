@@ -1,0 +1,575 @@
+{
+  "meta": {
+    "generated_at": "2026-02-22T21:00:58-05:00",
+    "repo_root": ".",
+    "git_commit": "65f8f54ae83a0fcb99a31bf6527dfc6324b9a8c4",
+    "audited_files": [
+      "work_lift_v1_seams/README.md",
+      "work_lift_v1_seams/scope_brief.md",
+      "work_lift_v1_seams/seam-1-lift-vector-schema-and-rubric.md",
+      "work_lift_v1_seams/seam-2-lift-model-config-v1.md",
+      "work_lift_v1_seams/seam-3-pm-lift-core-engine.md",
+      "work_lift_v1_seams/seam-4-pack-derived-lift-inputs.md",
+      "work_lift_v1_seams/seam-5-advisory-workflow-integration.md",
+      "work_lift_v1_seams/seam_map.md",
+      "work_lift_v1_seams/threaded-seams/README.md",
+      "work_lift_v1_seams/threaded-seams/seam-1-lift-vector-schema-and-rubric/seam.md",
+      "work_lift_v1_seams/threaded-seams/seam-1-lift-vector-schema-and-rubric/slice-1-contract-1-schema.md",
+      "work_lift_v1_seams/threaded-seams/seam-1-lift-vector-schema-and-rubric/slice-2-human-rubric-and-conformance.md",
+      "work_lift_v1_seams/threaded-seams/seam-2-lift-model-config-v1/seam.md",
+      "work_lift_v1_seams/threaded-seams/seam-2-lift-model-config-v1/slice-1-contract-2-model-config.md",
+      "work_lift_v1_seams/threaded-seams/seam-2-lift-model-config-v1/slice-2-goldens-and-conformance.md",
+      "work_lift_v1_seams/threaded-seams/seam-3-pm-lift-core-engine/seam.md",
+      "work_lift_v1_seams/threaded-seams/seam-3-pm-lift-core-engine/slice-1-contract-3-emit-json.md",
+      "work_lift_v1_seams/threaded-seams/seam-3-pm-lift-core-engine/slice-2-config-backed-scoring-and-validation.md",
+      "work_lift_v1_seams/threaded-seams/seam-3-pm-lift-core-engine/slice-3-goldens-and-conformance.md",
+      "work_lift_v1_seams/threaded-seams/seam-4-pack-derived-lift-inputs/seam.md",
+      "work_lift_v1_seams/threaded-seams/seam-4-pack-derived-lift-inputs/slice-1-contract-4-impact-map-emit-json.md",
+      "work_lift_v1_seams/threaded-seams/seam-4-pack-derived-lift-inputs/slice-2-prefix-expansion-and-derived-counts.md",
+      "work_lift_v1_seams/threaded-seams/seam-5-advisory-workflow-integration/seam.md",
+      "work_lift_v1_seams/threaded-seams/seam-5-advisory-workflow-integration/slice-1-advisory-workflow-docs-and-make-targets.md",
+      "work_lift_v1_seams/threaded-seams/seam-5-advisory-workflow-integration/slice-2-advisory-report-hook-and-lint-integration.md",
+      "work_lift_v1_seams/threaded-seams/seam-5-advisory-workflow-integration/slice-3-strict-mode-onramp-plan.md",
+      "work_lift_v1_seams/threading.md"
+    ],
+    "definition_of_concrete": "Concrete means implementable without assumptions: explicit schemas, inputs/outputs, error/exit behavior, deterministic defaults, and pinned deliverables."
+  },
+  "issues": [
+    {
+      "id": "CA-0001",
+      "severity": "blocker",
+      "category": "ownership",
+      "title": "Unclear which documents are normative vs planning aids",
+      "file_path": "work_lift_v1_seams/README.md",
+      "location": {
+        "start_line": 5,
+        "end_line": 7
+      },
+      "excerpt": "These files are planning aids; they are not normative contracts (authoritative contracts remain in the PM system docs + schemas).",
+      "problem": "Implementers cannot tell which statements in this directory are binding contracts vs non-authoritative guidance, and the referenced “PM system docs + schemas” are not concretely identified.",
+      "required_to_be_concrete": [
+        "Name the authoritative source(s) of truth for each CONTRACT-* (exact repo path(s) and expected stable identifiers/anchors).",
+        "State whether `work_lift_v1_seams/threading.md` is itself normative for CONTRACT-* semantics or only a pointer/registry.",
+        "If threaded slices are the “canonical execution plan”, specify what parts are normative (deliverable paths, CLI contracts, schema contracts) vs advisory."
+      ],
+      "suggested_evidence_order": [
+        "codebase",
+        "docs",
+        "external",
+        "decision"
+      ],
+      "cross_references": [
+        {
+          "file_path": "work_lift_v1_seams/README.md",
+          "location": {
+            "start_line": 20,
+            "end_line": 22
+          }
+        }
+      ]
+    },
+    {
+      "id": "CA-0002",
+      "severity": "blocker",
+      "category": "contract",
+      "title": "CONTRACT-2 model config: JSON shape and version selection are not concretely specified",
+      "file_path": "work_lift_v1_seams/threaded-seams/seam-2-lift-model-config-v1/slice-1-contract-2-model-config.md",
+      "location": {
+        "start_line": 34,
+        "end_line": 55
+      },
+      "excerpt": "Keep v1 rules to tables/constants only: weights, multipliers, triggers, mapping constants, confidence degradation.",
+      "problem": "The docs describe what the config “contains” but do not pin the exact JSON structure, key names, precedence rules, or the deterministic algorithm for selecting a version (v1 vs v2). This leaves core scoring behavior under-specified.",
+      "required_to_be_concrete": [
+        "Specify the exact JSON object structure for `work_lift_model.v1.json` (all required keys, types, and nested shapes).",
+        "Define precedence/ordering rules for applying weights → multipliers → triggers → mapping → confidence (including ties and rounding).",
+        "Define the version-selection algorithm as an ordered precedence list (e.g., CLI flag vs vector `model_version` vs default pin), including what happens when inputs disagree.",
+        "Define the behavior when the requested model version is unavailable (error vs fallback), including exit code and stderr requirements."
+      ],
+      "suggested_evidence_order": [
+        "codebase",
+        "docs",
+        "external",
+        "decision"
+      ],
+      "cross_references": [
+        {
+          "file_path": "work_lift_v1_seams/threading.md",
+          "location": {
+            "start_line": 19,
+            "end_line": 30
+          }
+        },
+        {
+          "file_path": "work_lift_v1_seams/threaded-seams/seam-2-lift-model-config-v1/slice-1-contract-2-model-config.md",
+          "location": {
+            "start_line": 111,
+            "end_line": 140
+          }
+        }
+      ]
+    },
+    {
+      "id": "CA-0003",
+      "severity": "blocker",
+      "category": "contract",
+      "title": "CONTRACT-3 `--emit-json`: missing concrete schema (types/enums/order/error model)",
+      "file_path": "work_lift_v1_seams/threaded-seams/seam-3-pm-lift-core-engine/slice-1-contract-3-emit-json.md",
+      "location": {
+        "start_line": 13,
+        "end_line": 24
+      },
+      "excerpt": "`pm_lift.py ... --emit-json` emits a JSON object with stable keys: `model_version`, `lift_score`, `estimated_slices`, `confidence`, `triggers`, `missing_inputs`, `vector`, `derived`.",
+      "problem": "The contract lists keys and some qualitative expectations, but it does not define a complete machine contract: exact types, allowed enum values, deterministic ordering rules, stable trigger string formats, which `derived` keys are stable vs debug-only, and whether errors ever emit JSON.",
+      "required_to_be_concrete": [
+        "Define each required key’s JSON type (e.g., integer vs number, string enum values, object shapes).",
+        "Define the full allowed value set for `confidence` (no “e.g.”) and the deterministic mapping from inputs → confidence.",
+        "Define the stable format and allowed value set for `triggers` and `missing_inputs` (including ordering/sort rules).",
+        "Define whether `--emit-json` emits JSON on error; if not, require stdout empty and specify exit codes per error class.",
+        "Define which `derived` fields are stable contract fields vs “best-effort debug” (and how consumers should treat them)."
+      ],
+      "suggested_evidence_order": [
+        "codebase",
+        "docs",
+        "external",
+        "decision"
+      ],
+      "cross_references": [
+        {
+          "file_path": "work_lift_v1_seams/threading.md",
+          "location": {
+            "start_line": 32,
+            "end_line": 42
+          }
+        },
+        {
+          "file_path": "work_lift_v1_seams/threaded-seams/seam-3-pm-lift-core-engine/slice-1-contract-3-emit-json.md",
+          "location": {
+            "start_line": 35,
+            "end_line": 50
+          }
+        }
+      ]
+    },
+    {
+      "id": "CA-0004",
+      "severity": "blocker",
+      "category": "contract",
+      "title": "CONTRACT-4 `validate_impact_map.py --emit-json`: base path + normalization + `dir_prefixes` semantics not fully specified",
+      "file_path": "work_lift_v1_seams/threaded-seams/seam-4-pack-derived-lift-inputs/slice-1-contract-4-impact-map-emit-json.md",
+      "location": {
+        "start_line": 13,
+        "end_line": 20
+      },
+      "excerpt": "CONTRACT-4 ... `create/edit/deprecate/delete`: arrays of normalized path tokens ... `dir_prefixes`: array of directory-prefix tokens ...",
+      "problem": "The contract names fields but does not define critical semantics needed for deterministic consumption: what paths are relative to (repo root vs pack root), path separator/case rules, deduplication expectations, and the exact derivation rules for `dir_prefixes`.",
+      "required_to_be_concrete": [
+        "Define the path base and normalization rules precisely (relative root, allowed separators, case-sensitivity expectations, and canonicalization).",
+        "Specify whether allowlist arrays may contain duplicates and whether producers must de-duplicate.",
+        "Specify the exact algorithm for deriving `dir_prefixes` (dedupe rules, ordering, and relationship to per-action lists).",
+        "Define strict vs legacy behavior in terms of exit codes and stderr messaging (not only “empty arrays”)."
+      ],
+      "suggested_evidence_order": [
+        "codebase",
+        "docs",
+        "external",
+        "decision"
+      ],
+      "cross_references": [
+        {
+          "file_path": "work_lift_v1_seams/threaded-seams/seam-4-pack-derived-lift-inputs/slice-1-contract-4-impact-map-emit-json.md",
+          "location": {
+            "start_line": 40,
+            "end_line": 49
+          }
+        },
+        {
+          "file_path": "work_lift_v1_seams/threading.md",
+          "location": {
+            "start_line": 44,
+            "end_line": 50
+          }
+        }
+      ]
+    },
+    {
+      "id": "CA-0005",
+      "severity": "blocker",
+      "category": "contract",
+      "title": "`pm_lift.py` CLI surface is not pinned (positional vs flags, subcommand signatures)",
+      "file_path": "work_lift_v1_seams/threaded-seams/seam-5-advisory-workflow-integration/slice-1-advisory-workflow-docs-and-make-targets.md",
+      "location": {
+        "start_line": 50,
+        "end_line": 53
+      },
+      "excerpt": "Include three “how to run” recipes: `pm_lift.py from-intake <path>` ... `pm_lift.py from-impact-map <pack_dir>` ...",
+      "problem": "Docs and slices reference `pm_lift.py` usage with inconsistent argument styles, leaving the CLI contract ambiguous (subcommand names, required flags, positional parameters, and where `--emit-json` is supported). This blocks writing stable docs, Makefile targets, and tests.",
+      "required_to_be_concrete": [
+        "Specify the canonical `pm_lift.py` CLI syntax for each subcommand (command name, required/optional flags, positional args, defaults).",
+        "Define how `--emit-json` composes with each subcommand (supported everywhere vs specific modes).",
+        "Define stable exit codes per subcommand and error class (consistent across modes)."
+      ],
+      "suggested_evidence_order": [
+        "codebase",
+        "docs",
+        "external",
+        "decision"
+      ],
+      "cross_references": [
+        {
+          "file_path": "work_lift_v1_seams/threaded-seams/seam-3-pm-lift-core-engine/slice-1-contract-3-emit-json.md",
+          "location": {
+            "start_line": 29,
+            "end_line": 31
+          }
+        }
+      ]
+    },
+    {
+      "id": "CA-0006",
+      "severity": "critical",
+      "category": "schema",
+      "title": "CONTRACT-1 schema requirements do not enumerate the v1 field set or per-field required/null rules",
+      "file_path": "work_lift_v1_seams/threaded-seams/seam-1-lift-vector-schema-and-rubric/slice-1-contract-1-schema.md",
+      "location": {
+        "start_line": 31,
+        "end_line": 39
+      },
+      "excerpt": "Schema property names/types match D6. Null allowances match D6.",
+      "problem": "The slice relies on an external “D6” field list but does not restate the field set or null allowances in a local, reviewable form. It also calls for “additive-friendly” evolution without specifying whether unknown keys are allowed or rejected in v1 validation.",
+      "required_to_be_concrete": [
+        "List all v1 fields (full JSON paths) that the schema must define, including which are required vs optional.",
+        "For each numeric field, specify whether `null` is allowed and whether omission is allowed (and if so, how it differs from `null`).",
+        "Define the v1 policy for unknown/additive fields (e.g., `additionalProperties` behavior) and how versioning gates stricter validation.",
+        "Define the stable trigger naming convention for missing inputs (`missing_inputs:*`) using explicit JSON paths."
+      ],
+      "suggested_evidence_order": [
+        "codebase",
+        "docs",
+        "external",
+        "decision"
+      ],
+      "cross_references": [
+        {
+          "file_path": "work_lift_v1_seams/seam-1-lift-vector-schema-and-rubric.md",
+          "location": {
+            "start_line": 20,
+            "end_line": 22
+          }
+        },
+        {
+          "file_path": "work_lift_v1_seams/threading.md",
+          "location": {
+            "start_line": 7,
+            "end_line": 18
+          }
+        }
+      ]
+    },
+    {
+      "id": "CA-0007",
+      "severity": "critical",
+      "category": "consistency",
+      "title": "Null semantics for Lift Vector counts are stated inconsistently (“numeric count inputs” vs specific fields)",
+      "file_path": "work_lift_v1_seams/seam-1-lift-vector-schema-and-rubric.md",
+      "location": {
+        "start_line": 20,
+        "end_line": 22
+      },
+      "excerpt": "Numeric count inputs may be represented as `null` to mean “unknown” (discovery-time)...",
+      "problem": "Some docs imply any numeric count may be `null`, while other parts of the plan single out specific fields (e.g., `touch.crates_touched` / `touch.boundary_crossings`). Without a per-field rule set, schema validation and scoring behavior will diverge.",
+      "required_to_be_concrete": [
+        "State exactly which Lift Vector fields allow `null` in v1 (by full JSON path).",
+        "State whether other numeric fields are required to be present and non-null, and what failure mode applies if they are missing/null.",
+        "State whether `null` and missing are treated equivalently or differently for scoring/triggers/confidence."
+      ],
+      "suggested_evidence_order": [
+        "codebase",
+        "docs",
+        "external",
+        "decision"
+      ],
+      "cross_references": [
+        {
+          "file_path": "work_lift_v1_seams/threaded-seams/seam-1-lift-vector-schema-and-rubric/seam.md",
+          "location": {
+            "start_line": 21,
+            "end_line": 26
+          }
+        },
+        {
+          "file_path": "work_lift_v1_seams/threaded-seams/seam-1-lift-vector-schema-and-rubric/slice-1-contract-1-schema.md",
+          "location": {
+            "start_line": 33,
+            "end_line": 35
+          }
+        }
+      ]
+    },
+    {
+      "id": "CA-0008",
+      "severity": "critical",
+      "category": "behavior",
+      "title": "Behavior when schema/config artifacts are missing is not concretely defined (advisory vs strict)",
+      "file_path": "work_lift_v1_seams/threaded-seams/seam-3-pm-lift-core-engine/slice-2-config-backed-scoring-and-validation.md",
+      "location": {
+        "start_line": 37,
+        "end_line": 39
+      },
+      "excerpt": "if config/schema missing, fail with actionable guidance in strict modes; otherwise fall back conservatively (documented).",
+      "problem": "Multiple files mention bootstrap fallbacks and strict-mode gating, but none define the exact runtime conditions (what is “strict mode” for the tool), the specific fallback behavior, or the exit-code/stderr contract for missing schema/config.",
+      "required_to_be_concrete": [
+        "Define how `pm_lift.py` determines whether it is in advisory vs strict mode (exact flag/env/config source).",
+        "Define behavior when config is missing in advisory mode (warn vs error), including deterministic stderr text elements and exit code.",
+        "Define behavior when schema is missing (and whether structural validation is allowed), including exit codes and how `--emit-json` behaves on these failures."
+      ],
+      "suggested_evidence_order": [
+        "codebase",
+        "docs",
+        "external",
+        "decision"
+      ],
+      "cross_references": [
+        {
+          "file_path": "work_lift_v1_seams/seam-2-lift-model-config-v1.md",
+          "location": {
+            "start_line": 40,
+            "end_line": 41
+          }
+        },
+        {
+          "file_path": "work_lift_v1_seams/threaded-seams/seam-2-lift-model-config-v1/slice-1-contract-2-model-config.md",
+          "location": {
+            "start_line": 31,
+            "end_line": 32
+          }
+        }
+      ]
+    },
+    {
+      "id": "CA-0009",
+      "severity": "critical",
+      "category": "operational",
+      "title": "Prefix expansion is “optional” but lacks a default, determinism boundary, and failure-mode contract",
+      "file_path": "work_lift_v1_seams/seam-4-pack-derived-lift-inputs.md",
+      "location": {
+        "start_line": 8,
+        "end_line": 11
+      },
+      "excerpt": "Optionally expand prefixes deterministically from the repo file list (e.g., `git ls-files <prefix>`) ... Degrade confidence when prefix entries are present...",
+      "problem": "The plan does not specify when prefix expansion runs (default on/off, flag-controlled, strict-mode-only), what constitutes the prefix namespace (repo-root relative vs pack-relative), or how errors/performance concerns are handled (git unavailable, large repos).",
+      "required_to_be_concrete": [
+        "Define the default behavior for prefix expansion (always/never/by-flag) and the exact controlling flag/env/config key.",
+        "Define the prefix resolution base (repo root) and how prefixes are validated/canonicalized before expansion.",
+        "Define failure behavior when expansion cannot be performed (git missing, command fails), including exit codes and whether scoring proceeds using raw counts only.",
+        "Define performance constraints (max prefixes, max runtime) and deterministic output expectations under those constraints."
+      ],
+      "suggested_evidence_order": [
+        "codebase",
+        "docs",
+        "external",
+        "decision"
+      ],
+      "cross_references": [
+        {
+          "file_path": "work_lift_v1_seams/threaded-seams/seam-4-pack-derived-lift-inputs/seam.md",
+          "location": {
+            "start_line": 11,
+            "end_line": 15
+          }
+        },
+        {
+          "file_path": "work_lift_v1_seams/threaded-seams/seam-4-pack-derived-lift-inputs/slice-2-prefix-expansion-and-derived-counts.md",
+          "location": {
+            "start_line": 1,
+            "end_line": 17
+          }
+        }
+      ]
+    },
+    {
+      "id": "CA-0010",
+      "severity": "critical",
+      "category": "behavior",
+      "title": "`confidence` is described with examples, but the deterministic mapping rules are not pinned",
+      "file_path": "work_lift_v1_seams/threaded-seams/seam-3-pm-lift-core-engine/slice-1-contract-3-emit-json.md",
+      "location": {
+        "start_line": 17,
+        "end_line": 20
+      },
+      "excerpt": "`confidence` is a low-cardinality string enum (e.g., `high|medium|low`) and is deterministic for a given input/config.",
+      "problem": "The contract uses “e.g.” for the enum values and does not specify the deterministic rule set mapping inputs (nulls, missing inputs, prefix entries) to a specific confidence value. Without this, downstream tools cannot safely interpret or gate on confidence.",
+      "required_to_be_concrete": [
+        "Enumerate the exact allowed `confidence` values for v1.",
+        "Define deterministic confidence computation rules (including precedence when multiple degradation reasons apply).",
+        "Define how prefix entries and missing inputs affect confidence (and whether model config can change this in v1)."
+      ],
+      "suggested_evidence_order": [
+        "codebase",
+        "docs",
+        "external",
+        "decision"
+      ],
+      "cross_references": [
+        {
+          "file_path": "work_lift_v1_seams/threaded-seams/seam-4-pack-derived-lift-inputs/seam.md",
+          "location": {
+            "start_line": 25,
+            "end_line": 25
+          }
+        },
+        {
+          "file_path": "work_lift_v1_seams/seam-1-lift-vector-schema-and-rubric.md",
+          "location": {
+            "start_line": 20,
+            "end_line": 21
+          }
+        }
+      ]
+    },
+    {
+      "id": "CA-0011",
+      "severity": "critical",
+      "category": "rollout",
+      "title": "Strict-mode onramp plan uses placeholders and does not pin invariant set selection",
+      "file_path": "work_lift_v1_seams/threaded-seams/seam-5-advisory-workflow-integration/slice-3-strict-mode-onramp-plan.md",
+      "location": {
+        "start_line": 44,
+        "end_line": 54
+      },
+      "excerpt": "Define promotion criteria: N calibration runs over real packs, acceptable false positive rate, documented exceptions.",
+      "problem": "The strict-mode plan contains unresolved quantities (N calibration runs, acceptable false positive rate) and leaves the enforcement rule set under-specified (how invariants are selected and versioned). This prevents implementers from writing a deterministic strict checker.",
+      "required_to_be_concrete": [
+        "Pin the promotion criteria as specific, measurable thresholds (exact N, exact false-positive target, and what constitutes a “run”).",
+        "Define the initial strict invariant set as an explicit list (by CONTRACT-3 fields) and the exact failure messages/exit codes when violated.",
+        "Define how the strict invariant set is selected (config file path + schema, or hard-coded list) and how it is versioned."
+      ],
+      "suggested_evidence_order": [
+        "codebase",
+        "docs",
+        "external",
+        "decision"
+      ],
+      "cross_references": [
+        {
+          "file_path": "work_lift_v1_seams/threaded-seams/seam-5-advisory-workflow-integration/slice-3-strict-mode-onramp-plan.md",
+          "location": {
+            "start_line": 79,
+            "end_line": 83
+          }
+        }
+      ]
+    },
+    {
+      "id": "CA-0012",
+      "severity": "major",
+      "category": "operational",
+      "title": "Deliverable file paths are underspecified via wildcards/“choose one”/“e.g.” patterns",
+      "file_path": "work_lift_v1_seams/seam-5-advisory-workflow-integration.md",
+      "location": {
+        "start_line": 34,
+        "end_line": 38
+      },
+      "excerpt": "`docs/project_management/system/standards/planning/*` (as needed for “where lift fits”)",
+      "problem": "Several slices leave key deliverables ambiguous (wildcard paths, “choose one” output formats, and example-only file paths). This makes work ownership and review criteria non-deterministic.",
+      "required_to_be_concrete": [
+        "Replace wildcard deliverables with exact file paths for each doc/script/test artifact.",
+        "When alternatives are listed (“choose one”), pick one and state it as the committed output path/format.",
+        "When example-only paths are used (“e.g.”), either pin the exact path or explicitly mark the item as non-contractual guidance."
+      ],
+      "suggested_evidence_order": [
+        "codebase",
+        "docs",
+        "external",
+        "decision"
+      ],
+      "cross_references": [
+        {
+          "file_path": "work_lift_v1_seams/threaded-seams/seam-5-advisory-workflow-integration/slice-1-advisory-workflow-docs-and-make-targets.md",
+          "location": {
+            "start_line": 45,
+            "end_line": 48
+          }
+        },
+        {
+          "file_path": "work_lift_v1_seams/threaded-seams/seam-2-lift-model-config-v1/slice-2-goldens-and-conformance.md",
+          "location": {
+            "start_line": 41,
+            "end_line": 44
+          }
+        },
+        {
+          "file_path": "work_lift_v1_seams/threaded-seams/seam-3-pm-lift-core-engine/slice-1-contract-3-emit-json.md",
+          "location": {
+            "start_line": 41,
+            "end_line": 44
+          }
+        },
+        {
+          "file_path": "work_lift_v1_seams/threaded-seams/seam-4-pack-derived-lift-inputs/slice-1-contract-4-impact-map-emit-json.md",
+          "location": {
+            "start_line": 40,
+            "end_line": 43
+          }
+        }
+      ]
+    },
+    {
+      "id": "CA-0013",
+      "severity": "major",
+      "category": "testing",
+      "title": "Test invocation is referenced but not specified as an executable command",
+      "file_path": "work_lift_v1_seams/threaded-seams/seam-3-pm-lift-core-engine/slice-3-goldens-and-conformance.md",
+      "location": {
+        "start_line": 16,
+        "end_line": 18
+      },
+      "excerpt": "A single command (python test invocation for planning scripts) runs: golden cases ... negative cases ...",
+      "problem": "The plan calls for “a single command” but does not specify the exact command, test runner, working directory assumptions, or required environment variables. This prevents reproducible verification.",
+      "required_to_be_concrete": [
+        "Specify the exact command line to run the planning script tests (runner, arguments, and working directory).",
+        "State any environment prerequisites (python version, dependencies, PATH requirements for git) needed for deterministic execution.",
+        "Define where fixtures live and the required on-disk layout for tests to pass."
+      ],
+      "suggested_evidence_order": [
+        "codebase",
+        "docs",
+        "external",
+        "decision"
+      ],
+      "cross_references": []
+    },
+    {
+      "id": "CA-0014",
+      "severity": "minor",
+      "category": "language",
+      "title": "Non-contract language (“roughly”, “may”) appears in goal/success framing without explicit bounds",
+      "file_path": "work_lift_v1_seams/scope_brief.md",
+      "location": {
+        "start_line": 3,
+        "end_line": 7
+      },
+      "excerpt": "PM / planning owners: quickly assess whether an ADR candidate should be split and roughly how many slices/checkpoints it implies.",
+      "problem": "Phrases like “roughly” and “may” are fine in narrative context, but here they sit adjacent to execution expectations without defining what accuracy/variance is acceptable, which can lead to inconsistent interpretation of success criteria.",
+      "required_to_be_concrete": [
+        "Clarify whether “roughly” is purely narrative or implies an accuracy target (and if so, state the target).",
+        "Where behavior is implied (e.g., splitting decisions), reference the concrete trigger thresholds and mapping rules that govern it."
+      ],
+      "suggested_evidence_order": [
+        "codebase",
+        "docs",
+        "external",
+        "decision"
+      ],
+      "cross_references": [
+        {
+          "file_path": "work_lift_v1_seams/scope_brief.md",
+          "location": {
+            "start_line": 36,
+            "end_line": 39
+          }
+        }
+      ]
+    }
+  ]
+}
