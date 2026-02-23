@@ -18,7 +18,7 @@
     - JSON schema for the object.
     - Rubric explaining each field, with examples and “what counts as null/unknown”.
 - **Key invariants / rules**
-  - Missing numeric inputs may be represented as `null`; scoring must treat them as 0 but degrade `confidence` and emit `missing_inputs:*` triggers.
+  - Numeric count inputs may be represented as `null` to mean “unknown” (discovery-time); scoring must treat `null` as 0, degrade `confidence`, and emit deterministic `missing_inputs:<field>` triggers.
   - Schema and rubric must match the canonical Lift Vector fields in `WORKSTREAM_TRIAGE_AND_LIFT_DECISIONS.md` (D6).
 - **Dependencies**
   - Blocks:
@@ -40,4 +40,3 @@
   - De-risk plan: allow additive fields via versioning; keep strict enforcement gated by pack strict mode.
 - **Rollout / safety**
   - Advisory-first: schema is used for validation when the block is present; presence requirement is deferred/gated.
-

@@ -22,7 +22,7 @@
     - parse Lift Vector blocks from markdown,
     - validate them against the schema (or fail with actionable errors),
     - compute a deterministic score/triggers/confidence using the model config,
-    - compute advisory lift from a Planning Pack `impact_map.md` touch set via `validate_impact_map.py --emit-json`,
+    - compute advisory lift from a strict Planning Pack `impact_map.md` touch set via `validate_impact_map.py --emit-json` (legacy packs emit the same JSON shape but with empty allowlists),
     - emit a stable JSON summary for downstream tooling.
   - Strict/legacy compatibility remains intact (no breakage of existing packs/scripts).
 - **Constraints**: must be deterministic; advisory-first rollout; strict enforcement gated by `tasks.json meta.slice_spec_version >= 2`; avoid inventing precision when inputs are missing (`null` degrades confidence).
@@ -37,4 +37,3 @@
   - Lift v1 remains “canonical until revised” per `WORKSTREAM_TRIAGE_AND_LIFT_DECISIONS.md` D6–D9.
   - Directory/prefix entries remain allowed in Impact Map Touch Sets; lift treats them carefully (discounted/capped expansion and/or confidence degradation).
   - `pm_lift.py` is the initial reference implementation; future refactors may split core logic into a library module without changing public CLI output contracts.
-

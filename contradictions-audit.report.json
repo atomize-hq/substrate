@@ -1,0 +1,233 @@
+{
+  "meta": {
+    "tool": "contradictions-audit",
+    "generated_at": "2026-02-22T19:53:38-05:00",
+    "files": [
+      "work_lift_v1_seams/README.md",
+      "work_lift_v1_seams/scope_brief.md",
+      "work_lift_v1_seams/seam-1-lift-vector-schema-and-rubric.md",
+      "work_lift_v1_seams/seam-2-lift-model-config-v1.md",
+      "work_lift_v1_seams/seam-3-pm-lift-core-engine.md",
+      "work_lift_v1_seams/seam-4-pack-derived-lift-inputs.md",
+      "work_lift_v1_seams/seam-5-advisory-workflow-integration.md",
+      "work_lift_v1_seams/seam_map.md",
+      "work_lift_v1_seams/threaded-seams/seam-1-lift-vector-schema-and-rubric/seam.md",
+      "work_lift_v1_seams/threaded-seams/seam-1-lift-vector-schema-and-rubric/slice-1-contract-1-schema.md",
+      "work_lift_v1_seams/threaded-seams/seam-1-lift-vector-schema-and-rubric/slice-2-human-rubric-and-conformance.md",
+      "work_lift_v1_seams/threaded-seams/seam-2-lift-model-config-v1/seam.md",
+      "work_lift_v1_seams/threaded-seams/seam-2-lift-model-config-v1/slice-1-contract-2-model-config.md",
+      "work_lift_v1_seams/threaded-seams/seam-2-lift-model-config-v1/slice-2-goldens-and-conformance.md",
+      "work_lift_v1_seams/threaded-seams/seam-3-pm-lift-core-engine/seam.md",
+      "work_lift_v1_seams/threaded-seams/seam-3-pm-lift-core-engine/slice-1-contract-3-emit-json.md",
+      "work_lift_v1_seams/threaded-seams/seam-3-pm-lift-core-engine/slice-2-config-backed-scoring-and-validation.md",
+      "work_lift_v1_seams/threaded-seams/seam-3-pm-lift-core-engine/slice-3-goldens-and-conformance.md",
+      "work_lift_v1_seams/threaded-seams/seam-4-pack-derived-lift-inputs/seam.md",
+      "work_lift_v1_seams/threaded-seams/seam-4-pack-derived-lift-inputs/slice-1-contract-4-impact-map-emit-json.md",
+      "work_lift_v1_seams/threaded-seams/seam-4-pack-derived-lift-inputs/slice-2-prefix-expansion-and-derived-counts.md",
+      "work_lift_v1_seams/threaded-seams/seam-5-advisory-workflow-integration/seam.md",
+      "work_lift_v1_seams/threaded-seams/seam-5-advisory-workflow-integration/slice-1-advisory-workflow-docs-and-make-targets.md",
+      "work_lift_v1_seams/threaded-seams/seam-5-advisory-workflow-integration/slice-2-advisory-report-hook-and-lint-integration.md",
+      "work_lift_v1_seams/threaded-seams/seam-5-advisory-workflow-integration/slice-3-strict-mode-onramp-plan.md",
+      "work_lift_v1_seams/threading.md"
+    ],
+    "scan": {
+      "used": false,
+      "output": null
+    },
+    "notes": [
+      "This audit is limited to contradictions across and within the files listed in meta.files (the `work_lift_v1_seams/` seam pack).",
+      "Many statements reference canonical rules outside this pack (e.g., `WORKSTREAM_TRIAGE_AND_LIFT_DECISIONS.md`). Those sources were not audited here; contradictions are assessed only among the seam-pack statements."
+    ]
+  },
+  "issues": [
+    {
+      "id": "CX-0001",
+      "severity": "critical",
+      "confidence": "high",
+      "type": "schema",
+      "subject": "Lift Vector v1: which numeric fields may be null",
+      "scope": {
+        "environment": "all",
+        "version": "v1",
+        "feature_flag": "none",
+        "timeline": "planned"
+      },
+      "statement_a": {
+        "file": "work_lift_v1_seams/seam-1-lift-vector-schema-and-rubric.md",
+        "line_start": 20,
+        "line_end": 22,
+        "excerpt": "- **Key invariants / rules**\n  - Missing numeric inputs may be represented as `null`; scoring must treat them as 0 but degrade `confidence` and emit `missing_inputs:*` triggers."
+      },
+      "statement_b": {
+        "file": "work_lift_v1_seams/threaded-seams/seam-1-lift-vector-schema-and-rubric/slice-1-contract-1-schema.md",
+        "line_start": 34,
+        "line_end": 36,
+        "excerpt": "- Allow `null` only where the decision log allows it:\n  - `touch.crates_touched`: `integer | null`\n  - `touch.boundary_crossings`: `integer | null`"
+      },
+      "analysis": {
+        "why_conflict": "Statement A reads as a general rule: any missing numeric input in the Lift Vector may be written as `null`. Statement B constrains `null` to exactly two fields (`touch.crates_touched` and `touch.boundary_crossings`). Both cannot be simultaneously true for the same Lift Vector v1 schema without additional scope qualifiers (e.g., “during pre-schema bootstrap” vs “once CONTRACT-1 is published”).",
+        "possible_reconciliations": [
+          "Scope Statement A to a pre-CONTRACT-1 bootstrap period (or to tool-internal normalization) rather than the published Lift Vector schema.",
+          "Expand CONTRACT-1 schema/null policy to allow `null` for additional numeric fields (and document which ones), if that matches the intended discovery-time behavior."
+        ],
+        "what_must_be_true": [
+          "A concrete, exhaustive v1 list of Lift Vector fields that permit `null` (and whether `null` is allowed in authored input, internal normalization, or both).",
+          "If `null` is restricted to two fields, all other docs that describe `null` broadly must be tightened to match (or explicitly scoped)."
+        ]
+      },
+      "suggested_evidence_order": [
+        "codebase",
+        "tests",
+        "runtime-config",
+        "git-history",
+        "other-docs",
+        "external",
+        "decision"
+      ],
+      "related_issues": [
+        "CX-0002"
+      ]
+    },
+    {
+      "id": "CX-0002",
+      "severity": "critical",
+      "confidence": "high",
+      "type": "scope_mismatch",
+      "subject": "Lift Vector v1: is `model_version` required or defaultable when missing?",
+      "scope": {
+        "environment": "all",
+        "version": "v1",
+        "feature_flag": "none",
+        "timeline": "planned"
+      },
+      "statement_a": {
+        "file": "work_lift_v1_seams/threaded-seams/seam-1-lift-vector-schema-and-rubric/slice-1-contract-1-schema.md",
+        "line_start": 31,
+        "line_end": 32,
+        "excerpt": "- Required top-level keys (v1): `model_version`, `touch`, `contract`, `qa`, `docs`, `ops`, `risk`, `notes`.\n- `model_version` should be an integer and allow v1 (`1`); do not hardcode assumptions about future versions (support additive evolution)."
+      },
+      "statement_b": {
+        "file": "work_lift_v1_seams/seam-3-pm-lift-core-engine.md",
+        "line_start": 41,
+        "line_end": 43,
+        "excerpt": "- Risk: multiple model versions introduce ambiguity (“which version should I use?”).\n- De-risk plan: explicit selection rule (e.g., `model_version` in vector; default to 1 if missing; require explicit pinning for strict mode)."
+      },
+      "analysis": {
+        "why_conflict": "Statement A makes `model_version` a required Lift Vector v1 key. Statement B proposes a tool behavior that can accept missing `model_version` by defaulting to 1. These are incompatible unless the “default if missing” behavior is explicitly scoped (e.g., for legacy vectors authored before CONTRACT-1 publication, or only in non-strict/advisory mode with a warning).",
+        "possible_reconciliations": [
+          "Make `model_version` required in authored Lift Vector blocks, and remove/qualify any language implying omission is acceptable.",
+          "Allow `model_version` to be optional in the schema (or via tool-side pre-validation normalization) and define deterministic defaulting semantics (including how/when warnings are emitted)."
+        ],
+        "what_must_be_true": [
+          "One canonical rule for `model_version` requiredness in authored Lift Vector blocks.",
+          "If defaulting is supported, the exact scope (which modes, strict vs advisory), and how it interacts with schema validation (pre-normalization vs schema allowing omission)."
+        ]
+      },
+      "suggested_evidence_order": [
+        "codebase",
+        "tests",
+        "runtime-config",
+        "git-history",
+        "other-docs",
+        "external",
+        "decision"
+      ],
+      "related_issues": [
+        "CX-0001"
+      ]
+    },
+    {
+      "id": "CX-0003",
+      "severity": "major",
+      "confidence": "medium",
+      "type": "api",
+      "subject": "CLI contract: `pm_lift.py from-git-diff` argument form",
+      "scope": {
+        "environment": "all",
+        "version": "v1",
+        "feature_flag": "none",
+        "timeline": "planned"
+      },
+      "statement_a": {
+        "file": "work_lift_v1_seams/threaded-seams/seam-3-pm-lift-core-engine/slice-1-contract-3-emit-json.md",
+        "line_start": 29,
+        "line_end": 32,
+        "excerpt": "- Manual smoke:\n  - `pm_lift.py from-git-diff --git-range HEAD~1..HEAD --emit-json` (or a small range) prints JSON-only to stdout."
+      },
+      "statement_b": {
+        "file": "work_lift_v1_seams/threaded-seams/seam-5-advisory-workflow-integration/slice-1-advisory-workflow-docs-and-make-targets.md",
+        "line_start": 50,
+        "line_end": 53,
+        "excerpt": "- Include three “how to run” recipes:\n  - intake/ADR: `pm_lift.py from-intake <path>`\n  - Planning Pack: `pm_lift.py from-impact-map <pack_dir>`\n  - calibration: `pm_lift.py from-git-diff <base> <head>` (or equivalent)"
+      },
+      "analysis": {
+        "why_conflict": "The seam pack gives two different invocations for the same subcommand. One uses a `--git-range` flag, the other uses positional `<base> <head>` arguments. Unless the CLI intentionally supports both (and documents precedence and exact parsing), downstream docs and Makefile targets cannot be implemented unambiguously.",
+        "possible_reconciliations": [
+          "Declare one canonical form (flag-based or positional) and update all docs to use it.",
+          "If both forms are supported, explicitly document both and how they map (e.g., `--git-range A..B` is equivalent to `A B`), including how errors are reported and how ambiguity is handled."
+        ],
+        "what_must_be_true": [
+          "The canonical `from-git-diff` CLI surface: required args, optional flags, and exact accepted forms.",
+          "A single set of examples that match the canonical surface (or a clearly-documented dual-support policy)."
+        ]
+      },
+      "suggested_evidence_order": [
+        "codebase",
+        "tests",
+        "runtime-config",
+        "git-history",
+        "other-docs",
+        "external",
+        "decision"
+      ],
+      "related_issues": []
+    },
+    {
+      "id": "CX-0004",
+      "severity": "major",
+      "confidence": "medium",
+      "type": "scope_mismatch",
+      "subject": "Pack-derived lift: `from-impact-map` expectations vs legacy-mode `validate_impact_map --emit-json` semantics",
+      "scope": {
+        "environment": "all",
+        "version": "v1",
+        "feature_flag": "none",
+        "timeline": "planned"
+      },
+      "statement_a": {
+        "file": "work_lift_v1_seams/scope_brief.md",
+        "line_start": 21,
+        "line_end": 26,
+        "excerpt": "- `pm_lift.py` can:\n  - parse Lift Vector blocks from markdown,\n  - validate them against the schema (or fail with actionable errors),\n  - compute a deterministic score/triggers/confidence using the model config,\n  - compute advisory lift from a Planning Pack `impact_map.md` touch set via `validate_impact_map.py --emit-json`,\n  - emit a stable JSON summary for downstream tooling."
+      },
+      "statement_b": {
+        "file": "work_lift_v1_seams/threaded-seams/seam-4-pack-derived-lift-inputs/slice-1-contract-4-impact-map-emit-json.md",
+        "line_start": 16,
+        "line_end": 17,
+        "excerpt": "- Legacy mode behavior is explicit:\n  - `--emit-json` still emits the full object with all keys present (allowlists empty; `dir_prefixes` empty)."
+      },
+      "analysis": {
+        "why_conflict": "Statement A frames pack-derived lift as computing from `validate_impact_map.py --emit-json` output. Statement B defines that legacy mode yields empty allowlists/`dir_prefixes`, which would make pack-derived inputs “all zeros/empty” unless `pm_lift` has an alternative legacy parsing path. The seam pack does not state whether `from-impact-map` is intended to work on legacy packs (and if so, how) or only on strict/new-format packs.",
+        "possible_reconciliations": [
+          "Scope `from-impact-map` to strict/new-format packs (e.g., `meta.slice_spec_version >= 2`) and document that limitation wherever pack-derived lift is described.",
+          "Keep `validate_impact_map --emit-json` empty for legacy packs, but define a separate legacy-derived input path (or a fallback parser) for `pm_lift` so pack-derived lift still works on legacy packs."
+        ],
+        "what_must_be_true": [
+          "Whether pack-derived lift is supported for legacy packs; if not, the explicit eligibility rule (including how the tool behaves and messages users).",
+          "If supported for legacy packs, the concrete source of derived counts when `validate_impact_map --emit-json` returns empty arrays."
+        ]
+      },
+      "suggested_evidence_order": [
+        "codebase",
+        "tests",
+        "runtime-config",
+        "git-history",
+        "other-docs",
+        "external",
+        "decision"
+      ],
+      "related_issues": []
+    }
+  ]
+}
+

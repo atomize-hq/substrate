@@ -39,7 +39,6 @@
   - Negative cases: invalid JSON block, missing markers, wrong types.
 - **Risks / unknowns**
   - Risk: multiple model versions introduce ambiguity (“which version should I use?”).
-  - De-risk plan: explicit selection rule (e.g., `model_version` in vector; default to 1 if missing; require explicit pinning for strict mode).
+  - De-risk plan: explicit selection rule (use `model_version` in the vector when present; default to 1 if missing; future strict mode may require explicit pinning).
 - **Rollout / safety**
   - Advisory-first; if strict mode enforcement is later added, it should be keyed off `tasks.json meta.slice_spec_version >= 2`.
-

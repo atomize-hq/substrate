@@ -136,33 +136,34 @@ Lift is tracked as a structured vector of measurable signals. The intent is:
 
 Canonical Lift Vector v1 (embedded JSON block shape):
 
+- `model_version` (int): scoring model version; default `1` if missing
 - `touch`
-  - `create_files` (int): count from Impact Map `Create`
-  - `edit_files` (int): count from `Edit`
-  - `delete_files` (int): count from `Delete`
-  - `deprecate_files` (int): count from `Deprecate`
+  - `create_files` (int|null): count from Impact Map `Create` (or `null` if unknown)
+  - `edit_files` (int|null): count from `Edit` (or `null` if unknown)
+  - `delete_files` (int|null): count from `Delete` (or `null` if unknown)
+  - `deprecate_files` (int|null): count from `Deprecate` (or `null` if unknown)
   - `crates_touched` (int|null): rough count of crates/major modules touched
   - `boundary_crossings` (int|null): number of subsystems affected (requires a defined taxonomy)
 - `contract`
-  - `cli_flags` (int): new/changed commands/flags
-  - `config_keys` (int): new/changed config keys
-  - `exit_codes` (int): new/changed exit codes
-  - `file_formats` (int): new/changed on-disk schemas/formats
+  - `cli_flags` (int|null): new/changed commands/flags
+  - `config_keys` (int|null): new/changed config keys
+  - `exit_codes` (int|null): new/changed exit codes
+  - `file_formats` (int|null): new/changed on-disk schemas/formats
   - `behavior_deltas` (int): should be `1` per ADR candidate; `>1` is an intentional “blow up” signal
 - `qa`
-  - `new_test_files` (int)
-  - `new_test_cases` (int) (or “new assertions” if we later rename)
+  - `new_test_files` (int|null)
+  - `new_test_cases` (int|null) (or “new assertions” if we later rename)
 - `docs`
-  - `new_docs_files` (int)
+  - `new_docs_files` (int|null)
 - `ops`
-  - `new_smoke_steps` (int)
-  - `ci_changes` (int)
+  - `new_smoke_steps` (int|null)
+  - `ci_changes` (int|null)
 - `risk`
   - `cross_platform` (bool)
   - `security_sensitive` (bool)
   - `concurrency_or_ordering` (bool)
   - `migration_or_backfill` (bool)
-  - `unknowns_high` (int): count of blocking unknowns
+  - `unknowns_high` (int|null): count of blocking unknowns
 - `notes` (string)
 
 Directory-prefix touch entries (Impact Map):

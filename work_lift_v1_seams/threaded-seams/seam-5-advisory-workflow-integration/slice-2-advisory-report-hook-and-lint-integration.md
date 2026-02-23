@@ -16,7 +16,7 @@
     - is resilient to additive keys in CONTRACT-3,
     - never blocks by default (exit code 0 unless the underlying `pm_lift` invocation fails).
   - Lint integration:
-    - gated behind an explicit flag/env var (e.g., `PM_LIFT_ADVISORY=1`),
+    - gated behind an explicit flag/env var: set `PM_LIFT_ADVISORY=1`
     - prints advisories but does not fail the lint run.
 - **Dependencies**:
   - Consumes: `CONTRACT-3:pm_lift_emit_json_v1`
@@ -95,4 +95,3 @@ Checklist:
   - Run lint with and without the flag.
 - Cleanup:
   - Keep integration optional and easy to disable.
-

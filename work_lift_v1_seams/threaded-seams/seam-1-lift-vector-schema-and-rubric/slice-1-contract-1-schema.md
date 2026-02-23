@@ -28,12 +28,10 @@
   - Input: `WORKSTREAM_TRIAGE_AND_LIFT_DECISIONS.md` (D3/D6 canonical shape + examples)
   - Output: `docs/project_management/system/schemas/work_lift_vector.schema.json`
 - **Implementation notes**:
-  - Required top-level keys (v1): `model_version`, `touch`, `contract`, `qa`, `docs`, `ops`, `risk`, `notes`.
-  - `model_version` should be an integer and allow v1 (`1`); do not hardcode assumptions about future versions (support additive evolution).
+  - Required top-level keys (v1): `touch`, `contract`, `qa`, `docs`, `ops`, `risk`, `notes`.
+  - `model_version` is optional; if missing, consumers/tools default to `1` (and should emit the resolved `model_version` in machine outputs).
   - Use `minimum: 0` for count fields where meaningful.
-  - Allow `null` only where the decision log allows it:
-    - `touch.crates_touched`: `integer | null`
-    - `touch.boundary_crossings`: `integer | null`
+  - Allow discovery-time unknowns by using `integer | null` for numeric count fields; `null` means “unknown” and must be treated as 0 for scoring while degrading confidence and emitting `missing_inputs:<field>`.
   - Keep additional fields additive-friendly (avoid schema patterns that would break when new optional keys appear).
 - **Acceptance criteria**:
   - Schema property names/types match D6.
@@ -85,4 +83,3 @@ Checklist:
   - Confirm checklist doesn’t include scoring weights (owned by CONTRACT-2).
 - Cleanup:
   - None.
-

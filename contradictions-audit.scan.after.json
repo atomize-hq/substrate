@@ -1,0 +1,39 @@
+{
+  "meta": {
+    "tool": "contradictions-scan",
+    "generated_at": "2026-02-23T01:10:18Z",
+    "scanned_files": [
+      "work_lift_v1_seams/seam_map.md",
+      "work_lift_v1_seams/scope_brief.md",
+      "work_lift_v1_seams/threading.md",
+      "work_lift_v1_seams/seam-2-lift-model-config-v1.md",
+      "work_lift_v1_seams/seam-1-lift-vector-schema-and-rubric.md",
+      "work_lift_v1_seams/seam-5-advisory-workflow-integration.md",
+      "work_lift_v1_seams/seam-4-pack-derived-lift-inputs.md",
+      "work_lift_v1_seams/README.md",
+      "work_lift_v1_seams/seam-3-pm-lift-core-engine.md",
+      "work_lift_v1_seams/threaded-seams/seam-4-pack-derived-lift-inputs/seam.md",
+      "work_lift_v1_seams/threaded-seams/seam-4-pack-derived-lift-inputs/slice-2-prefix-expansion-and-derived-counts.md",
+      "work_lift_v1_seams/threaded-seams/seam-4-pack-derived-lift-inputs/slice-1-contract-4-impact-map-emit-json.md",
+      "work_lift_v1_seams/threaded-seams/seam-3-pm-lift-core-engine/slice-3-goldens-and-conformance.md",
+      "work_lift_v1_seams/threaded-seams/seam-3-pm-lift-core-engine/slice-1-contract-3-emit-json.md",
+      "work_lift_v1_seams/threaded-seams/seam-3-pm-lift-core-engine/seam.md",
+      "work_lift_v1_seams/threaded-seams/seam-3-pm-lift-core-engine/slice-2-config-backed-scoring-and-validation.md",
+      "work_lift_v1_seams/threaded-seams/seam-5-advisory-workflow-integration/slice-3-strict-mode-onramp-plan.md",
+      "work_lift_v1_seams/threaded-seams/seam-5-advisory-workflow-integration/slice-1-advisory-workflow-docs-and-make-targets.md",
+      "work_lift_v1_seams/threaded-seams/seam-5-advisory-workflow-integration/seam.md",
+      "work_lift_v1_seams/threaded-seams/seam-5-advisory-workflow-integration/slice-2-advisory-report-hook-and-lint-integration.md",
+      "work_lift_v1_seams/threaded-seams/seam-2-lift-model-config-v1/slice-1-contract-2-model-config.md",
+      "work_lift_v1_seams/threaded-seams/seam-2-lift-model-config-v1/slice-2-goldens-and-conformance.md",
+      "work_lift_v1_seams/threaded-seams/seam-2-lift-model-config-v1/seam.md",
+      "work_lift_v1_seams/threaded-seams/seam-1-lift-vector-schema-and-rubric/slice-1-contract-1-schema.md",
+      "work_lift_v1_seams/threaded-seams/seam-1-lift-vector-schema-and-rubric/seam.md",
+      "work_lift_v1_seams/threaded-seams/seam-1-lift-vector-schema-and-rubric/slice-2-human-rubric-and-conformance.md",
+      "WORKSTREAM_TRIAGE_AND_LIFT_DECISIONS.md"
+    ],
+    "total_claim_keys": 15,
+    "candidate_keys": 0,
+    "note": "Candidates are heuristic leads; audit must confirm contradictions with scope/context."
+  },
+  "candidates": []
+}

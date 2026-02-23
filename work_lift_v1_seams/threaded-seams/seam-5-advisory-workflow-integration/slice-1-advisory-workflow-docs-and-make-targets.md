@@ -46,15 +46,15 @@
     - Add `docs/project_management/system/standards/planning/PLANNING_WORK_LIFT_ADVISORY.md`, and link it from:
       - `docs/project_management/system/standards/planning/PLANNING_WORKFLOW_OVERVIEW.md`
       - `docs/project_management/system/standards/planning/PLANNING_README.md`
-- **Implementation notes**:
-  - Include three “how to run” recipes:
-    - intake/ADR: `pm_lift.py from-intake <path>`
-    - Planning Pack: `pm_lift.py from-impact-map <pack_dir>`
-    - calibration: `pm_lift.py from-git-diff <base> <head>` (or equivalent)
-  - Include a short interpretation guide:
-    - score is advisory,
-    - triggers are the primary split signal,
-    - confidence/missing-inputs explain uncertainty.
+  - **Implementation notes**:
+    - Include three “how to run” recipes:
+      - intake/ADR: `pm_lift.py from-intake <path>`
+      - Planning Pack: `pm_lift.py from-impact-map <pack_dir>`
+      - calibration: `pm_lift.py from-git-diff --git-range <base>..<head>` (or equivalent)
+    - Include a short interpretation guide:
+      - score is advisory,
+      - triggers are the primary split signal,
+      - confidence/missing-inputs explain uncertainty.
 - **Acceptance criteria**:
   - A reader can run lift in <5 minutes without spelunking scripts.
 
@@ -113,4 +113,3 @@ Checklist:
   - Confirm it doesn’t assume strict-mode defaults.
 - Cleanup:
   - Avoid embedding large outputs (link to `--emit-json` field list instead).
-
