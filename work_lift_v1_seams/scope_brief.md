@@ -16,6 +16,7 @@
   - Enforced gating across the repo (hard failures) beyond what is explicitly marked “strict mode” and calibrated.
   - A full subsystem taxonomy to deterministically compute `touch.boundary_crossings` (can be a follow-on seam/spike).
   - Auto-rewriting intake/ADR/frontmatter in-place (unless explicitly added later with idempotent rules).
+  - Workstream registry mechanics (canonical Workstream IDs, grouping rules, or lifecycle automation). This pack assumes the decision-log posture that workstreams are umbrella initiatives and lift is a sizing/splitting signal, but it does not implement a workstream registry.
 - **Success criteria**:
   - The rubric artifacts exist at the approved locations and are internally consistent.
   - `pm_lift.py` can:

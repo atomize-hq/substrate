@@ -65,6 +65,10 @@ This file makes coupling explicit: contracts, dependency edges, and conflict-saf
 
 ## Parallelization notes / conflict-safe workstreams
 
+Note on terminology:
+- The **WS-A / WS-B / WS-C / WS-INT** labels in this file are **implementation workstreams** for executing this planning pack in parallel.
+- They are **not** canonical Workstream IDs and must not be confused with the initiative-themed registry IDs described in `WORKSTREAM_TRIAGE_AND_LIFT_DECISIONS.md` (see the “workstream IDs are initiative-themed” decision).
+
 The work can be parallelized safely with a thin-contract-first approach:
 
 - **WS-A (Artifacts)**: SEAM-1 + SEAM-2. Touch surface is new files under `docs/project_management/system/schemas/` and `docs/project_management/system/standards/shared/`.
