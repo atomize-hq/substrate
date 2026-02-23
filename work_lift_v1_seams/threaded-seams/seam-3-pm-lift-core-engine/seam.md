@@ -22,6 +22,14 @@
 - **Verification**:
   - Golden tests that run `pm_lift.py` and assert score/triggers/confidence and JSON output shape stability.
   - Negative cases: invalid/missing Lift Vector block, wrong types, schema violations, missing/invalid config.
+  - Canonical v1 goldens live in:
+    - `docs/project_management/system/standards/shared/WORK_LIFT_MODEL_V1_GOLDENS.md`
+  - Planning-script test modules (fast, deterministic):
+    - `docs/project_management/system/scripts/planning/tests/test_pm_lift_emit_json_contract.py` (CONTRACT-3 conformance)
+    - `docs/project_management/system/scripts/planning/tests/test_pm_lift_goldens_intake.py` (intake goldens: scoring/triggers/confidence)
+    - `docs/project_management/system/scripts/planning/tests/test_pm_lift_goldens_from_impact_map.py` (derived-pack goldens + prefix-entry trigger)
+    - `docs/project_management/system/scripts/planning/tests/test_pm_lift_negative_cases.py` (stderr/actionability + stdout JSON-only + artifact failures)
+    - `docs/project_management/system/scripts/planning/tests/test_pm_lift_vector_schema_validation.py` (CONTRACT-1 schema validation negative fixtures)
 - **Threading constraints**
   - Upstream blockers:
     - SEAM-1 (`CONTRACT-1:work_lift_vector_block_v1`) for authoritative Lift Vector schema/rubric.

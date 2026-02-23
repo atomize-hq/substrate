@@ -1,0 +1,87 @@
+{
+    "model_version": 1,
+    "summary": "Short human-readable summary",
+    "sources": {
+        "decision_log": "WORKSTREAM_TRIAGE_AND_LIFT_DECISIONS.md",
+        "scoring": "D7",
+        "split_triggers": "D8",
+        "lift_to_slices": "D9"
+    },
+    "selection": {
+        "supported_model_versions": [1],
+        "default_model_version": 1,
+        "vector_model_version_policy": "require_equal",
+        "unknown_version_behavior": "error"
+    },
+    "weights": {
+        "touch": {
+            "create_files": 3,
+            "edit_files": 2,
+            "delete_files": 1,
+            "deprecate_files": 1,
+            "crates_touched": 4,
+            "boundary_crossings": 3
+        },
+        "contract": {
+            "cli_flags": 3,
+            "config_keys": 3,
+            "exit_codes": 4,
+            "file_formats": 5,
+            "behavior_deltas_blowup": 10
+        },
+        "qa": {
+            "new_test_files": 2,
+            "new_test_cases": 1
+        },
+        "docs": {
+            "new_docs_files": 2
+        },
+        "ops": {
+            "new_smoke_steps": 3,
+            "ci_changes": 3
+        }
+    },
+    "risk_multipliers": {
+        "cross_platform": 1.15,
+        "security_sensitive": 1.2,
+        "concurrency_or_ordering": 1.15,
+        "migration_or_backfill": 1.25
+    },
+    "unknowns_add": {
+        "unknowns_high_multiplier": 2
+    },
+    "rounding": {
+        "score": "ceil"
+    },
+    "estimated_slices": {
+        "divisor": 12,
+        "min": 1,
+        "rounding": "ceil"
+    },
+    "confidence": {
+        "enum": ["high", "low"],
+        "rules": [
+            { "when": "missing_inputs_nonempty", "confidence": "low" },
+            { "when": "touch_set_contains_prefix_entries", "confidence": "low" },
+            { "when": "otherwise", "confidence": "high" }
+        ]
+    },
+    "split_triggers": {
+        "adr_candidate": [
+            { "id": "split_required:behavior_deltas>1", "when": "contract.behavior_deltas > 1" },
+            { "id": "likely_split:crates_touched>2", "when": "touch.crates_touched > 2" },
+            { "id": "likely_split:touch_files_sum>12", "when": "touch.create_files + touch.edit_files + touch.delete_files > 12" },
+            { "id": "likely_split:contract_surface_sum>4", "when": "contract.cli_flags + contract.config_keys + contract.exit_codes + contract.file_formats > 4" },
+            { "id": "likely_split:lift_score>24", "when": "lift_score > 24" },
+            { "id": "split_required:estimated_slices>3", "when": "estimated_slices > 3" }
+        ],
+        "workstream": [
+            { "id": "likely_split:lift_score>60", "when": "lift_score > 60" }
+        ]
+    },
+    "prefix_expansion": {
+        "enabled_by_default": true,
+        "expand_discount": 0.2,
+        "expand_cap": 10
+    }
+}

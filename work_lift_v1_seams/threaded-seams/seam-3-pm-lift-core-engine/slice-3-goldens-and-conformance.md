@@ -42,6 +42,43 @@
     - One or more fixture markdown files containing Lift Vector blocks.
     - Expected JSON outputs (stored as separate `.json` goldens or as inline expectations in tests).
 - **Implementation notes**:
+  - Implement goldens as subprocess tests that run `pm_lift.py from-intake --emit-json` against a runtime-written intake markdown fixture under `target/pm_script_tests/...`.
+  - Pin exact expected outputs (no “approx”), and fail on drift.
+  - Canonical scoring goldens (source-of-truth) live in:
+    - `docs/project_management/system/standards/shared/WORK_LIFT_MODEL_V1_GOLDENS.md`
+  - Concrete pinned goldens (v1):
+    - **GOLDEN-A (fully specified; high confidence; no triggers)**:
+      - Vector:
+        - `touch`: create=1, edit=2, delete=0, deprecate=0, crates_touched=1, boundary_crossings=0
+        - `contract`: cli_flags=0, config_keys=0, exit_codes=0, file_formats=0, behavior_deltas=1
+        - `qa/docs/ops`: all 0
+        - `risk`: all false; unknowns_high=0
+      - Expected:
+        - `lift_score = 11`
+        - `estimated_slices = 1`
+        - `confidence = high`
+        - `missing_inputs = []`
+        - `triggers = []`
+    - **GOLDEN-B (missing input downgrade; CONTRACT-3 behavior)**:
+      - Vector: same as the minimal contract fixture, but `touch.crates_touched = null`.
+      - Expected:
+        - `lift_score = 0`
+        - `estimated_slices = 1`
+        - `confidence = low`
+        - `missing_inputs = ["touch.crates_touched"]`
+        - `triggers = ["missing_inputs:touch.crates_touched"]`
+    - **GOLDEN-1 (SEAM-2 canonical golden; drift guard)**:
+      - Vector is copied from `WORK_LIFT_MODEL_V1_GOLDENS.md` GOLDEN-1.
+      - Expected (exact):
+        - `lift_score = 78`
+        - `estimated_slices = 7`
+        - `confidence = low`
+        - `missing_inputs = ["touch.crates_touched"]`
+        - `triggers` set includes (and SHOULD be exact-match in tests):
+          - `missing_inputs:touch.crates_touched`
+          - `split_required:behavior_deltas>1`
+          - `likely_split:lift_score>24`
+          - `split_required:estimated_slices>3`
   - Cover at least:
     - a “small/low-lift” case (high confidence, few triggers),
     - a “missing inputs” case (`null` values) that forces confidence downgrade + missing_inputs triggers,
@@ -73,8 +110,38 @@ Checklist:
   - Outputs:
     - A stubbed validator JSON output fixture (or a test harness that injects it) and expected `pm_lift` results.
 - **Implementation notes**:
-  - Avoid coupling to filesystem state:
-    - prefer stubbing `_run_validate_impact_map_emit_json` or injecting fixture output in tests.
+  - Prefer end-to-end derived-pack execution without depending on any real Planning Pack:
+    - create a minimal strict-mode feature dir under `target/pm_script_tests/...` containing:
+      - `tasks.json` with `meta.slice_spec_version = 2` (forces strict validator mode),
+      - `impact_map.md` with only **Create** entries (validator doesn’t require `create` paths to exist).
+  - Avoid coupling to repo file list by using a non-existent prefix token so expansion is deterministically empty:
+    - prefix token: `__pm_lift_test__/no_such_prefix/`
+  - Concrete pinned derived-pack goldens (v1):
+    - **DERIVED-A (explicit-only; no prefix trigger)**:
+      - Create tokens: `__pm_lift_test__/a.txt`, `__pm_lift_test__/b.txt`
+      - Expected:
+        - `lift_score = 6` (3 * 2 effective creates)
+        - `estimated_slices = 1`
+        - `confidence = low` (missing inputs outside Touch Set)
+        - `triggers` MUST NOT include `touch_set_contains_prefix_entries`
+        - `derived` MUST include: `impact_map_touch_counts`, `touch_effective_for_scoring`
+        - `derived.impact_map_touch_counts.create.raw_count = 2`
+        - `derived.touch_effective_for_scoring.create_files = 2.0`
+    - **DERIVED-B (prefix present; prefix trigger; deterministic empty expansion)**:
+      - Create tokens: `__pm_lift_test__/c.txt`, `__pm_lift_test__/no_such_prefix/`
+      - Expected:
+        - `lift_score = 3` (3 * 1 effective create)
+        - `estimated_slices = 1`
+        - `triggers` MUST include `touch_set_contains_prefix_entries`
+        - `derived.impact_map_touch_counts.create.raw_count = 2`
+        - `derived.impact_map_touch_counts.create.effective_count = 1.0`
+        - `derived.impact_map_touch_counts.create.prefix_expanded_counts["__pm_lift_test__/no_such_prefix/"] = 0`
+    - **DERIVED-negative (validator failure bubbles)**:
+      - Feature dir includes strict `tasks.json` but **no** `impact_map.md`.
+      - Expected:
+        - exit code non-zero (1)
+        - stdout empty in `--emit-json` mode
+        - stderr contains `validate_impact_map.py failed` and `missing required path`
   - Cover both:
     - no prefixes (confidence unaffected),
     - prefixes present (confidence downgrade + trigger).
@@ -109,6 +176,24 @@ Checklist:
 - **Implementation notes**:
   - Keep assertions resilient:
     - match key substrings rather than full error text, but require “actionable” elements (path, field name).
+  - Add a temp-git-repo harness under `target/pm_script_tests/...` to simulate artifact failures without touching repo-tracked files:
+    - `git init` a tmp repo
+    - copy `pm_lift.py` to canonical path inside tmp repo:
+      - `docs/project_management/system/scripts/planning/pm_lift.py`
+    - create intake markdown under tmp repo
+    - selectively add/omit/poison artifacts under tmp repo:
+      - `docs/project_management/system/schemas/work_lift_model.v1.json`
+      - `docs/project_management/system/schemas/work_lift_vector.schema.json`
+    - run the copied script with `cwd` set to tmp repo root and assert exit/stderr/stdout invariants.
+  - Concrete negative fixtures to pin (minimum set):
+    - markers present but missing fenced JSON block
+    - invalid JSON inside fenced block
+    - model_version mismatch (e.g., `model_version: 2`)
+    - invalid model config JSON (malformed `work_lift_model.v1.json`)
+    - invalid schema JSON (malformed `work_lift_vector.schema.json`)
+    - schema missing:
+      - valid vector succeeds (conservative structural validation)
+      - unknown top-level key fails with “schema missing” guidance
 - **Acceptance criteria**:
   - Tests fail if error paths become silent, ambiguous, or emit partial JSON to stdout.
 - **Test notes**:
