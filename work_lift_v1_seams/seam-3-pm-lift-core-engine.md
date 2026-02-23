@@ -5,8 +5,8 @@
 - **Goal / user value**: Provide a deterministic, inspectable CLI tool that computes Work Lift from either (a) an embedded Lift Vector block or (b) derived artifacts, and emits stable JSON for downstream tooling.
 - **Scope**
   - In:
-    - Load and apply `work_lift_model.v1.json` for scoring (no hard-coded weights in the steady-state).
-    - Validate embedded lift vectors against `work_lift_vector.schema.json` (or at minimum validate structure/types with actionable errors).
+    - Load and apply `CONTRACT-2:work_lift_model_v1` (`docs/project_management/system/schemas/work_lift_model.v1.json`) for scoring (no hard-coded weights in the steady-state).
+    - Validate embedded lift vectors against `CONTRACT-1:work_lift_vector_block_v1` (`docs/project_management/system/schemas/work_lift_vector.schema.json`) (or at minimum validate structure/types with actionable errors).
     - Emit stable JSON contract (`--emit-json`) for use by future lint/enforcement tooling.
     - Confidence and triggers rules consistent with the decision log (missing inputs, prefix entries).
   - Out:
@@ -15,7 +15,7 @@
 - **Primary interfaces (contracts)**
   - Inputs:
     - Intake/ADR markdown containing the `PM_LIFT_VECTOR` block.
-    - Optional model config file and schema file.
+    - `CONTRACT-2:work_lift_model_v1` (model config) and `CONTRACT-1:work_lift_vector_block_v1` (schema + markers).
   - Outputs:
     - Human summary to stdout.
     - Machine JSON summary via `--emit-json` (CONTRACT-3).

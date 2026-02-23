@@ -45,3 +45,8 @@ Primary extraction axis: **workflow-first** (intake/ADR → compute lift → tri
 - `seam-4-pack-derived-lift-inputs.md`
 - `seam-5-advisory-workflow-integration.md`
 
+## Threaded decompositions (execution plan)
+
+The seam briefs above are high-level overviews. The canonical execution plan artifacts live under:
+
+- `threaded-seams/README.md` (per-seam `seam.md` + `slice-*.md` breakdowns)

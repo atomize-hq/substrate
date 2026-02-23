@@ -45,7 +45,7 @@
   - Define eligibility:
     - strict gating applies only when `meta.slice_spec_version >= 2` (new format).
   - Define candidate invariants (initial list; do not enable by default):
-    - `contract.behavior_deltas == 1` (example; confirm actual field name in lift vector / pm_lift derived),
+    - `vector.contract.behavior_deltas == 1` (Lift Vector v1; canonical field name defined in `WORKSTREAM_TRIAGE_AND_LIFT_DECISIONS.md` → D6),
     - `estimated_slices <= 3` for single ADR candidates (example),
     - “no missing required inputs” once schema/rubric is stable.
   - Define promotion criteria:
@@ -91,4 +91,3 @@ Checklist:
   - Exercise eligible vs non-eligible pack flows.
 - Cleanup:
   - Keep invariant evaluation transparent (print which rule failed and which field drove it).
-

@@ -33,10 +33,9 @@
   - Reference: `WORKSTREAM_TRIAGE_AND_LIFT_DECISIONS.md`
 - **Verification**
   - Unit-style validation by running `pm_lift --emit-json` with known vectors and confirming score/triggers match expected values.
-  - A “golden” example in the rubric that asserts specific scoring outcomes for a small vector.
+  - A “golden cases” artifact (vector + expected outputs) owned by SEAM-2 S2 (see `threaded-seams/seam-2-lift-model-config-v1/slice-2-goldens-and-conformance.md`); SEAM-1 may later choose to embed a subset into the human rubric, but SEAM-2 does not edit the rubric directly.
 - **Risks / unknowns**
   - Risk: config grows too complex and becomes a second programming language.
   - De-risk plan: keep v1 minimal (weights + thresholds + multipliers); reserve derived rules for code with explicit documentation and stable outputs.
 - **Rollout / safety**
   - Tools should fall back to baked-in defaults only when config is missing (bootstrap); once present, config is required for strict mode (gated).
-
