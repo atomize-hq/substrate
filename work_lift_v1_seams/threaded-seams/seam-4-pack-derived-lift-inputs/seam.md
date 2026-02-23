@@ -27,6 +27,11 @@
   - `docs/project_management/system/scripts/planning/validate_impact_map.py` (producer; source-of-truth for CONTRACT-4 output)
   - `docs/project_management/system/scripts/planning/pm_lift.py` (consumer, via SEAM-3; do not duplicate wiring work here)
   - `docs/project_management/system/standards/planning/PLANNING_IMPACT_MAP_STANDARD.md`
+  - Spec doc: `docs/project_management/system/scripts/planning/impact_map_emit_json_v1.md` (CONTRACT-4)
+  - Conformance tests: `docs/project_management/system/scripts/planning/tests/test_validate_impact_map_emit_json_contract.py`
+  - Prefix counting spec: `docs/project_management/system/scripts/planning/impact_map_touch_counts_v1.md` (raw vs effective)
+  - Pure helper: `docs/project_management/system/scripts/planning/impact_map_touch_counts.py`
+  - Unit tests: `docs/project_management/system/scripts/planning/tests/test_impact_map_touch_counts.py`
 - **Verification**
   - Use at least one Planning Pack with:
     - explicit file entries only,
@@ -37,6 +42,7 @@
     - effective counts reflect discount/cap,
     - confidence is downgraded when prefixes exist,
     - prefix diagnostics are emitted for auditability.
+  - Coordination note: any change to CONTRACT-4 field names/types/semantics MUST be coordinated with SEAM-3 consumption in `pm_lift.py` to avoid silent drift.
 - **Threading constraints**
   - Upstream blockers:
     - SEAM-3 (`CONTRACT-3:pm_lift_emit_json_v1`) for stable result output semantics and where derived diagnostics ultimately land.

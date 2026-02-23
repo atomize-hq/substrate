@@ -39,6 +39,8 @@
       - effective counting rules,
       - deterministic expansion source (`git ls-files <prefix>` or equivalent),
       - confidence degradation trigger when prefixes exist.
+    - Chosen doc path (v1):
+      - `docs/project_management/system/scripts/planning/impact_map_touch_counts_v1.md`
 - **Implementation notes**:
   - Include concrete examples:
     - one prefix with 3 matches → effective +`0.6`,
@@ -67,6 +69,18 @@ Checklist:
       - `docs/project_management/system/scripts/planning/impact_map_touch_counts.py`
     - Export a single pure function such as:
       - `compute_impact_map_touch_counts(impact_map_emit_json, *, expand_prefix) -> dict`
+- **Pinned function contract (v1)**:
+  - Signature (keyword-only expansion + parameters for config-backed values):
+    - `compute_impact_map_touch_counts(impact_map_emit_json, *, expand_prefix, prefix_enabled=True, expand_discount=0.20, expand_cap=10) -> dict`
+  - Output shape (JSON-serializable; deterministic):
+    - `per_section.{create|edit|deprecate|delete}` objects with:
+      - `explicit_files` (int)
+      - `prefix_entries` (int)
+      - `prefix_expanded_counts` (object<string,int>, keys sorted by prefix)
+      - `raw_count` (int)
+      - `effective_count` (number)
+    - `dir_prefixes` (array<string>, sorted unique; derived by suffix `/`)
+    - `prefix_present` (bool)
 - **Implementation notes**:
   - Keep deterministic behavior explicit:
     - sort all output lists/maps by key,
@@ -100,6 +114,16 @@ Checklist:
       - raw counts treat prefixes as 1,
       - effective counts apply cap/discount per prefix,
       - diagnostics include per-prefix expanded counts.
+- **Concrete test module + pinned cases (v1)**:
+  - Test module:
+    - `docs/project_management/system/scripts/planning/tests/test_impact_map_touch_counts.py`
+  - Pinned cases (must remain deterministic; stub expansion provider):
+    - explicit-only: `["a.txt","b.txt"]` → raw=2, effective=2.0, no prefixes
+    - prefix-only (3 matches): `["p/"]` → raw=1, effective=0.6, expanded_counts={"p/":3}
+    - cap binds (100 matches): `["p/"]` → effective=2.0, expanded_counts={"p/":100}
+    - mixed: `["a.txt","p1/","p2/"]` with expansions 1 and 7 → raw=3, effective=2.6
+    - prefix disabled: `["a.txt","p/"]` with provider that would expand → provider not called; effective=1.0; expanded_counts={"p/":0}
+    - empty expansion: `["p/"]` → effective=0.0; expanded_counts={"p/":0}
 - **Implementation notes**:
   - Use a stub expansion provider returning deterministic lists per prefix.
   - Include at least one case where cap binds and one where expansion is empty.

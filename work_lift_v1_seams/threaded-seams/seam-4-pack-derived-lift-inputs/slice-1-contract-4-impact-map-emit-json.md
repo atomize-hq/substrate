@@ -143,6 +143,21 @@ Checklist:
   - Outputs:
     - New tests under `docs/project_management/system/scripts/planning/tests/`
     - Fixture directories under a new `tests/fixtures/` folder (small, self-contained)
+- **Concrete test module + cases (pinned)**:
+  - Test module:
+    - `docs/project_management/system/scripts/planning/tests/test_validate_impact_map_emit_json_contract.py`
+  - Fixture strategy:
+    - runtime-written feature dirs under:
+      - `target/pm_script_tests/validate_impact_map/emit_json_contract/<case>/`
+    - strict-mode fixtures include only Create entries (Edit/Deprecate/Delete are `- None`) to avoid filesystem coupling.
+  - Cases (must remain deterministic):
+    - `STRICT-A` explicit-only: Create tokens `__impact_map_test__/a.txt`, `__impact_map_test__/b.txt` → `dir_prefixes: []`
+    - `STRICT-B` prefix-present: Create tokens `__impact_map_test__/c.txt`, `__impact_map_test__/no_such_prefix/` → `dir_prefixes: ["__impact_map_test__/no_such_prefix/"]`
+    - `STRICT-C` normalization: Create token `./__impact_map_test__/d.txt` → output token `__impact_map_test__/d.txt`
+    - `LEGACY-A` shape stability: `meta.slice_spec_version = 1` and no `impact_map.md` → full key set with empty arrays
+    - `USAGE-A` missing args → exit 2, stdout empty, stderr includes `usage:`
+    - `STRICT-FAIL-A` missing `impact_map.md` → exit 1, stdout empty, stderr includes `missing required path`
+    - `STRICT-FAIL-B` invalid glob token `__impact_map_test__/*.txt` → exit 1, stdout empty, stderr includes `glob tokens are not allowed`
 - **Implementation notes**:
   - Cover at least:
     - explicit-only pack (no prefixes → `dir_prefixes: []`),
