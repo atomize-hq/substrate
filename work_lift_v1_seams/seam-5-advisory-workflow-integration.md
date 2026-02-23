@@ -1,0 +1,52 @@
+# SEAM-5 — Advisory-first workflow integration (+ strict-mode onramp)
+
+- **Name**: Work Lift in the planning workflow
+- **Type**: platform
+- **Goal / user value**: Make lift computation a standard advisory step in intake/triage and Planning Pack refinement, without breaking legacy packs or prematurely enforcing uncalibrated rules.
+- **Scope**
+  - In:
+    - Document “how to run” `pm_lift` for:
+      - intake/ADR markdown (`from-intake`),
+      - Planning Pack (`from-impact-map`),
+      - post-implementation diff (`from-git-diff`, calibration).
+    - Add lightweight integration points:
+      - Makefile target(s) for running lift (advisory),
+      - optional lint output in existing planning scripts (non-fatal by default).
+    - Define a strict-mode onramp plan:
+      - gating keyed off `tasks.json meta.slice_spec_version >= 2`,
+      - initial candidate invariants to enforce after calibration (e.g., `contract.behavior_deltas == 1`, `estimated_slices <= 3` for single ADR candidates).
+  - Out:
+    - Turning split triggers into hard errors immediately.
+    - Requiring lift blocks for all legacy packs.
+- **Primary interfaces (contracts)**
+  - Inputs:
+    - `pm_lift --emit-json` output (CONTRACT-3).
+  - Outputs:
+    - Planning workflow documentation and stable UX expectations for what lift means and how it’s used.
+- **Key invariants / rules**
+  - Advisory-first: lift computation should inform, not block, until explicitly promoted.
+  - Legacy compatibility: strict requirements must be gated and opt-in.
+- **Dependencies**
+  - Blocks:
+    - None (this seam can draft docs/targets early), but “final wiring” depends on stable `pm_lift` outputs.
+  - Blocked by:
+    - SEAM-3 and SEAM-4 for implementation completeness.
+- **Touch surface**
+  - `Makefile`
+  - `docs/project_management/system/standards/shared/WORK_LIFT_RUBRIC.md`
+  - `docs/project_management/system/standards/planning/*` (as needed for “where lift fits”)
+  - `WORKSTREAM_TRIAGE_AND_LIFT_DECISIONS.md` (reference only; avoid duplicating canonical rules)
+- **Verification**
+  - A short “happy path” walkthrough:
+    - compute lift for an intake file and a Planning Pack,
+    - confirm outputs are readable and actionable,
+    - confirm no legacy scripts change behavior unless invoked.
+  - A “failure path” walkthrough:
+    - invalid lift block produces actionable error with location hints.
+- **Risks / unknowns**
+  - Risk: if lift becomes “the only number”, teams might overfit to the score rather than use it as a trigger signal.
+  - De-risk plan: rubric emphasizes triggers + decomposition, not precision; confidence and missing-input warnings are front-and-center.
+- **Rollout / safety**
+  - Stage 1: docs + advisory targets + optional report output
+  - Stage 2: strict-mode enforcement for a minimal set of invariants (explicitly approved)
+

@@ -1,0 +1,53 @@
+# SEAM-4 — Pack-derived lift inputs (Impact Map + prefix expansion)
+
+- **Name**: Lift from Planning Pack artifacts
+- **Type**: capability
+- **Goal / user value**: Compute a reliable advisory lift signal from Planning Packs (especially `impact_map.md`) without requiring manual counts, while handling directory prefixes safely.
+- **Scope**
+  - In:
+    - Derive Touch Set counts from `impact_map.md` using `validate_impact_map.py --emit-json`.
+    - Count directory/prefix tokens as 1 in raw counts (for the vector).
+    - Optionally expand prefixes deterministically from the repo file list (e.g., `git ls-files <prefix>`) for *lift estimation only*, discounted and capped per prefix entry.
+    - Degrade confidence when prefix entries are present (since expansion reflects current HEAD).
+  - Out:
+    - Editing/reformatting `impact_map.md` or rewriting Touch Sets.
+    - Attempting to “predict” future files beyond current repo state.
+- **Primary interfaces (contracts)**
+  - Inputs:
+    - Planning Pack dir containing `impact_map.md`.
+    - `validate_impact_map.py --emit-json` JSON output.
+  - Outputs:
+    - A computed LiftResult with derived diagnostics:
+      - explicit vs prefix entries,
+      - per-prefix expansion counts,
+      - effective (discounted/capped) counts used for scoring/debugging.
+- **Key invariants / rules**
+  - Prefix expansion is deterministic and bounded:
+    - `EXPAND_DISCOUNT = 0.20`
+    - `EXPAND_CAP = 10`
+    - per-prefix effective contribution: `min(expanded, EXPAND_CAP) * EXPAND_DISCOUNT` (max 2.0).
+  - Prefix presence must degrade confidence unless explicitly overridden by a future policy decision.
+- **Dependencies**
+  - Blocks:
+    - SEAM-5 by enabling pack-level advisory computation.
+  - Blocked by:
+    - SEAM-3 for stable computation/output contracts (even if derived inputs live in the same tool initially).
+- **Touch surface**
+  - `docs/project_management/system/scripts/planning/pm_lift.py`
+  - `docs/project_management/system/scripts/planning/validate_impact_map.py` (contract dependency; changes require coordination)
+  - `docs/project_management/system/standards/planning/PLANNING_IMPACT_MAP_STANDARD.md` (document expected behavior)
+- **Verification**
+  - Use at least one Planning Pack with:
+    - explicit file entries only,
+    - directory/prefix entries,
+    - mixed entries (explicit + prefixes).
+  - Confirm:
+    - raw counts match authored tokens,
+    - effective counts reflect discount/cap,
+    - confidence is downgraded when prefixes exist.
+- **Risks / unknowns**
+  - Risk: prefix expansion can bias scoring for broad directories (even with cap).
+  - De-risk plan: ensure diagnostics are surfaced in `--emit-json` so reviewers can see the influence.
+- **Rollout / safety**
+  - Advisory-only; do not tie prefix expansion to enforcement until calibrated and explicitly approved.
+

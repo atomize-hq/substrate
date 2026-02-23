@@ -1,0 +1,42 @@
+# SEAM-2 — Lift model config v1 (weights/triggers/versioning)
+
+- **Name**: Work Lift model config v1
+- **Type**: integration
+- **Goal / user value**: Make Lift Score computation tunable and inspectable via a single versioned config file, so scoring changes don’t require code edits and can be reviewed like policy.
+- **Scope**
+  - In:
+    - Create `docs/project_management/system/schemas/work_lift_model.v1.json` defining:
+      - weights for base points,
+      - risk multipliers,
+      - slice mapping constants,
+      - split trigger thresholds,
+      - confidence rules related to missing inputs and prefix entries.
+    - Explicit version-selection semantics (how tools choose v1 vs future v2).
+  - Out:
+    - Multiple competing model files or dynamic “latest” selection without explicit version pinning.
+- **Primary interfaces (contracts)**
+  - Inputs:
+    - Lift Vector v1 (schema-defined fields).
+  - Outputs:
+    - A deterministic mapping from vector → score/triggers/slices/confidence.
+- **Key invariants / rules**
+  - The config must encode the canonical v1 rules in `WORKSTREAM_TRIAGE_AND_LIFT_DECISIONS.md` (D7–D9).
+  - The config must be “auditable”: readable by humans; no hidden code paths.
+  - Once shipped, `work_lift_model.v1.json` should be treated as stable/immutable; changes should introduce a new versioned file.
+- **Dependencies**
+  - Blocks:
+    - SEAM-3 by providing config-backed scoring.
+  - Blocked by:
+    - SEAM-1 only insofar as field names/types must match schema.
+- **Touch surface**
+  - New: `docs/project_management/system/schemas/work_lift_model.v1.json`
+  - Reference: `WORKSTREAM_TRIAGE_AND_LIFT_DECISIONS.md`
+- **Verification**
+  - Unit-style validation by running `pm_lift --emit-json` with known vectors and confirming score/triggers match expected values.
+  - A “golden” example in the rubric that asserts specific scoring outcomes for a small vector.
+- **Risks / unknowns**
+  - Risk: config grows too complex and becomes a second programming language.
+  - De-risk plan: keep v1 minimal (weights + thresholds + multipliers); reserve derived rules for code with explicit documentation and stable outputs.
+- **Rollout / safety**
+  - Tools should fall back to baked-in defaults only when config is missing (bootstrap); once present, config is required for strict mode (gated).
+

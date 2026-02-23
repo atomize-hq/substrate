@@ -1,0 +1,45 @@
+# SEAM-3 — `pm_lift` core engine + stable output contract
+
+- **Name**: `pm_lift` (core computation + outputs)
+- **Type**: capability
+- **Goal / user value**: Provide a deterministic, inspectable CLI tool that computes Work Lift from either (a) an embedded Lift Vector block or (b) derived artifacts, and emits stable JSON for downstream tooling.
+- **Scope**
+  - In:
+    - Load and apply `work_lift_model.v1.json` for scoring (no hard-coded weights in the steady-state).
+    - Validate embedded lift vectors against `work_lift_vector.schema.json` (or at minimum validate structure/types with actionable errors).
+    - Emit stable JSON contract (`--emit-json`) for use by future lint/enforcement tooling.
+    - Confidence and triggers rules consistent with the decision log (missing inputs, prefix entries).
+  - Out:
+    - Making `pm_lift` rewrite input files (frontmatter updates) unless explicitly introduced with idempotent rules.
+    - Introducing enforcement gates that break legacy packs.
+- **Primary interfaces (contracts)**
+  - Inputs:
+    - Intake/ADR markdown containing the `PM_LIFT_VECTOR` block.
+    - Optional model config file and schema file.
+  - Outputs:
+    - Human summary to stdout.
+    - Machine JSON summary via `--emit-json` (CONTRACT-3).
+- **Key invariants / rules**
+  - Deterministic outputs for a given input vector and model config.
+  - `null` numeric inputs never cause crash; they produce `confidence=low` and `missing_inputs:*` triggers.
+  - Additive evolution only for the JSON output contract (backward compatible).
+- **Dependencies**
+  - Blocks:
+    - SEAM-5 by providing stable outputs.
+  - Blocked by:
+    - SEAM-1 (schema/rubric) and SEAM-2 (model config).
+- **Touch surface**
+  - `docs/project_management/system/scripts/planning/pm_lift.py`
+  - New/optional: colocated helper modules (if splitting is needed to keep `pm_lift.py` readable).
+- **Verification**
+  - Golden tests (lightweight) that run `pm_lift` against sample inputs and assert:
+    - score and triggers,
+    - confidence downgrade on missing inputs,
+    - JSON output shape stability.
+  - Negative cases: invalid JSON block, missing markers, wrong types.
+- **Risks / unknowns**
+  - Risk: multiple model versions introduce ambiguity (“which version should I use?”).
+  - De-risk plan: explicit selection rule (e.g., `model_version` in vector; default to 1 if missing; require explicit pinning for strict mode).
+- **Rollout / safety**
+  - Advisory-first; if strict mode enforcement is later added, it should be keyed off `tasks.json meta.slice_spec_version >= 2`.
+

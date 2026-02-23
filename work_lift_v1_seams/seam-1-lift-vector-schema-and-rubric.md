@@ -1,0 +1,43 @@
+# SEAM-1 — Lift Vector schema + human rubric
+
+- **Name**: Lift Vector v1 schema + rubric
+- **Type**: integration
+- **Goal / user value**: Make Lift Vector v1 fillable/parseable in a deterministic way, with a single human-readable rubric that aligns with the machine schema and avoids “invented precision”.
+- **Scope**
+  - In:
+    - Create `docs/project_management/system/schemas/work_lift_vector.schema.json`.
+    - Create `docs/project_management/system/standards/shared/WORK_LIFT_RUBRIC.md`.
+    - Document the `PM_LIFT_VECTOR` marker convention and the required JSON fenced block.
+  - Out:
+    - Enforcing presence of lift blocks across all packs/intakes.
+    - Auto-rewriting existing docs to insert lift blocks.
+- **Primary interfaces (contracts)**
+  - Inputs:
+    - Markdown files containing `PM_LIFT_VECTOR` markers and a ` ```json { ... } ``` ` object.
+  - Outputs:
+    - JSON schema for the object.
+    - Rubric explaining each field, with examples and “what counts as null/unknown”.
+- **Key invariants / rules**
+  - Missing numeric inputs may be represented as `null`; scoring must treat them as 0 but degrade `confidence` and emit `missing_inputs:*` triggers.
+  - Schema and rubric must match the canonical Lift Vector fields in `WORKSTREAM_TRIAGE_AND_LIFT_DECISIONS.md` (D6).
+- **Dependencies**
+  - Blocks:
+    - SEAM-3 (pm_lift core) by providing schema/rubric.
+  - Blocked by:
+    - None (source-of-truth is the decision log).
+- **Touch surface**
+  - New: `docs/project_management/system/schemas/work_lift_vector.schema.json`
+  - New: `docs/project_management/system/standards/shared/WORK_LIFT_RUBRIC.md`
+  - Reference: `WORKSTREAM_TRIAGE_AND_LIFT_DECISIONS.md`
+- **Verification**
+  - Validate the schema against at least:
+    - a “fully specified” vector,
+    - a vector with `null` numeric fields,
+    - a vector with invalid types (e.g., bool for number) to ensure clear failures.
+  - Rubric includes at least one end-to-end example block that passes schema validation.
+- **Risks / unknowns**
+  - Risk: schema becomes too strict early and blocks iterative discovery.
+  - De-risk plan: allow additive fields via versioning; keep strict enforcement gated by pack strict mode.
+- **Rollout / safety**
+  - Advisory-first: schema is used for validation when the block is present; presence requirement is deferred/gated.
+

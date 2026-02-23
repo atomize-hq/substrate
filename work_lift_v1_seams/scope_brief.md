@@ -1,0 +1,40 @@
+# Scope Brief — Work Lift v1
+
+- **Goal (1 sentence)**: Materialize Work Lift v1 as a deterministic, advisory-first sizing/splitting signal that can be computed from intake/ADR markdown and Planning Pack artifacts.
+- **Why now**: Current workstream triage needs a stable “time-free” proxy for complexity to drive splitting decisions (ADR vs workstream) and map to execution primitives (slices/checkpoints) without inventing time estimates.
+- **Primary user(s) + JTBD**:
+  - PM / planning owners: quickly assess whether an ADR candidate should be split and roughly how many slices/checkpoints it implies.
+  - Agents: fill a structured lift vector in intake/ADR; compute lift deterministically from Planning Packs.
+- **In-scope**:
+  - Define v1 artifacts under `docs/project_management/system/*`:
+    - Lift Vector JSON schema (for embedded JSON block in markdown).
+    - Lift model config (weights/multipliers/triggers/versioning).
+    - Human rubric doc describing how to fill the vector + how scoring maps to split triggers and slices/checkpoints.
+  - Bring `docs/project_management/system/scripts/planning/pm_lift.py` to “v1 usable” by reading the artifacts and emitting stable summaries (`--emit-json`).
+  - Advisory-first integration points (Makefile/docs hooks), preserving legacy compatibility.
+- **Out-of-scope**:
+  - Enforced gating across the repo (hard failures) beyond what is explicitly marked “strict mode” and calibrated.
+  - A full subsystem taxonomy to deterministically compute `touch.boundary_crossings` (can be a follow-on seam/spike).
+  - Auto-rewriting intake/ADR/frontmatter in-place (unless explicitly added later with idempotent rules).
+- **Success criteria**:
+  - The rubric artifacts exist at the approved locations and are internally consistent.
+  - `pm_lift.py` can:
+    - parse Lift Vector blocks from markdown,
+    - validate them against the schema (or fail with actionable errors),
+    - compute a deterministic score/triggers/confidence using the model config,
+    - compute advisory lift from a Planning Pack `impact_map.md` touch set via `validate_impact_map.py --emit-json`,
+    - emit a stable JSON summary for downstream tooling.
+  - Strict/legacy compatibility remains intact (no breakage of existing packs/scripts).
+- **Constraints**: must be deterministic; advisory-first rollout; strict enforcement gated by `tasks.json meta.slice_spec_version >= 2`; avoid inventing precision when inputs are missing (`null` degrades confidence).
+- **External systems / dependencies**:
+  - Existing PM tooling and standards under `docs/project_management/system/`.
+  - `validate_impact_map.py --emit-json` contract as a dependency for pack-derived counts.
+- **Known unknowns / risks**:
+  - What becomes a “hard gate” vs advisory signal (requires calibration + policy decision).
+  - Consistent meaning of `boundary_crossings` without a taxonomy.
+  - Prefix expansion (directory tokens) can skew scoring if not carefully discounted/capped.
+- **Assumptions**:
+  - Lift v1 remains “canonical until revised” per `WORKSTREAM_TRIAGE_AND_LIFT_DECISIONS.md` D6–D9.
+  - Directory/prefix entries remain allowed in Impact Map Touch Sets; lift treats them carefully (discounted/capped expansion and/or confidence degradation).
+  - `pm_lift.py` is the initial reference implementation; future refactors may split core logic into a library module without changing public CLI output contracts.
+
