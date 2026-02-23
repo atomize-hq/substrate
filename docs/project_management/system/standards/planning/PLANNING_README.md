@@ -86,6 +86,7 @@ Planning agents must read end-to-end:
 - `docs/project_management/system/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`
 - `docs/project_management/system/standards/planning/PLANNING_IMPACT_MAP_STANDARD.md`
 - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+- `docs/project_management/system/standards/planning/PLANNING_WORK_LIFT_ADVISORY.md`
 - `docs/project_management/system/standards/ci/PLATFORM_INTEGRATION_AND_CI.md` (when cross-platform / smoke scripts exist)
 - `docs/project_management/system/standards/planning/PLANNING_LINT_CHECKLIST.md`
 - `docs/project_management/system/templates/planning_pack/PLANNING_GATE_REPORT_TEMPLATE.md`

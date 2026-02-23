@@ -132,6 +132,12 @@ Write-Host "-- impact_map.md Touch Set validation (gated by meta.slice_spec_vers
 & python (Join-Path $planningScriptsDir "validate_impact_map.py") --feature-dir $FeatureDir
 if ($LASTEXITCODE -ne 0) { throw "FAIL: impact_map Touch Set validation failed" }
 
+if ($env:PM_LIFT_ADVISORY -eq "1") {
+    Write-Host "-- Work Lift advisory report (PM_LIFT_ADVISORY=1)"
+    & python (Join-Path $planningScriptsDir "pm_lift_report.py") --feature-dir $FeatureDir
+    if ($LASTEXITCODE -ne 0) { throw "FAIL: Work Lift advisory report failed" }
+}
+
 if ([int]$schemaVersion -ge 3 -and $automationEnabled -eq "true" -and $crossPlatformEnabled -eq "true") {
     Write-Host "-- ci_checkpoint_plan.md invariants"
     & python (Join-Path $planningScriptsDir "validate_ci_checkpoint_plan.py") --feature-dir $FeatureDir

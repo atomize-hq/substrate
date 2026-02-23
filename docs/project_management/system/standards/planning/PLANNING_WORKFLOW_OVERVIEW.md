@@ -5,6 +5,7 @@ This diagram shows the intended handoff flow:
 - Spec determination (ADR → required spec set + ownership map)
 - Operator review via `## Executive Summary (Operator)` + drift guard
 - Planning Pack creation (execution-ready specs/tasks/prompts)
+- Advisory Work Lift computation (where lift fits + how to run): `docs/project_management/system/standards/planning/PLANNING_WORK_LIFT_ADVISORY.md`
 - Platform parity plan (required when cross-platform)
 - Third-party Planning Quality Gate (accept/flag)
 - If flagged: planning-doc remediation (docs-only) and re-review

@@ -177,6 +177,11 @@ python3 "${PLANNING_SCRIPTS_DIR}/validate_slice_specs.py" --feature-dir "${FEATU
 echo "-- impact_map.md Touch Set validation (gated by meta.slice_spec_version)"
 python3 "${PLANNING_SCRIPTS_DIR}/validate_impact_map.py" --feature-dir "${FEATURE_DIR}"
 
+if [[ "${PM_LIFT_ADVISORY:-0}" = "1" ]]; then
+    echo "-- Work Lift advisory report (PM_LIFT_ADVISORY=1)"
+    python3 "${PLANNING_SCRIPTS_DIR}/pm_lift_report.py" --feature-dir "${FEATURE_DIR}"
+fi
+
 if [[ "${schema_version}" -ge 3 && "${automation_enabled}" == "true" && "${cross_platform_enabled}" == "true" ]]; then
     echo "-- ci_checkpoint_plan.md invariants"
     python3 "${PLANNING_SCRIPTS_DIR}/validate_ci_checkpoint_plan.py" --feature-dir "${FEATURE_DIR}"

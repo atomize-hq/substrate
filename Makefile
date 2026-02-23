@@ -100,6 +100,7 @@ ADR ?=
 CODEX_PROFILE ?=
 CODEX_MODEL ?=
 CODEX_JSONL ?= 0
+EMIT_JSON ?= 0
 
 .PHONY: planning-validate
 planning-validate:
@@ -141,6 +142,49 @@ adr-check:
 adr-fix:
 	@if [ -z "$(ADR)" ]; then echo "ERROR: set ADR=docs/project_management/adrs/<bucket>/ADR-XXXX-....md"; exit 2; fi
 	python3 $(PM_SYSTEM_SCRIPTS)/planning/check_adr_exec_summary.py --adr "$(ADR)" --fix
+
+.PHONY: pm-lift-intake
+pm-lift-intake:
+	@if [ -z "$(FILE)" ]; then echo "ERROR: set FILE=<path/to/intake_or_adr.md>"; exit 2; fi
+	@set -euo pipefail; \
+	if [ "$(EMIT_JSON)" = "1" ]; then \
+	  python3 $(PM_SYSTEM_SCRIPTS)/planning/pm_lift.py from-intake --intake "$(FILE)" --emit-json; \
+	else \
+	  python3 $(PM_SYSTEM_SCRIPTS)/planning/pm_lift.py from-intake --intake "$(FILE)"; \
+	fi
+
+.PHONY: pm-lift-pack
+pm-lift-pack:
+	@if [ -z "$(PACK)" ]; then echo "ERROR: set PACK=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
+	@if ! echo "$(PACK)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: PACK must be under docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
+	@set -euo pipefail; \
+	if [ "$(EMIT_JSON)" = "1" ]; then \
+	  python3 $(PM_SYSTEM_SCRIPTS)/planning/pm_lift.py from-impact-map --feature-dir "$(PACK)" --emit-json; \
+	else \
+	  python3 $(PM_SYSTEM_SCRIPTS)/planning/pm_lift.py from-impact-map --feature-dir "$(PACK)"; \
+	fi
+
+.PHONY: pm-lift-diff
+pm-lift-diff:
+	@if [ -z "$(BASE)" ] || [ -z "$(HEAD)" ]; then echo "ERROR: set BASE=<git_ref> HEAD=<git_ref> (range is BASE..HEAD)"; exit 2; fi
+	@set -euo pipefail; \
+	if [ "$(EMIT_JSON)" = "1" ]; then \
+	  python3 $(PM_SYSTEM_SCRIPTS)/planning/pm_lift.py from-git-diff --git-range "$(BASE)..$(HEAD)" --emit-json; \
+	else \
+	  python3 $(PM_SYSTEM_SCRIPTS)/planning/pm_lift.py from-git-diff --git-range "$(BASE)..$(HEAD)"; \
+	fi
+
+.PHONY: pm-lift-strict
+pm-lift-strict:
+	@if [ -n "$(FILE)" ] && [ -n "$(PACK)" ]; then echo "ERROR: set only one of FILE or PACK"; exit 2; fi
+	@if [ -z "$(FILE)" ] && [ -z "$(PACK)" ]; then echo "ERROR: set FILE=<path/to/intake_or_adr.md> or PACK=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
+	@if [ -n "$(PACK)" ] && ! echo "$(PACK)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: PACK must be under docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
+	@set -euo pipefail; \
+	if [ -n "$(FILE)" ]; then \
+	  PM_LIFT_STRICT=1 python3 $(PM_SYSTEM_SCRIPTS)/planning/pm_lift_strict_check.py --intake "$(FILE)"; \
+	else \
+	  PM_LIFT_STRICT=1 python3 $(PM_SYSTEM_SCRIPTS)/planning/pm_lift_strict_check.py --feature-dir "$(PACK)"; \
+	fi
 
 # =========================
 # Cross-platform smoke (CI)
