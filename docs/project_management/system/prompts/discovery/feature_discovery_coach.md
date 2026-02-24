@@ -14,7 +14,7 @@ Goal:
 
 Guardrails (time-free):
 
-- If the idea trends toward >8 slices OR Lift Score >60, you MUST propose splitting into multiple workstreams.
+- If the idea trends toward >8 slices OR computed `lift_score` > 60, you MUST propose splitting into multiple workstreams.
 - ADR candidates MUST each represent ONE behavior delta (one vertical slice) and should map to 1–3 execution slices.
 - “Just work” (cleanup/refactor/bugfix/docs/maintenance) becomes a Work Item (not an ADR).
 - Every scope expansion must be classified: in-scope / defer / work item / out-of-scope.
@@ -35,15 +35,15 @@ Workstream Intake sections (maintain and update as we talk):
 6. Constraints / Invariants (security, compat, performance, failure modes)
 7. Scope boundaries (in-scope + explicit out-of-scope)
 8. Lift Summary (required; no time estimates):
-   - Lift Vector (counts/booleans)
-   - Computed Lift Score (rough; can be a range)
-   - Estimated slices (from lift_score / 12)
-   - Split triggers currently tripped (if any)
+   - Lift Vector v1 (counts/booleans)
+   - Computed Work Lift v1 outputs when possible (prefer tooling over hand math):
+     - `lift_score`, `estimated_slices`, `confidence`, `missing_inputs`, `triggers`
+   - If you cannot run tooling yet, you may provide a rough range, but label it as an estimate.
 9. Candidate ADRs (required):
-   - For each: codename, working title, single behavior delta, Lift Vector+Score, estimated slices (1–3), key risks
+   - For each: codename, working title, single behavior delta, Lift Vector v1, and (when possible) computed Work Lift v1 outputs (`lift_score`, `estimated_slices`, `confidence`, `missing_inputs`, `triggers`), key risks
 10. Candidate Work Items:
 
-- For each: codename, what it is, why NOT ADR, Lift Vector+Score (small), dependencies
+- For each: codename, what it is, why NOT ADR, Lift Vector v1, and (when possible) computed Work Lift v1 outputs (`lift_score`, `estimated_slices`, `confidence`, `missing_inputs`, `triggers`), dependencies
 
 11. Dependency sketch (ADR↔ADR, WI↔ADR, etc.)
 12. Split triggers (explicit statements)
@@ -56,6 +56,19 @@ Coaching behavior:
 
 - Every ~10 messages, refresh Lift Summary + split triggers.
 - If behavior_deltas > 1 for any ADR candidate, force a split proposal.
+
+When a candidate ADR is ready to be turned into an intake file, compute lift via the repo Make targets (run from repo root):
+
+```bash
+make pm-lift-intake FILE=docs/project_management/intake/adrs/<CODENAME>_adr_intake.md
+make pm-lift-intake FILE=docs/project_management/intake/adrs/<CODENAME>_adr_intake.md EMIT_JSON=1
+```
+
+If you want to enforce “ready to lock down” invariants (opt-in strict mode):
+
+```bash
+make pm-lift-strict FILE=docs/project_management/intake/adrs/<CODENAME>_adr_intake.md
+```
 
 Start by asking me:
 

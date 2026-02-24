@@ -15,6 +15,21 @@
 - Do not edit planning docs inside the worktree.
 - Each task (code/test/integ) must be scoped to fit within 40% of a typical 272k token context window (≤ 108,800 tokens).
 
+## Work Lift (advisory)
+- Pack-derived Work Lift is meaningful only for **strict packs** (`tasks.json.meta.slice_spec_version >= 2`), because derived touch sets flow through `validate_impact_map.py --emit-json`.
+- Compute from the pack:
+
+```bash
+make pm-lift-pack PACK="{{FEATURE_DIR}}"
+make pm-lift-pack PACK="{{FEATURE_DIR}}" EMIT_JSON=1
+```
+
+- Optional: include lift advisory in planning lint:
+
+```bash
+PM_LIFT_ADVISORY=1 make planning-lint FEATURE_DIR="{{FEATURE_DIR}}"
+```
+
 ## Triads
 - {{SLICE_ID}}: init slice (code/test/integ)
 - Prefer more (smaller) triads over fewer (larger) ones; avoid “grab bag” slices that mix multiple independent behavior changes.

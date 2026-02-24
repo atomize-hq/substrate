@@ -17,6 +17,7 @@ RECOMMENDATION: **ACCEPT** | **REVISE**
 - [ ] Planning quality gate is `ACCEPT` (`{{FEATURE_DIR}}/quality_gate_report.md`)
 - [ ] ADR accepted and still matches intent
 - [ ] Planning Pack complete (`plan.md`, `tasks.json`, `session_log.md`, specs, kickoff prompts)
+- [ ] Work Lift computed for this pack (strict packs only; record outputs/exit codes in this report)
 - [ ] Triad sizing is appropriate (each slice is one behavior delta; no “grab bag” slices)
 - [ ] Required planning artifacts exist (when required by planning standards): `impact_map.md`, `manual_testing_playbook.md`
 - [ ] Cross-platform plan is explicit (tasks.json meta: behavior + CI parity platforms, plus WSL mode if needed)
@@ -25,6 +26,16 @@ RECOMMENDATION: **ACCEPT** | **REVISE**
 
 - Slices reviewed:
 - Any required splits before starting execution:
+
+## 0.1) Work Lift (strict packs only)
+
+If `{{FEATURE_DIR}}/tasks.json` has `meta.slice_spec_version >= 2`, record Work Lift evidence:
+
+```bash
+make pm-lift-pack PACK="{{FEATURE_DIR}}"
+make pm-lift-pack PACK="{{FEATURE_DIR}}" EMIT_JSON=1
+PM_LIFT_ADVISORY=1 make planning-lint FEATURE_DIR="{{FEATURE_DIR}}"
+```
 
 ## 1) Cross-Platform Coverage (explicit and correct)
 

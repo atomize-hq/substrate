@@ -18,7 +18,7 @@ Use lift to:
 - detect early split signals (triggers matter more than the numeric score),
 - avoid “invented precision” by allowing unknown inputs (`null` / omitted) and letting confidence reflect uncertainty.
 
-Run: `pm_lift.py from-intake` (see recipes below).
+Run (recommended): `make pm-lift-intake FILE=...` (see examples below).
 
 ### Planning Pack refinement (planning-time)
 Once a Planning Pack has an `impact_map.md` Touch Set, you can compute lift from the pack.
@@ -29,14 +29,14 @@ Once a Planning Pack has an `impact_map.md` Touch Set, you can compute lift from
 
 Legacy packs (`meta.slice_spec_version` missing or `< 2`) intentionally emit **empty** allowlists under `--emit-json`, so `from-impact-map` will not reflect the authored Touch Set.
 
-Run: `pm_lift.py from-impact-map` (see recipes below).
+Run (recommended): `make pm-lift-pack PACK=...` (see examples below).
 
 ### Post-implementation calibration (after code changes)
 Use lift on a git diff to:
 - compare realized touch surface against the planning-time estimates,
 - calibrate whether lift thresholds/triggers are too sensitive or too lax.
 
-Run: `pm_lift.py from-git-diff` (see recipes below).
+Run (recommended): `make pm-lift-diff BASE=... HEAD=...` (see examples below).
 
 ## Prerequisites / gotchas
 
@@ -45,11 +45,40 @@ Run: `pm_lift.py from-git-diff` (see recipes below).
   - See: `docs/project_management/system/standards/shared/WORK_LIFT_RUBRIC.md` (`CONTRACT-1`)
 - Planning Pack lift is meaningful only for strict packs (`tasks.json.meta.slice_spec_version >= 2`), because `validate_impact_map.py --emit-json` is the authoritative source of Touch Set allowlists (`CONTRACT-4`).
 
-## How to run (direct script recipes)
+## How to run (recommended: Make targets)
+
+Prefer these Makefile wrappers as the canonical human/agent interface (they are thin wrappers around the direct script commands below).
+
+Notes:
+- Use `EMIT_JSON=1` to include `--emit-json` (machine output is pinned by `CONTRACT-3`).
+- Pack-derived lift is meaningful only for strict packs (`tasks.json.meta.slice_spec_version >= 2`), because derived touch sets flow through `validate_impact_map.py --emit-json` (`CONTRACT-4`).
+
+### Intake / ADR
+
+```bash
+make pm-lift-intake FILE=docs/project_management/intake/adrs/queued/ADR-000X-example.md
+make pm-lift-intake FILE=/tmp/pm_lift_intake_example.md EMIT_JSON=1
+```
+
+### Planning Pack
+
+```bash
+make pm-lift-pack PACK=docs/project_management/packs/active/warn-config-global-show-workspace-overrides
+make pm-lift-pack PACK=docs/project_management/packs/active/warn-config-global-show-workspace-overrides EMIT_JSON=1
+```
+
+### Git diff calibration
+
+```bash
+make pm-lift-diff BASE=HEAD~1 HEAD=HEAD
+make pm-lift-diff BASE=HEAD~1 HEAD=HEAD EMIT_JSON=1
+```
+
+### Direct script recipes (equivalent)
 
 All commands support `--emit-json` for machine-readable output (see `CONTRACT-3`).
 
-### Intake / ADR markdown (`from-intake`)
+#### Intake / ADR markdown (`from-intake`)
 
 ```bash
 python3 docs/project_management/system/scripts/planning/pm_lift.py \
@@ -62,7 +91,7 @@ To add a valid Lift Vector block to an intake/ADR file, follow:
 - `docs/project_management/system/standards/shared/WORK_LIFT_RUBRIC.md`
 - `docs/project_management/system/schemas/work_lift_vector.schema.json`
 
-### Planning Pack (`from-impact-map`)
+#### Planning Pack (`from-impact-map`)
 
 ```bash
 python3 docs/project_management/system/scripts/planning/pm_lift.py \
@@ -76,7 +105,7 @@ Notes:
 - For strict Touch Set rules (including prefix entry semantics), see:
   - `docs/project_management/system/standards/planning/PLANNING_IMPACT_MAP_STANDARD.md`
 
-### Git diff calibration (`from-git-diff`)
+#### Git diff calibration (`from-git-diff`)
 
 ```bash
 python3 docs/project_management/system/scripts/planning/pm_lift.py \
@@ -106,31 +135,6 @@ When `--emit-json` is provided, the output contract is:
 
 On success, stdout is JSON-only with required keys including:
 `model_version`, `lift_score`, `estimated_slices`, `confidence`, `triggers`, `missing_inputs`, `vector`, `derived`.
-
-## Makefile entry points (opt-in)
-
-These targets are **opt-in** helpers and do not change default planning lint behavior.
-
-### Intake / ADR
-
-```bash
-make pm-lift-intake FILE=docs/project_management/intake/adrs/queued/ADR-000X-example.md
-make pm-lift-intake FILE=/tmp/pm_lift_intake_example.md EMIT_JSON=1
-```
-
-### Planning Pack
-
-```bash
-make pm-lift-pack PACK=docs/project_management/packs/active/warn-config-global-show-workspace-overrides
-make pm-lift-pack PACK=docs/project_management/packs/active/warn-config-global-show-workspace-overrides EMIT_JSON=1
-```
-
-### Git diff calibration
-
-```bash
-make pm-lift-diff BASE=HEAD~1 HEAD=HEAD
-make pm-lift-diff BASE=HEAD~1 HEAD=HEAD EMIT_JSON=1
-```
 
 ## Advisory report (optional)
 
@@ -183,17 +187,17 @@ Prereqs:
 
 1) Intake/ADR (example file you create locally; do not commit):
 ```bash
-python3 docs/project_management/system/scripts/planning/pm_lift.py from-intake --intake /tmp/pm_lift_intake_example.md
+make pm-lift-intake FILE=/tmp/pm_lift_intake_example.md
 ```
 
 2) Planning Pack (strict pack example):
 ```bash
-python3 docs/project_management/system/scripts/planning/pm_lift.py from-impact-map --feature-dir docs/project_management/packs/active/warn-config-global-show-workspace-overrides
+make pm-lift-pack PACK=docs/project_management/packs/active/warn-config-global-show-workspace-overrides
 ```
 
 3) Git diff calibration:
 ```bash
-python3 docs/project_management/system/scripts/planning/pm_lift.py from-git-diff --git-range HEAD~1..HEAD
+make pm-lift-diff BASE=HEAD~1 HEAD=HEAD
 ```
 
 What to look for:

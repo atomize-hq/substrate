@@ -18,6 +18,8 @@ This directory contains **standards only** (normative rules). Prompt payloads li
 - `docs/project_management/system/standards/planning/PLANNING_IMPACT_MAP_STANDARD.md`
 - `docs/project_management/system/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`
 - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+- `docs/project_management/system/standards/planning/PLANNING_WORK_LIFT_ADVISORY.md`
+- `docs/project_management/system/standards/planning/PLANNING_WORK_LIFT_STRICT_MODE.md`
 
 ### Execution
 

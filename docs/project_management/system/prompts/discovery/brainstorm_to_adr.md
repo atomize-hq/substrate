@@ -18,7 +18,7 @@ Rules:
 - ADR MUST be ONE behavior delta. If it grows, split into multiple ADR candidates or Work Items.
 - Work Item must be a crisp, bounded task (implementation/maintenance/cleanup)
 - Track dependencies explicitly.
-- No hours/days estimates. Use Lift Vector + Lift Score + slice estimate.
+- No hours/days estimates. Use Work Lift v1 (Lift Vector + computed outputs via `make pm-lift-*` commands).
 
 ADR Intake sections (if ADR):
 
@@ -37,10 +37,22 @@ ADR Intake sections (if ADR):
 13. Dependencies: depends_on_adrs, depends_on_work_items, blocks
 14. Lift Summary:
 
-- Lift Vector (counts/booleans)
-- Lift Score (or range)
-- Estimated slices = ceil(score/12)
-- Split triggers tripped (if any)
+- Lift Vector v1 (counts/booleans), authored as a `PM_LIFT_VECTOR` JSON block (see `docs/project_management/system/standards/shared/WORK_LIFT_RUBRIC.md`).
+- Computed Work Lift v1 outputs (from tooling; do not hand-calculate if you can run the command):
+  - `lift_score`, `estimated_slices`, `confidence`, `missing_inputs`, `triggers`
+
+Compute (repo root):
+
+```bash
+make pm-lift-intake FILE=docs/project_management/intake/adrs/<CODENAME>_adr_intake.md
+make pm-lift-intake FILE=docs/project_management/intake/adrs/<CODENAME>_adr_intake.md EMIT_JSON=1
+```
+
+Optional (strict-mode opt-in check; should pass for “ready to lock down” ADR candidates):
+
+```bash
+make pm-lift-strict FILE=docs/project_management/intake/adrs/<CODENAME>_adr_intake.md
+```
 
 15. Open questions
 16. Ready-to-lockdown checklist
@@ -55,7 +67,10 @@ WI Intake sections (if WI):
 6. Done means (<=8 outcomes)
 7. Likely touch paths
 8. Dependencies (ADR/WI)
-9. Lift Summary (small; vector+score)
+9. Lift Summary (small; vector + computed outputs)
+   - Prefer computing via:
+     - `make pm-lift-intake FILE=docs/project_management/intake/work_items/<CODENAME>_work_item_intake.md`
+     - (optional) `EMIT_JSON=1`
 10. Open questions
 
 Start by asking me:

@@ -24,6 +24,14 @@ standards:
     category: planning
     path: docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md
     description: "Research planning rubric and alignment standard."
+  - id: planning_work_lift_advisory
+    category: planning
+    path: docs/project_management/system/standards/planning/PLANNING_WORK_LIFT_ADVISORY.md
+    description: "Advisory-first Work Lift usage in the planning workflow (Make targets + script recipes)."
+  - id: planning_work_lift_strict_mode
+    category: planning
+    path: docs/project_management/system/standards/planning/PLANNING_WORK_LIFT_STRICT_MODE.md
+    description: "Opt-in, gated strict mode checks for Work Lift (post-calibration enforcement surface)."
 
   - id: execution_preflight_gate_standard
     category: execution

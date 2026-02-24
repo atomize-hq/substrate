@@ -57,3 +57,6 @@ Rules:
 - “Summary of changes” must be exhaustive.
 - “Rubric checks run” must list actual commands executed.
 - If you changed `tasks.json`, include a statement that required fields exist and that kickoff prompts exist.
+- If you ran Work Lift, record the exact commands and exit codes, e.g.:
+  - `make pm-lift-pack PACK=docs/project_management/packs/active/<feature>` → `<exit code>` → `<PASS|FAIL>`
+  - `PM_LIFT_ADVISORY=1 make planning-lint FEATURE_DIR=docs/project_management/packs/active/<feature>` → `<exit code>` → `<PASS|FAIL>`

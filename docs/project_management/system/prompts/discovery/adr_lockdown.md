@@ -9,7 +9,7 @@ Task:
 
 - If ADR intake: generate a vertical-slice ADR draft that matches repo ADR standards.
 - If WI intake: generate a Work Item record suitable for the work_items queue.
-- No hours/days. Provide Lift Vector + Lift Score + estimated slices.
+- No hours/days. Provide Lift Vector v1 + computed Work Lift v1 outputs (use `make pm-lift-*` commands).
 
 Hard requirements:
 
@@ -41,6 +41,34 @@ Outputs (in this exact order):
    - depends_on_work_items
    - blocks
 4. “What must be true before planning-lint can pass” checklist
+
+Compute Work Lift v1 (repo root; prefer tool output over hand math):
+
+```bash
+make pm-lift-intake FILE=docs/project_management/intake/adrs/<CODENAME>_adr_intake.md
+make pm-lift-intake FILE=docs/project_management/intake/adrs/<CODENAME>_adr_intake.md EMIT_JSON=1
+```
+
+If a Planning Pack exists and is in strict format (`meta.slice_spec_version >= 2`), compute pack-derived lift:
+
+```bash
+make pm-lift-pack PACK=docs/project_management/packs/<bucket>/<feature>
+make pm-lift-pack PACK=docs/project_management/packs/<bucket>/<feature> EMIT_JSON=1
+```
+
+Optional strict-mode (opt-in) check for “ready to lock down”:
+
+```bash
+make pm-lift-strict FILE=docs/project_management/intake/adrs/<CODENAME>_adr_intake.md
+make pm-lift-strict PACK=docs/project_management/packs/<bucket>/<feature>
+```
+
+Planning lint (pack context):
+
+```bash
+make planning-lint FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>
+PM_LIFT_ADVISORY=1 make planning-lint FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>
+```
 
 Do not invent details silently:
 

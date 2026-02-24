@@ -61,6 +61,16 @@ Reference: `docs/project_management/system/standards/planning/PLANNING_LINT_CHEC
 - `<command>` → `<exit code>` → `<notes>`
 - `<command>` → `<exit code>` → `<notes>`
 
+### Work Lift advisory (recommended)
+
+If the pack is strict (`tasks.json.meta.slice_spec_version >= 2`), include Work Lift evidence:
+
+```bash
+make pm-lift-pack PACK="$FEATURE_DIR"
+make pm-lift-pack PACK="$FEATURE_DIR" EMIT_JSON=1
+PM_LIFT_ADVISORY=1 make planning-lint FEATURE_DIR="$FEATURE_DIR"
+```
+
 ### Additional review commands (if any)
 - `<command>` → `<exit code>` → `<notes>`
 
