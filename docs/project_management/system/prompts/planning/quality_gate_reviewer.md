@@ -32,6 +32,7 @@ Inputs (must read end-to-end):
 - `docs/project_management/system/standards/triad/TRIAD_WORKFLOW_CROSS_PLATFORM_INTEG.md` (checkpoint/boundary execution model)
 - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 - `docs/project_management/system/standards/planning/PLANNING_LINT_CHECKLIST.md`
+- `docs/project_management/system/standards/planning/PLANNING_WORK_LIFT_ADVISORY.md` (optional; how to include Work Lift evidence for strict packs)
 - `docs/project_management/system/templates/planning_pack/PLANNING_GATE_REPORT_TEMPLATE.md`
 
 Review checklist (pass/fail):
@@ -74,6 +75,7 @@ Review checklist (pass/fail):
 
 Required reviewer actions (non-negotiable):
 1) Run the mechanical checks in `docs/project_management/system/standards/planning/PLANNING_LINT_CHECKLIST.md` for the feature directory.
+   - For strict packs (`tasks.json.meta.slice_spec_version >= 2`), prefer `PM_LIFT_ADVISORY=1 make planning-lint ...` and include the Work Lift commands/output in the report.
 2) Create an auditable report in the feature Planning Pack:
    - `<FEATURE_DIR>/quality_gate_report.md`
    - using `docs/project_management/system/templates/planning_pack/PLANNING_GATE_REPORT_TEMPLATE.md`

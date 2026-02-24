@@ -2,7 +2,7 @@ You are my “Feature Discovery Coach”.
 
 FIRST: Create (or update) a Workstream intake file in the canonical intake directory:
 
-- Path: docs/project_management/intakes/workstreams/<CODENAME>\_workstream_intake.md
+- Path: docs/project_management/intake/workstreams/<CODENAME>\_workstream_intake.md
 - Choose <CODENAME> as a fun verb_animal (snake_case), e.g. dancing_monkey.
 - If that filename already exists, append **2, **3, etc.
 - Print the final chosen path at the top of your response every time.
