@@ -32,7 +32,11 @@ Use this rule:
 - Decision Register: **all** architectural decisions recorded as exactly two options (A/B) with explicit tradeoffs and one selection.
 
 If the work has more than one meaningful decision, the Planning Pack must include:
-- `docs/project_management/packs/active/<feature>/decision_register.md`
+- `docs/project_management/packs/<bucket>/<feature>/decision_register.md`
+
+Bucket rule:
+- Draft ADRs should reference `docs/project_management/packs/draft/<feature>/`.
+- Accepted ADRs must reference `docs/project_management/packs/active/<feature>/`.
 
 The ADR must link to that decision register and must not duplicate decision entries.
 
@@ -70,7 +74,9 @@ Every ADR must include all sections below. Every behavior statement must be sing
 - Status: `Draft` or `Accepted`
 - Date (UTC)
 - Owner(s)
-- Feature directory path under `docs/project_management/packs/active/<feature>/`
+- Feature directory path under `docs/project_management/packs/<bucket>/<feature>/`
+  - For Status=Draft: use `draft`
+  - For Status=Accepted: use `active`
 - Related documents (links to plan/specs/decision register/sequencing)
 
 ### Required sections
@@ -145,7 +151,9 @@ If both a cross-cutting ADR and a feature-local ADR exist, the cross-cutting ADR
 - Owner(s): <names/roles>
 
 ## Scope
-- Feature directory: `docs/project_management/packs/active/<feature>/`
+- Feature directory: `docs/project_management/packs/<bucket>/<feature>/`
+  - For Status=Draft: use `docs/project_management/packs/draft/<feature>/`
+  - For Status=Accepted: use `docs/project_management/packs/active/<feature>/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
@@ -153,14 +161,14 @@ If both a cross-cutting ADR and a feature-local ADR exist, the cross-cutting ADR
   - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
 
 ## Related Docs
-- Plan: `docs/project_management/packs/active/<feature>/plan.md`
-- Tasks: `docs/project_management/packs/active/<feature>/tasks.json`
-- Spec manifest: `docs/project_management/packs/active/<feature>/spec_manifest.md`
+- Plan: `docs/project_management/packs/<bucket>/<feature>/plan.md`
+- Tasks: `docs/project_management/packs/<bucket>/<feature>/tasks.json`
+- Spec manifest: `docs/project_management/packs/<bucket>/<feature>/spec_manifest.md`
 - Specs: <list spec paths>
-- Contract (if present): `docs/project_management/packs/active/<feature>/contract.md`
-- Decision Register: `docs/project_management/packs/active/<feature>/decision_register.md` (if required)
-- Impact Map: `docs/project_management/packs/active/<feature>/impact_map.md` (if required)
-- Manual Playbook: `docs/project_management/packs/active/<feature>/manual_testing_playbook.md` (if required)
+- Contract (if present): `docs/project_management/packs/<bucket>/<feature>/contract.md`
+- Decision Register: `docs/project_management/packs/<bucket>/<feature>/decision_register.md` (if required)
+- Impact Map: `docs/project_management/packs/<bucket>/<feature>/impact_map.md` (if required)
+- Manual Playbook: `docs/project_management/packs/<bucket>/<feature>/manual_testing_playbook.md` (if required)
 
 ## Executive Summary (Operator)
 

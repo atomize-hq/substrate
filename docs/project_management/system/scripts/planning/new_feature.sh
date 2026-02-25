@@ -4,13 +4,13 @@ set -euo pipefail
 usage() {
     cat <<'USAGE'
 Usage:
-  make planning-new-feature FEATURE=<feature_dir_name> [DECISION_HEAVY=1] [CROSS_PLATFORM=1] [AUTOMATION=1] [...]
+  make planning-new-feature FEATURE=<feature_dir_name> [PACK_BUCKET=<bucket>] [DECISION_HEAVY=1] [CROSS_PLATFORM=1] [AUTOMATION=1] [...]
 
 Example:
-  make planning-new-feature FEATURE=world-sync DECISION_HEAVY=1 CROSS_PLATFORM=1
+  make planning-new-feature FEATURE=world-sync PACK_BUCKET=draft DECISION_HEAVY=1 CROSS_PLATFORM=1
 
 Creates:
-  docs/project_management/packs/active/<feature>/   (canonical)
+  docs/project_management/packs/<bucket>/<feature>/   (bucket default: PM_DEFAULT_PACK_BUCKET, else active)
     plan.md
     tasks.json
     session_log.md
@@ -25,6 +25,7 @@ USAGE
 }
 
 FEATURE=""
+BUCKET=""
 SLICE_PREFIX=""
 DECISION_HEAVY=0
 CROSS_PLATFORM=0
@@ -43,6 +44,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --slice-prefix)
             SLICE_PREFIX="${2:-}"
+            shift 2
+            ;;
+        --bucket)
+            BUCKET="${2:-}"
             shift 2
             ;;
         --slice-dirs)
@@ -199,7 +204,18 @@ if [[ -z "${PM_PACKS_ROOT}" ]]; then
     exit 2
 fi
 
-FEATURE_DIR="${PM_PACKS_ROOT%/}/active/${FEATURE}"
+PM_DEFAULT_PACK_BUCKET="$(
+    python3 -c 'import json,sys; print(json.load(sys.stdin).get("pm_default_pack_bucket",""))' <<<"${pm_roots_json}" 2>/dev/null || true
+)"
+PACK_BUCKET="${BUCKET}"
+if [[ -z "${PACK_BUCKET}" ]]; then
+    PACK_BUCKET="${PM_DEFAULT_PACK_BUCKET}"
+fi
+if [[ -z "${PACK_BUCKET}" ]]; then
+    PACK_BUCKET="active"
+fi
+
+FEATURE_DIR="${PM_PACKS_ROOT%/}/${PACK_BUCKET}/${FEATURE}"
 PLANNING_TEMPLATES_DIR="docs/project_management/system/templates/planning_pack"
 KICKOFF_TEMPLATES_DIR="docs/project_management/system/templates/kickoff"
 ORCH_BRANCH="feat/${FEATURE}"

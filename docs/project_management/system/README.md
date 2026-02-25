@@ -7,7 +7,7 @@ This directory is the **portable system root** for PM “system” assets: stand
 - **System** = reusable, canonical references used by humans/agents (standards, prompts, templates, schemas).
 - **Artifacts** = feature- or run-specific outputs produced by planning/execution (Planning Packs, reports, tasks).
 
-Canonical artifact roots live elsewhere (for example `docs/project_management/packs/active/<feature>/`).
+Canonical artifact roots live elsewhere (for example `docs/project_management/packs/<bucket>/<feature>/`).
 
 ## Canonical locations
 

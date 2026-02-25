@@ -140,6 +140,25 @@ pm-pre-planning-research:
 	if [ -n "$(POLL_S)" ]; then cmd="$$cmd --poll-s \"$(POLL_S)\""; fi; \
 	CODEX_PROFILE="$(CODEX_PROFILE)" CODEX_MODEL="$(CODEX_MODEL)" CODEX_JSONL="$(CODEX_JSONL)" eval "$$cmd"
 
+.PHONY: pm-pre-planning-from-adr
+pm-pre-planning-from-adr:
+	@if [ -z "$(ADR)" ]; then echo "ERROR: set ADR=docs/project_management/adrs/<bucket>/ADR-XXXX-....md"; exit 2; fi
+	@set -euo pipefail; \
+	if [ -n "$$(git status --porcelain=v1)" ]; then echo "ERROR: orchestration checkout is dirty; commit or stash before running"; exit 2; fi; \
+	bucket="$(BUCKET)"; \
+	if [ -z "$$bucket" ]; then bucket="$${PM_DEFAULT_PACK_BUCKET:-}"; fi; \
+	if [ -z "$$bucket" ]; then bucket="draft"; fi; \
+	cmd="$(PM_SYSTEM_SCRIPTS)/planning/scaffold_pre_planning_pack.sh --adr \"$(ADR)\" --bucket \"$$bucket\""; \
+	if [ -n "$(FEATURE)" ]; then cmd="$$cmd --feature \"$(FEATURE)\""; fi; \
+	feature_dir="$$(eval "$$cmd")"; \
+	if [ -z "$$feature_dir" ]; then echo "ERROR: scaffold_pre_planning_pack.sh returned empty feature dir"; exit 2; fi; \
+	tasks_path="$$feature_dir/tasks.json"; \
+	if [ -n "$$(git status --porcelain=v1 -- \"$$tasks_path\")" ]; then \
+	  git add -- "$$tasks_path"; \
+	  if ! git diff --cached --quiet; then git commit -m "docs: bootstrap pre-planning pack"; fi; \
+	fi; \
+	$(MAKE) pm-pre-planning-research FEATURE_DIR="$$feature_dir" START_AT="$(START_AT)" POLL_S="$(POLL_S)"
+
 .PHONY: planning-lint-ps
 planning-lint-ps:
 	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
@@ -279,8 +298,9 @@ feature-smoke-wsl:
 # Planning pack scaffolding
 # =========================
 
-# New feature directory name under docs/project_management/packs/active/<feature>
+# New feature directory name under docs/project_management/packs/<bucket>/<feature>
 FEATURE ?=
+PACK_BUCKET ?=
 DECISION_HEAVY ?= 0
 CROSS_PLATFORM ?= 0
 WSL_REQUIRED ?= 0
@@ -294,7 +314,10 @@ SLICE_PREFIX ?=
 planning-new-feature:
 	@if [ -z "$(FEATURE)" ]; then echo "ERROR: set FEATURE=<feature_dir_name>"; exit 2; fi
 	@set -euo pipefail; \
-	cmd="$(PM_SYSTEM_SCRIPTS)/planning/new_feature.sh --feature \"$(FEATURE)\""; \
+	bucket="$(PACK_BUCKET)"; \
+	if [ -z "$$bucket" ]; then bucket="$${PM_DEFAULT_PACK_BUCKET:-}"; fi; \
+	if [ -z "$$bucket" ]; then bucket="active"; fi; \
+	cmd="$(PM_SYSTEM_SCRIPTS)/planning/new_feature.sh --feature \"$(FEATURE)\" --bucket \"$$bucket\""; \
 	if [ -n "$(SLICE_PREFIX)" ]; then cmd="$$cmd --slice-prefix \"$(SLICE_PREFIX)\""; fi; \
 	if [ "$(DECISION_HEAVY)" = "1" ]; then cmd="$$cmd --decision-heavy"; fi; \
 	if [ "$(CROSS_PLATFORM)" = "1" ]; then cmd="$$cmd --cross-platform"; fi; \
@@ -304,14 +327,17 @@ planning-new-feature:
 	if [ "$(WSL_SEPARATE)" = "1" ]; then cmd="$$cmd --wsl-separate"; fi; \
 	if [ "$(AUTOMATION)" = "1" ]; then cmd="$$cmd --automation"; fi; \
 	eval "$$cmd"; \
-	$(MAKE) planning-validate FEATURE_DIR="docs/project_management/packs/active/$(FEATURE)"
+	$(MAKE) planning-validate FEATURE_DIR="docs/project_management/packs/$$bucket/$(FEATURE)"
 
 .PHONY: planning-new-feature-ps
 planning-new-feature-ps:
 	@if [ -z "$(FEATURE)" ]; then echo "ERROR: set FEATURE=<feature_dir_name>"; exit 2; fi
 	@if ! command -v pwsh >/dev/null 2>&1; then echo "ERROR: pwsh not found on PATH"; exit 2; fi
 	@set -euo pipefail; \
-	cmd="pwsh -File $(PM_SYSTEM_SCRIPTS)/planning/new_feature.ps1 -Feature \"$(FEATURE)\""; \
+	bucket="$(PACK_BUCKET)"; \
+	if [ -z "$$bucket" ]; then bucket="$${PM_DEFAULT_PACK_BUCKET:-}"; fi; \
+	if [ -z "$$bucket" ]; then bucket="active"; fi; \
+	cmd="pwsh -File $(PM_SYSTEM_SCRIPTS)/planning/new_feature.ps1 -Feature \"$(FEATURE)\" -Bucket \"$$bucket\""; \
 	if [ -n "$(SLICE_PREFIX)" ]; then cmd="$$cmd -SlicePrefix \"$(SLICE_PREFIX)\""; fi; \
 	if [ "$(DECISION_HEAVY)" = "1" ]; then cmd="$$cmd -DecisionHeavy"; fi; \
 	if [ "$(CROSS_PLATFORM)" = "1" ]; then cmd="$$cmd -CrossPlatform"; fi; \
@@ -321,7 +347,7 @@ planning-new-feature-ps:
 	if [ "$(WSL_SEPARATE)" = "1" ]; then cmd="$$cmd -WslSeparate"; fi; \
 	if [ "$(AUTOMATION)" = "1" ]; then cmd="$$cmd -Automation"; fi; \
 	eval "$$cmd"; \
-	$(MAKE) planning-validate FEATURE_DIR="docs/project_management/packs/active/$(FEATURE)"
+	$(MAKE) planning-validate FEATURE_DIR="docs/project_management/packs/$$bucket/$(FEATURE)"
 
 .PHONY: planning-archive
 planning-archive:

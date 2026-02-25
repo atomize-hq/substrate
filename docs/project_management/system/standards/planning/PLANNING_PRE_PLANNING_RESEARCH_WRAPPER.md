@@ -9,7 +9,10 @@ Canonical wrapper prompt:
 - `docs/project_management/system/prompts/planning/pre_planning_wrapper.md`
 
 Canonical automation entrypoint:
-- `make pm-pre-planning-research FEATURE_DIR="docs/project_management/packs/<bucket>/<feature>"`
+- Start from ADR-only (no pack yet):
+  - `make pm-pre-planning-from-adr ADR="docs/project_management/adrs/draft/ADR-000X-<kebab-title>.md" [FEATURE="<feature>"] [BUCKET=draft]`
+- Start from an existing pack:
+  - `make pm-pre-planning-research FEATURE_DIR="docs/project_management/packs/<bucket>/<feature>"`
 
 ---
 
@@ -34,8 +37,12 @@ Non-goals:
 
 ## Preconditions
 
-1) A Planning Pack exists under `docs/project_management/packs/<bucket>/<feature>/`.
-   - Recommended scaffold: `make planning-new-feature FEATURE=<feature> ...`
+1) One of:
+   - ADR-only start (recommended for pre-planning): run:
+     - `make pm-pre-planning-from-adr ADR="docs/project_management/adrs/draft/ADR-000X-<kebab-title>.md" [FEATURE="<feature>"] [BUCKET=draft]`
+     - This scaffolds a minimal pack (creates/patches `tasks.json` with `meta.adr_paths`) and auto-commits it before launching pre-planning.
+   - Existing Planning Pack under `docs/project_management/packs/<bucket>/<feature>/`:
+     - Recommended full scaffold: `make planning-new-feature FEATURE=<feature> ...`
 
 2) The pack’s `tasks.json` can resolve ADR inputs for focused agents.
    - Strict packs (`meta.slice_spec_version >= 2`) must set at least one of:

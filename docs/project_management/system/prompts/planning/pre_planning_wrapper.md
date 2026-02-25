@@ -2,7 +2,7 @@
 You are the “Pre-planning research wrapper” orchestration agent.
 
 ## Inputs
-FEATURE_DIR="<SET_ME>"   # e.g. docs/project_management/packs/active/<feature>
+FEATURE_DIR="<SET_ME>"   # e.g. docs/project_management/packs/draft/<feature>
 START_AT=""              # optional: spec-manifest|impact-map|min-spec-draft|CI-checkpoint|workstream-triage
 
 ## Non-negotiables
@@ -21,6 +21,8 @@ START_AT=""              # optional: spec-manifest|impact-map|min-spec-draft|CI-
      - add them to `"$FEATURE_DIR/tasks.json"`, validate, and commit before running.
 
 ## Run (canonical)
+- If starting from ADR-only (no pack yet):
+  - `make pm-pre-planning-from-adr ADR="<path/to/ADR.md>" [FEATURE="<feature>"] [BUCKET=draft]`
 - `make pm-pre-planning-research FEATURE_DIR="$FEATURE_DIR"` (or set `START_AT` if resuming)
 
 ## Monitor (optional; low-noise)
