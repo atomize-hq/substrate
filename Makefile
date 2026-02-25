@@ -94,6 +94,10 @@ FEATURE_DIR ?=
 # Planning agent id for pm-run-planning-agent
 AGENT ?=
 
+# Pre-planning research orchestrator options
+START_AT ?=
+POLL_S ?= 60
+
 # ADR path under docs/project_management/adrs/<bucket>/...
 ADR ?=
 
@@ -118,13 +122,23 @@ planning-lint:
 pm-run-planning-agent:
 	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
 	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
-	@if [ -z "$(AGENT)" ]; then echo "ERROR: set AGENT=spec_manifest|impact_map"; exit 2; fi
+	@if [ -z "$(AGENT)" ]; then echo "ERROR: set AGENT=spec_manifest|impact_map|min_spec_draft|ci_checkpoint|workstream_triage"; exit 2; fi
 	@set -euo pipefail; \
 	cmd="$(PM_SYSTEM_SCRIPTS)/planning/run_planning_agent.sh --feature-dir \"$(FEATURE_DIR)\" --agent \"$(AGENT)\""; \
 	if [ -n "$(CODEX_PROFILE)" ]; then cmd="$$cmd --codex-profile \"$(CODEX_PROFILE)\""; fi; \
 	if [ -n "$(CODEX_MODEL)" ]; then cmd="$$cmd --codex-model \"$(CODEX_MODEL)\""; fi; \
 	if [ "$(CODEX_JSONL)" = "1" ]; then cmd="$$cmd --codex-jsonl"; fi; \
 	eval "$$cmd"
+
+.PHONY: pm-pre-planning-research
+pm-pre-planning-research:
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
+	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
+	@set -euo pipefail; \
+	cmd="$(PM_SYSTEM_SCRIPTS)/planning/pre_planning_research_orchestrate.sh --feature-dir \"$(FEATURE_DIR)\""; \
+	if [ -n "$(START_AT)" ]; then cmd="$$cmd --start-at \"$(START_AT)\""; fi; \
+	if [ -n "$(POLL_S)" ]; then cmd="$$cmd --poll-s \"$(POLL_S)\""; fi; \
+	CODEX_PROFILE="$(CODEX_PROFILE)" CODEX_MODEL="$(CODEX_MODEL)" CODEX_JSONL="$(CODEX_JSONL)" eval "$$cmd"
 
 .PHONY: planning-lint-ps
 planning-lint-ps:

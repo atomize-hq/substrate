@@ -1,21 +1,30 @@
 # Planning Pre-Planning Research Wrapper (Standard)
 
 This standard describes the **Pre-Planning Research** orchestration workflow and the intended contracts between:
-- the orchestration wrapper agent, and
-- the focused single-output planning agents (`spec_manifest`, `impact_map`).
+- the scripted orchestrator (automation),
+- the focused planning agents (headless Codex runs), and
+- the wrapper/orchestrator agent (operator).
 
-Canonical prompt:
+Canonical wrapper prompt:
 - `docs/project_management/system/prompts/planning/pre_planning_wrapper.md`
+
+Canonical automation entrypoint:
+- `make pm-pre-planning-research FEATURE_DIR="docs/project_management/packs/<bucket>/<feature>"`
 
 ---
 
 ## Goal
 
-Produce (or rapidly converge on) the initial, high-signal Planning Pack artifacts needed to reduce thrash before full planning:
+Produce the minimal, high-signal pre-planning artifacts needed to reduce thrash before full planning:
 
+Tracked (canonical; pack root):
 - `spec_manifest.md` (deterministic spec selection + ownership map)
 - `impact_map.md` (touch set + cascading implications + cross-queue scan)
+- `minimal_spec_draft.md` (**Pre‑Planning Only** alignment backbone; must be deleted/retired during full planning)
 - `ci_checkpoint_plan.md` (cross-platform automation packs only; provisional until slice boundaries stabilize)
+
+Untracked (logs-only):
+- workstream triage draft (orchestrator-facing; not canonical)
 
 Non-goals:
 - Completing slice specs or passing `make planning-lint` on a newly scaffolded pack.
@@ -33,60 +42,71 @@ Non-goals:
      - `meta.adr_refs` (preferred), or
      - `meta.adr_paths` (use when refs are ambiguous).
 
-3) The orchestrator keeps the feature directory clean between focused agent runs.
-   - The focused agents are executed via `make pm-run-planning-agent ...` which enforces a single-output rule.
-   - Commit the output of each focused agent before running the next.
+3) Orchestration runs from a clean orchestration checkout.
+   - `git status --porcelain=v1` must be empty before starting the orchestrator.
 
 ---
 
-## Artifacts and ownership
+## Stable step logs (sentinels + streaming)
 
-### Canonical artifacts (tracked; pack root)
+Pre-planning research uses stable, pack-local (gitignored) step log dirs under `<FEATURE_DIR>/logs/`:
+- `spec-manifest/`
+- `impact-map/`
+- `min-spec-draft/`
+- `CI-checkpoint/`
+- `workstream-triage/`
 
-- `spec_manifest.md` is authoritative for:
-  - which spec documents must exist under the pack, and
-  - which contract surfaces each spec document owns.
-
-- `impact_map.md` is authoritative for:
-  - the Touch Set allowlist (strict packs),
-  - cascading implications, and
-  - cross-queue overlap/conflict resolution notes.
-
-- `ci_checkpoint_plan.md` is authoritative for CI cadence (schema v4+):
-  - Checkpoint grouping, gates per checkpoint, and rationale.
-  - `tasks.json meta.checkpoint_boundaries` must match checkpoint group endings.
-
-### Scratch artifacts (untracked; logs)
-
-The wrapper may produce scratch outputs for caching and synthesis under:
-- `<FEATURE_DIR>/logs/**`
+Each step dir contains stable orchestration artifacts:
+- `stderr.log` (streams while Codex runs; created/truncated at start)
+- `codex.pid` (exists while Codex runs; removed at exit)
+- `handoff.md` (mid-run “start downstream now” signal)
+- `last_message.md` (stable completion sentinel; exists **only when the step successfully completes**)
 
 Rationale:
-- `docs/project_management/packs/**/logs/` is gitignored.
-- Scratch notes must not be mistaken for canonical contract statements and should not be reviewed as part of quality gate.
+- `docs/project_management/packs/**/logs/` is gitignored, so these artifacts do not affect canonical docs or quality gates.
+- Stable sentinels allow downstream steps to self-gate without relying on “latest” pointers.
 
 ---
 
-## Orchestration pattern (staggered overlap)
+## Orchestration pattern (staggered overlap + sentinel-gated writes)
 
-The wrapper should model “overlap” deterministically as **bounded iterations**, not time-based concurrency:
+Pre-planning research is a 5-step chain:
+1) `spec_manifest`
+2) `impact_map`
+3) `min_spec_draft`
+4) `ci_checkpoint`
+5) `workstream_triage`
 
-1) Run `spec_manifest` once.
-2) Run `impact_map` once (consuming `spec_manifest.md`).
-3) If (and only if) `impact_map` reveals ownership gaps or missing required docs:
-   - re-run `spec_manifest` once, then re-run `impact_map` once.
+Overlap model:
+- The orchestrator starts steps in a staggered, overlapped manner (triggered by upstream `handoff.md`).
+- Downstream agents may start early, but must:
+  - write to their own step `logs/` only while upstream is still running, and
+  - delay tracked (canonical) writes until upstream has completed successfully (`last_message.md` exists) and the pack is clean.
 
-Hard rule:
-- Avoid unbounded recursion. If ADR intent is insufficient, record follow-ups in the canonical artifacts and stop.
+Default poll interval for sentinel gating: 60s.
+
+Hard rules:
+- Stop-on-failure: if any step fails, do not proceed to downstream steps.
+- Avoid unbounded recursion: reruns are explicit and bounded via `START_AT=<step>`.
+
+---
+
+## Reruns (archive instead of delete)
+
+When rerunning from a mid-chain step, existing stable step log dirs are not deleted. They are archived by renaming:
+- `<FEATURE_DIR>/logs/<step>/` → `<FEATURE_DIR>/logs/<step>_run_N/` (per-step sequential numbering)
+
+This prevents stale stable sentinels from being reused and preserves audit history.
 
 ---
 
 ## Validation guidance
 
 During pre-planning research, prefer focused validation:
-
 - `make planning-validate FEATURE_DIR="<FEATURE_DIR>"`
-  - checks `tasks.json` shape and (for strict packs) reference formats/existence rules.
+
+If `ci_checkpoint_plan.md` is applicable and touched:
+- `python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "<FEATURE_DIR>"`
 
 Avoid assuming `make planning-lint` is green during pre-planning.
 
@@ -99,4 +119,3 @@ If the Touch Set is materially filled in (strict packs), the wrapper may compute
 - `make pm-lift-pack PACK="<FEATURE_DIR>" EMIT_JSON=1`
 
 Store outputs under `<FEATURE_DIR>/logs/` to keep them as evidence without impacting canonical docs.
-

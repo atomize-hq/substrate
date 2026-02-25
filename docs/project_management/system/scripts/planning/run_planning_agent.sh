@@ -5,14 +5,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
     cat <<'EOF'
-Run a focused planning agent (single-output) via Codex.
+Run a focused planning agent (output-allowlisted) via Codex.
 
 Usage:
-  run_planning_agent.sh --feature-dir <path> --agent <spec_manifest|impact_map> [options]
+  run_planning_agent.sh --feature-dir <path> --agent <spec_manifest|impact_map|min_spec_draft|ci_checkpoint|workstream_triage> [options]
 
 Required:
   --feature-dir <path>         Feature directory (relative or absolute)
-  --agent <id>                 Agent id: spec_manifest | impact_map
+  --agent <id>                 Agent id: spec_manifest | impact_map | min_spec_draft | ci_checkpoint | workstream_triage
 
 Optional:
   --codex-profile <profile>    Passed to `codex exec --profile`
@@ -23,11 +23,15 @@ Optional:
 Contract:
   - spec_manifest -> <FEATURE_DIR>/spec_manifest.md
   - impact_map    -> <FEATURE_DIR>/impact_map.md
+  - min_spec_draft -> <FEATURE_DIR>/minimal_spec_draft.md
+  - ci_checkpoint  -> <FEATURE_DIR>/ci_checkpoint_plan.md (and sometimes <FEATURE_DIR>/tasks.json)
+  - workstream_triage -> logs-only (no tracked output)
 
 Notes:
   - Uses roots from: `pm_paths.py` (sibling in this directory)
-  - Enforces a single-output rule: only the intended output file within FEATURE_DIR may change.
-  - Writes run artifacts under: <FEATURE_DIR>/logs/planning_agents/<AGENT>/<YYYYMMDD-HHMMSS>/
+  - Enforces an output allowlist: only the intended tracked output(s) within FEATURE_DIR may change.
+  - Writes run artifacts under: <FEATURE_DIR>/logs/<step>/runs/<YYYYMMDD-HHMMSS>/
+  - Writes stable step artifacts under: <FEATURE_DIR>/logs/<step>/ (stderr.log, codex.pid, last_message.md)
 EOF
 }
 
@@ -243,6 +247,7 @@ need_cmd git
 need_cmd python3
 need_cmd jq
 need_cmd codex
+need_cmd ps
 
 REPO_ROOT="$(repo_root)"
 [[ -n "${REPO_ROOT}" ]] || die "not in a git repo/worktree (git rev-parse failed)"
@@ -264,18 +269,36 @@ TASKS_JSON_ABS="${FEATURE_DIR_ABS}/tasks.json"
 [[ -f "${TASKS_JSON_ABS}" ]] || die "missing required tasks.json: ${FEATURE_DIR_REL}/tasks.json"
 
 PROMPT_FILE_REL=""
-ALLOWED_OUTPUT_REL=""
+STEP_DIR_NAME=""
+ALLOWED_OUTPUTS_REL=()
 case "${AGENT}" in
     spec_manifest)
+        STEP_DIR_NAME="spec-manifest"
         PROMPT_FILE_REL="docs/project_management/system/prompts/planning/spec_manifest_agent.md"
-        ALLOWED_OUTPUT_REL="${FEATURE_DIR_REL}/spec_manifest.md"
+        ALLOWED_OUTPUTS_REL=("${FEATURE_DIR_REL}/spec_manifest.md")
         ;;
     impact_map)
+        STEP_DIR_NAME="impact-map"
         PROMPT_FILE_REL="docs/project_management/system/prompts/planning/impact_map_agent.md"
-        ALLOWED_OUTPUT_REL="${FEATURE_DIR_REL}/impact_map.md"
+        ALLOWED_OUTPUTS_REL=("${FEATURE_DIR_REL}/impact_map.md")
+        ;;
+    min_spec_draft)
+        STEP_DIR_NAME="min-spec-draft"
+        PROMPT_FILE_REL="docs/project_management/system/prompts/planning/min_spec_draft_agent.md"
+        ALLOWED_OUTPUTS_REL=("${FEATURE_DIR_REL}/minimal_spec_draft.md")
+        ;;
+    ci_checkpoint)
+        STEP_DIR_NAME="CI-checkpoint"
+        PROMPT_FILE_REL="docs/project_management/system/prompts/planning/ci_checkpoint_agent.md"
+        ALLOWED_OUTPUTS_REL=("${FEATURE_DIR_REL}/ci_checkpoint_plan.md" "${FEATURE_DIR_REL}/tasks.json")
+        ;;
+    workstream_triage)
+        STEP_DIR_NAME="workstream-triage"
+        PROMPT_FILE_REL="docs/project_management/system/prompts/planning/workstream_triage_agent.md"
+        ALLOWED_OUTPUTS_REL=()
         ;;
     *)
-        die "unknown --agent: ${AGENT} (expected spec_manifest|impact_map)"
+        die "unknown --agent: ${AGENT} (expected spec_manifest|impact_map|min_spec_draft|ci_checkpoint|workstream_triage)"
         ;;
 esac
 
@@ -417,13 +440,13 @@ for p in "${ADR_PATHS[@]}"; do
     fi
 done
 
+STEP_DIR_ABS="${FEATURE_DIR_ABS}/logs/${STEP_DIR_NAME}"
 RUN_TS="$(date -u +%Y%m%d-%H%M%S)"
-RUN_DIR_ABS="${FEATURE_DIR_ABS}/logs/planning_agents/${AGENT}/${RUN_TS}"
+RUN_DIR_ABS="${STEP_DIR_ABS}/runs/${RUN_TS}"
 mkdir -p "${RUN_DIR_ABS}"
 
 PROMPT_OUT="${RUN_DIR_ABS}/prompt.md"
-CODEX_LAST_MESSAGE="${RUN_DIR_ABS}/last_message.md"
-CODEX_STDERR="${RUN_DIR_ABS}/stderr.txt"
+CODEX_LAST_MESSAGE_RUN="${RUN_DIR_ABS}/last_message.run.md"
 if [[ "${CODEX_JSONL}" -eq 1 ]]; then
     CODEX_STDOUT="${RUN_DIR_ABS}/events.jsonl"
 else
@@ -443,9 +466,20 @@ fi
     for p in "${ADR_PATHS_UNIQ[@]}"; do
         printf '  - `%s`\n' "${p}"
     done
-    printf '\nSingle-output rule:\n'
-    printf '- Only write/overwrite: `%s`\n' "${ALLOWED_OUTPUT_REL}"
-    printf '- Do not edit any other files. If you find follow-ups, record them *inside that output file* under a \"Follow-ups\" section.\n'
+    printf '\nOutput allowlist (non-negotiable):\n'
+    if [[ "${#ALLOWED_OUTPUTS_REL[@]}" -eq 0 ]]; then
+        printf '- Tracked outputs: (none)\n'
+        printf '- Do not modify any tracked files.\n'
+        printf '- Logs allowed (untracked only): `%s/logs/%s/`\n' "${FEATURE_DIR_REL}" "${STEP_DIR_NAME}"
+        printf '- If you find follow-ups, record them inside your logs draft(s) under that logs directory.\n'
+    else
+        printf '- Tracked outputs (only these may change):\n'
+        for p in "${ALLOWED_OUTPUTS_REL[@]}"; do
+            printf '  - `%s`\n' "${p}"
+        done
+        printf '- Logs allowed (untracked only): `%s/logs/%s/`\n' "${FEATURE_DIR_REL}" "${STEP_DIR_NAME}"
+        printf '- Do not edit any other tracked files. If you find follow-ups, record them inside the relevant output under a \"Follow-ups\" section.\n'
+    fi
     printf '\n---\n\n'
 
 	    sed \
@@ -454,55 +488,165 @@ fi
 	        "${PAYLOAD_TMP}"
 } > "${PROMPT_OUT}"
 
+STEP_STDERR="${STEP_DIR_ABS}/stderr.log"
+STEP_PID_PATH="${STEP_DIR_ABS}/codex.pid"
+STABLE_LAST_MESSAGE="${STEP_DIR_ABS}/last_message.md"
+
+wait_for_codex_pidfile_if_running() {
+    local pid_path="$1"
+    if [[ ! -f "${pid_path}" ]]; then
+        return 0
+    fi
+
+    local pid
+    pid="$(tr -d '[:space:]' < "${pid_path}" || true)"
+    if [[ -z "${pid}" ]]; then
+        rm -f "${pid_path}" >/dev/null 2>&1 || true
+        return 0
+    fi
+
+    if ! kill -0 "${pid}" 2>/dev/null; then
+        rm -f "${pid_path}" >/dev/null 2>&1 || true
+        return 0
+    fi
+
+    local cmd
+    cmd="$(ps -p "${pid}" -o cmd= 2>/dev/null || true)"
+    if [[ -z "${cmd}" ]]; then
+        rm -f "${pid_path}" >/dev/null 2>&1 || true
+        return 0
+    fi
+
+    # Guard against PID reuse: only wait if it still looks like a Codex invocation.
+    if ! printf '%s\n' "${cmd}" | grep -Eqi -- '(^|[[:space:]/])codex([[:space:]]|$)'; then
+        rm -f "${pid_path}" >/dev/null 2>&1 || true
+        return 0
+    fi
+
+    echo "WARN: codex.pid already exists for ${FEATURE_DIR_REL}/logs/${STEP_DIR_NAME} (pid=${pid}); waiting for it to exit" >&2
+    while kill -0 "${pid}" 2>/dev/null; do
+        sleep 2
+    done
+    rm -f "${pid_path}" >/dev/null 2>&1 || true
+}
+
+write_missing_last_message_stub() {
+    local exit_code="${1:-unknown}"
+    if [[ -f "${CODEX_LAST_MESSAGE_RUN}" ]]; then
+        return 0
+    fi
+    mkdir -p "$(dirname "${CODEX_LAST_MESSAGE_RUN}")" >/dev/null 2>&1 || true
+    {
+        printf '# Generated planning step summary (Codex last message missing)\n\n'
+        printf 'This file was generated by `%s` because Codex did not write `--output-last-message`.\n' "${0}"
+        printf 'This typically means the Codex process was interrupted or crashed.\n\n'
+        printf -- '- Agent: `%s`\n' "${AGENT}"
+        printf -- '- Feature dir: `%s/`\n' "${FEATURE_DIR_REL}"
+        printf -- '- Exit code: `%s`\n' "${exit_code}"
+        printf -- '- Stable stderr log: `%s`\n' "$(relpath_in_repo "${REPO_ROOT}" "${STEP_STDERR}")"
+        printf -- '- Stdout log: `%s`\n' "$(relpath_in_repo "${REPO_ROOT}" "${CODEX_STDOUT}")"
+    } >"${CODEX_LAST_MESSAGE_RUN}" 2>/dev/null || true
+}
+
+codex_pid=""
+cleanup_codex() {
+    local rc="$?"
+    if [[ -n "${codex_pid}" ]] && kill -0 "${codex_pid}" 2>/dev/null; then
+        kill "${codex_pid}" >/dev/null 2>&1 || true
+    fi
+    rm -f "${STEP_PID_PATH}" >/dev/null 2>&1 || true
+    write_missing_last_message_stub "${rc}"
+}
+trap cleanup_codex EXIT INT TERM
+
+mkdir -p "${STEP_DIR_ABS}"
+wait_for_codex_pidfile_if_running "${STEP_PID_PATH}"
+: > "${STEP_STDERR}"
+
 codex_args=(codex exec --dangerously-bypass-approvals-and-sandbox --cd "${REPO_ROOT}")
 if [[ -n "${CODEX_PROFILE}" ]]; then codex_args+=(--profile "${CODEX_PROFILE}"); fi
 if [[ -n "${CODEX_MODEL}" ]]; then codex_args+=(--model "${CODEX_MODEL}"); fi
 if [[ "${CODEX_JSONL}" -eq 1 ]]; then codex_args+=(--json); fi
-codex_args+=(--output-last-message "${CODEX_LAST_MESSAGE}" -)
+codex_args+=(--output-last-message "${CODEX_LAST_MESSAGE_RUN}" -)
 
 set +e
-"${codex_args[@]}" < "${PROMPT_OUT}" >"${CODEX_STDOUT}" 2>"${CODEX_STDERR}"
+"${codex_args[@]}" < "${PROMPT_OUT}" >"${CODEX_STDOUT}" 2>"${STEP_STDERR}" &
+codex_pid="$!"
+printf '%s\n' "${codex_pid}" > "${STEP_PID_PATH}"
+wait "${codex_pid}"
 CODEX_EXIT="$?"
+rm -f "${STEP_PID_PATH}" >/dev/null 2>&1 || true
 set -e
 
-if [[ ! -f "${CODEX_LAST_MESSAGE}" ]]; then
-    {
-        printf 'This file was generated by `%s` because Codex did not write `--output-last-message`.\n' "${0}"
-        printf '\n'
-        printf 'Codex exit: %s\n' "${CODEX_EXIT}"
-        printf 'Codex stderr: `%s`\n' "$(relpath_in_repo "${REPO_ROOT}" "${CODEX_STDERR}")"
-        printf 'Codex stdout: `%s`\n' "$(relpath_in_repo "${REPO_ROOT}" "${CODEX_STDOUT}")"
-    } >"${CODEX_LAST_MESSAGE}" 2>/dev/null || true
-fi
+write_missing_last_message_stub "${CODEX_EXIT}"
 
 mapfile -t CHANGED_TRACKED < <(git diff --name-only -- "${FEATURE_DIR_REL}" | sed '/^$/d')
 mapfile -t UNTRACKED < <(git ls-files --others --exclude-standard -- "${FEATURE_DIR_REL}" | sed '/^$/d')
 
-declare -A CHANGED_SEEN=()
-CHANGED_UNION=()
-for p in "${CHANGED_TRACKED[@]}" "${UNTRACKED[@]}"; do
-    [[ -n "${p}" ]] || continue
-    if [[ -z "${CHANGED_SEEN[${p}]+x}" ]]; then
-        CHANGED_SEEN["${p}"]=1
-        CHANGED_UNION+=("${p}")
-    fi
-done
-
-if [[ "${#CHANGED_UNION[@]}" -ne 1 || "${CHANGED_UNION[0]}" != "${ALLOWED_OUTPUT_REL}" ]]; then
-    echo "ERROR: single-output rule violated for ${FEATURE_DIR_REL}" >&2
-    echo "  Allowed: ${ALLOWED_OUTPUT_REL}" >&2
-    echo "  Changed/untracked within feature dir:" >&2
-    if [[ "${#CHANGED_UNION[@]}" -eq 0 ]]; then
-        echo "    (none)" >&2
-    else
-        for p in "${CHANGED_UNION[@]}"; do
-            echo "    - ${p}" >&2
-        done
-    fi
-    echo "  Logs: $(relpath_in_repo "${REPO_ROOT}" "${RUN_DIR_ABS}")" >&2
+if [[ "${#UNTRACKED[@]}" -ne 0 ]]; then
+    echo "ERROR: untracked (non-ignored) files created within feature dir during agent run: ${FEATURE_DIR_REL}" >&2
+    for p in "${UNTRACKED[@]}"; do
+        echo "  - ${p}" >&2
+    done
+    echo "  Step logs: $(relpath_in_repo "${REPO_ROOT}" "${STEP_DIR_ABS}")" >&2
+    echo "  Run logs:  $(relpath_in_repo "${REPO_ROOT}" "${RUN_DIR_ABS}")" >&2
     exit 2
 fi
 
-echo "OK: wrote/updated ${ALLOWED_OUTPUT_REL}"
-echo "Logs: $(relpath_in_repo "${REPO_ROOT}" "${RUN_DIR_ABS}")"
+declare -A ALLOWED_SET=()
+for p in "${ALLOWED_OUTPUTS_REL[@]}"; do
+    [[ -n "${p}" ]] || continue
+    ALLOWED_SET["${p}"]=1
+done
+
+violations=()
+for p in "${CHANGED_TRACKED[@]}"; do
+    [[ -n "${p}" ]] || continue
+    if [[ -z "${ALLOWED_SET[${p}]+x}" ]]; then
+        violations+=("${p}")
+    fi
+done
+
+if [[ "${#violations[@]}" -ne 0 ]]; then
+    echo "ERROR: output allowlist violated for ${FEATURE_DIR_REL} (agent=${AGENT})" >&2
+    echo "  Allowed tracked outputs:" >&2
+    if [[ "${#ALLOWED_OUTPUTS_REL[@]}" -eq 0 ]]; then
+        echo "    (none)" >&2
+    else
+        for p in "${ALLOWED_OUTPUTS_REL[@]}"; do
+            echo "    - ${p}" >&2
+        done
+    fi
+    echo "  Changed tracked files within feature dir:" >&2
+    if [[ "${#CHANGED_TRACKED[@]}" -eq 0 ]]; then
+        echo "    (none)" >&2
+    else
+        for p in "${CHANGED_TRACKED[@]}"; do
+            echo "    - ${p}" >&2
+        done
+    fi
+    echo "  Step logs: $(relpath_in_repo "${REPO_ROOT}" "${STEP_DIR_ABS}")" >&2
+    echo "  Run logs:  $(relpath_in_repo "${REPO_ROOT}" "${RUN_DIR_ABS}")" >&2
+    exit 2
+fi
+
+if [[ "${CODEX_EXIT}" -eq 0 ]]; then
+    if ! cp "${CODEX_LAST_MESSAGE_RUN}" "${STABLE_LAST_MESSAGE}"; then
+        echo "ERROR: failed to promote stable last_message.md for step ${FEATURE_DIR_REL}/logs/${STEP_DIR_NAME}" >&2
+        echo "  From: $(relpath_in_repo "${REPO_ROOT}" "${CODEX_LAST_MESSAGE_RUN}")" >&2
+        echo "  To:   $(relpath_in_repo "${REPO_ROOT}" "${STABLE_LAST_MESSAGE}")" >&2
+        exit 2
+    fi
+fi
+
+if [[ "${#ALLOWED_OUTPUTS_REL[@]}" -eq 0 ]]; then
+    echo "OK: logs-only step (no tracked changes)"
+else
+    echo "OK: tracked outputs within allowlist"
+fi
+echo "Step logs: $(relpath_in_repo "${REPO_ROOT}" "${STEP_DIR_ABS}")"
+echo "Run logs:  $(relpath_in_repo "${REPO_ROOT}" "${RUN_DIR_ABS}")"
+if [[ -f "${STABLE_LAST_MESSAGE}" ]]; then
+    echo "Stable last message: $(relpath_in_repo "${REPO_ROOT}" "${STABLE_LAST_MESSAGE}")"
+fi
 exit "${CODEX_EXIT}"

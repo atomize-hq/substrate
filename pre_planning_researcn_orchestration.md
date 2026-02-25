@@ -27,10 +27,15 @@ All under `<FEATURE_DIR>/logs/` (example `<FEATURE_DIR>` is a Planning Pack dir 
 Each step dir contains:
 - `last_message.md` (stable completion sentinel used for polling/gating)
 - `handoff.md` (mid‑run “start the next agent now” signal)
+- `stderr.log` (stable Codex stderr stream for this step; created/truncated at step start so it can be tailed while the agent runs)
+- `codex.pid` (stable PID file while Codex is running; remove when Codex exits; triad-format: if present at launch time, wait for the existing Codex PID when it is still a live Codex process; otherwise remove as stale)
 
 **Meaning of `last_message.md`**
-- Exists only when the step has completed successfully enough for downstream to proceed.
+- Exists only when the step has **successfully completed** (so downstream gating by file existence is safe).
 - It must not be left over from a prior run at the stable location; stale is prevented by archiving (next section).
+- If Codex fails to write `--output-last-message` (interruption/crash), the runner must still write a **run-scoped** placeholder summary (triad-style) so operators have a deterministic breadcrumb:
+  - Write/overwrite: `<FEATURE_DIR>/logs/<step>/runs/<RUN_TS>/last_message.run.md` (generated stub with exit code + pointers to stdout/stderr)
+  - Do **not** copy that stub into the stable `<FEATURE_DIR>/logs/<step>/last_message.md` unless the step is considered successful.
 
 ### 1.3 Archive‑instead‑of‑delete contract (per step; most resilient)
 When a step is being rerun, if `<FEATURE_DIR>/logs/<step>/` exists, the orchestrator archives it by renaming the entire directory:
@@ -59,64 +64,68 @@ These are the only tracked files each agent step is allowed to change:
 
 ## 2) Orchestrator (script + Make target)
 
-### 2.1 Add a new orchestrator script
-Create:
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/system/scripts/planning/pre_planning_research_orchestrate.sh`
+This layer is explicitly split into:
+- **Automation (scripts)**: deterministic mechanics (archiving, dispatching focused Codex runs, wait/monitor, commit, summary).
+- **Focused planning agents (Codex instances)**: the actual LLM “agent work” for each step, launched headlessly by the automation via `run_planning_agent.sh`.
+- **Orchestrator agent (operator)**: decisions + interventions when inputs are missing/ambiguous or when runs fail; does not manually “run” the chain step-by-step.
 
-Inputs (env vars or flags; pick one style and standardize):
-- `FEATURE_DIR` (required)
-- `START_AT` (optional; default `spec-manifest`)
-  - allowed: `spec-manifest | impact-map | min-spec-draft | CI-checkpoint | workstream-triage`
-- `POLL_S` (optional; default `2` seconds)
-
-Behavior:
-1) **Preflight**
-   - Ensure run from repo root.
-   - Ensure orchestration checkout is clean: `git status --porcelain=v1` must be empty.
-   - Ensure `FEATURE_DIR` exists and contains `tasks.json`.
-2) **Archive log dirs for the rerun range**
-   - Determine step chain: `spec-manifest → impact-map → min-spec-draft → CI-checkpoint → workstream-triage`
-   - Archive (rename whole dir) for `START_AT` and all downstream steps only.
-   - Do not touch upstream step log dirs.
-3) **Launch the chain with staggered overlap**
-   - Start the `spec_manifest` runner (foreground or background; recommended: background so orchestration can watch for handoffs).
-   - Watch for `<FEATURE_DIR>/logs/spec-manifest/handoff.md` to appear; when it does, start `impact_map` runner.
-   - Similarly:
-     - `impact-map/handoff.md` → start `min_spec_draft`
-     - `min-spec-draft/handoff.md` → start `ci_checkpoint`
-     - `CI-checkpoint/handoff.md` → start `workstream_triage`
-   - Fallback rule: if an upstream runner exits before writing `handoff.md`, treat that as “handoff implied” and start the next step immediately (unless upstream failed).
-4) **Commit strategy**
-   - After each step runner exits successfully, the orchestrator commits its tracked outputs (if any) before downstream is allowed to finalize writes:
-     - spec_manifest: `git add <FEATURE_DIR>/spec_manifest.md && git commit -m "docs: pre-planning spec manifest"`
-     - impact_map: `git add <FEATURE_DIR>/impact_map.md && git commit -m "docs: pre-planning impact map"`
-     - min_spec_draft: `git add <FEATURE_DIR>/minimal_spec_draft.md && git commit -m "docs: pre-planning minimal spec draft"`
-     - ci_checkpoint: `git add <FEATURE_DIR>/ci_checkpoint_plan.md <FEATURE_DIR>/tasks.json && git commit -m "docs: pre-planning CI checkpoint plan"` (only include `tasks.json` if changed)
-     - workstream_triage: no commit
-   - If a step made no tracked changes, skip committing for that step (but still produce its stable sentinel).
-5) **Failure handling**
-   - If any step runner exits non‑zero or violates output allowlists:
-     - Stop orchestration immediately.
-     - Terminate any already-launched downstream runners (cleanly if possible).
-     - Do **not** create downstream stable `last_message.md` sentinels.
-6) **Orchestrator run log**
-   - Always write a run‑scoped orchestration summary under:
-     - `<FEATURE_DIR>/logs/pre_planning_wrapper/<UTC_TS>/summary.md`
-   - Include:
-     - which steps ran/skipped
-     - commit SHAs per step
-     - stable sentinel paths
-     - “next actions / follow-ups” extracted from agent last_message files
-
-### 2.2 Add a Make target
-Update:
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/Makefile`
-
+### 2.1 Automated via scripts (canonical)
 Add:
-- `pm-pre-planning-research` target that shells out to `pre_planning_research_orchestrate.sh`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/system/scripts/planning/pre_planning_research_orchestrate.sh`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/Makefile` target: `pm-pre-planning-research`
 
-Usage:
-- `make pm-pre-planning-research FEATURE_DIR="docs/project_management/packs/active/<feature>" [START_AT=impact-map]`
+Entry point (canonical):
+- `make pm-pre-planning-research FEATURE_DIR="docs/project_management/packs/active/<feature>" [START_AT=impact-map] [POLL_S=60]`
+
+Script responsibilities (must be fully automated):
+1) **Mechanical preflight (fail-fast; no “fixing” here)**
+   - Require repo root + clean orchestration checkout (`git status --porcelain=v1` empty).
+   - Require `FEATURE_DIR` exists and contains `tasks.json`.
+2) **Prepare log dirs**
+   - For `START_AT` and downstream steps only:
+     - Archive existing `<FEATURE_DIR>/logs/<step>/` → `<FEATURE_DIR>/logs/<step>_run_N/` (rename whole dir).
+     - Recreate fresh `<FEATURE_DIR>/logs/<step>/`.
+3) **Launch + monitor the chain (staggered overlap)**
+   - Launch each step’s **focused planning agent** by calling the planning runner (`run_planning_agent.sh`) in a background process.
+     - Note: `run_planning_agent.sh` is a *runner/dispatcher script* that starts a Codex instance with the step prompt; it is automation glue, not the “orchestrator agent”.
+   - For each step:
+     - Ensure `<FEATURE_DIR>/logs/<step>/stderr.log` is created/truncated at start and streams while running.
+     - Ensure `<FEATURE_DIR>/logs/<step>/codex.pid` is written while Codex runs and removed at exit.
+   - Trigger downstream starts:
+     - Start next step when upstream writes `<FEATURE_DIR>/logs/<upstream>/handoff.md`.
+     - Fallback: if upstream exits successfully before emitting `handoff.md`, treat that as implied handoff and start downstream.
+     - Never start downstream if upstream fails.
+4) **Commit tracked artifacts (deterministic)**
+   - After each step completes successfully, commit only the step’s allowlisted tracked outputs (skip commit if no tracked changes).
+   - Commit messages are standardized (pre‑planning; per step) to keep runs easy to audit.
+5) **Stop-on-failure**
+   - If any step fails (non‑zero) or violates output allowlists:
+     - Stop orchestration immediately.
+     - Attempt to terminate already-launched downstream runners.
+     - Do not produce downstream stable `last_message.md` sentinels.
+6) **Write orchestrator summary**
+   - Always write: `<FEATURE_DIR>/logs/pre_planning_wrapper/<UTC_TS>/summary.md`
+   - Include: steps started/completed, exit codes, commit SHAs, stable sentinel paths, and pointers to per-step logs.
+
+### 2.2 Orchestrator agent responsibilities (operator; not scripted)
+The orchestrator agent is responsible for decisions and repo edits that require judgment.
+
+Before running the script:
+- Choose `FEATURE_DIR` and (if needed) `START_AT`.
+- Ensure required inputs exist (especially ADR refs/paths in `tasks.json` for strict packs); if missing, add them and commit *before* running.
+- Ensure the orchestration checkout is clean (commit/stash unrelated changes).
+
+During a run (if monitoring is desired):
+- Tail `<FEATURE_DIR>/logs/<step>/stderr.log` to observe progress without increasing polling frequency.
+- If the script fails, inspect:
+  - `<FEATURE_DIR>/logs/<step>/runs/<RUN_TS>/last_message.run.md`
+  - `<FEATURE_DIR>/logs/<step>/stderr.log`
+  - `<FEATURE_DIR>/logs/pre_planning_wrapper/<UTC_TS>/summary.md`
+
+After a run:
+- Review the committed tracked artifacts (`spec_manifest.md`, `impact_map.md`, `minimal_spec_draft.md`, and if applicable `ci_checkpoint_plan.md` / `tasks.json`).
+- Decide whether follow-ups require rerunning from a specific step (`START_AT=...`) vs deferring to full planning.
+- Confirm `minimal_spec_draft.md` is clearly labeled pre‑planning only (and plan its deletion/retirement during full planning).
 
 ---
 
@@ -142,18 +151,33 @@ Changes (decision‑complete):
    - Run artifacts go under:
      - `<FEATURE_DIR>/logs/<step>/runs/<RUN_TS>/`
    - Keep:
-     - `prompt.md`, `stdout.txt`/`events.jsonl`, `stderr.txt`
+     - `prompt.md`, `stdout.txt`/`events.jsonl`
      - `last_message.run.md` (Codex `--output-last-message` target)
+   - Also maintain stable “live” artifacts at the step root (triad-format):
+     - `<FEATURE_DIR>/logs/<step>/stderr.log` (Codex stderr; streams while running)
+     - `<FEATURE_DIR>/logs/<step>/codex.pid` (Codex PID while running)
+   - Implementation requirement (to match triad behavior):
+     - Launch Codex in the background so `codex.pid` can be written immediately.
+     - Redirect stderr to `<FEATURE_DIR>/logs/<step>/stderr.log` (truncate at start), so it streams while running.
+     - Remove `<FEATURE_DIR>/logs/<step>/codex.pid` after Codex exits.
 4) **Stable sentinel creation rule**
    - Codex writes to `last_message.run.md` only.
-   - The runner copies `last_message.run.md` → `<FEATURE_DIR>/logs/<step>/last_message.md` only after:
+   - The runner copies `last_message.run.md` → `<FEATURE_DIR>/logs/<step>/last_message.md` only when the step is **successful**:
+     - Codex exit code is `0`, and
      - output allowlist passes, and
      - (for tracked-output steps) git diff within `<FEATURE_DIR>` only contains allowed files.
 5) **Output allowlist enforcement**
    - Replace “exactly one changed file” with:
      - For normal steps: `changed_files ⊆ allowed_outputs` and `changed_files` may be empty.
      - For logs‑only (`workstream_triage`): require `changed_files` empty.
-6) **Prompts**
+6) **Prompt prelude must match allowlists (fix current mismatch)**
+   - Today the runner injects:
+     - “Only write/overwrite: `<output>`”
+     - “Do not edit any other files”
+   - That injected prelude must be updated so it does **not** contradict the orchestration model:
+     - Allow *untracked* writes under `<FEATURE_DIR>/logs/<step>/**` (for `handoff.md`, scratch, etc.).
+     - Keep a strict tracked-file allowlist for canonical outputs.
+7) **Prompts**
    - Add prompt file selection for the new agents:
      - `min_spec_draft` → `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/system/prompts/planning/min_spec_draft_agent.md`
      - `ci_checkpoint` → `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/system/prompts/planning/ci_checkpoint_agent.md`
@@ -163,11 +187,43 @@ Changes (decision‑complete):
 
 ## 4) Prompt changes (agents overlap + gating + handoffs)
 
-### 4.1 Update existing prompts
+### 4.0 Prompt inventory audit (as-is)
+This section is grounded in the current repo state under:
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/system/prompts/planning/`
+
+Present today:
+- Focused planning agents (used by `run_planning_agent.sh`):
+  - `spec_manifest` → `spec_manifest_agent.md`
+  - `impact_map` → `impact_map_agent.md`
+  - `min_spec_draft` → `min_spec_draft_agent.md`
+  - `ci_checkpoint` → `ci_checkpoint_agent.md`
+  - `workstream_triage` → `workstream_triage_agent.md`
+- Wrapper prompt (operator/orchestrator agent instructions):
+  - `pre_planning_wrapper.md`
+- Full planning kickoff prompt (not used by this pre-planning orchestration):
+  - `planning_kickoff_prompt.md`
+
+Implementation notes (current):
+- Focused agent prompts are prompt-only payloads (` ```md ... ``` `).
+- The runner prelude must allow logs writes under the stable step directory, and enforce tracked-file allowlists.
+- The wrapper prompt is script-driven (calls `make pm-pre-planning-research`).
+
+Prompt format contract (runner-dependent):
+- Each focused prompt file should be exactly one fenced payload block starting with ```` ```md ```` because the runner extracts the first ` ```md` block as stdin to Codex.
+  - The runner ignores any text outside the first ` ```md` block; for clarity and consistency, avoid putting anything outside that fence.
+- Prompts must contain prompt text only. Any rationale/guide belongs in standards under `docs/project_management/system/standards/**`.
+
+### 4.1 Existing prompts (required behaviors)
+Note: this prompt set depends on the runner prelude allowing logs writes under the stable step log directory (Section 3.6).
+
 Update:
 - `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/system/prompts/planning/spec_manifest_agent.md`
 
 Add requirements:
+- Update the output constraints to match the orchestration model:
+  - Keep the tracked-file single-output contract: only write/overwrite `<FEATURE_DIR>/spec_manifest.md`.
+  - Allow logs-only side effects under: `<FEATURE_DIR>/logs/spec-manifest/**` (scratch + `handoff.md`).
+  - Explicitly forbid writing anywhere else (including other tracked pack files).
 - Emit mid‑run handoff marker (logs only; not tracked):
   - Write/overwrite: `<FEATURE_DIR>/logs/spec-manifest/handoff.md`
   - Write it when:
@@ -177,6 +233,10 @@ Update:
 - `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/system/prompts/planning/impact_map_agent.md`
 
 Change behavior to support overlap:
+- Update the output constraints to match the orchestration model:
+  - Keep the tracked-file single-output contract: only write/overwrite `<FEATURE_DIR>/impact_map.md`.
+  - Allow logs-only side effects under: `<FEATURE_DIR>/logs/impact-map/**` (scratch + `handoff.md`).
+  - Explicitly forbid writing anywhere else (including other tracked pack files).
 - Phase A (start immediately; logs only):
   - Do repo scans, queued ADR scan, pack scan, and draft an initial touch set in a scratch file under:
     - `<FEATURE_DIR>/logs/impact-map/scratch.md`
@@ -185,11 +245,12 @@ Change behavior to support overlap:
   - Poll until BOTH are true:
     - `<FEATURE_DIR>/logs/spec-manifest/last_message.md` exists
     - `git status --porcelain=v1 -- "<FEATURE_DIR>"` is empty
+    - Default poll interval: `sleep 60` between checks.
   - Then write tracked output:
     - `<FEATURE_DIR>/impact_map.md` (only tracked file)
 
-### 4.2 Add new prompts (prompt‑only; no preamble)
-Add:
+### 4.2 Additional prompts (prompt‑only; no preamble)
+Ensure these prompts exist and enforce the overlap/gating behavior:
 - `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/system/prompts/planning/min_spec_draft_agent.md`
   - Output (tracked): `<FEATURE_DIR>/minimal_spec_draft.md` only
   - Overlap behavior:
@@ -198,12 +259,18 @@ Add:
     - Poll until:
       - `<FEATURE_DIR>/logs/impact-map/last_message.md` exists, and
       - feature dir clean
+    - Default poll interval: `sleep 60` between checks.
     - Then write `minimal_spec_draft.md`
   - Content contract:
     - explicitly labeled **Pre‑Planning Only** and must be deleted/retired in full planning
     - cross‑cutting defaults/precedence/invariants/failure posture only (alignment backbone)
+  - Required reading (minimum; cite these explicitly in the prompt):
+    - `docs/project_management/system/standards/shared/CONTRACT_SURFACE_STANDARD.md`
+    - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
+    - `docs/project_management/system/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md` (surface inventory discipline)
+    - `<FEATURE_DIR>/spec_manifest.md`
+    - `<FEATURE_DIR>/impact_map.md`
 
-Add:
 - `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/system/prompts/planning/ci_checkpoint_agent.md`
   - Conditional behavior:
     - If pack is not cross‑platform automation (detect via `tasks.json`), write “not applicable” into logs and still emit `handoff.md` (logs only), and exit without tracked changes.
@@ -213,13 +280,19 @@ Add:
     - Poll until:
       - `<FEATURE_DIR>/logs/min-spec-draft/last_message.md` exists, and
       - feature dir clean
+    - Default poll interval: `sleep 60` between checks.
     - Then update:
       - `<FEATURE_DIR>/ci_checkpoint_plan.md`
       - `<FEATURE_DIR>/tasks.json` only if required to satisfy the checkpoint wiring rules
     - Must pass:
       - `python3 /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "<FEATURE_DIR>"`
+  - Required reading (minimum; cite these explicitly in the prompt):
+    - `docs/project_management/system/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md`
+    - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md` (tasks.json wiring expectations)
+    - `<FEATURE_DIR>/impact_map.md`
+    - `<FEATURE_DIR>/tasks.json`
+    - `<FEATURE_DIR>/ci_checkpoint_plan.md` (if it already exists)
 
-Add:
 - `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/system/prompts/planning/workstream_triage_agent.md`
   - Logs‑only output:
     - Draft: `<FEATURE_DIR>/logs/workstream-triage/workstream_triage_draft.md`
@@ -228,11 +301,19 @@ Add:
     - Poll until:
       - `<FEATURE_DIR>/logs/CI-checkpoint/last_message.md` exists (or CI checkpoint step declared non-applicable by its logs), and
       - feature dir clean
+    - Default poll interval: `sleep 60` between checks.
   - Draft must include:
     - Proposed workstreams (parallelizable clusters) + rationale
     - Sequencing/gating constraints
     - Explicit “unknowns/follow-ups” to resolve in full planning
     - References/links to the stable step `last_message.md` files (so future agents can ingest filtered summaries)
+  - Required reading (minimum; cite these explicitly in the prompt):
+    - `WORKSTREAM_TRIAGE_AND_LIFT_DECISIONS.md` (repo root; canonical semantics)
+    - `docs/project_management/system/standards/planning/PLANNING_WORK_LIFT_ADVISORY.md`
+    - `<FEATURE_DIR>/spec_manifest.md`
+    - `<FEATURE_DIR>/impact_map.md`
+    - `<FEATURE_DIR>/minimal_spec_draft.md`
+    - `<FEATURE_DIR>/ci_checkpoint_plan.md` (if applicable)
 
 ---
 
@@ -268,6 +349,8 @@ Run on at least one real pack:
    - `make pm-pre-planning-research FEATURE_DIR="docs/project_management/packs/active/<feature>"`
    - Verify:
      - stable `last_message.md` exists in each step dir
+     - while a step is running: `<FEATURE_DIR>/logs/<step>/codex.pid` exists and `<FEATURE_DIR>/logs/<step>/stderr.log` streams
+     - after a step completes: `<FEATURE_DIR>/logs/<step>/codex.pid` is removed
      - tracked outputs updated/committed where applicable
      - workstream triage draft exists (logs-only)
 2) Partial rerun from mid‑chain:
