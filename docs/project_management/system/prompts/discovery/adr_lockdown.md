@@ -5,6 +5,10 @@ Inputs:
 - Read the intake file at:
   docs/project_management/intake/(adrs|work_items)/<CODENAME>\*...\_intake.md
 
+Required reading (ADR):
+- `docs/project_management/system/standards/adr/DRAFT_ADR_LOCKDOWN_STANDARD.md`
+- `docs/project_management/system/standards/adr/EXECUTIVE_SUMMARY_STANDARD.md`
+
 Task:
 
 - If ADR intake: generate a vertical-slice ADR draft that matches repo ADR standards.
@@ -20,6 +24,8 @@ Hard requirements:
   - explicit out-of-scope
   - slice decomposition (1–3 slices)
   - dependencies section
+  - NOTE: “Draft ADR” is still a full ADR with the normal ADR structure; `Draft` only affects Status and pack bucket paths (see the draft ADR lockdown standard).
+  - NOTE: The ADR `Related Docs` section is links-only; do not create the referenced planning pack files during lockdown.
 - Work Item MUST include:
   - “why not ADR”
   - bounded scope
