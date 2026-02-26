@@ -12,12 +12,12 @@ lockdown_prompt: docs/project_management/system/prompts/discovery/adr_lockdown.m
 
 # ADR Intake Sheet
 
-## 1. Codename + Created + Status
+## 1. Codename + date + status
 
 - Codename: `staging_beaver`
 - Created: 2026-02-20T01:32:05Z
 - Status: brainstorming
-- Dependencies: []
+- ADR draft: `docs/project_management/adrs/draft/ADR-0034-staging-beaver.md`
 
 ## 2. Working Title (tentative)
 
@@ -129,7 +129,58 @@ Choose **Option 1** when we want dev + prod installs to share the same mental mo
 - After `cargo clean` + rebuilding `target/<profile>/substrate` (without re-running dev-install), `substrate world enable --dry-run` succeeds by resolving the helper under `$SUBSTRATE_HOME/scripts/...`.
 - After dev-uninstall, the staged helper scripts under `~/.substrate/scripts/substrate/…` are removed (only for the matching dev install prefix).
 
-## 12. Open Questions / Unknowns (with priority)
+## 12. Dependencies
+
+- depends_on_adrs: []
+- depends_on_work_items: []
+- blocks: []
+
+## 13. Lift Summary
+
+### Lift Vector v1
+
+<!-- PM_LIFT_VECTOR:BEGIN -->
+```json
+{
+  "touch": {
+    "create_files": 0,
+    "edit_files": 1,
+    "delete_files": 0,
+    "deprecate_files": 0,
+    "crates_touched": 0,
+    "boundary_crossings": 0
+  },
+  "contract": {
+    "cli_flags": 0,
+    "config_keys": 0,
+    "exit_codes": 0,
+    "file_formats": 0,
+    "behavior_deltas": 1
+  },
+  "qa": { "new_test_files": 0, "new_test_cases": 0 },
+  "docs": { "new_docs_files": 0 },
+  "ops": { "new_smoke_steps": 0, "ci_changes": 0 },
+  "risk": {
+    "cross_platform": true,
+    "security_sensitive": false,
+    "concurrency_or_ordering": false,
+    "migration_or_backfill": false,
+    "unknowns_high": 0
+  },
+  "notes": "Estimate: dev-install/dev-uninstall script staging for helper discovery under SUBSTRATE_HOME."
+}
+```
+<!-- PM_LIFT_VECTOR:END -->
+
+### Computed outputs (from `make pm-lift-intake`)
+
+```text
+Lift Score (v1): 3
+Estimated slices: 1
+Confidence: high
+```
+
+## 14. Open Questions / Unknowns (with priority)
 
 - P0: Should `version-label` default remain `dev`, and should multiple labels be supported concurrently?
   - Proposed answer: yes (keep current behavior; avoid changing defaults).
@@ -140,7 +191,7 @@ Choose **Option 1** when we want dev + prod installs to share the same mental mo
 - P2: Should we add a tiny guard so dev-uninstall only removes helpers if they are symlinks pointing into the current repo (avoid deleting user customizations)?
   - Proposed answer: yes (safety belt; reduces foot-guns).
 
-## 13. “Ready to Draft ADR?” checklist (yes/no with reasons)
+## 15. Ready-to-lockdown checklist (yes/no with reasons)
 
 - [ ] One behavior delta locked (Option 2: stage helpers under `$SUBSTRATE_HOME/scripts/...`).
 - [ ] P0/P1/P2 proposals confirmed (or adjusted).

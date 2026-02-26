@@ -24,19 +24,18 @@ Rules:
 ADR Intake sections (if ADR):
 
 1. Codename + date + status
-2. Optional workstream link (path or WS id)
-3. Working title
-4. Problem/motivation
-5. Proposed outcome
-6. Non-goals
-7. Constraints/invariants
-8. Interfaces/contracts
-9. Options (>=2), pros/cons, risks
-10. Recommendation + “Choose X when…”
-11. Slice decomposition (1–3 slices)
-12. Acceptance criteria draft (<=8)
-13. Dependencies: depends_on_adrs, depends_on_work_items, blocks
-14. Lift Summary:
+2. Working title
+3. Problem/motivation
+4. Proposed outcome
+5. Non-goals
+6. Constraints/invariants
+7. Interfaces/contracts
+8. Options (>=2), pros/cons, risks
+9. Recommendation + “Choose X when…”
+10. Slice decomposition (1–3 slices)
+11. Acceptance criteria draft (<=8)
+12. Dependencies: depends_on_adrs, depends_on_work_items, blocks
+13. Lift Summary:
 
 - Lift Vector v1 (counts/booleans), authored as a `PM_LIFT_VECTOR` JSON block (see `docs/project_management/system/standards/shared/WORK_LIFT_RUBRIC.md`).
 - Computed Work Lift v1 outputs (from tooling; do not hand-calculate if you can run the command):
@@ -50,24 +49,23 @@ make pm-lift-intake FILE=docs/project_management/intake/adrs/<CODENAME>_adr_inta
 make pm-lift-intake FILE=docs/project_management/intake/adrs/<CODENAME>_adr_intake.md EMIT_JSON=1
 ```
 
-15. Open questions
-16. Ready-to-lockdown checklist
+14. Open questions
+15. Ready-to-lockdown checklist
 
 WI Intake sections (if WI):
 
 1. Codename + date + status
-2. Optional workstream link
-3. Title (imperative)
-4. Why not ADR
-5. Task definition (bounded)
-6. Done means (<=8 outcomes)
-7. Likely touch paths
-8. Dependencies (ADR/WI)
-9. Lift Summary (small; vector + computed outputs)
+2. Title (imperative)
+3. Why not ADR
+4. Task definition (bounded)
+5. Done means (<=8 outcomes)
+6. Likely touch paths
+7. Dependencies (ADR/WI)
+8. Lift Summary (small; vector + computed outputs)
    - Prefer computing via:
      - `make pm-lift-intake FILE=docs/project_management/intake/work_items/<CODENAME>_work_item_intake.md`
      - (optional) `EMIT_JSON=1`
-10. Open questions
+9. Open questions
 
 Start by asking me:
 

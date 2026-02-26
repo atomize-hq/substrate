@@ -12,13 +12,12 @@ lockdown_prompt: docs/project_management/system/prompts/discovery/adr_lockdown.m
 
 # ADR Intake Sheet
 
-## 1. Codename + Created + Status
+## 1. Codename + date + status
 
 - Codename: `clarifying_owl`
 - Created: 2026-02-20T01:32:05Z
 - Status: brainstorming
-- Dependencies: []
-- Related intakes (coordination only): `replaying_raccoon`
+- ADR draft: `docs/project_management/adrs/draft/ADR-0037-clarifying-owl.md`
 
 ## 2. Working Title (tentative)
 
@@ -110,7 +109,69 @@ Choose **Option 1** when we can reuse existing explain structures cheaply and wa
 - With `SUBSTRATE_OVERRIDE_WORLD=disabled`, output attributes disablement to the environment override.
 - No change in actual enable/disable behavior; only messaging changes.
 
-## 12. Open Questions / Unknowns (with priority)
+## 12. Dependencies
+
+- depends_on_adrs: []
+- depends_on_work_items: []
+- blocks: []
+- Related intakes (coordination only): [`replaying_raccoon`]
+
+## 13. Lift Summary
+
+### Lift Vector v1
+
+<!-- PM_LIFT_VECTOR:BEGIN -->
+```json
+{
+  "touch": {
+    "create_files": null,
+    "edit_files": 1,
+    "delete_files": 0,
+    "deprecate_files": 0,
+    "crates_touched": 1,
+    "boundary_crossings": 0
+  },
+  "contract": {
+    "cli_flags": 0,
+    "config_keys": 0,
+    "exit_codes": 0,
+    "file_formats": 0,
+    "behavior_deltas": 1
+  },
+  "qa": { "new_test_files": null, "new_test_cases": null },
+  "docs": { "new_docs_files": 0 },
+  "ops": { "new_smoke_steps": 0, "ci_changes": 0 },
+  "risk": {
+    "cross_platform": true,
+    "security_sensitive": false,
+    "concurrency_or_ordering": false,
+    "migration_or_backfill": false,
+    "unknowns_high": null
+  },
+  "notes": "Discovery estimate; fill touch/test counts during lockdown."
+}
+```
+<!-- PM_LIFT_VECTOR:END -->
+
+### Computed outputs (from `make pm-lift-intake`)
+
+```text
+Lift Score (v1): 7
+Estimated slices: 1
+Confidence: low
+Triggers:
+- missing_inputs:qa.new_test_cases
+- missing_inputs:qa.new_test_files
+- missing_inputs:risk.unknowns_high
+- missing_inputs:touch.create_files
+Missing inputs:
+- qa.new_test_cases
+- qa.new_test_files
+- risk.unknowns_high
+- touch.create_files
+```
+
+## 14. Open Questions / Unknowns (with priority)
 
 - P0: Do we want to surface the exact config path for attribution, and is workspace config path also desirable?
   - Proposed answer: yes — include the path for whichever config layer is the *highest-precedence* disable source; this is relevant when a workspace patch disables world even though the global config enables it (or vice versa).
@@ -119,7 +180,7 @@ Choose **Option 1** when we can reuse existing explain structures cheaply and wa
 - P2: Should this also apply to replay warnings and other world-related UX?
   - Proposed answer: yes, but as a follow-up ADR (`replaying_raccoon`) so we can land doctor/health attribution first.
 
-## 13. “Ready to Draft ADR?” checklist (yes/no with reasons)
+## 15. Ready-to-lockdown checklist (yes/no with reasons)
 
 - [ ] Option is locked (Option 2).
 - [ ] Output strings confirmed (exact phrasing + where shown).

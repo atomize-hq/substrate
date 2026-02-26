@@ -13,12 +13,12 @@ lockdown_prompt: docs/project_management/system/prompts/discovery/adr_lockdown.m
 
 # ADR Intake Sheet
 
-## 1. Codename + Created + Status
+## 1. Codename + date + status
 
 - Codename: `replaying_raccoon`
 - Created: 2026-02-20T01:32:05Z
 - Status: brainstorming
-- Dependencies: [`clarifying_owl`]
+- ADR draft: `docs/project_management/adrs/draft/ADR-0038-replaying-raccoon.md`
 
 ## 2. Working Title (tentative)
 
@@ -100,12 +100,75 @@ Choose Option 2 only as a temporary bridge if refactor scope blocks shipping.
 - With `SUBSTRATE_OVERRIDE_WORLD=disabled`, replay warnings attribute disablement to the env override.
 - No change in replay routing behavior; only messaging changes.
 
-## 12. Open Questions / Unknowns (with priority)
+## 12. Dependencies
+
+- depends_on_adrs: [`clarifying_owl`]
+- depends_on_work_items: []
+- blocks: []
+
+## 13. Lift Summary
+
+### Lift Vector v1
+
+<!-- PM_LIFT_VECTOR:BEGIN -->
+```json
+{
+  "touch": {
+    "create_files": null,
+    "edit_files": 2,
+    "delete_files": 0,
+    "deprecate_files": 0,
+    "crates_touched": 2,
+    "boundary_crossings": null
+  },
+  "contract": {
+    "cli_flags": 0,
+    "config_keys": 0,
+    "exit_codes": 0,
+    "file_formats": 0,
+    "behavior_deltas": 1
+  },
+  "qa": { "new_test_files": null, "new_test_cases": null },
+  "docs": { "new_docs_files": 0 },
+  "ops": { "new_smoke_steps": 0, "ci_changes": 0 },
+  "risk": {
+    "cross_platform": true,
+    "security_sensitive": false,
+    "concurrency_or_ordering": false,
+    "migration_or_backfill": false,
+    "unknowns_high": null
+  },
+  "notes": "Discovery estimate; replay/warnings messaging alignment with doctor/health disable attribution."
+}
+```
+<!-- PM_LIFT_VECTOR:END -->
+
+### Computed outputs (from `make pm-lift-intake`)
+
+```text
+Lift Score (v1): 14
+Estimated slices: 2
+Confidence: low
+Triggers:
+- missing_inputs:qa.new_test_cases
+- missing_inputs:qa.new_test_files
+- missing_inputs:risk.unknowns_high
+- missing_inputs:touch.boundary_crossings
+- missing_inputs:touch.create_files
+Missing inputs:
+- qa.new_test_cases
+- qa.new_test_files
+- risk.unknowns_high
+- touch.boundary_crossings
+- touch.create_files
+```
+
+## 14. Open Questions / Unknowns (with priority)
 
 - P0: Which replay messages are in scope for attribution (only “world disabled” warnings vs broader world-backend-unavailable messages)?
 - P1: Should replay emit the same JSON fields as doctor/health when `--json` is used elsewhere (future-proofing)?
 
-## 13. “Ready to Draft ADR?” checklist (yes/no with reasons)
+## 15. Ready-to-lockdown checklist (yes/no with reasons)
 
 - [ ] Scope of replay messaging surfaces is enumerated.
 - [ ] Shared helper vs local duplication is chosen.
