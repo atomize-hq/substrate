@@ -178,6 +178,11 @@ append_summary "- Start at: \`${START_AT}\`"
 append_summary "- Poll interval: \`${POLL_S}s\`"
 append_summary ""
 
+echo "Pre-planning research started: ${FEATURE_DIR_REL}/"
+echo "Wrapper summary: ${FEATURE_DIR_REL}/logs/pre_planning_wrapper/${RUN_TS}/summary.md"
+echo "Poll interval: ${POLL_S}s"
+echo ""
+
 # Prepare (archive + recreate) step log dirs for START_AT and downstream.
 append_summary "## Log directory preparation"
 for i in "${!steps[@]}"; do
@@ -215,6 +220,12 @@ launch_step() {
     runner_rcs[$idx]=""
     commit_shas[$idx]=""
     append_summary "- Started: \`${step}\` (agent=\`${agent}\`, pid=\`${pid}\`, runner_log=\`$(basename "${log_path}")\`)"
+
+    echo "Started: ${step} (agent=${agent}, pid=${pid})"
+    echo "  Runner log: ${FEATURE_DIR_REL}/logs/pre_planning_wrapper/${RUN_TS}/${step}.runner.log"
+    echo "  Step stderr: ${FEATURE_DIR_REL}/logs/${step}/stderr.log"
+    echo "  Tip: tail -f ${FEATURE_DIR_REL}/logs/${step}/stderr.log"
+    echo ""
 }
 
 kill_downstream() {
@@ -357,6 +368,13 @@ cleanup_on_exit() {
     exit "${rc}"
 }
 trap cleanup_on_exit EXIT
+
+on_interrupt() {
+    echo "Interrupted; stopping in-flight runners..." >&2
+    kill_downstream "${start_index}"
+    exit 130
+}
+trap on_interrupt INT TERM
 
 append_summary "## Launch"
 

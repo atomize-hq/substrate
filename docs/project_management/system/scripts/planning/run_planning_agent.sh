@@ -271,31 +271,37 @@ TASKS_JSON_ABS="${FEATURE_DIR_ABS}/tasks.json"
 PROMPT_FILE_REL=""
 STEP_DIR_NAME=""
 ALLOWED_OUTPUTS_REL=()
+REQUIRED_OUTPUTS_REL=()
 case "${AGENT}" in
     spec_manifest)
         STEP_DIR_NAME="spec-manifest"
         PROMPT_FILE_REL="docs/project_management/system/prompts/planning/spec_manifest_agent.md"
         ALLOWED_OUTPUTS_REL=("${FEATURE_DIR_REL}/spec_manifest.md")
+        REQUIRED_OUTPUTS_REL=("${FEATURE_DIR_REL}/spec_manifest.md")
         ;;
     impact_map)
         STEP_DIR_NAME="impact-map"
         PROMPT_FILE_REL="docs/project_management/system/prompts/planning/impact_map_agent.md"
         ALLOWED_OUTPUTS_REL=("${FEATURE_DIR_REL}/impact_map.md")
+        REQUIRED_OUTPUTS_REL=("${FEATURE_DIR_REL}/impact_map.md")
         ;;
     min_spec_draft)
         STEP_DIR_NAME="min-spec-draft"
         PROMPT_FILE_REL="docs/project_management/system/prompts/planning/min_spec_draft_agent.md"
         ALLOWED_OUTPUTS_REL=("${FEATURE_DIR_REL}/minimal_spec_draft.md")
+        REQUIRED_OUTPUTS_REL=("${FEATURE_DIR_REL}/minimal_spec_draft.md")
         ;;
     ci_checkpoint)
         STEP_DIR_NAME="CI-checkpoint"
         PROMPT_FILE_REL="docs/project_management/system/prompts/planning/ci_checkpoint_agent.md"
         ALLOWED_OUTPUTS_REL=("${FEATURE_DIR_REL}/ci_checkpoint_plan.md" "${FEATURE_DIR_REL}/tasks.json")
+        REQUIRED_OUTPUTS_REL=("${FEATURE_DIR_REL}/ci_checkpoint_plan.md")
         ;;
     workstream_triage)
         STEP_DIR_NAME="workstream-triage"
         PROMPT_FILE_REL="docs/project_management/system/prompts/planning/workstream_triage_agent.md"
         ALLOWED_OUTPUTS_REL=()
+        REQUIRED_OUTPUTS_REL=()
         ;;
     *)
         die "unknown --agent: ${AGENT} (expected spec_manifest|impact_map|min_spec_draft|ci_checkpoint|workstream_triage)"
@@ -612,6 +618,10 @@ CODEX_EXIT="$?"
 rm -f "${STEP_PID_PATH}" >/dev/null 2>&1 || true
 set -e
 
+LAST_MESSAGE_OK=1
+if [[ ! -s "${CODEX_LAST_MESSAGE_RUN}" ]]; then
+    LAST_MESSAGE_OK=0
+fi
 write_missing_last_message_stub "${CODEX_EXIT}"
 
 CHANGED_TRACKED=()
@@ -635,6 +645,15 @@ if [[ "${#UNTRACKED[@]}" -ne 0 ]]; then
     echo "  Run logs:  $(relpath_in_repo "${REPO_ROOT}" "${RUN_DIR_ABS}")" >&2
     exit 2
 fi
+
+REQUIRED_OUTPUTS_OK=1
+for p in ${REQUIRED_OUTPUTS_REL[@]+"${REQUIRED_OUTPUTS_REL[@]}"}; do
+    [[ -n "${p}" ]] || continue
+    if [[ ! -f "${REPO_ROOT}/${p}" ]]; then
+        echo "ERROR: required output missing after agent run (agent=${AGENT}): ${p}" >&2
+        REQUIRED_OUTPUTS_OK=0
+    fi
+done
 
 violations=()
 for p in ${CHANGED_TRACKED[@]+"${CHANGED_TRACKED[@]}"}; do
@@ -675,13 +694,26 @@ if [[ "${#violations[@]}" -ne 0 ]]; then
     exit 2
 fi
 
-if [[ "${CODEX_EXIT}" -eq 0 ]]; then
+if [[ "${CODEX_EXIT}" -eq 0 && "${LAST_MESSAGE_OK}" -eq 1 && "${REQUIRED_OUTPUTS_OK}" -eq 1 ]]; then
     if ! cp "${CODEX_LAST_MESSAGE_RUN}" "${STABLE_LAST_MESSAGE}"; then
         echo "ERROR: failed to promote stable last_message.md for step ${FEATURE_DIR_REL}/logs/${STEP_DIR_NAME}" >&2
         echo "  From: $(relpath_in_repo "${REPO_ROOT}" "${CODEX_LAST_MESSAGE_RUN}")" >&2
         echo "  To:   $(relpath_in_repo "${REPO_ROOT}" "${STABLE_LAST_MESSAGE}")" >&2
         exit 2
     fi
+fi
+
+if [[ "${CODEX_EXIT}" -eq 0 && "${LAST_MESSAGE_OK}" -ne 1 ]]; then
+    echo "ERROR: Codex exited 0 but did not write --output-last-message (treated as failure)" >&2
+    echo "  Expected: $(relpath_in_repo "${REPO_ROOT}" "${CODEX_LAST_MESSAGE_RUN}")" >&2
+    echo "  Stable stderr log: $(relpath_in_repo "${REPO_ROOT}" "${STEP_STDERR}")" >&2
+    exit 2
+fi
+if [[ "${CODEX_EXIT}" -eq 0 && "${REQUIRED_OUTPUTS_OK}" -ne 1 ]]; then
+    echo "ERROR: agent exited 0 but required outputs are missing (treated as failure)" >&2
+    echo "  Step logs: $(relpath_in_repo "${REPO_ROOT}" "${STEP_DIR_ABS}")" >&2
+    echo "  Run logs:  $(relpath_in_repo "${REPO_ROOT}" "${RUN_DIR_ABS}")" >&2
+    exit 2
 fi
 
 if [[ "${#ALLOWED_OUTPUTS_REL[@]}" -eq 0 ]]; then
