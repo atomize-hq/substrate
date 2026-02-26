@@ -22,7 +22,19 @@ Behavior:
   - Creates/ensures <FEATURE_DIR>/ exists.
   - Ensures <FEATURE_DIR>/tasks.json exists and includes meta.adr_paths containing the ADR path.
   - Creates tasks.json if missing with minimal schema:
-      { "meta": { "schema_version": 1, "slice_spec_version": 2, "feature": "<slug>", "adr_paths": ["<adr>"] }, "tasks": [] }
+      {
+        "meta": {
+          "schema_version": 4,
+          "cross_platform": true,
+          "ci_parity_platforms_required": ["linux", "macos", "windows"],
+          "behavior_platforms_required": ["linux", "macos", "windows"],
+          "automation": { "enabled": true, "orchestration_branch": "feat/<feature>" },
+          "slice_spec_version": 2,
+          "feature": "<slug>",
+          "adr_paths": ["<adr>"]
+        },
+        "tasks": []
+      }
 USAGE
 }
 
@@ -192,7 +204,16 @@ def _write_json(dst: str, data: Dict[str, Any]) -> None:
 
 if not os.path.exists(path):
     data: Dict[str, Any] = {
-        "meta": {"schema_version": 1, "slice_spec_version": 2, "feature": feature, "adr_paths": [adr_rel]},
+        "meta": {
+            "schema_version": 4,
+            "cross_platform": True,
+            "ci_parity_platforms_required": ["linux", "macos", "windows"],
+            "behavior_platforms_required": ["linux", "macos", "windows"],
+            "automation": {"enabled": True, "orchestration_branch": f"feat/{feature}"},
+            "slice_spec_version": 2,
+            "feature": feature,
+            "adr_paths": [adr_rel],
+        },
         "tasks": [],
     }
     _write_json(path, data)
@@ -222,6 +243,60 @@ if slice_spec_version is None:
     changed = True
 elif not isinstance(slice_spec_version, int):
     _die(f"tasks.json meta.slice_spec_version must be an integer when present: {path}")
+
+schema_version = meta.get("schema_version")
+if schema_version is None:
+    meta["schema_version"] = 4
+    changed = True
+elif not isinstance(schema_version, int):
+    _die(f"tasks.json meta.schema_version must be an integer when present: {path}")
+elif schema_version < 4:
+    meta["schema_version"] = 4
+    changed = True
+
+cross_platform = meta.get("cross_platform")
+if cross_platform is None:
+    meta["cross_platform"] = True
+    changed = True
+elif not isinstance(cross_platform, bool):
+    _die(f"tasks.json meta.cross_platform must be a boolean when present: {path}")
+
+ci_parity = meta.get("ci_parity_platforms_required")
+if ci_parity is None:
+    meta["ci_parity_platforms_required"] = ["linux", "macos", "windows"]
+    changed = True
+
+behavior = meta.get("behavior_platforms_required")
+if behavior is None:
+    meta["behavior_platforms_required"] = ["linux", "macos", "windows"]
+    changed = True
+
+automation = meta.get("automation")
+if automation is None:
+    meta["automation"] = {"enabled": True, "orchestration_branch": f"feat/{feature}"}
+    changed = True
+elif not isinstance(automation, dict):
+    _die(f"tasks.json meta.automation must be an object when present: {path}")
+else:
+    enabled = automation.get("enabled")
+    if enabled is None:
+        automation["enabled"] = True
+        changed = True
+    elif not isinstance(enabled, bool):
+        _die(f"tasks.json meta.automation.enabled must be a boolean when present: {path}")
+    elif enabled is not True:
+        automation["enabled"] = True
+        changed = True
+
+    orchestration_branch = automation.get("orchestration_branch")
+    if orchestration_branch is None:
+        automation["orchestration_branch"] = f"feat/{feature}"
+        changed = True
+    elif not isinstance(orchestration_branch, str):
+        _die(f"tasks.json meta.automation.orchestration_branch must be a string when present: {path}")
+    elif orchestration_branch.strip() == "":
+        automation["orchestration_branch"] = f"feat/{feature}"
+        changed = True
 
 adr_paths = meta.get("adr_paths")
 if adr_paths is None:

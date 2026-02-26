@@ -2,10 +2,11 @@
 You are the CI Checkpoint Planning agent for <FEATURE>.
 
 Goal:
-- If this Planning Pack is cross-platform + automation-enabled, produce or refine:
+- Produce a **pre-planning first pass** CI checkpoint plan at:
   - `<FEATURE_DIR>/ci_checkpoint_plan.md`
-  - and (only if required) adjust `<FEATURE_DIR>/tasks.json` wiring for checkpoint boundaries.
-- If not applicable, record “not applicable” in logs and do not change tracked files.
+- Ensure `<FEATURE_DIR>/tasks.json` reflects the required baseline for this pack:
+  - schema v4 (automation + cross-platform),
+  - dynamic platform scope fields (set conservatively when uncertain).
 
 Constraints (non-negotiable):
 - Do not write production code.
@@ -24,21 +25,21 @@ Required reading:
 Allowed writes:
 - Tracked (canonical): you may write/overwrite only:
   - `<FEATURE_DIR>/ci_checkpoint_plan.md`
-  - `<FEATURE_DIR>/tasks.json` (only if required to satisfy checkpoint wiring rules)
+  - `<FEATURE_DIR>/tasks.json` (only if required to satisfy schema-v4 cross-platform planning requirements)
 - Logs (untracked; scratch + orchestration handoff): you may write under `<FEATURE_DIR>/logs/CI-checkpoint/**` only.
 - Do not edit any other tracked files.
 
-Applicability check (required; do first):
-- Read `<FEATURE_DIR>/tasks.json` and determine whether CI checkpoints apply:
-  - `meta.schema_version >= 3` AND `meta.automation.enabled=true` AND `meta.cross_platform=true`
-- If NOT applicable:
-  - Write/overwrite: `<FEATURE_DIR>/logs/CI-checkpoint/not_applicable.md` with:
-    - the exact meta fields + values you observed, and
-    - why this step is not applicable.
-  - Write/overwrite: `<FEATURE_DIR>/logs/CI-checkpoint/handoff.md` (short summary: “skipped / not applicable”).
-  - Exit without changing any tracked files.
+Preflight (required; do first):
+1) Read `<FEATURE_DIR>/tasks.json` and ensure the pack baseline is set for pre-planning:
+   - `meta.schema_version = 4`
+   - `meta.automation.enabled = true` and `meta.automation.orchestration_branch` is a non-empty string
+   - `meta.cross_platform = true`
+2) Ensure platform scope fields are present (dynamic per pack; be conservative when uncertain):
+   - `meta.ci_parity_platforms_required` (default: `["linux","macos","windows"]`)
+   - `meta.behavior_platforms_required` (default: same as ci_parity)
+3) If any of the above is missing or wrong, update `<FEATURE_DIR>/tasks.json` (and only those fields).
 
-Overlap execution model (required; applicable packs only):
+Overlap execution model (required):
 - Phase A (start immediately; logs only):
   - Draft checkpoint grouping and gates as scratch:
     - `<FEATURE_DIR>/logs/CI-checkpoint/scratch.md`
@@ -54,21 +55,22 @@ Overlap execution model (required; applicable packs only):
     - `git status --porcelain=v1 -- "<FEATURE_DIR>"` is empty.
   - Default poll interval: `sleep 60` between checks.
 
-Tracked output requirements (applicable packs only):
-1) Update `<FEATURE_DIR>/ci_checkpoint_plan.md`:
-   - Must follow the template shape and include a valid machine-readable JSON block.
-   - Must partition slices with no overlap and no gaps.
-   - Must respect default checkpoint size bounds unless explicitly justified.
-2) Update `<FEATURE_DIR>/tasks.json` only if required by the standard:
-   - For schema v4+ boundary-only platform-fix packs:
-     - Ensure `meta.checkpoint_boundaries` exactly matches the checkpoint group endings in `ci_checkpoint_plan.md`.
-     - Ensure only those boundary slices define `*-integ-core` / `*-integ-<platform>` tasks.
-   - Ensure checkpoint ops tasks exist and are wired:
-     - `CPk-ci-checkpoint` depends on the boundary slice’s `*-integ-core`,
-     - the first slice of the next group depends on `CPk-ci-checkpoint`.
-3) Validate mechanically (must pass):
-   - `python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "<FEATURE_DIR>"`
-   - If validation fails, fix and re-run until green.
+Tracked output requirements (pre-planning first pass; required):
+1) Write/overwrite `<FEATURE_DIR>/ci_checkpoint_plan.md` using the template:
+   - `docs/project_management/system/templates/planning_pack/ci_checkpoint_plan.md.tmpl`
+2) Slice-awareness rule:
+   - If `<FEATURE_DIR>/tasks.json` already defines slice integration tasks (`*-integ`), then:
+     - Make the machine-readable JSON slices list match the real slice ids and group them contiguously.
+     - For schema v4 cross-platform packs, update `meta.checkpoint_boundaries` to match the checkpoint boundaries.
+     - Validate mechanically (must pass):
+       - `python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "<FEATURE_DIR>"`
+   - If `<FEATURE_DIR>/tasks.json` does NOT yet define slices, then:
+     - Still write a useful first-pass plan:
+       - decide which gates to run at checkpoints (compile parity / feature smoke / CI testing mode),
+       - decide whether feature-smoke is required at every checkpoint or only at “risk seams” based on `impact_map.md`,
+       - use placeholder slice ids only as placeholders (make that explicit in the rationale),
+       - record follow-ups for full planning to replace placeholders with real slice ids + wiring.
+     - Do NOT run `validate_ci_checkpoint_plan.py` (it will fail without real slice tasks).
 
 Follow-ups:
 - If the pack lacks enough information to choose code-grounded boundaries, record follow-ups in:
