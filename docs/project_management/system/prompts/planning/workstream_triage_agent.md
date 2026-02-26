@@ -25,6 +25,25 @@ Allowed writes:
 
 Overlap execution model (required):
 - Phase A (start immediately; logs only):
+  - Compute pack-derived Work Lift v1 (impact-map-based) and treat it as an initial sizing signal:
+    - From repo root, run and capture outputs into logs:
+      - `make pm-lift-pack PACK="<FEATURE_DIR>" > "<FEATURE_DIR>/logs/workstream-triage/pm_lift_pack.txt"`
+      - `make pm-lift-pack PACK="<FEATURE_DIR>" EMIT_JSON=1 > "<FEATURE_DIR>/logs/workstream-triage/pm_lift_pack.json"`
+    - Eligibility note:
+      - `pm-lift-pack` is only impact-map-derived when `<FEATURE_DIR>/tasks.json` indicates strict packs (`meta.slice_spec_version >= 2`).
+      - If the pack is legacy (`meta.slice_spec_version` missing or `< 2`), record that fact and do not treat the lift numbers as authoritative sizing.
+    - Use `lift_score`, `estimated_slices`, `confidence`, and `derived.impact_map_touch_counts` as evidence for:
+      - how many workstreams to propose,
+      - where to place boundaries (if any),
+      - whether to recommend a split before full planning.
+    - If the command fails, record the failure + reason in the draft and proceed using only the artifacts you can read.
+  - Optional (recommended): capture discovery-time lift (vector-authored) from the ADR or intake:
+    - Prefer ADR:
+      - If exactly one ADR path exists in `<FEATURE_DIR>/tasks.json` (`meta.adr_paths`), run:
+        - `make pm-lift-intake FILE="<ADR_PATH>" > "<FEATURE_DIR>/logs/workstream-triage/pm_lift_intake.txt"`
+        - `make pm-lift-intake FILE="<ADR_PATH>" EMIT_JSON=1 > "<FEATURE_DIR>/logs/workstream-triage/pm_lift_intake.json"`
+      - If multiple ADR paths exist, run `pm-lift-intake` for each and write separate files per ADR ref (avoid overwriting).
+    - If you can locate the matching intake file under `docs/project_management/intake/adrs/`, read its “Lift Summary” section as additional context (optional).
   - Create and iteratively refine:
     - `<FEATURE_DIR>/logs/workstream-triage/workstream_triage_draft.md`
   - If present, read upstream handoff notes as inputs:

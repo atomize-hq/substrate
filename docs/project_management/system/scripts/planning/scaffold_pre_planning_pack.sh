@@ -22,7 +22,7 @@ Behavior:
   - Creates/ensures <FEATURE_DIR>/ exists.
   - Ensures <FEATURE_DIR>/tasks.json exists and includes meta.adr_paths containing the ADR path.
   - Creates tasks.json if missing with minimal schema:
-      { "meta": { "schema_version": 1, "feature": "<slug>", "adr_paths": ["<adr>"] }, "tasks": [] }
+      { "meta": { "schema_version": 1, "slice_spec_version": 2, "feature": "<slug>", "adr_paths": ["<adr>"] }, "tasks": [] }
 USAGE
 }
 
@@ -192,7 +192,7 @@ def _write_json(dst: str, data: Dict[str, Any]) -> None:
 
 if not os.path.exists(path):
     data: Dict[str, Any] = {
-        "meta": {"schema_version": 1, "feature": feature, "adr_paths": [adr_rel]},
+        "meta": {"schema_version": 1, "slice_spec_version": 2, "feature": feature, "adr_paths": [adr_rel]},
         "tasks": [],
     }
     _write_json(path, data)
@@ -216,6 +216,13 @@ if meta is None:
 if not isinstance(meta, dict):
     _die(f"tasks.json meta must be an object when present: {path}")
 
+slice_spec_version = meta.get("slice_spec_version")
+if slice_spec_version is None:
+    meta["slice_spec_version"] = 2
+    changed = True
+elif not isinstance(slice_spec_version, int):
+    _die(f"tasks.json meta.slice_spec_version must be an integer when present: {path}")
+
 adr_paths = meta.get("adr_paths")
 if adr_paths is None:
     meta["adr_paths"] = [adr_rel]
@@ -232,4 +239,3 @@ if changed:
 PY
 
 printf '%s\n' "${FEATURE_DIR_REL}"
-

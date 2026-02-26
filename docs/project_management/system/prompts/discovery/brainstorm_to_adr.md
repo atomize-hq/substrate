@@ -19,6 +19,7 @@ Rules:
 - Work Item must be a crisp, bounded task (implementation/maintenance/cleanup)
 - Track dependencies explicitly.
 - No hours/days estimates. Use Work Lift v1 (Lift Vector + computed outputs via `make pm-lift-*` commands).
+  - NOTE: Intake-derived lift (`pm-lift-intake`) is an early estimate; pack-derived lift (`pm-lift-pack`) will be computed later (after `impact_map.md`) during Workstream Triage.
 
 ADR Intake sections (if ADR):
 
@@ -40,18 +41,13 @@ ADR Intake sections (if ADR):
 - Lift Vector v1 (counts/booleans), authored as a `PM_LIFT_VECTOR` JSON block (see `docs/project_management/system/standards/shared/WORK_LIFT_RUBRIC.md`).
 - Computed Work Lift v1 outputs (from tooling; do not hand-calculate if you can run the command):
   - `lift_score`, `estimated_slices`, `confidence`, `missing_inputs`, `triggers`
+  - NOTE: These values are discovery-time estimates and may change once the Impact Map touch set is available.
 
 Compute (repo root):
 
 ```bash
 make pm-lift-intake FILE=docs/project_management/intake/adrs/<CODENAME>_adr_intake.md
 make pm-lift-intake FILE=docs/project_management/intake/adrs/<CODENAME>_adr_intake.md EMIT_JSON=1
-```
-
-Optional (strict-mode opt-in check; should pass for “ready to lock down” ADR candidates):
-
-```bash
-make pm-lift-strict FILE=docs/project_management/intake/adrs/<CODENAME>_adr_intake.md
 ```
 
 15. Open questions

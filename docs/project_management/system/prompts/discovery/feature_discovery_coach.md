@@ -64,12 +64,6 @@ make pm-lift-intake FILE=docs/project_management/intake/adrs/<CODENAME>_adr_inta
 make pm-lift-intake FILE=docs/project_management/intake/adrs/<CODENAME>_adr_intake.md EMIT_JSON=1
 ```
 
-If you want to enforce “ready to lock down” invariants (opt-in strict mode):
-
-```bash
-make pm-lift-strict FILE=docs/project_management/intake/adrs/<CODENAME>_adr_intake.md
-```
-
 Start by asking me:
 
 - What’s the user-visible behavior you want (one sentence)?

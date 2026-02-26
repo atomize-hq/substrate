@@ -88,6 +88,42 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
 - Prerequisite integration task IDs:
   - `<X-integ>` before `<Y-code>`
 
+## Work Lift (discovery estimate)
+
+<!-- PM_LIFT_VECTOR:BEGIN -->
+```json
+{
+  "model_version": 1,
+  "touch": {
+    "create_files": null,
+    "edit_files": null,
+    "delete_files": null,
+    "deprecate_files": null,
+    "crates_touched": null,
+    "boundary_crossings": null
+  },
+  "contract": {
+    "cli_flags": null,
+    "config_keys": null,
+    "exit_codes": null,
+    "file_formats": null,
+    "behavior_deltas": 1
+  },
+  "qa": { "new_test_files": null, "new_test_cases": null },
+  "docs": { "new_docs_files": null },
+  "ops": { "new_smoke_steps": null, "ci_changes": null },
+  "risk": {
+    "cross_platform": false,
+    "security_sensitive": false,
+    "concurrency_or_ordering": false,
+    "migration_or_backfill": false,
+    "unknowns_high": null
+  },
+  "notes": ""
+}
+```
+<!-- PM_LIFT_VECTOR:END -->
+
 ## Security / Safety Posture
 - Fail-closed rules:
   - <explicit>

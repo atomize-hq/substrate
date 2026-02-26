@@ -59,6 +59,9 @@ Draft-only adjustments you must make to the template:
 - In `Related Docs (links only)`, use `docs/project_management/packs/draft/<feature>/...` paths (even if the files do not exist yet).
 - Do not create any Planning Pack files as part of lockdown; `Related Docs` must be links only.
 - In the Executive Summary, `ADR_BODY_SHA256` may remain a placeholder; do not run extra workflow steps unless explicitly instructed elsewhere.
+- Ensure the ADR includes exactly one Lift Vector v1 JSON block (`PM_LIFT_VECTOR`) under `## Work Lift (discovery estimate)`.
+  - If the intake contains a Lift Vector block already, copy it verbatim into the ADR.
+  - Do not run lift tooling (`pm-lift-*`) during lockdown.
 
 ## Normative strength rules
 
