@@ -153,7 +153,7 @@ pm-pre-planning-from-adr:
 	feature_dir="$$(eval "$$cmd")"; \
 	if [ -z "$$feature_dir" ]; then echo "ERROR: scaffold_pre_planning_pack.sh returned empty feature dir"; exit 2; fi; \
 	tasks_path="$$feature_dir/tasks.json"; \
-	if [ -n "$$(git status --porcelain=v1 -- \"$$tasks_path\")" ]; then \
+	if [ -n "$$(git status --porcelain=v1 -- "$$tasks_path")" ]; then \
 	  git add -- "$$tasks_path"; \
 	  if ! git diff --cached --quiet; then git commit -m "docs: bootstrap pre-planning pack"; fi; \
 	fi; \
