@@ -1,0 +1,11 @@
+{
+  "meta": {
+    "schema_version": 1,
+    "slice_spec_version": 2,
+    "feature": "world-deps-apt-provisioning",
+    "adr_paths": [
+      "docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md"
+    ]
+  },
+  "tasks": []
+}
