@@ -6,26 +6,25 @@
 - Owner(s): TBD (ASSUMPTION: Substrate shell + installer maintainers)
 
 ## Scope
-- Feature directory: `docs/project_management/packs/active/dev-install-world-agent-staging/` (ASSUMPTION)
+- Feature directory: `docs/project_management/packs/draft/dev-install-world-agent-staging/` (ASSUMPTION)
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
+  - `docs/project_management/system/standards/adr/EXECUTIVE_SUMMARY_STANDARD.md`
 
-## Related Docs
-- Plan: `docs/project_management/packs/active/dev-install-world-agent-staging/plan.md` (TBD)
-- Tasks: `docs/project_management/packs/active/dev-install-world-agent-staging/tasks.json` (TBD)
-- Spec manifest: `docs/project_management/packs/active/dev-install-world-agent-staging/spec_manifest.md` (TBD)
+## Related Docs (links only)
+- Intake: `docs/project_management/intake/adrs/summoning_wombat_adr_intake.md`
+- Plan: `docs/project_management/packs/draft/dev-install-world-agent-staging/plan.md` (TBD)
+- Tasks: `docs/project_management/packs/draft/dev-install-world-agent-staging/tasks.json` (TBD)
+- Spec manifest: `docs/project_management/packs/draft/dev-install-world-agent-staging/spec_manifest.md` (TBD)
 - Specs: (TBD)
-- Contract (if present): `docs/project_management/packs/active/dev-install-world-agent-staging/contract.md` (TBD)
-- Decision Register: `docs/project_management/packs/active/dev-install-world-agent-staging/decision_register.md` (TBD; required)
-- Impact Map: `docs/project_management/packs/active/dev-install-world-agent-staging/impact_map.md` (TBD)
-- Manual Playbook: `docs/project_management/packs/active/dev-install-world-agent-staging/manual_testing_playbook.md` (TBD)
+- Contract (if present): `docs/project_management/packs/draft/dev-install-world-agent-staging/contract.md` (TBD)
+- Decision Register: `docs/project_management/packs/draft/dev-install-world-agent-staging/decision_register.md` (TBD; required)
+- Impact Map: `docs/project_management/packs/draft/dev-install-world-agent-staging/impact_map.md` (TBD)
+- Manual Playbook: `docs/project_management/packs/draft/dev-install-world-agent-staging/manual_testing_playbook.md` (TBD)
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 2c07ccf5df09ef6097c09bec91824cf180fbeb8043c2819a2baf78021f235047
+ADR_BODY_SHA256: 79959343e6450f1755631d11dcb7bafb06b0bd97c5b50b5fac147783a10e3906
 
 ### Changes (operator-facing)
 - Linux dev installs done with `--no-world` become “enable later” ready without extra manual build steps.
@@ -133,6 +132,41 @@ Do not change build/stage behavior. Instead, add preflight checks so enable dete
 - Adjacent work (not required for this ADR):
   - A follow-up ADR to skip world-backend probing when `world.enabled: false` for `substrate health` / `substrate shim doctor`.
 
+## Work Lift (discovery estimate)
+
+<!-- PM_LIFT_VECTOR:BEGIN -->
+```json
+{
+  "touch": {
+    "create_files": null,
+    "edit_files": 2,
+    "delete_files": 0,
+    "deprecate_files": 0,
+    "crates_touched": 1,
+    "boundary_crossings": null
+  },
+  "contract": {
+    "cli_flags": 0,
+    "config_keys": 0,
+    "exit_codes": 0,
+    "file_formats": 0,
+    "behavior_deltas": 1
+  },
+  "qa": { "new_test_files": null, "new_test_cases": null },
+  "docs": { "new_docs_files": 0 },
+  "ops": { "new_smoke_steps": 0, "ci_changes": 0 },
+  "risk": {
+    "cross_platform": true,
+    "security_sensitive": false,
+    "concurrency_or_ordering": false,
+    "migration_or_backfill": false,
+    "unknowns_high": null
+  },
+  "notes": "Discovery estimate; dev-install/no-world follow-up enable path (artifact staging + deterministic remediation)."
+}
+```
+<!-- PM_LIFT_VECTOR:END -->
+
 ## Security / Safety Posture
 - Fail-closed rules:
   - Provisioning remains explicit and privileged (systemd/sudo); this ADR does not introduce silent privilege escalation.
@@ -150,14 +184,14 @@ Do not change build/stage behavior. Instead, add preflight checks so enable dete
   - Add a Linux-only integration test that runs `scripts/substrate/dev-install-substrate.sh --no-world --profile release` in a workspace checkout, then asserts `test -x target/bin/linux/world-agent` (or equivalent staged location) holds post-install.
 
 ### Manual validation
-- Manual playbook: `docs/project_management/packs/active/dev-install-world-agent-staging/manual_testing_playbook.md` (TBD), covering:
+- Manual playbook: `docs/project_management/packs/draft/dev-install-world-agent-staging/manual_testing_playbook.md` (TBD), covering:
   - Run `scripts/substrate/dev-install-substrate.sh --no-world --profile release`.
   - Confirm staged artifacts exist under `<repo>/target/bin/(linux/)world-agent`.
   - Run `substrate world enable --dry-run` and confirm no missing-artifact warning is produced (Linux).
   - Run `substrate world enable` (privileged) and confirm `world.enabled: true` is written to `$SUBSTRATE_HOME/config.yaml` after successful provisioning.
 
 ### Smoke scripts
-- Linux: `docs/project_management/packs/active/dev-install-world-agent-staging/smoke/linux-smoke.sh` (TBD)
+- Linux: `docs/project_management/packs/draft/dev-install-world-agent-staging/smoke/linux-smoke.sh` (TBD)
 - macOS: none (out of scope)
 - Windows: none (out of scope; `world enable` unsupported)
 
@@ -166,9 +200,17 @@ Do not change build/stage behavior. Instead, add preflight checks so enable dete
 - Compat work: none (production installs unchanged; dev-install behavior only)
 
 ## Decision Summary
-- Decision Register entries:
-  - `docs/project_management/packs/active/dev-install-world-agent-staging/decision_register.md`:
+- Decision Register entries (if applicable):
+  - `docs/project_management/packs/draft/dev-install-world-agent-staging/decision_register.md`:
     - DR-0001 (where to implement enable preflight: Rust runner vs helper script vs installer helper)
     - DR-0002 (dev meaning of `--no-world`: “skip provisioning only” vs “skip all world-related build outputs”)
     - DR-0003 (profile mapping for staging `world-agent`: release-only vs match `dev-install --profile`)
     - DR-0004 (overwrite policy if staged `world-agent` already exists in `target/bin/(linux/)`)
+- Options (required; at least two):
+  - A) Stage `world-agent` during `dev-install-substrate.sh --no-world` so “enable later” is execution-ready (recommended).
+  - B) Build/stage `world-agent` during `substrate world enable` when missing (requires a source checkout + cargo toolchain).
+- Selection:
+  - Chosen: A
+  - Rationale: Keeps `substrate world enable` provisioning-focused and deterministic while making the dev `--no-world → enable later` workflow reliable without requiring ad-hoc manual builds.
+  - Choose A when: we want a reliable dev workflow that does not depend on `cargo` being available at enable time.
+  - Choose B when: we strongly prefer “enable builds what it needs” and can reliably detect a source checkout + cargo environment without surprising privileged behavior.

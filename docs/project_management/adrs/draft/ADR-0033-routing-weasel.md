@@ -6,30 +6,31 @@
 - Owner(s): ASSUMPTION: Shell maintainers; World backend maintainers
 
 ## Scope
-- Feature directory: `docs/project_management/packs/active/world-deps-pacman-provisioning/` (ASSUMPTION: new pack)
+- Feature directory: `docs/project_management/packs/draft/world-deps-pacman-provisioning/` (ASSUMPTION: new pack)
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
+  - `docs/project_management/system/standards/adr/EXECUTIVE_SUMMARY_STANDARD.md`
 
-## Related Docs
+## Related Docs (links only)
+- Intake: `docs/project_management/intake/adrs/routing_weasel_adr_intake.md`
 - Internals (current behavior notes): `docs/internals/world/deps.md`
 - World-deps contract / install classes: `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
 - Provisioning-time system packages (APT baseline): `docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md`
 - Linux guest-rootfs roadmap context (system packages on Linux): `docs/project_management/adrs/draft/ADR-0009-linux-guest-rootfs-backend-and-linux-system-packages-provisioning.md`
 - Operator reference: `docs/reference/world/deps/README.md`
-- Plan/specs/tasks/etc (to be created in the feature directory above):
-  - Plan: `docs/project_management/packs/active/world-deps-pacman-provisioning/plan.md`
-  - Tasks: `docs/project_management/packs/active/world-deps-pacman-provisioning/tasks.json`
-  - Spec manifest: `docs/project_management/packs/active/world-deps-pacman-provisioning/spec_manifest.md`
-  - Decision Register: `docs/project_management/packs/active/world-deps-pacman-provisioning/decision_register.md`
-  - Impact Map: `docs/project_management/packs/active/world-deps-pacman-provisioning/impact_map.md`
-  - Manual Playbook: `docs/project_management/packs/active/world-deps-pacman-provisioning/manual_testing_playbook.md`
+- Plan: `docs/project_management/packs/draft/world-deps-pacman-provisioning/plan.md`
+- Tasks: `docs/project_management/packs/draft/world-deps-pacman-provisioning/tasks.json`
+- Spec manifest: `docs/project_management/packs/draft/world-deps-pacman-provisioning/spec_manifest.md`
+- Specs:
+  - ASSUMPTION: `docs/project_management/packs/draft/world-deps-pacman-provisioning/specs/world_deps_pacman_provisioning.md`
+- Contract (if present): `docs/project_management/packs/draft/world-deps-pacman-provisioning/contract.md`
+- Decision Register (if required): `docs/project_management/packs/draft/world-deps-pacman-provisioning/decision_register.md`
+- Impact Map (if required): `docs/project_management/packs/draft/world-deps-pacman-provisioning/impact_map.md`
+- Manual Playbook (if required): `docs/project_management/packs/draft/world-deps-pacman-provisioning/manual_testing_playbook.md`
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 7683fd74ffb42702987a6cbf8224e36e2f6e1ff2fe0f806f9e22800cbf981706
+ADR_BODY_SHA256: ca936883fd215e450faa879edf03ad5657980781b082a20c0cdff0397ca2c17c
 
 ### Changes (operator-facing)
 - Add Arch-family (pacman) provisioning-time support for world-deps system packages
@@ -158,6 +159,41 @@ Introduce an abstract system-packages method and have Substrate translate packag
   - `ADR-0030` (`provisioning_otter`) must land first (or concurrently) to define the provisioning-time system-packages workflow surface and runtime fail-early posture.
   - Linux guest-rootfs provisioning support depends on `ADR-0009` (Arch-family support may initially land via other guest images/backends).
 
+## Work Lift (discovery estimate)
+
+<!-- PM_LIFT_VECTOR:BEGIN -->
+```json
+{
+  "touch": {
+    "create_files": null,
+    "edit_files": 3,
+    "delete_files": 0,
+    "deprecate_files": 0,
+    "crates_touched": 2,
+    "boundary_crossings": null
+  },
+  "contract": {
+    "cli_flags": 0,
+    "config_keys": 0,
+    "exit_codes": 0,
+    "file_formats": 1,
+    "behavior_deltas": 1
+  },
+  "qa": { "new_test_files": null, "new_test_cases": null },
+  "docs": { "new_docs_files": 0 },
+  "ops": { "new_smoke_steps": 0, "ci_changes": 0 },
+  "risk": {
+    "cross_platform": true,
+    "security_sensitive": true,
+    "concurrency_or_ordering": false,
+    "migration_or_backfill": false,
+    "unknowns_high": null
+  },
+  "notes": "Discovery estimate; add pacman provisioning support (inventory method + provisioning-time implementation)."
+}
+```
+<!-- PM_LIFT_VECTOR:END -->
+
 ## Security / Safety Posture
 - Fail-closed rules:
   - Runtime `world deps current sync|install` must never attempt OS package manager execution (APT or pacman).
@@ -179,13 +215,13 @@ Introduce an abstract system-packages method and have Substrate translate packag
   - Unsupported backend: verify provisioning is rejected with exit `4` and clear “provisioning unsupported / no host mutation” messaging.
 
 ### Manual validation
-- Manual playbook: `docs/project_management/packs/active/world-deps-pacman-provisioning/manual_testing_playbook.md`
+- Manual playbook: `docs/project_management/packs/draft/world-deps-pacman-provisioning/manual_testing_playbook.md`
   - Must cover: Arch-family guest provisioning success, mismatch remediation, and runtime fail-early behavior.
 
 ### Smoke scripts
-- Linux: `docs/project_management/packs/active/world-deps-pacman-provisioning/smoke/linux-smoke.sh`
-- macOS: `docs/project_management/packs/active/world-deps-pacman-provisioning/smoke/macos-smoke.sh`
-- Windows: `docs/project_management/packs/active/world-deps-pacman-provisioning/smoke/windows-smoke.ps1`
+- Linux: `docs/project_management/packs/draft/world-deps-pacman-provisioning/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/packs/draft/world-deps-pacman-provisioning/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/packs/draft/world-deps-pacman-provisioning/smoke/windows-smoke.ps1`
 
 ## Rollout / Backwards Compatibility
 - Policy: greenfield breaking is allowed
@@ -193,16 +229,17 @@ Introduce an abstract system-packages method and have Substrate translate packag
 - Behavior change note: inventories that do not use `install.method=pacman` are unaffected; inventories that do may now be provisioned on Arch-family world OSes via `substrate world enable --provision-deps`.
 
 ## Decision Summary
-- Options in the ADR (body-of-work shape):
-  - Option A (recommended): explicit `install.method=pacman` schema extension (no package-name translation).
-  - Option B (viable alternative): abstract `install.method=system_packages` with per-distro mapping.
-  - This ADR documents the user-facing contract for Option A and the associated behavior delta.
-- Decision Register vs ADR:
-  - ADR should hold: the operator contract (`--provision-deps` behavior, exit codes, platform posture), the world OS probe contract, and the “no runtime OS mutation” invariant.
-  - Decision Register should hold: fine-grained A/B decisions like “exact probe commands and parsing strategy”, “pacman invocation shape (refresh/idempotency)”, “behavior when enabled set contains mixed system-package methods”, and “whether built-in inventories ship pacman variants vs user-only initial support”.
-- Decision Register entries:
-  - `docs/project_management/packs/active/world-deps-pacman-provisioning/decision_register.md`:
+- Decision Register entries (if applicable):
+  - `docs/project_management/packs/draft/world-deps-pacman-provisioning/decision_register.md`:
     - DR-0001 (schema approach: explicit method vs abstract mapping)
     - DR-0002 (probe strategy: `/etc/os-release` vs manager presence vs both)
     - DR-0003 (pacman invocation and idempotency strategy)
     - DR-0004 (mismatch policy: fail vs partial provision)
+- Options (required; at least two):
+  - A) Add explicit `install.method=pacman` alongside `install.method=apt` in the world-deps inventory schema (recommended).
+  - B) Introduce an abstract `install.method=system_packages` with per-distro mapping/translation (avoid in first ship).
+- Selection:
+  - Chosen: A
+  - Rationale: Keeps the behavior delta small and explicit (no cross-distro package-name translation), while enabling provisioning-time system packages for Arch-family world OSes when supported.
+  - Choose A when: we want explicit, readable inventory entries and are willing to add one manager at a time without solving translation.
+  - Choose B when: we are ready to own long-term cross-distro package-name mapping and accept higher maintenance and failure risk.

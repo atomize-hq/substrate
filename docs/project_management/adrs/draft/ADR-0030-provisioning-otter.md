@@ -6,29 +6,29 @@
 - Owner(s): ASSUMPTION: Shell maintainers; World backend maintainers
 
 ## Scope
-- Feature directory: `docs/project_management/packs/active/world-deps-apt-provisioning/` (ASSUMPTION: new pack)
+- Feature directory: `docs/project_management/packs/draft/world-deps-apt-provisioning/` (ASSUMPTION: new pack)
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
+  - `docs/project_management/system/standards/adr/EXECUTIVE_SUMMARY_STANDARD.md`
 
-## Related Docs
+## Related Docs (links only)
+- Intake: `docs/project_management/intake/adrs/provisioning_otter_adr_intake.md`
 - Internals (current behavior notes): `docs/internals/world/deps.md`
 - World-deps contract / install classes: `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
-- System packages posture (historical): `docs/project_management/_archived/world_deps_selection_layer/`
 - Linux guest-rootfs roadmap context: `docs/project_management/adrs/draft/ADR-0009-linux-guest-rootfs-backend-and-linux-system-packages-provisioning.md`
-- Plan/specs/tasks/etc (to be created in the feature directory above):
-  - Plan: `docs/project_management/packs/active/world-deps-apt-provisioning/plan.md`
-  - Tasks: `docs/project_management/packs/active/world-deps-apt-provisioning/tasks.json`
-  - Spec manifest: `docs/project_management/packs/active/world-deps-apt-provisioning/spec_manifest.md`
-  - Decision Register: `docs/project_management/packs/active/world-deps-apt-provisioning/decision_register.md`
-  - Impact Map: `docs/project_management/packs/active/world-deps-apt-provisioning/impact_map.md`
-  - Manual Playbook: `docs/project_management/packs/active/world-deps-apt-provisioning/manual_testing_playbook.md`
+- Plan: `docs/project_management/packs/draft/world-deps-apt-provisioning/plan.md`
+- Tasks: `docs/project_management/packs/draft/world-deps-apt-provisioning/tasks.json`
+- Spec manifest: `docs/project_management/packs/draft/world-deps-apt-provisioning/spec_manifest.md`
+- Specs:
+  - ASSUMPTION: `docs/project_management/packs/draft/world-deps-apt-provisioning/specs/world_deps_apt_provisioning.md`
+- Contract (if present): `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`
+- Decision Register (if required): `docs/project_management/packs/draft/world-deps-apt-provisioning/decision_register.md`
+- Impact Map (if required): `docs/project_management/packs/draft/world-deps-apt-provisioning/impact_map.md`
+- Manual Playbook (if required): `docs/project_management/packs/draft/world-deps-apt-provisioning/manual_testing_playbook.md`
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 73799aea312b8f9ed6cf90908dedcd06f0a6238d50e4b0273fbed7278a80862e
+ADR_BODY_SHA256: b28378e3b7fcc1e093b3f93ce7fd2957673c39ff1ff9864a756f1f542d8be9b7
 
 ### Changes (operator-facing)
 - APT-backed world-deps become provisioning-time; runtime sync/install is user-space-only
@@ -36,9 +36,11 @@ ADR_BODY_SHA256: 73799aea312b8f9ed6cf90908dedcd06f0a6238d50e4b0273fbed7278a80862
   - New: Operators run `substrate world enable --provision-deps` to provision APT/system packages required by the effective enabled world-deps set (guest backends only). Runtime `substrate world deps current sync|install` never runs APT; it fails early for APT items with actionable remediation (or manual guidance when provisioning is unsupported).
   - Why: Keep the hardened runtime sandbox fail-closed while providing an explicit, auditable workflow for OS mutation where it is safe (guest worlds).
   - Links:
-    - `docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md#L1`
-    - `docs/internals/world/deps.md#L1`
-    - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md#L1`
+    - `docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md#user-contract-authoritative`
+    - `docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md#validation-plan-authoritative`
+    - `docs/project_management/intake/adrs/provisioning_otter_adr_intake.md`
+    - `docs/internals/world/deps.md`
+    - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
 
 ## Problem / Context
 - Hardened world execution paths can render `/` effectively read-only (e.g. systemd `ProtectSystem=strict`), so `apt/dpkg` cannot mutate system paths/state and `substrate world deps current sync` can fail with “Read-only file system”.
@@ -137,9 +139,44 @@ Add a `substrate world deps provision` command that provisions APT/system packag
     - stable exit codes per taxonomy and mapping above
 
 ## Sequencing / Dependencies
-- Sequencing entry: `docs/project_management/packs/sequencing.json` → ASSUMPTION: add a new sprint entry for `world-deps-apt-provisioning`
+- Sequencing entry: `docs/project_management/packs/sequencing.json` → TBD (to be added during planning)
 - Prerequisite integration task IDs:
   - None required by this ADR (follow-ups may depend on Windows `world enable` support and/or Linux guest-rootfs availability).
+
+## Work Lift (discovery estimate)
+
+<!-- PM_LIFT_VECTOR:BEGIN -->
+```json
+{
+  "touch": {
+    "create_files": null,
+    "edit_files": 3,
+    "delete_files": 0,
+    "deprecate_files": 0,
+    "crates_touched": 2,
+    "boundary_crossings": null
+  },
+  "contract": {
+    "cli_flags": 1,
+    "config_keys": 0,
+    "exit_codes": 0,
+    "file_formats": 0,
+    "behavior_deltas": 1
+  },
+  "qa": { "new_test_files": null, "new_test_cases": null },
+  "docs": { "new_docs_files": 0 },
+  "ops": { "new_smoke_steps": 0, "ci_changes": 0 },
+  "risk": {
+    "cross_platform": true,
+    "security_sensitive": true,
+    "concurrency_or_ordering": false,
+    "migration_or_backfill": false,
+    "unknowns_high": null
+  },
+  "notes": "Discovery estimate; provisioning-time OS mutation flag + runtime fail-early remediation."
+}
+```
+<!-- PM_LIFT_VECTOR:END -->
 
 ## Security / Safety Posture
 - Fail-closed rules:
@@ -160,13 +197,13 @@ Add a `substrate world deps provision` command that provisions APT/system packag
   - Existing APT install tests must be updated/repurposed to reflect provisioning-time behavior.
 
 ### Manual validation
-- Manual playbook: `docs/project_management/packs/active/world-deps-apt-provisioning/manual_testing_playbook.md`
+- Manual playbook: `docs/project_management/packs/draft/world-deps-apt-provisioning/manual_testing_playbook.md`
   - Must cover: guest provisioning success, runtime remediation behavior, Linux host-native unsupported behavior.
 
 ### Smoke scripts
-- Linux: `docs/project_management/packs/active/world-deps-apt-provisioning/smoke/linux-smoke.sh`
-- macOS: `docs/project_management/packs/active/world-deps-apt-provisioning/smoke/macos-smoke.sh`
-- Windows: `docs/project_management/packs/active/world-deps-apt-provisioning/smoke/windows-smoke.ps1`
+- Linux: `docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/windows-smoke.ps1`
 
 ## Rollout / Backwards Compatibility
 - Policy: greenfield breaking is allowed
@@ -174,15 +211,16 @@ Add a `substrate world deps provision` command that provisions APT/system packag
 - Behavior change note: runtime `substrate world deps current sync|install` no longer performs APT installs; operators must provision APT requirements explicitly via `substrate world enable --provision-deps` (or follow manual guidance when unsupported).
 
 ## Decision Summary
-- Options in the ADR (body-of-work shape):
-  - Option A (recommended): provisioning is a flag on `substrate world enable` (`--provision-deps`).
-  - Option B (viable alternative): introduce `substrate world deps provision` as a separate verb under `world deps`.
-  - This ADR documents the user-facing contract for Option A and the associated behavior delta.
-- Decision Register vs ADR:
-  - ADR should hold: the operator contract, exit-code mapping, platform posture (guest vs host-native), and the “no runtime APT mutation” invariant.
-  - Decision Register should hold: fine-grained A/B decisions like “how provisioning runs relative to hardening profiles”, “whether to persist provisioned state vs probe-only”, “Windows support gating”, and “how to format derived APT package lists for `--dry-run`”.
-- Decision Register entries:
-  - `docs/project_management/packs/active/world-deps-apt-provisioning/decision_register.md`:
+- Decision Register entries (if applicable):
+  - `docs/project_management/packs/draft/world-deps-apt-provisioning/decision_register.md`:
     - DR-0001 (Option A vs Option B selection)
     - DR-0002 (provisioned-state tracking: probe-only vs state file)
     - DR-0003 (provisioning execution profile isolation model)
+- Options (required; at least two):
+  - A) Add `--provision-deps` on `substrate world enable` (recommended).
+  - B) Add a dedicated `substrate world deps provision` command under the `world deps` namespace.
+- Selection:
+  - Chosen: A
+  - Rationale: Keeps OS mutation behind an explicit provisioning verb (`world enable`) that already implies system preparation, and avoids widening runtime `world deps ...` into a system-mutation surface.
+  - Choose A when: OS mutation must be explicit and separate from runtime dependency sync/install, and we want a single, auditable provisioning entrypoint.
+  - Choose B when: the `world enable` surface must remain minimal and “deps provisioning” needs a dedicated namespace even at the cost of additional conceptual surface area.

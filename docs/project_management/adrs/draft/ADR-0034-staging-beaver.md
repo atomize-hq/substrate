@@ -6,26 +6,25 @@
 - Owner(s): TBD (ASSUMPTION: Substrate shell maintainers)
 
 ## Scope
-- Feature directory: `docs/project_management/packs/active/dev-install-helper-discovery/` (ASSUMPTION)
+- Feature directory: `docs/project_management/packs/draft/dev-install-helper-discovery/` (ASSUMPTION)
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
+  - `docs/project_management/system/standards/adr/EXECUTIVE_SUMMARY_STANDARD.md`
 
-## Related Docs
-- Plan: `docs/project_management/packs/active/dev-install-helper-discovery/plan.md` (TBD)
-- Tasks: `docs/project_management/packs/active/dev-install-helper-discovery/tasks.json` (TBD)
-- Spec manifest: `docs/project_management/packs/active/dev-install-helper-discovery/spec_manifest.md` (TBD)
+## Related Docs (links only)
+- Intake: `docs/project_management/intake/adrs/staging_beaver_adr_intake.md`
+- Plan: `docs/project_management/packs/draft/dev-install-helper-discovery/plan.md` (TBD)
+- Tasks: `docs/project_management/packs/draft/dev-install-helper-discovery/tasks.json` (TBD)
+- Spec manifest: `docs/project_management/packs/draft/dev-install-helper-discovery/spec_manifest.md` (TBD)
 - Specs: (TBD)
-- Contract (if present): `docs/project_management/packs/active/dev-install-helper-discovery/contract.md` (TBD)
-- Decision Register: `docs/project_management/packs/active/dev-install-helper-discovery/decision_register.md` (TBD; required)
-- Impact Map: `docs/project_management/packs/active/dev-install-helper-discovery/impact_map.md` (TBD)
-- Manual Playbook: `docs/project_management/packs/active/dev-install-helper-discovery/manual_testing_playbook.md` (TBD)
+- Contract (if present): `docs/project_management/packs/draft/dev-install-helper-discovery/contract.md` (TBD)
+- Decision Register: `docs/project_management/packs/draft/dev-install-helper-discovery/decision_register.md` (TBD; required)
+- Impact Map: `docs/project_management/packs/draft/dev-install-helper-discovery/impact_map.md` (TBD)
+- Manual Playbook: `docs/project_management/packs/draft/dev-install-helper-discovery/manual_testing_playbook.md` (TBD)
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 8f980bd66ef3c723d3924abaa21a044e50b26933fb53685877f86d3dd1cf19e3
+ADR_BODY_SHA256: 43541d4c94fde16444d08b5577c603c1447aa3dfc22fd148ae3e7d2e29377bf7
 
 ### Changes (operator-facing)
 - Dev installs become robust to `cargo clean` for `substrate world enable` helper discovery.
@@ -112,6 +111,41 @@ Adopt a production-like bundle root (`bin/`, `scripts/`, `config/`) under `$SUBS
 - Sequencing entry: `docs/project_management/packs/sequencing.json` → TBD
 - Prerequisite integration task IDs: none
 
+## Work Lift (discovery estimate)
+
+<!-- PM_LIFT_VECTOR:BEGIN -->
+```json
+{
+  "touch": {
+    "create_files": 0,
+    "edit_files": 1,
+    "delete_files": 0,
+    "deprecate_files": 0,
+    "crates_touched": 0,
+    "boundary_crossings": 0
+  },
+  "contract": {
+    "cli_flags": 0,
+    "config_keys": 0,
+    "exit_codes": 0,
+    "file_formats": 0,
+    "behavior_deltas": 1
+  },
+  "qa": { "new_test_files": 0, "new_test_cases": 0 },
+  "docs": { "new_docs_files": 0 },
+  "ops": { "new_smoke_steps": 0, "ci_changes": 0 },
+  "risk": {
+    "cross_platform": true,
+    "security_sensitive": false,
+    "concurrency_or_ordering": false,
+    "migration_or_backfill": false,
+    "unknowns_high": 0
+  },
+  "notes": "Estimate: dev-install/dev-uninstall script staging for helper discovery under SUBSTRATE_HOME."
+}
+```
+<!-- PM_LIFT_VECTOR:END -->
+
 ## Security / Safety Posture
 - Fail-closed rules:
   - If the helper script cannot be found in either location, `substrate world enable` must error (no “best-effort” provisioning without an explicit helper path).
@@ -127,15 +161,15 @@ Adopt a production-like bundle root (`bin/`, `scripts/`, `config/`) under `$SUBS
   - Add an integration-style test that simulates dev install, removes `<repo>/target/scripts/…`, and asserts `substrate world enable --dry-run` locates the helper from `$SUBSTRATE_HOME/scripts/substrate/…` (exact harness TBD).
 
 ### Manual validation
-- Manual playbook: `docs/project_management/packs/active/dev-install-helper-discovery/manual_testing_playbook.md` (TBD), covering:
+- Manual playbook: `docs/project_management/packs/draft/dev-install-helper-discovery/manual_testing_playbook.md` (TBD), covering:
   - Run `scripts/substrate/dev-install-substrate.sh`.
   - Run `cargo clean` then rebuild `target/<profile>/substrate` without rerunning dev-install.
   - Run `substrate world enable --dry-run` and confirm it resolves the helper from `$SUBSTRATE_HOME/scripts/substrate/…`.
   - Run `scripts/substrate/dev-uninstall-substrate.sh` and confirm staged helpers are removed when they are managed by dev-install.
 
 ### Smoke scripts
-- Linux: `docs/project_management/packs/active/dev-install-helper-discovery/smoke/linux-smoke.sh` (TBD)
-- macOS: `docs/project_management/packs/active/dev-install-helper-discovery/smoke/macos-smoke.sh` (TBD)
+- Linux: `docs/project_management/packs/draft/dev-install-helper-discovery/smoke/linux-smoke.sh` (TBD)
+- macOS: `docs/project_management/packs/draft/dev-install-helper-discovery/smoke/macos-smoke.sh` (TBD)
 - Windows: none (out of scope; `world enable` unsupported)
 
 ## Rollout / Backwards Compatibility
@@ -143,8 +177,16 @@ Adopt a production-like bundle root (`bin/`, `scripts/`, `config/`) under `$SUBS
 - Compat work: none (dev-install behavior change only; production installs unchanged)
 
 ## Decision Summary
-- Decision Register entries:
-  - `docs/project_management/packs/active/dev-install-helper-discovery/decision_register.md`:
+- Decision Register entries (if applicable):
+  - `docs/project_management/packs/draft/dev-install-helper-discovery/decision_register.md`:
     - DR-0001 (helper staging mechanism: symlink vs copy)
     - DR-0002 (uninstall ownership guard: how to determine “managed by dev-install”)
     - DR-0003 (overwrite policy if `$SUBSTRATE_HOME/scripts/substrate/world-enable.sh` already exists)
+- Options (required; at least two):
+  - A) Full parity: stage a production-like bundle under `$SUBSTRATE_HOME/versions/<label>/{bin,scripts,config}` and link `$SUBSTRATE_HOME/bin/*` into it.
+  - B) Minimal parity: keep `$SUBSTRATE_HOME/bin/substrate -> <repo>/target/...` but stage helper scripts under `$SUBSTRATE_HOME/scripts/substrate/...` (recommended).
+- Selection:
+  - Chosen: B
+  - Rationale: Fixes the brittle helper-discovery failure after `cargo clean` without changing the dev inner-loop “always use latest build output” symlink behavior.
+  - Choose A when: we want dev+prod installs to share the same mental model and are willing to address version-dir inference and potential drift from `cargo build` outputs.
+  - Choose B when: we want the smallest vertical slice that preserves the existing dev workflow but makes helper discovery stable under `$SUBSTRATE_HOME`.

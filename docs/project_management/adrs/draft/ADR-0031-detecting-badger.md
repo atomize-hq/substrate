@@ -6,24 +6,22 @@
 - Owner(s): ASSUMPTION: Substrate maintainers
 
 ## Scope
-- Feature directory: `docs/project_management/packs/active/detecting-badger/` (ASSUMPTION: created during planning)
+- Feature directory: `docs/project_management/packs/draft/detecting-badger/` (ASSUMPTION: created during planning)
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+  - `docs/project_management/system/standards/adr/EXECUTIVE_SUMMARY_STANDARD.md`
 
-## Related Docs
+## Related Docs (links only)
 - Intake: `docs/project_management/intake/adrs/detecting_badger_adr_intake.md`
-- Plan: `docs/project_management/packs/active/detecting-badger/plan.md` (planned)
-- Tasks: `docs/project_management/packs/active/detecting-badger/tasks.json` (planned)
-- Spec manifest: `docs/project_management/packs/active/detecting-badger/spec_manifest.md` (planned)
-- Decision Register: `docs/project_management/packs/active/detecting-badger/decision_register.md` (required; see “Decision Summary”)
-- Impact Map: `docs/project_management/packs/active/detecting-badger/impact_map.md` (required; install UX + support/debug implications)
+- Plan: `docs/project_management/packs/draft/detecting-badger/plan.md`
+- Tasks: `docs/project_management/packs/draft/detecting-badger/tasks.json`
+- Spec manifest: `docs/project_management/packs/draft/detecting-badger/spec_manifest.md`
+- Decision Register (if required): `docs/project_management/packs/draft/detecting-badger/decision_register.md`
+- Impact Map (if required): `docs/project_management/packs/draft/detecting-badger/impact_map.md`
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 3addde3fb1ef0912fc83c4f6dcd82e438b33222cf23b72adb3f7bae9264913f2
+ADR_BODY_SHA256: afeef29383051614b0a9908db231e53d3b6feeef7d582aa4ab2ce432d524e988
 
 ### Changes (operator-facing)
 - Linux installer prints detected distro and chosen package manager, and supports explicit override
@@ -157,6 +155,41 @@ Add a hermetic test under `tests/installers/` that exercises the precedence rule
 - Sequencing entry: `docs/project_management/packs/sequencing.json` → ASSUMPTION: add a “detecting-badger” entry before execution begins.
 - Related/coordination-only intake: `provisioning_otter` (no hard dependency declared in intake).
 
+## Work Lift (discovery estimate)
+
+<!-- PM_LIFT_VECTOR:BEGIN -->
+```json
+{
+  "touch": {
+    "create_files": 1,
+    "edit_files": 1,
+    "delete_files": 0,
+    "deprecate_files": 0,
+    "crates_touched": 0,
+    "boundary_crossings": 0
+  },
+  "contract": {
+    "cli_flags": 1,
+    "config_keys": 0,
+    "exit_codes": 0,
+    "file_formats": 0,
+    "behavior_deltas": 1
+  },
+  "qa": { "new_test_files": 1, "new_test_cases": 3 },
+  "docs": { "new_docs_files": 0 },
+  "ops": { "new_smoke_steps": 0, "ci_changes": 0 },
+  "risk": {
+    "cross_platform": false,
+    "security_sensitive": true,
+    "concurrency_or_ordering": false,
+    "migration_or_backfill": false,
+    "unknowns_high": 0
+  },
+  "notes": "Estimate based on: add one user-facing installer flag + one hermetic installer test file."
+}
+```
+<!-- PM_LIFT_VECTOR:END -->
+
 ## Security / Safety Posture
 - Fail-closed rules:
   - If an explicit override is provided (`--pkg-manager` or `PKG_MANAGER`) but the selected manager is unavailable or invalid, fail (do not silently fall back).
@@ -177,7 +210,7 @@ Add a hermetic test under `tests/installers/` that exercises the precedence rule
   - `tests/installers/pkg_manager_container_smoke.sh` remains a local sanity check for `/etc/os-release` presence and manager availability in representative images.
 
 ### Manual validation
-- Manual playbook: `docs/project_management/packs/active/detecting-badger/manual_testing_playbook.md` (planned)
+- Manual playbook: `docs/project_management/packs/draft/detecting-badger/manual_testing_playbook.md` (planned)
   - Must include: examples for default Ubuntu selection, default Arch selection, forced override (`--pkg-manager`), legacy env (`PKG_MANAGER`), and a failure mode with remediation.
 
 ### Smoke scripts
@@ -190,12 +223,16 @@ Add a hermetic test under `tests/installers/` that exercises the precedence rule
   - The only intentional behavior change is improved default selection when os-release mapping is available (more predictable “Ubuntu → apt-get”, “Arch → pacman”, etc.), plus explicit override support.
 
 ## Decision Summary
-- Decision Register: required (multiple architectural choices with tradeoffs). Create:
-  - `docs/project_management/packs/active/detecting-badger/decision_register.md`
-- What belongs in the ADR (this document):
-  - Operator-facing contract (flag/env precedence, mapping table, output line, exit-code behavior).
-  - Slice boundaries and validation requirements.
-- What belongs in the Decision Register (pack-local):
-  - Parsing approach for `/etc/os-release` (strict parser vs shell-friendly parsing constraints).
-  - Whether ambiguity in path probe should warn vs fail (and under what conditions).
-  - Whether to add/standardize a test hook for supplying an alternate os-release path (and whether it is supported or test-only).
+- Decision Register entries (if applicable):
+  - `docs/project_management/packs/draft/detecting-badger/decision_register.md`:
+    - DR-0001 (parser approach for `/etc/os-release`)
+    - DR-0002 (ambiguity policy for multi-manager PATH probe: warn vs fail)
+    - DR-0003 (test hook: allow alternate os-release path vs test-only harness)
+- Options (required; at least two):
+  - A) Add `--pkg-manager` and keep default selection as PATH probe only (no distro-family mapping).
+  - B) Add best-effort distro detection (`/etc/os-release` mapping) plus `--pkg-manager` override (recommended).
+- Selection:
+  - Chosen: B
+  - Rationale: Improves default correctness and diagnostics (“Ubuntu → apt-get”, “Arch → pacman”) while keeping deterministic override escape hatches for edge environments.
+  - Choose A when: we want the smallest safe improvement (override + visibility) before maintaining any distro-family mapping table.
+  - Choose B when: we want more predictable defaults and better diagnostics without sacrificing explicit override.

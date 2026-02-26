@@ -6,25 +6,23 @@
 - Owner(s): TBD (ASSUMPTION: Substrate shell maintainers)
 
 ## Scope
-- Feature directory: `docs/project_management/packs/active/replaying-raccoon/` (ASSUMPTION: created during planning)
+- Feature directory: `docs/project_management/packs/draft/replaying-raccoon/` (ASSUMPTION: created during planning)
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
+  - `docs/project_management/system/standards/adr/EXECUTIVE_SUMMARY_STANDARD.md`
 
-## Related Docs
+## Related Docs (links only)
 - Intake: `docs/project_management/intake/adrs/replaying_raccoon_adr_intake.md`
 - Prerequisite ADR (required): `docs/project_management/adrs/draft/ADR-0037-clarifying-owl.md`
-- Plan: `docs/project_management/packs/active/replaying-raccoon/plan.md` (planned)
-- Tasks: `docs/project_management/packs/active/replaying-raccoon/tasks.json` (planned)
-- Spec manifest: `docs/project_management/packs/active/replaying-raccoon/spec_manifest.md` (planned)
-- Decision Register: `docs/project_management/packs/active/replaying-raccoon/decision_register.md` (required; see “Decision Summary”)
-- Impact Map: `docs/project_management/packs/active/replaying-raccoon/impact_map.md` (recommended; cross-surface UX consistency + trace/CI implications)
+- Plan: `docs/project_management/packs/draft/replaying-raccoon/plan.md` (planned)
+- Tasks: `docs/project_management/packs/draft/replaying-raccoon/tasks.json` (planned)
+- Spec manifest: `docs/project_management/packs/draft/replaying-raccoon/spec_manifest.md` (planned)
+- Decision Register: `docs/project_management/packs/draft/replaying-raccoon/decision_register.md` (required; see “Decision Summary”)
+- Impact Map: `docs/project_management/packs/draft/replaying-raccoon/impact_map.md` (recommended; cross-surface UX consistency + trace/CI implications)
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 1fd6090f3bbe83104a53846107c49e92aab168d95055089e33112a6b1d74ac3c
+ADR_BODY_SHA256: 6c765ad8b6ec6afd7202ad9d7c0eb9b488db2160dbfa8331e338655822f3d9ce
 ### Changes (operator-facing)
 - Replay output reuses the same “world disabled reason attribution” as doctor/health, so replay does not imply `--no-world` when the actual cause is config/env.
   - Existing: `substrate --replay <span_id>` can emit replay origin/warning text that either (a) attributes host-only replay to `--no-world` when the true cause is persisted config/env, or (b) leaves operators guessing which layer disabled world (flag vs env override vs workspace/global config).
@@ -122,6 +120,41 @@ Implement the same precedence mapping and formatting in replay routing without s
 - Integration task IDs:
   - TBD (ASSUMPTION: this work can be scheduled after the `clarifying_owl` integration task lands).
 
+## Work Lift (discovery estimate)
+
+<!-- PM_LIFT_VECTOR:BEGIN -->
+```json
+{
+  "touch": {
+    "create_files": null,
+    "edit_files": 2,
+    "delete_files": 0,
+    "deprecate_files": 0,
+    "crates_touched": 2,
+    "boundary_crossings": null
+  },
+  "contract": {
+    "cli_flags": 0,
+    "config_keys": 0,
+    "exit_codes": 0,
+    "file_formats": 0,
+    "behavior_deltas": 1
+  },
+  "qa": { "new_test_files": null, "new_test_cases": null },
+  "docs": { "new_docs_files": 0 },
+  "ops": { "new_smoke_steps": 0, "ci_changes": 0 },
+  "risk": {
+    "cross_platform": true,
+    "security_sensitive": false,
+    "concurrency_or_ordering": false,
+    "migration_or_backfill": false,
+    "unknowns_high": null
+  },
+  "notes": "Discovery estimate; replay/warnings messaging alignment with doctor/health disable attribution."
+}
+```
+<!-- PM_LIFT_VECTOR:END -->
+
 ## Security / Safety Posture
 - Fail-closed vs degrade: unchanged (this ADR is messaging + attribution only).
 - Sensitive data handling:
@@ -155,10 +188,15 @@ Implement the same precedence mapping and formatting in replay routing without s
   - Text output parsing (if any) may need adjustment; prefer structured fields for automation when available.
 
 ## Decision Summary
-- Decision Register entries:
-  - `docs/project_management/packs/active/replaying-raccoon/decision_register.md` (required):
+- Decision Register entries (if applicable):
+  - `docs/project_management/packs/draft/replaying-raccoon/decision_register.md` (required):
     - DR-0001 — Implementation strategy: shared helper reuse vs replay-local duplication.
     - DR-0002 — Trace/JSON surface: add explicit `world_disable_reason` fields for replay vs reuse existing `origin_reason(_code)` only.
-- ADR vs Decision Register split:
-  - ADR defines the authoritative behavior contract: which replay surfaces must attribute disablement and the required precedence/redaction rules.
-  - Decision Register captures A/B choices about code structure and schema/field-level tradeoffs (with scoring), without duplicating the end-user contract text.
+- Options (required; at least two):
+  - A) Central “disable attribution” helper reused by doctor/health/replay (recommended).
+  - B) Replay-specific heuristic duplication (temporary bridge; drift risk).
+- Selection:
+  - Chosen: A
+  - Rationale: Keeps attribution semantics and precedence consistent across UX surfaces and reduces drift risk; tests can be shared.
+  - Choose A when: we want stable, shared semantics and can afford small refactors/plumbing.
+  - Choose B when: refactor scope blocks shipping and we accept a short-lived bridge with an explicit follow-up to remove duplication.

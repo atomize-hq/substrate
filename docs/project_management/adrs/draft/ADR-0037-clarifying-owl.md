@@ -6,24 +6,22 @@
 - Owner(s): TBD (ASSUMPTION: Substrate shell maintainers)
 
 ## Scope
-- Feature directory: `docs/project_management/packs/active/clarifying-owl/` (ASSUMPTION: created during planning)
+- Feature directory: `docs/project_management/packs/draft/clarifying-owl/` (ASSUMPTION: created during planning)
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
+  - `docs/project_management/system/standards/adr/EXECUTIVE_SUMMARY_STANDARD.md`
 
-## Related Docs
+## Related Docs (links only)
 - Intake: `docs/project_management/intake/adrs/clarifying_owl_adr_intake.md`
-- Plan: `docs/project_management/packs/active/clarifying-owl/plan.md` (planned)
-- Tasks: `docs/project_management/packs/active/clarifying-owl/tasks.json` (planned)
-- Spec manifest: `docs/project_management/packs/active/clarifying-owl/spec_manifest.md` (planned)
-- Decision Register: `docs/project_management/packs/active/clarifying-owl/decision_register.md` (required; see “Decision Summary”)
-- Impact Map: `docs/project_management/packs/active/clarifying-owl/impact_map.md` (recommended; support/debug + CI implications)
+- Plan: `docs/project_management/packs/draft/clarifying-owl/plan.md` (planned)
+- Tasks: `docs/project_management/packs/draft/clarifying-owl/tasks.json` (planned)
+- Spec manifest: `docs/project_management/packs/draft/clarifying-owl/spec_manifest.md` (planned)
+- Decision Register: `docs/project_management/packs/draft/clarifying-owl/decision_register.md` (required; see “Decision Summary”)
+- Impact Map: `docs/project_management/packs/draft/clarifying-owl/impact_map.md` (recommended; support/debug + CI implications)
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 6b7e5820cdad220f41174d94c53bc5a1642d1dac515cded5795b938f8f490cba
+ADR_BODY_SHA256: f8226b1fb7f7262198ff440c86f1e5edc0703d4eeb371cb3b7b4d4e05cbed755
 ### Changes (operator-facing)
 - Doctor/health output explains *why* world isolation is disabled (flag vs env vs config), without changing behavior.
   - Existing: `substrate host doctor`, `substrate world doctor`, and sometimes `substrate health` can report “world isolation disabled by effective config (--no-world)” even when the actual disablement source is persisted config (`$SUBSTRATE_HOME/config.yaml` / workspace `.substrate/workspace.yaml`) or an override env var (`SUBSTRATE_OVERRIDE_WORLD=disabled`). This misleads operators and increases debug time.
@@ -160,6 +158,41 @@ ASSUMPTION: `path_display` intentionally uses a stable tokenized display path ra
 - Prerequisite integration task IDs: none for this ADR (pure shell UX + JSON contract additions).
 - Follow-up (not part of this ADR): apply the same attribution to replay warnings and other world-adjacent messaging (see `docs/project_management/intake/adrs/replaying_raccoon_adr_intake.md`).
 
+## Work Lift (discovery estimate)
+
+<!-- PM_LIFT_VECTOR:BEGIN -->
+```json
+{
+  "touch": {
+    "create_files": null,
+    "edit_files": 1,
+    "delete_files": 0,
+    "deprecate_files": 0,
+    "crates_touched": 1,
+    "boundary_crossings": 0
+  },
+  "contract": {
+    "cli_flags": 0,
+    "config_keys": 0,
+    "exit_codes": 0,
+    "file_formats": 0,
+    "behavior_deltas": 1
+  },
+  "qa": { "new_test_files": null, "new_test_cases": null },
+  "docs": { "new_docs_files": 0 },
+  "ops": { "new_smoke_steps": 0, "ci_changes": 0 },
+  "risk": {
+    "cross_platform": true,
+    "security_sensitive": false,
+    "concurrency_or_ordering": false,
+    "migration_or_backfill": false,
+    "unknowns_high": null
+  },
+  "notes": "Discovery estimate; fill touch/test counts during lockdown."
+}
+```
+<!-- PM_LIFT_VECTOR:END -->
+
 ## Security / Safety Posture
 - Fail-closed vs degrade: unchanged (this ADR is messaging + attribution only).
 - Sensitive data handling:
@@ -196,10 +229,15 @@ ASSUMPTION: `path_display` intentionally uses a stable tokenized display path ra
   - Existing text output parsing (if any) may need adjustment; prefer JSON for automation.
 
 ## Decision Summary
-- Decision Register entries:
-  - `docs/project_management/packs/active/clarifying-owl/decision_register.md` (required):
+- Decision Register entries (if applicable):
+  - `docs/project_management/packs/draft/clarifying-owl/decision_register.md` (required):
     - DR-0001 — Attribution implementation strategy (Option A provenance vs Option B heuristic).
     - DR-0002 — JSON contract: field names + enum values + redaction strategy for paths.
-- ADR vs Decision Register split:
-  - ADR contains the authoritative behavior contract (what doctor/health must print/emit).
-  - Decision Register contains the A/B choices that select implementation strategy and schema details (with tradeoffs/scoring), and any follow-on schema/compat commitments.
+- Options (required; at least two):
+  - A) Use config “explain” provenance to compute the disable source (strict correctness).
+  - B) Use heuristic attribution (CLI → env → workspace → global) without full provenance (recommended).
+- Selection:
+  - Chosen: B
+  - Rationale: Likely sufficient for operator-facing attribution while keeping implementation and plumbing lighter; the contract remains “highest-precedence reason” and can later be upgraded to provenance without changing the surface.
+  - Choose A when: we can reuse existing explain structures cheaply and want strict correctness in all edge cases.
+  - Choose B when: we want a small vertical slice that is correct in the common cases and can be validated with focused tests.
