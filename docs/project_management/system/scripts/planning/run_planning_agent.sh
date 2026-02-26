@@ -82,10 +82,10 @@ PY
 extract_first_md_fence_payload() {
     local prompt_file="$1"
     awk '
-        BEGIN { in=0 }
-        /^```md[[:space:]]*$/ { in=1; next }
-        in && /^```[[:space:]]*$/ { exit }
-        in { print }
+        BEGIN { in_md=0 }
+        /^```md[[:space:]]*$/ { in_md=1; next }
+        in_md && /^```[[:space:]]*$/ { exit }
+        in_md { print }
     ' "${prompt_file}"
 }
 
@@ -100,10 +100,10 @@ parse_plan_frontmatter_adr_refs() {
     fi
 
     awk '
-        NR==1 { if ($0 != "---") exit 0; in=1; next }
-        in && $0=="---" { exit 0 }
-        in && $0 ~ /^adr_refs:[[:space:]]*$/ { mode="adr_refs"; next }
-        in && mode=="adr_refs" && $0 ~ /^[[:space:]]*-[[:space:]]*/ {
+        NR==1 { if ($0 != "---") exit 0; in_fm=1; next }
+        in_fm && $0=="---" { exit 0 }
+        in_fm && $0 ~ /^adr_refs:[[:space:]]*$/ { mode="adr_refs"; next }
+        in_fm && mode=="adr_refs" && $0 ~ /^[[:space:]]*-[[:space:]]*/ {
             gsub(/^[[:space:]]*-[[:space:]]*/, "", $0);
             if ($0 != "") print $0;
             next
@@ -318,8 +318,17 @@ if [[ -n "${SLICE_SPEC_VERSION_RAW}" ]]; then
     fi
 fi
 
-mapfile -t ADR_PATHS_TASKS < <(jq -r '.meta.adr_paths // [] | .[]' "${TASKS_JSON_ABS}")
-mapfile -t ADR_REFS_TASKS < <(jq -r '.meta.adr_refs // [] | .[]' "${TASKS_JSON_ABS}")
+ADR_PATHS_TASKS=()
+while IFS= read -r p; do
+    [[ -n "${p}" ]] || continue
+    ADR_PATHS_TASKS+=("${p}")
+done < <(jq -r '.meta.adr_paths // [] | .[]' "${TASKS_JSON_ABS}")
+
+ADR_REFS_TASKS=()
+while IFS= read -r r; do
+    [[ -n "${r}" ]] || continue
+    ADR_REFS_TASKS+=("${r}")
+done < <(jq -r '.meta.adr_refs // [] | .[]' "${TASKS_JSON_ABS}")
 
 resolve_adr_paths_list() {
     local -a raw_paths=("$@")
@@ -373,10 +382,14 @@ collect_adrs() {
         return 0
     fi
 
-    # Legacy fallback order
-    local plan_file="${FEATURE_DIR_ABS}/plan.md"
-    if [[ -f "${plan_file}" ]]; then
-        mapfile -t ADR_REFS_PLAN < <(parse_plan_frontmatter_adr_refs "${plan_file}")
+	    # Legacy fallback order
+	    local plan_file="${FEATURE_DIR_ABS}/plan.md"
+	    if [[ -f "${plan_file}" ]]; then
+	        local -a ADR_REFS_PLAN=()
+	        while IFS= read -r r; do
+	            [[ -n "${r}" ]] || continue
+	            ADR_REFS_PLAN+=("${r}")
+	        done < <(parse_plan_frontmatter_adr_refs "${plan_file}")
         if [[ "${#ADR_REFS_PLAN[@]}" -gt 0 ]]; then
             while IFS= read -r p; do
                 [[ -n "${p}" ]] || continue
@@ -387,8 +400,12 @@ collect_adrs() {
         fi
     fi
 
-    # Legacy fallback: ADR markdown files stored in the feature dir (historical packs).
-    mapfile -t ADR_PATHS_IN_FEATURE < <(find "${FEATURE_DIR_ABS}" -maxdepth 1 -type f \( -name 'ADR-*.md' -o -iname 'adr*.md' \) 2>/dev/null || true)
+	    # Legacy fallback: ADR markdown files stored in the feature dir (historical packs).
+	    local -a ADR_PATHS_IN_FEATURE=()
+	    while IFS= read -r p; do
+	        [[ -n "${p}" ]] || continue
+	        ADR_PATHS_IN_FEATURE+=("${p}")
+	    done < <(find "${FEATURE_DIR_ABS}" -maxdepth 1 -type f \( -name 'ADR-*.md' -o -iname 'adr*.md' \) 2>/dev/null || true)
     if [[ "${#ADR_PATHS_IN_FEATURE[@]}" -gt 0 ]]; then
         local a
         for a in "${ADR_PATHS_IN_FEATURE[@]}"; do
@@ -398,9 +415,13 @@ collect_adrs() {
         return 0
     fi
 
-    local spec_manifest_file="${FEATURE_DIR_ABS}/spec_manifest.md"
-    if [[ -f "${spec_manifest_file}" ]]; then
-        mapfile -t ADR_PATHS_SPEC < <(parse_spec_manifest_adr_paths "${spec_manifest_file}")
+	    local spec_manifest_file="${FEATURE_DIR_ABS}/spec_manifest.md"
+	    if [[ -f "${spec_manifest_file}" ]]; then
+	        local -a ADR_PATHS_SPEC=()
+	        while IFS= read -r p; do
+	            [[ -n "${p}" ]] || continue
+	            ADR_PATHS_SPEC+=("${p}")
+	        done < <(parse_spec_manifest_adr_paths "${spec_manifest_file}")
         if [[ "${#ADR_PATHS_SPEC[@]}" -gt 0 ]]; then
             while IFS= read -r p; do
                 [[ -n "${p}" ]] || continue
@@ -408,10 +429,14 @@ collect_adrs() {
             done < <(resolve_adr_paths_list "${ADR_PATHS_SPEC[@]}")
             printf '%s\n' "${out[@]}"
             return 0
-        fi
-    fi
+	        fi
+	    fi
 
-    mapfile -t ADR_MATCHES < <(find_adrs_by_feature_dir_match "${REPO_ROOT}" "${FEATURE_DIR_REL}" "${PM_ADRS_ROOT_REL}" "${PM_ROOT_REL}")
+	    local -a ADR_MATCHES=()
+	    while IFS= read -r p; do
+	        [[ -n "${p}" ]] || continue
+	        ADR_MATCHES+=("${p}")
+	    done < <(find_adrs_by_feature_dir_match "${REPO_ROOT}" "${FEATURE_DIR_REL}" "${PM_ADRS_ROOT_REL}" "${PM_ROOT_REL}")
     if [[ "${#ADR_MATCHES[@]}" -gt 0 ]]; then
         local a
         for a in "${ADR_MATCHES[@]}"; do
@@ -424,21 +449,30 @@ collect_adrs() {
     return 1
 }
 
-mapfile -t ADR_PATHS < <(collect_adrs || true)
+ADR_PATHS=()
+while IFS= read -r p; do
+    [[ -n "${p}" ]] || continue
+    ADR_PATHS+=("${p}")
+done < <(collect_adrs || true)
 if [[ "${#ADR_PATHS[@]}" -eq 0 ]]; then
     die "unable to resolve ADR(s) for ${FEATURE_DIR_REL}; add meta.adr_refs or meta.adr_paths to ${FEATURE_DIR_REL}/tasks.json"
 fi
 
 # De-duplicate ADR paths while preserving first occurrence order.
-declare -A ADR_SEEN=()
 ADR_PATHS_UNIQ=()
-for p in "${ADR_PATHS[@]}"; do
-    [[ -n "${p}" ]] || continue
-    if [[ -z "${ADR_SEEN[${p}]+x}" ]]; then
-        ADR_SEEN["${p}"]=1
-        ADR_PATHS_UNIQ+=("${p}")
-    fi
-done
+	for p in "${ADR_PATHS[@]}"; do
+	    [[ -n "${p}" ]] || continue
+	    seen=0
+	    for existing in ${ADR_PATHS_UNIQ[@]+"${ADR_PATHS_UNIQ[@]}"}; do
+	        if [[ "${existing}" == "${p}" ]]; then
+	            seen=1
+	            break
+	        fi
+	    done
+	    if [[ "${seen}" -eq 0 ]]; then
+	        ADR_PATHS_UNIQ+=("${p}")
+	    fi
+	done
 
 STEP_DIR_ABS="${FEATURE_DIR_ABS}/logs/${STEP_DIR_NAME}"
 RUN_TS="$(date -u +%Y%m%d-%H%M%S)"
@@ -459,28 +493,28 @@ if [[ ! -s "${PAYLOAD_TMP}" ]]; then
     die "prompt file does not contain a fenced md block payload (expected a line starting with three backticks + md): ${PROMPT_FILE_REL}"
 fi
 
-{
-    printf 'Dispatcher context (do not remove):\n'
-    printf '- Resolved feature dir: `%s/`\n' "${FEATURE_DIR_REL}"
-    printf '- Resolved ADR paths:\n'
-    for p in "${ADR_PATHS_UNIQ[@]}"; do
-        printf '  - `%s`\n' "${p}"
-    done
-    printf '\nOutput allowlist (non-negotiable):\n'
-    if [[ "${#ALLOWED_OUTPUTS_REL[@]}" -eq 0 ]]; then
-        printf '- Tracked outputs: (none)\n'
-        printf '- Do not modify any tracked files.\n'
-        printf '- Logs allowed (untracked only): `%s/logs/%s/`\n' "${FEATURE_DIR_REL}" "${STEP_DIR_NAME}"
-        printf '- If you find follow-ups, record them inside your logs draft(s) under that logs directory.\n'
-    else
-        printf '- Tracked outputs (only these may change):\n'
-        for p in "${ALLOWED_OUTPUTS_REL[@]}"; do
-            printf '  - `%s`\n' "${p}"
-        done
-        printf '- Logs allowed (untracked only): `%s/logs/%s/`\n' "${FEATURE_DIR_REL}" "${STEP_DIR_NAME}"
-        printf '- Do not edit any other tracked files. If you find follow-ups, record them inside the relevant output under a \"Follow-ups\" section.\n'
-    fi
-    printf '\n---\n\n'
+	{
+	    printf 'Dispatcher context (do not remove):\n'
+	    printf -- '- Resolved feature dir: `%s/`\n' "${FEATURE_DIR_REL}"
+	    printf -- '- Resolved ADR paths:\n'
+	    for p in "${ADR_PATHS_UNIQ[@]}"; do
+	        printf '  - `%s`\n' "${p}"
+	    done
+	    printf '\nOutput allowlist (non-negotiable):\n'
+	    if [[ "${#ALLOWED_OUTPUTS_REL[@]}" -eq 0 ]]; then
+	        printf -- '- Tracked outputs: (none)\n'
+	        printf -- '- Do not modify any tracked files.\n'
+	        printf -- '- Logs allowed (untracked only): `%s/logs/%s/`\n' "${FEATURE_DIR_REL}" "${STEP_DIR_NAME}"
+	        printf -- '- If you find follow-ups, record them inside your logs draft(s) under that logs directory.\n'
+	    else
+	        printf -- '- Tracked outputs (only these may change):\n'
+	        for p in "${ALLOWED_OUTPUTS_REL[@]}"; do
+	            printf '  - `%s`\n' "${p}"
+	        done
+	        printf -- '- Logs allowed (untracked only): `%s/logs/%s/`\n' "${FEATURE_DIR_REL}" "${STEP_DIR_NAME}"
+	        printf -- '- Do not edit any other tracked files. If you find follow-ups, record them inside the relevant output under a \"Follow-ups\" section.\n'
+	    fi
+	    printf '\n---\n\n'
 
 	    sed \
 	        -e "s|<FEATURE>|${FEATURE_SLUG}|g" \
@@ -580,8 +614,17 @@ set -e
 
 write_missing_last_message_stub "${CODEX_EXIT}"
 
-mapfile -t CHANGED_TRACKED < <(git diff --name-only -- "${FEATURE_DIR_REL}" | sed '/^$/d')
-mapfile -t UNTRACKED < <(git ls-files --others --exclude-standard -- "${FEATURE_DIR_REL}" | sed '/^$/d')
+CHANGED_TRACKED=()
+while IFS= read -r p; do
+    [[ -n "${p}" ]] || continue
+    CHANGED_TRACKED+=("${p}")
+done < <(git diff --name-only -- "${FEATURE_DIR_REL}" | sed '/^$/d')
+
+UNTRACKED=()
+while IFS= read -r p; do
+    [[ -n "${p}" ]] || continue
+    UNTRACKED+=("${p}")
+done < <(git ls-files --others --exclude-standard -- "${FEATURE_DIR_REL}" | sed '/^$/d')
 
 if [[ "${#UNTRACKED[@]}" -ne 0 ]]; then
     echo "ERROR: untracked (non-ignored) files created within feature dir during agent run: ${FEATURE_DIR_REL}" >&2
@@ -593,16 +636,18 @@ if [[ "${#UNTRACKED[@]}" -ne 0 ]]; then
     exit 2
 fi
 
-declare -A ALLOWED_SET=()
-for p in "${ALLOWED_OUTPUTS_REL[@]}"; do
-    [[ -n "${p}" ]] || continue
-    ALLOWED_SET["${p}"]=1
-done
-
 violations=()
-for p in "${CHANGED_TRACKED[@]}"; do
+for p in ${CHANGED_TRACKED[@]+"${CHANGED_TRACKED[@]}"}; do
     [[ -n "${p}" ]] || continue
-    if [[ -z "${ALLOWED_SET[${p}]+x}" ]]; then
+    allowed=0
+    for allowed_path in ${ALLOWED_OUTPUTS_REL[@]+"${ALLOWED_OUTPUTS_REL[@]}"}; do
+        [[ -n "${allowed_path}" ]] || continue
+        if [[ "${allowed_path}" == "${p}" ]]; then
+            allowed=1
+            break
+        fi
+    done
+    if [[ "${allowed}" -eq 0 ]]; then
         violations+=("${p}")
     fi
 done

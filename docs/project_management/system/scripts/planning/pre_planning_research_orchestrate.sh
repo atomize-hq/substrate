@@ -261,6 +261,8 @@ commit_step_outputs() {
     local step="${steps[$idx]}"
     local msg=""
     local -a allow=()
+    local allowlisted=""
+    local allow_p=""
 
     case "${step}" in
         spec-manifest)
@@ -289,15 +291,19 @@ commit_step_outputs() {
     esac
 
     # Safety: refuse to commit if any unexpected tracked changes exist under the feature dir.
-    local -a changed=()
-    mapfile -t changed < <(git diff --name-only -- "${FEATURE_DIR_REL}" | sed '/^$/d')
-    declare -A allow_set=()
-    for p in "${allow[@]}"; do allow_set["${p}"]=1; done
-    for p in "${changed[@]}"; do
-        if [[ -z "${allow_set[${p}]+x}" ]]; then
+    while IFS= read -r p; do
+        [[ -n "${p}" ]] || continue
+        allowlisted=0
+        for allow_p in "${allow[@]}"; do
+            if [[ "${allow_p}" == "${p}" ]]; then
+                allowlisted=1
+                break
+            fi
+        done
+        if [[ "${allowlisted}" -eq 0 ]]; then
             die "refusing to commit: unexpected tracked change within feature dir: ${p} (step=${step})"
         fi
-    done
+    done < <(git diff --name-only -- "${FEATURE_DIR_REL}" | sed '/^$/d')
 
     # Stage allowlisted paths only.
     git add -- "${allow[@]}" >/dev/null 2>&1 || true
@@ -306,13 +312,19 @@ commit_step_outputs() {
     fi
 
     # Safety: ensure we are only committing allowlisted paths.
-    local -a staged=()
-    mapfile -t staged < <(git diff --cached --name-only | sed '/^$/d')
-    for p in "${staged[@]}"; do
-        if [[ -z "${allow_set[${p}]+x}" ]]; then
+    while IFS= read -r p; do
+        [[ -n "${p}" ]] || continue
+        allowlisted=0
+        for allow_p in "${allow[@]}"; do
+            if [[ "${allow_p}" == "${p}" ]]; then
+                allowlisted=1
+                break
+            fi
+        done
+        if [[ "${allowlisted}" -eq 0 ]]; then
             die "refusing to commit non-allowlisted path: ${p} (step=${step})"
         fi
-    done
+    done < <(git diff --cached --name-only | sed '/^$/d')
 
     git commit -m "${msg}" >/dev/null
     commit_shas[$idx]="$(git rev-parse HEAD)"
