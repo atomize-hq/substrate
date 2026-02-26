@@ -636,11 +636,35 @@ while IFS= read -r p; do
     UNTRACKED+=("${p}")
 done < <(git ls-files --others --exclude-standard -- "${FEATURE_DIR_REL}" | sed '/^$/d')
 
-if [[ "${#UNTRACKED[@]}" -ne 0 ]]; then
-    echo "ERROR: untracked (non-ignored) files created within feature dir during agent run: ${FEATURE_DIR_REL}" >&2
-    for p in "${UNTRACKED[@]}"; do
+UNTRACKED_UNEXPECTED=()
+for p in ${UNTRACKED[@]+"${UNTRACKED[@]}"}; do
+    [[ -n "${p}" ]] || continue
+    allowed=0
+    for allowed_path in ${ALLOWED_OUTPUTS_REL[@]+"${ALLOWED_OUTPUTS_REL[@]}"}; do
+        [[ -n "${allowed_path}" ]] || continue
+        if [[ "${allowed_path}" == "${p}" ]]; then
+            allowed=1
+            break
+        fi
+    done
+    if [[ "${allowed}" -eq 0 ]]; then
+        UNTRACKED_UNEXPECTED+=("${p}")
+    fi
+done
+
+if [[ "${#UNTRACKED_UNEXPECTED[@]}" -ne 0 ]]; then
+    echo "ERROR: unexpected untracked (non-ignored) files exist within feature dir after agent run: ${FEATURE_DIR_REL}" >&2
+    for p in "${UNTRACKED_UNEXPECTED[@]}"; do
         echo "  - ${p}" >&2
     done
+    echo "  Allowed untracked outputs for this step:" >&2
+    if [[ "${#ALLOWED_OUTPUTS_REL[@]}" -eq 0 ]]; then
+        echo "    (none)" >&2
+    else
+        for p in "${ALLOWED_OUTPUTS_REL[@]}"; do
+            echo "    - ${p}" >&2
+        done
+    fi
     echo "  Step logs: $(relpath_in_repo "${REPO_ROOT}" "${STEP_DIR_ABS}")" >&2
     echo "  Run logs:  $(relpath_in_repo "${REPO_ROOT}" "${RUN_DIR_ABS}")" >&2
     exit 2
