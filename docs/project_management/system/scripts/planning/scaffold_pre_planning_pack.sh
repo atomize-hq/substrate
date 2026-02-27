@@ -243,6 +243,9 @@ if slice_spec_version is None:
     changed = True
 elif not isinstance(slice_spec_version, int):
     _die(f"tasks.json meta.slice_spec_version must be an integer when present: {path}")
+elif slice_spec_version < 2:
+    meta["slice_spec_version"] = 2
+    changed = True
 
 schema_version = meta.get("schema_version")
 if schema_version is None:
