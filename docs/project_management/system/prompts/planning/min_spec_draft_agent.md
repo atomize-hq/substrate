@@ -16,6 +16,7 @@ Required reading:
 - `docs/project_management/system/standards/shared/CONTRACT_SURFACE_STANDARD.md`
 - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 - `docs/project_management/system/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`
+- `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
 - `<FEATURE_DIR>/spec_manifest.md`
 - `<FEATURE_DIR>/impact_map.md`
 
@@ -59,4 +60,24 @@ Content contract for `minimal_spec_draft.md` (keep short, concrete, and cross-cu
    - Anything that multiple slice specs must align on (naming, field lists, path invariants, ordering rules).
 7) Follow-ups for full planning:
    - Concrete questions to resolve (each must be actionable and scoped).
+8) Draft slice skeleton (pre-planning only; required):
+   - Add a section titled: `## Draft slice skeleton (pre-planning only)`
+   - Purpose:
+     - Provide a **draft** execution slice outline (triad slices) that downstream pre-planning steps can reference.
+     - This is intentionally minimal and may split/merge during full planning.
+   - Hard rules:
+     - Use feature-derived slice IDs per `TASK_TRIADS_AND_FEATURE_SETUP.md` (do not use generic `C0/C1/...`).
+     - Include an explicit disclaimer: “draft; may split/merge; do not wire `tasks.json` yet.”
+     - Keep it small by default; only expand when justified by `impact_map.md` touch breadth:
+       - Target 3–8 slices total (inclusive).
+   - Required fields per slice entry:
+     - `slice_id`: e.g., `<SLICE_PREFIX>0`, `<SLICE_PREFIX>1`, …
+     - `name`: short, imperative
+     - `intent`: 1–2 lines (what behavior/contract seam it stabilizes)
+     - `likely touch surfaces`: a short list of repo paths / spec docs this slice likely owns (best-effort)
+   - Include a line that records the chosen slice prefix (draft but intended to become stable), e.g.:
+     - `Slice prefix (draft): ABC`
+   - Note for downstream steps:
+     - CI-checkpoint should prefer this slice list when populating the machine-readable slices list in `ci_checkpoint_plan.md` (still do not validate mechanically until slice tasks exist in `tasks.json`).
+     - Workstream triage may propose edits to this slice skeleton as recommendations in `workstream_triage.md` (but must not edit this file).
 ```

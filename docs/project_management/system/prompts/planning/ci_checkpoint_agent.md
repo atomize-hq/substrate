@@ -21,6 +21,7 @@ Required reading:
 - `<FEATURE_DIR>/tasks.json`
 - `<FEATURE_DIR>/impact_map.md`
 - `<FEATURE_DIR>/spec_manifest.md`
+- `<FEATURE_DIR>/minimal_spec_draft.md`
 - `<FEATURE_DIR>/ci_checkpoint_plan.md` (if it already exists)
 
 Allowed writes:
@@ -71,7 +72,10 @@ Tracked output requirements (pre-planning first pass; required):
      - Still write a useful first-pass plan:
        - decide which gates to run at checkpoints (compile parity / feature smoke / CI testing mode),
        - decide whether feature-smoke is required at every checkpoint or only at “risk seams” based on `impact_map.md`,
-       - use placeholder slice ids only as placeholders (make that explicit in the rationale),
+       - prefer the slice ids from `<FEATURE_DIR>/minimal_spec_draft.md` `## Draft slice skeleton (pre-planning only)` when populating the machine-readable JSON `checkpoints[].slices` list,
+         - treat these as **draft** slice ids (may split/merge),
+         - do not claim mechanical validity yet (until `tasks.json` slice tasks exist),
+       - if the draft slice skeleton is missing, use placeholder slice ids only as placeholders (make that explicit in the rationale),
        - record follow-ups for full planning to replace placeholders with real slice ids + wiring.
      - Do NOT run `validate_ci_checkpoint_plan.py` (it will fail without real slice tasks).
 
@@ -79,4 +83,12 @@ Follow-ups:
 - If the pack lacks enough information to choose code-grounded boundaries, record follow-ups in:
   - `<FEATURE_DIR>/ci_checkpoint_plan.md` under a “Follow-ups” section, and
   - `<FEATURE_DIR>/logs/CI-checkpoint/scratch.md` (evidence and rationale).
+
+Follow-up checklist for making this plan mechanically valid (required when slices are created):
+- Ensure slice ids in `tasks.json` match the draft slice skeleton (or update both to the accepted ids).
+- Replace any remaining placeholder slice ids in the plan’s machine-readable JSON with real slice ids.
+- Set `tasks.json` `meta.checkpoint_boundaries` to match checkpoint boundaries.
+- Add the `CP1-ci-checkpoint` task with correct dependencies (per this plan).
+- Then run (must pass):
+  - `python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "<FEATURE_DIR>"`
 ```
