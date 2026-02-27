@@ -506,6 +506,9 @@ fi
 	    for p in "${ADR_PATHS_UNIQ[@]}"; do
 	        printf '  - `%s`\n' "${p}"
 	    done
+	    if [[ "${PM_PLANNING_ORCHESTRATED:-0}" = "1" ]]; then
+	        printf -- '- Orchestration mode: `pre_planning_research_orchestrate.sh` overlap run (do not ask the operator to commit/stash/clean; if a Phase B gate is blocked by upstream uncommitted outputs, keep polling — orchestration will commit allowlisted outputs)\n'
+	    fi
 	    printf '\nOutput allowlist (non-negotiable):\n'
 	    if [[ "${#ALLOWED_OUTPUTS_REL[@]}" -eq 0 ]]; then
 	        printf -- '- Tracked outputs: (none)\n'

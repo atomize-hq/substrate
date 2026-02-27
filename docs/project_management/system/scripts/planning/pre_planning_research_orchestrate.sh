@@ -214,11 +214,11 @@ launch_step() {
     if [[ -n "${CODEX_PROFILE:-}" ]]; then args+=(--codex-profile "${CODEX_PROFILE}"); fi
     if [[ -n "${CODEX_MODEL:-}" ]]; then args+=(--codex-model "${CODEX_MODEL}"); fi
     if [[ "${CODEX_JSONL:-0}" = "1" ]]; then args+=(--codex-jsonl); fi
-    "${args[@]}" >"${log_path}" 2>&1 &
+    PM_PLANNING_ORCHESTRATED=1 "${args[@]}" >"${log_path}" 2>&1 &
     local pid="$!"
-    runner_pids[$idx]="${pid}"
-    runner_rcs[$idx]=""
-    commit_shas[$idx]=""
+    runner_pids[idx]="${pid}"
+    runner_rcs[idx]=""
+    commit_shas[idx]=""
     append_summary "- Started: \`${step}\` (agent=\`${agent}\`, pid=\`${pid}\`, runner_log=\`$(basename "${log_path}")\`)"
 
     echo "Started: ${step} (agent=${agent}, pid=${pid})"
@@ -235,35 +235,11 @@ kill_downstream() {
         if [[ "${j}" -lt "${from_idx}" ]]; then
             continue
         fi
-        local pid="${runner_pids[$j]:-}"
+        local pid="${runner_pids[j]:-}"
         [[ -n "${pid}" ]] || continue
         if kill -0 "${pid}" 2>/dev/null; then
             kill "${pid}" >/dev/null 2>&1 || true
         fi
-    done
-}
-
-wait_for_handoff_or_exit_success() {
-    local idx="$1"
-    local step="${steps[$idx]}"
-    local pid="${runner_pids[$idx]}"
-    local handoff="${LOGS_DIR}/${step}/handoff.md"
-
-    while true; do
-        if [[ -f "${handoff}" ]]; then
-            return 0
-        fi
-
-        if ! kill -0 "${pid}" 2>/dev/null; then
-            set +e
-            wait "${pid}"
-            rc="$?"
-            set -e
-            runner_rcs[$idx]="${rc}"
-            return "${rc}"
-        fi
-
-        sleep "${POLL_S}"
     done
 }
 
@@ -338,11 +314,15 @@ commit_step_outputs() {
     done < <(git diff --cached --name-only | sed '/^$/d')
 
     git commit -m "${msg}" >/dev/null
-    commit_shas[$idx]="$(git rev-parse HEAD)"
+    commit_shas[idx]="$(git rev-parse HEAD)"
 }
 
 cleanup_on_exit() {
     local rc="$?"
+    # Best-effort cleanup: ensure we don't leave planning runners running on failure.
+    if [[ "${rc}" -ne 0 ]]; then
+        kill_downstream "${start_index}" || true
+    fi
     append_summary ""
     append_summary "## Results"
     local i
@@ -352,9 +332,9 @@ cleanup_on_exit() {
         fi
         local step="${steps[$i]}"
         local agent="${agents[$i]}"
-        local pid="${runner_pids[$i]:-}"
-        local rcrc="${runner_rcs[$i]:-}"
-        local sha="${commit_shas[$i]:-}"
+        local pid="${runner_pids[i]:-}"
+        local rcrc="${runner_rcs[i]:-}"
+        local sha="${commit_shas[i]:-}"
         local step_dir_rel="${FEATURE_DIR_REL}/logs/${step}"
         local runner_log_rel="${FEATURE_DIR_REL}/logs/pre_planning_wrapper/${RUN_TS}/${step}.runner.log"
         append_summary "- \`${step}\` (agent=\`${agent}\` pid=\`${pid:-}\` rc=\`${rcrc:-}\` commit=\`${sha:-}\`) — logs: \`${step_dir_rel}/\` sentinel: \`${step_dir_rel}/last_message.md\` runner_log: \`${runner_log_rel}\`"
@@ -378,57 +358,117 @@ trap on_interrupt INT TERM
 
 append_summary "## Launch"
 
-# Launch the chain with staggered overlap.
 launch_step "${start_index}"
 
-for ((i = start_index; i < ${#steps[@]} - 1; i++)); do
-    # Wait for upstream handoff or upstream exit. On exit!=0, stop.
-    set +e
-    wait_for_handoff_or_exit_success "${i}"
-    rc="$?"
-    set -e
-
-    if [[ "${rc}" -ne 0 ]]; then
-        append_summary "- FAILED: \`${steps[$i]}\` exited with \`${rc}\` — stopping"
-        runner_rcs[$i]="${rc}"
-        kill_downstream "$((i + 1))"
-        exit "${rc}"
-    fi
-
-    # Upstream is either at handoff (still running) or has already exited successfully.
-    if [[ -z "${runner_pids[$((i + 1))]:-}" ]]; then
-        launch_step "$((i + 1))"
-    fi
-done
-
 append_summary ""
-append_summary "## Completion + commits"
+append_summary "## Progress + commits"
 
-# Wait for each step to complete and commit allowlisted outputs.
-for ((i = start_index; i < ${#steps[@]}; i++)); do
-    if [[ -z "${runner_rcs[$i]:-}" ]]; then
-        pid="${runner_pids[$i]}"
-        set +e
-        wait "${pid}"
-        rc="$?"
-        set -e
-        runner_rcs[$i]="${rc}"
-    else
-        rc="${runner_rcs[$i]}"
+last_index="$((${#steps[@]} - 1))"
+launched_upto="${start_index}"
+next_to_commit="${start_index}"
+
+commit_done=()
+
+handoff_path_for() {
+    local step="$1"
+    printf '%s\n' "${LOGS_DIR}/${step}/handoff.md"
+}
+
+all_steps_done() {
+    local i
+    for ((i = start_index; i <= last_index; i++)); do
+        if [[ -z "${runner_pids[i]:-}" ]]; then
+            return 1
+        fi
+        if [[ -z "${runner_rcs[i]:-}" ]]; then
+            return 1
+        fi
+        if [[ "${commit_done[i]:-0}" != "1" ]]; then
+            return 1
+        fi
+    done
+    return 0
+}
+
+# Event loop:
+# - Launch next steps when upstream emits handoff.md (or exits successfully).
+# - Commit allowlisted outputs as soon as each step exits successfully.
+while true; do
+    # 1) Detect completed steps (for any launched step).
+    for ((i = start_index; i <= launched_upto; i++)); do
+        if [[ -n "${runner_rcs[i]:-}" ]]; then
+            continue
+        fi
+        pid="${runner_pids[i]:-}"
+        [[ -n "${pid}" ]] || continue
+
+        if ! kill -0 "${pid}" 2>/dev/null; then
+            set +e
+            wait "${pid}"
+            rc="$?"
+            set -e
+            runner_rcs[i]="${rc}"
+
+            if [[ "${rc}" -ne 0 ]]; then
+                append_summary "- FAILED: \`${steps[$i]}\` exited with \`${rc}\` — stopping"
+                kill_downstream "$((i + 1))"
+                exit "${rc}"
+            fi
+        fi
+    done
+
+    # 2) Launch downstream steps as soon as upstream handoff is available.
+    while [[ "${launched_upto}" -lt "${last_index}" ]]; do
+        upstream_step="${steps[$launched_upto]}"
+        upstream_handoff="$(handoff_path_for "${upstream_step}")"
+
+        upstream_rc="${runner_rcs[launched_upto]:-}"
+        if [[ -f "${upstream_handoff}" ]] || [[ "${upstream_rc}" = "0" ]]; then
+            next_idx="$((launched_upto + 1))"
+            if [[ -z "${runner_pids[next_idx]:-}" ]]; then
+                launch_step "${next_idx}"
+            fi
+            launched_upto="${next_idx}"
+        else
+            break
+        fi
+    done
+
+    # 3) Commit allowlisted outputs in step order as soon as each step succeeds.
+    while [[ "${next_to_commit}" -le "${last_index}" ]]; do
+        if [[ -z "${runner_pids[next_to_commit]:-}" ]]; then
+            break
+        fi
+        if [[ "${commit_done[next_to_commit]:-0}" = "1" ]]; then
+            next_to_commit="$((next_to_commit + 1))"
+            continue
+        fi
+
+        rc="${runner_rcs[next_to_commit]:-}"
+        if [[ -z "${rc}" ]]; then
+            break
+        fi
+        if [[ "${rc}" -ne 0 ]]; then
+            # Should be handled above, but keep this as a safety net.
+            append_summary "- FAILED: \`${steps[$next_to_commit]}\` exited with \`${rc}\` — stopping"
+            kill_downstream "$((next_to_commit + 1))"
+            exit "${rc}"
+        fi
+
+        commit_step_outputs "${next_to_commit}"
+        commit_done[next_to_commit]=1
+        if [[ -n "${commit_shas[next_to_commit]:-}" ]]; then
+            append_summary "- Committed \`${steps[$next_to_commit]}\`: \`${commit_shas[next_to_commit]}\`"
+        else
+            append_summary "- No tracked changes to commit for \`${steps[$next_to_commit]}\`"
+        fi
+        next_to_commit="$((next_to_commit + 1))"
+    done
+
+    # 4) Exit once all steps are launched, completed, and commit-processed.
+    if [[ "${launched_upto}" -eq "${last_index}" ]] && all_steps_done; then
+        exit 0
     fi
 
-    if [[ "${rc}" -ne 0 ]]; then
-        append_summary "- FAILED: \`${steps[$i]}\` exited with \`${rc}\` — stopping"
-        kill_downstream "$((i + 1))"
-        exit "${rc}"
-    fi
-
-    commit_step_outputs "${i}"
-    if [[ -n "${commit_shas[$i]:-}" ]]; then
-        append_summary "- Committed \`${steps[$i]}\`: \`${commit_shas[$i]}\`"
-    else
-        append_summary "- No tracked changes to commit for \`${steps[$i]}\`"
-    fi
+    sleep "${POLL_S}"
 done
-
-exit 0

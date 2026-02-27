@@ -56,6 +56,7 @@ Overlap execution model (required):
     - `<FEATURE_DIR>/logs/CI-checkpoint/last_message.md` exists, and
     - `git status --porcelain=v1 -- "<FEATURE_DIR>"` is empty.
   - Default poll interval: `sleep 60` between checks.
+  - If the dispatcher context indicates an orchestration overlap run, **do not** ask the operator to commit/stash/clean upstream outputs; treat a dirty `git status` as transient and keep polling until the gate clears.
 
 Draft requirements (must be explicit and actionable):
 1) Proposed workstreams:

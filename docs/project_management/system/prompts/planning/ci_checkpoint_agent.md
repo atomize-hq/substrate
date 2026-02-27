@@ -38,6 +38,7 @@ Preflight (required; do first):
    - `meta.ci_parity_platforms_required` (default: `["linux","macos","windows"]`)
    - `meta.behavior_platforms_required` (default: same as ci_parity)
 3) If any of the above is missing or wrong, update `<FEATURE_DIR>/tasks.json` (and only those fields).
+   - Overlap note: in orchestration overlap runs, Phase A is logs-only; if the Phase B gate has not cleared yet, record required `tasks.json` edits in scratch and apply them only after the Phase B gate clears.
 
 Overlap execution model (required):
 - Phase A (start immediately; logs only):
@@ -54,6 +55,7 @@ Overlap execution model (required):
     - `<FEATURE_DIR>/logs/min-spec-draft/last_message.md` exists, and
     - `git status --porcelain=v1 -- "<FEATURE_DIR>"` is empty.
   - Default poll interval: `sleep 60` between checks.
+  - If the dispatcher context indicates an orchestration overlap run, **do not** ask the operator to commit/stash/clean upstream outputs; treat a dirty `git status` as transient and keep polling until the gate clears.
 
 Tracked output requirements (pre-planning first pass; required):
 1) Write/overwrite `<FEATURE_DIR>/ci_checkpoint_plan.md` using the template:

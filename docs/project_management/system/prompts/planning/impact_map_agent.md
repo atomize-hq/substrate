@@ -57,6 +57,7 @@ Output requirements:
      - `<FEATURE_DIR>/logs/spec-manifest/last_message.md` exists, and
      - `git status --porcelain=v1 -- "<FEATURE_DIR>"` is empty.
    - Default poll interval: `sleep 60` between checks.
+   - If the dispatcher context indicates an orchestration overlap run, **do not** ask the operator to commit/stash/clean upstream outputs; treat a dirty `git status` as transient and keep polling until the gate clears.
 3) Then write/overwrite `<FEATURE_DIR>/impact_map.md` using the template.
    - The Touch Set must have concrete repo-relative file paths (no vague “update some files”).
 4) If you discover a missing surface or ownership gap, record follow-ups inside `impact_map.md` under a “Follow-ups” section (not in ADRs).
