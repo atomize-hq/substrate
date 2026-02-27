@@ -25,9 +25,10 @@ Tracked (canonical; pack root):
 - `impact_map.md` (touch set + cascading implications + cross-queue scan)
 - `minimal_spec_draft.md` (**Pre‑Planning Only** alignment backbone; must be deleted/retired during full planning)
 - `ci_checkpoint_plan.md` (cross-platform automation packs only; provisional until slice boundaries stabilize)
+- `workstream_triage.md` (**Pre‑Planning Only**; proposed parallelizable workstreams + gates for full planning)
 
 Untracked (logs-only):
-- workstream triage draft (orchestrator-facing; not canonical)
+- workstream triage evidence + drafts under `<FEATURE_DIR>/logs/workstream-triage/`
 
 Non-goals:
 - Completing slice specs or passing `make planning-lint` on a newly scaffolded pack.

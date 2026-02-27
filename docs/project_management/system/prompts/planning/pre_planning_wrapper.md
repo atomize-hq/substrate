@@ -43,6 +43,7 @@ START_AT=""              # optional: spec-manifest|impact-map|min-spec-draft|CI-
 Return a concise summary that includes:
 - Which tracked artifacts changed and were committed
 - Stable sentinels written (`$FEATURE_DIR/logs/<step>/last_message.md`)
-- Where the workstream triage draft is (`$FEATURE_DIR/logs/workstream-triage/workstream_triage_draft.md`)
+- Where the tracked workstream triage artifact is (`$FEATURE_DIR/workstream_triage.md`)
+- Where the workstream triage draft/evidence is (`$FEATURE_DIR/logs/workstream-triage/workstream_triage_draft.md`)
 - Any follow-ups that must be resolved in full planning
 ```

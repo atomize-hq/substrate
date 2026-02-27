@@ -25,7 +25,7 @@ Contract:
   - impact_map    -> <FEATURE_DIR>/impact_map.md
   - min_spec_draft -> <FEATURE_DIR>/minimal_spec_draft.md
   - ci_checkpoint  -> <FEATURE_DIR>/ci_checkpoint_plan.md (and sometimes <FEATURE_DIR>/tasks.json)
-  - workstream_triage -> logs-only (no tracked output)
+  - workstream_triage -> <FEATURE_DIR>/workstream_triage.md
 
 Notes:
   - Uses roots from: `pm_paths.py` (sibling in this directory)
@@ -300,8 +300,8 @@ case "${AGENT}" in
     workstream_triage)
         STEP_DIR_NAME="workstream-triage"
         PROMPT_FILE_REL="docs/project_management/system/prompts/planning/workstream_triage_agent.md"
-        ALLOWED_OUTPUTS_REL=()
-        REQUIRED_OUTPUTS_REL=()
+        ALLOWED_OUTPUTS_REL=("${FEATURE_DIR_REL}/workstream_triage.md")
+        REQUIRED_OUTPUTS_REL=("${FEATURE_DIR_REL}/workstream_triage.md")
         ;;
     *)
         die "unknown --agent: ${AGENT} (expected spec_manifest|impact_map|min_spec_draft|ci_checkpoint|workstream_triage)"

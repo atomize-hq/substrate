@@ -269,8 +269,8 @@ commit_step_outputs() {
             allow=("${FEATURE_DIR_REL}/ci_checkpoint_plan.md" "${FEATURE_DIR_REL}/tasks.json")
             ;;
         workstream-triage)
-            # logs only
-            return 0
+            msg="docs: pre-planning workstream triage"
+            allow=("${FEATURE_DIR_REL}/workstream_triage.md")
             ;;
         *)
             die "unknown step: ${step}"
@@ -337,11 +337,12 @@ cleanup_on_exit() {
         local sha="${commit_shas[i]:-}"
         local step_dir_rel="${FEATURE_DIR_REL}/logs/${step}"
         local runner_log_rel="${FEATURE_DIR_REL}/logs/pre_planning_wrapper/${RUN_TS}/${step}.runner.log"
-        append_summary "- \`${step}\` (agent=\`${agent}\` pid=\`${pid:-}\` rc=\`${rcrc:-}\` commit=\`${sha:-}\`) — logs: \`${step_dir_rel}/\` sentinel: \`${step_dir_rel}/last_message.md\` runner_log: \`${runner_log_rel}\`"
+    append_summary "- \`${step}\` (agent=\`${agent}\` pid=\`${pid:-}\` rc=\`${rcrc:-}\` commit=\`${sha:-}\`) — logs: \`${step_dir_rel}/\` sentinel: \`${step_dir_rel}/last_message.md\` runner_log: \`${runner_log_rel}\`"
     done
     append_summary ""
-    append_summary "## Workstream triage draft"
-    append_summary "- \`${FEATURE_DIR_REL}/logs/workstream-triage/workstream_triage_draft.md\`"
+    append_summary "## Workstream triage"
+    append_summary "- Tracked: \`${FEATURE_DIR_REL}/workstream_triage.md\`"
+    append_summary "- Draft (logs): \`${FEATURE_DIR_REL}/logs/workstream-triage/workstream_triage_draft.md\`"
     append_summary ""
     append_summary "## Wrapper logs"
     append_summary "- \`${FEATURE_DIR_REL}/logs/pre_planning_wrapper/${RUN_TS}/\`"
