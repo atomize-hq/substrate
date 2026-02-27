@@ -9,6 +9,7 @@ Constraints (non-negotiable):
 - Do not write production code.
 - Do not edit ADR files.
 - Do not modify any tracked pack files *except* `<FEATURE_DIR>/workstream_triage.md`.
+- Do not call `update_plan` or include tool-meta commentary in your output; do the work.
 
 Required reading:
 - `WORKSTREAM_TRIAGE_AND_LIFT_DECISIONS.md`

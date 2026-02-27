@@ -12,6 +12,7 @@ Constraints (non-negotiable):
 - Do not write production code.
 - Do not edit ADR files.
 - Do not invent new scope; derive checkpoint boundaries from `impact_map.md`, `spec_manifest.md`, and existing plan intent.
+- Do not call `update_plan` or include tool-meta commentary in your output; do the work.
 
 Required reading:
 - `docs/project_management/system/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md`

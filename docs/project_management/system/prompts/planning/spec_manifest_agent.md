@@ -11,6 +11,7 @@ Constraints (non-negotiable):
 - Do not invent new scope; derive artifacts from the ADR and its stated goals/contract.
 - No ambiguous wording in normative statements (every behavior statement must be singular and testable).
 - No implied surfaces: every protocol/schema/env var/path/exit-code/log-field touched by the ADR must be enumerated and assigned to a doc.
+- Do not call `update_plan` or include tool-meta commentary in your output; do the work.
 
 Required reading:
 - `docs/project_management/system/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`
@@ -27,19 +28,21 @@ Output requirements:
    - Tracked (canonical): write/overwrite only `<FEATURE_DIR>/spec_manifest.md`.
    - Logs (untracked; scratch + orchestration handoff): you may write under `<FEATURE_DIR>/logs/spec-manifest/**` only.
    - Do not edit ADRs or any other tracked files.
-1) Write/overwrite: `<FEATURE_DIR>/spec_manifest.md` using the template structure.
+1) Overlap execution model (required):
+   - Phase A (start immediately; logs only):
+     - Rapidly read the ADR(s), select the required doc set, and draft an initial (not-yet-exhaustive) surface inventory + ownership notes.
+     - Write/overwrite: `<FEATURE_DIR>/logs/spec-manifest/handoff.md` as soon as the required-doc list is stable enough for downstream discovery.
+       - Target: emit this handoff within the first 5 minutes of the run (do not wait for `spec_manifest.md` to be “perfect”).
+       - If you later change the required-doc list, overwrite `handoff.md` and label it `UPDATED` at the top.
+       - `handoff.md` must be a short, high-signal summary (not a copy of `spec_manifest.md`) and must include:
+         - the required-doc list (filenames),
+         - the top surfaces and their intended owning docs,
+         - any high-risk unknowns/follow-ups.
+   - Phase B (canonical write):
+     - Write/overwrite: `<FEATURE_DIR>/spec_manifest.md` using the template structure, with an exhaustive surface inventory and a deterministic ownership matrix.
 2) In `spec_manifest.md`, include:
    - The exact list of required spec docs (filenames under the feature dir).
    - A coverage matrix mapping every surface to an authoritative doc.
    - For each required spec doc, list the deterministic items it must define (schemas, defaults, precedence, error rules, invariants).
-3) Emit an orchestration handoff signal for downstream overlap:
-   - Write/overwrite: `<FEATURE_DIR>/logs/spec-manifest/handoff.md`
-   - Write it once you have:
-     - enumerated the contract surfaces and selected the required doc set, and
-     - drafted enough ownership notes that impact-map can start discovery.
-   - `handoff.md` must be a short, high-signal summary (not a copy of `spec_manifest.md`) and must include:
-     - the required-doc list (filenames),
-     - the top surfaces and their intended owning docs,
-     - any high-risk unknowns/follow-ups.
-4) If you discover missing/ambiguous ADR intent, record follow-ups inside `spec_manifest.md` under a “Follow-ups” section (not in ADRs).
+3) If you discover missing/ambiguous ADR intent, record follow-ups inside `spec_manifest.md` under a “Follow-ups” section (not in ADRs).
 ```

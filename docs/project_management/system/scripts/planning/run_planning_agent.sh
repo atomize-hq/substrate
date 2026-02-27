@@ -612,6 +612,16 @@ PM_CODEX_DISABLE_MCP_FIGMA_LOCAL="${PM_CODEX_DISABLE_MCP_FIGMA_LOCAL:-1}"
 if [[ "${PM_CODEX_DISABLE_MCP_FIGMA_LOCAL}" = "1" ]]; then
     codex_args+=(--config mcp_servers.figma-local.enabled=false)
 fi
+# Planning agents primarily use local repo reads + shell commands. Disable non-essential MCP servers
+# by default to reduce startup overhead and avoid hangs when local MCP endpoints are unavailable.
+PM_CODEX_DISABLE_MCP_PLANNING_DEFAULTS="${PM_CODEX_DISABLE_MCP_PLANNING_DEFAULTS:-1}"
+if [[ "${PM_CODEX_DISABLE_MCP_PLANNING_DEFAULTS}" = "1" ]]; then
+    codex_args+=(--config mcp_servers.google-docs-mcp.enabled=false)
+    codex_args+=(--config mcp_servers.cloudflare-docs.enabled=false)
+    codex_args+=(--config mcp_servers.pencil.enabled=false)
+    codex_args+=(--config mcp_servers.gsd.enabled=false)
+    codex_args+=(--config mcp_servers.deepwiki.enabled=false)
+fi
 if [[ -n "${CODEX_PROFILE}" ]]; then codex_args+=(--profile "${CODEX_PROFILE}"); fi
 if [[ -n "${CODEX_MODEL}" ]]; then codex_args+=(--model "${CODEX_MODEL}"); fi
 if [[ "${CODEX_JSONL}" -eq 1 ]]; then codex_args+=(--json); fi

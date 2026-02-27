@@ -202,6 +202,8 @@ append_summary ""
 runner_pids=()
 runner_rcs=()
 commit_shas=()
+runner_start_epoch=()
+runner_end_epoch=()
 
 launch_step() {
     local idx="$1"
@@ -219,6 +221,8 @@ launch_step() {
     runner_pids[idx]="${pid}"
     runner_rcs[idx]=""
     commit_shas[idx]=""
+    runner_start_epoch[idx]="$(date -u +%s)"
+    runner_end_epoch[idx]=""
     append_summary "- Started: \`${step}\` (agent=\`${agent}\`, pid=\`${pid}\`, runner_log=\`$(basename "${log_path}")\`)"
 
     echo "Started: ${step} (agent=${agent}, pid=${pid})"
@@ -317,12 +321,94 @@ commit_step_outputs() {
     commit_shas[idx]="$(git rev-parse HEAD)"
 }
 
+fmt_hms() {
+    local total="${1:-0}"
+    if [[ -z "${total}" ]] || [[ ! "${total}" =~ ^[0-9]+$ ]]; then
+        printf '%s\n' ""
+        return 0
+    fi
+    local h=$((total / 3600))
+    local m=$(((total % 3600) / 60))
+    local s=$((total % 60))
+    printf '%02d:%02d:%02d' "${h}" "${m}" "${s}"
+}
+
+epoch_to_utc_iso() {
+    local epoch="${1:-}"
+    if [[ -z "${epoch}" ]] || [[ ! "${epoch}" =~ ^[0-9]+$ ]]; then
+        printf '%s\n' ""
+        return 0
+    fi
+    python3 - "${epoch}" <<'PY'
+from __future__ import annotations
+
+import datetime as dt
+import sys
+
+epoch = int(sys.argv[1])
+print(dt.datetime.fromtimestamp(epoch, tz=dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+PY
+}
+
+file_mtime_epoch() {
+    local path="$1"
+    if [[ ! -f "${path}" ]]; then
+        return 0
+    fi
+    python3 - "${path}" <<'PY'
+from __future__ import annotations
+
+import os
+import sys
+
+print(int(os.path.getmtime(sys.argv[1])))
+PY
+}
+
+handoff_path_for() {
+    local step="$1"
+    printf '%s\n' "${LOGS_DIR}/${step}/handoff.md"
+}
+
 cleanup_on_exit() {
     local rc="$?"
     # Best-effort cleanup: ensure we don't leave planning runners running on failure.
     if [[ "${rc}" -ne 0 ]]; then
         kill_downstream "${start_index}" || true
     fi
+    append_summary ""
+    append_summary "## Timing (UTC)"
+    append_summary ""
+    append_summary "| step | start | handoff | end | duration | handoff_after |"
+    append_summary "| --- | --- | --- | --- | --- | --- |"
+    local ti
+    for ti in "${!steps[@]}"; do
+        if [[ "${ti}" -lt "${start_index}" ]]; then
+            continue
+        fi
+        local step="${steps[$ti]}"
+        local start_epoch="${runner_start_epoch[ti]:-}"
+        local end_epoch="${runner_end_epoch[ti]:-}"
+
+        local start_iso end_iso dur_hms
+        start_iso="$(epoch_to_utc_iso "${start_epoch}")"
+        end_iso="$(epoch_to_utc_iso "${end_epoch}")"
+        dur_hms=""
+        if [[ -n "${start_epoch}" && -n "${end_epoch}" ]] && [[ "${start_epoch}" =~ ^[0-9]+$ ]] && [[ "${end_epoch}" =~ ^[0-9]+$ ]] && [[ "${end_epoch}" -ge "${start_epoch}" ]]; then
+            dur_hms="$(fmt_hms "$((end_epoch - start_epoch))")"
+        fi
+
+        local handoff_path handoff_epoch handoff_iso handoff_after_hms
+        handoff_path="$(handoff_path_for "${step}")"
+        handoff_epoch="$(file_mtime_epoch "${handoff_path}" || true)"
+        handoff_iso="$(epoch_to_utc_iso "${handoff_epoch}")"
+        handoff_after_hms=""
+        if [[ -n "${start_epoch}" && -n "${handoff_epoch}" ]] && [[ "${start_epoch}" =~ ^[0-9]+$ ]] && [[ "${handoff_epoch}" =~ ^[0-9]+$ ]] && [[ "${handoff_epoch}" -ge "${start_epoch}" ]]; then
+            handoff_after_hms="$(fmt_hms "$((handoff_epoch - start_epoch))")"
+        fi
+
+        append_summary "| \`${step}\` | \`${start_iso}\` | \`${handoff_iso}\` | \`${end_iso}\` | \`${dur_hms}\` | \`${handoff_after_hms}\` |"
+    done
     append_summary ""
     append_summary "## Results"
     local i
@@ -337,7 +423,7 @@ cleanup_on_exit() {
         local sha="${commit_shas[i]:-}"
         local step_dir_rel="${FEATURE_DIR_REL}/logs/${step}"
         local runner_log_rel="${FEATURE_DIR_REL}/logs/pre_planning_wrapper/${RUN_TS}/${step}.runner.log"
-    append_summary "- \`${step}\` (agent=\`${agent}\` pid=\`${pid:-}\` rc=\`${rcrc:-}\` commit=\`${sha:-}\`) — logs: \`${step_dir_rel}/\` sentinel: \`${step_dir_rel}/last_message.md\` runner_log: \`${runner_log_rel}\`"
+        append_summary "- \`${step}\` (agent=\`${agent}\` pid=\`${pid:-}\` rc=\`${rcrc:-}\` commit=\`${sha:-}\`) — logs: \`${step_dir_rel}/\` sentinel: \`${step_dir_rel}/last_message.md\` runner_log: \`${runner_log_rel}\`"
     done
     append_summary ""
     append_summary "## Workstream triage"
@@ -369,11 +455,6 @@ launched_upto="${start_index}"
 next_to_commit="${start_index}"
 
 commit_done=()
-
-handoff_path_for() {
-    local step="$1"
-    printf '%s\n' "${LOGS_DIR}/${step}/handoff.md"
-}
 
 all_steps_done() {
     local i
@@ -409,6 +490,7 @@ while true; do
             rc="$?"
             set -e
             runner_rcs[i]="${rc}"
+            runner_end_epoch[i]="$(date -u +%s)"
 
             if [[ "${rc}" -ne 0 ]]; then
                 append_summary "- FAILED: \`${steps[$i]}\` exited with \`${rc}\` — stopping"

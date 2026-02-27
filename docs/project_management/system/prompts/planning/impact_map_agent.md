@@ -13,6 +13,7 @@ Constraints (non-negotiable):
 - Do not invent new scope; derive impacts from the ADR + required specs.
 - No implied work: every change the ADR implies must appear in the touch set and implication sections.
 - If you find multiple viable resolutions to a conflict, record the A/B options and the selected option inside `impact_map.md` (do not edit `decision_register.md` in this single-output run).
+- Do not call `update_plan` or include tool-meta commentary in your output; do the work.
 
 Required reading:
 - `docs/project_management/system/standards/planning/PLANNING_IMPACT_MAP_STANDARD.md`
@@ -45,6 +46,9 @@ Output requirements:
    - Phase A (start immediately; logs only):
      - Perform discovery and draft an initial touch set + implication buckets.
      - Write/overwrite scratch notes at: `<FEATURE_DIR>/logs/impact-map/scratch.md`
+       - Target: create `scratch.md` within the first 5 minutes with:
+         - an initial Touch Set (directory prefixes are acceptable in Phase A), and
+         - the main implication buckets.
      - If present, read upstream handoff notes as an input:
        - `<FEATURE_DIR>/logs/spec-manifest/handoff.md`
    - Emit an orchestration handoff signal once Phase A is usable:
@@ -52,6 +56,7 @@ Output requirements:
      - Write it once `scratch.md` contains:
        - a concrete preliminary Touch Set (paths or directory prefixes), and
        - the main implication buckets.
+      - Target: emit this handoff within the first 10 minutes (do not wait for cross-queue scan completion).
 2) Phase B (canonical write gate; required):
    - Before writing `<FEATURE_DIR>/impact_map.md`, poll until BOTH are true:
      - `<FEATURE_DIR>/logs/spec-manifest/last_message.md` exists, and

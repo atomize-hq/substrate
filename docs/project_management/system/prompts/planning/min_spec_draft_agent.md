@@ -10,6 +10,7 @@ Constraints (non-negotiable):
 - Do not edit ADR files.
 - Do not invent new scope; derive everything from ADR(s) + `spec_manifest.md` + `impact_map.md`.
 - No ambiguous normative wording (“should/could/might/maybe”). If uncertain, record it as a follow-up.
+- Do not call `update_plan` or include tool-meta commentary in your output; do the work.
 
 Required reading:
 - `docs/project_management/system/standards/shared/CONTRACT_SURFACE_STANDARD.md`
