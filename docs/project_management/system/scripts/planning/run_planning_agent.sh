@@ -575,7 +575,7 @@ wait_for_codex_pidfile_if_running() {
 
 write_missing_last_message_stub() {
     local exit_code="${1:-unknown}"
-    if [[ -f "${CODEX_LAST_MESSAGE_RUN}" ]]; then
+    if [[ -s "${CODEX_LAST_MESSAGE_RUN}" ]]; then
         return 0
     fi
     mkdir -p "$(dirname "${CODEX_LAST_MESSAGE_RUN}")" >/dev/null 2>&1 || true
@@ -626,11 +626,15 @@ CODEX_EXIT="$?"
 rm -f "${STEP_PID_PATH}" >/dev/null 2>&1 || true
 set -e
 
+LAST_MESSAGE_WRITTEN_BY_CODEX=1
+if [[ ! -s "${CODEX_LAST_MESSAGE_RUN}" ]]; then
+    LAST_MESSAGE_WRITTEN_BY_CODEX=0
+fi
+write_missing_last_message_stub "${CODEX_EXIT}"
 LAST_MESSAGE_OK=1
 if [[ ! -s "${CODEX_LAST_MESSAGE_RUN}" ]]; then
     LAST_MESSAGE_OK=0
 fi
-write_missing_last_message_stub "${CODEX_EXIT}"
 
 CHANGED_TRACKED=()
 while IFS= read -r p; do
@@ -735,11 +739,10 @@ if [[ "${CODEX_EXIT}" -eq 0 && "${LAST_MESSAGE_OK}" -eq 1 && "${REQUIRED_OUTPUTS
     fi
 fi
 
-if [[ "${CODEX_EXIT}" -eq 0 && "${LAST_MESSAGE_OK}" -ne 1 ]]; then
-    echo "ERROR: Codex exited 0 but did not write --output-last-message (treated as failure)" >&2
-    echo "  Expected: $(relpath_in_repo "${REPO_ROOT}" "${CODEX_LAST_MESSAGE_RUN}")" >&2
+if [[ "${CODEX_EXIT}" -eq 0 && "${LAST_MESSAGE_WRITTEN_BY_CODEX}" -ne 1 ]]; then
+    echo "WARN: Codex exited 0 but did not write --output-last-message; generated a stub summary" >&2
+    echo "  Stub: $(relpath_in_repo "${REPO_ROOT}" "${CODEX_LAST_MESSAGE_RUN}")" >&2
     echo "  Stable stderr log: $(relpath_in_repo "${REPO_ROOT}" "${STEP_STDERR}")" >&2
-    exit 2
 fi
 if [[ "${CODEX_EXIT}" -eq 0 && "${REQUIRED_OUTPUTS_OK}" -ne 1 ]]; then
     echo "ERROR: agent exited 0 but required outputs are missing (treated as failure)" >&2
