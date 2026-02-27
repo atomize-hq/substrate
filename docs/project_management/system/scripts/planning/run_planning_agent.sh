@@ -607,6 +607,11 @@ wait_for_codex_pidfile_if_running "${STEP_PID_PATH}"
 : > "${STEP_STDERR}"
 
 codex_args=(codex exec --dangerously-bypass-approvals-and-sandbox --cd "${REPO_ROOT}")
+# Planning agents do not need Figma MCP and it can hang when no local MCP endpoint is running.
+PM_CODEX_DISABLE_MCP_FIGMA_LOCAL="${PM_CODEX_DISABLE_MCP_FIGMA_LOCAL:-1}"
+if [[ "${PM_CODEX_DISABLE_MCP_FIGMA_LOCAL}" = "1" ]]; then
+    codex_args+=(--config 'mcp_servers."figma-local".enabled=false')
+fi
 if [[ -n "${CODEX_PROFILE}" ]]; then codex_args+=(--profile "${CODEX_PROFILE}"); fi
 if [[ -n "${CODEX_MODEL}" ]]; then codex_args+=(--model "${CODEX_MODEL}"); fi
 if [[ "${CODEX_JSONL}" -eq 1 ]]; then codex_args+=(--json); fi
