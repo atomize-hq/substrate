@@ -493,10 +493,12 @@ while true; do
             runner_end_epoch[i]="$(date -u +%s)"
 
             if [[ "${rc}" -ne 0 ]]; then
+                echo "FAILED: ${steps[$i]} exited with ${rc} (see ${FEATURE_DIR_REL}/logs/${steps[$i]}/stderr.log)" >&2
                 append_summary "- FAILED: \`${steps[$i]}\` exited with \`${rc}\` — stopping"
                 kill_downstream "$((i + 1))"
                 exit "${rc}"
             fi
+            echo "Completed: ${steps[$i]} (rc=0)"
         fi
     done
 
@@ -533,6 +535,7 @@ while true; do
         fi
         if [[ "${rc}" -ne 0 ]]; then
             # Should be handled above, but keep this as a safety net.
+            echo "FAILED: ${steps[$next_to_commit]} exited with ${rc} (see ${FEATURE_DIR_REL}/logs/${steps[$next_to_commit]}/stderr.log)" >&2
             append_summary "- FAILED: \`${steps[$next_to_commit]}\` exited with \`${rc}\` — stopping"
             kill_downstream "$((next_to_commit + 1))"
             exit "${rc}"
@@ -542,8 +545,10 @@ while true; do
         commit_done[next_to_commit]=1
         if [[ -n "${commit_shas[next_to_commit]:-}" ]]; then
             append_summary "- Committed \`${steps[$next_to_commit]}\`: \`${commit_shas[next_to_commit]}\`"
+            echo "Committed: ${steps[$next_to_commit]} (${commit_shas[next_to_commit]})"
         else
             append_summary "- No tracked changes to commit for \`${steps[$next_to_commit]}\`"
+            echo "No tracked changes to commit for ${steps[$next_to_commit]}"
         fi
         next_to_commit="$((next_to_commit + 1))"
     done
