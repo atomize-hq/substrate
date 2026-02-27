@@ -12,6 +12,8 @@ SECOND: Create (or update) the intake file:
 - If WI: docs/project_management/intake/work_items/<CODENAME>\_work_item_intake.md
 - Choose <CODENAME> as fun verb_animal (snake_case). Add \_\_2 if needed.
 - Print the final chosen path at the top every time.
+- IMPORTANT: <CODENAME> is intake-only. Do not use it for ADR filenames or planning pack names.
+  - The final ADR title + kebab-case slug are decided during lockdown from “Working Title (tentative)”.
 
 Rules:
 

@@ -15,6 +15,22 @@ Task:
 - If WI intake: generate a Work Item record suitable for the work_items queue.
 - No hours/days.
 
+Naming + link sync (ADR only; required):
+
+- The intake `codename` is **intake-only**. It must NOT appear in the ADR filename.
+- Use `## 2. Working Title (tentative)` as the naming source of truth:
+  1) Decide the **final ADR title** (may refine wording, but must preserve intent).
+  2) Derive a **kebab-case slug** from that title for filenames and the pack name.
+     - Example: `Add non-apt system package provisioning support` → `add-non-apt-system-package-provisioning-support`
+  3) Use the slug consistently in:
+     - ADR filename: `docs/project_management/adrs/draft/ADR-000X-<kebab-slug>.md`
+     - ADR `Feature directory`: `docs/project_management/packs/draft/<kebab-slug>/`
+     - ADR `Related Docs (links only)` pack paths (must match the feature directory)
+     - Seeds: `Suggested pack name` (must match the ADR feature directory slug)
+- Update the intake file (so intake → ADR links are correct after naming is finalized):
+  - Update YAML frontmatter `adr_path:` to the final ADR path, and
+  - Update the “ADR draft:” link in the intake body to the same final ADR path.
+
 Hard requirements:
 
 - ADR MUST represent ONE behavior delta.
