@@ -9,8 +9,7 @@
     ],
     "behavior_platforms_required": [
       "linux",
-      "macos",
-      "windows"
+      "macos"
     ],
     "automation": {
       "enabled": true,
