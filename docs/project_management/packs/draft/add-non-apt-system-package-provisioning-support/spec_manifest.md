@@ -3,9 +3,11 @@
 This file enumerates every contract/protocol/schema/env-var surface for this feature and assigns each surface to exactly one authoritative document.
 
 Authoring standard:
+
 - `docs/project_management/system/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`
 
 ## Inputs
+
 - Feature directory: `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/`
 - ADR(s):
   - `docs/project_management/adrs/draft/ADR-0033-routing-weasel.md`
@@ -15,11 +17,13 @@ Authoring standard:
 List the exact spec documents that MUST exist under `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/`.
 
 Each entry includes:
+
 - Owns (authoritative): the surfaces it is the single source of truth for.
 - Must define (deterministic items): the exact items it MUST pin down with singular, testable statements.
 - Links (non-authoritative): upstream context docs it may reference but MUST NOT contradict.
 
 Spec templates:
+
 - `docs/project_management/system/templates/planning_pack/`
 - `docs/project_management/system/templates/spec/`
 
@@ -132,34 +136,35 @@ Spec templates:
 
 Every surface that ADR-0033 touches MUST appear here.
 
-| Surface | Authoritative doc | What must be explicitly defined |
-| --- | --- | --- |
-| CLI provisioning entrypoint: `substrate world enable --provision-deps [--dry-run] [--verbose]` | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/contract.md` | flags, defaults, success/no-op semantics, exit codes, remediation invariants, examples |
-| Provisioning OS/manager probe (in-world; not host PATH-based) | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/ANS0/ANS0-spec.md` | exact probe inputs (`/etc/os-release`, manager presence checks), precedence, classification rules, behavior when ambiguous/missing |
-| Provisioning requirement derivation (pacman packages from effective enabled world-deps set) | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/ANS1/ANS1-spec.md` | enabled-set boundary, `install.method=pacman` filter, de-dup rules, ordering, absence semantics |
-| Pacman provisioning execution semantics (idempotency, mutation boundary, `pacman` invocation) | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/ANS1/ANS1-spec.md` | exact non-interactive invocation(s), idempotency definition, error→exit mapping, unsupported-backend posture |
-| Provisioning `--dry-run` and `--verbose` contract (no-mutation semantics + output invariants) | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/contract.md` | exact “no mutation” definition; minimum guaranteed content; stream requirements; stability posture |
-| Provisioning APT invocation contract (when `install.method=apt` applies and provisioning is supported) | `docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP0/WDAP0-spec.md` | exact APT invocation contract, de-dup/ordering, error→exit mapping, `--dry-run` definition (APT path) |
-| Runtime invariant: `substrate world deps current sync|install` MUST NOT invoke OS package managers (`apt` or `pacman`) | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/contract.md` | prohibited side effects; operator-visible rationale; linkage to provisioning command |
-| Runtime fail-early operational semantics (scope rules + side-effect prohibitions) | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/ANS2/ANS2-spec.md` | exact trigger definition; enabled-set vs explicit-args handling; partial-apply rules (if any) |
-| Runtime `--dry-run` and `--verbose` contract under fail-early posture | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/contract.md` | whether dry-run bypasses fail-early; minimum guaranteed output/remediation elements; exit code mapping |
-| Runtime remediation message invariants (exact command string + unsupported-backend messaging) | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/contract.md` | required exact command string `substrate world enable --provision-deps`; required “no host OS mutation” messaging on Linux host-native; stream requirements |
-| Exit code meanings (`0/2/3/4/5`) for provisioning + runtime fail-early | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/contract.md` | mapping to taxonomy; per-command mapping; reserved meaning for exit `5` in this feature |
-| Platform/backends support matrix (Linux host-native vs macOS Lima vs Windows WSL) | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/contract.md` | supported/unsupported rules; guarantees about host OS mutation; Windows assumption posture |
-| Protected paths / OS-mutation invariants | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/contract.md` | explicit “no host OS mutation” invariant; hardened-runtime write constraints; any explicitly permitted writable surfaces |
-| Inventory schema (including `install.method=pacman` and `install.pacman` list shape) | `docs/project_management/packs/implemented/world-deps-packages-bundles-contract/contract.md` | full schema update; constraints; canonical ordering rules (if any); explicit absence semantics |
-| Effective enabled world-deps set resolution (inputs to provisioning/runtime checks) | `docs/project_management/packs/implemented/world-deps-packages-bundles-contract/contract.md` | merge order, enabled-precedence, bundle-expansion boundary, determinism guarantees |
-| World-agent execute/stream protocol baselines | `docs/WORLD.md` | `/v1/execute` and `/v1/stream` request/response shapes; transport notes; any explicit provisioning-execution isolation contract if introduced |
-| Decision records DR-0001/DR-0002/DR-0003/DR-0004 (and DR-0005 if required) | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/decision_register.md` | A/B options; chosen selection; constraints; pointers to constrained spec sections |
-| Manual validation | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/manual_testing_playbook.md` | deterministic preconditions, exact commands, expected key output lines, expected exit codes |
-| Smoke validation | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/smoke/*` | automated validation commands per platform; pass/fail expectations aligned to manual playbook |
-| Slice acceptance (ANS0) | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/ANS0/ANS0-spec.md` | per-slice scope + acceptance criteria IDs for the probe surface |
-| Slice acceptance (ANS1) | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/ANS1/ANS1-spec.md` | per-slice scope + acceptance criteria IDs for pacman provisioning |
-| Slice acceptance (ANS2) | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/ANS2/ANS2-spec.md` | per-slice scope + acceptance criteria IDs for runtime fail-early + operator-doc updates |
+| Surface                                                                                                | Authoritative doc                                                                                                | What must be explicitly defined                                                                                                                             |
+| ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| CLI provisioning entrypoint: `substrate world enable --provision-deps [--dry-run] [--verbose]`         | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/contract.md`                | flags, defaults, success/no-op semantics, exit codes, remediation invariants, examples                                                                      |
+| Provisioning OS/manager probe (in-world; not host PATH-based)                                          | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/ANS0/ANS0-spec.md`   | exact probe inputs (`/etc/os-release`, manager presence checks), precedence, classification rules, behavior when ambiguous/missing                          |
+| Provisioning requirement derivation (pacman packages from effective enabled world-deps set)            | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/ANS1/ANS1-spec.md`   | enabled-set boundary, `install.method=pacman` filter, de-dup rules, ordering, absence semantics                                                             |
+| Pacman provisioning execution semantics (idempotency, mutation boundary, `pacman` invocation)          | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/ANS1/ANS1-spec.md`   | exact non-interactive invocation(s), idempotency definition, error→exit mapping, unsupported-backend posture                                                |
+| Provisioning `--dry-run` and `--verbose` contract (no-mutation semantics + output invariants)          | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/contract.md`                | exact “no mutation” definition; minimum guaranteed content; stream requirements; stability posture                                                          |
+| Provisioning APT invocation contract (when `install.method=apt` applies and provisioning is supported) | `docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP0/WDAP0-spec.md`                     | exact APT invocation contract, de-dup/ordering, error→exit mapping, `--dry-run` definition (APT path)                                                       |
+| Runtime invariant: `substrate world deps current sync                                                  | install` MUST NOT invoke OS package managers (`apt`or`pacman`)                                                   | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/contract.md`                                                           | prohibited side effects; operator-visible rationale; linkage to provisioning command |
+| Runtime fail-early operational semantics (scope rules + side-effect prohibitions)                      | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/ANS2/ANS2-spec.md`   | exact trigger definition; enabled-set vs explicit-args handling; partial-apply rules (if any)                                                               |
+| Runtime `--dry-run` and `--verbose` contract under fail-early posture                                  | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/contract.md`                | whether dry-run bypasses fail-early; minimum guaranteed output/remediation elements; exit code mapping                                                      |
+| Runtime remediation message invariants (exact command string + unsupported-backend messaging)          | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/contract.md`                | required exact command string `substrate world enable --provision-deps`; required “no host OS mutation” messaging on Linux host-native; stream requirements |
+| Exit code meanings (`0/2/3/4/5`) for provisioning + runtime fail-early                                 | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/contract.md`                | mapping to taxonomy; per-command mapping; reserved meaning for exit `5` in this feature                                                                     |
+| Platform/backends support matrix (Linux host-native vs macOS Lima vs Windows WSL)                      | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/contract.md`                | supported/unsupported rules; guarantees about host OS mutation; Windows assumption posture                                                                  |
+| Protected paths / OS-mutation invariants                                                               | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/contract.md`                | explicit “no host OS mutation” invariant; hardened-runtime write constraints; any explicitly permitted writable surfaces                                    |
+| Inventory schema (including `install.method=pacman` and `install.pacman` list shape)                   | `docs/project_management/packs/implemented/world-deps-packages-bundles-contract/contract.md`                     | full schema update; constraints; canonical ordering rules (if any); explicit absence semantics                                                              |
+| Effective enabled world-deps set resolution (inputs to provisioning/runtime checks)                    | `docs/project_management/packs/implemented/world-deps-packages-bundles-contract/contract.md`                     | merge order, enabled-precedence, bundle-expansion boundary, determinism guarantees                                                                          |
+| World-agent execute/stream protocol baselines                                                          | `docs/WORLD.md`                                                                                                  | `/v1/execute` and `/v1/stream` request/response shapes; transport notes; any explicit provisioning-execution isolation contract if introduced               |
+| Decision records DR-0001/DR-0002/DR-0003/DR-0004 (and DR-0005 if required)                             | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/decision_register.md`       | A/B options; chosen selection; constraints; pointers to constrained spec sections                                                                           |
+| Manual validation                                                                                      | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/manual_testing_playbook.md` | deterministic preconditions, exact commands, expected key output lines, expected exit codes                                                                 |
+| Smoke validation                                                                                       | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/smoke/*`                    | automated validation commands per platform; pass/fail expectations aligned to manual playbook                                                               |
+| Slice acceptance (ANS0)                                                                                | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/ANS0/ANS0-spec.md`   | per-slice scope + acceptance criteria IDs for the probe surface                                                                                             |
+| Slice acceptance (ANS1)                                                                                | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/ANS1/ANS1-spec.md`   | per-slice scope + acceptance criteria IDs for pacman provisioning                                                                                           |
+| Slice acceptance (ANS2)                                                                                | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/ANS2/ANS2-spec.md`   | per-slice scope + acceptance criteria IDs for runtime fail-early + operator-doc updates                                                                     |
 
 ## Determinism checklist (must be satisfied before quality gate)
 
 For every selected spec document, confirm it explicitly defines:
+
 - Inputs (all) + precedence order (if multiple inputs exist)
 - Defaults (all) + absence semantics
 - Data model (types/constraints) for every serialized boundary
@@ -170,20 +175,14 @@ For every selected spec document, confirm it explicitly defines:
 
 ## Follow-ups
 
-Record missing/ambiguous ADR intent here (do not patch ADRs from this step).
-
-1) ADR scope/links drift vs this feature directory
-   - Issue: ADR-0033 declares feature dir `docs/project_management/packs/draft/world-deps-pacman-provisioning/` and lists related planning-pack docs under that path, but the actual feature dir for this run is `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/`.
-   - Required fix: during planning, reconcile to exactly one canonical feature directory and update all planning-pack doc links to match (without creating dual-authority contract/spec text across two dirs).
-
-2) World OS family detection rules are underspecified
+1. World OS family detection rules are underspecified
    - Issue: ADR-0033 requires using `/etc/os-release` (`ID`/`ID_LIKE`) plus manager presence checks, but does not define the exact mapping rules, precedence, or conflict resolution when inputs disagree.
    - Required fix: in `decision_register.md` (DR-0002) and `slices/ANS0/ANS0-spec.md`, define one deterministic algorithm, including:
      - exact Arch-family and Debian/Ubuntu-family allowlists (and whether `ID_LIKE` can override `ID`),
      - behavior when `/etc/os-release` is missing/unreadable,
      - behavior when `/etc/os-release` implies one family but `command -v <manager>` implies another.
 
-3) Pacman invocation contract is underspecified
+2. Pacman invocation contract is underspecified
    - Issue: ADR-0033 requires provisioning via `pacman` but does not specify the exact non-interactive invocation, idempotency rules, or the mapping of `pacman` failures to exit codes.
    - Required fix: in `decision_register.md` (DR-0003) and `slices/ANS1/ANS1-spec.md`, define:
      - exact `pacman` command(s) and flags,
@@ -191,29 +190,29 @@ Record missing/ambiguous ADR intent here (do not patch ADRs from this step).
      - package-list ordering/de-dup rules and how they affect determinism,
      - error→exit mapping aligned to `contract.md`.
 
-4) Provisioning mismatch policy needs a single deterministic rule
+3. Provisioning mismatch policy needs a single deterministic rule
    - Issue: ADR-0033 requires failing when enabled system-package items do not match the detected manager, but does not define whether partial provisioning is ever allowed, nor how mixed `apt`+`pacman` enabled sets are handled.
    - Required fix: in `decision_register.md` (DR-0004), `contract.md`, and the relevant slice specs, define exactly one posture (fail-closed vs partial) and the exact remediation content.
 
-5) Runtime fail-early “scope” is underspecified for `deps current install`
+4. Runtime fail-early “scope” is underspecified for `deps current install`
    - Issue: ADR-0033 states the runtime short-circuit triggers when the “effective enabled set contains `install.method=apt` or `install.method=pacman` items”, but the existing CLI includes `substrate world deps current install <ITEM...>` which can target explicit items.
    - Required fix: in `slices/ANS2/ANS2-spec.md` and `contract.md`, define exactly one scope rule (enabled-set vs explicit args vs union) and require tests to enforce it.
 
-6) Provisioning execution isolation model is implied but not pinned
+5. Provisioning execution isolation model is implied but not pinned
    - Issue: ADR-0033 architecture requires provisioning execution “without weakening hardened runtime execution” and mentions “distinct request profile or explicit guard rails”, but ADR-0033 Decision Summary does not record a selection.
    - Required fix: either:
      - add DR-0005 and record the selection (and update `docs/WORLD.md` if any wire contract changes), or
      - explicitly state (in `decision_register.md`) that no protocol change is required and that guard rails are implementable entirely within existing request shapes.
 
-7) `--verbose` output is underspecified
+6. `--verbose` output is underspecified
    - Issue: ADR-0033 includes `--verbose` but does not define what additional information is guaranteed and on which stream(s).
    - Required fix: in `contract.md` define minimum guaranteed verbose elements (and any explicitly prohibited requirements), and in slice specs define where/when those elements are emitted.
 
-8) Operator-doc update targets are not enumerated by exact path/headings
+7. Operator-doc update targets are not enumerated by exact path/headings
    - Issue: ADR-0033 requires updating operator reference and error text under `docs/reference/world/deps/…` but does not enumerate the exact file(s)/headings that must change.
    - Required fix: in `impact_map.md` and `slices/ANS2/ANS2-spec.md`, list the exact doc paths and headings, and require those docs to link to `contract.md` rather than restating the contract.
 
-9) Cross-document contract ownership conflicts already exist and must be reconciled
+8. Cross-document contract ownership conflicts already exist and must be reconciled
    - Issue: `docs/project_management/packs/implemented/world-deps-packages-bundles-contract/contract.md` currently specifies runtime `deps current sync|install` applying apt (“world image installs first (apt)”), which conflicts with ADR-0033 (“runtime MUST NOT invoke OS package managers (APT or pacman)”).
    - Required fix: during planning/implementation, reconcile the world-deps contract so there is exactly one authoritative truth for runtime behavior; it MUST either:
      - incorporate the provisioning-time-only system-package contract, or
