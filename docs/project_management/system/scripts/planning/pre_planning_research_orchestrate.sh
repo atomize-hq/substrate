@@ -104,6 +104,7 @@ fi
 PLANNING_SCRIPTS_DIR="${PM_SYSTEM_ROOT}/scripts/planning"
 RUNNER="${PLANNING_SCRIPTS_DIR}/run_planning_agent.sh"
 [[ -x "${RUNNER}" ]] || die "missing runner: ${RUNNER}"
+ALIGNMENT_REPORTER="${PLANNING_SCRIPTS_DIR}/wrapper_alignment_report.py"
 
 FEATURE_DIR_REL="$(python3 "${PLANNING_SCRIPTS_DIR}/pm_paths.py" resolve-feature-dir --feature-dir "${FEATURE_DIR_RAW}")"
 FEATURE_DIR_REL="${FEATURE_DIR_REL%/}"
@@ -436,6 +437,28 @@ cleanup_on_exit() {
     append_summary "- Tracked: \`${FEATURE_DIR_REL}/workstream_triage.md\`"
     append_summary "- Draft (logs): \`${FEATURE_DIR_REL}/logs/workstream-triage/workstream_triage_draft.md\`"
     append_summary ""
+
+    # Wrapper-detected misalignment triage + consolidated follow-ups (report-only; no edits).
+    local alignment_report_abs alignment_report_rel alignment_report_stderr_rel
+    alignment_report_abs="${WRAPPER_DIR}/alignment_report.md"
+    alignment_report_rel="${FEATURE_DIR_REL}/logs/pre_planning_wrapper/${RUN_TS}/alignment_report.md"
+    alignment_report_stderr_rel="${FEATURE_DIR_REL}/logs/pre_planning_wrapper/${RUN_TS}/alignment_report.stderr.log"
+    if [[ -x "${ALIGNMENT_REPORTER}" ]] || [[ -f "${ALIGNMENT_REPORTER}" ]]; then
+        if python3 "${ALIGNMENT_REPORTER}" --feature-dir "${FEATURE_DIR_REL}" >"${alignment_report_abs}" 2>"${WRAPPER_DIR}/alignment_report.stderr.log"; then
+            append_summary "## Alignment triage (wrapper-compiled)"
+            append_summary ""
+            append_summary "- Full report: \`${alignment_report_rel}\`"
+            append_summary ""
+            cat "${alignment_report_abs}" >>"${SUMMARY_PATH}"
+            append_summary ""
+        else
+            append_summary "## Alignment triage (wrapper-compiled)"
+            append_summary ""
+            append_summary "- Failed to generate alignment report (see \`${alignment_report_stderr_rel}\`)"
+            append_summary ""
+        fi
+    fi
+
     append_summary "## Wrapper logs"
     append_summary "- \`${FEATURE_DIR_REL}/logs/pre_planning_wrapper/${RUN_TS}/\`"
     exit "${rc}"
