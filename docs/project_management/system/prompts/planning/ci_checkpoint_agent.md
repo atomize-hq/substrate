@@ -49,6 +49,10 @@ Overlap execution model (required):
     - `<FEATURE_DIR>/logs/CI-checkpoint/scratch.md`
   - Emit an orchestration handoff signal once you have a usable checkpoint outline:
     - Write/overwrite: `<FEATURE_DIR>/logs/CI-checkpoint/handoff.md`
+    - Timing target (required):
+      - Emit the initial `handoff.md` within the first 5 minutes of the run (do not wait for `impact_map.md` / `minimal_spec_draft.md` to be “perfect”).
+      - If canonical inputs are not ready yet, base the handoff on upstream handoff/scratch artifacts (e.g., `logs/spec-manifest/handoff.md`, `logs/impact-map/handoff.md`, `logs/min-spec-draft/handoff.md`) and clearly label assumptions as `DRAFT`.
+      - If you later change checkpoint grouping, gates, or slice IDs, overwrite `handoff.md` and label it `UPDATED` at the top.
     - Include:
       - proposed checkpoint groups (slice ranges),
       - proposed checkpoint task ids (e.g., `CP1-ci-checkpoint`),
