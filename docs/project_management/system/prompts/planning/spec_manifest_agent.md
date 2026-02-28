@@ -32,9 +32,9 @@ Output requirements:
 1) Overlap execution model (required):
    - Phase A (start immediately; logs only):
      - Rapidly read the ADR(s), select the required doc set, and draft an initial (not-yet-exhaustive) surface inventory + ownership notes.
-     - Write/overwrite: `<FEATURE_DIR>/logs/spec-manifest/handoff.md` as soon as the required-doc list is stable enough for downstream discovery.
-       - Target: emit this handoff within the first 5 minutes of the run (do not wait for `spec_manifest.md` to be “perfect”).
-       - If you later change the required-doc list, overwrite `handoff.md` and label it `UPDATED` at the top.
+     - Write/overwrite: `<FEATURE_DIR>/logs/spec-manifest/handoff.md` within the first 5 minutes of the run (required).
+       - Do **not** wait for the required-doc list to be “stable”; if you are still uncertain, label assumptions as `DRAFT` and proceed.
+       - If you later change the required-doc list or ownership mapping, overwrite `handoff.md` and label it `UPDATED` at the top.
        - `handoff.md` must be a short, high-signal summary (not a copy of `spec_manifest.md`) and must include:
          - the required-doc list (filenames),
          - the top surfaces and their intended owning docs,
