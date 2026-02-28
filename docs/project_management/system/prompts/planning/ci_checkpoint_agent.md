@@ -39,6 +39,7 @@ Preflight (required; do first):
 2) Ensure platform scope fields are present (dynamic per pack; be conservative when uncertain):
    - `meta.ci_parity_platforms_required` (default: `["linux","macos","windows"]`)
    - `meta.behavior_platforms_required` (default: same as ci_parity)
+   - If `spec_manifest.md` / `minimal_spec_draft.md` explicitly scopes the behavior delta to a subset of platforms (e.g., Linux-only behavior change), set `meta.behavior_platforms_required` to that subset while keeping `meta.ci_parity_platforms_required` unchanged unless explicitly justified.
 3) If any of the above is missing or wrong, update `<FEATURE_DIR>/tasks.json` (and only those fields).
    - Overlap note: in orchestration overlap runs, Phase A is logs-only; if the Phase B gate has not cleared yet, record required `tasks.json` edits in scratch and apply them only after the Phase B gate clears.
 

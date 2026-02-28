@@ -204,6 +204,8 @@ runner_rcs=()
 commit_shas=()
 runner_start_epoch=()
 runner_end_epoch=()
+# First-seen handoff timestamp (stable even if handoff.md is later overwritten).
+handoff_seen_epoch=()
 
 launch_step() {
     local idx="$1"
@@ -400,7 +402,10 @@ cleanup_on_exit() {
 
         local handoff_path handoff_epoch handoff_iso handoff_after_hms
         handoff_path="$(handoff_path_for "${step}")"
-        handoff_epoch="$(file_mtime_epoch "${handoff_path}" || true)"
+        handoff_epoch="${handoff_seen_epoch[ti]:-}"
+        if [[ -z "${handoff_epoch}" ]]; then
+            handoff_epoch="$(file_mtime_epoch "${handoff_path}" || true)"
+        fi
         handoff_iso="$(epoch_to_utc_iso "${handoff_epoch}")"
         handoff_after_hms=""
         if [[ -n "${start_epoch}" && -n "${handoff_epoch}" ]] && [[ "${start_epoch}" =~ ^[0-9]+$ ]] && [[ "${handoff_epoch}" =~ ^[0-9]+$ ]] && [[ "${handoff_epoch}" -ge "${start_epoch}" ]]; then
@@ -476,6 +481,21 @@ all_steps_done() {
 # - Launch next steps when upstream emits handoff.md (or exits successfully).
 # - Commit allowlisted outputs as soon as each step exits successfully.
 while true; do
+    # 0) Record first-seen handoff timestamps for accurate timing even if handoff.md is overwritten later.
+    for ((i = start_index; i <= launched_upto; i++)); do
+        if [[ -n "${handoff_seen_epoch[i]:-}" ]]; then
+            continue
+        fi
+        handoff_step="${steps[$i]}"
+        handoff_path="$(handoff_path_for "${handoff_step}")"
+        if [[ -f "${handoff_path}" ]]; then
+            handoff_seen_epoch[i]="$(file_mtime_epoch "${handoff_path}" || true)"
+            if [[ -z "${handoff_seen_epoch[i]}" ]]; then
+                handoff_seen_epoch[i]="$(date -u +%s)"
+            fi
+        fi
+    done
+
     # 1) Detect completed steps (for any launched step).
     for ((i = start_index; i <= launched_upto; i++)); do
         if [[ -n "${runner_rcs[i]:-}" ]]; then

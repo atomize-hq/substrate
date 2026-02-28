@@ -32,15 +32,15 @@ Spec templates:
   - Owns (authoritative): deterministic manual test cases and expected outputs for the new installer behavior (Linux).
   - Links to (non-authoritative): `contract.md` (source of truth for expected behavior).
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/C0/C0-spec.md` — slice spec (distro detection + reporting):
+- `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md` — slice spec (distro detection + reporting):
   - Owns (authoritative): acceptance criteria for `/etc/os-release` best-effort read + safe parsing posture, `<unknown>` rendering, and emitting the required decision one-liner exactly once.
   - Links to (non-authoritative): `contract.md` (selection algorithm + mapping table).
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/C1/C1-spec.md` — slice spec (override + precedence + failure posture):
+- `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM1/BEDPM1-spec.md` — slice spec (override + precedence + failure posture):
   - Owns (authoritative): acceptance criteria for override precedence (`--pkg-manager` over `PKG_MANAGER`), validation/fail-closed rules, PATH probe fallback determinism + warnings, and exit-code mapping enforcement.
   - Links to (non-authoritative): `contract.md`, `decision_register.md`.
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/C2/C2-spec.md` — slice spec (hermetic detection tests):
+- `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md` — slice spec (hermetic detection tests):
   - Owns (authoritative): hermetic test harness requirements (stub PATH + fake os-release input), required test cases, and what outputs must be asserted.
   - Links to (non-authoritative): `contract.md`, `decision_register.md`.
 
@@ -58,9 +58,9 @@ Every surface that the ADR touches must appear here.
 | Input precedence pipeline | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | total ordering: `--pkg-manager` → `PKG_MANAGER` → `/etc/os-release` mapping → PATH probe |
 | Supported package-manager set | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | exact locked set: `apt-get`, `dnf`, `yum`, `pacman`, `zypper` |
 | `/etc/os-release` read | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | path, readability check, “read-only; no writes”, “no network calls for detection” |
-| `/etc/os-release` parsing posture | `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/C0/C0-spec.md` | safe parsing requirement: do not `source`; extraction rules for `ID` and `ID_LIKE` |
+| `/etc/os-release` parsing posture | `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md` | safe parsing requirement: do not `source`; extraction rules for `ID` and `ID_LIKE` |
 | Distro fields used | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | which keys influence behavior: `ID`, `ID_LIKE` |
-| Distro rendering when unknown | `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/C0/C0-spec.md` | when to render `<unknown>` for `id` / `id_like` |
+| Distro rendering when unknown | `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md` | when to render `<unknown>` for `id` / `id_like` |
 | Mapping table (distro → package manager) | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | exact locked mapping table + match rules stated in ADR |
 | Fedora/RHEL fallback rule (`dnf` preferred; fallback `yum`) | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | exact fallback trigger and output expectations |
 | PATH probe fallback | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | when PATH probing is used and what it searches for |
@@ -73,9 +73,9 @@ Every surface that the ADR touches must appear here.
 | Fail-closed rules for explicit overrides | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | when to fail vs fall back (override invalid or unavailable must fail) |
 | Failure when no manager can be selected | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | exit code `4` + required guidance elements including prerequisite list |
 | Linux prerequisite set | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | exact prerequisite command set the installer ensures (and the exact list printed in failure guidance) |
-| Slice acceptance (C0) | `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/C0/C0-spec.md` | acceptance criteria aligned to `contract.md` for detection/reporting |
-| Slice acceptance (C1) | `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/C1/C1-spec.md` | acceptance criteria aligned to `contract.md` for overrides/failures |
-| Validation (automation; hermetic) | `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/C2/C2-spec.md` | deterministic test harness contract and assertions (no host mutation; no containers required) |
+| Slice acceptance (`BEDPM0`) | `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md` | acceptance criteria aligned to `contract.md` for detection/reporting |
+| Slice acceptance (`BEDPM1`) | `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM1/BEDPM1-spec.md` | acceptance criteria aligned to `contract.md` for overrides/failures |
+| Validation (automation; hermetic) | `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md` | deterministic test harness contract and assertions (no host mutation; no containers required) |
 | Validation (manual) | `docs/project_management/packs/draft/best-effort-distro-package-manager/manual_testing_playbook.md` | deterministic manual cases and expected outputs (Linux) |
 | A/B decision ownership | `docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md` | DR-0001, DR-0002, DR-0003 options + one explicit selection each |
 
@@ -133,7 +133,7 @@ Must define, as exactly-two-option A/B decisions with one explicit selection eac
 - DR-0003: hermetic test hook approach
   - Must decide: how tests inject a fake os-release input (e.g., test-only env var/arg vs harness approach) without weakening production safety posture.
 
-### `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/C0/C0-spec.md`
+### `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md`
 
 Must define:
 
@@ -147,7 +147,7 @@ Must define:
 - Failure posture:
   - Behavior when `/etc/os-release` is unreadable or missing is non-fatal to detection (falls through to other steps per `contract.md`).
 
-### `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/C1/C1-spec.md`
+### `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM1/BEDPM1-spec.md`
 
 Must define:
 
@@ -161,7 +161,7 @@ Must define:
 - Error text acceptance:
   - Failure outputs include the required guidance elements defined in `contract.md`.
 
-### `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/C2/C2-spec.md`
+### `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md`
 
 Must define:
 
@@ -188,7 +188,7 @@ Must define deterministic cases with expected outputs (Linux), including at mini
 
 Must define:
 
-- Slice sequencing: a single explicit ordering for C0/C1/C2 and rationale.
+- Slice sequencing: a single explicit ordering for `BEDPM0`/`BEDPM1`/`BEDPM2` and rationale.
 - Files touched (by path) and high-level implementation plan consistent with the ADR.
 - Validation commands to run (hermetic test + manual playbook).
 
@@ -203,7 +203,7 @@ Must define:
 
 Must define:
 
-- A task graph that includes at least one execution task per slice (C0, C1, C2).
+- A task graph that includes at least one execution task per slice (`BEDPM0`, `BEDPM1`, `BEDPM2`).
 - For each slice task: an explicit reference to its slice spec path and the acceptance criteria source of truth (`contract.md`).
 
 ## Follow-ups

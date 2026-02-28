@@ -66,10 +66,12 @@ Content contract for `minimal_spec_draft.md` (keep short, concrete, and cross-cu
      - Provide a **draft** execution slice outline (triad slices) that downstream pre-planning steps can reference.
      - This is intentionally minimal and may split/merge during full planning.
    - Hard rules:
-     - Use feature-derived slice IDs per `TASK_TRIADS_AND_FEATURE_SETUP.md` (do not use generic `C0/C1/...`).
-     - Include an explicit disclaimer: “draft; may split/merge; do not wire `tasks.json` yet.”
-     - Keep it small by default; only expand when justified by `impact_map.md` touch breadth:
-       - Target 3–8 slices total (inclusive).
+     - If `<FEATURE_DIR>/spec_manifest.md` already lists slice spec docs using canonical slice IDs (e.g., `slices/<SLICE_ID>/<SLICE_ID>-spec.md`), reuse those `<SLICE_ID>`s for this slice skeleton (do not invent a second ID scheme).
+     - If `<FEATURE_DIR>/spec_manifest.md` lists slice spec docs, treat that set as the baseline slice count for this skeleton; do not add/remove slices unless you record an explicit follow-up explaining why the spec-manifest must be updated.
+      - Use feature-derived slice IDs per `TASK_TRIADS_AND_FEATURE_SETUP.md` (do not use generic `C0/C1/...`).
+      - Include an explicit disclaimer: “draft; may split/merge; do not wire `tasks.json` yet.”
+      - Keep it small by default; only expand when justified by `impact_map.md` touch breadth:
+       - If you must choose the slice count yourself (because `spec_manifest.md` does not already define slice IDs), target 3–8 slices total (inclusive).
    - Required fields per slice entry:
      - `slice_id`: e.g., `<SLICE_PREFIX>0`, `<SLICE_PREFIX>1`, …
      - `name`: short, imperative

@@ -18,6 +18,7 @@ Required reading:
 - `docs/project_management/system/standards/adr/ADR_STANDARD_AND_TEMPLATE.md`
 - `docs/project_management/system/standards/shared/CONTRACT_SURFACE_STANDARD.md`
 - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
+- `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
 
 Inputs:
 - ADR(s): <list exact paths>
@@ -44,5 +45,9 @@ Output requirements:
    - The exact list of required spec docs (filenames under the feature dir).
    - A coverage matrix mapping every surface to an authoritative doc.
    - For each required spec doc, list the deterministic items it must define (schemas, defaults, precedence, error rules, invariants).
+   - Slice spec naming (non-negotiable when slice specs are required):
+     - Use feature-derived slice IDs per `TASK_TRIADS_AND_FEATURE_SETUP.md` (do not use generic `C0/C1/...`).
+     - Canonical slice spec path: `<FEATURE_DIR>/slices/<SLICE_ID>/<SLICE_ID>-spec.md`.
+     - If you require slice specs, `spec_manifest.md` must list them using the canonical path and consistent `<SLICE_ID>`s.
 3) If you discover missing/ambiguous ADR intent, record follow-ups inside `spec_manifest.md` under a “Follow-ups” section (not in ADRs).
 ```
