@@ -12,7 +12,7 @@ Required:
 Options:
   --start-at <step>      spec-manifest|impact-map|min-spec-draft|CI-checkpoint|workstream-triage
                          (default: spec-manifest)
-  --poll-s <seconds>     Poll interval for handoff/exit checks (default: 60)
+  --poll-s <seconds>     Poll interval for handoff/exit checks (default: 30)
 
 Environment (optional; passed through to the planning runner):
   CODEX_PROFILE=<p>
@@ -43,7 +43,7 @@ need_cmd() {
 
 FEATURE_DIR_RAW=""
 START_AT="spec-manifest"
-POLL_S="60"
+POLL_S="30"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
