@@ -15,8 +15,8 @@ Required reading:
 - `WORKSTREAM_TRIAGE_AND_LIFT_DECISIONS.md`
 - `docs/project_management/system/standards/planning/PLANNING_WORK_LIFT_ADVISORY.md`
 - `<FEATURE_DIR>/spec_manifest.md`
-- `<FEATURE_DIR>/impact_map.md`
-- `<FEATURE_DIR>/minimal_spec_draft.md`
+- `<FEATURE_DIR>/impact_map.md` (if it exists; otherwise use upstream handoff/scratch in Phase A)
+- `<FEATURE_DIR>/minimal_spec_draft.md` (if it exists; otherwise use upstream handoff/scratch in Phase A)
 - `<FEATURE_DIR>/ci_checkpoint_plan.md` (if it exists)
 - `<FEATURE_DIR>/tasks.json`
 
@@ -27,6 +27,9 @@ Allowed writes:
 
 Overlap execution model (required):
 - Phase A (start immediately; logs only):
+  - Orchestration note:
+    - This agent may be launched as soon as `<FEATURE_DIR>/logs/min-spec-draft/handoff.md` exists (before `impact_map.md` / `minimal_spec_draft.md` / `ci_checkpoint_plan.md` are written).
+    - In that case, base Phase A on upstream `handoff.md` / `scratch.md` artifacts and clearly label assumptions in your draft as `DRAFT`.
   - Compute pack-derived Work Lift v1 (impact-map-based) and treat it as an initial sizing signal:
     - From repo root, run and capture outputs into logs:
       - `make pm-lift-pack PACK="<FEATURE_DIR>" > "<FEATURE_DIR>/logs/workstream-triage/pm_lift_pack.txt"`
@@ -39,6 +42,7 @@ Overlap execution model (required):
       - where to place boundaries (if any),
       - whether to recommend a split before full planning.
     - If the command fails, record the failure + reason in the draft and proceed using only the artifacts you can read.
+    - If the failure reason is that `impact_map.md` is not ready yet, retry `pm-lift-pack` once Phase B gate clears so the final artifact contains pack-derived lift evidence.
   - Optional (recommended): capture discovery-time lift (vector-authored) from the ADR or intake:
     - Prefer ADR:
       - If exactly one ADR path exists in `<FEATURE_DIR>/tasks.json` (`meta.adr_paths`), run:

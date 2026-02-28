@@ -22,7 +22,8 @@ Environment (optional; passed through to the planning runner):
 Behavior:
   - Requires a clean orchestration checkout (git status must be empty).
   - Archives existing step log dirs for START_AT and downstream: <step> -> <step>_run_N
-  - Launches the 5-step chain with staggered overlap, triggered by upstream handoff.md.
+  - Launches the 5-step overlap chain with staggered overlap, triggered by upstream handoff.md.
+    - Special case: `workstream-triage` is triggered by `min-spec-draft` handoff (so triage can draft while CI-checkpoint is still running).
   - Commits allowlisted tracked outputs after each step succeeds.
   - Always writes a wrapper summary under: <FEATURE_DIR>/logs/pre_planning_wrapper/<UTC_TS>/summary.md
 USAGE
@@ -522,20 +523,71 @@ while true; do
         fi
     done
 
-    # 2) Launch downstream steps as soon as upstream handoff is available.
-    while [[ "${launched_upto}" -lt "${last_index}" ]]; do
-        upstream_step="${steps[$launched_upto]}"
-        upstream_handoff="$(handoff_path_for "${upstream_step}")"
+    # 2) Launch downstream steps as soon as their upstream handoff is available.
+    #
+    # Launch rules (overlap triggers):
+    # - impact-map launches on spec-manifest handoff/exit.
+    # - min-spec-draft launches on impact-map handoff/exit.
+    # - CI-checkpoint launches on min-spec-draft handoff/exit.
+    # - workstream-triage launches on min-spec-draft handoff/exit (so triage can draft while CI-checkpoint is running).
+    idx_spec_manifest="$(step_index_of spec-manifest 2>/dev/null || true)"
+    idx_impact_map="$(step_index_of impact-map 2>/dev/null || true)"
+    idx_min_spec_draft="$(step_index_of min-spec-draft 2>/dev/null || true)"
+    idx_ci_checkpoint="$(step_index_of CI-checkpoint 2>/dev/null || true)"
 
-        upstream_rc="${runner_rcs[launched_upto]:-}"
-        if [[ -f "${upstream_handoff}" ]] || [[ "${upstream_rc}" = "0" ]]; then
-            next_idx="$((launched_upto + 1))"
-            if [[ -z "${runner_pids[next_idx]:-}" ]]; then
-                launch_step "${next_idx}"
+    for ((next_idx = start_index + 1; next_idx <= last_index; next_idx++)); do
+        if [[ -n "${runner_pids[next_idx]:-}" ]]; then
+            continue
+        fi
+
+        dep_idx=""
+        case "${steps[$next_idx]}" in
+            impact-map)
+                dep_idx="${idx_spec_manifest}"
+                ;;
+            min-spec-draft)
+                dep_idx="${idx_impact_map}"
+                ;;
+            CI-checkpoint)
+                dep_idx="${idx_min_spec_draft}"
+                ;;
+            workstream-triage)
+                dep_idx="${idx_min_spec_draft}"
+                ;;
+            *)
+                dep_idx=""
+                ;;
+        esac
+
+        if [[ -z "${dep_idx}" ]] || [[ ! "${dep_idx}" =~ ^[0-9]+$ ]]; then
+            continue
+        fi
+
+        ready=0
+        if [[ "${steps[$next_idx]}" == "workstream-triage" ]] && [[ -n "${idx_ci_checkpoint}" ]] && [[ "${idx_ci_checkpoint}" =~ ^[0-9]+$ ]]; then
+            # Prefer min-spec-draft handoff/exit, but fall back to CI-checkpoint handoff/exit if min-spec-draft handoff is missing
+            # (e.g., when resuming at START_AT=CI-checkpoint with archived/cleaned upstream logs).
+            min_handoff="$(handoff_path_for "${steps[$idx_min_spec_draft]}")"
+            min_rc="${runner_rcs[idx_min_spec_draft]:-}"
+            ci_handoff="$(handoff_path_for "${steps[$idx_ci_checkpoint]}")"
+            ci_rc="${runner_rcs[idx_ci_checkpoint]:-}"
+            if [[ -f "${min_handoff}" ]] || [[ "${min_rc}" = "0" ]] || [[ -f "${ci_handoff}" ]] || [[ "${ci_rc}" = "0" ]]; then
+                ready=1
             fi
-            launched_upto="${next_idx}"
         else
-            break
+            dep_step="${steps[$dep_idx]}"
+            dep_handoff="$(handoff_path_for "${dep_step}")"
+            dep_rc="${runner_rcs[dep_idx]:-}"
+            if [[ -f "${dep_handoff}" ]] || [[ "${dep_rc}" = "0" ]]; then
+                ready=1
+            fi
+        fi
+
+        if [[ "${ready}" -eq 1 ]]; then
+            launch_step "${next_idx}"
+            if [[ "${next_idx}" -gt "${launched_upto}" ]]; then
+                launched_upto="${next_idx}"
+            fi
         fi
     done
 
