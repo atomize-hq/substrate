@@ -33,7 +33,7 @@ Takeaway:
 
 ## Proposed workstreams
 
-### WS-CONTRACT — Operator contract + schema + decision register (hard gate)
+### PDL-PWS-contract — Operator contract + schema + decision register (hard gate)
 
 Goal:
 - Lock a deterministic, testable persistence contract for Linux-only platform metadata in `$SUBSTRATE_HOME/install_state.json` (`schema_version=1` unchanged), including explicit best-effort failure posture and consumer read precedence guidance.
@@ -57,7 +57,7 @@ Full-planning slices/triads to create:
   - DR-0003: scope decision for `scripts/substrate/dev-install-substrate.sh` (keep out by default unless explicitly included)
   - DR-0004: overwrite policy on re-run (preserve vs overwrite; missing-input behavior)
 
-### WS-INSTALLER — Implement persistence in installer (PDL0-code)
+### PDL-PWS-installer — Implement persistence in installer (PDL0-code)
 
 Goal:
 - Update the Linux installer to write/update `$SUBSTRATE_HOME/install_state.json` on successful installs (including `--no-world`) and persist `host_state.platform.*` without introducing new exit-code behavior.
@@ -66,7 +66,7 @@ Owns (surfaces / touch set from `impact_map.md`):
 - `scripts/substrate/install-substrate.sh`
 
 Depends on:
-- WS-CONTRACT (must pin write semantics, atomicity posture, absence semantics, overwrite policy, and best-effort behavior)
+- PDL-PWS-contract (must pin write semantics, atomicity posture, absence semantics, overwrite policy, and best-effort behavior)
 - Upstream detection semantics (avoid re-parsing `/etc/os-release` independently; persist upstream-derived outputs to prevent drift)
 
 Full-planning slices/triads to create:
@@ -79,7 +79,7 @@ Full-planning slices/triads to create:
     - `host_state.platform.pkg_manager.source`
   - Confirm macOS/Windows remain no-op for these fields (Linux-only behavior delta).
 
-### WS-TESTS — Installer smoke assertions (PDL0-test)
+### PDL-PWS-tests_ci — Installer smoke assertions (PDL0-test)
 
 Goal:
 - Extend installer smoke coverage to make the new persistence contract observable and regression-proof.
@@ -88,8 +88,8 @@ Owns (surfaces / touch set from `impact_map.md`):
 - `tests/installers/install_state_smoke.sh`
 
 Depends on:
-- WS-CONTRACT (exact key set + absence semantics + “successful install” definition)
-- WS-INSTALLER (behavior must exist; test design can proceed once contract is pinned)
+- PDL-PWS-contract (exact key set + absence semantics + “successful install” definition)
+- PDL-PWS-installer (behavior must exist; test design can proceed once contract is pinned)
 
 Full-planning slices/triads to create:
 - `PDL0-test` triad scope:
@@ -97,7 +97,7 @@ Full-planning slices/triads to create:
   - Assert new keys are present when `/etc/os-release` is available.
   - Assert missing/unreadable `/etc/os-release` does not fail install and still records `pkg_manager.*` with an explicit fallback `source` (per upstream detection contract).
 
-### WS-CI — Checkpoint wiring + validation (CP1)
+### PDL-PWS-tasks_checkpoints — Checkpoint wiring + validation (CP1)
 
 Goal:
 - Wire the slice triads and checkpoint task graph so CI cadence matches the authored checkpoint plan (`CP1` covering `PDL0`).
@@ -108,7 +108,7 @@ Owns:
 
 Depends on:
 - Minimal slice skeleton (`minimal_spec_draft.md`): `PDL0`
-- WS-CONTRACT/WS-INSTALLER/WS-TESTS (triad acceptance criteria must be stable to wire `*-integ` + CP1 deps)
+- PDL-PWS-contract/PDL-PWS-installer/PDL-PWS-tests_ci (triad acceptance criteria must be stable to wire `*-integ` + CP1 deps)
 
 Full-planning slices/triads to create:
 - Add `PDL0-{code,test,integ-*}` tasks + `CP1-ci-checkpoint` ops task and kickoff prompt (per `ci_checkpoint_plan.md` Follow-ups).
@@ -117,7 +117,7 @@ Full-planning slices/triads to create:
 
 ## Sequencing + gates (hard constraints)
 
-1) WS-CONTRACT gate: resolve DR-0001..DR-0004 and lock schema + absence semantics before treating `PDL0` slice spec acceptance criteria as stable (prevents churn).
+1) PDL-PWS-contract gate: resolve DR-0001..DR-0004 and lock schema + absence semantics before treating `PDL0` slice spec acceptance criteria as stable (prevents churn).
 2) Implement `PDL0-code` (installer persistence), then land `PDL0-test` (smoke assertions).
 3) Wire `PDL0-integ` + `CP1-ci-checkpoint` and run CP1 gates per `ci_checkpoint_plan.md` (compile parity + Linux feature smoke + quick CI testing).
 4) Cross-pack seam guardrail: keep changes in `scripts/substrate/install-substrate.sh` narrowly scoped to persistence to reduce merge conflict risk with:

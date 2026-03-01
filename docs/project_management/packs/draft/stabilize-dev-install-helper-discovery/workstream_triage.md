@@ -21,7 +21,7 @@
 
 ## Proposed workstreams (parallelizable for full planning)
 
-### WS1 — Contract + decisions (DRs first)
+### SDIHD-PWS-contract — Contract + decisions (DRs first)
 
 - Goal: make the user-facing behavior deterministic (staging, overwrite policy, cleanup guard, exit-code classes) before slice specs/tasks lock in wording.
 - Owned surfaces:
@@ -29,11 +29,11 @@
   - `docs/project_management/packs/draft/stabilize-dev-install-helper-discovery/decision_register.md` (DR-0001..DR-0003; link each decision into contract)
 - Dependencies:
   - Uses `docs/project_management/packs/draft/stabilize-dev-install-helper-discovery/impact_map.md` and `docs/project_management/packs/draft/stabilize-dev-install-helper-discovery/minimal_spec_draft.md` as constraints.
-  - Must land before WS2 finalizes slice specs + `tasks.json` triads.
+  - Must land before SDIHD-PWS-tasks_checkpoints finalizes slice specs + `tasks.json` triads.
 - Slices/triads to create during full planning:
   - SDIHD0/SDIHD1 specs link to contract sections; tasks reference slice specs (no new slice implied).
 
-### WS2 — Slice specs + plan + task graph (make it executable)
+### SDIHD-PWS-tasks_checkpoints — Slice specs + plan + task graph (make it executable)
 
 - Goal: produce runnable, OS-scoped acceptance criteria and a complete triad task graph for SDIHD0/SDIHD1.
 - Owned surfaces:
@@ -44,13 +44,13 @@
     - `docs/project_management/packs/draft/stabilize-dev-install-helper-discovery/plan.md`
     - `docs/project_management/packs/draft/stabilize-dev-install-helper-discovery/tasks.json` (triads + dependencies + checkpoint wiring)
 - Dependencies:
-  - Requires WS1 (contract + DR selections).
-  - Should align with WS4 checkpoint wiring before `tasks.json` is considered “planning complete”.
+  - Requires SDIHD-PWS-contract (contract + DR selections).
+  - Should align with SDIHD-PWS-docs_validation checkpoint wiring before `tasks.json` is considered “planning complete”.
 - Proposed slices/triads (baseline from `minimal_spec_draft.md`):
   - `SDIHD0` triad(s): stage helpers under `$SUBSTRATE_HOME/scripts/substrate/...` + validate helper discovery fallback
   - `SDIHD1` triad(s): ownership-guarded dev-uninstall cleanup + deterministic refusal posture
 
-### WS3 — Implementation seams + high-churn boundaries (pre-implementation review)
+### SDIHD-PWS-implementation_seams — Implementation seams + high-churn boundaries (pre-implementation review)
 
 - Goal: keep execution work bounded to the 4-file touch set and reduce churn risk (scripts are high-conflict surfaces).
 - Owned surfaces (touch set from `impact_map.md`):
@@ -59,11 +59,11 @@
   - `crates/shell/src/builtins/world_enable/runner/paths.rs` (helper discovery tests + error messaging constraints)
   - `crates/shell/tests/world_enable.rs` (integration coverage for fallback + `cargo clean` scenario)
 - Dependencies:
-  - Must consume WS1 decisions (copy vs symlink; overwrite policy; ownership-guard algorithm), because they shape both staging and uninstall logic.
+  - Must consume SDIHD-PWS-contract decisions (copy vs symlink; overwrite policy; ownership-guard algorithm), because they shape both staging and uninstall logic.
 - Slices/triads to create during full planning:
   - SDIHD0/SDIHD1 task plans should explicitly keep changes confined to these files unless `impact_map.md` is updated.
 
-### WS4 — CI checkpoint + validation artifacts (prove it safely)
+### SDIHD-PWS-docs_validation — CI checkpoint + validation artifacts (prove it safely)
 
 - Goal: define when CI gates run and what manual/smoke evidence is required to merge without regressions.
 - Owned surfaces:
@@ -73,7 +73,7 @@
     - `docs/project_management/packs/draft/stabilize-dev-install-helper-discovery/smoke/linux-smoke.sh`
     - `docs/project_management/packs/draft/stabilize-dev-install-helper-discovery/smoke/macos-smoke.sh`
 - Dependencies:
-  - Depends on WS2 slice specs (commands + assertions must align with acceptance criteria).
+  - Depends on SDIHD-PWS-tasks_checkpoints slice specs (commands + assertions must align with acceptance criteria).
 - CI checkpoint implications (current plan):
   - Single checkpoint `CP1` (`CP1-ci-checkpoint`) covering `SDIHD0`→`SDIHD1`.
   - Compile parity: linux/macos/windows; behavior smoke: linux/macos; CI testing: full.

@@ -27,7 +27,7 @@ Triage interpretation:
 
 ## Proposed workstreams (full planning)
 
-### WS1 — Contract + Decision Register (pin seams before slice specs)
+### DIWAS-PWS-contract — Contract + Decision Register (pin seams before slice specs)
 
 Goal:
 - Make the DIWAS behavior deterministic by pinning **paths, exit codes, `--dry-run` semantics, and overwrite/profile policy** before slice specs and tasks are authored.
@@ -51,7 +51,7 @@ Planned slices/triads (creates requirements for):
 
 ---
 
-### WS2 — DIWAS0 slice spec (enable preflight + remediation)
+### DIWAS-PWS-slice_spec_diwas0 — DIWAS0 slice spec (enable preflight + remediation)
 
 Goal:
 - Specify DIWAS0’s acceptance criteria and contracts for “fail fast when staged `world-agent` is missing” (before any privileged steps).
@@ -66,14 +66,14 @@ Owned implementation surfaces (per `pre-planning/impact_map.md`):
 - `crates/shell/tests/world_enable.rs`
 
 Dependencies:
-- WS1 (must have pinned exit code + remediation + `--dry-run` semantics + staged-path rule).
+- DIWAS-PWS-contract (must have pinned exit code + remediation + `--dry-run` semantics + staged-path rule).
 
 Planned slices/triads:
 - `DIWAS0-{code,test,integ}`
 
 ---
 
-### WS3 — DIWAS1 slice spec (dev-install `--no-world` stages `world-agent`)
+### DIWAS-PWS-slice_spec_diwas1 — DIWAS1 slice spec (dev-install `--no-world` stages `world-agent`)
 
 Goal:
 - Specify DIWAS1’s acceptance criteria and contracts for Linux dev-install staging so “install with `--no-world`, enable later” is execution-ready.
@@ -87,15 +87,15 @@ Owned implementation surfaces (per `pre-planning/impact_map.md`):
 - `tests/installers/install_smoke.sh`
 
 Dependencies:
-- WS1 (must have pinned staged-path rule + profile mapping + overwrite policy).
-- WS2 is upstream by slice ordering (`DIWAS0` then `DIWAS1`), but the slice specs can be authored in parallel once WS1 decisions are pinned.
+- DIWAS-PWS-contract (must have pinned staged-path rule + profile mapping + overwrite policy).
+- DIWAS-PWS-slice_spec_diwas0 is upstream by slice ordering (`DIWAS0` then `DIWAS1`), but the slice specs can be authored in parallel once DIWAS-PWS-contract decisions are pinned.
 
 Planned slices/triads:
 - `DIWAS1-{code,test,integ}`
 
 ---
 
-### WS4 — Validation artifacts (smoke + manual playbook + CI-proof)
+### DIWAS-PWS-docs_validation — Validation artifacts (smoke + manual playbook + CI-proof)
 
 Goal:
 - Ensure validation is deterministic and maps to the 2-slice spine and CI checkpoint plan.
@@ -105,15 +105,15 @@ Owns:
 - `docs/project_management/packs/draft/dev-install-world-agent-staging/manual_testing_playbook.md`
 
 Dependencies:
-- WS1 (exit codes + path rules + dry-run semantics).
-- WS2/WS3 (slice AC must exist to reference from smoke/playbook).
+- DIWAS-PWS-contract (exit codes + path rules + dry-run semantics).
+- DIWAS-PWS-slice_spec_diwas0/DIWAS-PWS-slice_spec_diwas1 (slice AC must exist to reference from smoke/playbook).
 
 Planned slices/triads:
 - Treat as acceptance surface for `DIWAS0-integ` and `DIWAS1-integ` (smoke + playbook assertions must map to AC IDs).
 
 ---
 
-### WS5 — Automation + checkpoints (tasks/plan/session log/quality gate)
+### DIWAS-PWS-tasks_checkpoints — Automation + checkpoints (tasks/plan/session log/quality gate)
 
 Goal:
 - Wire the planning pack into executable triads and checkpoint cadence (cross-platform compile parity + Linux behavior smoke).
@@ -125,8 +125,8 @@ Owns:
 - `docs/project_management/packs/draft/dev-install-world-agent-staging/tasks.json` (populate `tasks`; keep `meta.checkpoint_boundaries=["DIWAS1"]` aligned to checkpoint plan)
 
 Dependencies:
-- WS2/WS3 (slice specs define AC IDs and kickoff scope).
-- WS4 (smoke script existence/contract informs `feature_smoke` gate wiring).
+- DIWAS-PWS-slice_spec_diwas0/DIWAS-PWS-slice_spec_diwas1 (slice specs define AC IDs and kickoff scope).
+- DIWAS-PWS-docs_validation (smoke script existence/contract informs `feature_smoke` gate wiring).
 
 Planned slices/triads:
 - Add triad tasks:
@@ -136,16 +136,16 @@ Planned slices/triads:
 
 ## Sequencing + gates (hard constraints)
 
-1) **Gate A — Pin seams (WS1)**
+1) **Gate A — Pin seams (DIWAS-PWS-contract)**
    - Decisions in `decision_register.md` + the external contract in `contract.md` must land before slice specs are finalized.
 
-2) **Gate B — Slice specs (WS2/WS3)**
+2) **Gate B — Slice specs (DIWAS-PWS-slice_spec_diwas0/DIWAS-PWS-slice_spec_diwas1)**
    - Land DIWAS0 spec before DIWAS1 spec is considered final (slice ordering), but authoring can proceed in parallel once Gate A is done.
 
-3) **Gate C — Tasks + checkpoint wiring (WS5)**
+3) **Gate C — Tasks + checkpoint wiring (DIWAS-PWS-tasks_checkpoints)**
    - Populate `tasks.json` tasks + kickoff prompts + checkpoint tasks; ensure `meta.behavior_platforms_required=["linux"]` and `meta.ci_parity_platforms_required=["linux","macos","windows"]` remain aligned to validation artifacts.
 
-4) **Gate D — Validation readiness (WS4)**
+4) **Gate D — Validation readiness (DIWAS-PWS-docs_validation)**
    - Linux smoke + manual playbook must be mechanically runnable and referenced by slice acceptance criteria.
 
 ## Risks + unknowns (must be resolved in full planning)

@@ -33,7 +33,7 @@ Takeaway:
 
 ## Proposed workstreams
 
-### WS-CONTRACT — Operator contract + decision register (hard gate)
+### BEDPM-PWS-contract — Operator contract + decision register (hard gate)
 
 Goal:
 - Lock the operator-visible contract for Linux installer pkg-manager selection:
@@ -55,7 +55,7 @@ Full-planning slices/triads to create:
 - Doc-first gate: resolve DR-0001 (`/etc/os-release` parsing), DR-0002 (PATH ambiguity precedence + warning content), DR-0003 (hermetic test seam for fake os-release input).
 - Cross-pack boundary pinning: explicitly name detection/selection outputs that downstream packs (notably `persist-detected-linux-distro-pkg-manager`) will persist, and forbid persistence in this pack.
 
-### WS-INSTALLER — Implement detection + selection logic (BEDPM0 + BEDPM1)
+### BEDPM-PWS-installer — Implement detection + selection logic (BEDPM0 + BEDPM1)
 
 Goal:
 - Implement the installer behavior changes in `scripts/substrate/install-substrate.sh` while preserving “no behavior change on macOS/Windows”.
@@ -65,13 +65,13 @@ Owns (surfaces / touch set from `impact_map.md`):
 - Verify-only: `scripts/substrate/world-enable.sh` call paths that source `install-substrate.sh` (avoid violating “exactly once” one-liner invariant via double invocation).
 
 Depends on:
-- WS-CONTRACT (DRs + contract pinning must land first to avoid churn)
+- BEDPM-PWS-contract (DRs + contract pinning must land first to avoid churn)
 
 Full-planning slices/triads to create:
 - `BEDPM0` triad: best-effort `/etc/os-release` read + safe parsing + required stderr decision one-liner emitted exactly once.
 - `BEDPM1` triad: override precedence + mapping + PATH probe fallback + deterministic multi-manager warning + exit code mapping for override/selection failure modes.
 
-### WS-TESTS+CI — Hermetic tests + checkpoint wiring (BEDPM2 + CP1)
+### BEDPM-PWS-tests_ci — Hermetic tests + checkpoint wiring (BEDPM2 + CP1)
 
 Goal:
 - Add a hermetic test harness that makes precedence + one-liner + exit codes deterministic in CI, then wire the single checkpoint (CP1).
@@ -81,8 +81,8 @@ Owns (surfaces / touch set from `impact_map.md` + `ci_checkpoint_plan.md`):
 - Planning wiring: `tasks.json` slice `*-integ` tasks + `CP1-ci-checkpoint` task wiring (once slices exist)
 
 Depends on:
-- WS-CONTRACT (one-liner exact text, `source` enum, and DR-0003 test seam)
-- WS-INSTALLER (tests can’t pass until behavior exists; harness/spec work can proceed in parallel once contract is pinned)
+- BEDPM-PWS-contract (one-liner exact text, `source` enum, and DR-0003 test seam)
+- BEDPM-PWS-installer (tests can’t pass until behavior exists; harness/spec work can proceed in parallel once contract is pinned)
 
 Full-planning slices/triads to create:
 - `BEDPM2` triad: hermetic harness (stubbed `PATH` + fake os-release) asserting precedence, one-liner content, and exit codes with no host mutation.
@@ -90,7 +90,7 @@ Full-planning slices/triads to create:
 
 ## Sequencing + gates (hard constraints)
 
-1) **WS-CONTRACT gate:** DR-0001..DR-0003 + `contract.md` must land before slice specs are treated as stable (prevents churn on precedence, one-liner timing, exit-code scoping).
+1) **BEDPM-PWS-contract gate:** DR-0001..DR-0003 + `contract.md` must land before slice specs are treated as stable (prevents churn on precedence, one-liner timing, exit-code scoping).
 2) Execute `BEDPM0` + `BEDPM1` (installer behavior), then `BEDPM2` (hermetic tests).
 3) Run CP1 after `BEDPM2` (compile parity + quick CI; no feature-smoke expected unless the pack adds `FEATURE_DIR/smoke/` later).
 

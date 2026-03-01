@@ -17,17 +17,17 @@
 
 ## Proposed workstreams (for full planning)
 
-### WS-A — Contract + decision register (operator invariants first)
+### WDAP-PWS-contract — Contract + decision register (operator invariants first)
 - Goal: make the operator-facing contract deterministic so slice specs/tests/docs can be authored without guesswork.
 - Owned surfaces:
   - Planning docs: `contract.md`, `decision_register.md` (DR-0001/2/3), `plan.md`, `tasks.json` (slice/triad wiring)
   - UX invariants referenced by code/docs: exit-code tables (0/3/4/5), remediation wording (must include exact `substrate world enable --provision-deps`), backend support matrix + “no host OS mutation” wording
   - Overlap to coordinate: `crates/shell/src/builtins/health.rs` (ADR-0036)
-- Dependencies: none (start here); unblocks WS-B/WS-C/WS-E.
+- Dependencies: none (start here); unblocks WDAP-PWS-runtime_fail_early/WDAP-PWS-provisioning_wiring/WDAP-PWS-docs_validation.
 - Slices/triads to plan:
   - Contract+decisions triad that produces the authoritative tables and DR outcomes that every other slice must reference.
 
-### WS-B — Runtime fail-early for APT items (`world deps current sync|install`)
+### WDAP-PWS-runtime_fail_early — Runtime fail-early for APT items (`world deps current sync|install`)
 - Goal: enforce “no APT/dpkg at runtime” with deterministic exit code + remediation for APT-backed items that are in-scope.
 - Owned surfaces (code/test targets per `impact_map.md`):
   - `crates/shell/src/builtins/world_deps/surfaces.rs`
@@ -35,11 +35,11 @@
   - `crates/shell/src/execution/platform/mod.rs`
   - Tests: `crates/shell/tests/world_deps_apt_install_wdp5.rs` (update/repurpose per new contract)
 - Dependencies:
-  - Requires WS-A to lock the “in-scope” rule + remediation text + exit-code mapping.
+  - Requires WDAP-PWS-contract to lock the “in-scope” rule + remediation text + exit-code mapping.
 - Slices/triads to plan:
   - `WDAP1` (or equivalent if renamed): code+tests+doc-snippets triad for runtime short-circuit behavior.
 
-### WS-C — Provisioning workflow in `substrate world enable --provision-deps` (shell-side)
+### WDAP-PWS-provisioning_wiring — Provisioning workflow in `substrate world enable --provision-deps` (shell-side)
 - Goal: specify and implement the shell-facing provisioning UX: flag parsing, package-derivation plumbing, dry-run/verbose semantics, and dispatch gating by backend capability.
 - Owned surfaces (code/test targets per `impact_map.md`):
   - CLI + dispatch: `crates/shell/src/execution/cli.rs`, `crates/shell/src/execution/routing/dispatch/world_ops.rs`
@@ -47,23 +47,23 @@
   - Bootstrapping: `crates/shell/src/execution/home_bootstrap.rs`
   - Tests: `crates/shell/tests/world_enable.rs`
 - Dependencies:
-  - Requires WS-A for flag semantics + exit-code mapping + output invariants.
-  - Requires WS-D (or an explicit temporary seam) for the provisioning execution profile model.
+  - Requires WDAP-PWS-contract for flag semantics + exit-code mapping + output invariants.
+  - Requires WDAP-PWS-world_agent_profile (or an explicit temporary seam) for the provisioning execution profile model.
 - Slices/triads to plan:
   - `WDAP0` (provisioning UX + derivation + dry-run determinism) and any split slices recommended below.
 
-### WS-D — World-agent provisioning profile isolation + guard rails
+### WDAP-PWS-world_agent_profile — World-agent provisioning profile isolation + guard rails
 - Goal: define and implement a safe provisioning-time execution profile (APT/dpkg allowed only when operator-invoked) without widening hardened runtime surfaces.
 - Owned surfaces (per `impact_map.md`):
   - `crates/world-agent/src/service.rs`
   - Any required profile selection / request guard rails implied by ADR-0030 + DR-0003
 - Dependencies:
-  - Requires WS-A to decide DR-0003 (profile selection + guard rails).
+  - Requires WDAP-PWS-contract to decide DR-0003 (profile selection + guard rails).
   - Must coordinate with `docs/project_management/packs/active/world_process_exec_tracing_parity/` (explicit conflict in `spec_manifest.md` / `impact_map.md`).
 - Slices/triads to plan:
   - A dedicated slice for provisioning profile isolation (recommended as its own seam due to security + cross-pack churn).
 
-### WS-E — Docs + installer + validation artifacts (keep operator guidance coherent)
+### WDAP-PWS-docs_validation — Docs + installer + validation artifacts (keep operator guidance coherent)
 - Goal: propagate the contract into operator docs, installer scripts, and validation artifacts with minimal merge risk.
 - Owned surfaces (per `impact_map.md`):
   - Installer scripts: `scripts/substrate/world-enable.sh`, `scripts/substrate/install-substrate.sh`
@@ -71,15 +71,15 @@
   - Cross-pack alignment: `docs/project_management/packs/implemented/world-deps-packages-bundles-contract/contract.md`
   - Validation artifacts to create: `manual_testing_playbook.md`, `smoke/linux-smoke.sh`, `smoke/macos-smoke.sh`, `smoke/windows-smoke.ps1`
 - Dependencies:
-  - Requires WS-A contract wording and WS-B/WS-C behavior semantics to be stable.
+  - Requires WDAP-PWS-contract wording and WDAP-PWS-runtime_fail_early/WDAP-PWS-provisioning_wiring behavior semantics to be stable.
   - Script edits must be narrowly scoped to reduce conflict with `docs/project_management/packs/draft/best-effort-distro-package-manager/`.
 - Slices/triads to plan:
   - A docs+validation slice (or two slices if needed): operator docs updates + smoke/manual playbook + CI checkpoint wiring once `tasks.json` triads exist.
 
 ## Sequencing + gates (full planning)
-- Gate G1 (contract determinism): land WS-A outputs (DR-0001/2/3 + `contract.md` tables) before finalizing any slice specs.
-- Gate G2 (runtime scope rule): decide the single “APT-backed items in-scope” rule for `deps current sync|install` before finalizing WS-B (`WDAP1`).
-- Gate G3 (provisioning isolation model): finalize provisioning execution profile selection + guard rails (WS-D) before finalizing WS-C (`WDAP0`) dispatch semantics.
+- Gate G1 (contract determinism): land WDAP-PWS-contract outputs (DR-0001/2/3 + `contract.md` tables) before finalizing any slice specs.
+- Gate G2 (runtime scope rule): decide the single “APT-backed items in-scope” rule for `deps current sync|install` before finalizing WDAP-PWS-runtime_fail_early (`WDAP1`).
+- Gate G3 (provisioning isolation model): finalize provisioning execution profile selection + guard rails (WDAP-PWS-world_agent_profile) before finalizing WDAP-PWS-provisioning_wiring (`WDAP0`) dispatch semantics.
 - Gate G4 (planning wiring): populate `tasks.json` with slice triads + deps; update `ci_checkpoint_plan.md` boundaries if the slice skeleton changes; ensure planning-lint would be satisfiable.
 
 ## Slice skeleton recommendations (required)
