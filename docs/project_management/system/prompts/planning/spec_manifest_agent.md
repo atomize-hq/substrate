@@ -3,7 +3,7 @@ You are the Spec Determination agent for <FEATURE>.
 
 Goal:
 - Read the ADR(s) for <FEATURE>.
-- Produce `<FEATURE_DIR>/spec_manifest.md` that deterministically selects the exact spec documents required for this body of work.
+- Produce `<FEATURE_DIR>/pre-planning/spec_manifest.md` that deterministically selects the exact spec documents required for this body of work.
 - Ensure every contract surface is explicitly owned by exactly one authoritative document.
 
 Constraints (non-negotiable):
@@ -26,7 +26,7 @@ Inputs:
 
 Output requirements:
 0) Allowed writes:
-   - Tracked (canonical): write/overwrite only `<FEATURE_DIR>/spec_manifest.md`.
+   - Tracked (canonical): write/overwrite only `<FEATURE_DIR>/pre-planning/spec_manifest.md`.
    - Logs (untracked; scratch + orchestration handoff): you may write under `<FEATURE_DIR>/logs/spec-manifest/**` only.
    - Do not edit ADRs or any other tracked files.
 1) Overlap execution model (required):
@@ -40,8 +40,8 @@ Output requirements:
          - the top surfaces and their intended owning docs,
          - any high-risk unknowns/follow-ups.
    - Phase B (canonical write):
-     - Write/overwrite: `<FEATURE_DIR>/spec_manifest.md` using the template structure, with an exhaustive surface inventory and a deterministic ownership matrix.
-2) In `spec_manifest.md`, include:
+     - Write/overwrite: `<FEATURE_DIR>/pre-planning/spec_manifest.md` using the template structure, with an exhaustive surface inventory and a deterministic ownership matrix.
+2) In `pre-planning/spec_manifest.md`, include:
    - The exact list of required spec docs (filenames under the feature dir).
    - A coverage matrix mapping every surface to an authoritative doc.
    - For each required spec doc, list the deterministic items it must define (schemas, defaults, precedence, error rules, invariants).
@@ -49,5 +49,5 @@ Output requirements:
      - Use feature-derived slice IDs per `TASK_TRIADS_AND_FEATURE_SETUP.md` (do not use generic `C0/C1/...`).
      - Canonical slice spec path: `<FEATURE_DIR>/slices/<SLICE_ID>/<SLICE_ID>-spec.md`.
      - If you require slice specs, `spec_manifest.md` must list them using the canonical path and consistent `<SLICE_ID>`s.
-3) If you discover missing/ambiguous ADR intent, record follow-ups inside `spec_manifest.md` under a “Follow-ups” section (not in ADRs).
+3) If you discover missing/ambiguous ADR intent, record follow-ups inside `pre-planning/spec_manifest.md` under a “Follow-ups” section (not in ADRs).
 ```

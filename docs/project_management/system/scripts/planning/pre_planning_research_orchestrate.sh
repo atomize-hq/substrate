@@ -112,6 +112,10 @@ FEATURE_DIR_ABS="${REPO_ROOT}/${FEATURE_DIR_REL}"
 [[ -d "${FEATURE_DIR_ABS}" ]] || die "FEATURE_DIR does not exist: ${FEATURE_DIR_RAW} (resolved to ${FEATURE_DIR_REL})"
 [[ -f "${FEATURE_DIR_ABS}/tasks.json" ]] || die "missing required tasks.json: ${FEATURE_DIR_REL}/tasks.json"
 
+PRE_PLANNING_DIR_REL="${FEATURE_DIR_REL}/pre-planning"
+PRE_PLANNING_DIR_ABS="${FEATURE_DIR_ABS}/pre-planning"
+mkdir -p "${PRE_PLANNING_DIR_ABS}"
+
 LOGS_DIR="${FEATURE_DIR_ABS}/logs"
 mkdir -p "${LOGS_DIR}"
 
@@ -262,23 +266,23 @@ commit_step_outputs() {
     case "${step}" in
         spec-manifest)
             msg="docs: pre-planning spec manifest"
-            allow=("${FEATURE_DIR_REL}/spec_manifest.md")
+            allow=("${PRE_PLANNING_DIR_REL}/spec_manifest.md")
             ;;
         impact-map)
             msg="docs: pre-planning impact map"
-            allow=("${FEATURE_DIR_REL}/impact_map.md")
+            allow=("${PRE_PLANNING_DIR_REL}/impact_map.md")
             ;;
         min-spec-draft)
             msg="docs: pre-planning minimal spec draft"
-            allow=("${FEATURE_DIR_REL}/minimal_spec_draft.md")
+            allow=("${PRE_PLANNING_DIR_REL}/minimal_spec_draft.md")
             ;;
         CI-checkpoint)
             msg="docs: pre-planning CI checkpoint plan"
-            allow=("${FEATURE_DIR_REL}/ci_checkpoint_plan.md" "${FEATURE_DIR_REL}/tasks.json")
+            allow=("${PRE_PLANNING_DIR_REL}/ci_checkpoint_plan.md" "${FEATURE_DIR_REL}/tasks.json")
             ;;
         workstream-triage)
             msg="docs: pre-planning workstream triage"
-            allow=("${FEATURE_DIR_REL}/workstream_triage.md")
+            allow=("${PRE_PLANNING_DIR_REL}/workstream_triage.md")
             ;;
         *)
             die "unknown step: ${step}"
@@ -434,7 +438,7 @@ cleanup_on_exit() {
     done
     append_summary ""
     append_summary "## Workstream triage"
-    append_summary "- Tracked: \`${FEATURE_DIR_REL}/workstream_triage.md\`"
+    append_summary "- Tracked: \`${PRE_PLANNING_DIR_REL}/workstream_triage.md\`"
     append_summary "- Draft (logs): \`${FEATURE_DIR_REL}/logs/workstream-triage/workstream_triage_draft.md\`"
     append_summary ""
 
@@ -444,14 +448,14 @@ cleanup_on_exit() {
     alignment_report_abs="${WRAPPER_DIR}/alignment_report.md"
     alignment_report_rel="${FEATURE_DIR_REL}/logs/pre_planning_wrapper/${RUN_TS}/alignment_report.md"
     alignment_report_stderr_rel="${FEATURE_DIR_REL}/logs/pre_planning_wrapper/${RUN_TS}/alignment_report.stderr.log"
-    tracked_alignment_abs="${FEATURE_DIR_ABS}/alignment_report.md"
-    tracked_alignment_rel="${FEATURE_DIR_REL}/alignment_report.md"
+    tracked_alignment_abs="${PRE_PLANNING_DIR_ABS}/alignment_report.md"
+    tracked_alignment_rel="${PRE_PLANNING_DIR_REL}/alignment_report.md"
     if [[ -x "${ALIGNMENT_REPORTER}" ]] || [[ -f "${ALIGNMENT_REPORTER}" ]]; then
         if python3 "${ALIGNMENT_REPORTER}" --feature-dir "${FEATURE_DIR_REL}" >"${alignment_report_abs}" 2>"${WRAPPER_DIR}/alignment_report.stderr.log"; then
             append_summary "## Alignment triage (wrapper-compiled)"
             append_summary ""
             append_summary "- Full report: \`${alignment_report_rel}\`"
-            append_summary "- Tracked (pack root): \`${tracked_alignment_rel}\`"
+            append_summary "- Tracked: \`${tracked_alignment_rel}\`"
             append_summary ""
             cat "${alignment_report_abs}" >>"${SUMMARY_PATH}"
             append_summary ""

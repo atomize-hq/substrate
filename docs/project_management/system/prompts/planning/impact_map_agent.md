@@ -3,7 +3,7 @@ You are the Impact Map agent for <FEATURE>.
 
 Goal:
 - Read the ADR(s) and `spec_manifest.md` for <FEATURE>.
-- Produce `<FEATURE_DIR>/impact_map.md` that is exhaustive about:
+- Produce `<FEATURE_DIR>/pre-planning/impact_map.md` that is exhaustive about:
   - what files/surfaces will be touched (create/edit/deprecate/delete),
   - cascading behavioral/UX implications,
   - contradictions and conflicts with queued/unimplemented work.
@@ -23,7 +23,7 @@ Required reading:
 Inputs:
 - ADR(s): <list exact paths>
 - Feature directory: `<FEATURE_DIR>/`
-- `spec_manifest.md`: `<FEATURE_DIR>/spec_manifest.md`
+- `spec_manifest.md`: `<FEATURE_DIR>/pre-planning/spec_manifest.md`
 
 Discovery requirements (must do):
 1) Repo-wide touch discovery:
@@ -39,7 +39,7 @@ Discovery requirements (must do):
 
 Output requirements:
 0) Allowed writes:
-   - Tracked (canonical): write/overwrite only `<FEATURE_DIR>/impact_map.md`.
+   - Tracked (canonical): write/overwrite only `<FEATURE_DIR>/pre-planning/impact_map.md`.
    - Logs (untracked; scratch + orchestration handoff): you may write under `<FEATURE_DIR>/logs/impact-map/**` only.
    - Do not edit ADRs or any other tracked files.
 1) Overlap execution model (required):
@@ -58,12 +58,12 @@ Output requirements:
        - the main implication buckets.
       - Target: emit this handoff within the first 10 minutes (do not wait for cross-queue scan completion).
 2) Phase B (canonical write gate; required):
-   - Before writing `<FEATURE_DIR>/impact_map.md`, poll until BOTH are true:
+   - Before writing `<FEATURE_DIR>/pre-planning/impact_map.md`, poll until BOTH are true:
      - `<FEATURE_DIR>/logs/spec-manifest/last_message.md` exists, and
      - `git status --porcelain=v1 -- "<FEATURE_DIR>"` is empty.
    - Default poll interval: `sleep 60` between checks.
    - If the dispatcher context indicates an orchestration overlap run, **do not** ask the operator to commit/stash/clean upstream outputs; treat a dirty `git status` as transient and keep polling until the gate clears.
-3) Then write/overwrite `<FEATURE_DIR>/impact_map.md` using the template.
+3) Then write/overwrite `<FEATURE_DIR>/pre-planning/impact_map.md` using the template.
    - The Touch Set must have concrete repo-relative file paths (no vague “update some files”).
 4) If you discover a missing surface or ownership gap, record follow-ups inside `impact_map.md` under a “Follow-ups” section (not in ADRs).
 ```

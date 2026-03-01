@@ -39,6 +39,33 @@ def read_lines(path: Path) -> Optional[list[str]]:
         return None
 
 
+def resolve_pack_doc(feature_dir_abs: Path, feature_dir_rel: str, filename: str) -> tuple[Path, str]:
+    """
+    Resolve a canonical pack artifact path.
+
+    Preferred location (new layout):
+      <FEATURE_DIR>/pre-planning/<filename>
+
+    Legacy fallback (older packs):
+      <FEATURE_DIR>/<filename>
+
+    Returns (absolute_path, repo_relative_path_str).
+    """
+    feature_dir_rel = feature_dir_rel.rstrip("/") + "/"
+
+    preferred_abs = (feature_dir_abs / "pre-planning" / filename).resolve()
+    preferred_rel = f"{feature_dir_rel}pre-planning/{filename}"
+
+    legacy_abs = (feature_dir_abs / filename).resolve()
+    legacy_rel = f"{feature_dir_rel}{filename}"
+
+    if preferred_abs.exists():
+        return preferred_abs, preferred_rel
+    if legacy_abs.exists():
+        return legacy_abs, legacy_rel
+    return preferred_abs, preferred_rel
+
+
 def find_heading(lines: list[str], predicate) -> Optional[int]:
     for i, line in enumerate(lines):
         if line.startswith("## "):
@@ -313,10 +340,12 @@ def main() -> int:
                 drift_item = Item(kind="misalignment", title=title, sources=[src, SourceRef(tasks_rel, 1)])
 
                 # Handoff-only critical heuristic for this drift: check if spec_manifest.md follow-ups mention it.
-                spec_manifest_rel = f"{feature_dir_rel}spec_manifest.md"
-                spec_manifest_lines = read_lines(feature_dir_abs / "spec_manifest.md") or []
-                minimal_spec_rel = f"{feature_dir_rel}minimal_spec_draft.md"
-                minimal_spec_lines = read_lines(feature_dir_abs / "minimal_spec_draft.md") or []
+                spec_manifest_abs, spec_manifest_rel = resolve_pack_doc(feature_dir_abs, feature_dir_rel, "spec_manifest.md")
+                spec_manifest_lines = read_lines(spec_manifest_abs) or []
+                minimal_spec_abs, minimal_spec_rel = resolve_pack_doc(
+                    feature_dir_abs, feature_dir_rel, "minimal_spec_draft.md"
+                )
+                minimal_spec_lines = read_lines(minimal_spec_abs) or []
 
                 drift_token = declared.rstrip("/")
                 # Heuristic: track whether drift is called out in canonical follow-ups sections.
@@ -353,12 +382,12 @@ def main() -> int:
                 misalignments.append(drift_item)
 
     # Cross-pack authority conflict (impact_map selection mismatch)
-    impact_map_abs = feature_dir_abs / "impact_map.md"
-    impact_map_rel = f"{feature_dir_rel}impact_map.md"
+    impact_map_abs, impact_map_rel = resolve_pack_doc(feature_dir_abs, feature_dir_rel, "impact_map.md")
     selections = extract_contract_authority_selections(impact_map_abs, impact_map_rel)
     for other_pack, opt, src in selections:
-        other_impact_rel = other_pack.rstrip("/") + "/impact_map.md"
-        other_impact_abs = (root / other_impact_rel).resolve()
+        other_pack_rel = other_pack.rstrip("/") + "/"
+        other_pack_abs = (root / other_pack_rel).resolve()
+        other_impact_abs, other_impact_rel = resolve_pack_doc(other_pack_abs, other_pack_rel, "impact_map.md")
         other_selections = extract_contract_authority_selections(other_impact_abs, other_impact_rel)
         # Find reciprocal selection where referenced pack mentions this pack.
         reciprocal = next(
@@ -372,18 +401,24 @@ def main() -> int:
                 f"Cross-pack contract authority conflict: `{feature_dir_rel}` selects Option {opt} "
                 f"but `{other_pack}` selects Option {other_opt} (hard decision: converge on one authoritative contract doc)."
             )
-            misalignments.append(Item(kind="misalignment", title=title, sources=[src, other_src]))
+                misalignments.append(Item(kind="misalignment", title=title, sources=[src, other_src]))
 
     # Consolidated follow-ups across canonical artifacts.
-    spec_manifest_lines = read_lines(feature_dir_abs / "spec_manifest.md") or []
-    impact_map_lines = read_lines(feature_dir_abs / "impact_map.md") or []
-    minimal_spec_lines = read_lines(feature_dir_abs / "minimal_spec_draft.md") or []
-    ci_plan_lines = read_lines(feature_dir_abs / "ci_checkpoint_plan.md") or []
-    triage_lines = read_lines(feature_dir_abs / "workstream_triage.md") or []
+    spec_manifest_abs, spec_manifest_rel = resolve_pack_doc(feature_dir_abs, feature_dir_rel, "spec_manifest.md")
+    impact_map_abs, impact_map_rel = resolve_pack_doc(feature_dir_abs, feature_dir_rel, "impact_map.md")
+    minimal_spec_abs, minimal_spec_rel = resolve_pack_doc(feature_dir_abs, feature_dir_rel, "minimal_spec_draft.md")
+    ci_plan_abs, ci_plan_rel = resolve_pack_doc(feature_dir_abs, feature_dir_rel, "ci_checkpoint_plan.md")
+    triage_abs, triage_rel = resolve_pack_doc(feature_dir_abs, feature_dir_rel, "workstream_triage.md")
+
+    spec_manifest_lines = read_lines(spec_manifest_abs) or []
+    impact_map_lines = read_lines(impact_map_abs) or []
+    minimal_spec_lines = read_lines(minimal_spec_abs) or []
+    ci_plan_lines = read_lines(ci_plan_abs) or []
+    triage_lines = read_lines(triage_abs) or []
 
     items.extend(
         extract_numbered_items_typed(
-            f"{feature_dir_rel}spec_manifest.md",
+            spec_manifest_rel,
             spec_manifest_lines,
             lambda h: h == "Follow-ups",
             re.compile(r"^\s*(\d+)\.\s+(.+?)\s*$"),
@@ -391,10 +426,10 @@ def main() -> int:
             dr_prefix_ok=True,
         )
     )
-    items.extend(extract_impact_map_followups(f"{feature_dir_rel}impact_map.md", impact_map_lines))
+    items.extend(extract_impact_map_followups(impact_map_rel, impact_map_lines))
     items.extend(
         extract_numbered_items_typed(
-            f"{feature_dir_rel}ci_checkpoint_plan.md",
+            ci_plan_rel,
             ci_plan_lines,
             lambda h: h == "Follow-ups",
             re.compile(r"^\s*(\d+)\)\s+(.+?)\s*$"),
@@ -404,7 +439,7 @@ def main() -> int:
     )
     items.extend(
         extract_numbered_items_typed(
-            f"{feature_dir_rel}minimal_spec_draft.md",
+            minimal_spec_rel,
             minimal_spec_lines,
             lambda h: h == "Follow-ups for full planning",
             re.compile(r"^\s*(\d+)[\.\)]\s+(.+?)\s*$"),
@@ -414,7 +449,7 @@ def main() -> int:
     )
     items.extend(
         extract_triage_bullets(
-            f"{feature_dir_rel}workstream_triage.md",
+            triage_rel,
             triage_lines,
             "Risks + unknowns (must resolve during full planning)",
             "risk",
@@ -422,13 +457,13 @@ def main() -> int:
     )
     items.extend(
         extract_triage_bullets(
-            f"{feature_dir_rel}workstream_triage.md",
+            triage_rel,
             triage_lines,
             "Follow-ups",
             "followup",
         )
     )
-    items.extend(extract_gate_items(f"{feature_dir_rel}workstream_triage.md", triage_lines))
+    items.extend(extract_gate_items(triage_rel, triage_lines))
 
     # Include wrapper-detected misalignments as gates in the consolidated list.
     consolidated: list[Item] = []

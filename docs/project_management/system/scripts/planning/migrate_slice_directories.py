@@ -323,7 +323,9 @@ def main(argv: list[str]) -> int:
         _write_json(tasks_json, rewritten)
     report["tasks_json_rewrites"] = changed
 
-    spec_manifest = feature_dir / "spec_manifest.md"
+    spec_manifest = feature_dir / "pre-planning" / "spec_manifest.md"
+    if not spec_manifest.exists():
+        spec_manifest = feature_dir / "spec_manifest.md"
     report["spec_manifest_rewrites"] = _rewrite_spec_manifest(spec_manifest, mapping, dry_run=False)
 
     report["markdown_rewrites"] = _rewrite_markdown_tree(feature_dir, mapping, dry_run=False)

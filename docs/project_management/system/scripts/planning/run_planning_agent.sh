@@ -21,11 +21,11 @@ Optional:
   --help                       Show this help
 
 Contract:
-  - spec_manifest -> <FEATURE_DIR>/spec_manifest.md
-  - impact_map    -> <FEATURE_DIR>/impact_map.md
-  - min_spec_draft -> <FEATURE_DIR>/minimal_spec_draft.md
-  - ci_checkpoint  -> <FEATURE_DIR>/ci_checkpoint_plan.md (and sometimes <FEATURE_DIR>/tasks.json)
-  - workstream_triage -> <FEATURE_DIR>/workstream_triage.md
+  - spec_manifest -> <FEATURE_DIR>/pre-planning/spec_manifest.md
+  - impact_map    -> <FEATURE_DIR>/pre-planning/impact_map.md
+  - min_spec_draft -> <FEATURE_DIR>/pre-planning/minimal_spec_draft.md
+  - ci_checkpoint  -> <FEATURE_DIR>/pre-planning/ci_checkpoint_plan.md (and sometimes <FEATURE_DIR>/tasks.json)
+  - workstream_triage -> <FEATURE_DIR>/pre-planning/workstream_triage.md
 
 Notes:
   - Uses roots from: `pm_paths.py` (sibling in this directory)
@@ -265,6 +265,10 @@ FEATURE_DIR_REL="${FEATURE_DIR_REL%/}"
 FEATURE_DIR_ABS="${REPO_ROOT}/${FEATURE_DIR_REL}"
 [[ -d "${FEATURE_DIR_ABS}" ]] || die "FEATURE_DIR does not exist or is not a directory: ${FEATURE_DIR_RAW} (resolved to ${FEATURE_DIR_REL})"
 
+PRE_PLANNING_DIR_REL="${FEATURE_DIR_REL}/pre-planning"
+PRE_PLANNING_DIR_ABS="${FEATURE_DIR_ABS}/pre-planning"
+mkdir -p "${PRE_PLANNING_DIR_ABS}"
+
 TASKS_JSON_ABS="${FEATURE_DIR_ABS}/tasks.json"
 [[ -f "${TASKS_JSON_ABS}" ]] || die "missing required tasks.json: ${FEATURE_DIR_REL}/tasks.json"
 
@@ -276,32 +280,32 @@ case "${AGENT}" in
     spec_manifest)
         STEP_DIR_NAME="spec-manifest"
         PROMPT_FILE_REL="docs/project_management/system/prompts/planning/spec_manifest_agent.md"
-        ALLOWED_OUTPUTS_REL=("${FEATURE_DIR_REL}/spec_manifest.md")
-        REQUIRED_OUTPUTS_REL=("${FEATURE_DIR_REL}/spec_manifest.md")
+        ALLOWED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/spec_manifest.md")
+        REQUIRED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/spec_manifest.md")
         ;;
     impact_map)
         STEP_DIR_NAME="impact-map"
         PROMPT_FILE_REL="docs/project_management/system/prompts/planning/impact_map_agent.md"
-        ALLOWED_OUTPUTS_REL=("${FEATURE_DIR_REL}/impact_map.md")
-        REQUIRED_OUTPUTS_REL=("${FEATURE_DIR_REL}/impact_map.md")
+        ALLOWED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/impact_map.md")
+        REQUIRED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/impact_map.md")
         ;;
     min_spec_draft)
         STEP_DIR_NAME="min-spec-draft"
         PROMPT_FILE_REL="docs/project_management/system/prompts/planning/min_spec_draft_agent.md"
-        ALLOWED_OUTPUTS_REL=("${FEATURE_DIR_REL}/minimal_spec_draft.md")
-        REQUIRED_OUTPUTS_REL=("${FEATURE_DIR_REL}/minimal_spec_draft.md")
+        ALLOWED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/minimal_spec_draft.md")
+        REQUIRED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/minimal_spec_draft.md")
         ;;
     ci_checkpoint)
         STEP_DIR_NAME="CI-checkpoint"
         PROMPT_FILE_REL="docs/project_management/system/prompts/planning/ci_checkpoint_agent.md"
-        ALLOWED_OUTPUTS_REL=("${FEATURE_DIR_REL}/ci_checkpoint_plan.md" "${FEATURE_DIR_REL}/tasks.json")
-        REQUIRED_OUTPUTS_REL=("${FEATURE_DIR_REL}/ci_checkpoint_plan.md")
+        ALLOWED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/ci_checkpoint_plan.md" "${FEATURE_DIR_REL}/tasks.json")
+        REQUIRED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/ci_checkpoint_plan.md")
         ;;
     workstream_triage)
         STEP_DIR_NAME="workstream-triage"
         PROMPT_FILE_REL="docs/project_management/system/prompts/planning/workstream_triage_agent.md"
-        ALLOWED_OUTPUTS_REL=("${FEATURE_DIR_REL}/workstream_triage.md")
-        REQUIRED_OUTPUTS_REL=("${FEATURE_DIR_REL}/workstream_triage.md")
+        ALLOWED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/workstream_triage.md")
+        REQUIRED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/workstream_triage.md")
         ;;
     *)
         die "unknown --agent: ${AGENT} (expected spec_manifest|impact_map|min_spec_draft|ci_checkpoint|workstream_triage)"
@@ -421,7 +425,10 @@ collect_adrs() {
         return 0
     fi
 
-	    local spec_manifest_file="${FEATURE_DIR_ABS}/spec_manifest.md"
+	    local spec_manifest_file="${PRE_PLANNING_DIR_ABS}/spec_manifest.md"
+	    if [[ ! -f "${spec_manifest_file}" ]]; then
+	        spec_manifest_file="${FEATURE_DIR_ABS}/spec_manifest.md"
+	    fi
 	    if [[ -f "${spec_manifest_file}" ]]; then
 	        local -a ADR_PATHS_SPEC=()
 	        while IFS= read -r p; do

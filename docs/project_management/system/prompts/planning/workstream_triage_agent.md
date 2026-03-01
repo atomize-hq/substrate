@@ -8,20 +8,20 @@ Goal:
 Constraints (non-negotiable):
 - Do not write production code.
 - Do not edit ADR files.
-- Do not modify any tracked pack files *except* `<FEATURE_DIR>/workstream_triage.md`.
+- Do not modify any tracked pack files *except* `<FEATURE_DIR>/pre-planning/workstream_triage.md`.
 - Do not call `update_plan` or include tool-meta commentary in your output; do the work.
 
 Required reading:
 - `WORKSTREAM_TRIAGE_AND_LIFT_DECISIONS.md`
 - `docs/project_management/system/standards/planning/PLANNING_WORK_LIFT_ADVISORY.md`
-- `<FEATURE_DIR>/spec_manifest.md`
-- `<FEATURE_DIR>/impact_map.md` (if it exists; otherwise use upstream handoff/scratch in Phase A)
-- `<FEATURE_DIR>/minimal_spec_draft.md` (if it exists; otherwise use upstream handoff/scratch in Phase A)
-- `<FEATURE_DIR>/ci_checkpoint_plan.md` (if it exists)
+- `<FEATURE_DIR>/pre-planning/spec_manifest.md`
+- `<FEATURE_DIR>/pre-planning/impact_map.md` (if it exists; otherwise use upstream handoff/scratch in Phase A)
+- `<FEATURE_DIR>/pre-planning/minimal_spec_draft.md` (if it exists; otherwise use upstream handoff/scratch in Phase A)
+- `<FEATURE_DIR>/pre-planning/ci_checkpoint_plan.md` (if it exists)
 - `<FEATURE_DIR>/tasks.json`
 
 Allowed writes:
-- Tracked (canonical): `<FEATURE_DIR>/workstream_triage.md`
+- Tracked (canonical): `<FEATURE_DIR>/pre-planning/workstream_triage.md`
 - Logs only (untracked): you may write under `<FEATURE_DIR>/logs/workstream-triage/**` only.
 - Do not edit any other tracked files.
 
@@ -64,7 +64,7 @@ Overlap execution model (required):
   - Default poll interval: `sleep 60` between checks.
   - If the dispatcher context indicates an orchestration overlap run, **do not** ask the operator to commit/stash/clean upstream outputs; treat a dirty `git status` as transient and keep polling until the gate clears.
   - Once the gate clears:
-    - Write/overwrite the tracked artifact: `<FEATURE_DIR>/workstream_triage.md`
+    - Write/overwrite the tracked artifact: `<FEATURE_DIR>/pre-planning/workstream_triage.md`
       - This should be a polished promotion of the draft, not a raw scratchpad.
       - Keep it concise and actionable (headings + bullets; no prose essays).
 
@@ -76,7 +76,7 @@ Draft requirements (must be explicit and actionable):
      - owned surfaces (files/components/contracts),
      - dependencies (which other workstreams must land first),
      - proposed slices/triads to create during full planning.
-   - If `<FEATURE_DIR>/minimal_spec_draft.md` contains `## Draft slice skeleton (pre-planning only)`, treat it as the starting point for slice naming/IDs.
+   - If `<FEATURE_DIR>/pre-planning/minimal_spec_draft.md` contains `## Draft slice skeleton (pre-planning only)`, treat it as the starting point for slice naming/IDs.
 2) Sequencing + gates:
    - Hard ordering constraints (e.g., “must land protocol spec before implementation slices”).
    - CI checkpoint implications (if applicable).
@@ -89,15 +89,15 @@ Draft requirements (must be explicit and actionable):
      - `<FEATURE_DIR>/logs/impact-map/last_message.md`
      - `<FEATURE_DIR>/logs/min-spec-draft/last_message.md`
      - `<FEATURE_DIR>/logs/CI-checkpoint/last_message.md`
-   - Reference the canonical artifacts you relied on (`spec_manifest.md`, `impact_map.md`, `minimal_spec_draft.md`).
+   - Reference the canonical artifacts you relied on (`pre-planning/spec_manifest.md`, `pre-planning/impact_map.md`, `pre-planning/minimal_spec_draft.md`).
 5) Slice skeleton recommendations (required):
    - If lift/impact indicates the slice skeleton should change (more/fewer slices, split/merge, different seam boundaries):
-     - Propose explicit edits as recommendations inside the tracked artifact (`<FEATURE_DIR>/workstream_triage.md`), not by editing `<FEATURE_DIR>/minimal_spec_draft.md`.
+     - Propose explicit edits as recommendations inside the tracked artifact (`<FEATURE_DIR>/pre-planning/workstream_triage.md`), not by editing `<FEATURE_DIR>/pre-planning/minimal_spec_draft.md`.
      - Be concrete: list `ADD`, `SPLIT`, `MERGE`, `RENAME` actions that refer to slice ids and describe the new boundaries.
    - If you recommend no change, say so explicitly.
 
 Output:
 - Ensure `<FEATURE_DIR>/logs/workstream-triage/workstream_triage_draft.md` is readable and structured (headings + bullets; no prose essays).
-- Ensure `<FEATURE_DIR>/workstream_triage.md` exists and is readable/structured.
+- Ensure `<FEATURE_DIR>/pre-planning/workstream_triage.md` exists and is readable/structured.
 - Optionally write/overwrite: `<FEATURE_DIR>/logs/workstream-triage/handoff.md` as a short “executive summary” for the operator.
 ```

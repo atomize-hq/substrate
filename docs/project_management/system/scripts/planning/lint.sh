@@ -79,12 +79,28 @@ require_path() {
     fi
 }
 
+require_any_path() {
+    local label="$1"
+    shift
+    local p
+    for p in "$@"; do
+        if [[ -e "$p" ]]; then
+            return 0
+        fi
+    done
+    echo "Missing required path (${label}); expected one of:" >&2
+    for p in "$@"; do
+        echo "  - $p" >&2
+    done
+    exit 1
+}
+
 require_path "${FEATURE_DIR}/plan.md"
 require_path "${FEATURE_DIR}/tasks.json"
 require_path "${FEATURE_DIR}/session_log.md"
 require_path "${FEATURE_DIR}/kickoff_prompts"
-require_path "${FEATURE_DIR}/spec_manifest.md"
-require_path "${FEATURE_DIR}/impact_map.md"
+require_any_path "spec_manifest.md" "${FEATURE_DIR}/pre-planning/spec_manifest.md" "${FEATURE_DIR}/spec_manifest.md"
+require_any_path "impact_map.md" "${FEATURE_DIR}/pre-planning/impact_map.md" "${FEATURE_DIR}/impact_map.md"
 
 FEATURE_DIR_RELPATH="$(python3 "${PLANNING_SCRIPTS_DIR}/pm_paths.py" resolve-feature-dir --feature-dir "${FEATURE_DIR}")"
 pm_roots_json="$(python3 "${PLANNING_SCRIPTS_DIR}/pm_paths.py" print-roots)"
@@ -98,7 +114,7 @@ automation_enabled="$(jq -r '.meta.automation.enabled // false' "${FEATURE_DIR}/
 cross_platform_enabled="$(jq -r '.meta.cross_platform // false' "${FEATURE_DIR}/tasks.json")"
 
 if [[ "${schema_version}" -ge 3 && "${automation_enabled}" == "true" && "${cross_platform_enabled}" == "true" ]]; then
-    require_path "${FEATURE_DIR}/ci_checkpoint_plan.md"
+    require_any_path "ci_checkpoint_plan.md" "${FEATURE_DIR}/pre-planning/ci_checkpoint_plan.md" "${FEATURE_DIR}/ci_checkpoint_plan.md"
 fi
 
 if [[ -d "${FEATURE_DIR}/smoke" ]]; then

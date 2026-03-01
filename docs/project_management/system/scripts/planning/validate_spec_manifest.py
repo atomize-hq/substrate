@@ -50,8 +50,8 @@ def main() -> int:
     ap.add_argument("--feature-dir", required=True, help="docs/project_management/packs/<bucket>/<feature>")
     ap.add_argument(
         "--spec-manifest",
-        default="spec_manifest.md",
-        help="Path to spec_manifest.md (absolute or feature-dir-relative). Default: spec_manifest.md",
+        default="pre-planning/spec_manifest.md",
+        help="Path to spec_manifest.md (absolute or feature-dir-relative). Default: pre-planning/spec_manifest.md",
     )
     args = ap.parse_args()
 
@@ -64,7 +64,15 @@ def main() -> int:
         spec_manifest_path = feature_dir / spec_manifest_path
 
     if not spec_manifest_path.exists():
-        _fail(f"missing spec manifest: {spec_manifest_path}")
+        # Legacy fallback for older packs that store artifacts at the feature-dir root.
+        if args.spec_manifest == "pre-planning/spec_manifest.md":
+            legacy = feature_dir / "spec_manifest.md"
+            if legacy.exists():
+                spec_manifest_path = legacy
+            else:
+                _fail(f"missing spec manifest: {spec_manifest_path} (also missing legacy: {legacy})")
+        else:
+            _fail(f"missing spec manifest: {spec_manifest_path}")
 
     text = spec_manifest_path.read_text(encoding="utf-8")
     raw_paths = _extract_required_doc_paths(text)

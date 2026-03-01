@@ -263,8 +263,8 @@ def main() -> int:
     ap.add_argument("--feature-dir", required=True, help="docs/project_management/packs/<bucket>/<feature>")
     ap.add_argument(
         "--ci-checkpoint-plan",
-        default="ci_checkpoint_plan.md",
-        help="Path to ci_checkpoint_plan.md (absolute or feature-dir-relative). Default: ci_checkpoint_plan.md",
+        default="pre-planning/ci_checkpoint_plan.md",
+        help="Path to ci_checkpoint_plan.md (absolute or feature-dir-relative). Default: pre-planning/ci_checkpoint_plan.md",
     )
     args = ap.parse_args()
 
@@ -276,7 +276,15 @@ def main() -> int:
     if not plan_path.is_absolute():
         plan_path = feature_dir / plan_path
     if not plan_path.exists():
-        _fail(f"missing ci checkpoint plan: {plan_path}")
+        # Legacy fallback for older packs that store artifacts at the feature-dir root.
+        if args.ci_checkpoint_plan == "pre-planning/ci_checkpoint_plan.md":
+            legacy = feature_dir / "ci_checkpoint_plan.md"
+            if legacy.exists():
+                plan_path = legacy
+            else:
+                _fail(f"missing ci checkpoint plan: {plan_path} (also missing legacy: {legacy})")
+        else:
+            _fail(f"missing ci checkpoint plan: {plan_path}")
 
     text = plan_path.read_text(encoding="utf-8")
     plan = _extract_json_block(text)
