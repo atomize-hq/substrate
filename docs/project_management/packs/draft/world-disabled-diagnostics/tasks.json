@@ -12,6 +12,9 @@
       "macos",
       "windows"
     ],
+    "checkpoint_boundaries": [
+      "WDD2"
+    ],
     "automation": {
       "enabled": true,
       "orchestration_branch": "feat/world-disabled-diagnostics"
