@@ -440,17 +440,35 @@ cleanup_on_exit() {
 
     # Wrapper-detected misalignment triage + consolidated follow-ups (report-only; no edits).
     local alignment_report_abs alignment_report_rel alignment_report_stderr_rel
+    local tracked_alignment_abs tracked_alignment_rel
     alignment_report_abs="${WRAPPER_DIR}/alignment_report.md"
     alignment_report_rel="${FEATURE_DIR_REL}/logs/pre_planning_wrapper/${RUN_TS}/alignment_report.md"
     alignment_report_stderr_rel="${FEATURE_DIR_REL}/logs/pre_planning_wrapper/${RUN_TS}/alignment_report.stderr.log"
+    tracked_alignment_abs="${FEATURE_DIR_ABS}/alignment_report.md"
+    tracked_alignment_rel="${FEATURE_DIR_REL}/alignment_report.md"
     if [[ -x "${ALIGNMENT_REPORTER}" ]] || [[ -f "${ALIGNMENT_REPORTER}" ]]; then
         if python3 "${ALIGNMENT_REPORTER}" --feature-dir "${FEATURE_DIR_REL}" >"${alignment_report_abs}" 2>"${WRAPPER_DIR}/alignment_report.stderr.log"; then
             append_summary "## Alignment triage (wrapper-compiled)"
             append_summary ""
             append_summary "- Full report: \`${alignment_report_rel}\`"
+            append_summary "- Tracked (pack root): \`${tracked_alignment_rel}\`"
             append_summary ""
             cat "${alignment_report_abs}" >>"${SUMMARY_PATH}"
             append_summary ""
+
+            # On successful runs, also persist the report as a tracked pack artifact so it doesn't get lost in logs.
+            # This is report-only (no rewriting of other pack docs) but is intentionally committed.
+            if [[ "${rc}" -eq 0 ]]; then
+                cp "${alignment_report_abs}" "${tracked_alignment_abs}"
+                if [[ -n "$(git status --porcelain=v1 -- "${tracked_alignment_rel}")" ]]; then
+                    git add -- "${tracked_alignment_rel}"
+                    if ! git diff --cached --quiet; then
+                        if git commit -m "docs: pre-planning alignment report" >/dev/null; then
+                            echo "Committed: wrapper alignment report"
+                        fi
+                    fi
+                fi
+            fi
         else
             append_summary "## Alignment triage (wrapper-compiled)"
             append_summary ""

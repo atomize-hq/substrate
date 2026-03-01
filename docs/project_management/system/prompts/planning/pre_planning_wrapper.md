@@ -38,6 +38,7 @@ START_AT=""              # optional: spec-manifest|impact-map|min-spec-draft|CI-
   - `$FEATURE_DIR/logs/pre_planning_wrapper/<UTC_TS>/summary.md`
   - `$FEATURE_DIR/logs/pre_planning_wrapper/<UTC_TS>/alignment_report.md`
   - `$FEATURE_DIR/logs/pre_planning_wrapper/<UTC_TS>/alignment_report.stderr.log` (if the alignment report failed to generate)
+  - `$FEATURE_DIR/alignment_report.md` (tracked pack artifact; if present)
   - `$FEATURE_DIR/logs/<step>/runs/<RUN_TS>/last_message.run.md`
   - `$FEATURE_DIR/logs/<step>/stderr.log`
 
@@ -48,5 +49,6 @@ Return a concise summary that includes:
 - Where the tracked workstream triage artifact is (`$FEATURE_DIR/workstream_triage.md`)
 - Where the workstream triage draft/evidence is (`$FEATURE_DIR/logs/workstream-triage/workstream_triage_draft.md`)
 - Where the wrapper-compiled alignment + consolidated follow-ups report is (`$FEATURE_DIR/logs/pre_planning_wrapper/<UTC_TS>/alignment_report.md`) and any “hard gates” it flags
+- Where the tracked pack alignment report is (`$FEATURE_DIR/alignment_report.md`)
 - Any follow-ups that must be resolved in full planning
 ```
