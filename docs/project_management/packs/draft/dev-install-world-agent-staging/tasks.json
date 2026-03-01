@@ -1,0 +1,26 @@
+{
+  "meta": {
+    "schema_version": 4,
+    "cross_platform": true,
+    "ci_parity_platforms_required": [
+      "linux",
+      "macos",
+      "windows"
+    ],
+    "behavior_platforms_required": [
+      "linux",
+      "macos",
+      "windows"
+    ],
+    "automation": {
+      "enabled": true,
+      "orchestration_branch": "feat/dev-install-world-agent-staging"
+    },
+    "slice_spec_version": 2,
+    "feature": "dev-install-world-agent-staging",
+    "adr_paths": [
+      "docs/project_management/adrs/draft/ADR-0035-summoning-wombat.md"
+    ]
+  },
+  "tasks": []
+}
