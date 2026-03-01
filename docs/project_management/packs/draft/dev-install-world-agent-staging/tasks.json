@@ -8,9 +8,10 @@
       "windows"
     ],
     "behavior_platforms_required": [
-      "linux",
-      "macos",
-      "windows"
+      "linux"
+    ],
+    "checkpoint_boundaries": [
+      "DIWAS1"
     ],
     "automation": {
       "enabled": true,
