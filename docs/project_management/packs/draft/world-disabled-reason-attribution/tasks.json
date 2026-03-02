@@ -12,6 +12,9 @@
       "macos",
       "windows"
     ],
+    "checkpoint_boundaries": [
+      "WDRA0"
+    ],
     "automation": {
       "enabled": true,
       "orchestration_branch": "feat/world-disabled-reason-attribution"
