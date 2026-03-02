@@ -12,6 +12,10 @@
       "macos",
       "windows"
     ],
+    "checkpoint_boundaries": [
+      "DHO0",
+      "DHO1"
+    ],
     "automation": {
       "enabled": true,
       "orchestration_branch": "feat/make-doctor-health-output-explain-why"
