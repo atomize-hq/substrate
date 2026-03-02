@@ -52,34 +52,49 @@ All other PWS are dynamic and pack-specific.
 
 To avoid regex-parsing prose forever, `pre-planning/workstream_triage.md` MUST include a small machine-readable block enumerating PWS nodes, dependencies, and owned outputs.
 
-Recommended format: YAML.
+Recommended format: embedded JSON (dependency-free) with deterministic markers.
 
 Example:
-```yaml
-pws_index:
-  - id: WDAP-PWS-contract
-    role: contract
-    depends_on: []
-    owns:
-      - contract.md
-      - decision_register.md
-  - id: WDAP-PWS-world_agent_profile
-    role: implementation
-    depends_on: [WDAP-PWS-contract]
-    owns:
-      - slices/WDAP2/WDAP2-spec.md
-  - id: WDAP-PWS-tasks_checkpoints
-    role: tasks_checkpoints
-    depends_on: [WDAP-PWS-contract]
-    owns:
-      - tasks.json
-      - plan.md
+````md
+<!-- PM_PWS_INDEX:BEGIN -->
+```json
+{
+  "pws_index_version": 1,
+  "slice_prefix": "WDAP",
+  "pws": [
+    {
+      "id": "WDAP-PWS-contract",
+      "role": "contract",
+      "depends_on": [],
+      "assumes": [],
+      "owns": ["contract.md", "decision_register.md"]
+    },
+    {
+      "id": "WDAP-PWS-world_agent_profile",
+      "role": "implementation",
+      "depends_on": ["WDAP-PWS-contract"],
+      "assumes": [],
+      "owns": ["slices/WDAP2/WDAP2-spec.md"]
+    },
+    {
+      "id": "WDAP-PWS-tasks_checkpoints",
+      "role": "tasks_checkpoints",
+      "depends_on": ["WDAP-PWS-contract"],
+      "assumes": [],
+      "owns": ["tasks.json", "plan.md"]
+    }
+  ]
+}
 ```
+<!-- PM_PWS_INDEX:END -->
+````
 
 Notes:
+- The JSON block is the canonical input for orchestration (not the prose headings).
 - `depends_on` MUST encode **hard dependencies only**.
 - Non-blocking ordering preferences go in an optional `assumes:` list (not used to schedule).
 - `owns` is repo-relative *within the pack root* (e.g., `contract.md`, `slices/...`, `tasks.json`).
+- `owns` MUST be an exclusive set across PWS if we want safe parallel execution; `tasks.json` MUST be owned only by `<PREFIX>-PWS-tasks_checkpoints`.
 
 ### D4 — Default DAG shape is “star-ish”, not a chain
 
@@ -145,23 +160,65 @@ Operator decision (via the orchestrator):
 - **Deny the change**:
   - Keep the draft in logs only; no tracked edits occur.
 
-## Implementation outline (MVP)
+## Incremental implementation plan (MVP → parallelism)
 
-1) Enforce `pws_index` block emission in triage prompt + optional mechanical validator.
-2) Add a PWS runner:
-   - `make pm-run-pws FEATURE_DIR=... PWS_ID=...`
-   - Strict allowlist derived from `pws_index[*].owns`
-3) Add a PWS orchestrator:
-   - Builds a runnable set from `pws_index` + `depends_on`
-   - Enforces concurrency rules (`owns` disjoint, single-writer constraints)
-   - Incorporates `pre-planning/alignment_report.md` as required gate input
-4) Add allowlist expansion handling:
-   - Detect `allowlist_request.yaml` + draft artifacts
-   - Pause for operator decision (approve/deny/apply)
+### Step 0 — Lock the interface (triage output contract)
+
+- Update the triage agent contract so every `pre-planning/workstream_triage.md` contains:
+  - required PWS IDs (`<PREFIX>-PWS-contract`, `<PREFIX>-PWS-tasks_checkpoints`), and
+  - an embedded JSON `PM_PWS_INDEX` block (see D3).
+
+### Step 1 — Add a mechanical validator (non-invasive)
+
+- Add `validate_pws_index.py` (or equivalent) that:
+  - extracts and parses the `PM_PWS_INDEX` JSON block,
+  - validates ID formats, required PWS presence, and basic schema,
+  - checks that `owns` paths are pack-relative,
+  - checks `tasks.json` is owned by exactly one PWS (`<PREFIX>-PWS-tasks_checkpoints`).
+- Hook into `make planning-lint FEATURE_DIR=...` as a non-blocking advisory first (then promote to required when stable).
+
+### Step 2 — Add a scheduler dry-run
+
+- Add `make pm-pws-plan FEATURE_DIR=...` that prints:
+  - a topo-ordered plan (by hard deps),
+  - “parallel layers” (runnable sets) subject to `owns` disjointness and single-writer rules.
+
+### Step 3 — Add a single-PWS runner (strict allowlists)
+
+- Add `make pm-run-pws FEATURE_DIR=... PWS_ID=...`:
+  - creates `<PACK>/logs/pws/<PWS_ID>/...` (drafts only),
+  - enforces tracked-write allowlist = `pws_index[*].owns` for the selected PWS,
+  - executes a role-specific prompt (start with `contract` and `tasks_checkpoints`; keep others generic initially).
+
+### Step 4 — Add a sequential full-planning orchestrator
+
+- Add `make pm-full-planning-orchestrate FEATURE_DIR=...`:
+  - runs `<PREFIX>-PWS-contract` first,
+  - runs remaining runnable PWS sequentially (MVP),
+  - runs `<PREFIX>-PWS-tasks_checkpoints` last,
+  - treats `pre-planning/alignment_report.md` as required input and routes:
+    - “Gates / hard decisions” + “Decision Register required” → `<PREFIX>-PWS-contract`
+    - “CI/checkpoint wiring gaps” → `<PREFIX>-PWS-tasks_checkpoints`
+
+### Step 5 — Add operator-controlled allowlist expansion + integration-apply
+
+- Standardize logs-only artifacts when a PWS needs to edit a tracked file outside `owns`:
+  - `<PACK>/logs/pws/<PWS_ID>/allowlist_request.json` (requested paths + reason)
+  - `<PACK>/logs/pws/<PWS_ID>/draft.patch` and/or `<PACK>/logs/pws/<PWS_ID>/draft/<path>`
+- Orchestrator pauses for operator decision:
+  - approve allowlist expansion (and optionally update touch set + re-run `pm-lift-pack`),
+  - deny expansion but accept the change via “integration apply” step,
+  - deny the change entirely (keep draft in logs only).
+
+### Step 6 — Add safe parallelism (worktrees)
+
+- Only after Step 4/5 is stable:
+  - run disjoint PWS concurrently using git worktrees/branches,
+  - route shared-file work to an explicit integration/apply step,
+  - preserve single-writer invariants (`tasks.json`, often `plan.md`).
 
 ## Open questions (explicitly not decided yet)
 
 - Exact “integration apply” mechanics:
   - manual operator step vs orchestrator-assisted patch apply vs a dedicated integration PWS.
 - Exact locations/names of prompts for each `role` (contract, slice_spec, docs_validation, tasks_checkpoints, etc.).
-

@@ -75,6 +75,9 @@ Draft requirements (must be explicit and actionable):
    - Every proposed workstream MUST have a stable ID in the heading:
      - Format: `<SLICE_PREFIX>-PWS-<slug>`
      - Example: `WDAP-PWS-contract`
+   - Minimum required PWS (must exist in the artifact):
+     - `<SLICE_PREFIX>-PWS-contract`
+     - `<SLICE_PREFIX>-PWS-tasks_checkpoints` (treat as the single writer for `tasks.json`)
    - `SLICE_PREFIX` source of truth:
      - Use the slice prefix explicitly stated in `<FEATURE_DIR>/pre-planning/minimal_spec_draft.md` (Draft slice skeleton section).
      - Treat the prefix as **stable once pre-planning is done**; if you believe it should change, record it as a gate/risk instead of renaming it.
@@ -93,7 +96,27 @@ Draft requirements (must be explicit and actionable):
        - `docs_validation`
        - `implementation_seams`
      - If a workstream is focused on authoring a specific slice spec, use: `slice_spec_<slice_id_lower>` (e.g., `slice_spec_wdap0`).
-1) Proposed planning workstreams (PWS):
+1) Machine-readable PWS index (PM_PWS_INDEX) (required):
+   - Embed exactly one fenced JSON block in the tracked artifact (`<FEATURE_DIR>/pre-planning/workstream_triage.md`) using these markers:
+     - `<!-- PM_PWS_INDEX:BEGIN -->`
+     - `<!-- PM_PWS_INDEX:END -->`
+   - The JSON must be in a fenced code block:
+     - start fence: ```json
+     - end fence: ```
+   - The fenced JSON block MUST be valid JSON and MUST include:
+     - `pws_index_version` (integer; set to `1`)
+     - `slice_prefix` (string; exactly the `<SLICE_PREFIX>` used in your PWS IDs)
+     - `pws` (array of objects), where each object includes:
+       - `id` (string; PWS id; must match a `### <PWS_ID> — ...` heading in this document)
+       - `role` (string; e.g., `contract`, `tasks_checkpoints`, `slice_spec`, `docs_validation`, `implementation`)
+       - `depends_on` (array of PWS ids; **hard dependencies only**)
+       - `assumes` (array of strings; soft ordering / assumptions; may be empty)
+       - `owns` (array of strings; pack-relative paths of tracked files this PWS intends to create/edit during full planning)
+   - Ownership constraints (for safe future parallelism):
+     - `tasks.json` MUST appear in `owns` for `<SLICE_PREFIX>-PWS-tasks_checkpoints` only.
+     - Prefer disjoint `owns` sets across PWS; if two PWS must touch the same tracked file, encode that explicitly as a dependency (or flag it as a sequencing risk).
+   - The `pws` list must include **every** PWS you describe in the prose sections.
+2) Proposed planning workstreams (PWS):
    - 2–8 named workstreams (or fewer if the scope is small).
    - For each:
      - goal,
@@ -101,20 +124,20 @@ Draft requirements (must be explicit and actionable):
      - dependencies (which other workstreams must land first),
      - proposed slices/triads to create during full planning.
    - If `<FEATURE_DIR>/pre-planning/minimal_spec_draft.md` contains `## Draft slice skeleton (pre-planning only)`, treat it as the starting point for slice naming/IDs.
-2) Sequencing + gates:
+3) Sequencing + gates:
    - Hard ordering constraints (e.g., “must land protocol spec before implementation slices”).
    - CI checkpoint implications (if applicable).
-3) Risk + unknowns:
+4) Risk + unknowns:
    - Explicit unknowns/follow-ups to resolve during full planning.
    - Identify any “high-churn seams” that should become boundaries.
-4) Evidence links:
+5) Evidence links:
    - Link to the stable step completion sentinels:
      - `<FEATURE_DIR>/logs/spec-manifest/last_message.md`
      - `<FEATURE_DIR>/logs/impact-map/last_message.md`
      - `<FEATURE_DIR>/logs/min-spec-draft/last_message.md`
      - `<FEATURE_DIR>/logs/CI-checkpoint/last_message.md`
    - Reference the canonical artifacts you relied on (`pre-planning/spec_manifest.md`, `pre-planning/impact_map.md`, `pre-planning/minimal_spec_draft.md`).
-5) Slice skeleton recommendations (required):
+6) Slice skeleton recommendations (required):
    - If lift/impact indicates the slice skeleton should change (more/fewer slices, split/merge, different seam boundaries):
      - Propose explicit edits as recommendations inside the tracked artifact (`<FEATURE_DIR>/pre-planning/workstream_triage.md`), not by editing `<FEATURE_DIR>/pre-planning/minimal_spec_draft.md`.
      - Be concrete: list `ADD`, `SPLIT`, `MERGE`, `RENAME` actions that refer to slice ids and describe the new boundaries.
