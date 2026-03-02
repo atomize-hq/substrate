@@ -401,7 +401,7 @@ def main() -> int:
                 f"Cross-pack contract authority conflict: `{feature_dir_rel}` selects Option {opt} "
                 f"but `{other_pack}` selects Option {other_opt} (hard decision: converge on one authoritative contract doc)."
             )
-                misalignments.append(Item(kind="misalignment", title=title, sources=[src, other_src]))
+            misalignments.append(Item(kind="misalignment", title=title, sources=[src, other_src]))
 
     # Consolidated follow-ups across canonical artifacts.
     spec_manifest_abs, spec_manifest_rel = resolve_pack_doc(feature_dir_abs, feature_dir_rel, "spec_manifest.md")
