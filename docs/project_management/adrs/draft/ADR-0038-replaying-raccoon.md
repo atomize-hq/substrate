@@ -1,32 +1,37 @@
 # ADR-0038 — Replay: attribute why world isolation is disabled in replay warnings (flag vs env vs config)
 
 ## Status
+
 - Status: Draft
 - Date (UTC): 2026-02-21
 - Owner(s): TBD (ASSUMPTION: Substrate shell maintainers)
 
 ## Scope
-- Feature directory: `docs/project_management/packs/draft/replaying-raccoon/` (ASSUMPTION: created during planning)
+
+- Feature directory: `docs/project_management/packs/draft/world-disabled-reason-attribution/` (ASSUMPTION: created during planning)
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/system/standards/adr/EXECUTIVE_SUMMARY_STANDARD.md`
 
 ## Related Docs (links only)
+
 - Intake: `docs/project_management/intake/adrs/replaying_raccoon_adr_intake.md`
 - Prerequisite ADR (required): `docs/project_management/adrs/draft/ADR-0037-clarifying-owl.md`
-- Plan: `docs/project_management/packs/draft/replaying-raccoon/plan.md` (planned)
-- Tasks: `docs/project_management/packs/draft/replaying-raccoon/tasks.json` (planned)
-- Spec manifest: `docs/project_management/packs/draft/replaying-raccoon/spec_manifest.md` (planned)
-- Decision Register: `docs/project_management/packs/draft/replaying-raccoon/decision_register.md` (required; see “Decision Summary”)
-- Impact Map: `docs/project_management/packs/draft/replaying-raccoon/impact_map.md` (recommended; cross-surface UX consistency + trace/CI implications)
+- Plan: `docs/project_management/packs/draft/world-disabled-reason-attribution/plan.md` (planned)
+- Tasks: `docs/project_management/packs/draft/world-disabled-reason-attribution/tasks.json` (planned)
+- Spec manifest: `docs/project_management/packs/draft/world-disabled-reason-attribution/spec_manifest.md` (planned)
+- Decision Register: `docs/project_management/packs/draft/world-disabled-reason-attribution/decision_register.md` (required; see “Decision Summary”)
+- Impact Map: `docs/project_management/packs/draft/world-disabled-reason-attribution/impact_map.md` (recommended; cross-surface UX consistency + trace/CI implications)
 
 ## Executive Summary (Operator)
 
 ADR_BODY_SHA256: 6c765ad8b6ec6afd7202ad9d7c0eb9b488db2160dbfa8331e338655822f3d9ce
+
 ### Changes (operator-facing)
+
 - Replay output reuses the same “world disabled reason attribution” as doctor/health, so replay does not imply `--no-world` when the actual cause is config/env.
   - Existing: `substrate --replay <span_id>` can emit replay origin/warning text that either (a) attributes host-only replay to `--no-world` when the true cause is persisted config/env, or (b) leaves operators guessing which layer disabled world (flag vs env override vs workspace/global config).
-  - New: When replay runs on host due to world isolation being disabled, replay’s warning/origin text (and any associated structured replay strategy fields) include an accurate attribution of the *highest-precedence* disable source, aligned with doctor/health:
+  - New: When replay runs on host due to world isolation being disabled, replay’s warning/origin text (and any associated structured replay strategy fields) include an accurate attribution of the _highest-precedence_ disable source, aligned with doctor/health:
     - CLI `--no-world`, or
     - env override `SUBSTRATE_OVERRIDE_WORLD=disabled` (when applicable), or
     - workspace config `<workspace>/.substrate/workspace.yaml` (`world.enabled: false`), or
@@ -39,27 +44,32 @@ ADR_BODY_SHA256: 6c765ad8b6ec6afd7202ad9d7c0eb9b488db2160dbfa8331e338655822f3d9c
     - `crates/replay/src/replay/executor.rs` (replay_strategy trace event)
 
 ## Problem / Context
+
 - After ADR-0037 (`clarifying_owl`) lands, doctor/health output will correctly attribute why world is disabled (flag vs env vs config provenance).
 - Replay (and other world-adjacent flows) still emit warnings/origin summaries that can be generic or misleading, especially when users follow “install with `--no-world`, enable later” workflows.
 - Misattribution is worse than a generic message: it directs operators to the wrong knob (flag vs env vs config file), increasing confusion and support time.
 
 ## Goals
-- Replay warnings/origin summaries must attribute the *highest-precedence* world-disable reason using the same semantics and phrasing as doctor/health (ADR-0037).
+
+- Replay warnings/origin summaries must attribute the _highest-precedence_ world-disable reason using the same semantics and phrasing as doctor/health (ADR-0037).
 - Preserve replay’s execution selection semantics (world vs host) as they exist today; this ADR is attribution + messaging only.
 - Avoid leaking sensitive data: do not print env values beyond key names; use stable tokenized config display paths (not absolute host paths).
 - Avoid new noise in healthy/successful paths: only modify existing replay warning/origin surfaces.
 
 ## Non-Goals
+
 - Changing replay routing behavior (host vs world selection), timeouts, or backend selection.
 - Reworking config precedence or provenance semantics (reuse the existing model from ADR-0037).
 - Applying disable-attribution to non-replay UX surfaces (doctor/health are handled by ADR-0037; other world-adjacent commands are follow-ups).
 
 ## Out of Scope
+
 - Introducing a new replay JSON schema or a new user-facing replay subcommand solely for attribution.
 - Rewriting or reformatting existing replay verbose output beyond the minimal attribution substitution.
 - Changing the replay toggle precedence `--world > --no-world > SUBSTRATE_REPLAY_USE_WORLD` (replay-specific knob remains).
 
 ## Slice Decomposition
+
 - C0 — Enumerate replay attribution surfaces
   - Scope: Identify the replay stderr surfaces that mention host-only/world-disabled semantics (at minimum: replay origin summary and the “running on host” warning) and define the exact attribution string contract they must share with doctor/health.
 - C1 — Implement shared attribution in replay output + trace fields
@@ -70,18 +80,22 @@ ADR_BODY_SHA256: 6c765ad8b6ec6afd7202ad9d7c0eb9b488db2160dbfa8331e338655822f3d9c
 ## Options
 
 ### Option A — Reuse the shared “world disabled attribution” helper (recommended)
+
 Refactor/locate the attribution logic (introduced by ADR-0037) in a shared helper and call it from replay routing, so replay and doctor/health share the same precedence mapping, enum-like reason codes, and human-friendly attribution string.
 
 ### Option B — Replay-local attribution duplication
+
 Implement the same precedence mapping and formatting in replay routing without sharing code with doctor/health.
 
 ## Recommendation
+
 - Choose Option A when we want stable, shared semantics and a single precedence implementation to test.
 - Choose Option B when refactor constraints block Option A and a short-lived bridge is required (with an explicit follow-up to remove duplication).
 
 ## User Contract (Authoritative)
 
 ### CLI
+
 - Surface(s) in scope:
   - `substrate --replay <span_id> [--replay-verbose]` (ASSUMPTION: primary replay UX surface today).
 - When replay emits an “origin” summary and/or “running on host” warning due to world isolation being disabled, the attribution **must** reflect the highest-precedence disable source using the same contract as doctor/health (ADR-0037).
@@ -93,6 +107,7 @@ Implement the same precedence mapping and formatting in replay routing without s
 - No change to replay exit codes or stderr/stdout routing; only attribution text changes within existing replay warning/origin surfaces.
 
 ### Config
+
 - Precedence and provenance semantics are inherited from ADR-0037 (doctor/health):
   1. CLI `--no-world`
   2. env override `SUBSTRATE_OVERRIDE_WORLD=disabled`
@@ -100,9 +115,11 @@ Implement the same precedence mapping and formatting in replay routing without s
   4. global config `$SUBSTRATE_HOME/config.yaml` with `world.enabled: false`
 
 ### Platform guarantees
+
 - Linux/macOS/Windows: replay warning/origin attribution uses the same precedence mapping and does not leak sensitive values; platform-specific replay backends may differ, but attribution must be consistent.
 
 ## Architecture Shape
+
 - Components:
   - `crates/shell/src/execution/routing/replay.rs`: render replay origin/warn surfaces using shared disable attribution when world is disabled by effective config/env/flag.
   - `crates/shell/src/execution/config_model.rs`: source of effective config + provenance (reused via the ADR-0037 helper).
@@ -114,6 +131,7 @@ Implement the same precedence mapping and formatting in replay routing without s
   - Outputs: corrected replay stderr messaging; additive structured replay strategy metadata (where applicable)
 
 ## Sequencing / Dependencies
+
 - Sequencing entry: `docs/project_management/packs/sequencing.json` → TBD (to be added during planning)
 - Prerequisites:
   - ADR-0037 (`clarifying_owl`) must land first (shared attribution classifier + enum/phrasing contract).
@@ -123,6 +141,7 @@ Implement the same precedence mapping and formatting in replay routing without s
 ## Work Lift (discovery estimate)
 
 <!-- PM_LIFT_VECTOR:BEGIN -->
+
 ```json
 {
   "touch": {
@@ -153,9 +172,11 @@ Implement the same precedence mapping and formatting in replay routing without s
   "notes": "Discovery estimate; replay/warnings messaging alignment with doctor/health disable attribution."
 }
 ```
+
 <!-- PM_LIFT_VECTOR:END -->
 
 ## Security / Safety Posture
+
 - Fail-closed vs degrade: unchanged (this ADR is messaging + attribution only).
 - Sensitive data handling:
   - Do not print raw env values beyond the env var key name (allowed fixed token: `SUBSTRATE_OVERRIDE_WORLD=disabled`).
@@ -166,6 +187,7 @@ Implement the same precedence mapping and formatting in replay routing without s
 ## Validation Plan (Authoritative)
 
 ### Tests
+
 - Unit tests:
   - Reuse or extend the ADR-0037 attribution helper unit tests to cover replay callers (formatting + code mapping).
 - Integration tests:
@@ -177,19 +199,23 @@ Implement the same precedence mapping and formatting in replay routing without s
   - Assert redaction rules: no absolute host paths; no env values beyond key names.
 
 ### Manual validation
+
 - None required beyond smoke-level CLI checks for this ADR (ASSUMPTION: no backend/provisioning changes).
 
 ### Smoke scripts
+
 - None required for this ADR (no world backend changes).
 
 ## Rollout / Backwards Compatibility
+
 - Policy: additive/non-breaking output changes; replay behavior unchanged.
 - Compat work:
   - Text output parsing (if any) may need adjustment; prefer structured fields for automation when available.
 
 ## Decision Summary
+
 - Decision Register entries (if applicable):
-  - `docs/project_management/packs/draft/replaying-raccoon/decision_register.md` (required):
+  - `docs/project_management/packs/draft/world-disabled-reason-attribution/decision_register.md` (required):
     - DR-0001 — Implementation strategy: shared helper reuse vs replay-local duplication.
     - DR-0002 — Trace/JSON surface: add explicit `world_disable_reason` fields for replay vs reuse existing `origin_reason(_code)` only.
 - Options (required; at least two):
