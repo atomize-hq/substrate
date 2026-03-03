@@ -38,8 +38,8 @@ Goal: propose pack-internal **Planning Workstreams (PWS)** and sequencing gates 
 ### WDRA-PWS-schema_inventory — telemetry + trace contract shape
 
 - Goal: inventory the replay trace surface(s) and pin the additive `replay_strategy` schema changes and redaction/absence semantics (aligned with ADR-0037 fields).
-- Depends on:
-  - Assumes `WDRA-PWS-contract` has established the replay stderr wording constraints (so telemetry mirrors, not diverges).
+- Depends on (hard):
+  - `WDRA-PWS-contract` (replay stderr wording constraints must be mirrored, not diverged).
 - Owns (planning artifacts):
   - `telemetry-spec.md`
 - Proposed slices/triads to plan:
@@ -62,7 +62,7 @@ Goal: propose pack-internal **Planning Workstreams (PWS)** and sequencing gates 
   - `WDRA-PWS-contract`
   - `WDRA-PWS-schema_inventory`
 - Assumes (soft ordering):
-  - `WDRA-PWS-implementation_seams` has stabilized the Touch Set (to avoid churn).
+  - Touch Set validity is stabilized early (to avoid churn while authoring `WDRA0`).
 - Owns (planning artifacts):
   - `slices/WDRA0/WDRA0-spec.md`
 - Proposed slices/triads to plan:
@@ -97,8 +97,8 @@ Goal: propose pack-internal **Planning Workstreams (PWS)** and sequencing gates 
     {
       "id": "WDRA-PWS-schema_inventory",
       "role": "schema_inventory",
-      "depends_on": [],
-      "assumes": ["WDRA-PWS-contract drafts replay stderr constraints first", "ADR-0037 fields reused verbatim"],
+      "depends_on": ["WDRA-PWS-contract"],
+      "assumes": ["ADR-0037 fields reused verbatim"],
       "owns": ["telemetry-spec.md"]
     },
     {
@@ -112,7 +112,7 @@ Goal: propose pack-internal **Planning Workstreams (PWS)** and sequencing gates 
       "id": "WDRA-PWS-slice_spec_wdra0",
       "role": "slice_spec",
       "depends_on": ["WDRA-PWS-contract", "WDRA-PWS-schema_inventory"],
-      "assumes": ["WDRA-PWS-implementation_seams reduces churn by stabilizing touch set first"],
+      "assumes": ["Touch Set validity is stabilized early to reduce churn"],
       "owns": ["slices/WDRA0/WDRA0-spec.md"]
     },
     {
@@ -157,4 +157,3 @@ Recommended order (low churn):
 - `logs/impact-map/last_message.md`
 - `logs/min-spec-draft/last_message.md`
 - `logs/CI-checkpoint/last_message.md`
-
