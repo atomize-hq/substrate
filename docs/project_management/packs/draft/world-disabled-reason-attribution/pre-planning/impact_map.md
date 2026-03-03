@@ -35,7 +35,6 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - `crates/replay/src/replay/mod.rs`
 - `crates/shell/src/execution/routing/replay.rs`
 - `crates/shell/tests/replay_world.rs`
-- `crates/shell/tests/world_disable_attribution.rs`
 - `docs/REPLAY.md`
 - `docs/TRACE.md`
 - `docs/project_management/adrs/draft/ADR-0038-replaying-raccoon.md`
@@ -183,4 +182,3 @@ List overlaps/conflicts with other in-flight work and resolve them deterministic
   - `docs/project_management/packs/draft/world-disabled-reason-attribution/slices/WDRA0/WDRA0-spec.md` — define AC matrix (CLI/env/workspace/global winners + redaction + “no behavior change” assertions) and the boundary between world-disablement vs replay-only opt-out.
   - `docs/project_management/adrs/draft/ADR-0038-replaying-raccoon.md` — reconcile precedence text with ADR-0037 + env contract (workspace overrides env); update Related Docs paths to point at the canonical pre-planning artifacts.
   - `docs/project_management/packs/sequencing.json` — add the sequencing entry and gate this work on ADR-0037 integration landing first.
-
