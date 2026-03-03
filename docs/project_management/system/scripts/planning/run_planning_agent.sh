@@ -748,6 +748,20 @@ if [[ "${#violations[@]}" -ne 0 ]]; then
 fi
 
 if [[ "${CODEX_EXIT}" -eq 0 && "${LAST_MESSAGE_OK}" -eq 1 && "${REQUIRED_OUTPUTS_OK}" -eq 1 ]]; then
+    if [[ "${AGENT}" == "workstream_triage" ]]; then
+        if [[ "${PM_SKIP_PWS_INDEX_VALIDATE:-0}" = "1" ]]; then
+            echo "WARN: PM_SKIP_PWS_INDEX_VALIDATE=1; skipping PM_PWS_INDEX validation for ${FEATURE_DIR_REL}" >&2
+        else
+            if ! python3 "${PLANNING_SCRIPTS_DIR}/validate_pws_index.py" --feature-dir "${FEATURE_DIR_ABS}"; then
+                echo "ERROR: PM_PWS_INDEX validation failed for ${FEATURE_DIR_REL}" >&2
+                echo "  Artifact: ${PRE_PLANNING_DIR_REL}/workstream_triage.md" >&2
+                echo "  Step logs: $(relpath_in_repo "${REPO_ROOT}" "${STEP_DIR_ABS}")" >&2
+                echo "  Run logs:  $(relpath_in_repo "${REPO_ROOT}" "${RUN_DIR_ABS}")" >&2
+                echo "  Hint: encode hard deps in depends_on; assumes must not mention PWS ids." >&2
+                exit 1
+            fi
+        fi
+    fi
     if ! cp "${CODEX_LAST_MESSAGE_RUN}" "${STABLE_LAST_MESSAGE}"; then
         echo "ERROR: failed to promote stable last_message.md for step ${FEATURE_DIR_REL}/logs/${STEP_DIR_NAME}" >&2
         echo "  From: $(relpath_in_repo "${REPO_ROOT}" "${CODEX_LAST_MESSAGE_RUN}")" >&2

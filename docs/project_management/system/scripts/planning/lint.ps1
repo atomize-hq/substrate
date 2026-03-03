@@ -77,6 +77,9 @@ if ([int]$schemaVersion -ge 3 -and $automationEnabled -eq "true" -and $crossPlat
     )
 }
 
+Write-Host "-- workstream_triage PM_PWS_INDEX (advisory)"
+& python (Join-Path $planningScriptsDir "validate_pws_index.py") --feature-dir $FeatureDir --advisory
+
 if (Test-Path -LiteralPath (Join-Path $FeatureDir "smoke")) {
     $behaviorPlatforms = @()
     try {

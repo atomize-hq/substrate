@@ -96,7 +96,7 @@ Draft requirements (must be explicit and actionable):
        - `docs_validation`
        - `implementation_seams`
      - If a workstream is focused on authoring a specific slice spec, use: `slice_spec_<slice_id_lower>` (e.g., `slice_spec_wdap0`).
-1) Machine-readable PWS index (PM_PWS_INDEX) (required):
+   1) Machine-readable PWS index (PM_PWS_INDEX) (required):
    - Embed exactly one fenced JSON block in the tracked artifact (`<FEATURE_DIR>/pre-planning/workstream_triage.md`) using these markers:
      - `<!-- PM_PWS_INDEX:BEGIN -->`
      - `<!-- PM_PWS_INDEX:END -->`
@@ -112,6 +112,20 @@ Draft requirements (must be explicit and actionable):
        - `depends_on` (array of PWS ids; **hard dependencies only**)
        - `assumes` (array of strings; soft ordering / assumptions; may be empty)
        - `owns` (array of strings; pack-relative paths of tracked files this PWS intends to create/edit during full planning)
+   - Semantics (non-negotiable):
+     - `depends_on` is the ONLY scheduling signal; it MUST include every “must happen first” dependency.
+       - If PWS B must incorporate or mirror concrete outputs/decisions from PWS A (wording constraints, schema tokens, winner matrices, authoritative contracts), then `B.depends_on` MUST include `A`.
+       - Litmus test: if it would be incorrect or risky for the orchestrator to run two PWS concurrently, encode a hard dependency via `depends_on`.
+     - `assumes` is soft-only (churn reduction / preferences). It is NOT used to schedule.
+     - `assumes[]` MUST NOT contain any PWS id strings (e.g., `WDRA-PWS-contract`).
+       - If you find yourself writing “<PWS_ID> does X first” in `assumes`, you are encoding a hard dependency: promote it into `depends_on`.
+   - Example correction:
+     - BAD:
+       - `schema_inventory.depends_on=[]`
+       - `schema_inventory.assumes=["<SLICE_PREFIX>-PWS-contract drafts wording first"]`
+     - GOOD:
+       - `schema_inventory.depends_on=["<SLICE_PREFIX>-PWS-contract"]`
+       - `schema_inventory.assumes=["ADR-0037 contract is authoritative"]` (no PWS ids)
    - Ownership constraints (for safe future parallelism):
      - `tasks.json` MUST appear in `owns` for `<SLICE_PREFIX>-PWS-tasks_checkpoints` only.
      - Prefer disjoint `owns` sets across PWS; if two PWS must touch the same tracked file, encode that explicitly as a dependency (or flag it as a sequencing risk).

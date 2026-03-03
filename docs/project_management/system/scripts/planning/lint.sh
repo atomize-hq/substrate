@@ -117,6 +117,9 @@ if [[ "${schema_version}" -ge 3 && "${automation_enabled}" == "true" && "${cross
     require_any_path "ci_checkpoint_plan.md" "${FEATURE_DIR}/pre-planning/ci_checkpoint_plan.md" "${FEATURE_DIR}/ci_checkpoint_plan.md"
 fi
 
+echo "-- workstream_triage PM_PWS_INDEX (advisory)"
+python3 "${PLANNING_SCRIPTS_DIR}/validate_pws_index.py" --feature-dir "${FEATURE_DIR}" --advisory
+
 if [[ -d "${FEATURE_DIR}/smoke" ]]; then
     behavior_platforms_csv="$(jq -r '[.meta.behavior_platforms_required // .meta.ci_parity_platforms_required // .meta.platforms_required // []] | flatten | join(",")' "${FEATURE_DIR}/tasks.json")"
     if [[ -z "${behavior_platforms_csv}" ]]; then
