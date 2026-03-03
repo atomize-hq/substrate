@@ -748,6 +748,20 @@ if [[ "${#violations[@]}" -ne 0 ]]; then
 fi
 
 if [[ "${CODEX_EXIT}" -eq 0 && "${LAST_MESSAGE_OK}" -eq 1 && "${REQUIRED_OUTPUTS_OK}" -eq 1 ]]; then
+    if [[ "${AGENT}" == "impact_map" ]]; then
+        if [[ "${PM_SKIP_IMPACT_MAP_VALIDATE:-0}" = "1" ]]; then
+            echo "WARN: PM_SKIP_IMPACT_MAP_VALIDATE=1; skipping impact_map Touch Set validation for ${FEATURE_DIR_REL}" >&2
+        else
+            if ! python3 "${PLANNING_SCRIPTS_DIR}/validate_impact_map.py" --feature-dir "${FEATURE_DIR_ABS}"; then
+                echo "ERROR: impact_map Touch Set validation failed for ${FEATURE_DIR_REL}" >&2
+                echo "  Artifact: ${PRE_PLANNING_DIR_REL}/impact_map.md" >&2
+                echo "  Step logs: $(relpath_in_repo "${REPO_ROOT}" "${STEP_DIR_ABS}")" >&2
+                echo "  Run logs:  $(relpath_in_repo "${REPO_ROOT}" "${RUN_DIR_ABS}")" >&2
+                echo "  Hint: Edit/Deprecate/Delete entries must exist; move non-existent paths to Create or fix the path." >&2
+                exit 1
+            fi
+        fi
+    fi
     if [[ "${AGENT}" == "workstream_triage" ]]; then
         if [[ "${PM_SKIP_PWS_INDEX_VALIDATE:-0}" = "1" ]]; then
             echo "WARN: PM_SKIP_PWS_INDEX_VALIDATE=1; skipping PM_PWS_INDEX validation for ${FEATURE_DIR_REL}" >&2

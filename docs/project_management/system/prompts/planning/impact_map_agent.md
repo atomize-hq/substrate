@@ -65,5 +65,15 @@ Output requirements:
    - If the dispatcher context indicates an orchestration overlap run, **do not** ask the operator to commit/stash/clean upstream outputs; treat a dirty `git status` as transient and keep polling until the gate clears.
 3) Then write/overwrite `<FEATURE_DIR>/pre-planning/impact_map.md` using the template.
    - The Touch Set must have concrete repo-relative file paths (no vague “update some files”).
+   - Strict Touch Set existence rule (non-negotiable):
+     - If a path is listed under `### Edit`, `### Deprecate`, or `### Delete`, it MUST exist in the repo at authoring time.
+     - If it does not exist, it MUST be moved to `### Create` (if it will be created) or corrected/removed (if it was a guessed path).
+     - If you cannot determine the exact file yet, prefer an existing directory prefix entry ending with `/` (and record a Follow-up to tighten it later) rather than guessing a filename.
 4) If you discover a missing surface or ownership gap, record follow-ups inside `impact_map.md` under a “Follow-ups” section (not in ADRs).
+5) Closeout validation (required; must pass before you end the session):
+   - Run the strict Touch Set validator and capture output to logs:
+     - `python3 docs/project_management/system/scripts/planning/validate_impact_map.py --feature-dir "<FEATURE_DIR>" > "<FEATURE_DIR>/logs/impact-map/validate_impact_map.txt" 2>&1`
+   - If it fails:
+     - Fix `<FEATURE_DIR>/pre-planning/impact_map.md`, then rerun the validator until it passes.
+   - Only then end the session (exit successfully).
 ```

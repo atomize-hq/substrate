@@ -63,6 +63,7 @@ Overlap execution model (required):
     - `git status --porcelain=v1 -- "<FEATURE_DIR>"` is empty.
   - Default poll interval: `sleep 60` between checks.
   - If the dispatcher context indicates an orchestration overlap run, **do not** ask the operator to commit/stash/clean upstream outputs; treat a dirty `git status` as transient and keep polling until the gate clears.
+  - After the gate clears, re-read `<FEATURE_DIR>/pre-planning/impact_map.md` (not just `logs/impact-map/handoff.md`) before finalizing the tracked artifact.
   - Once the gate clears:
     - Write/overwrite the tracked artifact: `<FEATURE_DIR>/pre-planning/workstream_triage.md`
       - This should be a polished promotion of the draft, not a raw scratchpad.
