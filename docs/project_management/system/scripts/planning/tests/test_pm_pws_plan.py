@@ -158,7 +158,13 @@ class TestPmPwsPlan(unittest.TestCase):
                 "role": "tasks_checkpoints",
                 "depends_on": [schema, slice_spec],
                 "assumes": ["fixture"],
-                "owns": ["tasks.json", "plan.md"],
+                "owns": [
+                    "tasks.json",
+                    "plan.md",
+                    "session_log.md",
+                    "kickoff_prompts/",
+                    "slices/WDRA0/kickoff_prompts/",
+                ],
             },
         ]
 
@@ -209,7 +215,13 @@ class TestPmPwsPlan(unittest.TestCase):
                 "role": "tasks_checkpoints",
                 "depends_on": [slice_spec],
                 "assumes": ["fixture"],
-                "owns": ["tasks.json", "plan.md"],
+                "owns": [
+                    "tasks.json",
+                    "plan.md",
+                    "session_log.md",
+                    "kickoff_prompts/",
+                    "slices/WDRA0/kickoff_prompts/",
+                ],
             },
         ]
 
@@ -246,4 +258,3 @@ class TestPmPwsPlan(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

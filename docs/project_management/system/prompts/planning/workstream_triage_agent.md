@@ -129,6 +129,15 @@ Draft requirements (must be explicit and actionable):
        - `schema_inventory.assumes=["ADR-0037 contract is authoritative"]` (no PWS ids)
    - Ownership constraints (for safe future parallelism):
      - `tasks.json` MUST appear in `owns` for `<SLICE_PREFIX>-PWS-tasks_checkpoints` only.
+     - Triad-critical owns (required for execution-ready packs):
+       - `<SLICE_PREFIX>-PWS-tasks_checkpoints` MUST include these additional `owns` entries (pack-relative):
+         - `session_log.md`
+         - `kickoff_prompts/` (prefix ownership; note the required trailing `/`)
+         - For each slice in the draft/accepted slice skeleton: `slices/<SLICE_ID>/kickoff_prompts/` (prefix; trailing `/`)
+       - Trailing `/` means prefix ownership (the PWS may create/edit any tracked file under that directory).
+     - Execution gate owns (recommended when `tasks.json.meta.execution_gates=true`):
+       - `execution_preflight_report.md`
+       - For each slice: `slices/<SLICE_ID>/<SLICE_ID>-closeout_report.md`
      - Prefer disjoint `owns` sets across PWS; if two PWS must touch the same tracked file, encode that explicitly as a dependency (or flag it as a sequencing risk).
    - The `pws` list must include **every** PWS you describe in the prose sections.
 2) Proposed planning workstreams (PWS):

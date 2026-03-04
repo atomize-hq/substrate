@@ -315,6 +315,7 @@ def _validate_doc(feature_dir: Path, triage_path: Path, advisory: bool) -> list[
 
     # owns: pack-relative + disjoint + tasks.json single-writer.
     owns_owner: dict[str, str] = {}
+    owns_norm_by_id: dict[str, list[str]] = {}
     for pid, obj in pws_by_id.items():
         owns = _as_str_list(obj.get("owns"))
         if owns is None:
@@ -339,6 +340,8 @@ def _validate_doc(feature_dir: Path, triage_path: Path, advisory: bool) -> list[
                 continue
             normalized.append(p)
 
+        owns_norm_by_id[pid] = list(normalized)
+
         # duplicates within the same PWS
         dupes = sorted({x for x in normalized if normalized.count(x) > 1})
         for d in dupes:
@@ -356,7 +359,47 @@ def _validate_doc(feature_dir: Path, triage_path: Path, advisory: bool) -> list[
                             f"{triage_path}: owns path overlap is not allowed: {p!r} is claimed by both {prev!r} and {pid!r}"
                         )
                     )
+            )
+
+    # Step 3.5 triad alignment: tasks_checkpoints must own triad-critical surfaces.
+    if slice_prefix:
+        tasks_pws_id = f"{slice_prefix}-PWS-tasks_checkpoints"
+        if tasks_pws_id in id_set:
+            tasks_owns = set(owns_norm_by_id.get(tasks_pws_id, []))
+
+            if "session_log.md" not in tasks_owns:
+                errors.append(
+                    ValidationError(
+                        message=f"{triage_path}: {tasks_pws_id}.owns must include 'session_log.md' (triad execution surface)"
+                    )
                 )
+            if "kickoff_prompts/" not in tasks_owns:
+                errors.append(
+                    ValidationError(
+                        message=f"{triage_path}: {tasks_pws_id}.owns must include 'kickoff_prompts/' (prefix; triad kickoff prompts)"
+                    )
+                )
+
+            slice_ids: set[str] = set()
+            for owns_norm in owns_norm_by_id.values():
+                for p in owns_norm:
+                    if not p.startswith("slices/"):
+                        continue
+                    parts = [seg for seg in p.split("/") if seg]
+                    if len(parts) >= 2 and parts[0] == "slices":
+                        slice_ids.add(parts[1])
+
+            for slice_id in sorted(slice_ids):
+                required = f"slices/{slice_id}/kickoff_prompts/"
+                if required not in tasks_owns:
+                    errors.append(
+                        ValidationError(
+                            message=(
+                                f"{triage_path}: {tasks_pws_id}.owns must include {required!r} "
+                                f"(prefix; slice kickoff prompts)"
+                            )
+                        )
+                    )
 
     if slice_prefix:
         tasks_pws_id = f"{slice_prefix}-PWS-tasks_checkpoints"
@@ -423,4 +466,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

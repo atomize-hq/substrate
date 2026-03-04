@@ -93,7 +93,12 @@ class TestPmPwsIndexExtract(unittest.TestCase):
                 "role": "tasks_checkpoints",
                 "depends_on": [contract_id],
                 "assumes": [],
-                "owns": ["tasks.json"],
+                "owns": [
+                    "tasks.json",
+                    "session_log.md",
+                    "kickoff_prompts/",
+                    "slices/WDRA0/kickoff_prompts/",
+                ],
             },
         ]
         feature_dir = self._make_feature_dir("pass_normalize", _triage_text(slice_prefix=prefix, pws=pws))
@@ -129,7 +134,12 @@ class TestPmPwsIndexExtract(unittest.TestCase):
                 "role": "tasks_checkpoints",
                 "depends_on": [contract_id],
                 "assumes": [],
-                "owns": ["tasks.json"],
+                "owns": [
+                    "tasks.json",
+                    "session_log.md",
+                    "kickoff_prompts/",
+                    "slices/WDRA0/kickoff_prompts/",
+                ],
             },
         ]
         feature_dir = self._make_feature_dir("pass_prefix_exact", _triage_text(slice_prefix=prefix, pws=pws))
@@ -156,7 +166,7 @@ class TestPmPwsIndexExtract(unittest.TestCase):
                 "role": "tasks_checkpoints",
                 "depends_on": [contract_id],
                 "assumes": [],
-                "owns": ["tasks.json"],
+                "owns": ["tasks.json", "session_log.md", "kickoff_prompts/"],
             },
         ]
         feature_dir = self._make_feature_dir("fail_unknown_id", _triage_text(slice_prefix=prefix, pws=pws))
@@ -181,4 +191,3 @@ class TestPmPwsIndexExtract(unittest.TestCase):
         res = self._run(["--feature-dir", str(feature_dir), "--pws-id", contract_id])
         self.assertNotEqual(res.returncode, 0)
         self.assertIn("missing required PWS id", res.stderr)
-

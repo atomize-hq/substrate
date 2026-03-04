@@ -27,6 +27,8 @@ Contract:
   - Enforces tracked-write allowlist equal to that PWS's owns (exact + prefix via trailing '/')
   - Writes run artifacts under: <FEATURE_DIR>/logs/pws/<PWS_ID>/runs/<UTC_TS>/
   - Writes stable PWS artifacts under: <FEATURE_DIR>/logs/pws/<PWS_ID>/ (stderr.log, codex.pid, last_message.md)
+  - For role=tasks_checkpoints, success requires post-run validators (tasks.json + slice specs + checkpoint plan when applicable).
+    - Optional: set PM_PWS_RUN_PLANNING_LINT=1 to also run `make planning-lint FEATURE_DIR="<FEATURE_DIR>"`.
 
 Exit codes:
   0 success
@@ -541,6 +543,35 @@ if [[ "${CODEX_EXIT}" -eq 0 && "${LAST_MESSAGE_OK}" -eq 1 && "${REQUIRED_OUTPUTS
             echo "  Run logs:  $(relpath_in_repo "${REPO_ROOT}" "${RUN_DIR_ABS}")" >&2
             exit 2
         fi
+        if ! python3 "${PLANNING_SCRIPTS_DIR}/validate_slice_specs.py" --feature-dir "${FEATURE_DIR_ABS}"; then
+            echo "ERROR: validate_slice_specs.py failed after tasks_checkpoints PWS run: ${FEATURE_DIR_REL}" >&2
+            echo "  Step logs: $(relpath_in_repo "${REPO_ROOT}" "${STEP_DIR_ABS}")" >&2
+            echo "  Run logs:  $(relpath_in_repo "${REPO_ROOT}" "${RUN_DIR_ABS}")" >&2
+            exit 2
+        fi
+
+        checkpoint_plan_exists=0
+        if [[ -f "${FEATURE_DIR_ABS}/pre-planning/ci_checkpoint_plan.md" || -f "${FEATURE_DIR_ABS}/ci_checkpoint_plan.md" ]]; then
+            checkpoint_plan_exists=1
+        fi
+        cross_platform_enabled="$(jq -r '.meta.cross_platform // false' "${FEATURE_DIR_ABS}/tasks.json" 2>/dev/null || echo "false")"
+        if [[ "${checkpoint_plan_exists}" -eq 1 || "${cross_platform_enabled}" == "true" ]]; then
+            if ! python3 "${PLANNING_SCRIPTS_DIR}/validate_ci_checkpoint_plan.py" --feature-dir "${FEATURE_DIR_ABS}"; then
+                echo "ERROR: validate_ci_checkpoint_plan.py failed after tasks_checkpoints PWS run: ${FEATURE_DIR_REL}" >&2
+                echo "  Step logs: $(relpath_in_repo "${REPO_ROOT}" "${STEP_DIR_ABS}")" >&2
+                echo "  Run logs:  $(relpath_in_repo "${REPO_ROOT}" "${RUN_DIR_ABS}")" >&2
+                exit 2
+            fi
+        fi
+
+        if [[ "${PM_PWS_RUN_PLANNING_LINT:-0}" == "1" ]]; then
+            if ! make planning-lint FEATURE_DIR="${FEATURE_DIR_REL}"; then
+                echo "ERROR: planning-lint failed after tasks_checkpoints PWS run: ${FEATURE_DIR_REL}" >&2
+                echo "  Step logs: $(relpath_in_repo "${REPO_ROOT}" "${STEP_DIR_ABS}")" >&2
+                echo "  Run logs:  $(relpath_in_repo "${REPO_ROOT}" "${RUN_DIR_ABS}")" >&2
+                exit 2
+            fi
+        fi
     fi
     if ! cp "${CODEX_LAST_MESSAGE_RUN}" "${STABLE_LAST_MESSAGE}"; then
         echo "ERROR: failed to promote stable last_message.md for PWS ${PWS_ID}" >&2
@@ -575,4 +606,3 @@ fi
 
 echo "ERROR: Codex exited non-zero (exit=${CODEX_EXIT})" >&2
 exit 1
-

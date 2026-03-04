@@ -76,6 +76,9 @@ Goal: propose pack-internal **Planning Workstreams (PWS)** and sequencing gates 
 - Owns (planning artifacts):
   - `tasks.json` (**single writer**)
   - `plan.md`
+  - `session_log.md`
+  - `kickoff_prompts/`
+  - `slices/WDRA0/kickoff_prompts/`
   - `decision_register.md`
   - `pre-planning/ci_checkpoint_plan.md` (update only if slice skeleton changes or checkpoint wiring needs correction)
 - Proposed slices/triads to plan:
@@ -120,7 +123,15 @@ Goal: propose pack-internal **Planning Workstreams (PWS)** and sequencing gates 
       "role": "tasks_checkpoints",
       "depends_on": ["WDRA-PWS-slice_spec_wdra0"],
       "assumes": ["pre-planning/ci_checkpoint_plan.md remains single-checkpoint unless slice skeleton changes"],
-      "owns": ["tasks.json", "plan.md", "decision_register.md", "pre-planning/ci_checkpoint_plan.md"]
+      "owns": [
+        "tasks.json",
+        "plan.md",
+        "session_log.md",
+        "kickoff_prompts/",
+        "slices/WDRA0/kickoff_prompts/",
+        "decision_register.md",
+        "pre-planning/ci_checkpoint_plan.md"
+      ]
     }
   ]
 }

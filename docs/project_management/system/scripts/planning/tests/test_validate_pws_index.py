@@ -80,6 +80,13 @@ class TestValidatePwsIndex(unittest.TestCase):
                 "owns": ["contract.md"],
             },
             {
+                "id": f"{prefix}-PWS-slice_spec_wdra0",
+                "role": "slice_spec",
+                "depends_on": [f"{prefix}-PWS-contract"],
+                "assumes": [],
+                "owns": ["slices/WDRA0/WDRA0-spec.md"],
+            },
+            {
                 "id": f"{prefix}-PWS-schema_inventory",
                 "role": "schema_inventory",
                 "depends_on": [f"{prefix}-PWS-contract"],
@@ -89,15 +96,54 @@ class TestValidatePwsIndex(unittest.TestCase):
             {
                 "id": f"{prefix}-PWS-tasks_checkpoints",
                 "role": "tasks_checkpoints",
-                "depends_on": [f"{prefix}-PWS-contract"],
+                "depends_on": [f"{prefix}-PWS-slice_spec_wdra0"],
                 "assumes": [],
-                "owns": ["tasks.json", "plan.md"],
+                "owns": [
+                    "tasks.json",
+                    "plan.md",
+                    "session_log.md",
+                    "kickoff_prompts/",
+                    "slices/WDRA0/kickoff_prompts/",
+                ],
             },
         ]
         feature_dir = self._make_feature_dir("pass_valid", _triage_text(slice_prefix=prefix, pws=pws))
         res = self._run(["--feature-dir", str(feature_dir)])
         self.assertEqual(res.returncode, 0, msg=res.stderr)
         self.assertEqual(res.stderr.strip(), "")
+
+    def test_fail_tasks_checkpoints_missing_triad_owns(self) -> None:
+        prefix = "WDRA"
+        contract_id = f"{prefix}-PWS-contract"
+        pws = [
+            {
+                "id": contract_id,
+                "role": "contract",
+                "depends_on": [],
+                "assumes": [],
+                "owns": ["contract.md"],
+            },
+            {
+                "id": f"{prefix}-PWS-slice_spec_wdra0",
+                "role": "slice_spec",
+                "depends_on": [contract_id],
+                "assumes": [],
+                "owns": ["slices/WDRA0/WDRA0-spec.md"],
+            },
+            {
+                "id": f"{prefix}-PWS-tasks_checkpoints",
+                "role": "tasks_checkpoints",
+                "depends_on": [contract_id],
+                "assumes": [],
+                "owns": ["tasks.json", "plan.md"],
+            },
+        ]
+        feature_dir = self._make_feature_dir("fail_missing_triad_owns", _triage_text(slice_prefix=prefix, pws=pws))
+        res = self._run(["--feature-dir", str(feature_dir)])
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("owns must include 'session_log.md'", res.stderr)
+        self.assertIn("owns must include 'kickoff_prompts/'", res.stderr)
+        self.assertIn("owns must include 'slices/WDRA0/kickoff_prompts/'", res.stderr)
 
     def test_fail_assumes_mentions_pws_id(self) -> None:
         prefix = "WDRA"
@@ -256,4 +302,3 @@ class TestValidatePwsIndex(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
