@@ -94,6 +94,9 @@ FEATURE_DIR ?=
 # Planning agent id for pm-run-planning-agent
 AGENT ?=
 
+# PWS id for pm-run-pws
+PWS_ID ?=
+
 # Pre-planning research orchestrator options
 START_AT ?=
 POLL_S ?= 60
@@ -123,6 +126,18 @@ pm-pws-plan:
 	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
 	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
 	@python3 $(PM_SYSTEM_SCRIPTS)/planning/pm_pws_plan.py --feature-dir "$(FEATURE_DIR)"
+
+.PHONY: pm-run-pws
+pm-run-pws:
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
+	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
+	@if [ -z "$(PWS_ID)" ]; then echo "ERROR: set PWS_ID=<PWS_ID>"; exit 2; fi
+	@set -euo pipefail; \
+	cmd="$(PM_SYSTEM_SCRIPTS)/planning/run_pws_agent.sh --feature-dir \"$(FEATURE_DIR)\" --pws-id \"$(PWS_ID)\""; \
+	if [ -n "$(CODEX_PROFILE)" ]; then cmd="$$cmd --codex-profile \"$(CODEX_PROFILE)\""; fi; \
+	if [ -n "$(CODEX_MODEL)" ]; then cmd="$$cmd --codex-model \"$(CODEX_MODEL)\""; fi; \
+	if [ "$(CODEX_JSONL)" = "1" ]; then cmd="$$cmd --codex-jsonl"; fi; \
+	eval "$$cmd"
 
 .PHONY: pm-run-planning-agent
 pm-run-planning-agent:
