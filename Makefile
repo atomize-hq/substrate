@@ -118,6 +118,12 @@ planning-lint:
 	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
 	$(PM_SYSTEM_SCRIPTS)/planning/lint.sh --feature-dir "$(FEATURE_DIR)"
 
+.PHONY: pm-pws-plan
+pm-pws-plan:
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
+	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
+	@python3 $(PM_SYSTEM_SCRIPTS)/planning/pm_pws_plan.py --feature-dir "$(FEATURE_DIR)"
+
 .PHONY: pm-run-planning-agent
 pm-run-planning-agent:
 	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
