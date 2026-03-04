@@ -1,7 +1,7 @@
 {
   "meta": {
-    "schema_version": 4,
-    "cross_platform": true,
+    "schema_version": 2,
+    "cross_platform": false,
     "ci_parity_platforms_required": [
       "linux",
       "macos",
@@ -16,14 +16,90 @@
       "WDRA0"
     ],
     "automation": {
-      "enabled": true,
+      "enabled": false,
       "orchestration_branch": "feat/world-disabled-reason-attribution"
     },
     "slice_spec_version": 2,
     "feature": "world-disabled-reason-attribution",
+    "adr_refs": [
+      "ADR-0037",
+      "ADR-0038"
+    ],
     "adr_paths": [
       "docs/project_management/adrs/draft/ADR-0038-replaying-raccoon.md"
     ]
   },
-  "tasks": []
+  "tasks": [
+    {
+      "id": "P0-allowlist-kickoff-prompts",
+      "name": "Request kickoff_prompts allowlist (ops)",
+      "type": "ops",
+      "phase": "Planning",
+      "status": "completed",
+      "description": "Request output allowlist expansion to permit creating feature-local kickoff prompts required by schema v4 automation packs (WDRA0 triads + CP1 checkpoint + FZ cleanup).",
+      "references": [
+        "docs/project_management/packs/draft/world-disabled-reason-attribution/pre-planning/workstream_triage.md",
+        "docs/project_management/packs/draft/world-disabled-reason-attribution/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/world-disabled-reason-attribution/plan.md",
+        "docs/project_management/packs/draft/world-disabled-reason-attribution/slices/WDRA0/WDRA0-spec.md"
+      ],
+      "acceptance_criteria": [
+        "allowlist_request.json exists under logs/pws/WDRA-PWS-tasks_checkpoints",
+        "draft.patch exists under logs/pws/WDRA-PWS-tasks_checkpoints",
+        "Request includes kickoff_prompts paths needed to restore schema v4 automation task wiring"
+      ],
+      "start_checklist": [
+        "Confirm validate_tasks_json.py failures are caused by missing schema v4 task graph + kickoff prompts",
+        "Write allowlist_request.json listing required kickoff_prompts paths",
+        "Write draft.patch proposing schema v4 task graph + kickoff prompts"
+      ],
+      "end_checklist": [
+        "Re-run: python3 docs/project_management/system/scripts/planning/validate_tasks_json.py --feature-dir \"docs/project_management/packs/draft/world-disabled-reason-attribution\""
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": null,
+      "depends_on": [],
+      "concurrent_with": []
+    },
+    {
+      "id": "P1-wire-schema-v4-taskgraph",
+      "name": "Wire schema v4 triads + checkpoint (ops)",
+      "type": "ops",
+      "phase": "Planning",
+      "status": "blocked",
+      "description": "Upgrade tasks.json to schema v4, restore meta.cross_platform=true and meta.automation.enabled=true, then add WDRA0 triad tasks, CP1-ci-checkpoint wiring, and FZ-feature-cleanup. Blocked on kickoff_prompts being allowlisted for tracked writes.",
+      "references": [
+        "docs/project_management/packs/draft/world-disabled-reason-attribution/plan.md",
+        "docs/project_management/packs/draft/world-disabled-reason-attribution/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/world-disabled-reason-attribution/slices/WDRA0/WDRA0-spec.md",
+        "docs/project_management/packs/draft/world-disabled-reason-attribution/contract.md",
+        "docs/project_management/packs/draft/world-disabled-reason-attribution/telemetry-spec.md"
+      ],
+      "acceptance_criteria": [
+        "tasks.json meta.schema_version=4 and meta.cross_platform=true",
+        "tasks.json defines WDRA0-code, WDRA0-test, WDRA0-integ-core, WDRA0-integ-{linux,macos,windows}, WDRA0-integ",
+        "tasks.json defines CP1-ci-checkpoint with depends_on [\"WDRA0-integ-core\"]",
+        "tasks.json defines FZ-feature-cleanup with kickoff_prompt under kickoff_prompts/",
+        "validate_tasks_json.py passes",
+        "validate_ci_checkpoint_plan.py passes"
+      ],
+      "start_checklist": [
+        "Ensure kickoff_prompts/ paths are allowlisted for tracked writes",
+        "Generate kickoff prompts for each triad task and checkpoint task",
+        "Update tasks.json task graph and dependencies per ci_checkpoint_plan.md"
+      ],
+      "end_checklist": [
+        "Run: python3 docs/project_management/system/scripts/planning/validate_tasks_json.py --feature-dir \"docs/project_management/packs/draft/world-disabled-reason-attribution\"",
+        "Run: python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir \"docs/project_management/packs/draft/world-disabled-reason-attribution\""
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": null,
+      "depends_on": [
+        "P0-allowlist-kickoff-prompts"
+      ],
+      "concurrent_with": []
+    }
+  ]
 }

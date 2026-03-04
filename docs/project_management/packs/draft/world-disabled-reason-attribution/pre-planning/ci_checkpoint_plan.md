@@ -18,6 +18,7 @@ Standard:
 ## Operator rules
 - This plan is authoritative for **CI cadence**.
 - If you discover a mismatch between the plan and reality (slice ids, platform scope, contract surfaces), update this plan first, then update `tasks.json` and kickoff prompts.
+- Current state note (2026-03-04): `tasks.json` cannot yet be wired as a schema v4 cross-platform automation pack because `kickoff_prompts/` is not in the tracked output allowlist for the `tasks_checkpoints` PWS. The target state remains schema v4 triads + checkpoint wiring once kickoff prompts are allowlisted.
 - For schema v4+ cross-platform automation packs: `tasks.json` `meta.checkpoint_boundaries` MUST list the **last slice** in each checkpoint group (this is linted once slice tasks exist in `tasks.json`).
 - Pre-planning note: `tasks.json` does not define slice triads (`*-integ`) yet, so this plan is not mechanically validated yet; the slice list below is derived from the draft slice skeleton in `pre-planning/minimal_spec_draft.md`.
 
@@ -93,4 +94,3 @@ Before running:
      - `kickoff_prompt: docs/project_management/packs/draft/world-disabled-reason-attribution/kickoff_prompts/CP1-ci-checkpoint.md`
 
 4) If additional checkpoints are added later, wire gating so the next checkpoint group’s first slice code/test tasks depend on the prior checkpoint task.
-
