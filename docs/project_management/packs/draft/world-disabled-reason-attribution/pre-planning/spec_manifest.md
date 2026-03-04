@@ -23,7 +23,7 @@ Each entry is feature-local (must live under `docs/project_management/packs/draf
 - `docs/project_management/packs/draft/world-disabled-reason-attribution/pre-planning/spec_manifest.md`
   - Owns (authoritative): required-doc selection + surface→doc ownership map (this file)
   - Links to (non-authoritative): ADR-0038, ADR-0037, env contract, exit code taxonomy
-- `docs/project_management/packs/draft/world-disabled-reason-attribution/impact_map.md`
+- `docs/project_management/packs/draft/world-disabled-reason-attribution/pre-planning/impact_map.md`
   - Owns (authoritative): touch set + cascading implications + cross-queue conflicts
   - Links to (non-authoritative): all feature-local specs + referenced upstream contracts
 - `docs/project_management/packs/draft/world-disabled-reason-attribution/plan.md`

@@ -24,11 +24,9 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - To compute pack-derived Work Lift v1 from this Touch Set: `make pm-lift-pack PACK="docs/project_management/packs/draft/world-disabled-reason-attribution/"` (strict packs only).
 
 ### Create
-- `docs/project_management/packs/draft/world-disabled-reason-attribution/contract.md`
 - `docs/project_management/packs/draft/world-disabled-reason-attribution/decision_register.md`
 - `docs/project_management/packs/draft/world-disabled-reason-attribution/plan.md`
 - `docs/project_management/packs/draft/world-disabled-reason-attribution/slices/WDRA0/WDRA0-spec.md`
-- `docs/project_management/packs/draft/world-disabled-reason-attribution/telemetry-spec.md`
 
 ### Edit
 - `crates/replay/src/replay/executor.rs`
@@ -38,7 +36,9 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - `docs/REPLAY.md`
 - `docs/TRACE.md`
 - `docs/project_management/adrs/draft/ADR-0038-replaying-raccoon.md`
+- `docs/project_management/packs/draft/world-disabled-reason-attribution/contract.md`
 - `docs/project_management/packs/draft/world-disabled-reason-attribution/tasks.json`
+- `docs/project_management/packs/draft/world-disabled-reason-attribution/telemetry-spec.md`
 - `docs/project_management/packs/sequencing.json`
 
 ### Deprecate
