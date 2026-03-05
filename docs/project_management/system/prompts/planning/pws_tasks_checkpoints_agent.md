@@ -19,7 +19,7 @@ Required reading (pack-local inputs):
 - `<FEATURE_DIR>/pre-planning/spec_manifest.md`
 - `<FEATURE_DIR>/pre-planning/impact_map.md`
 - `<FEATURE_DIR>/pre-planning/ci_checkpoint_plan.md` (when present / when cross-platform automation is intended)
-- `<FEATURE_DIR>/pre-planning/alignment_report.md` (gates/risks that must be reflected in task wiring)
+- `<FEATURE_DIR>/pre-planning/alignment_report.md` (especially “CI/checkpoint wiring gaps”; reflect required wiring into `tasks.json`)
 - For each slice: `<FEATURE_DIR>/slices/<SLICE_ID>/<SLICE_ID>-spec.md` (AC IDs + references)
 - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md` (triad conventions + required surfaces)
 

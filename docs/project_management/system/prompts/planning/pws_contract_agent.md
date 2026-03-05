@@ -13,6 +13,8 @@ Goal (contract role):
 
 Instructions:
 1) Read the feature pack docs (especially `<FEATURE_DIR>/pre-planning/workstream_triage.md`) and any existing spec/contract docs under the feature directory.
+   - Treat `<FEATURE_DIR>/pre-planning/alignment_report.md` as required input.
+   - Routing rule (Step 4): address “Gates / hard decisions” + “Decision Register required” items via this contract PWS.
 2) Make only the tracked edits that are required to satisfy the contract goal.
 3) Strictly obey the dispatcher-provided output allowlist.
    - If you need additional tracked writes, do NOT edit them.
