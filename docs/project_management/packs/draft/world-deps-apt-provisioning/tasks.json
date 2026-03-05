@@ -12,6 +12,10 @@
       "macos",
       "windows"
     ],
+    "checkpoint_boundaries": [
+      "WDAP0",
+      "WDAP1"
+    ],
     "automation": {
       "enabled": true,
       "orchestration_branch": "feat/world-deps-apt-provisioning"
@@ -22,5 +26,916 @@
       "docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md"
     ]
   },
-  "tasks": []
+  "tasks": [
+    {
+      "id": "WDAP0-code",
+      "name": "WDAP0 slice (code)",
+      "type": "code",
+      "phase": "WDAP0",
+      "status": "pending",
+      "description": "Implement the `substrate world enable --provision-deps` provisioning-time APT surface per WDAP0 spec.",
+      "references": [
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/tasks.json",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/session_log.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/alignment_report.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/workstream_triage.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP0/WDAP0-spec.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/decision_register.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/manual_testing_playbook.md",
+        "docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md"
+      ],
+      "acceptance_criteria": [
+        "Production code implements WDAP0 behaviors and failure posture per spec.",
+        "Code is formatted and clippy-clean per triad standards."
+      ],
+      "ac_ids": [
+        "AC-WDAP0-01",
+        "AC-WDAP0-02",
+        "AC-WDAP0-03",
+        "AC-WDAP0-04",
+        "AC-WDAP0-05",
+        "AC-WDAP0-06",
+        "AC-WDAP0-07",
+        "AC-WDAP0-08"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-deps-apt-provisioning && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDAP0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/world-deps-apt-provisioning\" SLICE_ID=\"WDAP0\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDAP0-code\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-apt-provisioning-wdap0-code",
+      "integration_task": "WDAP0-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP0/kickoff_prompts/WDAP0-code.md",
+      "depends_on": [],
+      "concurrent_with": [
+        "WDAP0-test"
+      ],
+      "git_branch": "world-deps-apt-provisioning-wdap0-code",
+      "required_make_targets": [
+        "triad-code-checks"
+      ]
+    },
+    {
+      "id": "WDAP0-test",
+      "name": "WDAP0 slice (test)",
+      "type": "test",
+      "phase": "WDAP0",
+      "status": "pending",
+      "description": "Add tests that enforce the WDAP0 provisioning-time APT requirements contract (derivation, conflicts, and guard rails).",
+      "references": [
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/tasks.json",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/session_log.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/alignment_report.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/workstream_triage.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP0/WDAP0-spec.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/decision_register.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/manual_testing_playbook.md",
+        "docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover WDAP0 ACs for requirement normalization, conflict posture, and guard rails.",
+        "Tests are deterministic and avoid global machine state."
+      ],
+      "ac_ids": [
+        "AC-WDAP0-01",
+        "AC-WDAP0-02",
+        "AC-WDAP0-03",
+        "AC-WDAP0-04",
+        "AC-WDAP0-05",
+        "AC-WDAP0-06",
+        "AC-WDAP0-07",
+        "AC-WDAP0-08"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-deps-apt-provisioning && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDAP0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/world-deps-apt-provisioning\" SLICE_ID=\"WDAP0\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "Run the targeted tests you add/touch",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDAP0-test\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-apt-provisioning-wdap0-test",
+      "integration_task": "WDAP0-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP0/kickoff_prompts/WDAP0-test.md",
+      "depends_on": [],
+      "concurrent_with": [
+        "WDAP0-code"
+      ],
+      "git_branch": "world-deps-apt-provisioning-wdap0-test",
+      "required_make_targets": [
+        "triad-test-checks"
+      ]
+    },
+    {
+      "id": "WDAP0-integ-core",
+      "name": "WDAP0 slice (integration core)",
+      "type": "integration",
+      "phase": "WDAP0",
+      "status": "pending",
+      "description": "Integrate WDAP0 and make it green on the primary dev platform (pre-checkpoint).",
+      "references": [
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/tasks.json",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/session_log.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP0/WDAP0-spec.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/decision_register.md",
+        "docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/linux-smoke.sh",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/macos-smoke.sh",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/windows-smoke.ps1"
+      ],
+      "acceptance_criteria": [
+        "Local integration gates are green for WDAP0 (fmt, clippy, tests, integ-checks).",
+        "Core integration branch is ready for checkpoint validation (CP1-ci-checkpoint)."
+      ],
+      "start_checklist": [
+        "git checkout feat/world-deps-apt-provisioning && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDAP0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/world-deps-apt-provisioning\" TASK_ID=\"WDAP0-integ-core\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "On the orchestration branch, run checkpoint task: CP1-ci-checkpoint",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDAP0-integ-core\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-apt-provisioning-wdap0-integ-core",
+      "integration_task": "WDAP0-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP0/kickoff_prompts/WDAP0-integ-core.md",
+      "depends_on": [
+        "WDAP0-code",
+        "WDAP0-test"
+      ],
+      "concurrent_with": [],
+      "git_branch": "world-deps-apt-provisioning-wdap0-integ-core",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "CP1-ci-checkpoint",
+      "name": "CP1 CI checkpoint (cross-platform validation)",
+      "type": "ops",
+      "phase": "CP1",
+      "status": "pending",
+      "description": "Run cross-platform compile parity + feature smoke for checkpoint boundary slice WDAP0 (schema v4).",
+      "references": [
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/tasks.json",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/session_log.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP0/WDAP0-spec.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/linux-smoke.sh",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/macos-smoke.sh",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/windows-smoke.ps1"
+      ],
+      "acceptance_criteria": [
+        "Compile parity is green for the checkpoint checkout SHA.",
+        "Feature smoke is green for the checkpoint checkout SHA on behavior platforms.",
+        "Run ids and checkout SHA are recorded in session_log.md."
+      ],
+      "start_checklist": [
+        "git checkout feat/world-deps-apt-provisioning && git pull --ff-only",
+        "Read pre-planning/ci_checkpoint_plan.md and kickoff prompt",
+        "Run CI audit (ci-testing + feature-smoke) and dispatch required gates"
+      ],
+      "end_checklist": [
+        "Record run ids/URLs in session_log.md",
+        "Set status to completed; add END entry; commit docs"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/packs/draft/world-deps-apt-provisioning/kickoff_prompts/CP1-ci-checkpoint.md",
+      "depends_on": [
+        "WDAP0-integ-core"
+      ],
+      "concurrent_with": []
+    },
+    {
+      "id": "WDAP0-integ-linux",
+      "name": "WDAP0 slice (integration platform-fix — linux)",
+      "type": "integration",
+      "phase": "WDAP0",
+      "status": "pending",
+      "description": "Fix WDAP0 platform drift for linux after checkpoint results.",
+      "references": [
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/tasks.json",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/session_log.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP0/WDAP0-spec.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md",
+        "docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/linux-smoke.sh"
+      ],
+      "acceptance_criteria": [
+        "linux platform gate is green for WDAP0 (quality gates and behavior smoke when required).",
+        "Any linux-only fixes are committed to the platform branch."
+      ],
+      "start_checklist": [
+        "git checkout feat/world-deps-apt-provisioning && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDAP0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/world-deps-apt-provisioning\" TASK_ID=\"WDAP0-integ-linux\" TASK_PLATFORM=linux"
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run platform-local validation and record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDAP0-integ-linux\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-apt-provisioning-wdap0-integ-linux",
+      "integration_task": "WDAP0-integ-linux",
+      "kickoff_prompt": "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP0/kickoff_prompts/WDAP0-integ-linux.md",
+      "depends_on": [
+        "WDAP0-integ-core",
+        "CP1-ci-checkpoint"
+      ],
+      "concurrent_with": [],
+      "platform": "linux",
+      "git_branch": "world-deps-apt-provisioning-wdap0-integ-linux",
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "WDAP0-integ-macos",
+      "name": "WDAP0 slice (integration platform-fix — macos)",
+      "type": "integration",
+      "phase": "WDAP0",
+      "status": "pending",
+      "description": "Fix WDAP0 platform drift for macos after checkpoint results.",
+      "references": [
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/tasks.json",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/session_log.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP0/WDAP0-spec.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md",
+        "docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/macos-smoke.sh"
+      ],
+      "acceptance_criteria": [
+        "macos platform gate is green for WDAP0 (quality gates and behavior smoke when required).",
+        "Any macos-only fixes are committed to the platform branch."
+      ],
+      "start_checklist": [
+        "git checkout feat/world-deps-apt-provisioning && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDAP0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/world-deps-apt-provisioning\" TASK_ID=\"WDAP0-integ-macos\" TASK_PLATFORM=macos"
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run platform-local validation and record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDAP0-integ-macos\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-apt-provisioning-wdap0-integ-macos",
+      "integration_task": "WDAP0-integ-macos",
+      "kickoff_prompt": "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP0/kickoff_prompts/WDAP0-integ-macos.md",
+      "depends_on": [
+        "WDAP0-integ-core",
+        "CP1-ci-checkpoint"
+      ],
+      "concurrent_with": [],
+      "platform": "macos",
+      "git_branch": "world-deps-apt-provisioning-wdap0-integ-macos",
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "WDAP0-integ-windows",
+      "name": "WDAP0 slice (integration platform-fix — windows)",
+      "type": "integration",
+      "phase": "WDAP0",
+      "status": "pending",
+      "description": "Fix WDAP0 platform drift for windows after checkpoint results.",
+      "references": [
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/tasks.json",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/session_log.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP0/WDAP0-spec.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md",
+        "docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/windows-smoke.ps1"
+      ],
+      "acceptance_criteria": [
+        "windows platform gate is green for WDAP0 (quality gates and behavior smoke when required).",
+        "Any windows-only fixes are committed to the platform branch."
+      ],
+      "start_checklist": [
+        "git checkout feat/world-deps-apt-provisioning && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDAP0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/world-deps-apt-provisioning\" TASK_ID=\"WDAP0-integ-windows\" TASK_PLATFORM=windows"
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run platform-local validation and record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDAP0-integ-windows\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-apt-provisioning-wdap0-integ-windows",
+      "integration_task": "WDAP0-integ-windows",
+      "kickoff_prompt": "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP0/kickoff_prompts/WDAP0-integ-windows.md",
+      "depends_on": [
+        "WDAP0-integ-core",
+        "CP1-ci-checkpoint"
+      ],
+      "concurrent_with": [],
+      "platform": "windows",
+      "git_branch": "world-deps-apt-provisioning-wdap0-integ-windows",
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "WDAP0-integ",
+      "name": "WDAP0 slice (integration final)",
+      "type": "integration",
+      "phase": "WDAP0",
+      "status": "pending",
+      "description": "Finalize WDAP0 with cross-platform merge after checkpoint and any platform fixes.",
+      "references": [
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/tasks.json",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/session_log.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP0/WDAP0-spec.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/decision_register.md",
+        "docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md"
+      ],
+      "acceptance_criteria": [
+        "Checkpoint CI gates are completed and recorded in session_log.md.",
+        "WDAP0 slice is green locally (integ-checks)."
+      ],
+      "ac_ids": [
+        "AC-WDAP0-01",
+        "AC-WDAP0-02",
+        "AC-WDAP0-03",
+        "AC-WDAP0-04",
+        "AC-WDAP0-05",
+        "AC-WDAP0-06",
+        "AC-WDAP0-07",
+        "AC-WDAP0-08"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-deps-apt-provisioning && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDAP0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/world-deps-apt-provisioning\" TASK_ID=\"WDAP0-integ\""
+      ],
+      "end_checklist": [
+        "Merge platform-fix branches and resolve conflicts",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDAP0-integ\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-apt-provisioning-wdap0-integ",
+      "integration_task": "WDAP0-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP0/kickoff_prompts/WDAP0-integ.md",
+      "depends_on": [
+        "WDAP0-integ-core",
+        "CP1-ci-checkpoint",
+        "WDAP0-integ-linux",
+        "WDAP0-integ-macos",
+        "WDAP0-integ-windows"
+      ],
+      "concurrent_with": [],
+      "git_branch": "world-deps-apt-provisioning-wdap0-integ",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": true
+    },
+    {
+      "id": "WDAP1-code",
+      "name": "WDAP1 slice (code)",
+      "type": "code",
+      "phase": "WDAP1",
+      "status": "pending",
+      "description": "Implement the runtime fail-early posture for APT-backed items for `substrate world deps current sync|install` per WDAP1 spec.",
+      "references": [
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/tasks.json",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/session_log.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/alignment_report.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/workstream_triage.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP1/WDAP1-spec.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/decision_register.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/manual_testing_playbook.md",
+        "docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md"
+      ],
+      "acceptance_criteria": [
+        "Production code implements WDAP1 behaviors and failure posture per spec.",
+        "Code is formatted and clippy-clean per triad standards."
+      ],
+      "ac_ids": [
+        "AC-WDAP1-01",
+        "AC-WDAP1-03",
+        "AC-WDAP1-04",
+        "AC-WDAP1-05",
+        "AC-WDAP1-06",
+        "AC-WDAP1-07",
+        "AC-WDAP1-09",
+        "AC-WDAP1-10"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-deps-apt-provisioning && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDAP1-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/world-deps-apt-provisioning\" SLICE_ID=\"WDAP1\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDAP1-code\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-apt-provisioning-wdap1-code",
+      "integration_task": "WDAP1-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP1/kickoff_prompts/WDAP1-code.md",
+      "depends_on": [
+        "WDAP0-integ",
+        "CP1-ci-checkpoint"
+      ],
+      "concurrent_with": [
+        "WDAP1-test"
+      ],
+      "git_branch": "world-deps-apt-provisioning-wdap1-code",
+      "required_make_targets": [
+        "triad-code-checks"
+      ]
+    },
+    {
+      "id": "WDAP1-test",
+      "name": "WDAP1 slice (test)",
+      "type": "test",
+      "phase": "WDAP1",
+      "status": "pending",
+      "description": "Add tests that enforce the WDAP1 runtime fail-early contract (no runtime APT mutation; remediation invariants).",
+      "references": [
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/tasks.json",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/session_log.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/alignment_report.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/workstream_triage.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP1/WDAP1-spec.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/decision_register.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/manual_testing_playbook.md",
+        "docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover WDAP1 ACs for fail-early scope rules and deterministic remediation.",
+        "Tests are deterministic and avoid global machine state."
+      ],
+      "ac_ids": [
+        "AC-WDAP1-01",
+        "AC-WDAP1-03",
+        "AC-WDAP1-04",
+        "AC-WDAP1-05",
+        "AC-WDAP1-06",
+        "AC-WDAP1-07",
+        "AC-WDAP1-09",
+        "AC-WDAP1-10"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-deps-apt-provisioning && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDAP1-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/world-deps-apt-provisioning\" SLICE_ID=\"WDAP1\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "Run the targeted tests you add/touch",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDAP1-test\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-apt-provisioning-wdap1-test",
+      "integration_task": "WDAP1-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP1/kickoff_prompts/WDAP1-test.md",
+      "depends_on": [
+        "WDAP0-integ",
+        "CP1-ci-checkpoint"
+      ],
+      "concurrent_with": [
+        "WDAP1-code"
+      ],
+      "git_branch": "world-deps-apt-provisioning-wdap1-test",
+      "required_make_targets": [
+        "triad-test-checks"
+      ]
+    },
+    {
+      "id": "WDAP1-integ-core",
+      "name": "WDAP1 slice (integration core)",
+      "type": "integration",
+      "phase": "WDAP1",
+      "status": "pending",
+      "description": "Integrate WDAP1 and make it green on the primary dev platform (pre-checkpoint).",
+      "references": [
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/tasks.json",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/session_log.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP1/WDAP1-spec.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/decision_register.md",
+        "docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/linux-smoke.sh",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/macos-smoke.sh",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/windows-smoke.ps1"
+      ],
+      "acceptance_criteria": [
+        "Local integration gates are green for WDAP1 (fmt, clippy, tests, integ-checks).",
+        "Core integration branch is ready for checkpoint validation (CP2-ci-checkpoint)."
+      ],
+      "start_checklist": [
+        "git checkout feat/world-deps-apt-provisioning && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDAP1-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/world-deps-apt-provisioning\" TASK_ID=\"WDAP1-integ-core\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "On the orchestration branch, run checkpoint task: CP2-ci-checkpoint",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDAP1-integ-core\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-apt-provisioning-wdap1-integ-core",
+      "integration_task": "WDAP1-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP1/kickoff_prompts/WDAP1-integ-core.md",
+      "depends_on": [
+        "WDAP1-code",
+        "WDAP1-test"
+      ],
+      "concurrent_with": [],
+      "git_branch": "world-deps-apt-provisioning-wdap1-integ-core",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "CP2-ci-checkpoint",
+      "name": "CP2 CI checkpoint (cross-platform validation)",
+      "type": "ops",
+      "phase": "CP2",
+      "status": "pending",
+      "description": "Run cross-platform compile parity + feature smoke for checkpoint boundary slice WDAP1 (schema v4).",
+      "references": [
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/tasks.json",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/session_log.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP1/WDAP1-spec.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/linux-smoke.sh",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/macos-smoke.sh",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/windows-smoke.ps1"
+      ],
+      "acceptance_criteria": [
+        "Compile parity is green for the checkpoint checkout SHA.",
+        "Feature smoke is green for the checkpoint checkout SHA on behavior platforms.",
+        "Run ids and checkout SHA are recorded in session_log.md."
+      ],
+      "start_checklist": [
+        "git checkout feat/world-deps-apt-provisioning && git pull --ff-only",
+        "Read pre-planning/ci_checkpoint_plan.md and kickoff prompt",
+        "Run CI audit (ci-testing + feature-smoke) and dispatch required gates"
+      ],
+      "end_checklist": [
+        "Record run ids/URLs in session_log.md",
+        "Set status to completed; add END entry; commit docs"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/packs/draft/world-deps-apt-provisioning/kickoff_prompts/CP2-ci-checkpoint.md",
+      "depends_on": [
+        "WDAP1-integ-core"
+      ],
+      "concurrent_with": []
+    },
+    {
+      "id": "WDAP1-integ-linux",
+      "name": "WDAP1 slice (integration platform-fix — linux)",
+      "type": "integration",
+      "phase": "WDAP1",
+      "status": "pending",
+      "description": "Fix WDAP1 platform drift for linux after checkpoint results.",
+      "references": [
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/tasks.json",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/session_log.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP1/WDAP1-spec.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md",
+        "docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/linux-smoke.sh"
+      ],
+      "acceptance_criteria": [
+        "linux platform gate is green for WDAP1 (quality gates and behavior smoke when required).",
+        "Any linux-only fixes are committed to the platform branch."
+      ],
+      "start_checklist": [
+        "git checkout feat/world-deps-apt-provisioning && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDAP1-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/world-deps-apt-provisioning\" TASK_ID=\"WDAP1-integ-linux\" TASK_PLATFORM=linux"
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run platform-local validation and record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDAP1-integ-linux\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-apt-provisioning-wdap1-integ-linux",
+      "integration_task": "WDAP1-integ-linux",
+      "kickoff_prompt": "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP1/kickoff_prompts/WDAP1-integ-linux.md",
+      "depends_on": [
+        "WDAP1-integ-core",
+        "CP2-ci-checkpoint"
+      ],
+      "concurrent_with": [],
+      "platform": "linux",
+      "git_branch": "world-deps-apt-provisioning-wdap1-integ-linux",
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "WDAP1-integ-macos",
+      "name": "WDAP1 slice (integration platform-fix — macos)",
+      "type": "integration",
+      "phase": "WDAP1",
+      "status": "pending",
+      "description": "Fix WDAP1 platform drift for macos after checkpoint results.",
+      "references": [
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/tasks.json",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/session_log.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP1/WDAP1-spec.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md",
+        "docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/macos-smoke.sh"
+      ],
+      "acceptance_criteria": [
+        "macos platform gate is green for WDAP1 (quality gates and behavior smoke when required).",
+        "Any macos-only fixes are committed to the platform branch."
+      ],
+      "start_checklist": [
+        "git checkout feat/world-deps-apt-provisioning && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDAP1-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/world-deps-apt-provisioning\" TASK_ID=\"WDAP1-integ-macos\" TASK_PLATFORM=macos"
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run platform-local validation and record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDAP1-integ-macos\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-apt-provisioning-wdap1-integ-macos",
+      "integration_task": "WDAP1-integ-macos",
+      "kickoff_prompt": "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP1/kickoff_prompts/WDAP1-integ-macos.md",
+      "depends_on": [
+        "WDAP1-integ-core",
+        "CP2-ci-checkpoint"
+      ],
+      "concurrent_with": [],
+      "platform": "macos",
+      "git_branch": "world-deps-apt-provisioning-wdap1-integ-macos",
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "WDAP1-integ-windows",
+      "name": "WDAP1 slice (integration platform-fix — windows)",
+      "type": "integration",
+      "phase": "WDAP1",
+      "status": "pending",
+      "description": "Fix WDAP1 platform drift for windows after checkpoint results.",
+      "references": [
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/tasks.json",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/session_log.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP1/WDAP1-spec.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md",
+        "docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/windows-smoke.ps1"
+      ],
+      "acceptance_criteria": [
+        "windows platform gate is green for WDAP1 (quality gates and behavior smoke when required).",
+        "Any windows-only fixes are committed to the platform branch."
+      ],
+      "start_checklist": [
+        "git checkout feat/world-deps-apt-provisioning && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDAP1-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/world-deps-apt-provisioning\" TASK_ID=\"WDAP1-integ-windows\" TASK_PLATFORM=windows"
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run platform-local validation and record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDAP1-integ-windows\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-apt-provisioning-wdap1-integ-windows",
+      "integration_task": "WDAP1-integ-windows",
+      "kickoff_prompt": "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP1/kickoff_prompts/WDAP1-integ-windows.md",
+      "depends_on": [
+        "WDAP1-integ-core",
+        "CP2-ci-checkpoint"
+      ],
+      "concurrent_with": [],
+      "platform": "windows",
+      "git_branch": "world-deps-apt-provisioning-wdap1-integ-windows",
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "WDAP1-integ",
+      "name": "WDAP1 slice (integration final)",
+      "type": "integration",
+      "phase": "WDAP1",
+      "status": "pending",
+      "description": "Finalize WDAP1 with cross-platform merge after checkpoint and any platform fixes.",
+      "references": [
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/tasks.json",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/session_log.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP1/WDAP1-spec.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/decision_register.md",
+        "docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md"
+      ],
+      "acceptance_criteria": [
+        "Checkpoint CI gates are completed and recorded in session_log.md.",
+        "WDAP1 slice is green locally (integ-checks)."
+      ],
+      "ac_ids": [
+        "AC-WDAP1-01",
+        "AC-WDAP1-03",
+        "AC-WDAP1-04",
+        "AC-WDAP1-05",
+        "AC-WDAP1-06",
+        "AC-WDAP1-07",
+        "AC-WDAP1-09",
+        "AC-WDAP1-10"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-deps-apt-provisioning && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDAP1-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/world-deps-apt-provisioning\" TASK_ID=\"WDAP1-integ\""
+      ],
+      "end_checklist": [
+        "Merge platform-fix branches and resolve conflicts",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDAP1-integ\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-deps-apt-provisioning-wdap1-integ",
+      "integration_task": "WDAP1-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP1/kickoff_prompts/WDAP1-integ.md",
+      "depends_on": [
+        "WDAP1-integ-core",
+        "CP2-ci-checkpoint",
+        "WDAP1-integ-linux",
+        "WDAP1-integ-macos",
+        "WDAP1-integ-windows"
+      ],
+      "concurrent_with": [],
+      "git_branch": "world-deps-apt-provisioning-wdap1-integ",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": true
+    },
+    {
+      "id": "FZ-feature-cleanup",
+      "name": "Feature cleanup (worktrees + branches)",
+      "type": "ops",
+      "phase": "FZ",
+      "status": "pending",
+      "description": "Close out the feature (cleanup worktrees and task branches).",
+      "references": [
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/tasks.json",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/session_log.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP0/WDAP0-spec.md",
+        "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP1/WDAP1-spec.md",
+        "docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md"
+      ],
+      "acceptance_criteria": [
+        "All feature worktrees are removed per the triad worktree registry.",
+        "Task branches are pruned per the cleanup command flags."
+      ],
+      "start_checklist": [
+        "git checkout feat/world-deps-apt-provisioning && git pull --ff-only",
+        "Verify all feature tasks are completed",
+        "Run the feature cleanup command in dry-run mode first"
+      ],
+      "end_checklist": [
+        "Run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/packs/draft/world-deps-apt-provisioning\" REMOVE_WORKTREES=1 PRUNE_LOCAL=1",
+        "Paste cleanup stdout summary into session_log.md END entry",
+        "Set status to completed; add END entry; commit docs"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/packs/draft/world-deps-apt-provisioning/kickoff_prompts/FZ-feature-cleanup.md",
+      "depends_on": [
+        "WDAP1-integ"
+      ],
+      "concurrent_with": []
+    }
+  ]
 }
