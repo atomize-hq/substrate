@@ -50,4 +50,14 @@ Output requirements:
      - Canonical slice spec path: `<FEATURE_DIR>/slices/<SLICE_ID>/<SLICE_ID>-spec.md`.
      - If you require slice specs, `spec_manifest.md` must list them using the canonical path and consistent `<SLICE_ID>`s.
 3) If you discover missing/ambiguous ADR intent, record follow-ups inside `pre-planning/spec_manifest.md` under a “Follow-ups” section (not in ADRs).
+
+Closeout micro-lint (required):
+- Run the hard-ban scan and ambiguity scan against ONLY the tracked output you wrote in this run.
+- For this role: `<OWNED_PATHS...>` = `<FEATURE_DIR>/pre-planning/spec_manifest.md`.
+
+Concrete micro-lint commands:
+```bash
+# Hard-ban + ambiguity scans (required)
+make planning-micro-lint FEATURE_DIR="<FEATURE_DIR>" OWNED_PATHS="<OWNED_PATHS...>"
+```
 ```

@@ -97,4 +97,14 @@ Follow-up checklist for making this plan mechanically valid (required when slice
 - Add the `CP1-ci-checkpoint` task with correct dependencies (per this plan).
 - Then run (must pass):
   - `python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "<FEATURE_DIR>"`
+
+Closeout micro-lint (required):
+- Run the hard-ban scan and ambiguity scan against ONLY the tracked outputs you edited in this run.
+- For this role: `<OWNED_PATHS...>` should include `<FEATURE_DIR>/pre-planning/ci_checkpoint_plan.md` and, if edited, `<FEATURE_DIR>/tasks.json`.
+
+Concrete micro-lint commands:
+```bash
+# Hard-ban + ambiguity scans (required)
+make planning-micro-lint FEATURE_DIR="<FEATURE_DIR>" OWNED_PATHS="<OWNED_PATHS...>"
+```
 ```

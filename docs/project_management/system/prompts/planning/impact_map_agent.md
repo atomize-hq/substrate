@@ -76,4 +76,14 @@ Output requirements:
    - If it fails:
      - Fix `<FEATURE_DIR>/pre-planning/impact_map.md`, then rerun the validator until it passes.
    - Only then end the session (exit successfully).
+
+6) Closeout micro-lint (required):
+   - Run the hard-ban scan and ambiguity scan against ONLY the tracked output you wrote in this run.
+   - For this role: `<OWNED_PATHS...>` = `<FEATURE_DIR>/pre-planning/impact_map.md`.
+
+Concrete micro-lint commands:
+```bash
+# Hard-ban + ambiguity scans (required)
+make planning-micro-lint FEATURE_DIR="<FEATURE_DIR>" OWNED_PATHS="<OWNED_PATHS...>"
+```
 ```

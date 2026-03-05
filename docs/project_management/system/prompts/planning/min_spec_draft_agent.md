@@ -83,4 +83,14 @@ Content contract for `pre-planning/minimal_spec_draft.md` (keep short, concrete,
    - Note for downstream steps:
      - CI-checkpoint should prefer this slice list when populating the machine-readable slices list in `pre-planning/ci_checkpoint_plan.md` (still do not validate mechanically until slice tasks exist in `tasks.json`).
      - Workstream triage may propose edits to this slice skeleton as recommendations in `pre-planning/workstream_triage.md` (but must not edit this file).
+
+Closeout micro-lint (required):
+- Run the hard-ban scan and ambiguity scan against ONLY the tracked output you wrote in this run.
+- For this role: `<OWNED_PATHS...>` = `<FEATURE_DIR>/pre-planning/minimal_spec_draft.md`.
+
+Concrete micro-lint commands:
+```bash
+# Hard-ban + ambiguity scans (required)
+make planning-micro-lint FEATURE_DIR="<FEATURE_DIR>" OWNED_PATHS="<OWNED_PATHS...>"
+```
 ```

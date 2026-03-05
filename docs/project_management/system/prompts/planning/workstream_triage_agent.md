@@ -171,4 +171,14 @@ Output:
 - Ensure `<FEATURE_DIR>/logs/workstream-triage/workstream_triage_draft.md` is readable and structured (headings + bullets; no prose essays).
 - Ensure `<FEATURE_DIR>/pre-planning/workstream_triage.md` exists and is readable/structured.
 - Optionally write/overwrite: `<FEATURE_DIR>/logs/workstream-triage/handoff.md` as a short “executive summary” for the operator.
+
+Closeout micro-lint (required):
+- Run the hard-ban scan and ambiguity scan against ONLY the tracked output you wrote in this run.
+- For this role: `<OWNED_PATHS...>` = `<FEATURE_DIR>/pre-planning/workstream_triage.md`.
+
+Concrete micro-lint commands:
+```bash
+# Hard-ban + ambiguity scans (required)
+make planning-micro-lint FEATURE_DIR="<FEATURE_DIR>" OWNED_PATHS="<OWNED_PATHS...>"
+```
 ```

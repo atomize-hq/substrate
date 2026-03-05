@@ -65,8 +65,17 @@ Blocked-by-allowlist behavior (non-negotiable):
 Self-check (run and report results in your final response):
 - `python3 docs/project_management/system/scripts/planning/validate_tasks_json.py --feature-dir "<FEATURE_DIR>"`
 - `python3 docs/project_management/system/scripts/planning/validate_slice_specs.py --feature-dir "<FEATURE_DIR>"`
-- If a checkpoint plan exists OR tasks.json indicates cross-platform:
+ - If a checkpoint plan exists OR tasks.json indicates cross-platform:
   - `python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "<FEATURE_DIR>"`
+ - Closeout micro-lint (required):
+   - Run the hard-ban scan and ambiguity scan against ONLY the tracked paths you edited in this run (prefer the `PM_PWS_INDEX` `owns` list for `<PWS_ID>`).
+   - If any matches are found, rewrite the affected tracked outputs to remove the matches, then rerun until clean.
+
+Concrete micro-lint commands (scope to the owned paths you just wrote):
+```bash
+# Hard-ban + ambiguity scans (required)
+make planning-micro-lint FEATURE_DIR="<FEATURE_DIR>" OWNED_PATHS="<OWNED_PATHS...>"
+```
 
 Constraints (non-negotiable):
 - Do not modify any tracked files outside the output allowlist.

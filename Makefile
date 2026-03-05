@@ -91,6 +91,9 @@ PM_SYSTEM_SCRIPTS := docs/project_management/system/scripts
 # Feature directory under docs/project_management/packs/<bucket>/<feature>
 FEATURE_DIR ?=
 
+# Space-separated list of pack-relative paths to scan (scoped lint for planning agents)
+OWNED_PATHS ?=
+
 # Planning agent id for pm-run-planning-agent
 AGENT ?=
 
@@ -120,6 +123,13 @@ planning-lint:
 	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
 	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
 	$(PM_SYSTEM_SCRIPTS)/planning/lint.sh --feature-dir "$(FEATURE_DIR)"
+
+.PHONY: planning-micro-lint
+planning-micro-lint:
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
+	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
+	@if [ -z "$(OWNED_PATHS)" ]; then echo "ERROR: set OWNED_PATHS=\"<pack-relative paths you edited>\""; exit 2; fi
+	$(PM_SYSTEM_SCRIPTS)/planning/micro_lint.sh --feature-dir "$(FEATURE_DIR)" -- $(OWNED_PATHS)
 
 .PHONY: pm-pws-plan
 pm-pws-plan:
