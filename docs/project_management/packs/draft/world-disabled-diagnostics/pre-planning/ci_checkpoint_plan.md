@@ -19,7 +19,7 @@ Standard:
 - This plan is authoritative for **CI cadence**.
 - If you discover a mismatch between the plan and reality (slice ids, platform scope, contract surfaces), update this plan first, then update `tasks.json` and kickoff prompts.
 - For schema v4+ cross-platform automation packs: `tasks.json` `meta.checkpoint_boundaries` MUST list the **last slice** in each checkpoint group (this is linted once slice tasks exist in `tasks.json`).
-- Pre-planning note: `tasks.json` does not define slice triads (`*-integ`) yet, so this plan is not mechanically validated yet; the slice list below is derived from the draft slice skeleton in `pre-planning/minimal_spec_draft.md`.
+- Pre-planning note: this plan is mechanically validated against `tasks.json` once slice tasks exist; keep the JSON `slices` list and the `tasks.json` `meta.checkpoint_boundaries` in sync.
 
 ## Machine-readable plan (linted)
 
@@ -34,13 +34,13 @@ Standard:
     {
       "id": "CP1",
       "task_id": "CP1-ci-checkpoint",
-      "slices": ["WDD0"],
+      "slices": ["WDD0", "WDD1", "WDD2"],
       "gates": {
         "compile_parity": true,
         "feature_smoke": true,
         "ci_testing": "full"
       },
-      "rationale": "Single end-of-feature checkpoint after WDD0. Total slices (1) is below defaults.min=4, so one checkpoint is acceptable; CP1 validates the stabilized disabled/skipped diagnostics contract (text + JSON), the \"skip probes when disabled\" boundary, and cross-platform parity across Linux/macOS/Windows."
+      "rationale": "Single end-of-feature checkpoint after WDD2. Total slices (3) is below defaults.min=4, so one checkpoint is acceptable; CP1 validates the end-to-end disabled/skipped diagnostics contract (text + JSON), the \"no probes when disabled\" boundary, docs alignment, and cross-platform parity across Linux/macOS/Windows."
     }
   ]
 }
@@ -48,11 +48,11 @@ Standard:
 
 ## Human-readable rationale (required)
 
-### CP1 (`WDD0..WDD0`) — disabled/skipped diagnostics contract completion seam
+### CP1 (`WDD0..WDD2`) — disabled/skipped diagnostics contract completion seam
 
 Why this boundary is code-grounded:
-- This pre-planning slice skeleton has a single slice (`WDD0`); the CI checkpoint standard allows a single checkpoint when total slices `< defaults.min_triads_per_checkpoint`.
-- CP1 is the “contract completion seam” for this feature: by the end of `WDD0`, the operator-facing behavior for `substrate health` and `substrate shim doctor` (text + `--json`) should be coherent and testable end-to-end, including the disabled/skipped posture and the enabled-but-broken posture. See:
+- Total slices for this pack is 3 (`WDD0..WDD2`); the CI checkpoint standard allows a single checkpoint when total slices `< defaults.min_triads_per_checkpoint`.
+- CP1 is the “contract completion seam” for this feature: by the end of `WDD2`, the operator-facing behavior for `substrate health` and `substrate shim doctor` (text + `--json`) should be coherent and testable end-to-end, including the disabled/skipped posture, the enabled-but-broken posture, and docs alignment. See:
   - `pre-planning/minimal_spec_draft.md` (cross-cutting invariants: effective-config precedence, degrade vs fail-visible posture, additive-only JSON)
   - `pre-planning/spec_manifest.md` (owned contract surfaces and required docs)
   - `pre-planning/impact_map.md` (touch set + contradiction risks)
@@ -61,7 +61,10 @@ What surfaces are stabilized at CP1 (from `pre-planning/spec_manifest.md` + `pre
 - Operator-facing contract + exit-code posture: `contract.md` (disabled vs needs-attention semantics; deterministic copy; exit-code mapping).
 - JSON contract (additive-only; machine-detectable disabled/skipped): `world-disabled-diagnostics-json-schema-spec.md` (field paths + enum spellings + emission rules).
 - Operator documentation: `docs/USAGE.md` (examples/field explanations aligned to shipped behavior).
-- Slice behavior + acceptance criteria: `slices/WDD0/WDD0-spec.md` (including a singular, testable “skip probes when disabled” boundary).
+- Slice behavior + acceptance criteria:
+  - `slices/WDD0/WDD0-spec.md` (effective-config resolution seam + exit-code posture for config errors).
+  - `slices/WDD1/WDD1-spec.md` (shim doctor disabled/skipped statuses + omission rules + no-probes boundary).
+  - `slices/WDD2/WDD2-spec.md` (health summary behavior + docs alignment).
 - Cross-platform behavior validation artifacts: `manual_testing_playbook.md` and `smoke/{linux,macos,windows}-smoke.*`.
 
 What risk CP1 reduces (from `pre-planning/impact_map.md`):
@@ -71,26 +74,8 @@ What risk CP1 reduces (from `pre-planning/impact_map.md`):
 
 ## Follow-ups
 
-This plan is not mechanically validated yet because `tasks.json` does not currently define slice integration tasks (`*-integ`) or checkpoint ops tasks.
-
 Before running:
-`python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "docs/project_management/packs/draft/world-disabled-diagnostics"`
+- `python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "docs/project_management/packs/draft/world-disabled-diagnostics"`
 
-…complete these wiring steps:
-
-1) Confirm slice ids and ordering
-   - Ensure the final slice ids in `tasks.json` match the accepted slice ids (expect `WDD0` unless planning splits/merges).
-   - Ensure this plan’s JSON `slices` list matches the deterministic slice order from `tasks.json`.
-
-2) Add `tasks.json` checkpoint boundary metadata (schema v4 cross-platform)
-   - Set `meta.checkpoint_boundaries = ["WDD0"]` to match the checkpoint group boundary (the last slice in each checkpoint group).
-
-3) Add checkpoint task + kickoff prompt + deps
-   - Add an ops task `CP1-ci-checkpoint` with:
-     - `type: "ops"`
-     - `depends_on: ["WDD0-integ-core"]`
-     - `kickoff_prompt: docs/project_management/packs/draft/world-disabled-diagnostics/kickoff_prompts/CP1-ci-checkpoint.md`
-   - Note: tracked output allowlists must include `kickoff_prompts/` before this wiring can be completed.
-
-4) If additional checkpoints are added later, wire gating so the next checkpoint group’s first slice code/test tasks depend on the prior checkpoint task.
-
+If planning later adds additional checkpoints:
+- Wire gating so the next checkpoint group’s first slice code/test tasks depend on the prior checkpoint task.
