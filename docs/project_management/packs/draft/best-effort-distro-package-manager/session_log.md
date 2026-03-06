@@ -26,3 +26,10 @@
   - `python3 docs/project_management/system/scripts/planning/validate_slice_specs.py --feature-dir "docs/project_management/packs/draft/best-effort-distro-package-manager"` → `PASS`
   - `python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "docs/project_management/packs/draft/best-effort-distro-package-manager"` → `FAIL` because `pre-planning/ci_checkpoint_plan.md` still lists only `BEDPM0`
   - `make planning-micro-lint FEATURE_DIR="docs/project_management/packs/draft/best-effort-distro-package-manager" OWNED_PATHS="tasks.json session_log.md kickoff_prompts slices/BEDPM0/kickoff_prompts slices/BEDPM1/kickoff_prompts slices/BEDPM2/kickoff_prompts"` → `PASS`
+
+## BLOCKED — 2026-03-06T03:38:15Z — planning — BEDPM-PWS-tasks_checkpoints
+- Exact blocker:
+  - `python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "docs/project_management/packs/draft/best-effort-distro-package-manager"` → `FAIL: ci_checkpoint_plan.md must assign slices in deterministic order and as contiguous groups; expected slice order ['BEDPM0', 'BEDPM1', 'BEDPM2'], got ['BEDPM0']`
+- Allowlist status:
+  - No allowlist-safe tracked edit can change that validator result because `pre-planning/ci_checkpoint_plan.md` is outside the tracked output allowlist.
+  - The requested tracked write and proposed replacement remain staged under `logs/pws/BEDPM-PWS-tasks_checkpoints/`.
