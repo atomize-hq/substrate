@@ -33,3 +33,7 @@
 - Allowlist status:
   - No allowlist-safe tracked edit can change that validator result because `pre-planning/ci_checkpoint_plan.md` is outside the tracked output allowlist.
   - The requested tracked write and proposed replacement remain staged under `logs/pws/BEDPM-PWS-tasks_checkpoints/`.
+- Cross-doc state:
+  - `minimal_spec_draft.md`, `workstream_triage.md`, `plan.md`, and the three slice specs all model `BEDPM0`, `BEDPM1`, and `BEDPM2`.
+  - `spec_manifest.md`, `impact_map.md`, `alignment_report.md`, and `ci_checkpoint_plan.md` still model a single-slice `BEDPM0` pack.
+  - The triad graph remains on the three-slice shape because it matches the slice specs, the plan, and the PWS assumptions for this workstream.
