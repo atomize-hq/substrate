@@ -37,3 +37,15 @@
   - `minimal_spec_draft.md`, `workstream_triage.md`, `plan.md`, and the three slice specs all model `BEDPM0`, `BEDPM1`, and `BEDPM2`.
   - `spec_manifest.md`, `impact_map.md`, `alignment_report.md`, and `ci_checkpoint_plan.md` still model a single-slice `BEDPM0` pack.
   - The triad graph remains on the three-slice shape because it matches the slice specs, the plan, and the PWS assumptions for this workstream.
+
+## END — 2026-03-06T03:50:41Z — planning — BEDPM-PWS-tasks_checkpoints
+- Summary:
+  - Re-aligned `tasks.json` to the current single-slice checkpoint model centered on `BEDPM0`, which is the shape required by `pre-planning/ci_checkpoint_plan.md`, `pre-planning/spec_manifest.md`, `pre-planning/impact_map.md`, and `pre-planning/alignment_report.md`.
+  - Converted `BEDPM0` into the schema-v4 checkpoint-boundary slice with `BEDPM0-integ-core`, per-platform parity tasks, final `BEDPM0-integ`, `CP1-ci-checkpoint`, and `FZ-feature-cleanup`.
+  - Added BEDPM0 boundary kickoff prompts and updated the CP1 kickoff prompt to target the `BEDPM0` core branch and CI ledger path.
+- Validation results:
+  - `python3 docs/project_management/system/scripts/planning/validate_tasks_json.py --feature-dir "docs/project_management/packs/draft/best-effort-distro-package-manager"` → `PASS`
+  - `python3 docs/project_management/system/scripts/planning/validate_slice_specs.py --feature-dir "docs/project_management/packs/draft/best-effort-distro-package-manager"` → `PASS`
+  - `python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "docs/project_management/packs/draft/best-effort-distro-package-manager"` → `PASS`
+  - `make planning-micro-lint FEATURE_DIR="docs/project_management/packs/draft/best-effort-distro-package-manager" OWNED_PATHS="tasks.json session_log.md kickoff_prompts slices/BEDPM0/kickoff_prompts slices/BEDPM1/kickoff_prompts slices/BEDPM2/kickoff_prompts"` → `PASS`
+  - `python3 docs/project_management/system/scripts/planning/ensure_kickoff_prompt_sentinel.py --root "docs/project_management/packs/draft/best-effort-distro-package-manager"` → `Updated kickoff prompts: 0`
