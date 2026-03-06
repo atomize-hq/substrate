@@ -1,4 +1,4 @@
-# best-effort-distro-package-manager — impact map
+# best-effort-distro-package-manager — impact map (pre-planning)
 
 This file replaces the legacy `integration_map.md`.
 
@@ -11,7 +11,7 @@ Authoring standards:
 - ADR(s):
   - `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md`
 - Spec manifest:
-  - `docs/project_management/packs/draft/best-effort-distro-package-manager/spec_manifest.md`
+  - `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
 
 ## Touch set (explicit)
 
@@ -24,9 +24,18 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - To compute pack-derived Work Lift v1 from this Touch Set: `make pm-lift-pack PACK="docs/project_management/packs/draft/best-effort-distro-package-manager"` (strict packs only).
 
 ### Create
+- `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`
+- `docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md`
+- `docs/project_management/packs/draft/best-effort-distro-package-manager/manual_testing_playbook.md`
+- `docs/project_management/packs/draft/best-effort-distro-package-manager/plan.md`
+- `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md`
 - `tests/installers/pkg_manager_detection_test.sh`
 
 ### Edit
+- `docs/INSTALLATION.md`
+- `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md`
+- `docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json`
+- `docs/project_management/packs/sequencing.json`
 - `scripts/substrate/install-substrate.sh`
 
 ### Deprecate
@@ -43,54 +52,56 @@ For each externally visible change, list:
 - contradiction risks (what existing semantics would conflict).
 
 ### CLI / UX
-- Change: Add `--pkg-manager <apt-get|dnf|yum|pacman|zypper>` (Linux-only) and print a stable “distro + pkg-manager decision” one-liner before installing prerequisites.
+- Change: Linux installer supports explicit override (`--pkg-manager`) and emits an operator-facing distro/pkg-manager decision one-liner before prerequisite installation begins.
   - Direct impact:
     - Operators can deterministically force the Linux prereq install path to use a specific manager, reducing brittle PATH-based selection.
-    - Installer output gains a stable, support-friendly one-liner that makes the detection inputs and selected manager explicit.
+    - Installer output includes a support-friendly one-liner that makes the detection inputs, selected manager, and selection source explicit.
   - Cascading impact:
-    - `scripts/substrate/install-substrate.sh` help/usage output and error messages must document the new flag and the legacy `PKG_MANAGER` override, including allowed values.
-    - “Exactly one one-liner” requirement implies the installer must avoid emitting the line multiple times across internal prereq checks and must define whether the line is emitted when no prereq installation is needed.
-    - The hermetic test must assert both precedence and one-liner content/stability (source enum + selected manager) to prevent drift.
+    - `scripts/substrate/install-substrate.sh` `--help` output must document `--pkg-manager` and `PKG_MANAGER`, including allowed values and precedence.
+    - `docs/INSTALLATION.md` must add `--pkg-manager` to the Installer Options Reference and explicitly label it Linux-only.
+    - The one-liner is required to be emitted exactly once; `ensure_linux_prereqs` currently performs multiple prereq checks, so implementation must gate emission to avoid duplicate one-liners.
   - Contradiction risks:
-    - Multiple-manager PATH ambiguity: the ADR requires deterministic selection plus a warning listing alternates + override guidance, but the fixed precedence order is not yet pinned (must be decided and recorded; see DR-0002).
-    - Output stability vs reuse: `scripts/substrate/world-enable.sh` sources `install-substrate.sh` and may call the prereq installer helpers; changes that print the decision line unconditionally can alter `world enable` helper UX (and can violate “exactly once” if invoked in multiple contexts) unless carefully scoped.
+    - `scripts/substrate/world-enable.sh` sources `install-substrate.sh` and reuses prereq helpers; if the one-liner is emitted from shared helpers, `world-enable` UX changes unintentionally unless explicitly scoped.
+    - Output exactness: the ADR requires an exact one-liner string, so the implementation cannot reuse `log()` if it prefixes or formats the line.
 
-- Change: Enforce exit-code taxonomy for pkg-manager selection/override failures.
+- Change: Pkg-manager decision failures use taxonomy exit codes (`2/3/4`) and include actionable remediation guidance.
   - Direct impact:
-    - Invalid override values fail with exit `2`; missing forced manager fails with exit `3`; inability to select any supported manager fails with exit `4` (per ADR-0031).
+    - Invalid override values fail with exit `2`; forced manager missing from PATH fails with exit `3`; inability to select any supported manager fails with exit `4`.
   - Cascading impact:
-    - `scripts/substrate/install-substrate.sh` currently uses `exit 1` for many failures; implementing the ADR’s pkg-manager exit codes requires refactoring error handling so only the intended failure modes map to `2|3|4` without unintentionally reclassifying unrelated failures.
-    - The hermetic test should assert exit codes for the override/selection failure modes (not only the selected manager) to keep the contract enforceable.
+    - `scripts/substrate/install-substrate.sh` currently exits `1` for most failures via `fatal`; implementing `2/3/4` requires refactoring error handling so only pkg-manager-related failures map to `2/3/4` (without reclassifying unrelated install failures).
+    - `tests/installers/pkg_manager_detection_test.sh` must assert exit codes and required remediation content elements for the failure cases.
   - Contradiction risks:
-    - Platform “no behavior change” vs exit codes: today the script exits `2` on Windows (“not yet implemented” warning). If the exit-code meanings are treated as global (not Linux-only), Windows should likely be `4` (“not supported”) per taxonomy. Specs must explicitly scope which exit-code meanings are Linux-only vs global to avoid hidden cross-platform behavior changes.
+    - `scripts/substrate/install-substrate.sh` currently exits `2` on the Windows code path (“PowerShell flow not yet implemented”). To preserve “no behavior change on Windows”, `contract.md` must scope the `2/3/4` meanings to the Linux pkg-manager decision path (or explicitly accept a separate Windows change).
 
 ### Config / env vars / paths
-- Change: Legacy env override `PKG_MANAGER=...` becomes an explicit part of the contract with deterministic precedence under `--pkg-manager`.
+- Change: Add env override `PKG_MANAGER` as an explicit contract input with deterministic precedence under `--pkg-manager`.
   - Direct impact:
-    - Operators can continue to use `PKG_MANAGER` while gaining a higher-precedence flag for explicit override.
+    - Operators can use `PKG_MANAGER` as an override while `--pkg-manager` remains the highest-precedence override.
   - Cascading impact:
-    - Precedence pipeline becomes a stable contract surface that must be consistent across all error messages, one-liner `source` values, and tests.
+    - `scripts/substrate/install-substrate.sh` must not clobber the environment value at startup (it currently initializes `PKG_MANAGER=""`) and must validate allowed values before proceeding.
+    - Precedence + validation become stable contract surfaces that must match across one-liner `source` values, warnings/errors, and tests.
   - Contradiction risks:
-    - Value vocabulary: existing users may set `PKG_MANAGER` to values not in `{apt-get,dnf,yum,pacman,zypper}` (e.g., `apt`), which will become a hard error (exit `2`) under the ADR contract.
+    - `PKG_MANAGER` is a generic env var name; hosts may already have it set for unrelated tooling. After this change, an accidental value can cause a new hard failure (exit `2`) unless the contract explicitly constrains when it is read and strongly encourages the flag for explicit override.
 
-- Change: Read `/etc/os-release` best-effort (safe parse; no `source`) and use `ID`/`ID_LIKE` for mapping + diagnostics.
+- Change: Default selection uses best-effort `/etc/os-release` parsing + distro-family mapping, with deterministic fallback to PATH probing.
   - Direct impact:
-    - On Linux, default manager selection becomes more predictable (distro-family mapping) and diagnostics include the os-release inputs even when they are missing (`<unknown>` rendering).
+    - Default manager selection matches common operator expectations when `/etc/os-release` is available.
   - Cascading impact:
-    - Safe parsing rules must be explicit (quotes/whitespace/comments/duplicates/case-sensitivity) and must be shared across slices and tests to avoid drift.
-    - Hermetic testing requires a deterministic mechanism to inject a fake os-release input (DR-0003); whichever test seam is chosen becomes a contract-bearing surface that must not weaken production safety posture.
+    - Specs must pin safe parsing posture (no `source`/eval), `<unknown>` rendering, and mapping rules exactly as in ADR-0031.
+    - Specs must pin “mapping matched but binary missing” behavior (fallback vs fail) and the resulting `source` value and exit code.
   - Contradiction risks:
-    - “Mapping matched but manager missing” semantics are underspecified (specs must choose: fall back to PATH probe vs fail closed, and which `pkg_manager_source`/exit code applies).
+    - In-world provisioning packs also probe `/etc/os-release` in different contexts; if canonicalization and “unknown” handling drift, operator guidance can become contradictory across host installer vs in-world probes.
 
 ### Policy / isolation / security posture
-- Change: Best-effort detection + override is fail-closed on explicit override but non-fatal for missing/unreadable `/etc/os-release`.
+- Change: Detection remains local, non-executing, and best-effort while overrides are validated and fail-closed.
   - Direct impact:
-    - Forced manager selection never silently falls back, reducing “installed the wrong thing” risk.
-    - `/etc/os-release` read failures do not by themselves block installs; the installer can continue via other selection steps.
+    - Distro detection reads only `/etc/os-release` and performs no writes or network calls for detection.
+    - Explicit overrides validate and fail-closed (no silent fallback).
   - Cascading impact:
-    - Error/warning outputs must avoid dumping full `/etc/os-release` contents (no accidental sensitive-data/log spam) and must not copy the `source /etc/os-release` pattern from container smoke checks.
+    - `contract.md` must explicitly separate “detection” (local reads only) from the rest of the installer, which still performs network downloads for release artifacts.
+    - Hermetic tests must ensure the os-release parser never executes file content and that override validation never falls back silently.
   - Contradiction risks:
-    - If selection falls through to PATH probing, the resulting behavior can still be surprising on mixed systems unless the warning + override guidance is consistent and test-asserted.
+    - A hermetic-test hook that allows arbitrary os-release paths via environment variables can weaken the production safety posture unless tightly constrained and test-only (Decision Register DR-0003).
 
 ## Cross-queue scan (ADRs + Planning Packs)
 
@@ -100,74 +111,90 @@ List overlaps/conflicts with other in-flight work and resolve them deterministic
 - ADR: `docs/project_management/adrs/draft/ADR-0032-stashing-ferret.md`
   - Overlap surfaces:
     - `scripts/substrate/install-substrate.sh`
-    - `/etc/os-release` parsing + canonicalization rules (`ID`, `ID_LIKE`)
-    - pkg-manager identifier + `source` vocabulary (`flag|env|os_release|path_probe`)
+    - shared detected fields: os-release `ID`/`ID_LIKE`, selected manager, and `source`
   - Conflict: yes
   - Resolution (explicit):
-    - Sequence + non-overlap boundary: `best-effort-distro-package-manager` owns detection/selection outputs and MUST remain the authoritative contract for parsing + selection; `ADR-0032` work persists those outputs to `install_state.json` and MUST NOT redefine the detection pipeline.
+    - Authority boundary: this pack owns detection/selection semantics and the installer one-liner; ADR-0032 owns persistence into `install_state.json` and must treat this pack’s `contract.md` as authoritative for parsing/selection/`source` vocabulary.
+
+- ADR: `docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md`
+  - Overlap surfaces:
+    - `scripts/substrate/install-substrate.sh` (shared file; provisioning pack touch surface)
+  - Conflict: yes
+  - Resolution (explicit):
+    - Keep pkg-manager detection/selection logic isolated and stable within `install-substrate.sh`; provisioning-related edits must not refactor the detection pipeline owned by ADR-0031.
 
 - ADR: `docs/project_management/adrs/draft/ADR-0033-routing-weasel.md`
   - Overlap surfaces:
-    - `/etc/os-release` parsing and OS-family classification (world OS probe; Arch-family logic)
-    - manager identifier vocabulary (`pacman`, etc.)
+    - `/etc/os-release` parsing and distro-family vocabulary (in-world OS probe)
+    - manager identifier vocabulary (`apt-get`, `dnf`, `yum`, `pacman`, `zypper`)
   - Conflict: no
   - Resolution (explicit):
-    - Keep “host installer manager selection” distinct from “world OS probe” while reusing the same safe parsing/canonicalization rules where applicable to prevent drift between host detection, in-world detection, and persisted metadata.
+    - Align canonicalization + “unknown” rendering rules across host installer and in-world probes while keeping “host pkg-manager” distinct from “world OS pkg-manager” in operator text.
 
 - ADR: `docs/project_management/adrs/draft/ADR-0034-staging-beaver.md`
   - Overlap surfaces:
-    - `scripts/substrate/install-substrate.sh` (staged under `$SUBSTRATE_HOME/scripts/substrate/…` for dev-install helper discovery)
+    - `scripts/substrate/install-substrate.sh` as a staged helper dependency (sourced by `scripts/substrate/world-enable.sh`)
   - Conflict: no
   - Resolution (explicit):
-    - Minimize refactors in `install-substrate.sh` that would complicate helper staging; treat the installer script as a stable artifact that other flows stage/copy, and keep behavior changes localized to pkg-manager selection logic + output.
+    - Preserve the “safe to source” posture (`main` only runs when executed) and avoid interface changes that would break helper staging/discovery flows.
 
 - ADR: `docs/project_management/adrs/draft/ADR-0035-summoning-wombat.md`
   - Overlap surfaces:
-    - `scripts/substrate/install-substrate.sh` and `scripts/substrate/world-enable.sh` provisioning flows (Linux dev “enable later” ergonomics)
+    - `scripts/substrate/world-enable.sh` sourcing `install-substrate.sh` and calling prereq helpers
   - Conflict: no
   - Resolution (explicit):
-    - Ensure pkg-manager detection changes do not alter the expectations around provisioning artifacts (`world-agent`) and do not introduce new side effects when the installer helpers are sourced by `world-enable.sh`.
-
-- ADR: `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`
-  - Overlap surfaces:
-    - Installer responsibilities for writing `$SUBSTRATE_HOME/env.sh` and related env-script invariants
-  - Conflict: no
-  - Resolution (explicit):
-    - This feature introduces no changes to `SUBSTRATE_*` env var semantics or env-script generation; keep the scope limited to Linux package-manager selection and `/etc/os-release` read-only detection.
+    - Ensure the new one-liner + pkg-manager decision behavior is gated so it does not introduce unexpected side effects when installer helpers are reused by world-enable workflows.
 
 ### Relevant Planning Packs (queued/unimplemented)
 - Planning Pack: `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/`
   - Overlap surfaces:
     - `scripts/substrate/install-substrate.sh`
-    - shared detection output fields/semantics (`distro_id`, `id_like`, `pkg_manager.*`, `source`)
+    - shared output fields and semantics for os-release + pkg-manager selection
   - Conflict: yes
   - Resolution (explicit):
-    - Enforce a strict non-overlap boundary:
-      - `best-effort-distro-package-manager` defines detection + selection outputs and explicitly MUST NOT persist `install_state.json`.
-      - `persist-detected-linux-distro-pkg-manager` persists those outputs and MUST treat this pack’s `contract.md` as authoritative for parsing/selection semantics.
-
-- Planning Pack: `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/`
-  - Overlap surfaces:
-    - `/etc/os-release` parsing and canonicalization; distro-family classification vocabulary
-  - Conflict: no
-  - Resolution (explicit):
-    - Align parsing/canonicalization rules and the Arch-family classification vocabulary to avoid contradictory behavior between host installer detection, in-world provisioning probes, and any persisted host metadata.
+    - Authority boundary:
+      - `best-effort-distro-package-manager` owns detection/selection/parsing/`source` semantics and MUST NOT persist host metadata.
+      - `persist-detected-linux-distro-pkg-manager` persists those outputs (Linux-only) and MUST NOT redefine how they are derived.
 
 - Planning Pack: `docs/project_management/packs/draft/world-deps-apt-provisioning/`
   - Overlap surfaces:
-    - shared exit-code taxonomy usage (`2|3|4`) and “no silent OS mutation” posture (in a different execution context)
+    - `scripts/substrate/install-substrate.sh` (shared file)
+  - Conflict: yes
+  - Resolution (explicit):
+    - Keep ADR-0030 edits to `install-substrate.sh` limited to provisioning workflow integration/messaging and avoid modifying the pkg-manager detection pipeline owned by ADR-0031.
+
+- Planning Pack: `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/`
+  - Overlap surfaces:
+    - `scripts/substrate/install-substrate.sh` (shared file via installer/world-enable coupling)
+    - `/etc/os-release` parsing vocabulary and manager identifiers
+  - Conflict: yes
+  - Resolution (explicit):
+    - Keep host installer pkg-manager selection distinct from in-world provisioning manager selection while aligning parsing/canonicalization rules to avoid contradictory remediation.
+
+- Planning Pack: `docs/project_management/packs/draft/stabilize-dev-install-helper-discovery/`
+  - Overlap surfaces:
+    - helper staging/discovery flows that stage `install-substrate.sh` under `$SUBSTRATE_HOME/scripts/substrate/…`
   - Conflict: no
   - Resolution (explicit):
-    - Keep concerns separate: this pack’s manager selection is host-installer-only; provisioning-time system package work owns the `substrate world enable --provision-deps` contract and must not introduce host PATH-based manager selection semantics.
+    - Ensure helper staging continues to stage the current `install-substrate.sh` and that sourcing expectations remain valid after this pack’s changes.
+
+- Planning Pack: `docs/project_management/packs/draft/dev-install-world-agent-staging/`
+  - Overlap surfaces:
+    - `scripts/substrate/world-enable.sh` sourcing `install-substrate.sh` for provisioning
+  - Conflict: no
+  - Resolution (explicit):
+    - Keep detection changes constrained so downstream “enable later” improvements can rebase cleanly without changing pkg-manager detection semantics.
 
 ## Follow-ups (explicit)
 
 - Decision Register entries required:
-  - DR-0001 — `/etc/os-release` parsing + canonicalization rules (no `source`; quotes/whitespace/duplicates/case-sensitivity).
-  - DR-0002 — PATH probe ambiguity policy + fixed precedence order (warn vs fail; exact ordering; required warning content).
-  - DR-0003 — Hermetic test seam for fake os-release input (test-only env var/arg vs harness approach; ensure no production safety weakening).
-- Spec updates required (if any):
-  - `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` — pin the exact prereq command set to name in remediation guidance; pin “mapping matched but binary missing” behavior; pin when the one-liner is emitted (including “no prereqs needed” behavior).
-  - `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` — explicitly scope exit-code meanings as Linux-only vs global (to avoid accidental Windows/macOS behavior changes).
-  - `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/C2/C2-spec.md` — assert exit codes + one-liner content + precedence in the hermetic harness; forbid host mutation.
-  - `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md` — reconcile “Related Docs” link drift (`detecting-badger/*` vs `best-effort-distro-package-manager/*`) during planning.
+  - DR-0001 — Pin `/etc/os-release` parsing + matching rules (normalization; duplicate keys; case-sensitivity; `ID_LIKE` tokenization).
+  - DR-0002 — Pin deterministic PATH-probe precedence order and multi-manager ambiguity policy (warn vs fail; required warning content elements).
+  - DR-0003 — Pin hermetic-test os-release injection seam (fake input without weakening production safety posture).
+- Spec updates required:
+  - `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` — pin mapping failure semantics (“mapped manager missing” posture), PATH-probe precedence order, and one-liner emission timing (including the “no prereqs needed” case and reuse via `scripts/substrate/world-enable.sh`).
+  - `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` — pin remediation guidance content elements and the exact prerequisite command list included in the “no supported manager” guidance.
+  - `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md` — define the hermetic harness contract and assert precedence, one-liner content, warning/error elements, and exit codes.
+  - `docs/project_management/packs/draft/best-effort-distro-package-manager/plan.md` — include the exact command(s) to run the hermetic detection test and explicitly label the container smoke as optional (if it is not CI gating).
+  - `docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json` — populate the `BEDPM0` triad tasks and reference the slice spec + contract explicitly.
+  - `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md` — reconcile Related Docs link drift (paths under `docs/project_management/packs/draft/detecting-badger/` vs `docs/project_management/packs/draft/best-effort-distro-package-manager/`) so downstream planning artifacts are discoverable.
