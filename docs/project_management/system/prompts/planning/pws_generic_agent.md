@@ -17,7 +17,10 @@ Instructions:
 3) Strictly obey the dispatcher-provided output allowlist.
    - If you need additional tracked writes, do NOT edit them.
    - Instead, write logs-only artifacts under the allowed logs directory:
-     - `allowlist_request.json` (requested tracked paths + reason)
+     - `allowlist_request.json` with exact JSON keys:
+       - `pws_id`
+       - `requested_tracked_paths`
+       - `reason`
      - Prefer: `draft/<pack-relative path>` for each requested tracked file (full-file drafts)
      - Optional: `draft.patch` (patch-format diff; may be used as reference by the owning PWS)
    - Note: during full-planning orchestration, allowlist requests are auto-processed and the orchestrator will resume this same Codex session with a follow-up message.

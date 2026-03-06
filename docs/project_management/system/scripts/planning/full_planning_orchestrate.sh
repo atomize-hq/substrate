@@ -96,9 +96,6 @@ need_cmd python3
 need_cmd jq
 need_cmd make
 need_cmd rg
-if [[ "${DRY_RUN}" -eq 0 ]]; then
-    need_cmd codex
-fi
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || die "not in a git repo/worktree (git rev-parse failed)"
 cd "${REPO_ROOT}"
@@ -112,8 +109,18 @@ if [[ "${PM_SYSTEM_ROOT}" != /* ]]; then
     PM_SYSTEM_ROOT="${REPO_ROOT}/${PM_SYSTEM_ROOT}"
 fi
 PLANNING_SCRIPTS_DIR="${PM_SYSTEM_ROOT}/scripts/planning"
-RUNNER="${PLANNING_SCRIPTS_DIR}/run_pws_agent.sh"
+RUNNER="${PM_FULL_PLANNING_RUNNER:-${PLANNING_SCRIPTS_DIR}/run_pws_agent.sh}"
+if [[ "${RUNNER}" != /* ]]; then
+    RUNNER="${REPO_ROOT}/${RUNNER}"
+fi
+ALLOWLIST_REQUEST_PARSER="${PLANNING_SCRIPTS_DIR}/parse_allowlist_request.py"
+SLICE_COHERENCE_VALIDATOR="${PLANNING_SCRIPTS_DIR}/validate_slice_inventory_coherence.py"
 [[ -x "${RUNNER}" ]] || die "missing runner: ${RUNNER}"
+[[ -f "${ALLOWLIST_REQUEST_PARSER}" ]] || die "missing allowlist request parser: ${ALLOWLIST_REQUEST_PARSER}"
+[[ -f "${SLICE_COHERENCE_VALIDATOR}" ]] || die "missing slice coherence validator: ${SLICE_COHERENCE_VALIDATOR}"
+if [[ "${DRY_RUN}" -eq 0 && -z "${PM_FULL_PLANNING_RUNNER:-}" ]]; then
+    need_cmd codex
+fi
 
 FEATURE_DIR_REL="$(python3 "${PLANNING_SCRIPTS_DIR}/pm_paths.py" resolve-feature-dir --feature-dir "${FEATURE_DIR_RAW}")"
 FEATURE_DIR_REL="${FEATURE_DIR_REL%/}"
@@ -131,6 +138,8 @@ WRAPPER_DIR_ABS="${LOGS_DIR_ABS}/full_planning_orchestrator/${RUN_TS}"
 mkdir -p "${WRAPPER_DIR_ABS}"
 SUMMARY_PATH_ABS="${WRAPPER_DIR_ABS}/summary.md"
 PLAN_JSON_ABS="${WRAPPER_DIR_ABS}/pws_plan.json"
+ATTEMPTS_DIR_ABS="${WRAPPER_DIR_ABS}/attempts"
+mkdir -p "${ATTEMPTS_DIR_ABS}"
 
 append_summary() {
     printf '%s\n' "$*" >>"${SUMMARY_PATH_ABS}"
@@ -611,6 +620,57 @@ write_resume_message() {
     printf '%s\n' "${path}"
 }
 
+write_attempt_report() {
+    local pid="$1"
+    local attempt="$2"
+    local label="$3"
+    local body="$4"
+    local path="${ATTEMPTS_DIR_ABS}/${pid}.attempt${attempt}.${label}.md"
+    {
+        printf '# Attempt Report: `%s`\n\n' "${pid}"
+        printf -- '- Attempt: `%s`\n' "${attempt}"
+        printf -- '- Label: `%s`\n\n' "${label}"
+        printf '%s\n' "${body}"
+    } >"${path}"
+    printf '%s\n' "${path}"
+}
+
+collect_failure_details() {
+    local path="$1"
+    python3 - "${path}" <<'PY'
+from __future__ import annotations
+
+import json
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+validator = ""
+error_line = ""
+
+if path.exists():
+    for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if not validator:
+            match = re.search(r"(validate_[A-Za-z0-9_]+\.py)", line)
+            if match:
+                validator = match.group(1)
+        if not error_line and (line.startswith("FAIL:") or line.startswith("ERROR:")):
+            error_line = line
+        if validator and error_line:
+            break
+
+print(json.dumps({"error_line": error_line, "validator": validator}, sort_keys=True))
+PY
+}
+
+run_pre_tasks_coherence_gate() {
+    python3 "${SLICE_COHERENCE_VALIDATOR}" --feature-dir "${FEATURE_DIR_ABS}" --phase pre_tasks_checkpoints
+}
+
 run_pws_fresh() {
     local pid="$1"
     local -a args=("${RUNNER}" --feature-dir "${FEATURE_DIR_ABS}" --pws-id "${pid}" --codex-jsonl)
@@ -632,30 +692,93 @@ run_pws_resume() {
 process_allowlist_request() {
     local pid="$1"
     local attempt="$2"
+    local stage_label="$3"
+    local validator_name="${4:-}"
+    local error_line="${5:-}"
     local req_path="${FEATURE_DIR_ABS}/logs/pws/${pid}/allowlist_request.json"
     [[ -f "${req_path}" ]] || return 1
 
-    local reason
-    reason="$(jq -r '.reason // ""' "${req_path}" 2>/dev/null || echo "")"
+    local parse_json
+    parse_json="$(python3 "${ALLOWLIST_REQUEST_PARSER}" --request "${req_path}" --expected-pws-id "${pid}")"
+
+    local status alias_used reason
+    status="$(jq -r '.status' <<<"${parse_json}")"
+    alias_used="$(jq -r '.alias_used // ""' <<<"${parse_json}")"
+    reason="$(jq -r '.reason // ""' <<<"${parse_json}")"
+
+    if [[ "${status}" != "ok" ]]; then
+        local parse_errors
+        parse_errors="$(jq -r '.errors[]?' <<<"${parse_json}" | sed 's/^/- /')"
+        local body
+        body=$(
+            cat <<EOF
+${stage_label} failed for \`${pid}\`.
+
+- Validator: ${validator_name:-"(not detected)"}
+- Failure line: ${error_line:-"(no FAIL:/ERROR: line found)"}
+- Allowlist request status: malformed
+- Request file: \`${FEATURE_DIR_REL}/logs/pws/${pid}/allowlist_request.json\`
+- Draft patch (if any): \`${FEATURE_DIR_REL}/logs/pws/${pid}/draft.patch\`
+
+Malformed request details:
+${parse_errors:-"- (none emitted by parser)"}
+
+Rewrite \`allowlist_request.json\` with this exact shape:
+- \`pws_id\`: \`${pid}\`
+- \`requested_tracked_paths\`: array of pack-relative or feature-dir paths
+- \`reason\`: non-empty string
+EOF
+        )
+        write_attempt_report "${pid}" "${attempt}" "malformed_allowlist_request" "${body}" >/dev/null
+        append_summary "- \`${pid}\`: malformed allowlist request detected; resuming same session with exact schema errors"
+        write_resume_message "${pid}" "${attempt}" "malformed_allowlist_request" "${body}"
+        return 0
+    fi
+
     local -a raw_paths=()
     while IFS= read -r p; do
         [[ -n "${p}" ]] || continue
         raw_paths+=("${p}")
-    done < <(jq -r '.requested_tracked_paths[]?' "${req_path}" 2>/dev/null | sed '/^$/d')
-
-    if [[ "${#raw_paths[@]}" -eq 0 ]]; then
-        die "allowlist_request.json exists but requested_tracked_paths is empty: ${FEATURE_DIR_REL}/logs/pws/${pid}/allowlist_request.json"
-    fi
+    done < <(jq -r '.requested_tracked_paths[]?' <<<"${parse_json}" | sed '/^$/d')
 
     local -a pack_paths=()
+    local -a path_errors=()
+    local raw
     for raw in "${raw_paths[@]}"; do
-        pack_rel="$(normalize_requested_path "${raw}")" || die "invalid requested_tracked_path (must be pack-relative or inside feature dir): ${raw}"
-        pack_paths+=("${pack_rel}")
+        if pack_rel="$(normalize_requested_path "${raw}" 2>/dev/null)"; then
+            pack_paths+=("${pack_rel}")
+        else
+            path_errors+=("${raw}")
+        fi
     done
+
+    if [[ "${#path_errors[@]}" -gt 0 ]]; then
+        local invalid_paths
+        invalid_paths="$(printf '%s\n' "${path_errors[@]}" | sed 's/^/- /')"
+        local body
+        body=$(
+            cat <<EOF
+${stage_label} failed for \`${pid}\`.
+
+- Validator: ${validator_name:-"(not detected)"}
+- Failure line: ${error_line:-"(no FAIL:/ERROR: line found)"}
+- Allowlist request status: malformed
+- Invalid requested path(s):
+${invalid_paths}
+
+Requested tracked paths must be pack-relative or resolve inside \`${FEATURE_DIR_REL}/\`.
+EOF
+        )
+        write_attempt_report "${pid}" "${attempt}" "invalid_allowlist_paths" "${body}" >/dev/null
+        append_summary "- \`${pid}\`: allowlist request contained invalid requested_tracked_paths"
+        write_resume_message "${pid}" "${attempt}" "invalid_allowlist_paths" "${body}"
+        return 0
+    fi
 
     local -a grant_paths=()
     local owner_pairs_file
     owner_pairs_file="$(mktemp "${WRAPPER_DIR_ABS}/.allowlist_owner_pairs.${pid}.attempt${attempt}.XXXXXX")"
+    local pack_rel owner
     for pack_rel in "${pack_paths[@]}"; do
         owner="$(find_owner_pws_for_pack_rel "${pack_rel}" || true)"
         if [[ -z "${owner}" ]]; then
@@ -671,6 +794,7 @@ process_allowlist_request() {
     if [[ "${#grant_paths[@]}" -gt 0 ]]; then
         echo "Auto-granting allowlist for ${pid}: ${grant_paths[*]}"
         grant_owns_in_triage "${pid}" "${grant_paths[@]}"
+        append_summary "- Auto-granted allowlist for \`${pid}\` (paths=\`$(printf '%s ' "${grant_paths[@]}" | xargs)\`)"
 
         triage_rel="$(python3 - "${REPO_ROOT}" "${TRIAGE_PATH_ABS}" <<'PY'
 import sys
@@ -696,7 +820,10 @@ PY
 
     for owner in ${owners[@]+"${owners[@]}"}; do
         if ! is_pws_done "${owner}"; then
-            die "allowlist_request from ${pid} targets path(s) owned by ${owner}, but ${owner} has not run yet (fix PM_PWS_INDEX depends_on ordering)"
+            local dep_error="allowlist_request from ${pid} targets path(s) owned by ${owner}, but ${owner} has not run yet (fix PM_PWS_INDEX depends_on ordering)"
+            write_attempt_report "${pid}" "${attempt}" "dependency_topology_error" "${dep_error}" >/dev/null
+            append_summary "- \`${pid}\`: dependency topology error while processing allowlist request"
+            die "${dep_error}"
         fi
 
         owner_role="$(jq -r --arg id "${owner}" '.pws[$id].role' "${PLAN_JSON_ABS}")"
@@ -709,6 +836,8 @@ Another PWS is blocked and needs changes inside your owned outputs.
 - Requestor PWS: \`${pid}\`
 - Requested path(s): \`${owner_paths}\`
 - Reason: ${reason}
+- Validator: ${validator_name:-"(not detected)"}
+- Failure line: ${error_line:-"(no FAIL:/ERROR: line found)"}
 
 Draft locations (preferred first):
 - \`${FEATURE_DIR_REL}/logs/pws/${pid}/draft/<pack-relative path>\`
@@ -723,24 +852,35 @@ EOF
         echo "== Auto-heal routing: resuming owner PWS ${owner} (requested by ${pid}) =="
         append_summary "- Routed allowlist request from \`${pid}\` to owner \`${owner}\` (paths=\`${owner_paths}\`)"
 
-        # Resume owner until it passes runner + micro-lint.
         run_pws_until_done "${owner}" "${owner_role}" "${owner_msg_path}"
     done
 
+    local alias_note=""
+    if [[ -n "${alias_used}" ]]; then
+        alias_note=$'- Parser note: accepted legacy alias `'"${alias_used}"$'`; future requests must emit `requested_tracked_paths`.\n'
+    fi
+
+    local grant_csv owners_csv
     grant_csv="$(printf '%s\n' "${grant_paths[@]+"${grant_paths[@]}"}" | paste -sd ',' - 2>/dev/null || true)"
     owners_csv="$(printf '%s\n' "${owners[@]+"${owners[@]}"}" | sort | paste -sd ',' - 2>/dev/null || true)"
+    local req_body
     req_body=$(
         cat <<EOF
 Your allowlist_request.json was processed automatically.
 
+- Stage: ${stage_label}
+- Validator: ${validator_name:-"(not detected)"}
+- Failure line: ${error_line:-"(no FAIL:/ERROR: line found)"}
+- Request file: \`${FEATURE_DIR_REL}/logs/pws/${pid}/allowlist_request.json\`
+- Draft patch (if any): \`${FEATURE_DIR_REL}/logs/pws/${pid}/draft.patch\`
 - Granted new owns (if any): ${grant_csv:-"(none)"}
 - Routed fixes to owner PWS (if any): ${owners_csv:-"(none)"}
-
-Continue and complete this PWS. If still blocked, rewrite \`${FEATURE_DIR_REL}/logs/pws/${pid}/allowlist_request.json\` with the next required paths + drafts.
+${alias_note}Continue and complete this PWS. If still blocked, rewrite \`${FEATURE_DIR_REL}/logs/pws/${pid}/allowlist_request.json\` with the next required paths + drafts.
 EOF
     )
-    resume_msg_path="$(write_resume_message "${pid}" "${attempt}" "after_allowlist" "${req_body}")"
-    printf '%s\n' "${resume_msg_path}"
+    write_attempt_report "${pid}" "${attempt}" "allowlist_processed" "${req_body}" >/dev/null
+    append_summary "- \`${pid}\`: allowlist request processed automatically"
+    write_resume_message "${pid}" "${attempt}" "after_allowlist" "${req_body}"
     return 0
 }
 
@@ -780,21 +920,27 @@ run_pws_until_done() {
         commit_pws_outputs "${pid}"
 
         if [[ "${rc}" -ne 0 ]]; then
+            local runner_failure_json validator_name error_line
+            runner_failure_json="$(collect_failure_details "${FEATURE_DIR_ABS}/logs/pws/${pid}/stderr.log")"
+            validator_name="$(jq -r '.validator // ""' <<<"${runner_failure_json}")"
+            error_line="$(jq -r '.error_line // ""' <<<"${runner_failure_json}")"
             append_summary "- \`${pid}\`: runner failed (exit=${rc}); attempting auto-heal"
-            if resume_after_allowlist="$(process_allowlist_request "${pid}" "${attempt}")"; then
+            if resume_after_allowlist="$(process_allowlist_request "${pid}" "${attempt}" "Runner failure" "${validator_name}" "${error_line}")"; then
                 resume_msg="${resume_after_allowlist}"
             else
                 body=$(
                     cat <<EOF
 Runner failed for \`${pid}\` (role=\`${role}\`, exit=${rc}).
 
-Inspect:
+- Validator: ${validator_name:-"(not detected)"}
+- Failure line: ${error_line:-"(no FAIL:/ERROR: line found)"}
 - Step logs: \`${FEATURE_DIR_REL}/logs/pws/${pid}\`
 - Stable stderr: \`${FEATURE_DIR_REL}/logs/pws/${pid}/stderr.log\`
 
 Fix the issue within the output allowlist and ensure self-checks pass. If you need additional tracked writes, write allowlist_request.json + drafts under \`${FEATURE_DIR_REL}/logs/pws/${pid}/\`.
 EOF
                 )
+                write_attempt_report "${pid}" "${attempt}" "runner_failed" "${body}" >/dev/null
                 resume_msg="$(write_resume_message "${pid}" "${attempt}" "runner_failed" "${body}")"
             fi
             attempt=$((attempt + 1))
@@ -802,25 +948,39 @@ EOF
         fi
 
         echo "-- Micro-lint (scoped): ${pid}"
+        local micro_lint_log
+        micro_lint_log="${ATTEMPTS_DIR_ABS}/${pid}.attempt${attempt}.micro_lint.log"
         set +e
-        micro_lint_pws "${pid}"
+        micro_lint_pws "${pid}" >"${micro_lint_log}" 2>&1
         ml_rc=$?
         set -e
         if [[ "${ml_rc}" -ne 0 ]]; then
+            local micro_failure_json micro_error_line
+            micro_failure_json="$(collect_failure_details "${micro_lint_log}")"
+            micro_error_line="$(jq -r '.error_line // ""' <<<"${micro_failure_json}")"
             append_summary "- \`${pid}\`: micro-lint failed; attempting auto-heal"
-            if resume_after_allowlist="$(process_allowlist_request "${pid}" "${attempt}")"; then
+            if resume_after_allowlist="$(process_allowlist_request "${pid}" "${attempt}" "planning-micro-lint failure" "planning-micro-lint" "${micro_error_line}")"; then
                 resume_msg="${resume_after_allowlist}"
             else
                 body=$(
                     cat <<EOF
 planning-micro-lint failed for \`${pid}\` (role=\`${role}\`).
 
+- Failure line: ${micro_error_line:-"(no FAIL:/ERROR: line found)"}
+- Micro-lint log: \`$(python3 - "${REPO_ROOT}" "${micro_lint_log}" <<'PY'
+import sys
+from pathlib import Path
+repo = Path(sys.argv[1]).resolve()
+path = Path(sys.argv[2]).resolve()
+print(path.relative_to(repo).as_posix())
+PY
+)\`
+
 Fix hard-ban / ambiguity matches (and slice spec v2 structural rules when applicable), then rerun:
 \`make planning-micro-lint FEATURE_DIR="${FEATURE_DIR_REL}" OWNED_PATHS="<owned paths>"\`
-
-Step logs: \`${FEATURE_DIR_REL}/logs/pws/${pid}\`
 EOF
                 )
+                write_attempt_report "${pid}" "${attempt}" "micro_lint_failed" "${body}" >/dev/null
                 resume_msg="$(write_resume_message "${pid}" "${attempt}" "micro_lint_failed" "${body}")"
             fi
             attempt=$((attempt + 1))
@@ -840,6 +1000,12 @@ append_summary ""
 while IFS= read -r pid; do
     [[ -n "${pid}" ]] || continue
     role="$(jq -r --arg id "${pid}" '.pws[$id].role' "${PLAN_JSON_ABS}")"
+
+    if [[ "${role}" == "tasks_checkpoints" ]]; then
+        echo "== Pre-task coherence gate: ${pid} =="
+        append_summary "- Pre-task coherence gate before \`${pid}\`"
+        run_pre_tasks_coherence_gate
+    fi
 
     echo "== Running PWS: ${pid} (role=${role}) =="
     append_summary "- Started: \`${pid}\` (role=\`${role}\`)"

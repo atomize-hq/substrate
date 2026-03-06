@@ -12,6 +12,7 @@ Goal (tasks_checkpoints role): produce an execution-ready triad pack
 - Generate *all* kickoff prompts referenced by `tasks.json.tasks[].kickoff_prompt`.
 - Ensure slice spec ↔ task AC traceability is correct (`ac_ids`).
 - Do not “make validation pass” by downgrading the pack to non-automation / non-cross-platform when the pack intends triad execution.
+- Do not collapse, merge away, delete, or otherwise shrink the accepted slice set to satisfy a validator. If the authoritative planning surfaces and `tasks.json` disagree, fix the authoritative surface or emit an allowlist request for it.
 
 Required reading (pack-local inputs):
 - `<FEATURE_DIR>/pre-planning/workstream_triage.md` (including `PM_PWS_INDEX`)
@@ -58,8 +59,12 @@ Blocked-by-allowlist behavior (non-negotiable):
 - Strictly obey the dispatcher-provided tracked output allowlist.
 - If you need additional tracked writes, do NOT edit disallowed files.
 - Do NOT downgrade schemas / disable automation to “get green”.
+- Do NOT rewrite the task graph to drop accepted slices so stale upstream planning docs pass.
 - Instead, write logs-only artifacts under `<FEATURE_DIR>/logs/pws/<PWS_ID>/`:
-  - `allowlist_request.json` (requested paths + reason)
+  - `allowlist_request.json` with exact JSON keys:
+    - `pws_id`
+    - `requested_tracked_paths`
+    - `reason`
   - `draft.patch` (and/or `draft/<path>`) with the proposed changes
 
 Self-check (run and report results in your final response):

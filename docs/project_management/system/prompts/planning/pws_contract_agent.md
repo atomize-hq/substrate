@@ -18,7 +18,11 @@ Instructions:
 2) Make only the tracked edits that are required to satisfy the contract goal.
 3) Strictly obey the dispatcher-provided output allowlist.
    - If you need additional tracked writes, do NOT edit them.
-   - Instead, write `allowlist_request.json` plus a `draft.patch` (and/or `draft/<path>`) under the allowed logs directory.
+   - Instead, write `allowlist_request.json` with exact JSON keys:
+     - `pws_id`
+     - `requested_tracked_paths`
+     - `reason`
+   - Also write `draft.patch` (and/or `draft/<path>`) under the allowed logs directory.
 4) Closeout micro-lint (required):
    - Determine the tracked paths you edited in this run (prefer the `PM_PWS_INDEX` `owns` list for `<PWS_ID>`).
    - Run the hard-ban scan and ambiguity scan against ONLY those paths.

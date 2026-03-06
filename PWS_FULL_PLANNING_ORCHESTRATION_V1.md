@@ -559,6 +559,7 @@ Implementation requirements:
 - prompts must tell agents the exact field names,
 - the orchestrator must parse the canonical name,
 - and, during migration, it should also accept legacy aliases like `requested_paths` so a well-reasoned request is not discarded due to field drift.
+- The canonical parser should preserve optional diagnostic keys (for example `required_updates`, `recommended_follow_on_paths`, `consistency_evidence`, `blocked_validation`) without requiring them.
 
 If the request file exists but is malformed, the orchestrator should:
 - preserve it,
@@ -576,6 +577,7 @@ We need a hard gate that compares the accepted slice inventory across:
 - `slices/<SLICE_ID>/<SLICE_ID>-spec.md`
 - `pre-planning/ci_checkpoint_plan.md`
 - `tasks.json`
+- and, when present, `pre-planning/spec_manifest.md`, `pre-planning/impact_map.md`, and `pre-planning/alignment_report.md`
 
 Minimum required invariants:
 - every accepted slice must have a slice spec,
@@ -584,11 +586,13 @@ Minimum required invariants:
 - `tasks.json` must not silently drop accepted slices,
 - slice ids referenced by PWS topology, slice specs, and checkpoint plan must agree.
 
-This can be implemented either as:
-- a new validator, or
-- a strengthening of `validate_slice_specs.py` / `validate_ci_checkpoint_plan.py`
+Implement this as a dedicated validator:
+- `docs/project_management/system/scripts/planning/validate_slice_inventory_coherence.py`
+- It should support:
+  - `pre_tasks_checkpoints` phase (used before `*-PWS-tasks_checkpoints`)
+  - `execution_ready` phase (used after `tasks_checkpoints` and by planning lint)
 
-…but the end result must be:
+The end result must be:
 - green is impossible if `BEDPM1` / `BEDPM2` still exist in accepted planning docs but disappear from `tasks.json`.
 
 ##### 3) Add an earlier coherence gate before `tasks_checkpoints`

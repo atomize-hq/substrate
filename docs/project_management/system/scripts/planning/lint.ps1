@@ -152,6 +152,10 @@ Write-Host "-- impact_map.md Touch Set validation (gated by meta.slice_spec_vers
 & python (Join-Path $planningScriptsDir "validate_impact_map.py") --feature-dir $FeatureDir
 if ($LASTEXITCODE -ne 0) { throw "FAIL: impact_map Touch Set validation failed" }
 
+Write-Host "-- slice inventory coherence"
+& python (Join-Path $planningScriptsDir "validate_slice_inventory_coherence.py") --feature-dir $FeatureDir --phase execution_ready
+if ($LASTEXITCODE -ne 0) { throw "FAIL: slice inventory coherence failed" }
+
 if ($env:PM_LIFT_ADVISORY -eq "1") {
     Write-Host "-- Work Lift advisory report (PM_LIFT_ADVISORY=1)"
     & python (Join-Path $planningScriptsDir "pm_lift_report.py") --feature-dir $FeatureDir

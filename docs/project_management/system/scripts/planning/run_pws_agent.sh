@@ -255,7 +255,7 @@ if [[ -n "${RESUME_THREAD_ID}" ]]; then
         cat "${RESUME_MESSAGE_PATH}" > "${PAYLOAD_TMP}"
     else
         cat > "${PAYLOAD_TMP}" <<'EOF'
-Resume: continue this PWS until all runner gates pass (and clear/replace allowlist_request.json if still blocked).
+Resume: continue this PWS until all runner gates pass. If still blocked, rewrite allowlist_request.json with pws_id, requested_tracked_paths, and reason.
 EOF
     fi
 else
@@ -305,7 +305,8 @@ fi
     printf -- '- Logs allowed (untracked only): `%s/logs/pws/%s/`\n' "${FEATURE_DIR_REL}" "${PWS_ID}"
     printf -- '- If blocked by needing more tracked edits:\n'
     printf -- '  - Write logs-only artifacts under that logs directory:\n'
-    printf -- '    - `allowlist_request.json` (requested paths + reason)\n'
+    printf -- '    - `allowlist_request.json` with exact JSON keys: `pws_id`, `requested_tracked_paths`, `reason`\n'
+    printf -- '      - Migration note: legacy `requested_paths` is still accepted by the orchestrator, but do not emit it in new requests.\n'
     printf -- '    - `draft.patch` and/or `draft/<path>` (proposed changes)\n'
     printf -- '  - Do not edit disallowed tracked files.\n'
 
@@ -609,6 +610,12 @@ if [[ "${CODEX_EXIT}" -eq 0 && "${LAST_MESSAGE_OK}" -eq 1 && "${REQUIRED_OUTPUTS
     if [[ "${ROLE}" == "tasks_checkpoints" ]]; then
         if ! python3 "${PLANNING_SCRIPTS_DIR}/validate_tasks_json.py" --feature-dir "${FEATURE_DIR_ABS}"; then
             echo "ERROR: validate_tasks_json.py failed after tasks_checkpoints PWS run: ${FEATURE_DIR_REL}" >&2
+            echo "  Step logs: $(relpath_in_repo "${REPO_ROOT}" "${STEP_DIR_ABS}")" >&2
+            echo "  Run logs:  $(relpath_in_repo "${REPO_ROOT}" "${RUN_DIR_ABS}")" >&2
+            exit 2
+        fi
+        if ! python3 "${PLANNING_SCRIPTS_DIR}/validate_slice_inventory_coherence.py" --feature-dir "${FEATURE_DIR_ABS}" --phase execution_ready; then
+            echo "ERROR: validate_slice_inventory_coherence.py failed after tasks_checkpoints PWS run: ${FEATURE_DIR_REL}" >&2
             echo "  Step logs: $(relpath_in_repo "${REPO_ROOT}" "${STEP_DIR_ABS}")" >&2
             echo "  Run logs:  $(relpath_in_repo "${REPO_ROOT}" "${RUN_DIR_ABS}")" >&2
             exit 2
