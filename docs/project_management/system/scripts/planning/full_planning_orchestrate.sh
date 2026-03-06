@@ -376,7 +376,25 @@ micro_lint_pws() {
     make planning-micro-lint FEATURE_DIR="${FEATURE_DIR_REL}" OWNED_PATHS="${owned_paths}"
 }
 
-declare -A PWS_DONE=()
+PWS_DONE=()
+
+is_pws_done() {
+    local pid="$1"
+    local x
+    for x in ${PWS_DONE[@]+"${PWS_DONE[@]}"}; do
+        if [[ "${x}" == "${pid}" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+mark_pws_done() {
+    local pid="$1"
+    if ! is_pws_done "${pid}"; then
+        PWS_DONE+=("${pid}")
+    fi
+}
 
 normalize_requested_path() {
     local raw="$1"
@@ -636,7 +654,8 @@ process_allowlist_request() {
     done
 
     local -a grant_paths=()
-    declare -A owner_to_paths=()
+    local owner_pairs_file
+    owner_pairs_file="$(mktemp "${WRAPPER_DIR_ABS}/.allowlist_owner_pairs.${pid}.attempt${attempt}.XXXXXX")"
     for pack_rel in "${pack_paths[@]}"; do
         owner="$(find_owner_pws_for_pack_rel "${pack_rel}" || true)"
         if [[ -z "${owner}" ]]; then
@@ -646,7 +665,7 @@ process_allowlist_request() {
         if [[ "${owner}" == "${pid}" ]]; then
             continue
         fi
-        owner_to_paths["${owner}"]="${owner_to_paths[$owner]:-} ${pack_rel}"
+        printf '%s\t%s\n' "${owner}" "${pack_rel}" >> "${owner_pairs_file}"
     done
 
     if [[ "${#grant_paths[@]}" -gt 0 ]]; then
@@ -667,14 +686,21 @@ PY
         TRIAGE_PATH_ABS="$(jq -r '.triage_path' "${PLAN_JSON_ABS}")"
     fi
 
-    for owner in "${!owner_to_paths[@]}"; do
-        if [[ -z "${PWS_DONE[$owner]:-}" ]]; then
+    local -a owners=()
+    if [[ -s "${owner_pairs_file}" ]]; then
+        while IFS= read -r o; do
+            [[ -n "${o}" ]] || continue
+            owners+=("${o}")
+        done < <(cut -f1 "${owner_pairs_file}" | sort -u)
+    fi
+
+    for owner in ${owners[@]+"${owners[@]}"}; do
+        if ! is_pws_done "${owner}"; then
             die "allowlist_request from ${pid} targets path(s) owned by ${owner}, but ${owner} has not run yet (fix PM_PWS_INDEX depends_on ordering)"
         fi
 
         owner_role="$(jq -r --arg id "${owner}" '.pws[$id].role' "${PLAN_JSON_ABS}")"
-        owner_thread_id="$(get_thread_id "${owner}")"
-        owner_paths="$(echo "${owner_to_paths[$owner]}" | xargs)"
+        owner_paths="$(awk -F'\t' -v o="${owner}" '$1==o{print $2}' "${owner_pairs_file}" | paste -sd ' ' - 2>/dev/null | xargs)"
 
         owner_body=$(
             cat <<EOF
@@ -702,7 +728,7 @@ EOF
     done
 
     grant_csv="$(printf '%s\n' "${grant_paths[@]+"${grant_paths[@]}"}" | paste -sd ',' - 2>/dev/null || true)"
-    owners_csv="$(printf '%s\n' "${!owner_to_paths[@]}" | sort | paste -sd ',' - 2>/dev/null || true)"
+    owners_csv="$(printf '%s\n' "${owners[@]+"${owners[@]}"}" | sort | paste -sd ',' - 2>/dev/null || true)"
     req_body=$(
         cat <<EOF
 Your allowlist_request.json was processed automatically.
@@ -803,7 +829,7 @@ EOF
 
         # Final commit after micro-lint passes (usually no-op if already committed).
         commit_pws_outputs "${pid}"
-        PWS_DONE["${pid}"]=1
+        mark_pws_done "${pid}"
         return 0
     done
 }
