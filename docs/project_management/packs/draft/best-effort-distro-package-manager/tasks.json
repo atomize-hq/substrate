@@ -10,6 +10,9 @@
     "behavior_platforms_required": [
       "linux"
     ],
+    "checkpoint_boundaries": [
+      "BEDPM2"
+    ],
     "automation": {
       "enabled": true,
       "orchestration_branch": "feat/best-effort-distro-package-manager"
@@ -20,5 +23,794 @@
       "docs/project_management/adrs/draft/ADR-0031-detecting-badger.md"
     ]
   },
-  "tasks": []
+  "tasks": [
+    {
+      "id": "BEDPM0-code",
+      "name": "BEDPM0 code",
+      "type": "code",
+      "phase": "BEDPM0",
+      "status": "pending",
+      "description": "Implement BEDPM0 Linux distro detection and decision one-liner production changes.",
+      "references": [
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/plan.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/session_log.md",
+        "docs/project_management/adrs/draft/ADR-0031-detecting-badger.md"
+      ],
+      "acceptance_criteria": [
+        "Production code implements the BEDPM0 AC set.",
+        "Linux-only scope remains intact and the required formatter and lint gates pass."
+      ],
+      "ac_ids": [
+        "AC-BEDPM0-01",
+        "AC-BEDPM0-02",
+        "AC-BEDPM0-03",
+        "AC-BEDPM0-04",
+        "AC-BEDPM0-05",
+        "AC-BEDPM0-06",
+        "AC-BEDPM0-07",
+        "AC-BEDPM0-08"
+      ],
+      "start_checklist": [
+        "git checkout feat/best-effort-distro-package-manager && git pull --ff-only",
+        "Read the slice spec, contract.md, decision_register.md, tasks.json, session_log.md, and the kickoff prompt",
+        "Set status to in_progress, add a START entry, and commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/best-effort-distro-package-manager\" SLICE_ID=\"BEDPM0\""
+      ],
+      "end_checklist": [
+        "Record a targeted baseline command before edits and rerun it after edits",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"BEDPM0-code\"",
+        "Update tasks.json and session_log.md on the orchestration branch and leave the worktree in place"
+      ],
+      "worktree": "wt/best-effort-distro-package-manager-bedpm0-code",
+      "integration_task": "BEDPM0-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM0/kickoff_prompts/BEDPM0-code.md",
+      "depends_on": [],
+      "concurrent_with": [
+        "BEDPM0-test"
+      ],
+      "git_branch": "best-effort-distro-package-manager-bedpm0-code",
+      "required_make_targets": [
+        "triad-code-checks"
+      ]
+    },
+    {
+      "id": "BEDPM0-test",
+      "name": "BEDPM0 test",
+      "type": "test",
+      "phase": "BEDPM0",
+      "status": "pending",
+      "description": "Add tests that enforce BEDPM0 os-release parsing and decision one-liner invariants.",
+      "references": [
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/plan.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/session_log.md",
+        "docs/project_management/adrs/draft/ADR-0031-detecting-badger.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover the BEDPM0 AC set.",
+        "Test-only changes stay isolated from production code."
+      ],
+      "ac_ids": [
+        "AC-BEDPM0-01",
+        "AC-BEDPM0-02",
+        "AC-BEDPM0-03",
+        "AC-BEDPM0-04",
+        "AC-BEDPM0-05",
+        "AC-BEDPM0-06",
+        "AC-BEDPM0-07",
+        "AC-BEDPM0-08"
+      ],
+      "start_checklist": [
+        "git checkout feat/best-effort-distro-package-manager && git pull --ff-only",
+        "Read the slice spec, contract.md, decision_register.md, tasks.json, session_log.md, and the kickoff prompt",
+        "Set status to in_progress, add a START entry, and commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/best-effort-distro-package-manager\" SLICE_ID=\"BEDPM0\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "Run the targeted tests you add or touch",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"BEDPM0-test\"",
+        "Update tasks.json and session_log.md on the orchestration branch and leave the worktree in place"
+      ],
+      "worktree": "wt/best-effort-distro-package-manager-bedpm0-test",
+      "integration_task": "BEDPM0-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM0/kickoff_prompts/BEDPM0-test.md",
+      "depends_on": [],
+      "concurrent_with": [
+        "BEDPM0-code"
+      ],
+      "git_branch": "best-effort-distro-package-manager-bedpm0-test",
+      "required_make_targets": [
+        "triad-test-checks"
+      ]
+    },
+    {
+      "id": "BEDPM0-integ",
+      "name": "BEDPM0 integration",
+      "type": "integration",
+      "phase": "BEDPM0",
+      "status": "pending",
+      "description": "Merge BEDPM0 code and test work and validate local integration gates.",
+      "references": [
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/plan.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/session_log.md",
+        "docs/project_management/adrs/draft/ADR-0031-detecting-badger.md"
+      ],
+      "acceptance_criteria": [
+        "Local integration gates are green for BEDPM0.",
+        "The merged slice matches the BEDPM0 AC set."
+      ],
+      "ac_ids": [
+        "AC-BEDPM0-01",
+        "AC-BEDPM0-02",
+        "AC-BEDPM0-03",
+        "AC-BEDPM0-04",
+        "AC-BEDPM0-05",
+        "AC-BEDPM0-06",
+        "AC-BEDPM0-07",
+        "AC-BEDPM0-08"
+      ],
+      "start_checklist": [
+        "git checkout feat/best-effort-distro-package-manager && git pull --ff-only",
+        "Read the slice spec, contract.md, decision_register.md, tasks.json, session_log.md, and the kickoff prompt",
+        "Set status to in_progress, add a START entry, and commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/best-effort-distro-package-manager\" TASK_ID=\"BEDPM0-integ\""
+      ],
+      "end_checklist": [
+        "Merge the code and test branches and resolve conflicts",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"BEDPM0-integ\"",
+        "Update tasks.json and session_log.md on the orchestration branch and leave the worktree in place"
+      ],
+      "worktree": "wt/best-effort-distro-package-manager-bedpm0-integ",
+      "integration_task": "BEDPM0-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM0/kickoff_prompts/BEDPM0-integ.md",
+      "depends_on": [
+        "BEDPM0-code",
+        "BEDPM0-test"
+      ],
+      "concurrent_with": [],
+      "git_branch": "best-effort-distro-package-manager-bedpm0-integ",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": true
+    },
+    {
+      "id": "BEDPM1-code",
+      "name": "BEDPM1 code",
+      "type": "code",
+      "phase": "BEDPM1",
+      "status": "pending",
+      "description": "Implement BEDPM1 deterministic manager selection, override validation, and failure posture.",
+      "references": [
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM1/BEDPM1-spec.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/plan.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/session_log.md",
+        "docs/project_management/adrs/draft/ADR-0031-detecting-badger.md"
+      ],
+      "acceptance_criteria": [
+        "Production code implements the BEDPM1 AC set.",
+        "Linux-only scope remains intact and the required formatter and lint gates pass."
+      ],
+      "ac_ids": [
+        "AC-BEDPM1-01",
+        "AC-BEDPM1-02",
+        "AC-BEDPM1-03",
+        "AC-BEDPM1-04",
+        "AC-BEDPM1-05",
+        "AC-BEDPM1-06",
+        "AC-BEDPM1-07",
+        "AC-BEDPM1-08"
+      ],
+      "start_checklist": [
+        "git checkout feat/best-effort-distro-package-manager && git pull --ff-only",
+        "Read the slice spec, contract.md, decision_register.md, tasks.json, session_log.md, and the kickoff prompt",
+        "Set status to in_progress, add a START entry, and commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/best-effort-distro-package-manager\" SLICE_ID=\"BEDPM1\""
+      ],
+      "end_checklist": [
+        "Record a targeted baseline command before edits and rerun it after edits",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"BEDPM1-code\"",
+        "Update tasks.json and session_log.md on the orchestration branch and leave the worktree in place"
+      ],
+      "worktree": "wt/best-effort-distro-package-manager-bedpm1-code",
+      "integration_task": "BEDPM1-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM1/kickoff_prompts/BEDPM1-code.md",
+      "depends_on": [
+        "BEDPM0-integ"
+      ],
+      "concurrent_with": [
+        "BEDPM1-test"
+      ],
+      "git_branch": "best-effort-distro-package-manager-bedpm1-code",
+      "required_make_targets": [
+        "triad-code-checks"
+      ]
+    },
+    {
+      "id": "BEDPM1-test",
+      "name": "BEDPM1 test",
+      "type": "test",
+      "phase": "BEDPM1",
+      "status": "pending",
+      "description": "Add tests that enforce BEDPM1 precedence, warning, and failure behaviors.",
+      "references": [
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM1/BEDPM1-spec.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/plan.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/session_log.md",
+        "docs/project_management/adrs/draft/ADR-0031-detecting-badger.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover the BEDPM1 AC set.",
+        "Test-only changes stay isolated from production code."
+      ],
+      "ac_ids": [
+        "AC-BEDPM1-01",
+        "AC-BEDPM1-02",
+        "AC-BEDPM1-03",
+        "AC-BEDPM1-04",
+        "AC-BEDPM1-05",
+        "AC-BEDPM1-06",
+        "AC-BEDPM1-07",
+        "AC-BEDPM1-08"
+      ],
+      "start_checklist": [
+        "git checkout feat/best-effort-distro-package-manager && git pull --ff-only",
+        "Read the slice spec, contract.md, decision_register.md, tasks.json, session_log.md, and the kickoff prompt",
+        "Set status to in_progress, add a START entry, and commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/best-effort-distro-package-manager\" SLICE_ID=\"BEDPM1\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "Run the targeted tests you add or touch",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"BEDPM1-test\"",
+        "Update tasks.json and session_log.md on the orchestration branch and leave the worktree in place"
+      ],
+      "worktree": "wt/best-effort-distro-package-manager-bedpm1-test",
+      "integration_task": "BEDPM1-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM1/kickoff_prompts/BEDPM1-test.md",
+      "depends_on": [
+        "BEDPM0-integ"
+      ],
+      "concurrent_with": [
+        "BEDPM1-code"
+      ],
+      "git_branch": "best-effort-distro-package-manager-bedpm1-test",
+      "required_make_targets": [
+        "triad-test-checks"
+      ]
+    },
+    {
+      "id": "BEDPM1-integ",
+      "name": "BEDPM1 integration",
+      "type": "integration",
+      "phase": "BEDPM1",
+      "status": "pending",
+      "description": "Merge BEDPM1 code and test work and validate local integration gates.",
+      "references": [
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM1/BEDPM1-spec.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/plan.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/session_log.md",
+        "docs/project_management/adrs/draft/ADR-0031-detecting-badger.md"
+      ],
+      "acceptance_criteria": [
+        "Local integration gates are green for BEDPM1.",
+        "The merged slice matches the BEDPM1 AC set."
+      ],
+      "ac_ids": [
+        "AC-BEDPM1-01",
+        "AC-BEDPM1-02",
+        "AC-BEDPM1-03",
+        "AC-BEDPM1-04",
+        "AC-BEDPM1-05",
+        "AC-BEDPM1-06",
+        "AC-BEDPM1-07",
+        "AC-BEDPM1-08"
+      ],
+      "start_checklist": [
+        "git checkout feat/best-effort-distro-package-manager && git pull --ff-only",
+        "Read the slice spec, contract.md, decision_register.md, tasks.json, session_log.md, and the kickoff prompt",
+        "Set status to in_progress, add a START entry, and commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/best-effort-distro-package-manager\" TASK_ID=\"BEDPM1-integ\""
+      ],
+      "end_checklist": [
+        "Merge the code and test branches and resolve conflicts",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"BEDPM1-integ\"",
+        "Update tasks.json and session_log.md on the orchestration branch and leave the worktree in place"
+      ],
+      "worktree": "wt/best-effort-distro-package-manager-bedpm1-integ",
+      "integration_task": "BEDPM1-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM1/kickoff_prompts/BEDPM1-integ.md",
+      "depends_on": [
+        "BEDPM1-code",
+        "BEDPM1-test"
+      ],
+      "concurrent_with": [],
+      "git_branch": "best-effort-distro-package-manager-bedpm1-integ",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": true
+    },
+    {
+      "id": "BEDPM2-code",
+      "name": "BEDPM2 code",
+      "type": "code",
+      "phase": "BEDPM2",
+      "status": "pending",
+      "description": "Implement the production-side seams and installer adjustments required for the BEDPM2 hermetic harness.",
+      "references": [
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/plan.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/session_log.md",
+        "docs/project_management/adrs/draft/ADR-0031-detecting-badger.md"
+      ],
+      "acceptance_criteria": [
+        "Production code implements the BEDPM2 AC set.",
+        "Linux-only scope remains intact and the required formatter and lint gates pass."
+      ],
+      "ac_ids": [
+        "AC-BEDPM2-01",
+        "AC-BEDPM2-02",
+        "AC-BEDPM2-03",
+        "AC-BEDPM2-04",
+        "AC-BEDPM2-05",
+        "AC-BEDPM2-06",
+        "AC-BEDPM2-07",
+        "AC-BEDPM2-08"
+      ],
+      "start_checklist": [
+        "git checkout feat/best-effort-distro-package-manager && git pull --ff-only",
+        "Read the slice spec, contract.md, decision_register.md, pre-planning/ci_checkpoint_plan.md, tasks.json, session_log.md, and the kickoff prompt",
+        "Set status to in_progress, add a START entry, and commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/best-effort-distro-package-manager\" SLICE_ID=\"BEDPM2\""
+      ],
+      "end_checklist": [
+        "Record a targeted baseline command before edits and rerun it after edits",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"BEDPM2-code\"",
+        "Update tasks.json and session_log.md on the orchestration branch and leave the worktree in place"
+      ],
+      "worktree": "wt/best-effort-distro-package-manager-bedpm2-code",
+      "integration_task": "BEDPM2-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/kickoff_prompts/BEDPM2-code.md",
+      "depends_on": [
+        "BEDPM1-integ"
+      ],
+      "concurrent_with": [
+        "BEDPM2-test"
+      ],
+      "git_branch": "best-effort-distro-package-manager-bedpm2-code",
+      "required_make_targets": [
+        "triad-code-checks"
+      ]
+    },
+    {
+      "id": "BEDPM2-test",
+      "name": "BEDPM2 test",
+      "type": "test",
+      "phase": "BEDPM2",
+      "status": "pending",
+      "description": "Add the BEDPM2 hermetic harness and test fixtures that enforce the full pkg-manager detection contract.",
+      "references": [
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/plan.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/session_log.md",
+        "docs/project_management/adrs/draft/ADR-0031-detecting-badger.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover the BEDPM2 AC set.",
+        "Test-only changes stay isolated from production code."
+      ],
+      "ac_ids": [
+        "AC-BEDPM2-01",
+        "AC-BEDPM2-02",
+        "AC-BEDPM2-03",
+        "AC-BEDPM2-04",
+        "AC-BEDPM2-05",
+        "AC-BEDPM2-06",
+        "AC-BEDPM2-07",
+        "AC-BEDPM2-08"
+      ],
+      "start_checklist": [
+        "git checkout feat/best-effort-distro-package-manager && git pull --ff-only",
+        "Read the slice spec, contract.md, decision_register.md, pre-planning/ci_checkpoint_plan.md, tasks.json, session_log.md, and the kickoff prompt",
+        "Set status to in_progress, add a START entry, and commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/best-effort-distro-package-manager\" SLICE_ID=\"BEDPM2\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "Run the targeted tests you add or touch",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"BEDPM2-test\"",
+        "Update tasks.json and session_log.md on the orchestration branch and leave the worktree in place"
+      ],
+      "worktree": "wt/best-effort-distro-package-manager-bedpm2-test",
+      "integration_task": "BEDPM2-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/kickoff_prompts/BEDPM2-test.md",
+      "depends_on": [
+        "BEDPM1-integ"
+      ],
+      "concurrent_with": [
+        "BEDPM2-code"
+      ],
+      "git_branch": "best-effort-distro-package-manager-bedpm2-test",
+      "required_make_targets": [
+        "triad-test-checks"
+      ]
+    },
+    {
+      "id": "BEDPM2-integ-core",
+      "name": "BEDPM2 integration core",
+      "type": "integration",
+      "phase": "BEDPM2",
+      "status": "pending",
+      "description": "Merge BEDPM2 code and test work and validate local integration gates before CP1.",
+      "references": [
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/plan.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/session_log.md",
+        "docs/project_management/adrs/draft/ADR-0031-detecting-badger.md"
+      ],
+      "acceptance_criteria": [
+        "Local integration gates are green for BEDPM2.",
+        "The BEDPM2 core branch is ready for the CP1 checkpoint run."
+      ],
+      "start_checklist": [
+        "git checkout feat/best-effort-distro-package-manager && git pull --ff-only",
+        "Read the slice spec, contract.md, decision_register.md, pre-planning/ci_checkpoint_plan.md, tasks.json, session_log.md, and the kickoff prompt",
+        "Set status to in_progress, add a START entry, and commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/best-effort-distro-package-manager\" TASK_ID=\"BEDPM2-integ-core\""
+      ],
+      "end_checklist": [
+        "Merge the code and test branches and resolve conflicts",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"BEDPM2-integ-core\"",
+        "Update tasks.json and session_log.md on the orchestration branch and leave the worktree in place"
+      ],
+      "worktree": "wt/best-effort-distro-package-manager-bedpm2-integ-core",
+      "integration_task": "BEDPM2-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/kickoff_prompts/BEDPM2-integ-core.md",
+      "depends_on": [
+        "BEDPM2-code",
+        "BEDPM2-test"
+      ],
+      "concurrent_with": [],
+      "git_branch": "best-effort-distro-package-manager-bedpm2-integ-core",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "CP1-ci-checkpoint",
+      "name": "CP1 CI checkpoint",
+      "type": "ops",
+      "phase": "CP1",
+      "status": "pending",
+      "description": "Run compile parity and CI Testing quick for the BEDPM2 checkpoint boundary.",
+      "references": [
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/impact_map.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/session_log.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md",
+        "docs/project_management/adrs/draft/ADR-0031-detecting-badger.md"
+      ],
+      "acceptance_criteria": [
+        "Compile parity is green for the checkpoint checkout SHA.",
+        "CI Testing quick is green for the checkpoint checkout SHA.",
+        "Run ids and the checkout SHA are recorded in session_log.md."
+      ],
+      "start_checklist": [
+        "git checkout feat/best-effort-distro-package-manager && git pull --ff-only",
+        "Read pre-planning/ci_checkpoint_plan.md, tasks.json, session_log.md, and the kickoff prompt",
+        "Set status to in_progress, add a START entry, and commit docs",
+        "Run CI audit, compile parity, and CI Testing quick for the BEDPM2 core SHA"
+      ],
+      "end_checklist": [
+        "Record the checkout SHA, the audit output, and the run ids in session_log.md",
+        "Set status to completed, add an END entry, and commit docs"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/packs/draft/best-effort-distro-package-manager/kickoff_prompts/CP1-ci-checkpoint.md",
+      "depends_on": [
+        "BEDPM2-integ-core"
+      ],
+      "concurrent_with": []
+    },
+    {
+      "id": "BEDPM2-integ-linux",
+      "name": "BEDPM2 integration linux",
+      "type": "integration",
+      "phase": "BEDPM2",
+      "status": "pending",
+      "description": "Resolve CP1 parity drift for BEDPM2 on linux.",
+      "references": [
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/session_log.md",
+        "docs/project_management/adrs/draft/ADR-0031-detecting-badger.md"
+      ],
+      "acceptance_criteria": [
+        "Linux parity issues reported by CP1 are resolved.",
+        "Local quality gates for the platform-fix worktree are green."
+      ],
+      "start_checklist": [
+        "git checkout feat/best-effort-distro-package-manager && git pull --ff-only",
+        "Read the slice spec, contract.md, pre-planning/ci_checkpoint_plan.md, the CP1 results, tasks.json, session_log.md, and the kickoff prompt",
+        "Set status to in_progress, add a START entry, and commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/best-effort-distro-package-manager\" TASK_ID=\"BEDPM2-integ-linux\""
+      ],
+      "end_checklist": [
+        "Merge BEDPM2-integ-core into the worktree before platform fixes",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run the failing platform command set again until it passes",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"BEDPM2-integ-linux\"",
+        "Update tasks.json and session_log.md on the orchestration branch and leave the worktree in place"
+      ],
+      "worktree": "wt/best-effort-distro-package-manager-bedpm2-integ-linux",
+      "integration_task": "BEDPM2-integ-linux",
+      "kickoff_prompt": "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/kickoff_prompts/BEDPM2-integ-linux.md",
+      "depends_on": [
+        "BEDPM2-integ-core",
+        "CP1-ci-checkpoint"
+      ],
+      "concurrent_with": [],
+      "platform": "linux",
+      "git_branch": "best-effort-distro-package-manager-bedpm2-integ-linux",
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "BEDPM2-integ-macos",
+      "name": "BEDPM2 integration macos",
+      "type": "integration",
+      "phase": "BEDPM2",
+      "status": "pending",
+      "description": "Resolve CP1 parity drift for BEDPM2 on macos.",
+      "references": [
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/session_log.md",
+        "docs/project_management/adrs/draft/ADR-0031-detecting-badger.md"
+      ],
+      "acceptance_criteria": [
+        "macOS parity issues reported by CP1 are resolved.",
+        "Local quality gates for the platform-fix worktree are green."
+      ],
+      "start_checklist": [
+        "git checkout feat/best-effort-distro-package-manager && git pull --ff-only",
+        "Read the slice spec, contract.md, pre-planning/ci_checkpoint_plan.md, the CP1 results, tasks.json, session_log.md, and the kickoff prompt",
+        "Set status to in_progress, add a START entry, and commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/best-effort-distro-package-manager\" TASK_ID=\"BEDPM2-integ-macos\""
+      ],
+      "end_checklist": [
+        "Merge BEDPM2-integ-core into the worktree before platform fixes",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run the failing platform command set again until it passes",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"BEDPM2-integ-macos\"",
+        "Update tasks.json and session_log.md on the orchestration branch and leave the worktree in place"
+      ],
+      "worktree": "wt/best-effort-distro-package-manager-bedpm2-integ-macos",
+      "integration_task": "BEDPM2-integ-macos",
+      "kickoff_prompt": "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/kickoff_prompts/BEDPM2-integ-macos.md",
+      "depends_on": [
+        "BEDPM2-integ-core",
+        "CP1-ci-checkpoint"
+      ],
+      "concurrent_with": [],
+      "platform": "macos",
+      "git_branch": "best-effort-distro-package-manager-bedpm2-integ-macos",
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "BEDPM2-integ-windows",
+      "name": "BEDPM2 integration windows",
+      "type": "integration",
+      "phase": "BEDPM2",
+      "status": "pending",
+      "description": "Resolve CP1 parity drift for BEDPM2 on windows.",
+      "references": [
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/session_log.md",
+        "docs/project_management/adrs/draft/ADR-0031-detecting-badger.md"
+      ],
+      "acceptance_criteria": [
+        "Windows parity issues reported by CP1 are resolved.",
+        "Local quality gates for the platform-fix worktree are green."
+      ],
+      "start_checklist": [
+        "git checkout feat/best-effort-distro-package-manager && git pull --ff-only",
+        "Read the slice spec, contract.md, pre-planning/ci_checkpoint_plan.md, the CP1 results, tasks.json, session_log.md, and the kickoff prompt",
+        "Set status to in_progress, add a START entry, and commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/best-effort-distro-package-manager\" TASK_ID=\"BEDPM2-integ-windows\""
+      ],
+      "end_checklist": [
+        "Merge BEDPM2-integ-core into the worktree before platform fixes",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run the failing platform command set again until it passes",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"BEDPM2-integ-windows\"",
+        "Update tasks.json and session_log.md on the orchestration branch and leave the worktree in place"
+      ],
+      "worktree": "wt/best-effort-distro-package-manager-bedpm2-integ-windows",
+      "integration_task": "BEDPM2-integ-windows",
+      "kickoff_prompt": "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/kickoff_prompts/BEDPM2-integ-windows.md",
+      "depends_on": [
+        "BEDPM2-integ-core",
+        "CP1-ci-checkpoint"
+      ],
+      "concurrent_with": [],
+      "platform": "windows",
+      "git_branch": "best-effort-distro-package-manager-bedpm2-integ-windows",
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "BEDPM2-integ",
+      "name": "BEDPM2 integration final",
+      "type": "integration",
+      "phase": "BEDPM2",
+      "status": "pending",
+      "description": "Merge BEDPM2 core and platform-fix branches and merge the slice back to orchestration.",
+      "references": [
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/plan.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/session_log.md",
+        "docs/project_management/adrs/draft/ADR-0031-detecting-badger.md"
+      ],
+      "acceptance_criteria": [
+        "All CP1 parity failures for BEDPM2 are resolved.",
+        "BEDPM2 is merged back to the orchestration branch."
+      ],
+      "ac_ids": [
+        "AC-BEDPM2-01",
+        "AC-BEDPM2-02",
+        "AC-BEDPM2-03",
+        "AC-BEDPM2-04",
+        "AC-BEDPM2-05",
+        "AC-BEDPM2-06",
+        "AC-BEDPM2-07",
+        "AC-BEDPM2-08"
+      ],
+      "start_checklist": [
+        "git checkout feat/best-effort-distro-package-manager && git pull --ff-only",
+        "Read the slice spec, contract.md, decision_register.md, pre-planning/ci_checkpoint_plan.md, the CP1 results, tasks.json, session_log.md, and the kickoff prompt",
+        "Set status to in_progress, add a START entry, and commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/best-effort-distro-package-manager\" TASK_ID=\"BEDPM2-integ\""
+      ],
+      "end_checklist": [
+        "Merge BEDPM2-integ-core and all platform-fix branches and resolve conflicts",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "Confirm CP1-ci-checkpoint is completed and recorded in session_log.md",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"BEDPM2-integ\"",
+        "Update tasks.json and session_log.md on the orchestration branch and leave the worktree in place"
+      ],
+      "worktree": "wt/best-effort-distro-package-manager-bedpm2-integ",
+      "integration_task": "BEDPM2-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/kickoff_prompts/BEDPM2-integ.md",
+      "depends_on": [
+        "BEDPM2-integ-core",
+        "BEDPM2-integ-linux",
+        "BEDPM2-integ-macos",
+        "BEDPM2-integ-windows"
+      ],
+      "concurrent_with": [],
+      "git_branch": "best-effort-distro-package-manager-bedpm2-integ",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": true
+    },
+    {
+      "id": "FZ-feature-cleanup",
+      "name": "Feature cleanup",
+      "type": "ops",
+      "phase": "FZ",
+      "status": "pending",
+      "description": "Remove retained triad worktrees after all slice integrations finish.",
+      "references": [
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/plan.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/session_log.md",
+        "docs/project_management/adrs/draft/ADR-0031-detecting-badger.md"
+      ],
+      "acceptance_criteria": [
+        "All triad tasks are completed and merged as intended.",
+        "Cleanup records the script summary in session_log.md."
+      ],
+      "start_checklist": [
+        "git checkout feat/best-effort-distro-package-manager && git pull --ff-only",
+        "Confirm all tasks are completed and merged as intended",
+        "Set status to in_progress, add a START entry, and commit docs"
+      ],
+      "end_checklist": [
+        "Run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/packs/draft/best-effort-distro-package-manager\" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1",
+        "Then run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/packs/draft/best-effort-distro-package-manager\" REMOVE_WORKTREES=1 PRUNE_LOCAL=1",
+        "Set status to completed, add an END entry with the cleanup summary, and commit docs"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/packs/draft/best-effort-distro-package-manager/kickoff_prompts/FZ-feature-cleanup.md",
+      "depends_on": [
+        "BEDPM2-integ"
+      ],
+      "concurrent_with": []
+    }
+  ]
 }
