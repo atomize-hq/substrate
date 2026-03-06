@@ -579,6 +579,11 @@ We need a hard gate that compares the accepted slice inventory across:
 - `tasks.json`
 - and, when present, `pre-planning/spec_manifest.md`, `pre-planning/impact_map.md`, and `pre-planning/alignment_report.md`
 
+Authority nuance:
+- `pre-planning/minimal_spec_draft.md` is the draft starting skeleton and default CI-checkpoint input.
+- `pre-planning/workstream_triage.md` may explicitly recommend `ADD` / `SPLIT` / `MERGE` / `RENAME` edits without mutating `minimal_spec_draft.md`.
+- Once full-planning surfaces (`workstream_triage`, `plan.md`, slice specs, checkpoint plan) adopt that revised skeleton, the validator must treat the triage-adopted slice set as the accepted inventory and then fail any stale planning surfaces that still describe the old draft set.
+
 Minimum required invariants:
 - every accepted slice must have a slice spec,
 - every accepted slice must appear in `tasks.json`,

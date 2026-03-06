@@ -18,7 +18,9 @@ PHASE_EXECUTION_READY = "execution_ready"
 
 SLICE_ID_RE = re.compile(r"^(?P<prefix>[A-Za-z][A-Za-z0-9]*?)(?P<num>\d+)$")
 PLAN_HEADING_RE = re.compile(r"^###\s+(?P<slice_id>[A-Za-z][A-Za-z0-9]*\d+)\b")
-MIN_SPEC_SLICE_RE = re.compile(r"^\s*-\s+slice_id:\s*`(?P<slice_id>[A-Za-z][A-Za-z0-9]*\d+)`")
+MIN_SPEC_SLICE_RE = re.compile(
+    r"^\s*-\s+(?:`?slice_id`?)\s*:\s*`(?P<slice_id>[A-Za-z][A-Za-z0-9]*\d+)`"
+)
 SLICE_SPEC_PATH_RE = re.compile(r"^slices/(?P<slice_id>[A-Za-z][A-Za-z0-9]*\d+)/(?P=slice_id)-spec\.md$")
 
 
@@ -235,12 +237,22 @@ def _extract_tasks_slice_ids(feature_dir: Path) -> SliceSource:
 
 
 def _choose_baseline(sources: list[SliceSource]) -> SliceSource:
-    for preferred in ("minimal_spec_draft", "workstream_triage", "plan", "ci_checkpoint_plan", "slice_specs"):
+    # minimal_spec_draft is a draft starting point; workstream_triage may adopt a
+    # different accepted slice skeleton without mutating the draft file.
+    for preferred in ("workstream_triage", "plan", "slice_specs", "ci_checkpoint_plan", "minimal_spec_draft"):
         for source in sources:
             if source.name == preferred and source.ordered:
                 return source
     _fail("could not determine accepted slice inventory from any planning surface")
     raise AssertionError("unreachable")
+
+
+def _requires_strict_compare(source: SliceSource, baseline: SliceSource) -> bool:
+    if source.name == baseline.name:
+        return False
+    if source.name == "minimal_spec_draft" and baseline.name != "minimal_spec_draft":
+        return False
+    return True
 
 
 def _compare_ordered(source: SliceSource, expected: list[str], baseline_name: str) -> None:
@@ -287,7 +299,7 @@ def validate(feature_dir: Path, phase: str) -> None:
     ]
 
     for source in candidate_sources:
-        if source.name == baseline.name:
+        if not _requires_strict_compare(source, baseline):
             continue
         if source.ordered_required:
             _compare_ordered(source, accepted_order, baseline.label)

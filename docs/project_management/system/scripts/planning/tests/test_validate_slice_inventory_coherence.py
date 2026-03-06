@@ -70,11 +70,12 @@ def _triage_text(*, slice_prefix: str, slice_ids: list[str]) -> str:
     )
 
 
-def _minimal_spec_text(feature_name: str, slice_prefix: str, slice_ids: list[str]) -> str:
+def _minimal_spec_text(feature_name: str, slice_prefix: str, slice_ids: list[str], *, backtick_key: bool = False) -> str:
     blocks = []
     for slice_id in slice_ids:
+        key = "`slice_id`" if backtick_key else "slice_id"
         blocks.append(
-            f"- slice_id: `{slice_id}`\n"
+            f"- {key}: `{slice_id}`\n"
             f"  - name: Fixture {slice_id}\n"
             f"  - intent: Keep slice {slice_id} in the accepted skeleton.\n"
         )
@@ -171,19 +172,25 @@ class TestValidateSliceInventoryCoherence(unittest.TestCase):
         name: str,
         *,
         slice_ids: list[str],
+        min_spec_slice_ids: list[str] | None = None,
         checkpoint_slice_ids: list[str] | None = None,
         task_slice_ids: list[str] | None = None,
         extra_spec_ids: list[str] | None = None,
         spec_manifest_slice_ids: list[str] | None = None,
+        backticked_min_spec_keys: bool = False,
     ) -> Path:
         feature_dir = self.tmp_root / name
         slice_prefix = slice_ids[0][:-1]
+        min_spec_slice_ids = min_spec_slice_ids or list(slice_ids)
         checkpoint_slice_ids = checkpoint_slice_ids or list(slice_ids)
         task_slice_ids = task_slice_ids or list(slice_ids)
         extra_spec_ids = extra_spec_ids or []
         spec_manifest_slice_ids = spec_manifest_slice_ids or list(slice_ids)
 
-        _write_text(feature_dir / "pre-planning" / "minimal_spec_draft.md", _minimal_spec_text(name, slice_prefix, slice_ids))
+        _write_text(
+            feature_dir / "pre-planning" / "minimal_spec_draft.md",
+            _minimal_spec_text(name, slice_prefix, min_spec_slice_ids, backtick_key=backticked_min_spec_keys),
+        )
         _write_text(feature_dir / "pre-planning" / "workstream_triage.md", _triage_text(slice_prefix=slice_prefix, slice_ids=slice_ids))
         _write_text(feature_dir / "plan.md", _plan_text(name, slice_ids))
         _write_text(feature_dir / "pre-planning" / "ci_checkpoint_plan.md", _checkpoint_plan_text(checkpoint_slice_ids))
@@ -210,6 +217,15 @@ class TestValidateSliceInventoryCoherence(unittest.TestCase):
     def test_passes_active_pack_without_pre_planning(self) -> None:
         feature_dir = self._make_active_pack("active_pack_pass", slice_ids=["C0"])
         res = self._run(feature_dir, PHASE_EXECUTION_READY)
+        self.assertEqual(res.returncode, 0, msg=res.stderr)
+
+    def test_passes_with_backticked_min_spec_as_only_slice_source(self) -> None:
+        feature_dir = self.tmp_root / "backticked_min_spec_only"
+        _write_text(
+            feature_dir / "pre-planning" / "minimal_spec_draft.md",
+            _minimal_spec_text("backticked_min_spec_only", "BEDPM", ["BEDPM0", "BEDPM1"], backtick_key=True),
+        )
+        res = self._run(feature_dir, PHASE_PRE_TASKS)
         self.assertEqual(res.returncode, 0, msg=res.stderr)
 
     def test_fails_pre_tasks_when_checkpoint_plan_drifts(self) -> None:
@@ -255,6 +271,17 @@ class TestValidateSliceInventoryCoherence(unittest.TestCase):
         self.assertEqual(res.returncode, 1)
         self.assertIn("spec_manifest", res.stderr)
         self.assertIn("missing ['BEDPM1']", res.stderr)
+
+    def test_passes_when_triage_adopts_split_without_mutating_min_spec(self) -> None:
+        feature_dir = self._make_draft_pack(
+            "triage_adopted_split",
+            slice_ids=["PDLDPM0", "PDLDPM1", "PDLDPM3", "PDLDPM2"],
+            min_spec_slice_ids=["PDLDPM0", "PDLDPM1", "PDLDPM2"],
+            spec_manifest_slice_ids=["PDLDPM0", "PDLDPM1", "PDLDPM3", "PDLDPM2"],
+            backticked_min_spec_keys=True,
+        )
+        res = self._run(feature_dir, PHASE_PRE_TASKS)
+        self.assertEqual(res.returncode, 0, msg=res.stderr)
 
 
 PHASE_PRE_TASKS = "pre_tasks_checkpoints"
