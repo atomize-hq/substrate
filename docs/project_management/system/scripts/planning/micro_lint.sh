@@ -116,6 +116,33 @@ for rp in "${resolved[@]}"; do
     echo "  - ${rp}"
 done
 
+PLANNING_SCRIPTS_DIR="${REPO_ROOT}/docs/project_management/system/scripts/planning"
+
+slice_specs=()
+for rp in "${resolved[@]}"; do
+    if [[ -f "${rp}" ]]; then
+        if [[ "${rp}" == */slices/*/*-spec.md ]]; then
+            slice_specs+=("${rp}")
+        fi
+        continue
+    fi
+    if [[ -d "${rp}" ]]; then
+        while IFS= read -r -d '' f; do
+            [[ -n "${f}" ]] || continue
+            slice_specs+=("${f}")
+        done < <(find "${rp}" -type f -name '*-spec.md' -path '*/slices/*/*-spec.md' -print0 2>/dev/null || true)
+    fi
+done
+
+if [[ "${#slice_specs[@]}" -gt 0 ]]; then
+    if ! command -v python3 >/dev/null 2>&1; then
+        echo "FAIL: python3 is required for slice spec structural checks (planning micro-lint)" >&2
+        exit 2
+    fi
+    echo "-- Slice spec structural checks"
+    python3 "${PLANNING_SCRIPTS_DIR}/validate_slice_spec_doc_only.py" --paths "${slice_specs[@]}"
+fi
+
 run_rg_fail_on_match() {
     local label="$1"
     local pattern="$2"

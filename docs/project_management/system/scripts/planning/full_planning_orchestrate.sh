@@ -144,6 +144,12 @@ append_summary "- Workstream triage: \`${WORKSTREAM_TRIAGE_REL}\`"
 append_summary "- Alignment report (required): \`${FEATURE_DIR_REL}/pre-planning/alignment_report.md\`"
 append_summary ""
 
+MAX_RESUMES="${PM_FULL_PLANNING_MAX_RESUMES:-6}"
+if ! [[ "${MAX_RESUMES}" =~ ^[0-9]+$ ]]; then
+    die "PM_FULL_PLANNING_MAX_RESUMES must be an integer (got ${MAX_RESUMES})"
+fi
+
+compute_plan_json() {
 PLANNING_SCRIPTS_DIR="${PLANNING_SCRIPTS_DIR}" python3 - "${FEATURE_DIR_ABS}" "${WORKSTREAM_TRIAGE_REL}" >"${PLAN_JSON_ABS}" <<'PY'
 from __future__ import annotations
 
@@ -271,10 +277,14 @@ out = {
 }
 print(json.dumps(out, sort_keys=True))
 PY
+}
+
+compute_plan_json
 
 SLICE_PREFIX="$(jq -r '.slice_prefix' "${PLAN_JSON_ABS}")"
 CONTRACT_ID="$(jq -r '.contract_pws_id' "${PLAN_JSON_ABS}")"
 TASKS_ID="$(jq -r '.tasks_checkpoints_pws_id' "${PLAN_JSON_ABS}")"
+TRIAGE_PATH_ABS="$(jq -r '.triage_path' "${PLAN_JSON_ABS}")"
 
 append_summary "## Plan"
 append_summary ""
@@ -366,6 +376,438 @@ micro_lint_pws() {
     make planning-micro-lint FEATURE_DIR="${FEATURE_DIR_REL}" OWNED_PATHS="${owned_paths}"
 }
 
+declare -A PWS_DONE=()
+
+normalize_requested_path() {
+    local raw="$1"
+    python3 - "${REPO_ROOT}" "${FEATURE_DIR_REL}" "${raw}" <<'PY'
+from __future__ import annotations
+
+import re
+import sys
+from pathlib import Path
+
+repo = Path(sys.argv[1]).resolve()
+feature_rel = sys.argv[2].rstrip("/")
+raw = (sys.argv[3] or "").strip()
+if not raw:
+    raise SystemExit(2)
+
+p = Path(raw)
+if p.is_absolute():
+    try:
+        rel = p.resolve().relative_to(repo).as_posix()
+    except Exception:
+        raise SystemExit(2)
+else:
+    rel = raw.replace("\\", "/")
+
+rel = rel.lstrip("./")
+rel = re.sub(r"/{2,}", "/", rel)
+
+feature_prefix = feature_rel + "/"
+if rel == feature_rel:
+    raise SystemExit(2)
+if rel.startswith(feature_prefix):
+    pack_rel = rel[len(feature_prefix) :]
+else:
+    pack_rel = rel
+
+pack_rel = pack_rel.strip().lstrip("./")
+if not pack_rel or pack_rel.startswith("/"):
+    raise SystemExit(2)
+parts = [seg for seg in pack_rel.split("/") if seg]
+if any(seg == ".." for seg in parts):
+    raise SystemExit(2)
+if pack_rel.startswith("docs/"):
+    # pack-relative paths must not be repo-root paths
+    raise SystemExit(2)
+
+print(pack_rel)
+PY
+}
+
+find_owner_pws_for_pack_rel() {
+    local pack_rel="$1"
+    python3 - "${PLAN_JSON_ABS}" "${pack_rel}" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+plan = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+path = (sys.argv[2] or "").strip()
+if not path:
+    raise SystemExit(0)
+
+exact_owners: list[str] = []
+best_owner: str | None = None
+best_prefix: str | None = None
+
+for pid, node in plan.get("pws", {}).items():
+    owns = node.get("owns_norm") or []
+    if not isinstance(owns, list):
+        continue
+    for own in owns:
+        if not isinstance(own, str) or not own:
+            continue
+        if own.endswith("/"):
+            continue
+        if own == path:
+            exact_owners.append(pid)
+
+if len(exact_owners) > 1:
+    print(f"ERROR: multiple exact owners for {path!r}: {sorted(exact_owners)!r}", file=sys.stderr)
+    raise SystemExit(2)
+if len(exact_owners) == 1:
+    print(exact_owners[0])
+    raise SystemExit(0)
+
+for pid, node in plan.get("pws", {}).items():
+    owns = node.get("owns_norm") or []
+    if not isinstance(owns, list):
+        continue
+    for own in owns:
+        if not isinstance(own, str) or not own:
+            continue
+        if not own.endswith("/"):
+            continue
+        if path.startswith(own):
+            if best_prefix is None or len(own) > len(best_prefix):
+                best_prefix = own
+                best_owner = pid
+
+if best_owner is not None:
+    print(best_owner)
+PY
+}
+
+grant_owns_in_triage() {
+    local pid="$1"
+    shift
+    local -a to_add=("$@")
+    [[ "${#to_add[@]}" -gt 0 ]] || return 0
+
+    PLANNING_SCRIPTS_DIR="${PLANNING_SCRIPTS_DIR}" python3 - "${TRIAGE_PATH_ABS}" "${pid}" "${to_add[@]}" <<'PY'
+from __future__ import annotations
+
+import json
+import os
+import re
+import sys
+from pathlib import Path
+
+scripts_dir = os.environ.get("PLANNING_SCRIPTS_DIR", "")
+if scripts_dir:
+    sys.path.insert(0, scripts_dir)
+
+import validate_pws_index as vpi
+
+triage_path = Path(sys.argv[1]).resolve()
+pid = (sys.argv[2] or "").strip()
+paths = [str(x) for x in sys.argv[3:]]
+
+text = triage_path.read_text(encoding="utf-8")
+idx = vpi._extract_pm_pws_index_json(text)
+
+pws = idx.get("pws")
+if not isinstance(pws, list):
+    raise SystemExit(2)
+
+entry = None
+for raw in pws:
+    if isinstance(raw, dict) and raw.get("id") == pid:
+        entry = raw
+        break
+if entry is None:
+    raise SystemExit(2)
+
+owns = entry.get("owns")
+if not isinstance(owns, list) or not all(isinstance(x, str) for x in owns):
+    raise SystemExit(2)
+
+normalized_add = []
+for p in paths:
+    norm = vpi._normalize_owns_path(p)
+    if norm.endswith("//"):
+        norm = norm.rstrip("/") + "/"
+    normalized_add.append(norm)
+
+for p in normalized_add:
+    if p not in owns:
+        owns.append(p)
+
+begin = text.find(vpi.BEGIN_MARKER)
+end = text.find(vpi.END_MARKER)
+if begin < 0 or end < 0 or begin >= end:
+    raise SystemExit(2)
+
+segment = text[begin:end]
+m = vpi.JSON_FENCE_RE.search(segment)
+if not m:
+    raise SystemExit(2)
+
+new_body = json.dumps(idx, indent=2, sort_keys=False)
+segment2 = segment[: m.start("body")] + new_body + segment[m.end("body") :]
+
+out = text[:begin] + segment2 + text[end:]
+triage_path.write_text(out, encoding="utf-8")
+PY
+}
+
+commit_tracked_path() {
+    local path="$1"
+    local msg="$2"
+    git add -- "${path}" >/dev/null 2>&1 || true
+    if git diff --cached --quiet; then
+        return 0
+    fi
+    git commit -m "${msg}" >/dev/null
+    sha="$(git rev-parse HEAD)"
+    echo "Committed: ${sha} (${msg})"
+    append_summary "- committed \`${sha}\` (\`${msg}\`)"
+}
+
+get_thread_id() {
+    local pid="$1"
+    local f="${FEATURE_DIR_ABS}/logs/pws/${pid}/last_thread_id.txt"
+    [[ -f "${f}" ]] || die "missing last_thread_id.txt for ${pid} (expected: ${FEATURE_DIR_REL}/logs/pws/${pid}/last_thread_id.txt)"
+    tid="$(tr -d '[:space:]' < "${f}" || true)"
+    [[ -n "${tid}" ]] || die "empty last_thread_id.txt for ${pid}: ${FEATURE_DIR_REL}/logs/pws/${pid}/last_thread_id.txt"
+    printf '%s\n' "${tid}"
+}
+
+write_resume_message() {
+    local pid="$1"
+    local attempt="$2"
+    local label="$3"
+    local body="$4"
+    local dir="${WRAPPER_DIR_ABS}/resume_messages"
+    mkdir -p "${dir}"
+    local path="${dir}/${pid}.attempt${attempt}.${label}.md"
+    {
+        printf 'Dispatcher resume (%s): `%s`\n\n' "${label}" "${pid}"
+        printf '%s\n' "${body}"
+    } >"${path}"
+    printf '%s\n' "${path}"
+}
+
+run_pws_fresh() {
+    local pid="$1"
+    local -a args=("${RUNNER}" --feature-dir "${FEATURE_DIR_ABS}" --pws-id "${pid}" --codex-jsonl)
+    if [[ -n "${CODEX_PROFILE}" ]]; then args+=(--codex-profile "${CODEX_PROFILE}"); fi
+    if [[ -n "${CODEX_MODEL}" ]]; then args+=(--codex-model "${CODEX_MODEL}"); fi
+    PM_PLANNING_ORCHESTRATED=1 "${args[@]}"
+}
+
+run_pws_resume() {
+    local pid="$1"
+    local thread_id="$2"
+    local resume_message_path="$3"
+    local -a args=("${RUNNER}" --feature-dir "${FEATURE_DIR_ABS}" --pws-id "${pid}" --codex-jsonl --resume-thread-id "${thread_id}" --resume-message "${resume_message_path}")
+    if [[ -n "${CODEX_PROFILE}" ]]; then args+=(--codex-profile "${CODEX_PROFILE}"); fi
+    if [[ -n "${CODEX_MODEL}" ]]; then args+=(--codex-model "${CODEX_MODEL}"); fi
+    PM_PLANNING_ORCHESTRATED=1 "${args[@]}"
+}
+
+process_allowlist_request() {
+    local pid="$1"
+    local attempt="$2"
+    local req_path="${FEATURE_DIR_ABS}/logs/pws/${pid}/allowlist_request.json"
+    [[ -f "${req_path}" ]] || return 1
+
+    local reason
+    reason="$(jq -r '.reason // ""' "${req_path}" 2>/dev/null || echo "")"
+    local -a raw_paths=()
+    while IFS= read -r p; do
+        [[ -n "${p}" ]] || continue
+        raw_paths+=("${p}")
+    done < <(jq -r '.requested_tracked_paths[]?' "${req_path}" 2>/dev/null | sed '/^$/d')
+
+    if [[ "${#raw_paths[@]}" -eq 0 ]]; then
+        die "allowlist_request.json exists but requested_tracked_paths is empty: ${FEATURE_DIR_REL}/logs/pws/${pid}/allowlist_request.json"
+    fi
+
+    local -a pack_paths=()
+    for raw in "${raw_paths[@]}"; do
+        pack_rel="$(normalize_requested_path "${raw}")" || die "invalid requested_tracked_path (must be pack-relative or inside feature dir): ${raw}"
+        pack_paths+=("${pack_rel}")
+    done
+
+    local -a grant_paths=()
+    declare -A owner_to_paths=()
+    for pack_rel in "${pack_paths[@]}"; do
+        owner="$(find_owner_pws_for_pack_rel "${pack_rel}" || true)"
+        if [[ -z "${owner}" ]]; then
+            grant_paths+=("${pack_rel}")
+            continue
+        fi
+        if [[ "${owner}" == "${pid}" ]]; then
+            continue
+        fi
+        owner_to_paths["${owner}"]="${owner_to_paths[$owner]:-} ${pack_rel}"
+    done
+
+    if [[ "${#grant_paths[@]}" -gt 0 ]]; then
+        echo "Auto-granting allowlist for ${pid}: ${grant_paths[*]}"
+        grant_owns_in_triage "${pid}" "${grant_paths[@]}"
+
+        triage_rel="$(python3 - "${REPO_ROOT}" "${TRIAGE_PATH_ABS}" <<'PY'
+import sys
+from pathlib import Path
+repo = Path(sys.argv[1]).resolve()
+p = Path(sys.argv[2]).resolve()
+print(p.relative_to(repo).as_posix())
+PY
+)"
+        commit_tracked_path "${triage_rel}" "docs: pws allowlist grant (${pid})"
+
+        compute_plan_json
+        TRIAGE_PATH_ABS="$(jq -r '.triage_path' "${PLAN_JSON_ABS}")"
+    fi
+
+    for owner in "${!owner_to_paths[@]}"; do
+        if [[ -z "${PWS_DONE[$owner]:-}" ]]; then
+            die "allowlist_request from ${pid} targets path(s) owned by ${owner}, but ${owner} has not run yet (fix PM_PWS_INDEX depends_on ordering)"
+        fi
+
+        owner_role="$(jq -r --arg id "${owner}" '.pws[$id].role' "${PLAN_JSON_ABS}")"
+        owner_thread_id="$(get_thread_id "${owner}")"
+        owner_paths="$(echo "${owner_to_paths[$owner]}" | xargs)"
+
+        owner_body=$(
+            cat <<EOF
+Another PWS is blocked and needs changes inside your owned outputs.
+
+- Requestor PWS: \`${pid}\`
+- Requested path(s): \`${owner_paths}\`
+- Reason: ${reason}
+
+Draft locations (preferred first):
+- \`${FEATURE_DIR_REL}/logs/pws/${pid}/draft/<pack-relative path>\`
+- \`${FEATURE_DIR_REL}/logs/pws/${pid}/draft.patch\`
+
+Do the minimal tracked edits needed inside your allowlist to resolve the issue, then rerun:
+\`make planning-micro-lint FEATURE_DIR="${FEATURE_DIR_REL}" OWNED_PATHS="<your owned paths>"\`
+EOF
+        )
+        owner_msg_path="$(write_resume_message "${owner}" "${attempt}" "owner_fix_for_${pid}" "${owner_body}")"
+
+        echo "== Auto-heal routing: resuming owner PWS ${owner} (requested by ${pid}) =="
+        append_summary "- Routed allowlist request from \`${pid}\` to owner \`${owner}\` (paths=\`${owner_paths}\`)"
+
+        # Resume owner until it passes runner + micro-lint.
+        run_pws_until_done "${owner}" "${owner_role}" "${owner_msg_path}"
+    done
+
+    grant_csv="$(printf '%s\n' "${grant_paths[@]+"${grant_paths[@]}"}" | paste -sd ',' - 2>/dev/null || true)"
+    owners_csv="$(printf '%s\n' "${!owner_to_paths[@]}" | sort | paste -sd ',' - 2>/dev/null || true)"
+    req_body=$(
+        cat <<EOF
+Your allowlist_request.json was processed automatically.
+
+- Granted new owns (if any): ${grant_csv:-"(none)"}
+- Routed fixes to owner PWS (if any): ${owners_csv:-"(none)"}
+
+Continue and complete this PWS. If still blocked, rewrite \`${FEATURE_DIR_REL}/logs/pws/${pid}/allowlist_request.json\` with the next required paths + drafts.
+EOF
+    )
+    resume_msg_path="$(write_resume_message "${pid}" "${attempt}" "after_allowlist" "${req_body}")"
+    printf '%s\n' "${resume_msg_path}"
+    return 0
+}
+
+run_pws_until_done() {
+    local pid="$1"
+    local role="$2"
+    local first_resume_msg="${3:-}"
+
+    local attempt=0
+    local resume_msg=""
+    local first_is_resume=0
+    if [[ -n "${first_resume_msg}" ]]; then
+        first_is_resume=1
+        resume_msg="${first_resume_msg}"
+    fi
+
+    while true; do
+        if [[ "${attempt}" -ge "${MAX_RESUMES}" ]]; then
+            die "exhausted resume attempts for ${pid} (MAX=${MAX_RESUMES}); see ${FEATURE_DIR_REL}/logs/pws/${pid}/"
+        fi
+
+        echo "-- Attempt ${attempt} for ${pid}"
+
+        set +e
+        if [[ "${attempt}" -eq 0 && "${first_is_resume}" -ne 1 ]]; then
+            run_pws_fresh "${pid}"
+            rc=$?
+        else
+            thread_id="$(get_thread_id "${pid}")"
+            [[ -n "${resume_msg}" ]] || resume_msg="$(write_resume_message "${pid}" "${attempt}" "resume" "Resume and continue work for this PWS until all gates pass.")"
+            run_pws_resume "${pid}" "${thread_id}" "${resume_msg}"
+            rc=$?
+        fi
+        set -e
+
+        # Always commit allowlisted outputs after each Codex run to keep the checkout clean for resumes.
+        commit_pws_outputs "${pid}"
+
+        if [[ "${rc}" -ne 0 ]]; then
+            append_summary "- \`${pid}\`: runner failed (exit=${rc}); attempting auto-heal"
+            if resume_after_allowlist="$(process_allowlist_request "${pid}" "${attempt}")"; then
+                resume_msg="${resume_after_allowlist}"
+            else
+                body=$(
+                    cat <<EOF
+Runner failed for \`${pid}\` (role=\`${role}\`, exit=${rc}).
+
+Inspect:
+- Step logs: \`${FEATURE_DIR_REL}/logs/pws/${pid}\`
+- Stable stderr: \`${FEATURE_DIR_REL}/logs/pws/${pid}/stderr.log\`
+
+Fix the issue within the output allowlist and ensure self-checks pass. If you need additional tracked writes, write allowlist_request.json + drafts under \`${FEATURE_DIR_REL}/logs/pws/${pid}/\`.
+EOF
+                )
+                resume_msg="$(write_resume_message "${pid}" "${attempt}" "runner_failed" "${body}")"
+            fi
+            attempt=$((attempt + 1))
+            continue
+        fi
+
+        echo "-- Micro-lint (scoped): ${pid}"
+        set +e
+        micro_lint_pws "${pid}"
+        ml_rc=$?
+        set -e
+        if [[ "${ml_rc}" -ne 0 ]]; then
+            append_summary "- \`${pid}\`: micro-lint failed; attempting auto-heal"
+            if resume_after_allowlist="$(process_allowlist_request "${pid}" "${attempt}")"; then
+                resume_msg="${resume_after_allowlist}"
+            else
+                body=$(
+                    cat <<EOF
+planning-micro-lint failed for \`${pid}\` (role=\`${role}\`).
+
+Fix hard-ban / ambiguity matches (and slice spec v2 structural rules when applicable), then rerun:
+\`make planning-micro-lint FEATURE_DIR="${FEATURE_DIR_REL}" OWNED_PATHS="<owned paths>"\`
+
+Step logs: \`${FEATURE_DIR_REL}/logs/pws/${pid}\`
+EOF
+                )
+                resume_msg="$(write_resume_message "${pid}" "${attempt}" "micro_lint_failed" "${body}")"
+            fi
+            attempt=$((attempt + 1))
+            continue
+        fi
+
+        # Final commit after micro-lint passes (usually no-op if already committed).
+        commit_pws_outputs "${pid}"
+        PWS_DONE["${pid}"]=1
+        return 0
+    done
+}
+
 append_summary "## Execution"
 append_summary ""
 
@@ -376,18 +818,7 @@ while IFS= read -r pid; do
     echo "== Running PWS: ${pid} (role=${role}) =="
     append_summary "- Started: \`${pid}\` (role=\`${role}\`)"
 
-    args=("${RUNNER}" --feature-dir "${FEATURE_DIR_ABS}" --pws-id "${pid}")
-    if [[ -n "${CODEX_PROFILE}" ]]; then args+=(--codex-profile "${CODEX_PROFILE}"); fi
-    if [[ -n "${CODEX_MODEL}" ]]; then args+=(--codex-model "${CODEX_MODEL}"); fi
-    if [[ "${CODEX_JSONL}" -eq 1 ]]; then args+=(--codex-jsonl); fi
-
-    PM_PLANNING_ORCHESTRATED=1 "${args[@]}"
-
-    echo "-- Micro-lint (scoped): ${pid}"
-    micro_lint_pws "${pid}"
-
-    echo "-- Commit: ${pid}"
-    commit_pws_outputs "${pid}"
+    run_pws_until_done "${pid}" "${role}" ""
 
     echo ""
 done < <(jq -r '.run_order[]' "${PLAN_JSON_ABS}")

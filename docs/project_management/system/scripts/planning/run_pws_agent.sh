@@ -20,6 +20,8 @@ Optional:
   --codex-profile <profile>      Passed to `codex exec --profile`
   --codex-model <model>          Passed to `codex exec --model`
   --codex-jsonl                  Enable `codex exec --json` (stdout is events.jsonl)
+  --resume-thread-id <UUID>      Resume an existing Codex session (same PWS) instead of starting a new one
+  --resume-message <path>        Path to a resume message to send (optional; default message if omitted)
   --help                         Show this help
 
 Contract:
@@ -97,6 +99,8 @@ WORKSTREAM_TRIAGE=""
 CODEX_PROFILE=""
 CODEX_MODEL=""
 CODEX_JSONL=0
+RESUME_THREAD_ID=""
+RESUME_MESSAGE_PATH=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -124,6 +128,14 @@ while [[ $# -gt 0 ]]; do
             CODEX_JSONL=1
             shift 1
             ;;
+        --resume-thread-id)
+            RESUME_THREAD_ID="${2:-}"
+            shift 2
+            ;;
+        --resume-message)
+            RESUME_MESSAGE_PATH="${2:-}"
+            shift 2
+            ;;
         --help|-h)
             usage
             exit 0
@@ -136,6 +148,13 @@ done
 
 [[ -n "${FEATURE_DIR_RAW}" ]] || die "--feature-dir is required"
 [[ -n "${PWS_ID}" ]] || die "--pws-id is required"
+if [[ -n "${RESUME_MESSAGE_PATH}" && -z "${RESUME_THREAD_ID}" ]]; then
+    die "--resume-message requires --resume-thread-id"
+fi
+if [[ -n "${RESUME_THREAD_ID}" ]]; then
+    RESUME_THREAD_ID="$(echo "${RESUME_THREAD_ID}" | xargs)"
+    [[ -n "${RESUME_THREAD_ID}" ]] || die "--resume-thread-id cannot be empty"
+fi
 
 need_cmd git
 need_cmd python3
@@ -227,9 +246,23 @@ else
 fi
 PAYLOAD_TMP="${RUN_DIR_ABS}/_payload.txt"
 
-extract_first_md_fence_payload "${REPO_ROOT}/${PROMPT_TEMPLATE_REL}" > "${PAYLOAD_TMP}" || true
-if [[ ! -s "${PAYLOAD_TMP}" ]]; then
-    die "prompt template does not contain a fenced md block payload (expected a line starting with three backticks + md): ${PROMPT_TEMPLATE_REL}"
+if [[ -n "${RESUME_THREAD_ID}" ]]; then
+    if [[ -n "${RESUME_MESSAGE_PATH}" ]]; then
+        if [[ "${RESUME_MESSAGE_PATH}" != /* ]]; then
+            RESUME_MESSAGE_PATH="${REPO_ROOT}/${RESUME_MESSAGE_PATH}"
+        fi
+        [[ -f "${RESUME_MESSAGE_PATH}" ]] || die "resume message file not found: ${RESUME_MESSAGE_PATH}"
+        cat "${RESUME_MESSAGE_PATH}" > "${PAYLOAD_TMP}"
+    else
+        cat > "${PAYLOAD_TMP}" <<'EOF'
+Resume: continue this PWS until all runner gates pass (and clear/replace allowlist_request.json if still blocked).
+EOF
+    fi
+else
+    extract_first_md_fence_payload "${REPO_ROOT}/${PROMPT_TEMPLATE_REL}" > "${PAYLOAD_TMP}" || true
+    if [[ ! -s "${PAYLOAD_TMP}" ]]; then
+        die "prompt template does not contain a fenced md block payload (expected a line starting with three backticks + md): ${PROMPT_TEMPLATE_REL}"
+    fi
 fi
 
 {
@@ -399,7 +432,12 @@ fi
 if [[ -n "${CODEX_PROFILE}" ]]; then codex_args+=(--profile "${CODEX_PROFILE}"); fi
 if [[ -n "${CODEX_MODEL}" ]]; then codex_args+=(--model "${CODEX_MODEL}"); fi
 if [[ "${CODEX_JSONL}" -eq 1 ]]; then codex_args+=(--json); fi
-codex_args+=(--output-last-message "${CODEX_LAST_MESSAGE_RUN}" -)
+codex_args+=(--output-last-message "${CODEX_LAST_MESSAGE_RUN}")
+if [[ -n "${RESUME_THREAD_ID}" ]]; then
+    codex_args+=(resume "${RESUME_THREAD_ID}" -)
+else
+    codex_args+=(-)
+fi
 
 set +e
 "${codex_args[@]}" < "${PROMPT_OUT}" >"${CODEX_STDOUT}" 2>"${STEP_STDERR}" &
@@ -418,6 +456,38 @@ write_missing_last_message_stub "${CODEX_EXIT}"
 LAST_MESSAGE_OK=1
 if [[ ! -s "${CODEX_LAST_MESSAGE_RUN}" ]]; then
     LAST_MESSAGE_OK=0
+fi
+
+THREAD_ID=""
+if [[ "${CODEX_JSONL}" -eq 1 && -s "${CODEX_STDOUT}" ]]; then
+    THREAD_ID="$(python3 - "${CODEX_STDOUT}" <<'PY' 2>/dev/null || true
+import json
+import sys
+from pathlib import Path
+
+p = Path(sys.argv[1])
+for raw in p.read_text(encoding="utf-8", errors="replace").splitlines():
+    raw = raw.strip()
+    if not raw:
+        continue
+    try:
+        obj = json.loads(raw)
+    except Exception:
+        continue
+    tid = obj.get("thread_id")
+    if isinstance(tid, str) and tid.strip():
+        print(tid.strip())
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
+)"
+fi
+if [[ -z "${THREAD_ID}" && -n "${RESUME_THREAD_ID}" ]]; then
+    THREAD_ID="${RESUME_THREAD_ID}"
+fi
+if [[ -n "${THREAD_ID}" ]]; then
+    printf '%s\n' "${THREAD_ID}" > "${RUN_DIR_ABS}/thread_id.txt" 2>/dev/null || true
+    printf '%s\n' "${THREAD_ID}" > "${STEP_DIR_ABS}/last_thread_id.txt" 2>/dev/null || true
 fi
 
 CHANGED_TRACKED_ALL=()
