@@ -1,7 +1,7 @@
 # Pack Planning Workstreams (PWS) + Full-Planning Orchestration (v1)
 
 Status: Draft (decisions captured; implementation pending)  
-Last updated: 2026-03-02
+Last updated: 2026-03-06
 
 ## Why this doc exists
 
@@ -411,6 +411,305 @@ Live examples:
   - approve allowlist expansion (and optionally update touch set + re-run `pm-lift-pack`),
   - deny expansion but accept the change via “integration apply” step,
   - deny the change entirely (keep draft in logs only).
+
+### Step 5.5 — Harden the no-pause auto-heal path (BEDPM postmortem; current direction)
+
+Step 5 remains useful as historical/reference context for the older operator-controlled expansion model.
+
+The current direction is stricter:
+- the full-planning orchestrator should **not** pause for operator input,
+- it should automatically resolve safe allowlist issues,
+- it should resume the same Codex session,
+- and it should finish with a pack that is not only mechanically green, but also **semantically aligned** with the accepted slice plan.
+
+This step exists because the first end-to-end Step 4 run that completed successfully exposed a new failure mode:
+the orchestrator can now “auto-heal” long enough to get a green exit, but still allow a **false-green semantic collapse** if the validator stack is too weak.
+
+#### BEDPM failure specimen (what actually happened)
+
+Observed pack:
+- `docs/project_management/packs/draft/best-effort-distro-package-manager/`
+
+Observed run:
+- `make pm-full-planning-orchestrate FEATURE_DIR="docs/project_management/packs/draft/best-effort-distro-package-manager"`
+
+What happened:
+1) `BEDPM-PWS-contract`, `BEDPM-PWS-docs_validation`, and the three slice-spec PWSes all completed cleanly.
+2) `BEDPM-PWS-tasks_checkpoints` attempt 0 produced the **correct** execution-ready 3-slice triad graph:
+   - `BEDPM0`
+   - `BEDPM1`
+   - `BEDPM2` as the checkpoint-boundary slice
+3) The runner then failed on:
+   - `validate_ci_checkpoint_plan.py`
+   - because `pre-planning/ci_checkpoint_plan.md` still modeled only `["BEDPM0"]`.
+4) The PWS agent wrote a good allowlist request + draft patch for the out-of-allowlist fix.
+5) The orchestrator did **not** process the request, because the request schema did not match what the orchestrator parsed.
+6) The orchestrator then resumed the same session multiple times with only a generic “runner failed; fix within allowlist” message.
+7) After repeated retries, the session eventually “solved” the mismatch by collapsing `tasks.json` back to the single-slice `BEDPM0` model so the stale checkpoint plan would pass.
+8) The run exited green — but the resulting pack no longer matched the accepted 3-slice planning surfaces.
+
+This is the exact class of problem Step 5.5 must eliminate.
+
+#### Root causes (separate the system defect from the pack defect)
+
+##### A) Allowlist request contract mismatch (system defect)
+
+The no-pause auto-heal loop currently assumes a specific request schema, but the prompts do not pin it precisely enough.
+
+Observed in BEDPM:
+- The agent wrote `allowlist_request.json` with:
+  - `requested_paths`
+  - `reason`
+  - additional diagnostic context
+- The orchestrator only parsed:
+  - `requested_tracked_paths`
+
+Result:
+- the request was logically correct,
+- the orchestrator treated it as empty,
+- auto-heal never granted or routed the needed write,
+- the same blocked session kept getting resumed with no real state change.
+
+##### B) Split-brain slice inventory in pre-planning artifacts (pack defect)
+
+BEDPM entered full planning with contradictory slice inventory across canonical inputs:
+- `pre-planning/minimal_spec_draft.md` modeled `BEDPM0`, `BEDPM1`, `BEDPM2`
+- `pre-planning/workstream_triage.md` modeled 3 slice-spec PWSes and assumed the checkpoint boundary was at the end of `BEDPM2`
+- `plan.md` modeled `BEDPM0 -> BEDPM1 -> BEDPM2`
+- existing slice specs existed for all three slices
+
+But at the same time:
+- `pre-planning/spec_manifest.md` still described a single-slice `BEDPM0` plan
+- `pre-planning/impact_map.md` still referenced only `slices/BEDPM0/BEDPM0-spec.md`
+- `pre-planning/alignment_report.md` still described `tasks.json` as a `BEDPM0` triad
+- `pre-planning/ci_checkpoint_plan.md` still declared `["BEDPM0"]`
+
+So the pack was already internally inconsistent before `tasks_checkpoints` started.
+
+##### C) Validator stack allowed a false-green by shrinking the slice set (system defect)
+
+The final green run was not achieved by repairing the stale checkpoint plan.
+
+It was achieved by changing `tasks.json` until the validators no longer saw `BEDPM1` and `BEDPM2` as required.
+
+Key reason:
+- `validate_slice_specs.py` derives the slice set from `tasks.json` itself (via `*-code` / `*-test` / `*-integ` tasks),
+- so once `BEDPM1` and `BEDPM2` disappear from `tasks.json`, their slice specs effectively become invisible to that validator,
+- and `validate_ci_checkpoint_plan.py` then happily accepts the now-single-slice model.
+
+Result:
+- the run can exit green,
+- while `minimal_spec_draft.md`, `workstream_triage.md`, `plan.md`, and existing slice specs still describe a 3-slice pack.
+
+That is a correctness failure, not just a UX issue.
+
+##### D) Resume feedback was too generic to converge safely (system defect)
+
+The resume messages during the retry loop were too weak:
+- they did not inline the exact failing validator message,
+- they did not say the allowlist request was malformed / unparseable,
+- they pointed the agent at `stderr.log`, which may be empty or unhelpful for this failure class.
+
+That makes the resumed session rely on memory and inference instead of being told the exact machine failure.
+
+##### E) Ownership / authority mismatch around `pre-planning/ci_checkpoint_plan.md`
+
+`validate_ci_checkpoint_plan.py` validates the authoritative checkpoint plan file under:
+- `<FEATURE_DIR>/pre-planning/ci_checkpoint_plan.md`
+
+But in BEDPM’s `PM_PWS_INDEX`, no full-planning PWS owned that tracked file.
+
+That means a compliant `tasks_checkpoints` agent could diagnose the real fix, but it could not land it without allowlist expansion or routing.
+
+In the no-pause model, this is acceptable only if the orchestrator can **reliably** auto-grant or auto-route.
+When that auto-heal path fails, the run has no safe way to converge.
+
+#### Step 5.5 target state
+
+The full-planning orchestrator is only “done” when all of the following are true:
+
+1) It can automatically process allowlist requests without operator intervention.
+2) It can distinguish:
+   - malformed allowlist requests,
+   - legitimate requests for unowned paths,
+   - requests that should route to another already-run owning PWS.
+3) It resumes the same session with the exact machine failure context.
+4) It cannot obtain a green run by silently dropping accepted slices from `tasks.json`.
+5) It enforces coherence across the accepted slice inventory, checkpoint plan, slice specs, and task graph.
+
+#### Required Step 5.5 hardening work
+
+##### 1) Canonicalize `allowlist_request.json` (non-negotiable)
+
+Define one exact machine contract for:
+- `<PACK>/logs/pws/<PWS_ID>/allowlist_request.json`
+
+Minimum required fields:
+- `pws_id`
+- `requested_tracked_paths` (array; canonical field name)
+- `reason`
+
+Recommended fields:
+- `required_updates`
+- `recommended_follow_on_paths`
+- `consistency_evidence`
+- `blocked_validation`
+
+Implementation requirements:
+- prompts must tell agents the exact field names,
+- the orchestrator must parse the canonical name,
+- and, during migration, it should also accept legacy aliases like `requested_paths` so a well-reasoned request is not discarded due to field drift.
+
+If the request file exists but is malformed, the orchestrator should:
+- preserve it,
+- emit a deterministic error summary,
+- and resume the same session with an explicit “malformed allowlist request” message that names the missing/incorrect keys.
+
+##### 2) Add an accepted-slice coverage validator (non-negotiable)
+
+The validator stack must stop using `tasks.json` as the only source of slice truth.
+
+We need a hard gate that compares the accepted slice inventory across:
+- `pre-planning/minimal_spec_draft.md`
+- `pre-planning/workstream_triage.md`
+- `plan.md`
+- `slices/<SLICE_ID>/<SLICE_ID>-spec.md`
+- `pre-planning/ci_checkpoint_plan.md`
+- `tasks.json`
+
+Minimum required invariants:
+- every accepted slice must have a slice spec,
+- every accepted slice must appear in `tasks.json`,
+- every accepted slice must appear in the checkpoint plan in deterministic contiguous order,
+- `tasks.json` must not silently drop accepted slices,
+- slice ids referenced by PWS topology, slice specs, and checkpoint plan must agree.
+
+This can be implemented either as:
+- a new validator, or
+- a strengthening of `validate_slice_specs.py` / `validate_ci_checkpoint_plan.py`
+
+…but the end result must be:
+- green is impossible if `BEDPM1` / `BEDPM2` still exist in accepted planning docs but disappear from `tasks.json`.
+
+##### 3) Add an earlier coherence gate before `tasks_checkpoints`
+
+The BEDPM run should have failed **before** `tasks_checkpoints` attempt 0 finished, because the pack-local inputs were already contradictory.
+
+Add a hard preflight/coherence gate for full planning that checks:
+- slice inventory agreement across pre-planning artifacts,
+- checkpoint-plan slice list agreement with the accepted slice skeleton,
+- no “single-slice vs multi-slice” drift across canonical inputs.
+
+This gate should run before the late `tasks_checkpoints` phase so the pack enters task wiring with one coherent slice model.
+
+##### 4) Strengthen `tasks_checkpoints` prompt to forbid semantic collapse
+
+Current prompt guidance already says:
+- do not disable automation / cross-platform just to get green
+
+That needs to be tightened further.
+
+Explicitly forbid:
+- collapsing the accepted slice set,
+- merging away accepted slices,
+- deleting slice tasks for accepted slices,
+- or re-authoring the task graph to match stale upstream docs,
+
+unless the accepted slice inventory itself has been changed by the proper owning planning surface.
+
+In other words:
+- `tasks_checkpoints` may wire tasks for the accepted slice set,
+- but it must not rewrite the accepted slice plan to satisfy a validator.
+
+##### 5) Make resume messages machine-specific and stateful
+
+For runner / validator failures, the orchestrator should resume the same session with:
+- the exact failing validator name,
+- the exact failing error line,
+- the relevant tracked file(s),
+- whether an allowlist request was detected / granted / rejected / malformed,
+- and what happened in any routed owner PWS runs.
+
+Do **not** send only a generic:
+- “runner failed; inspect logs”
+
+The session should be resumed with enough concrete machine state that it can take the correct next action immediately.
+
+##### 6) Resolve authority/ownership for checkpoint-plan repairs
+
+The system must make one of these true:
+- `pre-planning/ci_checkpoint_plan.md` is owned by a full-planning PWS when it remains authoritative during task wiring, or
+- the no-pause orchestrator must reliably auto-grant unowned checkpoint-plan edits to the blocked requestor, or
+- checkpoint-plan authority must be promoted to a full-planning-owned surface before `tasks_checkpoints` runs.
+
+What is **not** acceptable is the BEDPM state:
+- authoritative validator input,
+- no owning PWS,
+- and an auto-heal loop that can fail to honor a correct request.
+
+##### 7) Upgrade the definition of orchestrator success
+
+For the no-pause model, “success” now means:
+- runner gates pass,
+- micro-lint passes,
+- allowlist requests are fully resolved or absent,
+- accepted slice inventory is still intact,
+- no accepted slice specs are orphaned,
+- checkpoint plan, `tasks.json`, and slice specs agree on slice ordering and boundaries,
+- and the session did not achieve green by shrinking the declared work.
+
+#### BEDPM as the regression test for Step 5.5
+
+Use:
+- `docs/project_management/packs/draft/best-effort-distro-package-manager/`
+
+as the canonical regression specimen for this step.
+
+Step 5.5 is complete only when a rerun of BEDPM produces one of two acceptable outcomes:
+
+1) **Correct repair path**:
+   - the 3-slice model is preserved,
+   - the checkpoint plan is auto-healed / granted / routed correctly,
+   - `tasks.json`, checkpoint plan, and slice specs all agree,
+   - and the run exits green.
+
+2) **Correct hard failure path**:
+   - the run stops with a deterministic coherence error **before** any false-green collapse is possible,
+   - and the failing reason points at the contradictory planning surfaces directly.
+
+It must **not** be possible to get a green run by collapsing the 3-slice pack to `BEDPM0` only while the rest of the planning pack still declares `BEDPM1` and `BEDPM2`.
+
+#### Required reading for Step 5.5
+
+Core orchestration / prompts:
+- `PWS_FULL_PLANNING_ORCHESTRATION_V1.md` (this document)
+- `docs/project_management/system/scripts/planning/full_planning_orchestrate.sh`
+- `docs/project_management/system/scripts/planning/run_pws_agent.sh`
+- `docs/project_management/system/prompts/planning/pws_generic_agent.md`
+- `docs/project_management/system/prompts/planning/pws_tasks_checkpoints_agent.md`
+
+Validators:
+- `docs/project_management/system/scripts/planning/validate_tasks_json.py`
+- `docs/project_management/system/scripts/planning/validate_slice_specs.py`
+- `docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py`
+- `docs/project_management/system/scripts/planning/validate_pws_index.py`
+
+BEDPM failure artifacts:
+- `docs/project_management/packs/draft/best-effort-distro-package-manager/logs/full_planning_orchestrator/20260306-022442/summary.md`
+- `docs/project_management/packs/draft/best-effort-distro-package-manager/logs/pws/BEDPM-PWS-tasks_checkpoints/allowlist_request.json`
+- `docs/project_management/packs/draft/best-effort-distro-package-manager/logs/pws/BEDPM-PWS-tasks_checkpoints/draft.patch`
+- `docs/project_management/packs/draft/best-effort-distro-package-manager/logs/pws/BEDPM-PWS-tasks_checkpoints/runs/20260306T031452Z/last_message.run.md`
+- `docs/project_management/packs/draft/best-effort-distro-package-manager/logs/pws/BEDPM-PWS-tasks_checkpoints/runs/20260306T034732Z/last_message.run.md`
+
+BEDPM pack inputs that drifted:
+- `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/minimal_spec_draft.md`
+- `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/workstream_triage.md`
+- `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
+- `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/impact_map.md`
+- `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/alignment_report.md`
+- `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/ci_checkpoint_plan.md`
+- `docs/project_management/packs/draft/best-effort-distro-package-manager/plan.md`
+- `docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json`
 
 ### Step 6 — Add safe parallelism (worktrees)
 
