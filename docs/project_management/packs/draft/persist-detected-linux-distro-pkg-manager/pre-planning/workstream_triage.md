@@ -132,7 +132,13 @@ Interpretation:
         "slices/PDLDPM0/kickoff_prompts/",
         "slices/PDLDPM1/kickoff_prompts/",
         "slices/PDLDPM2/kickoff_prompts/",
-        "slices/PDLDPM3/kickoff_prompts/"
+        "slices/PDLDPM3/kickoff_prompts/",
+        "pre-planning/alignment_report.md",
+        "pre-planning/ci_checkpoint_plan.md",
+        "pre-planning/impact_map.md",
+        "pre-planning/minimal_spec_draft.md",
+        "pre-planning/spec_manifest.md",
+        "pre-planning/workstream_triage.md"
       ]
     }
   ]
