@@ -46,7 +46,7 @@ ADR-0032 requires Linux installs to persist `host_state.platform.*`, but it does
   - Define exact omission rules and sample payloads for partial os-release input cases.
 - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM0/PDLDPM0-spec.md`
   - Add acceptance criteria for persistence with readable and unreadable `/etc/os-release` inputs.
-- `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM2/PDLDPM2-spec.md`
+- `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM3/PDLDPM3-spec.md`
   - Add Linux smoke assertions that verify omission semantics instead of placeholder strings.
 
 ## DR-0002 — Dry-run semantics for install-state persistence
@@ -82,7 +82,7 @@ ADR-0032 requires reliable Linux install-state persistence after successful inst
   - State the exact non-mutating dry-run rule and the logging requirement.
 - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM1/PDLDPM1-spec.md`
   - Add acceptance criteria that dry-run does not leave an install-state artifact behind.
-- `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM2/PDLDPM2-spec.md`
+- `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM3/PDLDPM3-spec.md`
   - Add validation coverage for the selected dry-run rule in Linux smoke.
 
 ## DR-0003 — Installer-entrypoint scope for the shared install-state contract
@@ -90,11 +90,16 @@ ADR-0032 requires reliable Linux install-state persistence after successful inst
 **Decision owner(s):** Installer / host-provisioning maintainers  
 **Date (UTC):** 2026-03-07  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/adrs/draft/ADR-0032-stashing-ferret.md`, `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/contract.md`, `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM3/PDLDPM3-spec.md`, `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/plan.md`
+**Related docs:** `docs/project_management/adrs/draft/ADR-0032-stashing-ferret.md`, `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/contract.md`, `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM2/PDLDPM2-spec.md`, `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/plan.md`
 
 **Problem / context**
 
 ADR-0032 names `scripts/substrate/install-substrate.sh`, while the repository already exposes the same `install_state.json` surface through `scripts/substrate/dev-install-substrate.sh`. Planning needs one exact scope decision so the same on-disk file does not gain two incompatible meanings.
+
+Deterministic slice-order note:
+- The accepted four-slice execution order is `PDLDPM0 -> PDLDPM1 -> PDLDPM2 -> PDLDPM3`.
+- `PDLDPM2` is the dev-installer parity slice.
+- `PDLDPM3` is the final validation and checkpoint slice.
 
 **Option A — Both installer entry points share one install-state contract**
 
@@ -119,7 +124,7 @@ ADR-0032 names `scripts/substrate/install-substrate.sh`, while the repository al
 - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/contract.md`
   - State that both installer entry points are in scope for the Linux persistence contract.
   - State that `--no-world` does not suppress Linux install-state persistence.
-- `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM3/PDLDPM3-spec.md`
+- `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM2/PDLDPM2-spec.md`
   - Add exact acceptance criteria for dev-installer parity on the shared install-state file.
 - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/plan.md`
   - Include `tests/installers/install_smoke.sh` as the required validation surface for dev-installer parity.
