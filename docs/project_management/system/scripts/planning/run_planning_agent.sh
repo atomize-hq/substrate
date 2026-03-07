@@ -8,11 +8,11 @@ usage() {
 Run a focused planning agent (output-allowlisted) via Codex.
 
 Usage:
-  run_planning_agent.sh --feature-dir <path> --agent <spec_manifest|impact_map|min_spec_draft|ci_checkpoint|workstream_triage> [options]
+  run_planning_agent.sh --feature-dir <path> --agent <spec_manifest|impact_map|min_spec_draft|ci_checkpoint|workstream_triage|pre_planning_slice_reconcile> [options]
 
 Required:
   --feature-dir <path>         Feature directory (relative or absolute)
-  --agent <id>                 Agent id: spec_manifest | impact_map | min_spec_draft | ci_checkpoint | workstream_triage
+  --agent <id>                 Agent id: spec_manifest | impact_map | min_spec_draft | ci_checkpoint | workstream_triage | pre_planning_slice_reconcile
 
 Optional:
   --codex-profile <profile>    Passed to `codex exec --profile`
@@ -26,6 +26,7 @@ Contract:
   - min_spec_draft -> <FEATURE_DIR>/pre-planning/minimal_spec_draft.md
   - ci_checkpoint  -> <FEATURE_DIR>/pre-planning/ci_checkpoint_plan.md (and sometimes <FEATURE_DIR>/tasks.json)
   - workstream_triage -> <FEATURE_DIR>/pre-planning/workstream_triage.md
+  - pre_planning_slice_reconcile -> <FEATURE_DIR>/pre-planning/{spec_manifest,impact_map,ci_checkpoint_plan}.md
 
 Notes:
   - Uses roots from: `pm_paths.py` (sibling in this directory)
@@ -307,8 +308,18 @@ case "${AGENT}" in
         ALLOWED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/workstream_triage.md")
         REQUIRED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/workstream_triage.md")
         ;;
+    pre_planning_slice_reconcile)
+        STEP_DIR_NAME="pre-full-planning-convergence"
+        PROMPT_FILE_REL="docs/project_management/system/prompts/planning/pre_planning_slice_reconcile_agent.md"
+        ALLOWED_OUTPUTS_REL=(
+            "${PRE_PLANNING_DIR_REL}/spec_manifest.md"
+            "${PRE_PLANNING_DIR_REL}/impact_map.md"
+            "${PRE_PLANNING_DIR_REL}/ci_checkpoint_plan.md"
+        )
+        REQUIRED_OUTPUTS_REL=()
+        ;;
     *)
-        die "unknown --agent: ${AGENT} (expected spec_manifest|impact_map|min_spec_draft|ci_checkpoint|workstream_triage)"
+        die "unknown --agent: ${AGENT} (expected spec_manifest|impact_map|min_spec_draft|ci_checkpoint|workstream_triage|pre_planning_slice_reconcile)"
         ;;
 esac
 

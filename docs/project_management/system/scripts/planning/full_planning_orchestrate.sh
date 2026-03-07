@@ -21,7 +21,7 @@ Codex options (optional; forwarded to run_pws_agent.sh):
 
 Behavior:
   - Requires a clean orchestration checkout (git status must be empty).
-  - Requires pre-planning alignment report: <FEATURE_DIR>/pre-planning/alignment_report.md
+  - Runs pre-full-planning convergence before loading the tracked alignment report.
   - Runs <PREFIX>-PWS-contract first.
   - Runs all remaining runnable PWS sequentially in a stable, dependency-respecting order.
   - Runs <PREFIX>-PWS-tasks_checkpoints last.
@@ -113,9 +113,14 @@ RUNNER="${PM_FULL_PLANNING_RUNNER:-${PLANNING_SCRIPTS_DIR}/run_pws_agent.sh}"
 if [[ "${RUNNER}" != /* ]]; then
     RUNNER="${REPO_ROOT}/${RUNNER}"
 fi
+PRE_FULL_PLANNING_CONVERGE="${PM_FULL_PLANNING_CONVERGE_SCRIPT:-${PLANNING_SCRIPTS_DIR}/pre_full_planning_converge.sh}"
+if [[ "${PRE_FULL_PLANNING_CONVERGE}" != /* ]]; then
+    PRE_FULL_PLANNING_CONVERGE="${REPO_ROOT}/${PRE_FULL_PLANNING_CONVERGE}"
+fi
 ALLOWLIST_REQUEST_PARSER="${PLANNING_SCRIPTS_DIR}/parse_allowlist_request.py"
 SLICE_COHERENCE_VALIDATOR="${PLANNING_SCRIPTS_DIR}/validate_slice_inventory_coherence.py"
 [[ -x "${RUNNER}" ]] || die "missing runner: ${RUNNER}"
+[[ -x "${PRE_FULL_PLANNING_CONVERGE}" ]] || [[ -f "${PRE_FULL_PLANNING_CONVERGE}" ]] || die "missing convergence script: ${PRE_FULL_PLANNING_CONVERGE}"
 [[ -f "${ALLOWLIST_REQUEST_PARSER}" ]] || die "missing allowlist request parser: ${ALLOWLIST_REQUEST_PARSER}"
 [[ -f "${SLICE_COHERENCE_VALIDATOR}" ]] || die "missing slice coherence validator: ${SLICE_COHERENCE_VALIDATOR}"
 if [[ "${DRY_RUN}" -eq 0 && -z "${PM_FULL_PLANNING_RUNNER:-}" ]]; then
@@ -126,6 +131,16 @@ FEATURE_DIR_REL="$(python3 "${PLANNING_SCRIPTS_DIR}/pm_paths.py" resolve-feature
 FEATURE_DIR_REL="${FEATURE_DIR_REL%/}"
 FEATURE_DIR_ABS="${REPO_ROOT}/${FEATURE_DIR_REL}"
 [[ -d "${FEATURE_DIR_ABS}" ]] || die "FEATURE_DIR does not exist: ${FEATURE_DIR_RAW} (resolved to ${FEATURE_DIR_REL})"
+
+run_pre_full_planning_convergence() {
+    local -a args=("${PRE_FULL_PLANNING_CONVERGE}" --feature-dir "${FEATURE_DIR_ABS}" --workstream-triage "${WORKSTREAM_TRIAGE_REL}")
+    if [[ -n "${CODEX_PROFILE}" ]]; then args+=(--codex-profile "${CODEX_PROFILE}"); fi
+    if [[ -n "${CODEX_MODEL}" ]]; then args+=(--codex-model "${CODEX_MODEL}"); fi
+    if [[ "${CODEX_JSONL}" -eq 1 ]]; then args+=(--codex-jsonl); fi
+    "${args[@]}"
+}
+
+run_pre_full_planning_convergence
 
 ALIGNMENT_REPORT_ABS="${FEATURE_DIR_ABS}/pre-planning/alignment_report.md"
 [[ -f "${ALIGNMENT_REPORT_ABS}" ]] || die "missing required pre-planning alignment report: ${FEATURE_DIR_REL}/pre-planning/alignment_report.md"
@@ -668,7 +683,7 @@ PY
 }
 
 run_pre_tasks_coherence_gate() {
-    python3 "${SLICE_COHERENCE_VALIDATOR}" --feature-dir "${FEATURE_DIR_ABS}" --phase pre_tasks_checkpoints
+    python3 "${SLICE_COHERENCE_VALIDATOR}" --feature-dir "${FEATURE_DIR_ABS}" --workstream-triage "${WORKSTREAM_TRIAGE_REL}" --phase pre_tasks_checkpoints
 }
 
 run_pws_fresh() {

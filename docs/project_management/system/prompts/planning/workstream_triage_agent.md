@@ -105,8 +105,10 @@ Draft requirements (must be explicit and actionable):
      - start fence: ```json
      - end fence: ```
    - The fenced JSON block MUST be valid JSON and MUST include:
-     - `pws_index_version` (integer; set to `1`)
+     - `pws_index_version` (integer; set to `2`)
      - `slice_prefix` (string; exactly the `<SLICE_PREFIX>` used in your PWS IDs)
+     - `accepted_slice_order` (array of slice ids; the authoritative post-triage slice order for full planning)
+     - `draft_slice_order` (optional array of slice ids copied from `minimal_spec_draft.md`; include when it materially differs from `accepted_slice_order`)
      - `pws` (array of objects), where each object includes:
        - `id` (string; PWS id; must match a `### <PWS_ID> — ...` heading in this document)
        - `role` (string; e.g., `contract`, `tasks_checkpoints`, `slice_spec`, `docs_validation`, `implementation`)
@@ -133,7 +135,7 @@ Draft requirements (must be explicit and actionable):
        - `<SLICE_PREFIX>-PWS-tasks_checkpoints` MUST include these additional `owns` entries (pack-relative):
          - `session_log.md`
          - `kickoff_prompts/` (prefix ownership; note the required trailing `/`)
-         - For each slice in the draft/accepted slice skeleton: `slices/<SLICE_ID>/kickoff_prompts/` (prefix; trailing `/`)
+       - For each slice in `accepted_slice_order`: `slices/<SLICE_ID>/kickoff_prompts/` (prefix; trailing `/`)
        - Trailing `/` means prefix ownership (the PWS may create/edit any tracked file under that directory).
      - Execution gate owns (recommended when `tasks.json.meta.execution_gates=true`):
        - `execution_preflight_report.md`
@@ -147,7 +149,7 @@ Draft requirements (must be explicit and actionable):
      - owned surfaces (files/components/contracts),
      - dependencies (which other workstreams must land first),
      - proposed slices/triads to create during full planning.
-   - If `<FEATURE_DIR>/pre-planning/minimal_spec_draft.md` contains `## Draft slice skeleton (pre-planning only)`, treat it as the starting point for slice naming/IDs.
+   - If `<FEATURE_DIR>/pre-planning/minimal_spec_draft.md` contains `## Draft slice skeleton (pre-planning only)`, treat it as the starting point for slice naming/IDs, then explicitly encode the post-triage result in `accepted_slice_order`.
 3) Sequencing + gates:
    - Hard ordering constraints (e.g., “must land protocol spec before implementation slices”).
    - CI checkpoint implications (if applicable).
@@ -165,6 +167,7 @@ Draft requirements (must be explicit and actionable):
    - If lift/impact indicates the slice skeleton should change (more/fewer slices, split/merge, different seam boundaries):
      - Propose explicit edits as recommendations inside the tracked artifact (`<FEATURE_DIR>/pre-planning/workstream_triage.md`), not by editing `<FEATURE_DIR>/pre-planning/minimal_spec_draft.md`.
      - Be concrete: list `ADD`, `SPLIT`, `MERGE`, `RENAME` actions that refer to slice ids and describe the new boundaries.
+     - Ensure `accepted_slice_order` reflects the post-triage slice inventory/order that full planning must honor, even when `minimal_spec_draft.md` remains unchanged.
    - If you recommend no change, say so explicitly.
 
 Output:

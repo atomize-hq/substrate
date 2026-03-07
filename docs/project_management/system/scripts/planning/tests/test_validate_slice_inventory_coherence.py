@@ -14,7 +14,13 @@ def _write_text(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
-def _triage_text(*, slice_prefix: str, slice_ids: list[str]) -> str:
+def _triage_text(
+    *,
+    slice_prefix: str,
+    slice_ids: list[str],
+    pws_index_version: int = 1,
+    accepted_slice_order: list[str] | None = None,
+) -> str:
     pws = [
         {
             "id": f"{slice_prefix}-PWS-contract",
@@ -55,7 +61,9 @@ def _triage_text(*, slice_prefix: str, slice_ids: list[str]) -> str:
     for p in pws:
         headings.append(f"### {p['id']} — {p['role']}\n\n- Goal: fixture\n")
 
-    idx = {"pws_index_version": 1, "slice_prefix": slice_prefix, "pws": pws}
+    idx = {"pws_index_version": pws_index_version, "slice_prefix": slice_prefix, "pws": pws}
+    if accepted_slice_order is not None:
+        idx["accepted_slice_order"] = accepted_slice_order
     body = json.dumps(idx, indent=2, sort_keys=False)
     return (
         "# Workstream triage fixture\n\n"
@@ -172,6 +180,8 @@ class TestValidateSliceInventoryCoherence(unittest.TestCase):
         name: str,
         *,
         slice_ids: list[str],
+        accepted_slice_order: list[str] | None = None,
+        triage_version: int = 1,
         min_spec_slice_ids: list[str] | None = None,
         checkpoint_slice_ids: list[str] | None = None,
         task_slice_ids: list[str] | None = None,
@@ -191,12 +201,24 @@ class TestValidateSliceInventoryCoherence(unittest.TestCase):
             feature_dir / "pre-planning" / "minimal_spec_draft.md",
             _minimal_spec_text(name, slice_prefix, min_spec_slice_ids, backtick_key=backticked_min_spec_keys),
         )
-        _write_text(feature_dir / "pre-planning" / "workstream_triage.md", _triage_text(slice_prefix=slice_prefix, slice_ids=slice_ids))
+        _write_text(
+            feature_dir / "pre-planning" / "workstream_triage.md",
+            _triage_text(
+                slice_prefix=slice_prefix,
+                slice_ids=slice_ids,
+                pws_index_version=triage_version,
+                accepted_slice_order=accepted_slice_order,
+            ),
+        )
         _write_text(feature_dir / "plan.md", _plan_text(name, slice_ids))
         _write_text(feature_dir / "pre-planning" / "ci_checkpoint_plan.md", _checkpoint_plan_text(checkpoint_slice_ids))
         _write_text(
             feature_dir / "pre-planning" / "spec_manifest.md",
             "Canonical slice IDs selected for this feature:\n" + "\n".join(f"- `{sid}`" for sid in spec_manifest_slice_ids),
+        )
+        _write_text(
+            feature_dir / "pre-planning" / "impact_map.md",
+            "Slice touch set:\n" + "\n".join(f"- `{sid}`" for sid in spec_manifest_slice_ids),
         )
 
         for slice_id in [*slice_ids, *extra_spec_ids]:
@@ -276,6 +298,8 @@ class TestValidateSliceInventoryCoherence(unittest.TestCase):
         feature_dir = self._make_draft_pack(
             "triage_adopted_split",
             slice_ids=["PDLDPM0", "PDLDPM1", "PDLDPM3", "PDLDPM2"],
+            accepted_slice_order=["PDLDPM0", "PDLDPM1", "PDLDPM3", "PDLDPM2"],
+            triage_version=2,
             min_spec_slice_ids=["PDLDPM0", "PDLDPM1", "PDLDPM2"],
             spec_manifest_slice_ids=["PDLDPM0", "PDLDPM1", "PDLDPM3", "PDLDPM2"],
             backticked_min_spec_keys=True,
@@ -283,6 +307,52 @@ class TestValidateSliceInventoryCoherence(unittest.TestCase):
         res = self._run(feature_dir, PHASE_PRE_TASKS)
         self.assertEqual(res.returncode, 0, msg=res.stderr)
 
+    def test_passes_pre_full_planning_when_docs_match_accepted_order(self) -> None:
+        feature_dir = self._make_draft_pack(
+            "pre_full_planning_pass",
+            slice_ids=["WDAP0", "WDAP2", "WDAP1", "WDAP3"],
+            accepted_slice_order=["WDAP0", "WDAP2", "WDAP1", "WDAP3"],
+            triage_version=2,
+            min_spec_slice_ids=["WDAP0", "WDAP1"],
+            checkpoint_slice_ids=["WDAP0", "WDAP2", "WDAP1", "WDAP3"],
+            spec_manifest_slice_ids=["WDAP0", "WDAP2", "WDAP1", "WDAP3"],
+        )
+        res = self._run(feature_dir, PHASE_PRE_FULL_PLANNING)
+        self.assertEqual(res.returncode, 0, msg=res.stderr)
+
+    def test_fails_pre_full_planning_when_checkpoint_plan_is_stale(self) -> None:
+        feature_dir = self._make_draft_pack(
+            "pre_full_planning_checkpoint_stale",
+            slice_ids=["WDAP0", "WDAP2", "WDAP1", "WDAP3"],
+            accepted_slice_order=["WDAP0", "WDAP2", "WDAP1", "WDAP3"],
+            triage_version=2,
+            min_spec_slice_ids=["WDAP0", "WDAP1"],
+            checkpoint_slice_ids=["WDAP0", "WDAP1"],
+            spec_manifest_slice_ids=["WDAP0", "WDAP2", "WDAP1", "WDAP3"],
+        )
+        res = self._run(feature_dir, PHASE_PRE_FULL_PLANNING)
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("ci_checkpoint_plan", res.stderr)
+
+    def test_fails_pre_full_planning_when_impact_map_is_stale(self) -> None:
+        feature_dir = self._make_draft_pack(
+            "pre_full_planning_impact_map_stale",
+            slice_ids=["WDAP0", "WDAP2", "WDAP1", "WDAP3"],
+            accepted_slice_order=["WDAP0", "WDAP2", "WDAP1", "WDAP3"],
+            triage_version=2,
+            min_spec_slice_ids=["WDAP0", "WDAP1"],
+            checkpoint_slice_ids=["WDAP0", "WDAP2", "WDAP1", "WDAP3"],
+            spec_manifest_slice_ids=["WDAP0", "WDAP2", "WDAP1", "WDAP3"],
+        )
+        _write_text(
+            feature_dir / "pre-planning" / "impact_map.md",
+            "Slice touch notes:\n- `WDAP0`\n- `WDAP1`\n",
+        )
+        res = self._run(feature_dir, PHASE_PRE_FULL_PLANNING)
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("impact_map", res.stderr)
+
 
 PHASE_PRE_TASKS = "pre_tasks_checkpoints"
+PHASE_PRE_FULL_PLANNING = "pre_full_planning"
 PHASE_EXECUTION_READY = "execution_ready"

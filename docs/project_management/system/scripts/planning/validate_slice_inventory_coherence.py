@@ -14,6 +14,7 @@ import validate_pws_index as vpi
 
 
 PHASE_PRE_TASKS = "pre_tasks_checkpoints"
+PHASE_PRE_FULL_PLANNING = "pre_full_planning"
 PHASE_EXECUTION_READY = "execution_ready"
 
 SLICE_ID_RE = re.compile(r"^(?P<prefix>[A-Za-z][A-Za-z0-9]*?)(?P<num>\d+)$")
@@ -37,6 +38,19 @@ class SliceSource:
         if self.path is None:
             return self.name
         return f"{self.name} ({self.path})"
+
+
+@dataclass(frozen=True)
+class CoherenceIssue:
+    source_name: str
+    message: str
+    path: Path | None = None
+
+    @property
+    def label(self) -> str:
+        if self.path is None:
+            return self.source_name
+        return f"{self.source_name} ({self.path})"
 
 
 def _fail(msg: str) -> None:
@@ -85,8 +99,11 @@ def _extract_min_spec_slice_ids(feature_dir: Path) -> SliceSource | None:
     return SliceSource(name="minimal_spec_draft", ordered=ordered, path=path)
 
 
-def _extract_triage_slice_ids(feature_dir: Path) -> tuple[SliceSource | None, str | None]:
-    triage_path = vpi._resolve_triage_path(feature_dir, vpi.DEFAULT_TRIAGE_REL, advisory=True)
+def _extract_triage_slice_ids(
+    feature_dir: Path,
+    workstream_triage: str = vpi.DEFAULT_TRIAGE_REL,
+) -> tuple[SliceSource | None, str | None]:
+    triage_path = vpi._resolve_triage_path(feature_dir, workstream_triage, advisory=True)
     if triage_path is None:
         return (None, None)
 
@@ -101,19 +118,10 @@ def _extract_triage_slice_ids(feature_dir: Path) -> tuple[SliceSource | None, st
     else:
         slice_prefix = slice_prefix.strip()
 
-    ordered: list[str] = []
-    for raw in idx.get("pws", []):
-        if not isinstance(raw, dict):
-            continue
-        owns = raw.get("owns")
-        if not isinstance(owns, list):
-            continue
-        for own in owns:
-            if not isinstance(own, str):
-                continue
-            match = SLICE_SPEC_PATH_RE.match(vpi._normalize_owns_path(own))
-            if match:
-                ordered.append(match.group("slice_id"))
+    try:
+        ordered = vpi._accepted_slice_order_from_index(idx)
+    except Exception:
+        return (None, slice_prefix)
 
     ordered = _ordered_unique(ordered)
     if not ordered:
@@ -256,30 +264,104 @@ def _requires_strict_compare(source: SliceSource, baseline: SliceSource) -> bool
 
 
 def _compare_ordered(source: SliceSource, expected: list[str], baseline_name: str) -> None:
-    if source.ordered != expected:
-        _fail(
-            f"{source.label} disagrees with accepted slice order from {baseline_name}: "
-            f"expected {expected}, got {source.ordered}"
-        )
+    issue = _ordered_issue(source, expected, baseline_name)
+    if issue is not None:
+        _fail(issue.message)
 
 
 def _compare_set(source: SliceSource, expected: list[str], baseline_name: str) -> None:
+    issue = _set_issue(source, expected, baseline_name)
+    if issue is not None:
+        _fail(issue.message)
+
+
+def _ordered_issue(source: SliceSource, expected: list[str], baseline_name: str) -> CoherenceIssue | None:
+    if source.ordered == expected:
+        return None
+    return CoherenceIssue(
+        source_name=source.name,
+        path=source.path,
+        message=(
+            f"{source.label} disagrees with accepted slice order from {baseline_name}: "
+            f"expected {expected}, got {source.ordered}"
+        ),
+    )
+
+
+def _set_issue(source: SliceSource, expected: list[str], baseline_name: str) -> CoherenceIssue | None:
     expected_set = set(expected)
     actual_set = set(source.ordered)
-    if actual_set != expected_set:
-        missing = sorted(expected_set - actual_set, key=_slice_sort_key)
-        extra = sorted(actual_set - expected_set, key=_slice_sort_key)
-        parts: list[str] = []
-        if missing:
-            parts.append(f"missing {missing}")
-        if extra:
-            parts.append(f"extra {extra}")
-        _fail(f"{source.label} disagrees with accepted slice set from {baseline_name}: " + "; ".join(parts))
+    if actual_set == expected_set:
+        return None
+    missing = sorted(expected_set - actual_set, key=_slice_sort_key)
+    extra = sorted(actual_set - expected_set, key=_slice_sort_key)
+    parts: list[str] = []
+    if missing:
+        parts.append(f"missing {missing}")
+    if extra:
+        parts.append(f"extra {extra}")
+    return CoherenceIssue(
+        source_name=source.name,
+        path=source.path,
+        message=f"{source.label} disagrees with accepted slice set from {baseline_name}: " + "; ".join(parts),
+    )
 
 
-def validate(feature_dir: Path, phase: str) -> None:
+def inspect_pre_full_planning(
+    feature_dir: Path,
+    workstream_triage: str = vpi.DEFAULT_TRIAGE_REL,
+) -> tuple[SliceSource | None, str | None, list[CoherenceIssue]]:
+    issues: list[CoherenceIssue] = []
+    triage_source, triage_prefix = _extract_triage_slice_ids(feature_dir, workstream_triage)
+    if triage_source is None:
+        triage_path = Path(workstream_triage)
+        if not triage_path.is_absolute():
+            triage_path = feature_dir / workstream_triage
+        issues.append(
+            CoherenceIssue(
+                source_name="workstream_triage",
+                path=triage_path if triage_path.exists() else None,
+                message=(
+                    f"missing or invalid triage slice authority: expected accepted slice order from "
+                    f"{triage_path}"
+                ),
+            )
+        )
+        return (None, triage_prefix, issues)
+
+    accepted_order = triage_source.ordered
+    prefixes = _slice_prefixes_for_scan(accepted_order, triage_prefix)
+    baseline_label = triage_source.label
+
+    checkpoint_source = _extract_checkpoint_plan(feature_dir)
+    if checkpoint_source is not None:
+        issue = _ordered_issue(checkpoint_source, accepted_order, baseline_label)
+        if issue is not None:
+            issues.append(issue)
+
+    for rel_path, name in (
+        ("pre-planning/spec_manifest.md", "spec_manifest"),
+        ("pre-planning/impact_map.md", "impact_map"),
+    ):
+        aux_source = _extract_aux_source(feature_dir, rel_path, name, prefixes)
+        if aux_source is None:
+            continue
+        issue = _set_issue(aux_source, accepted_order, baseline_label)
+        if issue is not None:
+            issues.append(issue)
+
+    return (triage_source, triage_prefix, issues)
+
+
+def validate(feature_dir: Path, phase: str, workstream_triage: str = vpi.DEFAULT_TRIAGE_REL) -> None:
+    if phase == PHASE_PRE_FULL_PLANNING:
+        _, _, issues = inspect_pre_full_planning(feature_dir, workstream_triage)
+        if issues:
+            _fail(issues[0].message)
+        return
+
     min_spec_source = _extract_min_spec_slice_ids(feature_dir)
-    triage_source, triage_prefix = _extract_triage_slice_ids(feature_dir)
+    triage_source, triage_prefix = _extract_triage_slice_ids(feature_dir, workstream_triage)
     plan_source = _extract_plan_slice_ids(feature_dir)
     slice_specs_source = _extract_slice_specs(feature_dir)
     checkpoint_source = _extract_checkpoint_plan(feature_dir)
@@ -320,14 +402,22 @@ def validate(feature_dir: Path, phase: str) -> None:
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description="Validate accepted slice inventory coherence across planning surfaces.")
     ap.add_argument("--feature-dir", required=True, help="docs/project_management/packs/<bucket>/<feature>")
-    ap.add_argument("--phase", choices=[PHASE_PRE_TASKS, PHASE_EXECUTION_READY], required=True)
+    ap.add_argument("--phase", choices=[PHASE_PRE_TASKS, PHASE_PRE_FULL_PLANNING, PHASE_EXECUTION_READY], required=True)
+    ap.add_argument(
+        "--workstream-triage",
+        default=vpi.DEFAULT_TRIAGE_REL,
+        help=(
+            "Path to workstream_triage.md (absolute or feature-dir-relative). "
+            f"Default: {vpi.DEFAULT_TRIAGE_REL} (legacy fallback: {vpi.LEGACY_TRIAGE_REL})"
+        ),
+    )
     args = ap.parse_args(argv)
 
     feature_dir = Path(args.feature_dir)
     if not feature_dir.exists():
         _fail(f"feature dir does not exist: {feature_dir}")
 
-    validate(feature_dir.resolve(), args.phase)
+    validate(feature_dir.resolve(), args.phase, args.workstream_triage)
     return 0
 
 

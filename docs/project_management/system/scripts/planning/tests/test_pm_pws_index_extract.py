@@ -14,12 +14,20 @@ def _write_text(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
-def _triage_text(*, slice_prefix: str, pws: list[dict]) -> str:
+def _triage_text(
+    *,
+    slice_prefix: str,
+    pws: list[dict],
+    pws_index_version: int = 1,
+    accepted_slice_order: list[str] | None = None,
+) -> str:
     headings = []
     for p in pws:
         headings.append(f"### {p['id']} — {p['role']}\n\n- Goal: fixture\n")
 
-    idx = {"pws_index_version": 1, "slice_prefix": slice_prefix, "pws": pws}
+    idx = {"pws_index_version": pws_index_version, "slice_prefix": slice_prefix, "pws": pws}
+    if accepted_slice_order is not None:
+        idx["accepted_slice_order"] = accepted_slice_order
     body = json.dumps(idx, indent=2, sort_keys=False)
     return (
         "# Workstream triage fixture\n\n"
@@ -148,6 +156,46 @@ class TestPmPwsIndexExtract(unittest.TestCase):
         data = json.loads(res.stdout)
         self.assertEqual(data["owns_prefix_norm"], ["slices/"])
         self.assertEqual(data["owns_exact_norm"], ["contract.md"])
+
+    def test_pass_v2_index_extracts_normally(self) -> None:
+        prefix = "WDRA"
+        contract_id = f"{prefix}-PWS-contract"
+        tasks_id = f"{prefix}-PWS-tasks_checkpoints"
+        pws = [
+            {
+                "id": contract_id,
+                "role": "contract",
+                "depends_on": [],
+                "assumes": [],
+                "owns": ["contract.md"],
+            },
+            {
+                "id": tasks_id,
+                "role": "tasks_checkpoints",
+                "depends_on": [contract_id],
+                "assumes": [],
+                "owns": [
+                    "tasks.json",
+                    "session_log.md",
+                    "kickoff_prompts/",
+                    "slices/WDRA0/kickoff_prompts/",
+                    "slices/WDRA1/kickoff_prompts/",
+                ],
+            },
+        ]
+        feature_dir = self._make_feature_dir(
+            "pass_v2_extract",
+            _triage_text(
+                slice_prefix=prefix,
+                pws=pws,
+                pws_index_version=2,
+                accepted_slice_order=["WDRA0", "WDRA1"],
+            ),
+        )
+        res = self._run(["--feature-dir", str(feature_dir), "--pws-id", tasks_id])
+        self.assertEqual(res.returncode, 0, msg=res.stderr)
+        data = json.loads(res.stdout)
+        self.assertEqual(data["pws_id"], tasks_id)
 
     def test_fail_unknown_pws_id(self) -> None:
         prefix = "WDRA"

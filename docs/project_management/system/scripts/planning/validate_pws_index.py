@@ -19,6 +19,7 @@ HEADING_RE = re.compile(r"^###\s+(?P<id>\S+)\s+—\s+")
 FENCE_START_RE = re.compile(r"^```")
 JSON_FENCE_RE = re.compile(r"```json\s*\r?\n(?P<body>[\s\S]*?)\r?\n```")
 SLUG_RE = re.compile(r"^[a-z0-9_]+$")
+SLICE_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*\d+$")
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,18 @@ def _as_str_list(value: Any) -> list[str] | None:
     if not isinstance(value, list) or not all(isinstance(x, str) for x in value):
         return None
     return list(value)
+
+
+def _normalize_slice_order(raw: list[str]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        value = item.strip()
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        out.append(value)
+    return out
 
 
 def _normalize_owns_path(raw: str) -> str:
@@ -178,6 +191,96 @@ def _extract_heading_ids(markdown_text: str) -> set[str]:
     return ids
 
 
+def _slice_order_from_owns_entries(owns_entries: Iterable[str]) -> list[str]:
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for own in owns_entries:
+        match = re.match(r"^slices/(?P<slice_id>[A-Za-z][A-Za-z0-9]*\d+)/(?P=slice_id)-spec\.md$", own)
+        if not match:
+            continue
+        slice_id = match.group("slice_id")
+        if slice_id in seen:
+            continue
+        seen.add(slice_id)
+        ordered.append(slice_id)
+    return ordered
+
+
+def _derive_v1_slice_order(idx: dict[str, Any]) -> list[str]:
+    ordered: list[str] = []
+    for raw in idx.get("pws", []):
+        if not isinstance(raw, dict):
+            continue
+        owns = _as_str_list(raw.get("owns"))
+        if owns is None:
+            continue
+        ordered.extend(_slice_order_from_owns_entries(_normalize_owns_path(x) for x in owns))
+    return _normalize_slice_order(ordered)
+
+
+def _validate_slice_order_field(
+    *,
+    triage_path: Path,
+    slice_prefix: str,
+    field_name: str,
+    value: Any,
+    required: bool,
+) -> tuple[list[str] | None, list[ValidationError]]:
+    errors: list[ValidationError] = []
+    if value is None:
+        if required:
+            errors.append(ValidationError(message=f"{triage_path}: {field_name} must be an array of non-empty slice ids"))
+        return (None, errors)
+
+    raw = _as_str_list(value)
+    if raw is None:
+        errors.append(ValidationError(message=f"{triage_path}: {field_name} must be an array of non-empty slice ids"))
+        return (None, errors)
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        slice_id = item.strip()
+        if not slice_id:
+            errors.append(ValidationError(message=f"{triage_path}: {field_name} contains an empty slice id"))
+            continue
+        if slice_id in seen:
+            errors.append(ValidationError(message=f"{triage_path}: {field_name} contains duplicate slice id: {slice_id!r}"))
+            continue
+        seen.add(slice_id)
+        normalized.append(slice_id)
+        if not SLICE_ID_RE.match(slice_id):
+            errors.append(ValidationError(message=f"{triage_path}: {field_name} contains invalid slice id: {slice_id!r}"))
+            continue
+        if slice_prefix and not slice_id.startswith(slice_prefix):
+            errors.append(
+                ValidationError(
+                    message=(
+                        f"{triage_path}: {field_name} slice id {slice_id!r} must start with "
+                        f"slice_prefix {slice_prefix!r}"
+                    )
+                )
+            )
+
+    if required and not normalized:
+        errors.append(ValidationError(message=f"{triage_path}: {field_name} must contain at least one slice id"))
+
+    return (normalized, errors)
+
+
+def _accepted_slice_order_from_index(idx: dict[str, Any]) -> list[str]:
+    version = idx.get("pws_index_version")
+    if version == 2:
+        accepted = _as_str_list(idx.get("accepted_slice_order"))
+        if accepted is None:
+            raise ValueError("accepted_slice_order must be an array of strings for pws_index_version=2")
+        accepted = _normalize_slice_order(accepted)
+        if not accepted:
+            raise ValueError("accepted_slice_order must contain at least one slice id for pws_index_version=2")
+        return accepted
+    return _derive_v1_slice_order(idx)
+
+
 def _validate_doc(feature_dir: Path, triage_path: Path, advisory: bool) -> list[ValidationError]:
     errors: list[ValidationError] = []
 
@@ -192,8 +295,8 @@ def _validate_doc(feature_dir: Path, triage_path: Path, advisory: bool) -> list[
         return [ValidationError(message=f"{triage_path}: {e}")]
 
     v = idx.get("pws_index_version")
-    if v != 1:
-        errors.append(ValidationError(message=f"{triage_path}: pws_index_version must be 1 (found {v!r})"))
+    if v not in (1, 2):
+        errors.append(ValidationError(message=f"{triage_path}: pws_index_version must be 1 or 2 (found {v!r})"))
 
     slice_prefix = idx.get("slice_prefix")
     if not isinstance(slice_prefix, str) or not slice_prefix.strip():
@@ -201,6 +304,25 @@ def _validate_doc(feature_dir: Path, triage_path: Path, advisory: bool) -> list[
         slice_prefix = ""
     else:
         slice_prefix = slice_prefix.strip()
+
+    accepted_slice_order: list[str] | None = None
+    if v == 2:
+        accepted_slice_order, field_errors = _validate_slice_order_field(
+            triage_path=triage_path,
+            slice_prefix=slice_prefix,
+            field_name="accepted_slice_order",
+            value=idx.get("accepted_slice_order"),
+            required=True,
+        )
+        errors.extend(field_errors)
+        _, field_errors = _validate_slice_order_field(
+            triage_path=triage_path,
+            slice_prefix=slice_prefix,
+            field_name="draft_slice_order",
+            value=idx.get("draft_slice_order"),
+            required=False,
+        )
+        errors.extend(field_errors)
 
     pws_raw = idx.get("pws")
     if not isinstance(pws_raw, list) or not pws_raw:
@@ -380,16 +502,12 @@ def _validate_doc(feature_dir: Path, triage_path: Path, advisory: bool) -> list[
                     )
                 )
 
-            slice_ids: set[str] = set()
-            for owns_norm in owns_norm_by_id.values():
-                for p in owns_norm:
-                    if not p.startswith("slices/"):
-                        continue
-                    parts = [seg for seg in p.split("/") if seg]
-                    if len(parts) >= 2 and parts[0] == "slices":
-                        slice_ids.add(parts[1])
+            if v == 2 and accepted_slice_order is not None:
+                slice_ids = accepted_slice_order
+            else:
+                slice_ids = _derive_v1_slice_order(idx)
 
-            for slice_id in sorted(slice_ids):
+            for slice_id in slice_ids:
                 required = f"slices/{slice_id}/kickoff_prompts/"
                 if required not in tasks_owns:
                     errors.append(

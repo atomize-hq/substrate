@@ -160,6 +160,30 @@ pm-full-planning-orchestrate:
 	if [ "$(CODEX_JSONL)" = "1" ]; then cmd="$$cmd --codex-jsonl"; fi; \
 	eval "$$cmd"
 
+.PHONY: pm-pre-full-planning-converge
+pm-pre-full-planning-converge:
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
+	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
+	@set -euo pipefail; \
+	cmd="$(PM_SYSTEM_SCRIPTS)/planning/pre_full_planning_converge.sh --feature-dir \"$(FEATURE_DIR)\""; \
+	if [ -n "$(CODEX_PROFILE)" ]; then cmd="$$cmd --codex-profile \"$(CODEX_PROFILE)\""; fi; \
+	if [ -n "$(CODEX_MODEL)" ]; then cmd="$$cmd --codex-model \"$(CODEX_MODEL)\""; fi; \
+	if [ "$(CODEX_JSONL)" = "1" ]; then cmd="$$cmd --codex-jsonl"; fi; \
+	eval "$$cmd"
+
+.PHONY: pm-planning-pipeline
+pm-planning-pipeline:
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
+	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
+	@set -euo pipefail; \
+	cmd="$(PM_SYSTEM_SCRIPTS)/planning/planning_pipeline_orchestrate.sh --feature-dir \"$(FEATURE_DIR)\""; \
+	if [ -n "$(START_AT)" ]; then cmd="$$cmd --start-at \"$(START_AT)\""; fi; \
+	if [ -n "$(POLL_S)" ]; then cmd="$$cmd --poll-s \"$(POLL_S)\""; fi; \
+	if [ -n "$(CODEX_PROFILE)" ]; then cmd="$$cmd --codex-profile \"$(CODEX_PROFILE)\""; fi; \
+	if [ -n "$(CODEX_MODEL)" ]; then cmd="$$cmd --codex-model \"$(CODEX_MODEL)\""; fi; \
+	if [ "$(CODEX_JSONL)" = "1" ]; then cmd="$$cmd --codex-jsonl"; fi; \
+	eval "$$cmd"
+
 .PHONY: pm-run-planning-agent
 pm-run-planning-agent:
 	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
@@ -199,7 +223,11 @@ pm-pre-planning-from-adr:
 	  git add -- "$$tasks_path"; \
 	  if ! git diff --cached --quiet; then git commit -m "docs: bootstrap pre-planning pack"; fi; \
 	fi; \
-	$(MAKE) pm-pre-planning-research FEATURE_DIR="$$feature_dir" START_AT="$(START_AT)" POLL_S="$(POLL_S)"
+	if [ "$(RUN_PIPELINE)" = "1" ]; then \
+	  $(MAKE) pm-planning-pipeline FEATURE_DIR="$$feature_dir" START_AT="$(START_AT)" POLL_S="$(POLL_S)" CODEX_PROFILE="$(CODEX_PROFILE)" CODEX_MODEL="$(CODEX_MODEL)" CODEX_JSONL="$(CODEX_JSONL)"; \
+	else \
+	  $(MAKE) pm-pre-planning-research FEATURE_DIR="$$feature_dir" START_AT="$(START_AT)" POLL_S="$(POLL_S)" CODEX_PROFILE="$(CODEX_PROFILE)" CODEX_MODEL="$(CODEX_MODEL)" CODEX_JSONL="$(CODEX_JSONL)"; \
+	fi
 
 .PHONY: planning-lint-ps
 planning-lint-ps:

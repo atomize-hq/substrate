@@ -14,12 +14,23 @@ def _write_text(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
-def _triage_text(*, slice_prefix: str, pws: list[dict]) -> str:
+def _triage_text(
+    *,
+    slice_prefix: str,
+    pws: list[dict],
+    pws_index_version: int = 1,
+    accepted_slice_order: list[str] | None = None,
+    draft_slice_order: list[str] | None = None,
+) -> str:
     headings = []
     for p in pws:
         headings.append(f"### {p['id']} — {p['role']}\n\n- Goal: fixture\n")
 
-    idx = {"pws_index_version": 1, "slice_prefix": slice_prefix, "pws": pws}
+    idx = {"pws_index_version": pws_index_version, "slice_prefix": slice_prefix, "pws": pws}
+    if accepted_slice_order is not None:
+        idx["accepted_slice_order"] = accepted_slice_order
+    if draft_slice_order is not None:
+        idx["draft_slice_order"] = draft_slice_order
     body = json.dumps(idx, indent=2, sort_keys=False)
     return (
         "# Workstream triage fixture\n\n"
@@ -112,6 +123,51 @@ class TestValidatePwsIndex(unittest.TestCase):
         self.assertEqual(res.returncode, 0, msg=res.stderr)
         self.assertEqual(res.stderr.strip(), "")
 
+    def test_pass_v2_with_explicit_accepted_slice_order(self) -> None:
+        prefix = "WDRA"
+        contract_id = f"{prefix}-PWS-contract"
+        pws = [
+            {
+                "id": contract_id,
+                "role": "contract",
+                "depends_on": [],
+                "assumes": [],
+                "owns": ["contract.md"],
+            },
+            {
+                "id": f"{prefix}-PWS-docs_validation",
+                "role": "docs_validation",
+                "depends_on": [contract_id],
+                "assumes": [],
+                "owns": ["plan.md"],
+            },
+            {
+                "id": f"{prefix}-PWS-tasks_checkpoints",
+                "role": "tasks_checkpoints",
+                "depends_on": [contract_id],
+                "assumes": [],
+                "owns": [
+                    "tasks.json",
+                    "session_log.md",
+                    "kickoff_prompts/",
+                    "slices/WDRA0/kickoff_prompts/",
+                    "slices/WDRA1/kickoff_prompts/",
+                ],
+            },
+        ]
+        feature_dir = self._make_feature_dir(
+            "pass_v2_explicit_authority",
+            _triage_text(
+                slice_prefix=prefix,
+                pws=pws,
+                pws_index_version=2,
+                draft_slice_order=["WDRA0"],
+                accepted_slice_order=["WDRA0", "WDRA1"],
+            ),
+        )
+        res = self._run(["--feature-dir", str(feature_dir)])
+        self.assertEqual(res.returncode, 0, msg=res.stderr)
+
     def test_fail_tasks_checkpoints_missing_triad_owns(self) -> None:
         prefix = "WDRA"
         contract_id = f"{prefix}-PWS-contract"
@@ -144,6 +200,33 @@ class TestValidatePwsIndex(unittest.TestCase):
         self.assertIn("owns must include 'session_log.md'", res.stderr)
         self.assertIn("owns must include 'kickoff_prompts/'", res.stderr)
         self.assertIn("owns must include 'slices/WDRA0/kickoff_prompts/'", res.stderr)
+
+    def test_fail_v2_missing_accepted_slice_order(self) -> None:
+        prefix = "WDRA"
+        contract_id = f"{prefix}-PWS-contract"
+        pws = [
+            {
+                "id": contract_id,
+                "role": "contract",
+                "depends_on": [],
+                "assumes": [],
+                "owns": ["contract.md"],
+            },
+            {
+                "id": f"{prefix}-PWS-tasks_checkpoints",
+                "role": "tasks_checkpoints",
+                "depends_on": [contract_id],
+                "assumes": [],
+                "owns": ["tasks.json", "session_log.md", "kickoff_prompts/"],
+            },
+        ]
+        feature_dir = self._make_feature_dir(
+            "fail_v2_missing_accepted_order",
+            _triage_text(slice_prefix=prefix, pws=pws, pws_index_version=2),
+        )
+        res = self._run(["--feature-dir", str(feature_dir)])
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("accepted_slice_order", res.stderr)
 
     def test_fail_assumes_mentions_pws_id(self) -> None:
         prefix = "WDRA"
