@@ -188,6 +188,7 @@ class TestValidateSliceInventoryCoherence(unittest.TestCase):
         extra_spec_ids: list[str] | None = None,
         spec_manifest_slice_ids: list[str] | None = None,
         backticked_min_spec_keys: bool = False,
+        alignment_report_text: str | None = None,
     ) -> Path:
         feature_dir = self.tmp_root / name
         slice_prefix = slice_ids[0][:-1]
@@ -220,6 +221,8 @@ class TestValidateSliceInventoryCoherence(unittest.TestCase):
             feature_dir / "pre-planning" / "impact_map.md",
             "Slice touch set:\n" + "\n".join(f"- `{sid}`" for sid in spec_manifest_slice_ids),
         )
+        if alignment_report_text is not None:
+            _write_text(feature_dir / "pre-planning" / "alignment_report.md", alignment_report_text)
 
         for slice_id in [*slice_ids, *extra_spec_ids]:
             _write_text(feature_dir / "slices" / slice_id / f"{slice_id}-spec.md", f"# {slice_id}\n")
@@ -293,6 +296,35 @@ class TestValidateSliceInventoryCoherence(unittest.TestCase):
         self.assertEqual(res.returncode, 1)
         self.assertIn("spec_manifest", res.stderr)
         self.assertIn("missing ['BEDPM1']", res.stderr)
+
+    def test_passes_pre_tasks_when_alignment_report_mentions_subset(self) -> None:
+        feature_dir = self._make_draft_pack(
+            "alignment_report_subset",
+            slice_ids=["BEDPM0", "BEDPM1", "BEDPM2"],
+            alignment_report_text="# Alignment report\n\n## Other follow-ups\n- `BEDPM1`\n",
+        )
+        res = self._run(feature_dir, PHASE_PRE_TASKS)
+        self.assertEqual(res.returncode, 0, msg=res.stderr)
+
+    def test_passes_pre_tasks_when_alignment_report_mentions_no_slice_ids(self) -> None:
+        feature_dir = self._make_draft_pack(
+            "alignment_report_no_slice_ids",
+            slice_ids=["BEDPM0", "BEDPM1", "BEDPM2"],
+            alignment_report_text="# Alignment report\n\n- No slice references here.\n",
+        )
+        res = self._run(feature_dir, PHASE_PRE_TASKS)
+        self.assertEqual(res.returncode, 0, msg=res.stderr)
+
+    def test_fails_pre_tasks_when_alignment_report_mentions_unknown_slice(self) -> None:
+        feature_dir = self._make_draft_pack(
+            "alignment_report_unknown_slice",
+            slice_ids=["BEDPM0", "BEDPM1", "BEDPM2"],
+            alignment_report_text="# Alignment report\n\n- `BEDPM9`\n",
+        )
+        res = self._run(feature_dir, PHASE_PRE_TASKS)
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("alignment_report", res.stderr)
+        self.assertIn("extra ['BEDPM9']", res.stderr)
 
     def test_passes_when_triage_adopts_split_without_mutating_min_spec(self) -> None:
         feature_dir = self._make_draft_pack(

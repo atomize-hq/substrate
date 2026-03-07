@@ -1,5 +1,6 @@
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -116,8 +117,8 @@ class TestFullPlanningOrchestrate(unittest.TestCase):
         _write_text(feature_dir / "tasks.json", json.dumps({"meta": {"schema_version": 4, "cross_platform": True, "slice_spec_version": 2}, "tasks": []}, indent=2))
         return feature_dir
 
-    def _write_convergence_stub(self, path: Path) -> None:
-        script = """#!/usr/bin/env bash
+    def _write_convergence_stub(self, path: Path, *, alignment_body: str = "# Alignment report\n") -> None:
+        script = f"""#!/usr/bin/env bash
 set -euo pipefail
 feature_dir=""
 while [[ $# -gt 0 ]]; do
@@ -131,11 +132,18 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
-mkdir -p "${feature_dir}/pre-planning"
-cat >"${feature_dir}/pre-planning/alignment_report.md" <<'EOF'
-# Alignment report
+mkdir -p "${{feature_dir}}/pre-planning"
+cat >"${{feature_dir}}/pre-planning/alignment_report.md" <<'EOF'
+{alignment_body.rstrip()}
 EOF
 echo "OK: pre-full-planning convergence passed"
+"""
+        _write_text(path, script)
+        os.chmod(path, 0o755)
+
+    def _write_alignment_reporter(self, path: Path, *, body: str) -> None:
+        script = f"""#!/usr/bin/env python3
+print({body!r})
 """
         _write_text(path, script)
         os.chmod(path, 0o755)
@@ -159,13 +167,24 @@ exec "${REAL_GIT}" "$@"
         _write_text(path, script)
         os.chmod(path, 0o755)
 
-    def _write_runner_stub(self, path: Path, trace_path: Path) -> None:
+    def _write_runner_stub(
+        self,
+        path: Path,
+        trace_path: Path,
+        *,
+        fail_tasks: bool = True,
+        expected_alignment_text: str | None = None,
+    ) -> None:
+        expected_alignment = shlex.quote(expected_alignment_text or "")
+        tasks_should_fail = "1" if fail_tasks else "0"
         script = f"""#!/usr/bin/env bash
 set -euo pipefail
 
 feature_dir=""
 pws_id=""
 resume_message=""
+expected_alignment={expected_alignment}
+tasks_should_fail="{tasks_should_fail}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --feature-dir)
@@ -206,7 +225,19 @@ if [[ -n "${{resume_message}}" ]]; then
   exit 0
 fi
 
-if [[ "${{pws_id}}" == "WDRA-PWS-tasks_checkpoints" ]]; then
+if [[ "${{pws_id}}" == "WDRA-PWS-tasks_checkpoints" && -n "${{expected_alignment}}" ]]; then
+  alignment_report="${{feature_dir}}/pre-planning/alignment_report.md"
+  if [[ ! -f "${{alignment_report}}" ]]; then
+    printf 'ERROR: alignment report missing: %s\n' "${{alignment_report}}" >"${{step_dir}}/stderr.log"
+    exit 2
+  fi
+  if ! grep -Fq -- "${{expected_alignment}}" "${{alignment_report}}"; then
+    printf 'ERROR: alignment report was not refreshed before tasks gate\n' >"${{step_dir}}/stderr.log"
+    exit 2
+  fi
+fi
+
+if [[ "${{pws_id}}" == "WDRA-PWS-tasks_checkpoints" && "${{tasks_should_fail}}" == "1" ]]; then
   cat >"${{step_dir}}/allowlist_request.json" <<'EOF'
 {{
   "pws_id": "WDRA-PWS-tasks_checkpoints",
@@ -232,16 +263,19 @@ fi
         trace_path = feature_dir / "resume_trace.tsv"
         runner = tools_dir / "fake_runner.sh"
         convergence = tools_dir / "fake_convergence.sh"
+        reporter = tools_dir / "fake_alignment_reporter.py"
         fake_make = tools_dir / "make"
         fake_git = tools_dir / "git"
         self._write_runner_stub(runner, trace_path)
         self._write_convergence_stub(convergence)
+        self._write_alignment_reporter(reporter, body="# Alignment report\n\n- generated\n")
         self._write_make_stub(fake_make)
         self._write_git_wrapper(fake_git)
 
         env = os.environ.copy()
         env["PM_FULL_PLANNING_RUNNER"] = str(runner)
         env["PM_FULL_PLANNING_CONVERGE_SCRIPT"] = str(convergence)
+        env["PM_FULL_PLANNING_ALIGNMENT_REPORTER"] = str(reporter)
         env["PM_FULL_PLANNING_MAX_RESUMES"] = "2"
         env["REAL_GIT"] = subprocess.check_output(["which", "git"], text=True, cwd=str(self.repo_root)).strip()
         env["PATH"] = str(tools_dir) + os.pathsep + env["PATH"]
@@ -267,6 +301,42 @@ fi
         resume_path = Path(task_rows[0][1])
         self.assertTrue(resume_path.is_file(), msg=f"resume path was not a real file: {resume_path}")
         self.assertIn("after_allowlist", resume_path.name)
+
+    def test_refreshes_alignment_report_before_tasks_gate(self) -> None:
+        feature_dir = self._make_feature_dir("alignment_report_refresh")
+        tools_dir = feature_dir / "tools"
+        trace_path = feature_dir / "runner_trace.tsv"
+        runner = tools_dir / "fake_runner.sh"
+        convergence = tools_dir / "fake_convergence.sh"
+        reporter = tools_dir / "fake_alignment_reporter.py"
+        fake_make = tools_dir / "make"
+        fake_git = tools_dir / "git"
+        self._write_runner_stub(runner, trace_path, fail_tasks=False, expected_alignment_text="fresh-marker")
+        self._write_convergence_stub(convergence, alignment_body="# Alignment report\n\nstale-marker\n")
+        self._write_alignment_reporter(reporter, body="# Alignment report\n\nfresh-marker\n")
+        self._write_make_stub(fake_make)
+        self._write_git_wrapper(fake_git)
+
+        env = os.environ.copy()
+        env["PM_FULL_PLANNING_RUNNER"] = str(runner)
+        env["PM_FULL_PLANNING_CONVERGE_SCRIPT"] = str(convergence)
+        env["PM_FULL_PLANNING_ALIGNMENT_REPORTER"] = str(reporter)
+        env["REAL_GIT"] = subprocess.check_output(["which", "git"], text=True, cwd=str(self.repo_root)).strip()
+        env["PATH"] = str(tools_dir) + os.pathsep + env["PATH"]
+
+        res = subprocess.run(
+            ["bash", str(self.script), "--feature-dir", str(feature_dir)],
+            text=True,
+            capture_output=True,
+            check=False,
+            cwd=str(self.repo_root),
+            env=env,
+        )
+
+        self.assertEqual(res.returncode, 0, msg=res.stderr)
+        alignment_report = (feature_dir / "pre-planning" / "alignment_report.md").read_text(encoding="utf-8")
+        self.assertIn("fresh-marker", alignment_report)
+        self.assertNotIn("stale-marker", alignment_report)
 
 
 if __name__ == "__main__":

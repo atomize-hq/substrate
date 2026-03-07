@@ -271,6 +271,12 @@ def _compare_set(source: SliceSource, expected: list[str], baseline_name: str) -
         _fail(issue.message)
 
 
+def _compare_subset(source: SliceSource, expected: list[str], baseline_name: str) -> None:
+    issue = _subset_issue(source, expected, baseline_name)
+    if issue is not None:
+        _fail(issue.message)
+
+
 def _ordered_issue(source: SliceSource, expected: list[str], baseline_name: str) -> CoherenceIssue | None:
     if source.ordered == expected:
         return None
@@ -300,6 +306,22 @@ def _set_issue(source: SliceSource, expected: list[str], baseline_name: str) -> 
         source_name=source.name,
         path=source.path,
         message=f"{source.label} disagrees with accepted slice set from {baseline_name}: " + "; ".join(parts),
+    )
+
+
+def _subset_issue(source: SliceSource, expected: list[str], baseline_name: str) -> CoherenceIssue | None:
+    expected_set = set(expected)
+    actual_set = set(source.ordered)
+    extra = sorted(actual_set - expected_set, key=_slice_sort_key)
+    if not extra:
+        return None
+    return CoherenceIssue(
+        source_name=source.name,
+        path=source.path,
+        message=(
+            f"{source.label} mentions slice ids outside the accepted set from {baseline_name}: "
+            f"extra {extra}"
+        ),
     )
 
 
@@ -383,8 +405,13 @@ def validate(feature_dir: Path, phase: str, workstream_triage: str = vpi.DEFAULT
     aux_sources = [
         _extract_aux_source(feature_dir, "pre-planning/spec_manifest.md", "spec_manifest", prefixes),
         _extract_aux_source(feature_dir, "pre-planning/impact_map.md", "impact_map", prefixes),
-        _extract_aux_source(feature_dir, "pre-planning/alignment_report.md", "alignment_report", prefixes),
     ]
+    alignment_report_source = _extract_aux_source(
+        feature_dir,
+        "pre-planning/alignment_report.md",
+        "alignment_report",
+        prefixes,
+    )
 
     for source in candidate_sources:
         if not _requires_strict_compare(source, baseline):
@@ -398,6 +425,9 @@ def validate(feature_dir: Path, phase: str, workstream_triage: str = vpi.DEFAULT
         if aux_source is None:
             continue
         _compare_set(aux_source, accepted_order, baseline.label)
+
+    if alignment_report_source is not None:
+        _compare_subset(alignment_report_source, accepted_order, baseline.label)
 
     if phase == PHASE_EXECUTION_READY:
         tasks_source = _extract_tasks_slice_ids(feature_dir)

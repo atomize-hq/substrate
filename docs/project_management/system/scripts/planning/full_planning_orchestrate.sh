@@ -22,6 +22,7 @@ Codex options (optional; forwarded to run_pws_agent.sh):
 Behavior:
   - Requires a clean orchestration checkout (git status must be empty).
   - Runs pre-full-planning convergence before loading the tracked alignment report.
+  - Refreshes pre-planning/alignment_report.md before the tasks/checkpoints pre-task gate.
   - Runs <PREFIX>-PWS-contract first.
   - Runs all remaining runnable PWS sequentially in a stable, dependency-respecting order.
   - Runs <PREFIX>-PWS-tasks_checkpoints last.
@@ -117,10 +118,15 @@ PRE_FULL_PLANNING_CONVERGE="${PM_FULL_PLANNING_CONVERGE_SCRIPT:-${PLANNING_SCRIP
 if [[ "${PRE_FULL_PLANNING_CONVERGE}" != /* ]]; then
     PRE_FULL_PLANNING_CONVERGE="${REPO_ROOT}/${PRE_FULL_PLANNING_CONVERGE}"
 fi
+ALIGNMENT_REPORTER="${PM_FULL_PLANNING_ALIGNMENT_REPORTER:-${PLANNING_SCRIPTS_DIR}/wrapper_alignment_report.py}"
+if [[ "${ALIGNMENT_REPORTER}" != /* ]]; then
+    ALIGNMENT_REPORTER="${REPO_ROOT}/${ALIGNMENT_REPORTER}"
+fi
 ALLOWLIST_REQUEST_PARSER="${PLANNING_SCRIPTS_DIR}/parse_allowlist_request.py"
 SLICE_COHERENCE_VALIDATOR="${PLANNING_SCRIPTS_DIR}/validate_slice_inventory_coherence.py"
 [[ -x "${RUNNER}" ]] || die "missing runner: ${RUNNER}"
 [[ -x "${PRE_FULL_PLANNING_CONVERGE}" ]] || [[ -f "${PRE_FULL_PLANNING_CONVERGE}" ]] || die "missing convergence script: ${PRE_FULL_PLANNING_CONVERGE}"
+[[ -f "${ALIGNMENT_REPORTER}" ]] || die "missing alignment reporter: ${ALIGNMENT_REPORTER}"
 [[ -f "${ALLOWLIST_REQUEST_PARSER}" ]] || die "missing allowlist request parser: ${ALLOWLIST_REQUEST_PARSER}"
 [[ -f "${SLICE_COHERENCE_VALIDATOR}" ]] || die "missing slice coherence validator: ${SLICE_COHERENCE_VALIDATOR}"
 if [[ "${DRY_RUN}" -eq 0 && -z "${PM_FULL_PLANNING_RUNNER:-}" ]]; then
@@ -154,6 +160,8 @@ mkdir -p "${WRAPPER_DIR_ABS}"
 SUMMARY_PATH_ABS="${WRAPPER_DIR_ABS}/summary.md"
 PLAN_JSON_ABS="${WRAPPER_DIR_ABS}/pws_plan.json"
 ATTEMPTS_DIR_ABS="${WRAPPER_DIR_ABS}/attempts"
+ALIGNMENT_SYNC_TMP="${WRAPPER_DIR_ABS}/alignment_report.md"
+ALIGNMENT_SYNC_STDERR_ABS="${WRAPPER_DIR_ABS}/alignment_report.stderr.log"
 mkdir -p "${ATTEMPTS_DIR_ABS}"
 
 append_summary() {
@@ -686,6 +694,28 @@ run_pre_tasks_coherence_gate() {
     python3 "${SLICE_COHERENCE_VALIDATOR}" --feature-dir "${FEATURE_DIR_ABS}" --workstream-triage "${WORKSTREAM_TRIAGE_REL}" --phase pre_tasks_checkpoints
 }
 
+sync_alignment_report() {
+    local tracked_rel="${FEATURE_DIR_REL}/pre-planning/alignment_report.md"
+    local tracked_abs="${FEATURE_DIR_ABS}/pre-planning/alignment_report.md"
+    local stderr_rel="${FEATURE_DIR_REL}/logs/full_planning_orchestrator/${RUN_TS}/alignment_report.stderr.log"
+    if python3 "${ALIGNMENT_REPORTER}" --feature-dir "${FEATURE_DIR_REL}" >"${ALIGNMENT_SYNC_TMP}" 2>"${ALIGNMENT_SYNC_STDERR_ABS}"; then
+        if [[ ! -f "${tracked_abs}" ]] || ! cmp -s "${ALIGNMENT_SYNC_TMP}" "${tracked_abs}"; then
+            cp "${ALIGNMENT_SYNC_TMP}" "${tracked_abs}"
+            append_summary "- Regenerated alignment report before tasks gate: \`${tracked_rel}\`"
+            git add -- "${tracked_rel}" >/dev/null 2>&1 || true
+            if ! git diff --cached --quiet; then
+                git commit -m "docs: full-planning alignment report" >/dev/null
+                append_summary "- Committed refreshed alignment report"
+                echo "Committed: full-planning alignment report"
+            fi
+        else
+            append_summary "- Alignment report already current before tasks gate: \`${tracked_rel}\`"
+        fi
+    else
+        die "failed to refresh alignment report (see ${stderr_rel})"
+    fi
+}
+
 run_pws_fresh() {
     local pid="$1"
     local -a args=("${RUNNER}" --feature-dir "${FEATURE_DIR_ABS}" --pws-id "${pid}" --codex-jsonl)
@@ -1027,6 +1057,7 @@ while IFS= read -r pid; do
     if [[ "${role}" == "tasks_checkpoints" ]]; then
         echo "== Pre-task coherence gate: ${pid} =="
         append_summary "- Pre-task coherence gate before \`${pid}\`"
+        sync_alignment_report
         run_pre_tasks_coherence_gate
     fi
 

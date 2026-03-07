@@ -122,6 +122,10 @@ The orchestrator uses it to:
 - seed required work into the appropriate PWS (especially `*-PWS-contract` and `*-PWS-tasks_checkpoints`)
 - detect cross-pack conflicts that should be handled by an integration step (not buried inside one pack’s PWS)
 
+Important:
+- `alignment_report.md` is a generated routing/index artifact, not a second slice-authority surface.
+- Slice-order authority remains limited to `PM_PWS_INDEX.accepted_slice_order` plus the converged slice-bearing pre-planning docs.
+
 ## Execution model (safety + concurrency)
 
 ### Per-PWS safety model (same as pre-planning)
@@ -320,6 +324,7 @@ The validator is intentionally narrow here:
   - runs `<PREFIX>-PWS-contract` first,
   - runs remaining runnable PWS sequentially (MVP),
   - runs `<PREFIX>-PWS-tasks_checkpoints` last,
+  - refreshes `pre-planning/alignment_report.md` immediately before the pre-task coherence gate for `<PREFIX>-PWS-tasks_checkpoints`,
   - treats `pre-planning/alignment_report.md` as required input and routes:
     - “Gates / hard decisions” + “Decision Register required” → `<PREFIX>-PWS-contract`
     - “CI/checkpoint wiring gaps” → `<PREFIX>-PWS-tasks_checkpoints`
@@ -381,6 +386,8 @@ The landed authority and convergence rules are:
 5) `alignment_report.md` remains generated, not agent-authored.
 - `pre_full_planning_converge.sh` regenerates the tracked `pre-planning/alignment_report.md` after successful convergence.
 - The report is not directly remediated by the agent.
+- During full planning, the orchestrator refreshes `pre-planning/alignment_report.md` again immediately before `<PREFIX>-PWS-tasks_checkpoints`.
+- The report may mention only a subset of accepted slices; it is used for routing follow-ups, not for exact slice-set authority.
 
 #### Landed entrypoints
 
