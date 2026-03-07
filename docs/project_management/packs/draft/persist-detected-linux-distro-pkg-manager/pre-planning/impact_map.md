@@ -231,17 +231,13 @@ List overlaps/conflicts with other in-flight work and resolve them deterministic
 
 ## Follow-ups (explicit)
 
-- Decision Register entries required:
-  - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/decision_register.md` — DR-0001: persistence location contract (`install_state.json` vs separate file)
-  - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/decision_register.md` — DR-0002: field naming and nesting under `host_state.platform.*`
-  - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/decision_register.md` — DR-0003: vocabulary ownership (`best-effort-distro-package-manager` contract vs local duplication)
-  - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/decision_register.md` — DR-0004: write-trigger scope across hosted install, hosted `--no-world`, dev install, and dev `--no-world`
+`decision_register.md`, `contract.md`, and `install-state-schema-spec.md` now pin the pack-local contract, path, and schema choices. Remaining follow-ups are downstream slice tracing and external doc reconciliation.
 
-- Spec updates required:
-  - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/contract.md` — pin installer-scope selection, Linux-only guarantees, prefix-to-`$SUBSTRATE_HOME` equivalence, and no-world/dry-run/write-failure rules
-  - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/install-state-schema-spec.md` — pin `schema_version` field name, `host_state.platform.*` schema, merge rules with `host_state.group` and `host_state.linger`, and JSON examples
-  - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM1/PDLDPM1-spec.md` — pin exact write/no-write branches and the temp-file replacement rule
-  - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM2/PDLDPM2-spec.md` — pin smoke assertions for no-event writes, missing `/etc/os-release`, and additive compatibility
-  - `docs/project_management/adrs/draft/ADR-0032-stashing-ferret.md` — fix feature-directory drift and related-doc path drift
-  - `docs/INSTALLATION.md` — reconcile installer-scope language, `schema_version` field name, and effective metadata path wording
+- Downstream slice-spec updates required:
+  - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM1/PDLDPM1-spec.md` — trace the accepted hosted-plus-dev Linux write matrix, `--dry-run` no-write rule, idempotency rule, and temp-file replacement invariant from `contract.md`
+  - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM2/PDLDPM2-spec.md` — trace smoke assertions for no-event writes, missing `/etc/os-release`, and additive compatibility against `install-state-schema-spec.md`
+
+- External tracked updates required:
+  - `docs/project_management/adrs/draft/ADR-0032-stashing-ferret.md` — fix feature-directory drift, related-doc path drift, canonical install-state path wording, and hosted-plus-dev installer scope wording
+  - `docs/INSTALLATION.md` — reconcile installer-scope language, `schema_version` field name, effective metadata path wording, and the accepted `host_state.platform.*` field set
   - `scripts/substrate/uninstall-substrate.sh` — review HOME-vs-prefix path handling as a separate follow-up outside the selected touch set

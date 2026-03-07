@@ -120,10 +120,17 @@ No separate protocol, policy, telemetry, env-vars, filesystem-semantics, platfor
     - the Linux-only behavior contract:
       - successful Linux installs create or update `install_state.json`
       - macOS and Windows do not gain new `host_state.platform.*` metadata writes from this ADR
+    - the exact installer-scope write matrix:
+      - hosted install and hosted `--no-world` follow the same Linux persistence rule
+      - dev install and dev `--no-world` follow the same Linux persistence rule
+      - `--dry-run` remains a no-write branch
     - the exact best-effort failure posture:
       - missing `/etc/os-release` does not fail install
       - metadata read or write failure does not flip an otherwise successful install into failure
       - metadata write is skipped during dry-run
+    - the atomic update invariant:
+      - existing files are replaced via a temporary file in the same directory plus a replace step
+      - in-place truncation of the canonical file is not allowed
     - the future-consumer read contract:
       - consumers prefer persisted metadata for guidance strings
       - consumers fall back to runtime detection when persisted metadata is missing or unreadable
@@ -260,6 +267,7 @@ Every surface that ADR-0032 touches appears here.
 | Metadata file path resolution (`--prefix`, default `~/.substrate`, user-facing `$SUBSTRATE_HOME`) | `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/contract.md` | one canonical path rule and precedence |
 | Linux-only write guarantee | `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/contract.md` | exact Linux behavior and exact no-change statement for macOS and Windows |
 | Successful-install write trigger and dry-run no-write rule | `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/contract.md` | exact write and no-write branches |
+| Atomic install-state replacement rule | `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/contract.md` | temp-file-in-same-directory replacement invariant and no in-place truncation |
 | Metadata read/write failure posture | `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/contract.md` | warning-only degrade behavior and non-failing install rule |
 | Future-consumer read precedence | `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/contract.md` | prefer persisted metadata, fall back to runtime detection |
 | Protected-path invariant | `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/contract.md` | write boundary stays under the effective Substrate home |
@@ -296,24 +304,24 @@ For every selected spec document, confirm it explicitly defines:
 
 1. ADR feature-path drift exists
    - Issue: `docs/project_management/adrs/draft/ADR-0032-stashing-ferret.md` still points at `docs/project_management/packs/draft/stashing-ferret/`, while orchestration resolved this feature to `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/`.
-   - Required fix: update ADR-0032 Scope and Related Docs to the resolved feature directory and align every selected spec path with that directory.
+   - Required fix: update ADR-0032 Scope and Related Docs to the resolved feature directory and align every selected spec path with that directory. `decision_register.md` DR-0005 already records the local pack boundary.
 
-2. Prefix naming and `$SUBSTRATE_HOME` naming need one canonical rule
-   - Issue: ADR-0032 names `$SUBSTRATE_HOME/install_state.json`, while the hosted installer currently writes to the effective `--prefix` path with default `~/.substrate`.
-   - Required fix: `contract.md` must define one canonical equivalence rule, and `impact_map.md` must include every touched doc or script that still uses the alternate naming.
+2. Operator wording still needs to reconcile to the accepted canonical path rule
+   - Issue: `contract.md` now defines `$SUBSTRATE_HOME/install_state.json` and `<prefix>/install_state.json` as the same canonical file at `<effective install prefix>/install_state.json`, but ADR-0032 and `docs/INSTALLATION.md` still describe that path surface with drifted wording.
+   - Required fix: update ADR-0032 and `docs/INSTALLATION.md` to use the contract's equivalence rule and keep every operator-facing reference tied to the effective install prefix.
 
-3. Installer scope is not pinned
-   - Issue: `docs/INSTALLATION.md` states both installers record host-state details, while ADR-0032 architecture names only `scripts/substrate/install-substrate.sh`.
-   - Required fix: `decision_register.md` and `contract.md` must select one installer-scope rule, and `impact_map.md` must reflect the resulting touch set.
+3. Installer-scope wording still needs to reconcile to the accepted shared-producer contract
+   - Issue: DR-0004 and `contract.md` now select hosted install plus dev install as one Linux producer contract, but ADR-0032 architecture text still names only `scripts/substrate/install-substrate.sh`.
+   - Required fix: update ADR-0032 and `docs/INSTALLATION.md` to match the accepted hosted-plus-dev installer scope and keep the touch set aligned to both installer scripts.
 
-4. Successful-install branches need exact write and no-write semantics
-   - Issue: ADR-0032 says “successful Linux install” but does not enumerate hosted `--no-world`, dev-install `--no-world`, or `--dry-run`.
-   - Required fix: `decision_register.md`, `contract.md`, and `slices/PDLDPM1/PDLDPM1-spec.md` must define the exact rule for each branch.
+4. Slice acceptance still needs to trace the accepted write matrix and atomic update rule
+   - Issue: `contract.md` now pins hosted/dev `--no-world` behavior, `--dry-run` no-write behavior, and the temp-file replacement invariant, but `slices/PDLDPM1/PDLDPM1-spec.md` does not exist yet.
+   - Required fix: author `slices/PDLDPM1/PDLDPM1-spec.md` so its acceptance criteria trace the contract-defined write/no-write matrix, idempotency rule, and atomic replacement rule.
 
 5. Operator-doc schema naming drift already exists
-   - Issue: `docs/INSTALLATION.md` documents “Schema version = 1”, while ADR-0032 and the installer code use `schema_version = 1`.
-   - Required fix: `install-state-schema-spec.md` must declare the authoritative field name, and `impact_map.md` must include the operator-doc reconciliation path.
+   - Issue: `install-state-schema-spec.md` now declares `schema_version = 1` and the accepted `host_state.platform.*` field shape, but `docs/INSTALLATION.md` still documents “Schema version = 1”.
+   - Required fix: update `docs/INSTALLATION.md` to use the schema spec's field name and align any examples or prose to the accepted additive field shape.
 
-6. Uninstaller path compatibility needs explicit review
+6. Hosted uninstaller path mismatch remains an explicit follow-up boundary
    - Issue: install docs describe `<prefix>/install_state.json`, while `scripts/substrate/uninstall-substrate.sh` still reads `HOME/.substrate/install_state.json`.
-   - Required fix: `impact_map.md` must record whether uninstaller path handling is an untouched follow-up surface or an in-scope dependency of this feature.
+   - Required fix: keep hosted uninstaller path handling outside this feature touch set and track any reconciliation as separate follow-up work.
