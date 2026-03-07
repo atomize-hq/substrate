@@ -102,31 +102,27 @@ def _extract_min_spec_slice_ids(feature_dir: Path) -> SliceSource | None:
 def _extract_triage_slice_ids(
     feature_dir: Path,
     workstream_triage: str = vpi.DEFAULT_TRIAGE_REL,
-) -> tuple[SliceSource | None, str | None]:
-    triage_path = vpi._resolve_triage_path(feature_dir, workstream_triage, advisory=True)
-    if triage_path is None:
-        return (None, None)
+    require_v2: bool = False,
+) -> tuple[SliceSource | None, str | None, Path | None, list[vpi.ValidationError]]:
+    triage_path, authority, errors = vpi._load_slice_authority(
+        feature_dir,
+        workstream_triage,
+        advisory=True,
+        require_v2=require_v2,
+    )
+    if authority is None:
+        return (None, None, triage_path, errors)
 
-    errors = vpi._validate_doc(feature_dir, triage_path, advisory=True)
-    if errors:
-        return (None, None)
-
-    idx = vpi._extract_pm_pws_index_json(triage_path.read_text(encoding="utf-8"))
-    slice_prefix = idx.get("slice_prefix")
-    if not isinstance(slice_prefix, str) or not slice_prefix.strip():
-        slice_prefix = None
-    else:
-        slice_prefix = slice_prefix.strip()
-
-    try:
-        ordered = vpi._accepted_slice_order_from_index(idx)
-    except Exception:
-        return (None, slice_prefix)
-
-    ordered = _ordered_unique(ordered)
+    ordered = _ordered_unique(authority.accepted_slice_order)
     if not ordered:
-        return (None, slice_prefix)
-    return (SliceSource(name="workstream_triage", ordered=ordered, path=triage_path), slice_prefix)
+        return (None, authority.slice_prefix or None, triage_path, errors)
+
+    return (
+        SliceSource(name="workstream_triage", ordered=ordered, path=authority.triage_path),
+        authority.slice_prefix or None,
+        authority.triage_path,
+        errors,
+    )
 
 
 def _extract_plan_slice_ids(feature_dir: Path) -> SliceSource | None:
@@ -312,19 +308,29 @@ def inspect_pre_full_planning(
     workstream_triage: str = vpi.DEFAULT_TRIAGE_REL,
 ) -> tuple[SliceSource | None, str | None, list[CoherenceIssue]]:
     issues: list[CoherenceIssue] = []
-    triage_source, triage_prefix = _extract_triage_slice_ids(feature_dir, workstream_triage)
+    triage_source, triage_prefix, triage_path, triage_errors = _extract_triage_slice_ids(
+        feature_dir,
+        workstream_triage,
+        require_v2=True,
+    )
     if triage_source is None:
-        triage_path = Path(workstream_triage)
-        if not triage_path.is_absolute():
-            triage_path = feature_dir / workstream_triage
+        if triage_path is None:
+            triage_path = Path(workstream_triage)
+            if not triage_path.is_absolute():
+                triage_path = feature_dir / workstream_triage
+        message = (
+            triage_errors[0].message
+            if triage_errors
+            else (
+                f"missing or invalid triage slice authority: expected accepted slice order from "
+                f"{triage_path}"
+            )
+        )
         issues.append(
             CoherenceIssue(
                 source_name="workstream_triage",
                 path=triage_path if triage_path.exists() else None,
-                message=(
-                    f"missing or invalid triage slice authority: expected accepted slice order from "
-                    f"{triage_path}"
-                ),
+                message=message,
             )
         )
         return (None, triage_prefix, issues)
@@ -361,7 +367,7 @@ def validate(feature_dir: Path, phase: str, workstream_triage: str = vpi.DEFAULT
         return
 
     min_spec_source = _extract_min_spec_slice_ids(feature_dir)
-    triage_source, triage_prefix = _extract_triage_slice_ids(feature_dir, workstream_triage)
+    triage_source, triage_prefix, _, _ = _extract_triage_slice_ids(feature_dir, workstream_triage)
     plan_source = _extract_plan_slice_ids(feature_dir)
     slice_specs_source = _extract_slice_specs(feature_dir)
     checkpoint_source = _extract_checkpoint_plan(feature_dir)

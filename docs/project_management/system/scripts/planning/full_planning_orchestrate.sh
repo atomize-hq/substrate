@@ -607,7 +607,7 @@ commit_tracked_path() {
     fi
     git commit -m "${msg}" >/dev/null
     sha="$(git rev-parse HEAD)"
-    echo "Committed: ${sha} (${msg})"
+    echo "Committed: ${sha} (${msg})" >&2
     append_summary "- committed \`${sha}\` (\`${msg}\`)"
 }
 
@@ -704,6 +704,8 @@ run_pws_resume() {
     PM_PLANNING_ORCHESTRATED=1 "${args[@]}"
 }
 
+ALLOWLIST_RESUME_MESSAGE=""
+
 process_allowlist_request() {
     local pid="$1"
     local attempt="$2"
@@ -711,6 +713,7 @@ process_allowlist_request() {
     local validator_name="${4:-}"
     local error_line="${5:-}"
     local req_path="${FEATURE_DIR_ABS}/logs/pws/${pid}/allowlist_request.json"
+    ALLOWLIST_RESUME_MESSAGE=""
     [[ -f "${req_path}" ]] || return 1
 
     local parse_json
@@ -746,7 +749,7 @@ EOF
         )
         write_attempt_report "${pid}" "${attempt}" "malformed_allowlist_request" "${body}" >/dev/null
         append_summary "- \`${pid}\`: malformed allowlist request detected; resuming same session with exact schema errors"
-        write_resume_message "${pid}" "${attempt}" "malformed_allowlist_request" "${body}"
+        ALLOWLIST_RESUME_MESSAGE="$(write_resume_message "${pid}" "${attempt}" "malformed_allowlist_request" "${body}")"
         return 0
     fi
 
@@ -786,7 +789,7 @@ EOF
         )
         write_attempt_report "${pid}" "${attempt}" "invalid_allowlist_paths" "${body}" >/dev/null
         append_summary "- \`${pid}\`: allowlist request contained invalid requested_tracked_paths"
-        write_resume_message "${pid}" "${attempt}" "invalid_allowlist_paths" "${body}"
+        ALLOWLIST_RESUME_MESSAGE="$(write_resume_message "${pid}" "${attempt}" "invalid_allowlist_paths" "${body}")"
         return 0
     fi
 
@@ -807,7 +810,7 @@ EOF
     done
 
     if [[ "${#grant_paths[@]}" -gt 0 ]]; then
-        echo "Auto-granting allowlist for ${pid}: ${grant_paths[*]}"
+        echo "Auto-granting allowlist for ${pid}: ${grant_paths[*]}" >&2
         grant_owns_in_triage "${pid}" "${grant_paths[@]}"
         append_summary "- Auto-granted allowlist for \`${pid}\` (paths=\`$(printf '%s ' "${grant_paths[@]}" | xargs)\`)"
 
@@ -864,7 +867,7 @@ EOF
         )
         owner_msg_path="$(write_resume_message "${owner}" "${attempt}" "owner_fix_for_${pid}" "${owner_body}")"
 
-        echo "== Auto-heal routing: resuming owner PWS ${owner} (requested by ${pid}) =="
+        echo "== Auto-heal routing: resuming owner PWS ${owner} (requested by ${pid}) ==" >&2
         append_summary "- Routed allowlist request from \`${pid}\` to owner \`${owner}\` (paths=\`${owner_paths}\`)"
 
         run_pws_until_done "${owner}" "${owner_role}" "${owner_msg_path}"
@@ -895,7 +898,7 @@ EOF
     )
     write_attempt_report "${pid}" "${attempt}" "allowlist_processed" "${req_body}" >/dev/null
     append_summary "- \`${pid}\`: allowlist request processed automatically"
-    write_resume_message "${pid}" "${attempt}" "after_allowlist" "${req_body}"
+    ALLOWLIST_RESUME_MESSAGE="$(write_resume_message "${pid}" "${attempt}" "after_allowlist" "${req_body}")"
     return 0
 }
 
@@ -926,6 +929,7 @@ run_pws_until_done() {
         else
             thread_id="$(get_thread_id "${pid}")"
             [[ -n "${resume_msg}" ]] || resume_msg="$(write_resume_message "${pid}" "${attempt}" "resume" "Resume and continue work for this PWS until all gates pass.")"
+            [[ -f "${resume_msg}" ]] || die "resume message file not found: ${resume_msg}"
             run_pws_resume "${pid}" "${thread_id}" "${resume_msg}"
             rc=$?
         fi
@@ -940,8 +944,10 @@ run_pws_until_done() {
             validator_name="$(jq -r '.validator // ""' <<<"${runner_failure_json}")"
             error_line="$(jq -r '.error_line // ""' <<<"${runner_failure_json}")"
             append_summary "- \`${pid}\`: runner failed (exit=${rc}); attempting auto-heal"
-            if resume_after_allowlist="$(process_allowlist_request "${pid}" "${attempt}" "Runner failure" "${validator_name}" "${error_line}")"; then
-                resume_msg="${resume_after_allowlist}"
+            if process_allowlist_request "${pid}" "${attempt}" "Runner failure" "${validator_name}" "${error_line}"; then
+                [[ -n "${ALLOWLIST_RESUME_MESSAGE}" ]] || die "allowlist processing did not produce a resume message path for ${pid}"
+                [[ -f "${ALLOWLIST_RESUME_MESSAGE}" ]] || die "resume message file not found: ${ALLOWLIST_RESUME_MESSAGE}"
+                resume_msg="${ALLOWLIST_RESUME_MESSAGE}"
             else
                 body=$(
                     cat <<EOF
@@ -974,8 +980,10 @@ EOF
             micro_failure_json="$(collect_failure_details "${micro_lint_log}")"
             micro_error_line="$(jq -r '.error_line // ""' <<<"${micro_failure_json}")"
             append_summary "- \`${pid}\`: micro-lint failed; attempting auto-heal"
-            if resume_after_allowlist="$(process_allowlist_request "${pid}" "${attempt}" "planning-micro-lint failure" "planning-micro-lint" "${micro_error_line}")"; then
-                resume_msg="${resume_after_allowlist}"
+            if process_allowlist_request "${pid}" "${attempt}" "planning-micro-lint failure" "planning-micro-lint" "${micro_error_line}"; then
+                [[ -n "${ALLOWLIST_RESUME_MESSAGE}" ]] || die "allowlist processing did not produce a resume message path for ${pid}"
+                [[ -f "${ALLOWLIST_RESUME_MESSAGE}" ]] || die "resume message file not found: ${ALLOWLIST_RESUME_MESSAGE}"
+                resume_msg="${ALLOWLIST_RESUME_MESSAGE}"
             else
                 body=$(
                     cat <<EOF

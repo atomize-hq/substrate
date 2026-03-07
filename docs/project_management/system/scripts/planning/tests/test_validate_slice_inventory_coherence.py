@@ -352,6 +352,17 @@ class TestValidateSliceInventoryCoherence(unittest.TestCase):
         self.assertEqual(res.returncode, 1)
         self.assertIn("impact_map", res.stderr)
 
+    def test_fails_pre_full_planning_when_triage_is_still_v1(self) -> None:
+        feature_dir = self._make_draft_pack(
+            "pre_full_planning_v1_triage",
+            slice_ids=["WDAP0", "WDAP2", "WDAP1", "WDAP3"],
+            triage_version=1,
+        )
+        res = self._run(feature_dir, PHASE_PRE_FULL_PLANNING)
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("requires PM_PWS_INDEX v2", res.stderr)
+        self.assertIn("rerun pre-planning/workstream triage", res.stderr)
+
 
 PHASE_PRE_TASKS = "pre_tasks_checkpoints"
 PHASE_PRE_FULL_PLANNING = "pre_full_planning"

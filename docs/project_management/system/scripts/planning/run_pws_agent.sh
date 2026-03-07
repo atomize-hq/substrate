@@ -614,7 +614,15 @@ if [[ "${CODEX_EXIT}" -eq 0 && "${LAST_MESSAGE_OK}" -eq 1 && "${REQUIRED_OUTPUTS
             echo "  Run logs:  $(relpath_in_repo "${REPO_ROOT}" "${RUN_DIR_ABS}")" >&2
             exit 2
         fi
-        if ! python3 "${PLANNING_SCRIPTS_DIR}/validate_slice_inventory_coherence.py" --feature-dir "${FEATURE_DIR_ABS}" --phase execution_ready; then
+        slice_inventory_args=(
+            python3 "${PLANNING_SCRIPTS_DIR}/validate_slice_inventory_coherence.py"
+            --feature-dir "${FEATURE_DIR_ABS}"
+            --phase execution_ready
+        )
+        if [[ -n "${WORKSTREAM_TRIAGE}" ]]; then
+            slice_inventory_args+=(--workstream-triage "${WORKSTREAM_TRIAGE}")
+        fi
+        if ! "${slice_inventory_args[@]}"; then
             echo "ERROR: validate_slice_inventory_coherence.py failed after tasks_checkpoints PWS run: ${FEATURE_DIR_REL}" >&2
             echo "  Step logs: $(relpath_in_repo "${REPO_ROOT}" "${STEP_DIR_ABS}")" >&2
             echo "  Run logs:  $(relpath_in_repo "${REPO_ROOT}" "${RUN_DIR_ABS}")" >&2
@@ -633,7 +641,14 @@ if [[ "${CODEX_EXIT}" -eq 0 && "${LAST_MESSAGE_OK}" -eq 1 && "${REQUIRED_OUTPUTS
         fi
         cross_platform_enabled="$(jq -r '.meta.cross_platform // false' "${FEATURE_DIR_ABS}/tasks.json" 2>/dev/null || echo "false")"
         if [[ "${checkpoint_plan_exists}" -eq 1 || "${cross_platform_enabled}" == "true" ]]; then
-            if ! python3 "${PLANNING_SCRIPTS_DIR}/validate_ci_checkpoint_plan.py" --feature-dir "${FEATURE_DIR_ABS}"; then
+            checkpoint_args=(
+                python3 "${PLANNING_SCRIPTS_DIR}/validate_ci_checkpoint_plan.py"
+                --feature-dir "${FEATURE_DIR_ABS}"
+            )
+            if [[ -n "${WORKSTREAM_TRIAGE}" ]]; then
+                checkpoint_args+=(--workstream-triage "${WORKSTREAM_TRIAGE}")
+            fi
+            if ! "${checkpoint_args[@]}"; then
                 echo "ERROR: validate_ci_checkpoint_plan.py failed after tasks_checkpoints PWS run: ${FEATURE_DIR_REL}" >&2
                 echo "  Step logs: $(relpath_in_repo "${REPO_ROOT}" "${STEP_DIR_ABS}")" >&2
                 echo "  Run logs:  $(relpath_in_repo "${REPO_ROOT}" "${RUN_DIR_ABS}")" >&2

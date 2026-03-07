@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import validate_pws_index as vpi
+
 
 @dataclass(frozen=True)
 class Checkpoint:
@@ -90,6 +92,42 @@ def _slice_sort_key(slice_id: str) -> tuple[str, int, str]:
     return (m.group("prefix"), int(m.group("num")), slice_id)
 
 
+def _expected_slice_order_from_authority(
+    feature_dir: Path,
+    tasks_data: dict[str, Any],
+    workstream_triage: str,
+) -> tuple[list[str], list[str], str | None]:
+    task_slice_ids = _slice_ids_from_tasks(tasks_data)
+    triage_path, authority, errors = vpi._load_slice_authority(
+        feature_dir,
+        workstream_triage,
+        advisory=True,
+        require_v2=False,
+    )
+    if triage_path is not None and errors:
+        _fail(f"invalid workstream triage slice authority: {errors[0].message}")
+
+    if authority is not None and authority.version == 2:
+        accepted_slice_order = authority.accepted_slice_order
+        expected_set = set(accepted_slice_order)
+        task_set = set(task_slice_ids)
+        if task_set != expected_set:
+            missing = sorted(expected_set - task_set, key=_slice_sort_key)
+            extra = sorted(task_set - expected_set, key=_slice_sort_key)
+            parts: list[str] = []
+            if missing:
+                parts.append(f"missing {missing}")
+            if extra:
+                parts.append(f"extra {extra}")
+            _fail(
+                f"tasks.json slice set disagrees with accepted slice order from {triage_path}: "
+                + "; ".join(parts)
+            )
+        return (task_slice_ids, accepted_slice_order, str(triage_path))
+
+    return (task_slice_ids, task_slice_ids, None)
+
+
 def _parse_checkpoints(plan: dict[str, Any]) -> tuple[dict[str, int], list[Checkpoint]]:
     version = plan.get("version")
     if version != 1:
@@ -149,9 +187,19 @@ def _parse_checkpoints(plan: dict[str, Any]) -> tuple[dict[str, int], list[Check
     return {"min": min_n, "max": max_n}, checkpoints
 
 
-def _validate_against_tasks(feature_dir: Path, tasks_data: dict[str, Any], defaults: dict[str, int], checkpoints: list[Checkpoint]) -> None:
-    slice_ids = _slice_ids_from_tasks(tasks_data)
-    if not slice_ids:
+def _validate_against_tasks(
+    feature_dir: Path,
+    tasks_data: dict[str, Any],
+    defaults: dict[str, int],
+    checkpoints: list[Checkpoint],
+    workstream_triage: str,
+) -> None:
+    task_slice_ids, expected_slice_order, authority_path = _expected_slice_order_from_authority(
+        feature_dir,
+        tasks_data,
+        workstream_triage,
+    )
+    if not task_slice_ids:
         _fail("tasks.json does not contain any slice final integration tasks (*-integ); cannot validate checkpoint coverage")
 
     meta = tasks_data.get("meta") if isinstance(tasks_data, dict) else None
@@ -166,10 +214,11 @@ def _validate_against_tasks(feature_dir: Path, tasks_data: dict[str, Any], defau
 
     # Ordering / contiguity: the plan must define a single ordered partition of the slice list.
     # This removes ambiguity and enables mechanical gating checks between checkpoint groups.
-    if slices_in_plan != slice_ids:
+    if slices_in_plan != expected_slice_order:
+        authority_note = f" from accepted slice order {authority_path}" if authority_path else ""
         _fail(
             "ci_checkpoint_plan.md must assign slices in deterministic order and as contiguous groups; "
-            f"expected slice order {slice_ids}, got {slices_in_plan}"
+            f"expected slice order{authority_note} {expected_slice_order}, got {slices_in_plan}"
         )
 
     # Coverage: every slice must belong to exactly one checkpoint.
@@ -177,8 +226,8 @@ def _validate_against_tasks(feature_dir: Path, tasks_data: dict[str, Any], defau
     if duplicates:
         _fail(f"ci_checkpoint_plan.md assigns slices to multiple checkpoints: {', '.join(duplicates)}")
 
-    missing = sorted(set(slice_ids) - set(slices_in_plan))
-    extra = sorted(set(slices_in_plan) - set(slice_ids))
+    missing = sorted(set(task_slice_ids) - set(slices_in_plan))
+    extra = sorted(set(slices_in_plan) - set(task_slice_ids))
     if missing:
         _fail(f"ci_checkpoint_plan.md missing slices present in tasks.json: {', '.join(missing)}")
     if extra:
@@ -200,7 +249,7 @@ def _validate_against_tasks(feature_dir: Path, tasks_data: dict[str, Any], defau
             )
 
     # Bounds (default): enforce min/max per checkpoint, except when total slices < min.
-    total = len(slice_ids)
+    total = len(task_slice_ids)
     min_n = defaults["min"]
     max_n = defaults["max"]
     for c in checkpoints:
@@ -262,6 +311,14 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Validate ci_checkpoint_plan.md against tasks.json.")
     ap.add_argument("--feature-dir", required=True, help="docs/project_management/packs/<bucket>/<feature>")
     ap.add_argument(
+        "--workstream-triage",
+        default=vpi.DEFAULT_TRIAGE_REL,
+        help=(
+            "Path to workstream_triage.md (absolute or feature-dir-relative). "
+            f"Default: {vpi.DEFAULT_TRIAGE_REL} (legacy fallback: {vpi.LEGACY_TRIAGE_REL})"
+        ),
+    )
+    ap.add_argument(
         "--ci-checkpoint-plan",
         default="pre-planning/ci_checkpoint_plan.md",
         help="Path to ci_checkpoint_plan.md (absolute or feature-dir-relative). Default: pre-planning/ci_checkpoint_plan.md",
@@ -290,7 +347,8 @@ def main() -> int:
     plan = _extract_json_block(text)
     defaults, checkpoints = _parse_checkpoints(plan)
     tasks_data = _read_tasks_json(feature_dir)
-    _validate_against_tasks(feature_dir, tasks_data, defaults, checkpoints)
+    _validate_against_tasks(feature_dir, tasks_data, defaults, checkpoints, args.workstream_triage)
+    print(f"OK: ci_checkpoint_plan validation passed: {plan_path}")
     return 0
 
 

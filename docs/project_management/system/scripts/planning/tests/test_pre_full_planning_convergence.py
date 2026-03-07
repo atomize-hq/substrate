@@ -16,7 +16,7 @@ def _write_text(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
-def _triage_text(slice_prefix: str, accepted_slice_order: list[str]) -> str:
+def _triage_text(slice_prefix: str, accepted_slice_order: list[str], *, triage_version: int = 2) -> str:
     pws = [
         {
             "id": f"{slice_prefix}-PWS-contract",
@@ -39,12 +39,13 @@ def _triage_text(slice_prefix: str, accepted_slice_order: list[str]) -> str:
         },
     ]
     idx = {
-        "pws_index_version": 2,
+        "pws_index_version": triage_version,
         "slice_prefix": slice_prefix,
-        "accepted_slice_order": accepted_slice_order,
-        "draft_slice_order": [accepted_slice_order[0]],
         "pws": pws,
     }
+    if triage_version == 2:
+        idx["accepted_slice_order"] = accepted_slice_order
+        idx["draft_slice_order"] = [accepted_slice_order[0]]
     body = json.dumps(idx, indent=2, sort_keys=False)
     return (
         "# Workstream triage fixture\n\n"
@@ -110,6 +111,7 @@ class TestPreFullPlanningConvergence(unittest.TestCase):
         spec_manifest_slice_ids: list[str] | None = None,
         impact_map_slice_ids: list[str] | None = None,
         include_triage: bool = True,
+        triage_version: int = 2,
     ) -> Path:
         feature_dir = self.tmp_root / name
         if feature_dir.exists():
@@ -120,7 +122,10 @@ class TestPreFullPlanningConvergence(unittest.TestCase):
         impact_map_slice_ids = impact_map_slice_ids or list(accepted_slice_order)
 
         if include_triage:
-            _write_text(feature_dir / "pre-planning" / "workstream_triage.md", _triage_text(slice_prefix, accepted_slice_order))
+            _write_text(
+                feature_dir / "pre-planning" / "workstream_triage.md",
+                _triage_text(slice_prefix, accepted_slice_order, triage_version=triage_version),
+            )
         _write_text(
             feature_dir / "pre-planning" / "spec_manifest.md",
             "Canonical slice IDs selected for this feature:\n" + "\n".join(f"- `{sid}`" for sid in spec_manifest_slice_ids),
@@ -180,6 +185,18 @@ class TestPreFullPlanningConvergence(unittest.TestCase):
         data = json.loads(res.stdout)
         self.assertEqual(data["status"], "hard_fail")
         self.assertFalse(data["remediation_allowed"])
+
+    def test_helper_classifies_v1_triage_as_hard_fail(self) -> None:
+        feature_dir = self._make_feature_dir(
+            "helper_v1_triage_hard_fail",
+            accepted_slice_order=["WDAP0", "WDAP2", "WDAP1", "WDAP3"],
+            triage_version=1,
+        )
+        res = self._run_helper(feature_dir)
+        self.assertEqual(res.returncode, 0, msg=res.stderr)
+        data = json.loads(res.stdout)
+        self.assertEqual(data["status"], "hard_fail")
+        self.assertIn("requires PM_PWS_INDEX v2", data["issues"][0]["message"])
 
     def _write_reconcile_runner(self, path: Path, *, mutate: bool) -> None:
         script = f"""#!/usr/bin/env python3

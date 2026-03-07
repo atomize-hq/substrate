@@ -27,6 +27,14 @@ class ValidationError:
     message: str
 
 
+@dataclass(frozen=True)
+class SliceAuthority:
+    triage_path: Path
+    version: int
+    slice_prefix: str
+    accepted_slice_order: list[str]
+
+
 def _emit(prefix: str, msg: str) -> None:
     print(f"{prefix}: {msg}", file=sys.stderr)
 
@@ -279,6 +287,61 @@ def _accepted_slice_order_from_index(idx: dict[str, Any]) -> list[str]:
             raise ValueError("accepted_slice_order must contain at least one slice id for pws_index_version=2")
         return accepted
     return _derive_v1_slice_order(idx)
+
+
+def _explicit_v2_authority_error(triage_path: Path) -> ValidationError:
+    return ValidationError(
+        message=(
+            f"{triage_path}: full planning requires PM_PWS_INDEX v2 with explicit accepted_slice_order; "
+            "rerun pre-planning/workstream triage before retrying"
+        )
+    )
+
+
+def _load_slice_authority(
+    feature_dir: Path,
+    workstream_triage: str = DEFAULT_TRIAGE_REL,
+    *,
+    advisory: bool,
+    require_v2: bool = False,
+) -> tuple[Path | None, SliceAuthority | None, list[ValidationError]]:
+    triage_path = _resolve_triage_path(feature_dir, workstream_triage, advisory=advisory)
+    if triage_path is None:
+        return (None, None, [])
+
+    errors = _validate_doc(feature_dir, triage_path, advisory=advisory)
+    if errors:
+        return (triage_path, None, errors)
+
+    try:
+        idx = _extract_pm_pws_index_json(triage_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        return (triage_path, None, [ValidationError(message=f"{triage_path}: {e}")])
+
+    version = idx.get("pws_index_version")
+    if require_v2 and version != 2:
+        return (triage_path, None, [_explicit_v2_authority_error(triage_path)])
+
+    slice_prefix = idx.get("slice_prefix")
+    if not isinstance(slice_prefix, str):
+        slice_prefix = ""
+    slice_prefix = slice_prefix.strip()
+
+    try:
+        accepted_slice_order = _accepted_slice_order_from_index(idx)
+    except Exception as e:
+        return (triage_path, None, [ValidationError(message=f"{triage_path}: {e}")])
+
+    return (
+        triage_path,
+        SliceAuthority(
+            triage_path=triage_path,
+            version=version if isinstance(version, int) else 0,
+            slice_prefix=slice_prefix,
+            accepted_slice_order=accepted_slice_order,
+        ),
+        [],
+    )
 
 
 def _validate_doc(feature_dir: Path, triage_path: Path, advisory: bool) -> list[ValidationError]:
