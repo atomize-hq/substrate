@@ -28,6 +28,7 @@ Canonical slice IDs selected for this feature:
 - Slice prefix: `PDLDPM` (derived from `persist-detected-linux-distro-pkg-manager`)
 - `PDLDPM0` — capture distro/package-manager metadata into the install-state schema
 - `PDLDPM1` — guarantee Linux install-state persistence on successful installs without host-state events
+- `PDLDPM3` — extend dev-installer parity for the shared install-state contract
 - `PDLDPM2` — extend Linux installer smoke coverage for the persisted metadata contract
 
 ## Required spec documents (authoritative)
@@ -47,12 +48,12 @@ Spec templates:
     - follow-ups required to remove ADR ambiguity before quality gate
   - Must define (deterministic items):
     - the complete required-doc set listed in this file
-    - the canonical slice IDs `PDLDPM0`, `PDLDPM1`, `PDLDPM2`
+    - the canonical slice IDs `PDLDPM0`, `PDLDPM1`, `PDLDPM3`, `PDLDPM2`
     - every ADR-0032 surface category, including surfaces owned by external dependency docs
 
 - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/impact_map.md`
   - Owns (authoritative):
-    - touch set, cascading implications, and cross-pack conflicts for `PDLDPM0`, `PDLDPM1`, and `PDLDPM2`
+    - touch set, cascading implications, and cross-pack conflicts for `PDLDPM0`, `PDLDPM1`, `PDLDPM3`, and `PDLDPM2`
   - Must define (deterministic items):
     - explicit edit allowlists by path for installer scripts, uninstall scripts, tests, and operator docs
     - exact external-doc update targets required to keep non-authoritative docs aligned with the selected contract
@@ -60,7 +61,7 @@ Spec templates:
 
 - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/plan.md`
   - Owns (authoritative):
-    - execution runbook and slice sequencing for `PDLDPM0`, `PDLDPM1`, and `PDLDPM2`
+    - execution runbook and slice sequencing for `PDLDPM0`, `PDLDPM1`, `PDLDPM3`, and `PDLDPM2`
   - Must define (deterministic items):
     - one explicit slice order
     - exact validation commands for Linux installer smoke coverage
@@ -71,8 +72,8 @@ Spec templates:
   - Owns (authoritative):
     - triad task graph, automation metadata, and slice-to-task traceability
   - Must define (deterministic items):
-    - triad tasks for `PDLDPM0`, `PDLDPM1`, and `PDLDPM2`
-    - references to `slices/PDLDPM0/PDLDPM0-spec.md`, `slices/PDLDPM1/PDLDPM1-spec.md`, and `slices/PDLDPM2/PDLDPM2-spec.md`
+    - triad tasks for `PDLDPM0`, `PDLDPM1`, `PDLDPM3`, and `PDLDPM2`
+    - references to `slices/PDLDPM0/PDLDPM0-spec.md`, `slices/PDLDPM1/PDLDPM1-spec.md`, `slices/PDLDPM3/PDLDPM3-spec.md`, and `slices/PDLDPM2/PDLDPM2-spec.md`
     - orchestration branch `feat/persist-detected-linux-distro-pkg-manager`
 
 ### Feature contract, schema, compatibility, and platform docs
@@ -157,6 +158,14 @@ Spec templates:
     - failure-posture acceptance criteria when metadata persistence fails
     - acceptance criteria for the selected `--no-world` and dry-run behaviors
 
+- `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM3/PDLDPM3-spec.md`
+  - Owns (authoritative):
+    - acceptance criteria for dev-installer parity with the shared install-state contract
+  - Must define (deterministic items):
+    - exact acceptance criteria for persisting the selected install-state contract through `scripts/substrate/dev-install-substrate.sh`
+    - exact acceptance criteria for keeping one `install_state.json` meaning across the production and dev installers
+    - exact validation target path that owns dev-installer parity assertions
+
 - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM2/PDLDPM2-spec.md`
   - Owns (authoritative):
     - acceptance criteria for automated validation of ADR-0032
@@ -197,6 +206,7 @@ Every ADR-0032 surface MUST appear exactly once in this matrix.
 | Required A/B decisions for ADR-0032 ambiguity removal | `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/decision_register.md` | DR-0001, DR-0002, DR-0003 options and selections |
 | Slice acceptance: schema persistence | `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM0/PDLDPM0-spec.md` | observable outcomes for additive platform fields |
 | Slice acceptance: reliable file creation/update | `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM1/PDLDPM1-spec.md` | observable outcomes for no-event installs and merge behavior |
+| Slice acceptance: dev-installer parity | `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM3/PDLDPM3-spec.md` | observable outcomes for keeping one install-state contract across both installers |
 | Slice acceptance: smoke validation | `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM2/PDLDPM2-spec.md` | observable outcomes for Linux smoke coverage |
 | Execution sequencing and validation commands | `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/plan.md` | slice order and required validation commands |
 | Task graph and automation metadata | `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/tasks.json` | triad tasks, deps, references, and orchestration branch |
@@ -262,6 +272,13 @@ MUST define:
 - the exact acceptance criteria for file creation when no group/linger events occurred
 - the exact acceptance criteria for idempotent updates and merge preservation
 - the exact acceptance criteria for the selected `--no-world` and dry-run rules
+
+### `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM3/PDLDPM3-spec.md`
+
+MUST define:
+- the exact acceptance criteria for dev-installer parity with the selected install-state contract
+- the exact acceptance criteria for keeping one `install_state.json` meaning across both installer entrypoints
+- the exact validation target path that owns dev-installer parity assertions
 
 ### `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM2/PDLDPM2-spec.md`
 

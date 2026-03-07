@@ -34,13 +34,13 @@ Standard:
     {
       "id": "CP1",
       "task_id": "CP1-ci-checkpoint",
-      "slices": ["PDLDPM0", "PDLDPM1", "PDLDPM2"],
+      "slices": ["PDLDPM0", "PDLDPM1", "PDLDPM3", "PDLDPM2"],
       "gates": {
         "compile_parity": true,
         "feature_smoke": true,
         "ci_testing": "quick"
       },
-      "rationale": "Single checkpoint for the whole feature (3 slices < defaults.min=4). Boundary after PDLDPM2 is the first contract-complete seam: the additive host_state.platform persistence contract, Linux successful-install write guarantee, and Linux smoke evidence all exist together, so compile parity plus Linux smoke can validate the feature without splitting one coherent installer contract across multiple checkpoints."
+      "rationale": "Single checkpoint for the whole feature (4 slices fits the default checkpoint window). Boundary after PDLDPM2 is the first contract-complete seam: the additive host_state.platform persistence contract, Linux successful-install write guarantee, dev-installer parity for the shared install-state contract, and Linux smoke evidence all exist together, so compile parity plus Linux smoke can validate the feature without splitting one coherent installer contract across multiple checkpoints."
     }
   ]
 }
@@ -53,17 +53,17 @@ For each checkpoint, explain:
 - What surfaces are stabilized by this checkpoint (from `spec_manifest.md`).
 - What risk is reduced by running cross-platform CI here (from `impact_map.md`).
 
-### CP1 (`PDLDPM0`-`PDLDPM2`) — install-state persistence contract completion seam
+### CP1 (`PDLDPM0`, `PDLDPM1`, `PDLDPM3`, `PDLDPM2`) — install-state persistence contract completion seam
 
 - Code-grounded boundary:
-  - Contract completion seam: `PDLDPM0` establishes the additive `host_state.platform.*` persistence surface, `PDLDPM1` completes the Linux successful-install file-presence and compatibility-preserving merge rules, and `PDLDPM2` adds the Linux smoke assertions that make the contract observable end-to-end.
+  - Contract completion seam: `PDLDPM0` establishes the additive `host_state.platform.*` persistence surface, `PDLDPM1` completes the Linux successful-install file-presence and compatibility-preserving merge rules, `PDLDPM3` brings the dev installer onto the same install-state contract, and `PDLDPM2` adds the Linux smoke assertions that make the contract observable end-to-end.
   - UX seam: after `PDLDPM2`, the operator-visible claim that successful Linux installs leave a stable `install_state.json` artifact becomes testable rather than speculative.
 - Stabilized surfaces (from `spec_manifest.md` ownership):
   - `contract.md` for the resolved `install_state.json` path, Linux-only write guarantee, no-fail posture, dry-run and `--no-world` rules, and downstream read fallback.
   - `install-state-schema-spec.md` for additive `host_state.platform.os_release.*` and `host_state.platform.pkg_manager.*` nesting and omission semantics.
   - `compatibility-spec.md` for `schema_version=1` preservation and `host_state.group` / `host_state.linger` merge rules.
   - `platform-parity-spec.md` for Linux behavior delta and explicit macOS/Windows no-delta statements.
-  - `slices/PDLDPM0/PDLDPM0-spec.md`, `slices/PDLDPM1/PDLDPM1-spec.md`, and `slices/PDLDPM2/PDLDPM2-spec.md` for schema capture, reliable write behavior, and smoke validation coverage.
+  - `slices/PDLDPM0/PDLDPM0-spec.md`, `slices/PDLDPM1/PDLDPM1-spec.md`, `slices/PDLDPM3/PDLDPM3-spec.md`, and `slices/PDLDPM2/PDLDPM2-spec.md` for schema capture, reliable write behavior, dev-installer parity, and smoke validation coverage.
 - Risk reduced (from `impact_map.md`):
   - Detects cross-platform regressions from shared installer-script changes in `scripts/substrate/install-substrate.sh` and `scripts/substrate/dev-install-substrate.sh` without paying full multi-OS cost after every slice.
   - Verifies that Linux behavior changed where intended while macOS and Windows remain parity-only no-delta platforms.
@@ -73,7 +73,7 @@ For each checkpoint, explain:
 ## Follow-ups
 
 - Mechanical validity (when slice tasks exist in `tasks.json`):
-  - Ensure the real slice ids in `tasks.json` match `PDLDPM0`, `PDLDPM1`, and `PDLDPM2`, or update this plan and the accepted slice inventory together.
+  - Ensure the real slice ids in `tasks.json` match `PDLDPM0`, `PDLDPM1`, `PDLDPM3`, and `PDLDPM2`, or update this plan and the accepted slice inventory together.
   - Replace any remaining draft or placeholder slice ids in this plan with the accepted final ids.
   - Add `CP1-ci-checkpoint` to `tasks.json` and wire it after `PDLDPM2-integ-core`, with the next slice group depending on it if new slices are later introduced.
   - Set `tasks.json` `meta.checkpoint_boundaries` to `["PDLDPM2"]`.

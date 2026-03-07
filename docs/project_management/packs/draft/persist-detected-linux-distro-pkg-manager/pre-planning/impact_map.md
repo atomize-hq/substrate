@@ -32,6 +32,7 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/platform-parity-spec.md`
 - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM0/PDLDPM0-spec.md`
 - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM1/PDLDPM1-spec.md`
+- `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM3/PDLDPM3-spec.md`
 - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM2/PDLDPM2-spec.md`
 
 ### Edit
@@ -284,5 +285,5 @@ List overlaps/conflicts with other in-flight work and resolve them deterministic
   - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/compatibility-spec.md` — define merge/reset behavior for corrupt or wrong-schema files and restate the `schema_version=1` invariant.
   - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/platform-parity-spec.md` — define Linux as the only behavior delta and capture explicit no-delta evidence expectations for macOS and Windows.
   - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/plan.md` — include exact validation commands for `tests/installers/install_state_smoke.sh` and `tests/installers/install_smoke.sh`, plus the sequencing boundary against `best-effort-distro-package-manager`.
-  - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/tasks.json` — populate `PDLDPM0` through `PDLDPM2` and reconcile `meta.behavior_platforms_required` with Linux-only behavior plus macOS/Windows no-delta evidence.
+  - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/tasks.json` — populate `PDLDPM0`, `PDLDPM1`, `PDLDPM3`, and `PDLDPM2`, and reconcile `meta.behavior_platforms_required` with Linux-only behavior plus macOS/Windows no-delta evidence.
   - `docs/project_management/adrs/draft/ADR-0032-stashing-ferret.md` — reconcile the feature-directory and Related Docs drift from `stashing-ferret` to `persist-detected-linux-distro-pkg-manager` before the quality gate.
