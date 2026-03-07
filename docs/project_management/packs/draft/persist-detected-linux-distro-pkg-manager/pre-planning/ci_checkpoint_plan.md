@@ -78,33 +78,24 @@ Standard:
   - `feature_smoke = true` because the impact map selects `tests/installers/install_state_smoke.sh` as a direct touch surface and `PDLDPM2` exists specifically to lock smoke coverage and evidence.
   - `ci_testing = "quick"` because the canonical impact map excludes `crates/`, `src/`, `crates/world*`, `crates/shim`, `crates/shell`, and `crates/world-agent` from the touch set. If full planning expands the touch set into those areas, update this plan first and then raise the checkpoint gate to `full`.
 
-## Follow-ups
+## Tasks.json wiring
 
-This plan is not mechanically validated yet because `tasks.json` does not currently define slice integration tasks (`*-integ`) or checkpoint ops tasks.
+The execution-ready triad graph for this plan uses the schema-v4 boundary-only platform-fix model.
 
-Before running:
-`python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager"`
+Current wiring:
+- `tasks.json` keeps `meta.checkpoint_boundaries = ["PDLDPM2"]`.
+- `tasks.json` keeps `meta.behavior_platforms_required = ["linux"]`.
+- `tasks.json` keeps `meta.ci_parity_platforms_required = ["linux", "macos", "windows"]`.
+- `CP1-ci-checkpoint` is the checkpoint ops task and depends on `PDLDPM2-integ-core`.
+- `PDLDPM2-integ-linux`, `PDLDPM2-integ-macos`, and `PDLDPM2-integ-windows` each depend on `PDLDPM2-integ-core` and `CP1-ci-checkpoint`.
+- `PDLDPM2-integ` depends on `PDLDPM2-integ-core` plus the three platform-fix tasks.
+- `PDLDPM0` and `PDLDPM1` remain non-boundary slices with `code`, `test`, and final `integ` tasks only.
 
-...complete these wiring steps:
+Mechanical validation command:
 
-1. Confirm slice ids and ordering
-   - Ensure the final slice ids in `tasks.json` match the accepted slice ids `PDLDPM0`, `PDLDPM1`, and `PDLDPM2` unless full planning explicitly splits or merges slices.
-   - Ensure this plan's JSON `slices` list matches the deterministic slice order from `tasks.json`.
+```bash
+python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager"
+```
 
-2. Add `tasks.json` checkpoint boundary metadata
-   - Set `meta.checkpoint_boundaries = ["PDLDPM2"]` to match the checkpoint group boundary.
-   - Keep `meta.behavior_platforms_required = ["linux"]`.
-   - Keep `meta.ci_parity_platforms_required = ["linux", "macos", "windows"]`.
-
-3. Add the checkpoint task and wiring
-   - Add an ops task `CP1-ci-checkpoint` with:
-     - `type: "ops"`
-     - `depends_on: ["PDLDPM2-integ-core"]`
-     - `kickoff_prompt: docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/kickoff_prompts/CP1-ci-checkpoint.md`
-
-4. Wire future checkpoint gating
-   - If later planning adds another checkpoint, make the first slice in the next checkpoint group depend on the prior checkpoint task.
-
-5. Re-run mechanical validation
-   - Run:
-     - `python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager"`
+Future checkpoint rule:
+- If later planning adds another checkpoint, update this plan first and then make the first slice in the next checkpoint group depend on the prior checkpoint task.
