@@ -48,7 +48,7 @@ Owner standard:
   - `docs/INSTALLATION.md` `### Windows Host (PowerShell)`
 
 ## Acceptance criteria (testable)
-- Linux: `platform-parity-spec.md`, `plan.md`, and `slices/PDLDPM2/PDLDPM2-spec.md` all identify Linux as the only behavior-smoke platform and point to the exact Linux smoke commands listed above.
+- Linux: `platform-parity-spec.md`, `plan.md`, and `slices/PDLDPM2/PDLDPM2-spec.md` all identify Linux as the only behavior-smoke platform, with production metadata validation stabilized before dev-installer parity, and they point to the exact Linux smoke commands listed above.
 - macOS: the pack states that ADR-0032 adds no new `host_state.platform.*` write contract on macOS, and validation evidence for macOS is limited to explicit no-delta documentation plus compile parity.
 - Windows: the pack states that ADR-0032 adds no new `host_state.platform.*` write contract on Windows, and validation evidence for Windows is limited to explicit no-delta documentation plus compile parity.
 - Cross-platform: `make ci-compile-parity CI_WORKFLOW_REF="feat/persist-detected-linux-distro-pkg-manager"` remains the required cross-platform gate after the Linux installer-smoke changes land.

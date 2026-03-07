@@ -12,7 +12,7 @@
 
 ## Guardrails (non-negotiable)
 - Specs under this feature directory are the single source of truth for ADR-0032 planning.
-- Slice order is fixed: `PDLDPM0` before `PDLDPM1`, `PDLDPM1` before `PDLDPM3`, and `PDLDPM3` before `PDLDPM2`.
+- Slice order is fixed: `PDLDPM0` before `PDLDPM1`, `PDLDPM1` before `PDLDPM2`, and `PDLDPM2` before `PDLDPM3`.
 - Linux is the only behavior-delta platform. macOS and Windows remain explicit no-delta platforms for this feature.
 - The install-state contract remains one file at `<resolved SUBSTRATE_HOME>/install_state.json` with `schema_version=1`; this feature does not create a second metadata file.
 - Validation ownership is split intentionally:
@@ -22,7 +22,7 @@
 ## Slices (sequencing)
 
 Sequencing is fixed for this pack:
-- `PDLDPM0` -> `PDLDPM1` -> `PDLDPM3` -> `PDLDPM2`
+- `PDLDPM0` -> `PDLDPM1` -> `PDLDPM2` -> `PDLDPM3`
 
 ### PDLDPM0 — Persist additive platform metadata
 
@@ -49,22 +49,10 @@ bash tests/installers/install_state_smoke.sh --scenario metadata
 bash tests/installers/install_smoke.sh --scenario prod-no-world
 ```
 
-### PDLDPM3 — Keep dev-installer parity
-
-Primary deliverables:
-- Keep `scripts/substrate/dev-install-substrate.sh` on the same Linux install-state contract as the production installer.
-- Keep one `install_state.json` meaning across both Unix installer entry points.
-
-Required validation commands:
-
-```bash
-bash tests/installers/install_smoke.sh --scenario dev
-```
-
 ### PDLDPM2 — Validate the persisted metadata contract
 
 Primary deliverables:
-- Extend Linux smoke coverage so the persisted platform payload, `schema_version=1` preservation, host-state preservation, unreadable `/etc/os-release` omission rule, production `--no-world` behavior, and dev-installer parity are observable in harnesses.
+- Extend Linux smoke coverage so the persisted platform payload, `schema_version=1` preservation, host-state preservation, unreadable `/etc/os-release` omission rule, and production `--no-world` behavior are observable in harnesses before the dev-installer parity slice lands.
 - Record the explicit macOS/Windows no-delta evidence required for closeout.
 
 Required validation commands:
@@ -74,6 +62,17 @@ bash tests/installers/install_state_smoke.sh --scenario metadata
 bash tests/installers/install_state_smoke.sh --scenario cleanup
 bash tests/installers/install_state_smoke.sh --scenario missing
 bash tests/installers/install_smoke.sh --scenario prod-no-world
+```
+
+### PDLDPM3 — Keep dev-installer parity
+
+Primary deliverables:
+- Keep `scripts/substrate/dev-install-substrate.sh` on the same Linux install-state contract as the production installer after the production validation slice is stable.
+- Keep one `install_state.json` meaning across both Unix installer entry points.
+
+Required validation commands:
+
+```bash
 bash tests/installers/install_smoke.sh --scenario dev
 ```
 

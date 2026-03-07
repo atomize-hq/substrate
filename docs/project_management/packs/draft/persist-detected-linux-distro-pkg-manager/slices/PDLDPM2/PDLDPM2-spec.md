@@ -1,8 +1,8 @@
 # PDLDPM2-spec — Validate the persisted Linux install-state contract
 
 ## Behavior delta (single)
-- Existing: installer smoke coverage verifies the baseline install/uninstall flows, but it does not yet assert the ADR-0032 platform payload, the Linux `--no-world` persistence rule, dev-installer parity, or omission semantics when `/etc/os-release` is unreadable.
-- New: extend the Linux smoke harnesses so `tests/installers/install_state_smoke.sh` and `tests/installers/install_smoke.sh` prove the persisted `host_state.platform.*` contract, `schema_version=1` preservation, host-state preservation, unreadable `/etc/os-release` omission behavior, production `--no-world` persistence, and dev-installer parity.
+- Existing: installer smoke coverage verifies the baseline install/uninstall flows, but it does not yet assert the ADR-0032 platform payload, the Linux `--no-world` persistence rule, or omission semantics when `/etc/os-release` is unreadable.
+- New: extend the Linux smoke harnesses so `tests/installers/install_state_smoke.sh` and the production `prod-no-world` scenario in `tests/installers/install_smoke.sh` prove the persisted `host_state.platform.*` contract, `schema_version=1` preservation, host-state preservation, unreadable `/etc/os-release` omission behavior, and production `--no-world` persistence before the later dev-installer parity slice.
 - Why: ADR-0032 needs executable evidence that the persisted install-state contract is correct, backward compatible, and Linux-only.
 
 ## Scope
@@ -13,8 +13,7 @@
   - reset behavior for corrupt or wrong-schema files,
   - omission of unavailable `host_state.platform.os_release.*` keys.
 - Extend `tests/installers/install_smoke.sh` to own:
-  - the production-installer `--no-world` persistence assertion,
-  - the dev-installer parity assertion for the shared `install_state.json` contract.
+  - the production-installer `--no-world` persistence assertion.
 - Keep macOS and Windows validation limited to explicit no-delta documentation plus compile parity.
 
 ## Inputs (authoritative)
@@ -22,7 +21,7 @@
 - Schema contract: `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/install-state-schema-spec.md`
 - Compatibility rules: `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/compatibility-spec.md`
 - Platform boundary: `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/platform-parity-spec.md`
-- Upstream implementation slices: `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM0/PDLDPM0-spec.md`, `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM1/PDLDPM1-spec.md`, `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM3/PDLDPM3-spec.md`
+- Upstream implementation slices: `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM0/PDLDPM0-spec.md`, `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM1/PDLDPM1-spec.md`
 
 ## Behavior (authoritative)
 
@@ -38,9 +37,9 @@
 - Its `missing` scenario MUST continue to prove that missing or corrupt install-state metadata falls back to guidance instead of causing a hard failure.
 
 ### `tests/installers/install_smoke.sh` ownership
-- `tests/installers/install_smoke.sh` is the required validation target path for Linux installer-entrypoint parity in this feature.
+- `tests/installers/install_smoke.sh` is the required validation target path for the Linux production-installer `--no-world` assertion in this slice.
 - Its `prod-no-world` scenario MUST assert that a successful Linux production install with `--no-world` still creates or updates `<resolved SUBSTRATE_HOME>/install_state.json` and writes the same `schema_version=1` platform payload contract.
-- Its `dev` scenario MUST assert that `scripts/substrate/dev-install-substrate.sh` writes the same `schema_version=1` install-state meaning as the production installer, including the same `host_state.platform.*` subtree, omission rules, merge rules, and warning-only failure posture.
+- The dev-installer parity assertion for the shared `install_state.json` contract is owned by `PDLDPM3`, not by this slice.
 
 ### Non-Linux evidence boundary
 - macOS and Windows MUST NOT gain new host-state platform smoke tests for this feature.
@@ -55,10 +54,10 @@
 - AC-PDLDPM2-04: The same `metadata` scenario asserts that readable `schema_version=1` merges preserve `created_at`, preserve existing readable `host_state.group` and `host_state.linger`, refresh `updated_at`, and replace only `host_state.platform`; wrong-schema or corrupt files are rewritten as fresh `schema_version=1` documents with a warning-only posture.
 - AC-PDLDPM2-05: `bash tests/installers/install_state_smoke.sh --scenario cleanup` and `bash tests/installers/install_state_smoke.sh --scenario missing` continue to prove backward compatibility: uninstall cleanup ignores the additive `host_state.platform` subtree and falls back to guidance when metadata is missing or unreadable.
 - AC-PDLDPM2-06: `bash tests/installers/install_smoke.sh --scenario prod-no-world` asserts that a successful Linux production install with `--no-world` still creates or updates `<resolved SUBSTRATE_HOME>/install_state.json` with the persisted platform payload selected by `contract.md` and `install-state-schema-spec.md`.
-- AC-PDLDPM2-07: `bash tests/installers/install_smoke.sh --scenario dev` asserts that `scripts/substrate/dev-install-substrate.sh` preserves the same `schema_version=1` install-state meaning as the production installer, including the same `host_state.platform.*` subtree and merge behavior.
+- AC-PDLDPM2-07: `plan.md` fixes the slice order as `PDLDPM0 -> PDLDPM1 -> PDLDPM2 -> PDLDPM3`, so production metadata validation completes before the later dev-installer parity slice.
 - AC-PDLDPM2-08: `make ci-compile-parity CI_WORKFLOW_REF="feat/persist-detected-linux-distro-pkg-manager"` remains the required cross-platform gate, and the pack records macOS plus Windows as explicit no-delta platforms instead of adding new host-state platform smoke expectations there.
 
 ## Out of scope
 - Changing the installer persistence contract, schema, or failure posture defined by `contract.md`, `install-state-schema-spec.md`, and `compatibility-spec.md`.
 - Adding macOS or Windows host-state platform writes.
-- Moving validation ownership away from `tests/installers/install_state_smoke.sh` and `tests/installers/install_smoke.sh`.
+- Moving validation ownership away from `tests/installers/install_state_smoke.sh` and the production `prod-no-world` assertion in `tests/installers/install_smoke.sh`.
