@@ -65,7 +65,7 @@ For each externally visible change, list:
     - Operators get one stable post-install metadata file after successful Linux installs instead of an event-only file.
     - Hosted install and dev install use one visible contract for install-state persistence.
   - Cascading impact:
-    - `scripts/substrate/install-substrate.sh` and `scripts/substrate/dev-install-substrate.sh` need one write-trigger rule across default install, `--no-world`, and dry-run.
+    - `scripts/substrate/install-substrate.sh` must apply one write/no-write matrix across default install, `--no-world`, and hosted `--dry-run`, while `scripts/substrate/dev-install-substrate.sh` must apply the same successful-Linux write rule across default install and `--no-world`.
     - `tests/installers/install_state_smoke.sh` needs explicit no-event assertions in addition to the current group/linger assertions.
     - `docs/INSTALLATION.md` needs one statement for install-state creation rules across both installers.
   - Contradiction risks:
@@ -82,7 +82,7 @@ For each externally visible change, list:
     - Future consumers can read persisted distro and selected-manager metadata without losing existing group/linger cleanup data.
     - Path semantics stay anchored to the effective install prefix; operator docs can refer to the same location as `$SUBSTRATE_HOME/install_state.json`.
   - Cascading impact:
-    - `install-state-schema-spec.md` must lock JSON nesting, types, absence semantics, and merge rules with existing `host_state.group` and `host_state.linger`.
+    - `install-state-schema-spec.md` must lock JSON nesting, types, missing-`/etc/os-release` `<unknown>` sentinel behavior, absence semantics, and merge rules with existing `host_state.group` and `host_state.linger`.
     - `docs/INSTALLATION.md` needs field-name reconciliation from `Schema version = 1` to `schema_version = 1`.
     - `tests/installers/install_state_smoke.sh` needs additive-compatibility assertions rather than a schema bump assertion.
   - Contradiction risks:
@@ -99,7 +99,7 @@ For each externally visible change, list:
     - macOS and Windows do not gain new `host_state.platform.*` writes.
   - Cascading impact:
     - `pkg_manager.selected` and `pkg_manager.source` must come from the detection contract, not local re-derivation.
-    - `tests/installers/install_state_smoke.sh` needs a missing-`/etc/os-release` branch and a no-event branch.
+    - `tests/installers/install_state_smoke.sh` needs a missing-`/etc/os-release` branch that asserts persisted `<unknown>` `os_release` values alongside package-manager metadata, plus a no-event branch.
   - Contradiction risks:
     - Local duplication of manager or `source` vocabulary breaks parity with installer output and future persisted metadata consumers.
   - Conflict resolution:

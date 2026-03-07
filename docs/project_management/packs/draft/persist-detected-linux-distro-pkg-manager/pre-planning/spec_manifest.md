@@ -162,10 +162,10 @@ No separate protocol, policy, telemetry, env-vars, filesystem-semantics, platfor
       - `host_state.platform.pkg_manager.selected`
       - `host_state.platform.pkg_manager.source`
     - the exact storage rules for those fields:
-      - `os_release.id` stores the detected `ID` string when available
-      - `os_release.id_like` stores the detected `ID_LIKE` raw string when available
-      - `pkg_manager.selected` stores the selected manager string emitted by the detection contract
-      - `pkg_manager.source` stores the source string emitted by the detection contract
+      - `os_release.id` stores the detected `ID` string emitted by distro detection; when `/etc/os-release` data is missing or unreadable and detection emits `<unknown>`, the literal sentinel is persisted
+      - `os_release.id_like` stores the detected `ID_LIKE` raw string emitted by distro detection; when `/etc/os-release` data is missing or unreadable and detection emits `<unknown>`, the literal sentinel is persisted
+      - `pkg_manager.selected` stores the selected manager string emitted by the detection contract verbatim
+      - `pkg_manager.source` stores the source string emitted by the detection contract verbatim
     - the additive compatibility policy:
       - existing consumers that ignore unknown keys remain compatible
       - this ADR does not rename or remove existing fields
@@ -273,8 +273,8 @@ Every surface that ADR-0032 touches appears here.
 | Protected-path invariant | `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/contract.md` | write boundary stays under the effective Substrate home |
 | `install_state.json` top-level version field | `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/install-state-schema-spec.md` | field name, fixed value, and no-version-bump rule |
 | Existing `host_state.group` and `host_state.linger` preservation | `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/install-state-schema-spec.md` | merge and preservation rules |
-| `host_state.platform.os_release.id` | `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/install-state-schema-spec.md` | path, type, source, and absence semantics |
-| `host_state.platform.os_release.id_like` | `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/install-state-schema-spec.md` | path, type, raw-string rule, and absence semantics |
+| `host_state.platform.os_release.id` | `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/install-state-schema-spec.md` | path, type, source, `<unknown>` sentinel rule, and absence semantics |
+| `host_state.platform.os_release.id_like` | `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/install-state-schema-spec.md` | path, type, raw-string-or-`<unknown>` rule, and absence semantics |
 | `host_state.platform.pkg_manager.selected` persisted field | `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/install-state-schema-spec.md` | path, type, and copy-through storage rule |
 | `host_state.platform.pkg_manager.source` persisted field | `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/install-state-schema-spec.md` | path, type, and copy-through storage rule |
 | Additive compatibility and unknown-key tolerance | `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/install-state-schema-spec.md` | additive-only rule, old-consumer compatibility, no field removal |
