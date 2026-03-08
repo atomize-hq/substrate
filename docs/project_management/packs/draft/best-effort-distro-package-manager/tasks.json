@@ -1,0 +1,26 @@
+{
+  "meta": {
+    "schema_version": 4,
+    "cross_platform": true,
+    "ci_parity_platforms_required": [
+      "linux",
+      "macos",
+      "windows"
+    ],
+    "behavior_platforms_required": [
+      "linux",
+      "macos",
+      "windows"
+    ],
+    "automation": {
+      "enabled": true,
+      "orchestration_branch": "feat/best-effort-distro-package-manager"
+    },
+    "slice_spec_version": 2,
+    "feature": "best-effort-distro-package-manager",
+    "adr_paths": [
+      "docs/project_management/adrs/draft/ADR-0031-detecting-badger.md"
+    ]
+  },
+  "tasks": []
+}
