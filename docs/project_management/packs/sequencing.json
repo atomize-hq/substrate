@@ -333,7 +333,7 @@
       "branch": "feat/world-sync",
       "directory": "docs/project_management/packs/active/world-sync",
       "plan": "docs/project_management/packs/active/world-sync/plan.md",
-      "status": "not_started",
+      "status": "completed",
       "sequence": [
         {
           "id": "WS0",
@@ -660,9 +660,7 @@
           "spec": "docs/project_management/packs/active/warn-config-global-show-workspace-overrides/slices/C0/C0-spec.md"
         }
       ],
-      "notes": [
-        "Backlog: docs/BACKLOG.md (P1)"
-      ]
+      "notes": ["Backlog: docs/BACKLOG.md (P1)"]
     },
     {
       "order": 40,
