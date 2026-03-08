@@ -280,7 +280,12 @@ Slice specs MUST use the canonical layout:
   - Owns (authoritative):
     - the `NASP4` slice scope and acceptance criteria for doc reconciliation, platform parity, and validation evidence
   - Must define:
-    - the exact doc-update targets that must be reconciled to the feature contract
+    - the exact doc-update targets that must be reconciled to the feature contract:
+      - `docs/project_management/adrs/draft/ADR-0033-routing-weasel.md`
+      - `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`
+      - `docs/project_management/packs/implemented/world-deps-packages-bundles-contract/contract.md`
+      - `docs/reference/world/deps/README.md`
+      - `docs/internals/world/deps.md`
     - the exact platform parity posture to validate across Linux, macOS, and Windows
     - the exact manual and smoke evidence required before slice closeout
     - the exact acceptance criteria proving:
@@ -324,7 +329,7 @@ Every surface touched by ADR-0033 appears here.
 | Slice acceptance for provisioning wiring | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/NASP2/NASP2-spec.md` | scope and acceptance criteria IDs |
 | Slice acceptance for runtime fail-early | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/NASP3/NASP3-spec.md` | scope and acceptance criteria IDs |
 | Slice acceptance for validation evidence and doc reconciliation | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/NASP4/NASP4-spec.md` | scope and acceptance criteria IDs |
-| Decision A/B selections required by ADR-0033 | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/decision_register.md` | exactly two options and one selection for DR-0001, DR-0002, and DR-0003 |
+| Decision A/B selections required by ADR-0033 | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/decision_register.md` | exactly two options and one selection for DR-0001, DR-0002, DR-0003, and DR-0004 |
 | Existing world-agent execute/stream protocol baseline | `docs/WORLD.md` | existing endpoint/request semantics and request `profile` field existence |
 | Existing env-var surface `SUBSTRATE_WORLD_REQUEST_PROFILE` | `docs/CONFIGURATION.md` | name, meaning, default, and advanced/testing scope |
 | Existing world-deps inventory/enabled baseline (`install.method=apt`, `install.apt`, enabled-set resolution) | `docs/project_management/packs/implemented/world-deps-packages-bundles-contract/contract.md` | existing schema and enabled-resolution rules reused by ADR-0033 |
@@ -358,30 +363,6 @@ For every selected spec document, confirm it explicitly defines:
    - Issue: ADR-0033 “Related Docs” references a flat `spec_manifest.md` path and an assumed `specs/world_deps_pacman_provisioning.md` file, but this pack’s canonical output is `pre-planning/spec_manifest.md` plus canonical slice specs under `slices/NASP*/`.
    - Required fix: after promotion, update ADR-0033 to the canonical pre-planning and slice-spec paths.
 
-3. Windows posture is still assumption-only
-   - Issue: ADR-0033 says Windows behavior is an assumption, but this pack requires an exact cross-platform contract.
-   - Required fix: in `platform-parity-spec.md`, `contract.md`, and `smoke/windows-smoke.ps1`, select one deterministic Windows posture and define the exact validation expectation.
-
-4. Mixed-manager behavior is not pinned yet
-   - Issue: ADR-0033 requires mismatch failure when system-package methods do not match the detected world OS package manager, but it does not define the exact rule for enabled sets that contain both APT and pacman items.
-   - Required fix: in `slices/NASP2/NASP2-spec.md` and `contract.md`, define one deterministic mixed-manager rule, including whether any partial provisioning is forbidden and how the error is surfaced.
-
-5. Runtime `current install <ITEM...>` scope remains ambiguous
-   - Issue: ADR-0033 talks about the effective enabled set, but the CLI also supports explicit-item install targeting.
-   - Required fix: in `contract.md` and `slices/NASP3/NASP3-spec.md`, choose one deterministic scope rule for runtime fail-early behavior and require tests to enforce it.
-
-6. Probe tie-break behavior is still implied
-   - Issue: ADR-0033 requires both `/etc/os-release` and `command -v pacman`, but it does not specify which signal wins when they disagree.
-   - Required fix: in `decision_register.md` DR-0002 and `slices/NASP0/NASP0-spec.md`, define one exact precedence/tie-break rule and the exact failure behavior for contradictory probe results.
-
-7. Pacman invocation details are not pinned yet
-   - Issue: ADR-0033 requires provisioning via `pacman` but does not define the exact command flags, update/install sequencing, lock-handling posture, or dry-run rendering.
-   - Required fix: in `decision_register.md` DR-0003 and `slices/NASP2/NASP2-spec.md`, define one exact pacman invocation contract and its idempotency guarantees.
-
-8. Built-in inventory strategy is still open
-   - Issue: the intake asks whether built-in inventory items gain pacman variants now or whether pacman support is user-defined inventory only in v1.
-   - Required fix: in `pre-planning/impact_map.md` and `slices/NASP1/NASP1-spec.md`, define the exact v1 touch boundary so planning does not imply built-in inventory expansion unless it is explicitly selected.
-
-9. Validation substrate for real Arch-family success is not enumerated by exact path
-   - Issue: ADR-0033 requires an Arch-family provisioning success case, but it does not identify the exact manual fixture, guest image, or automated harness path that will provide that evidence.
-   - Required fix: in `manual_testing_playbook.md`, `platform-parity-spec.md`, and `pre-planning/impact_map.md`, name the exact evidence path for the supported success case and the exact fallback if that evidence cannot be automated in smoke.
+3. Arch-family success evidence remains manual-only on macOS
+   - Issue: the repo-default Lima profile at `scripts/mac/lima/substrate.yaml` provisions an Ubuntu guest, so feature-local smoke cannot prove the pacman-success path on the default macOS backend fixture.
+   - Required fix: `platform-parity-spec.md`, `manual_testing_playbook.md`, and `slices/NASP4/NASP4-spec.md` must keep the required Arch-family success case explicit as a manual evidence path against an Arch-family `substrate` VM fixture, while `smoke/macos-smoke.sh` remains authoritative for the supported guest-backend mixed-manager and runtime fail-early checks that the repo-default Ubuntu guest can exercise deterministically.
