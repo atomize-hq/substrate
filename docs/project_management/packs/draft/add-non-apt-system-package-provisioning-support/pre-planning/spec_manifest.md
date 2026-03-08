@@ -31,12 +31,14 @@ ADR-0033 uses placeholder slice IDs (`C0`, `C1`, `C2`). This feature MUST use fe
 Canonical slice IDs selected for this feature:
 - Slice prefix: `NASP` (derived from `non-apt-system-package-provisioning`)
 - `NASP0` — world OS package-manager probe and provisioning support gate
-- `NASP1` — pacman schema extension and provisioning execution path
-- `NASP2` — runtime fail-early remediation, contract reconciliation, and validation evidence
+- `NASP1` — pacman schema extension and inventory-view updates
+- `NASP2` — provisioning routing, request-profile use, and pacman command execution
+- `NASP3` — runtime fail-early behavior, explicit-item scoping, and remediation wording
+- `NASP4` — contract reconciliation, platform parity, and manual/smoke validation evidence
 
 ## Required spec documents (authoritative)
 
-This ADR requires one user-facing contract doc, one schema spec, one platform-parity spec, one decision register, one impact map, one CI checkpoint plan, one execution plan, one manual validation playbook, three platform smoke scripts, and three canonical slice specs.
+This ADR requires one user-facing contract doc, one schema spec, one platform-parity spec, one decision register, one impact map, one CI checkpoint plan, one execution plan, one manual validation playbook, three platform smoke scripts, and five canonical slice specs.
 
 No separate protocol, env-vars, telemetry, filesystem-semantics, or compatibility doc is selected.
 - ADR-0033 reuses the existing world-agent execute/stream protocol and existing request `profile` field; it does not require a new endpoint or request/response field.
@@ -70,7 +72,7 @@ No separate protocol, env-vars, telemetry, filesystem-semantics, or compatibilit
 
 - `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/pre-planning/ci_checkpoint_plan.md`
   - Owns (authoritative):
-    - checkpoint grouping for `NASP0`, `NASP1`, and `NASP2`
+    - checkpoint grouping for the accepted slice order `NASP0`, `NASP1`, `NASP2`, `NASP3`, and `NASP4`
     - the CI gate cadence that `tasks.json` must mirror
   - Must define:
     - the accepted checkpoint boundary or boundaries for this pack
@@ -79,11 +81,11 @@ No separate protocol, env-vars, telemetry, filesystem-semantics, or compatibilit
 
 - `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/plan.md`
   - Owns (authoritative):
-    - the execution order for `NASP0`, `NASP1`, and `NASP2`
+    - the execution order for `NASP0`, `NASP1`, `NASP2`, `NASP3`, and `NASP4`
     - the required validation commands and evidence expectations
   - Must define:
     - the orchestration branch `feat/add-non-apt-system-package-provisioning-support`
-    - the exact slice order `NASP0` → `NASP1` → `NASP2`
+    - the exact slice order `NASP0` → `NASP1` → `NASP2` → `NASP3` → `NASP4`
     - the dependency boundary with ADR-0030
     - the exact validation commands for shell tests, manual validation, and smoke scripts
 
@@ -95,6 +97,8 @@ No separate protocol, env-vars, telemetry, filesystem-semantics, or compatibilit
       - `NASP0-code`, `NASP0-test`, `NASP0-integ`
       - `NASP1-code`, `NASP1-test`, `NASP1-integ`
       - `NASP2-code`, `NASP2-test`, `NASP2-integ`
+      - `NASP3-code`, `NASP3-test`, `NASP3-integ`
+      - `NASP4-code`, `NASP4-test`, `NASP4-integ`
     - references to the canonical slice spec paths under `slices/NASP*/`
     - acceptance-criteria traceability to `AC-NASP*` IDs
     - behavior-platform and CI-parity metadata consistent with `linux`, `macos`, and `windows`
@@ -238,29 +242,50 @@ Slice specs MUST use the canonical layout:
 
 - `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/NASP1/NASP1-spec.md`
   - Owns (authoritative):
-    - the `NASP1` slice scope and acceptance criteria for schema validation and pacman provisioning
+    - the `NASP1` slice scope and acceptance criteria for schema validation and inventory-view updates
   - Must define:
     - the exact implementation boundary for `install.method=pacman` inventory support
-    - the exact pacman requirement-derivation rule from the effective enabled set
-    - the exact pacman package de-duplication and stable ordering rules
-    - the exact pacman command-construction and idempotency contract selected by `decision_register.md`
-    - the exact `--dry-run` behavior for pacman requirement reporting
+    - the exact validation failures that make pacman-backed inventory items invalid
+    - the exact mutual exclusion and absence rules for `install.apt`, `install.pacman`, `install.script*`, and `install.manual_instructions`
+    - the exact valid and invalid YAML examples for pacman-backed items
+    - the exact list/show JSON and YAML view expectations for `install.method=pacman`
     - the exact acceptance criteria proving:
       - invalid pacman schema shapes fail with the contract-defined config/schema exit code
-      - supported provisioning constructs the intended in-world pacman command set
-      - mismatched manager requirements fail deterministically without partial mutation
+      - pacman-backed items render with the intended method and field names across inventory views
 
 - `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/NASP2/NASP2-spec.md`
   - Owns (authoritative):
-    - the `NASP2` slice scope and acceptance criteria for runtime fail-early behavior, doc reconciliation, and validation evidence
+    - the `NASP2` slice scope and acceptance criteria for provisioning routing and pacman command execution
+  - Must define:
+    - the exact pacman requirement-derivation rule from the effective enabled set
+    - the exact pacman package de-duplication and stable ordering rules
+    - the exact request-profile usage boundaries for provisioning
+    - the exact pacman command-construction and idempotency contract selected by `decision_register.md`
+    - the exact acceptance criteria proving:
+      - supported provisioning constructs the intended in-world pacman command set
+      - mismatched manager requirements fail deterministically without partial mutation
+
+- `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/NASP3/NASP3-spec.md`
+  - Owns (authoritative):
+    - the `NASP3` slice scope and acceptance criteria for runtime fail-early behavior and explicit-item scoping
   - Must define:
     - the exact runtime fail-early rule for `current sync` and `current install`
-    - the exact doc-update targets that must be reconciled to the feature contract
-    - the exact test and smoke evidence required before slice closeout
+    - the exact explicit-item scope rule for `current install <ITEM...>`
+    - the exact remediation wording invariants for runtime failure
     - the exact acceptance criteria proving:
       - runtime paths never invoke OS package managers for `apt` or `pacman`
       - remediation text is manager-aware and does not imply host mutation
+
+- `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/NASP4/NASP4-spec.md`
+  - Owns (authoritative):
+    - the `NASP4` slice scope and acceptance criteria for doc reconciliation, platform parity, and validation evidence
+  - Must define:
+    - the exact doc-update targets that must be reconciled to the feature contract
+    - the exact platform parity posture to validate across Linux, macOS, and Windows
+    - the exact manual and smoke evidence required before slice closeout
+    - the exact acceptance criteria proving:
       - upstream docs and contracts are updated to leave exactly one authoritative truth
+      - platform parity and validation evidence match the accepted manager-aware contract
 
 ## Coverage matrix (surface → authoritative doc)
 
@@ -281,22 +306,24 @@ Every surface touched by ADR-0033 appears here.
 | Pacman version-pinning posture | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/world-deps-pacman-schema-spec.md` | explicit v1 prohibition and validation rule |
 | Mutual exclusion between `install.apt`, `install.pacman`, `install.script*`, and `install.manual_instructions` | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/world-deps-pacman-schema-spec.md` | exact allowed combinations and invalid combinations |
 | Invalid pacman schema shapes | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/world-deps-pacman-schema-spec.md` | exact invalid cases and links to contract-defined exit behavior |
-| Pacman requirement derivation from the effective enabled set | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/NASP1/NASP1-spec.md` | filter rule, bundle expansion boundary, enabled-set inputs |
-| Pacman package de-duplication and stable ordering | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/NASP1/NASP1-spec.md` | one deterministic de-dup rule and one deterministic ordering rule |
-| Mixed-manager enabled-set posture | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/NASP1/NASP1-spec.md` | exact mismatch/failure rule when the enabled set contains incompatible system-package methods |
+| Pacman requirement derivation from the effective enabled set | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/NASP2/NASP2-spec.md` | filter rule, bundle expansion boundary, enabled-set inputs |
+| Pacman package de-duplication and stable ordering | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/NASP2/NASP2-spec.md` | one deterministic de-dup rule and one deterministic ordering rule |
+| Mixed-manager enabled-set posture | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/NASP2/NASP2-spec.md` | exact mismatch/failure rule when the enabled set contains incompatible system-package methods |
 | World OS probe inputs (`ID`, `ID_LIKE`, `command -v pacman`) | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/NASP0/NASP0-spec.md` | exact probe inputs, normalization, and absence semantics |
 | World OS probe tie-break and mismatch rules | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/NASP0/NASP0-spec.md` | one deterministic source-of-truth rule and one deterministic conflict rule |
 | In-world-only manager selection invariant | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/NASP0/NASP0-spec.md` | explicit prohibition on host-PATH-based selection |
-| Pacman invocation and idempotency contract | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/NASP1/NASP1-spec.md` | exact command shape, flags, repeat-run behavior, and non-partial-failure posture |
+| Pacman invocation and idempotency contract | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/NASP2/NASP2-spec.md` | exact command shape, flags, repeat-run behavior, and non-partial-failure posture |
 | Platform/backend support matrix | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/platform-parity-spec.md` | exact Linux/macOS/Windows guarantees and permitted divergences |
 | Linux validation contract | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/smoke/linux-smoke.sh` | exact assertions and exit-code expectations for Linux |
 | macOS validation contract | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/smoke/macos-smoke.sh` | exact assertions and exit-code expectations for macOS |
 | Windows validation contract | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/smoke/windows-smoke.ps1` | exact assertions and exit-code expectations for Windows |
 | Manual validation | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/manual_testing_playbook.md` | preconditions, commands, expected output, expected exit codes |
-| Shared `--provision-deps` contract reconciliation across affected docs | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/NASP2/NASP2-spec.md` | exact doc targets and acceptance criteria for single-source-of-truth reconciliation |
+| Shared `--provision-deps` contract reconciliation across affected docs | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/NASP4/NASP4-spec.md` | exact doc targets and acceptance criteria for single-source-of-truth reconciliation |
 | Slice acceptance for world OS probe and support gate | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/NASP0/NASP0-spec.md` | scope and acceptance criteria IDs |
-| Slice acceptance for schema validation and pacman provisioning | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/NASP1/NASP1-spec.md` | scope and acceptance criteria IDs |
-| Slice acceptance for runtime fail-early and validation evidence | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/NASP2/NASP2-spec.md` | scope and acceptance criteria IDs |
+| Slice acceptance for schema validation and inventory views | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/NASP1/NASP1-spec.md` | scope and acceptance criteria IDs |
+| Slice acceptance for provisioning wiring | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/NASP2/NASP2-spec.md` | scope and acceptance criteria IDs |
+| Slice acceptance for runtime fail-early | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/NASP3/NASP3-spec.md` | scope and acceptance criteria IDs |
+| Slice acceptance for validation evidence and doc reconciliation | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/NASP4/NASP4-spec.md` | scope and acceptance criteria IDs |
 | Decision A/B selections required by ADR-0033 | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/decision_register.md` | exactly two options and one selection for DR-0001, DR-0002, and DR-0003 |
 | Existing world-agent execute/stream protocol baseline | `docs/WORLD.md` | existing endpoint/request semantics and request `profile` field existence |
 | Existing env-var surface `SUBSTRATE_WORLD_REQUEST_PROFILE` | `docs/CONFIGURATION.md` | name, meaning, default, and advanced/testing scope |
@@ -325,7 +352,7 @@ For every selected spec document, confirm it explicitly defines:
 
 1. Shared contract ownership is still split across existing docs
    - Issue: ADR-0033 extends the same `substrate world enable --provision-deps` surface introduced by ADR-0030, while the implemented world-deps contract docs still describe runtime APT behavior that ADR-0030/0033 reject.
-   - Required fix: in `contract.md`, `slices/NASP2/NASP2-spec.md`, and `pre-planning/impact_map.md`, define the exact single-source-of-truth reconciliation plan so there is one authoritative contract for provisioning-time system packages and runtime fail-early behavior.
+   - Required fix: in `contract.md`, `slices/NASP4/NASP4-spec.md`, and `pre-planning/impact_map.md`, define the exact single-source-of-truth reconciliation plan so there is one authoritative contract for provisioning-time system packages and runtime fail-early behavior.
 
 2. ADR-0033 still points at stale spec paths
    - Issue: ADR-0033 “Related Docs” references a flat `spec_manifest.md` path and an assumed `specs/world_deps_pacman_provisioning.md` file, but this pack’s canonical output is `pre-planning/spec_manifest.md` plus canonical slice specs under `slices/NASP*/`.
@@ -337,11 +364,11 @@ For every selected spec document, confirm it explicitly defines:
 
 4. Mixed-manager behavior is not pinned yet
    - Issue: ADR-0033 requires mismatch failure when system-package methods do not match the detected world OS package manager, but it does not define the exact rule for enabled sets that contain both APT and pacman items.
-   - Required fix: in `slices/NASP1/NASP1-spec.md` and `contract.md`, define one deterministic mixed-manager rule, including whether any partial provisioning is forbidden and how the error is surfaced.
+   - Required fix: in `slices/NASP2/NASP2-spec.md` and `contract.md`, define one deterministic mixed-manager rule, including whether any partial provisioning is forbidden and how the error is surfaced.
 
 5. Runtime `current install <ITEM...>` scope remains ambiguous
    - Issue: ADR-0033 talks about the effective enabled set, but the CLI also supports explicit-item install targeting.
-   - Required fix: in `contract.md` and `slices/NASP2/NASP2-spec.md`, choose one deterministic scope rule for runtime fail-early behavior and require tests to enforce it.
+   - Required fix: in `contract.md` and `slices/NASP3/NASP3-spec.md`, choose one deterministic scope rule for runtime fail-early behavior and require tests to enforce it.
 
 6. Probe tie-break behavior is still implied
    - Issue: ADR-0033 requires both `/etc/os-release` and `command -v pacman`, but it does not specify which signal wins when they disagree.
@@ -349,7 +376,7 @@ For every selected spec document, confirm it explicitly defines:
 
 7. Pacman invocation details are not pinned yet
    - Issue: ADR-0033 requires provisioning via `pacman` but does not define the exact command flags, update/install sequencing, lock-handling posture, or dry-run rendering.
-   - Required fix: in `decision_register.md` DR-0003 and `slices/NASP1/NASP1-spec.md`, define one exact pacman invocation contract and its idempotency guarantees.
+   - Required fix: in `decision_register.md` DR-0003 and `slices/NASP2/NASP2-spec.md`, define one exact pacman invocation contract and its idempotency guarantees.
 
 8. Built-in inventory strategy is still open
    - Issue: the intake asks whether built-in inventory items gain pacman variants now or whether pacman support is user-defined inventory only in v1.
