@@ -84,6 +84,6 @@ Output requirements:
 Concrete micro-lint commands:
 ```bash
 # Hard-ban + ambiguity scans (required)
-make planning-micro-lint FEATURE_DIR="<FEATURE_DIR>" OWNED_PATHS="<OWNED_PATHS...>"
+make planning-micro-lint FEATURE_DIR="<FEATURE_DIR>" AGENT="impact_map" OWNED_PATHS="<OWNED_PATHS...>"
 ```
 ```

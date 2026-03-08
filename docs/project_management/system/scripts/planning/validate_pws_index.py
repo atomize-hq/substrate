@@ -20,6 +20,7 @@ FENCE_START_RE = re.compile(r"^```")
 JSON_FENCE_RE = re.compile(r"```json\s*\r?\n(?P<body>[\s\S]*?)\r?\n```")
 SLUG_RE = re.compile(r"^[a-z0-9_]+$")
 SLICE_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*\d+$")
+HEADING_WRAPPERS = ("***", "___", "**", "__", "`", "*", "_")
 
 
 @dataclass(frozen=True)
@@ -178,9 +179,9 @@ def _topo_check_acyclic(edges: dict[str, set[str]]) -> None:
         raise ValueError("depends_on graph contains a cycle")
 
 
-def _extract_heading_ids(markdown_text: str) -> set[str]:
+def _extract_heading_ids(markdown_text: str) -> dict[str, set[str]]:
     lines = markdown_text.splitlines()
-    ids: set[str] = set()
+    ids: dict[str, set[str]] = {}
     in_marker = False
     for line in _iter_non_fenced_lines(lines):
         if BEGIN_MARKER in line and not in_marker:
@@ -195,8 +196,35 @@ def _extract_heading_ids(markdown_text: str) -> set[str]:
         m = HEADING_RE.match(line)
         if not m:
             continue
-        ids.add(m.group("id"))
+        raw = m.group("id")
+        normalized = _normalize_heading_id(raw)
+        ids.setdefault(normalized, set()).add(raw)
     return ids
+
+
+def _normalize_heading_id(raw: str) -> str:
+    token = raw.strip()
+    for wrapper in HEADING_WRAPPERS:
+        if not token.startswith(wrapper) or not token.endswith(wrapper):
+            continue
+        if len(token) <= (2 * len(wrapper)):
+            continue
+        inner = token[len(wrapper) : -len(wrapper)].strip()
+        if inner:
+            return inner
+    return token
+
+
+def _describe_heading_id(raw_tokens: set[str], normalized: str) -> str:
+    raws = sorted(raw_tokens)
+    if len(raws) == 1:
+        raw = raws[0]
+        if raw == normalized:
+            return repr(raw)
+        return f"raw {raw!r} (normalized to {normalized!r})"
+
+    rendered = ", ".join(repr(raw) for raw in raws)
+    return f"raws [{rendered}] (normalized to {normalized!r})"
 
 
 def _slice_order_from_owns_entries(owns_entries: Iterable[str]) -> list[str]:
@@ -597,11 +625,19 @@ def _validate_doc(feature_dir: Path, triage_path: Path, advisory: bool) -> list[
 
     # Prose alignment: headings must match JSON pws ids.
     heading_ids = _extract_heading_ids(text)
-    missing_in_json = sorted(h for h in heading_ids if h not in id_set)
+    normalized_heading_ids = set(heading_ids.keys())
+    missing_in_json = sorted(h for h in normalized_heading_ids if h not in id_set)
     for hid in missing_in_json:
-        errors.append(ValidationError(message=f"{triage_path}: heading PWS id missing from PM_PWS_INDEX JSON: {hid!r}"))
+        errors.append(
+            ValidationError(
+                message=(
+                    f"{triage_path}: heading PWS id missing from PM_PWS_INDEX JSON: "
+                    f"{_describe_heading_id(heading_ids[hid], hid)}"
+                )
+            )
+        )
 
-    missing_in_headings = sorted(pid for pid in id_set if pid not in heading_ids)
+    missing_in_headings = sorted(pid for pid in id_set if pid not in normalized_heading_ids)
     for pid in missing_in_headings:
         errors.append(ValidationError(message=f"{triage_path}: PM_PWS_INDEX JSON id missing corresponding '### {pid} —' heading"))
 

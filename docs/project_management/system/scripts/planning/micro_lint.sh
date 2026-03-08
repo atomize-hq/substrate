@@ -4,22 +4,28 @@ set -euo pipefail
 usage() {
     cat <<'USAGE'
 Usage:
-  make planning-micro-lint FEATURE_DIR=docs/project_management/packs/<bucket>/<feature> OWNED_PATHS="path1 path2 ..."
+  make planning-micro-lint FEATURE_DIR=docs/project_management/packs/<bucket>/<feature> [AGENT=<id>] OWNED_PATHS="path1 path2 ..."
 
 Notes:
   - This is a scoped, closeout lint intended for planning agents.
   - It runs the hard-ban scan AND the ambiguity scan ONLY on the provided paths.
+  - For selected agents, it also runs the same structural validator the runner enforces.
   - Paths may be pack-relative (e.g., "contract.md"), feature-dir-prefixed, repo-relative, or absolute.
 USAGE
 }
 
 FEATURE_DIR=""
+AGENT="${AGENT:-}"
 paths=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --feature-dir)
             FEATURE_DIR="${2:-}"
+            shift 2
+            ;;
+        --agent)
+            AGENT="${2:-}"
             shift 2
             ;;
         --)
@@ -115,6 +121,9 @@ echo "-- Scope:"
 for rp in "${resolved[@]}"; do
     echo "  - ${rp}"
 done
+if [[ -n "${AGENT}" ]]; then
+    echo "-- Agent: ${AGENT}"
+fi
 
 PLANNING_SCRIPTS_DIR="${REPO_ROOT}/docs/project_management/system/scripts/planning"
 
@@ -168,5 +177,30 @@ run_rg_fail_on_match "Ambiguity scan" '\b(should|could|might|maybe)\b' \
     --glob '!**/session_log.md' \
     --glob '!**/quality_gate_report.md' \
     --glob '!**/final_alignment_report.md'
+
+run_agent_structural_validation() {
+    case "${AGENT}" in
+        impact_map)
+            echo "-- Structural validation (impact_map)"
+            if [[ "${PM_SKIP_IMPACT_MAP_VALIDATE:-0}" = "1" ]]; then
+                echo "WARN: PM_SKIP_IMPACT_MAP_VALIDATE=1; skipping impact_map Touch Set validation for ${FEATURE_DIR}" >&2
+                return 0
+            fi
+            python3 "${PLANNING_SCRIPTS_DIR}/validate_impact_map.py" --feature-dir "${FEATURE_DIR}"
+            ;;
+        workstream_triage)
+            echo "-- Structural validation (workstream_triage)"
+            if [[ "${PM_SKIP_PWS_INDEX_VALIDATE:-0}" = "1" ]]; then
+                echo "WARN: PM_SKIP_PWS_INDEX_VALIDATE=1; skipping PM_PWS_INDEX validation for ${FEATURE_DIR}" >&2
+                return 0
+            fi
+            python3 "${PLANNING_SCRIPTS_DIR}/validate_pws_index.py" --feature-dir "${FEATURE_DIR}"
+            ;;
+        *)
+            ;;
+    esac
+}
+
+run_agent_structural_validation
 
 echo "OK: planning micro-lint passed"

@@ -758,35 +758,46 @@ if [[ "${#violations[@]}" -ne 0 ]]; then
     exit 2
 fi
 
+run_closeout_validation() {
+    local -a owned_paths=()
+    local label=""
+    local artifact=""
+    local hint=""
+
+    case "${AGENT}" in
+        impact_map)
+            owned_paths=("${PRE_PLANNING_DIR_ABS}/impact_map.md")
+            label="impact_map"
+            artifact="${PRE_PLANNING_DIR_REL}/impact_map.md"
+            hint="fix the Touch Set or the closeout micro-lint findings and rerun."
+            ;;
+        workstream_triage)
+            owned_paths=("${PRE_PLANNING_DIR_ABS}/workstream_triage.md")
+            label="workstream_triage"
+            artifact="${PRE_PLANNING_DIR_REL}/workstream_triage.md"
+            hint="keep headings canonical (\`### <PWS_ID> — ...\`) and encode hard deps in depends_on."
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+
+    if bash "${PLANNING_SCRIPTS_DIR}/micro_lint.sh" --feature-dir "${FEATURE_DIR_ABS}" --agent "${AGENT}" -- "${owned_paths[@]}"; then
+        return 0
+    fi
+
+    echo "ERROR: ${label} closeout validation failed for ${FEATURE_DIR_REL}" >&2
+    echo "  Artifact: ${artifact}" >&2
+    echo "  Step logs: $(relpath_in_repo "${REPO_ROOT}" "${STEP_DIR_ABS}")" >&2
+    echo "  Run logs:  $(relpath_in_repo "${REPO_ROOT}" "${RUN_DIR_ABS}")" >&2
+    if [[ -n "${hint}" ]]; then
+        echo "  Hint: ${hint}" >&2
+    fi
+    exit 1
+}
+
 if [[ "${CODEX_EXIT}" -eq 0 && "${LAST_MESSAGE_OK}" -eq 1 && "${REQUIRED_OUTPUTS_OK}" -eq 1 ]]; then
-    if [[ "${AGENT}" == "impact_map" ]]; then
-        if [[ "${PM_SKIP_IMPACT_MAP_VALIDATE:-0}" = "1" ]]; then
-            echo "WARN: PM_SKIP_IMPACT_MAP_VALIDATE=1; skipping impact_map Touch Set validation for ${FEATURE_DIR_REL}" >&2
-        else
-            if ! python3 "${PLANNING_SCRIPTS_DIR}/validate_impact_map.py" --feature-dir "${FEATURE_DIR_ABS}"; then
-                echo "ERROR: impact_map Touch Set validation failed for ${FEATURE_DIR_REL}" >&2
-                echo "  Artifact: ${PRE_PLANNING_DIR_REL}/impact_map.md" >&2
-                echo "  Step logs: $(relpath_in_repo "${REPO_ROOT}" "${STEP_DIR_ABS}")" >&2
-                echo "  Run logs:  $(relpath_in_repo "${REPO_ROOT}" "${RUN_DIR_ABS}")" >&2
-                echo "  Hint: Edit/Deprecate/Delete entries must exist; move non-existent paths to Create or fix the path." >&2
-                exit 1
-            fi
-        fi
-    fi
-    if [[ "${AGENT}" == "workstream_triage" ]]; then
-        if [[ "${PM_SKIP_PWS_INDEX_VALIDATE:-0}" = "1" ]]; then
-            echo "WARN: PM_SKIP_PWS_INDEX_VALIDATE=1; skipping PM_PWS_INDEX validation for ${FEATURE_DIR_REL}" >&2
-        else
-            if ! python3 "${PLANNING_SCRIPTS_DIR}/validate_pws_index.py" --feature-dir "${FEATURE_DIR_ABS}"; then
-                echo "ERROR: PM_PWS_INDEX validation failed for ${FEATURE_DIR_REL}" >&2
-                echo "  Artifact: ${PRE_PLANNING_DIR_REL}/workstream_triage.md" >&2
-                echo "  Step logs: $(relpath_in_repo "${REPO_ROOT}" "${STEP_DIR_ABS}")" >&2
-                echo "  Run logs:  $(relpath_in_repo "${REPO_ROOT}" "${RUN_DIR_ABS}")" >&2
-                echo "  Hint: encode hard deps in depends_on; assumes must not mention PWS ids." >&2
-                exit 1
-            fi
-        fi
-    fi
+    run_closeout_validation
     if ! cp "${CODEX_LAST_MESSAGE_RUN}" "${STABLE_LAST_MESSAGE}"; then
         echo "ERROR: failed to promote stable last_message.md for step ${FEATURE_DIR_REL}/logs/${STEP_DIR_NAME}" >&2
         echo "  From: $(relpath_in_repo "${REPO_ROOT}" "${CODEX_LAST_MESSAGE_RUN}")" >&2

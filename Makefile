@@ -129,7 +129,11 @@ planning-micro-lint:
 	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
 	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
 	@if [ -z "$(OWNED_PATHS)" ]; then echo "ERROR: set OWNED_PATHS=\"<pack-relative paths you edited>\""; exit 2; fi
-	$(PM_SYSTEM_SCRIPTS)/planning/micro_lint.sh --feature-dir "$(FEATURE_DIR)" -- $(OWNED_PATHS)
+	@set -euo pipefail; \
+	cmd="$(PM_SYSTEM_SCRIPTS)/planning/micro_lint.sh --feature-dir \"$(FEATURE_DIR)\""; \
+	if [ -n "$(AGENT)" ]; then cmd="$$cmd --agent \"$(AGENT)\""; fi; \
+	cmd="$$cmd -- $(OWNED_PATHS)"; \
+	eval "$$cmd"
 
 .PHONY: pm-pws-plan
 pm-pws-plan:

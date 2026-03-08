@@ -21,10 +21,12 @@ def _triage_text(
     pws_index_version: int = 1,
     accepted_slice_order: list[str] | None = None,
     draft_slice_order: list[str] | None = None,
+    heading_tokens: list[str] | None = None,
 ) -> str:
     headings = []
-    for p in pws:
-        headings.append(f"### {p['id']} — {p['role']}\n\n- Goal: fixture\n")
+    heading_tokens = heading_tokens or [str(p["id"]) for p in pws]
+    for p, heading_token in zip(pws, heading_tokens):
+        headings.append(f"### {heading_token} — {p['role']}\n\n- Goal: fixture\n")
 
     idx = {"pws_index_version": pws_index_version, "slice_prefix": slice_prefix, "pws": pws}
     if accepted_slice_order is not None:
@@ -122,6 +124,40 @@ class TestValidatePwsIndex(unittest.TestCase):
         res = self._run(["--feature-dir", str(feature_dir)])
         self.assertEqual(res.returncode, 0, msg=res.stderr)
         self.assertEqual(res.stderr.strip(), "")
+
+    def test_pass_backticked_heading_ids_normalize_to_json_ids(self) -> None:
+        prefix = "WDRA"
+        pws = [
+            {
+                "id": f"{prefix}-PWS-contract",
+                "role": "contract",
+                "depends_on": [],
+                "assumes": [],
+                "owns": ["contract.md"],
+            },
+            {
+                "id": f"{prefix}-PWS-tasks_checkpoints",
+                "role": "tasks_checkpoints",
+                "depends_on": [f"{prefix}-PWS-contract"],
+                "assumes": [],
+                "owns": [
+                    "tasks.json",
+                    "session_log.md",
+                    "kickoff_prompts/",
+                    "slices/WDRA0/kickoff_prompts/",
+                ],
+            },
+        ]
+        feature_dir = self._make_feature_dir(
+            "pass_backticked_headings",
+            _triage_text(
+                slice_prefix=prefix,
+                pws=pws,
+                heading_tokens=["`WDRA-PWS-contract`", "`WDRA-PWS-tasks_checkpoints`"],
+            ),
+        )
+        res = self._run(["--feature-dir", str(feature_dir)])
+        self.assertEqual(res.returncode, 0, msg=res.stderr)
 
     def test_pass_v2_with_explicit_accepted_slice_order(self) -> None:
         prefix = "WDRA"
@@ -227,6 +263,77 @@ class TestValidatePwsIndex(unittest.TestCase):
         res = self._run(["--feature-dir", str(feature_dir)])
         self.assertEqual(res.returncode, 1)
         self.assertIn("accepted_slice_order", res.stderr)
+
+    def test_fail_heading_reports_raw_and_normalized_id_when_wrapped_id_is_wrong(self) -> None:
+        prefix = "WDRA"
+        pws = [
+            {
+                "id": f"{prefix}-PWS-contract",
+                "role": "contract",
+                "depends_on": [],
+                "assumes": [],
+                "owns": ["contract.md"],
+            },
+            {
+                "id": f"{prefix}-PWS-tasks_checkpoints",
+                "role": "tasks_checkpoints",
+                "depends_on": [f"{prefix}-PWS-contract"],
+                "assumes": [],
+                "owns": [
+                    "tasks.json",
+                    "session_log.md",
+                    "kickoff_prompts/",
+                    "slices/WDRA0/kickoff_prompts/",
+                ],
+            },
+        ]
+        feature_dir = self._make_feature_dir(
+            "fail_wrong_wrapped_heading",
+            _triage_text(
+                slice_prefix=prefix,
+                pws=pws,
+                heading_tokens=["`WDRA-PWS-contract_typo`", "`WDRA-PWS-tasks_checkpoints`"],
+            ),
+        )
+        res = self._run(["--feature-dir", str(feature_dir)])
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("raw '`WDRA-PWS-contract_typo`' (normalized to 'WDRA-PWS-contract_typo')", res.stderr)
+
+    def test_fail_invalid_heading_markdown_wrapper_does_not_normalize(self) -> None:
+        prefix = "WDRA"
+        pws = [
+            {
+                "id": f"{prefix}-PWS-contract",
+                "role": "contract",
+                "depends_on": [],
+                "assumes": [],
+                "owns": ["contract.md"],
+            },
+            {
+                "id": f"{prefix}-PWS-tasks_checkpoints",
+                "role": "tasks_checkpoints",
+                "depends_on": [f"{prefix}-PWS-contract"],
+                "assumes": [],
+                "owns": [
+                    "tasks.json",
+                    "session_log.md",
+                    "kickoff_prompts/",
+                    "slices/WDRA0/kickoff_prompts/",
+                ],
+            },
+        ]
+        feature_dir = self._make_feature_dir(
+            "fail_invalid_heading_wrapper",
+            _triage_text(
+                slice_prefix=prefix,
+                pws=pws,
+                heading_tokens=["`WDRA-PWS-contract*", "`WDRA-PWS-tasks_checkpoints`"],
+            ),
+        )
+        res = self._run(["--feature-dir", str(feature_dir)])
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("heading PWS id missing from PM_PWS_INDEX JSON", res.stderr)
+        self.assertIn("`WDRA-PWS-contract*'", res.stderr)
 
     def test_fail_assumes_mentions_pws_id(self) -> None:
         prefix = "WDRA"

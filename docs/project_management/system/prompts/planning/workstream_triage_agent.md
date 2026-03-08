@@ -76,6 +76,8 @@ Draft requirements (must be explicit and actionable):
    - Every proposed workstream MUST have a stable ID in the heading:
      - Format: `<SLICE_PREFIX>-PWS-<slug>`
      - Example: `WDAP-PWS-contract`
+     - Canonical heading style: `### <SLICE_PREFIX>-PWS-<slug> — <title>`
+     - Do not wrap the heading PWS id in backticks, emphasis, or other markdown formatting.
    - Minimum required PWS (must exist in the artifact):
      - `<SLICE_PREFIX>-PWS-contract`
      - `<SLICE_PREFIX>-PWS-tasks_checkpoints` (treat as the single writer for `tasks.json`)
@@ -182,6 +184,6 @@ Closeout micro-lint (required):
 Concrete micro-lint commands:
 ```bash
 # Hard-ban + ambiguity scans (required)
-make planning-micro-lint FEATURE_DIR="<FEATURE_DIR>" OWNED_PATHS="<OWNED_PATHS...>"
+make planning-micro-lint FEATURE_DIR="<FEATURE_DIR>" AGENT="workstream_triage" OWNED_PATHS="<OWNED_PATHS...>"
 ```
 ```
