@@ -19,7 +19,7 @@ Standard:
 - This plan is authoritative for **CI cadence**.
 - If you discover a mismatch between the plan and reality (slice ids, platform scope, contract surfaces), update this plan first, then update `tasks.json` and kickoff prompts.
 - For schema v4+ cross-platform automation packs: update `tasks.json` `meta.checkpoint_boundaries` to list the **last slice** in each checkpoint group (this is linted once slice tasks exist in `tasks.json`).
-- Pre-planning note: `tasks.json` does not define slice triads (`*-integ`) yet, so this plan is not mechanically validated yet; the slice list below is derived from the canonical slice inventory in `pre-planning/spec_manifest.md` and reconciled to the accepted slice order in `pre-planning/workstream_triage.md`. `pre-planning/minimal_spec_draft.md` remains draft context only.
+- Full-planning wiring note: `tasks.json` now uses the schema v4 boundary-only task model for the accepted slice order `BEDPM0` → `BEDPM1` → `BEDPM2` → `BEDPM3`. `BEDPM3` is the single checkpoint-boundary slice and `tasks.json` mirrors that with `meta.checkpoint_boundaries = ["BEDPM3"]`.
 
 ## Machine-readable plan (linted)
 
@@ -84,35 +84,16 @@ Standard:
   - `feature_smoke = true` because the canonical impact map explicitly selects `tests/installers/pkg_manager_detection_smoke.sh` as the exact repo test path and selects `smoke/linux-smoke.sh` as the feature-local Linux wrapper.
   - `ci_testing = "quick"` because the canonical impact map keeps implementation changes out of `crates/`, `src/`, `crates/world*`, `crates/shim`, `crates/shell`, and `crates/world-agent`, and scopes the work to installer shell scripts, installer docs, repo tests, and planning artifacts. If full planning expands the touch set into those areas or into workflow/infrastructure changes, update this plan first and then raise the checkpoint gate to `full`.
 
-## Follow-ups
+## Wiring Status
 
-This plan cannot be mechanically validated yet because `tasks.json` does not currently define slice integration tasks (`*-integ`) or checkpoint ops tasks.
-
-Before running:
-`python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "docs/project_management/packs/draft/best-effort-distro-package-manager"`
-
-…complete these wiring steps:
-
-1) Confirm slice ids and ordering
-   - Ensure the final slice ids in `tasks.json` match the accepted slice ids (`BEDPM0`, `BEDPM1`, `BEDPM2`, `BEDPM3`) unless full planning explicitly splits or merges slices.
-   - Ensure this plan’s JSON `slices` list matches the deterministic slice order from `tasks.json`.
-
-2) Add `tasks.json` checkpoint boundary metadata (schema v4 cross-platform)
-   - Set `meta.checkpoint_boundaries = ["BEDPM3"]` to match the checkpoint group boundary (the last slice in each checkpoint group).
-
-3) Add checkpoint task + kickoff prompt + deps
-   - Add an ops task `CP1-ci-checkpoint` with:
-     - `type: "ops"`
-     - `depends_on: ["BEDPM3-integ-core"]`
-     - `kickoff_prompt: docs/project_management/packs/draft/best-effort-distro-package-manager/kickoff_prompts/CP1-ci-checkpoint.md`
-
-4) Preserve the current platform-scope split unless this plan is updated first
-   - Keep `meta.behavior_platforms_required = ["linux"]`.
-   - Keep `meta.ci_parity_platforms_required = ["linux", "macos", "windows"]`.
-   - If full planning decides to widen or narrow either scope, update this plan before changing `tasks.json`.
-
-5) Reconcile upstream planning drift during full planning
-   - `pre-planning/spec_manifest.md` still says `pre-planning/ci_checkpoint_plan.md` is not part of the required-doc set and still describes a Linux-only task model with `meta.cross_platform = false`.
-   - Full planning must either align those statements to this schema-v4 cross-platform baseline or update this plan and the pack metadata together.
-
-6) If additional checkpoints are added later, wire gating so the next checkpoint group’s first slice code/test tasks depend on the prior checkpoint task.
+- `tasks.json` now defines:
+  - normal-slice triads for `BEDPM0`, `BEDPM1`, and `BEDPM2`
+  - the boundary slice `BEDPM3` as `BEDPM3-code`, `BEDPM3-test`, `BEDPM3-integ-core`, `BEDPM3-integ-linux`, `BEDPM3-integ-macos`, `BEDPM3-integ-windows`, and `BEDPM3-integ`
+  - the checkpoint ops task `CP1-ci-checkpoint`
+  - the feature cleanup ops task `FZ-feature-cleanup`
+- Platform scope remains:
+  - behavior smoke: `linux`
+  - CI parity: `linux`, `macos`, `windows`
+- Remaining planning drift is tracked separately:
+  - `pre-planning/spec_manifest.md` still carries stale task-model text that says `meta.cross_platform = false`
+  - the tasks/checkpoints lane logged an allowlist request and draft patch under `logs/pws/BEDPM-PWS-tasks_checkpoints/` so that drift can be reconciled without downgrading the pack
