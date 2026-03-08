@@ -26,9 +26,10 @@ Inputs:
 
 Output requirements:
 0) Allowed writes:
-   - Tracked (canonical): write/overwrite only `<FEATURE_DIR>/pre-planning/spec_manifest.md`.
+   - Tracked (canonical): none. Do not write tracked files directly.
+   - Staged candidate (logs-only; promoted later by runner/wrapper): write/overwrite only `<FEATURE_DIR>/logs/spec-manifest/staged/pre-planning/spec_manifest.md`.
    - Logs (untracked; scratch + orchestration handoff): you may write under `<FEATURE_DIR>/logs/spec-manifest/**` only.
-   - Do not edit ADRs or any other tracked files.
+   - Do not edit ADRs or any other tracked files directly.
 1) Overlap execution model (required):
    - Phase A (start immediately; logs only):
      - Rapidly read the ADR(s), select the required doc set, and draft an initial (not-yet-exhaustive) surface inventory + ownership notes.
@@ -39,8 +40,8 @@ Output requirements:
          - the required-doc list (filenames),
          - the top surfaces and their intended owning docs,
          - any high-risk unknowns/follow-ups.
-   - Phase B (canonical write):
-     - Write/overwrite: `<FEATURE_DIR>/pre-planning/spec_manifest.md` using the template structure, with an exhaustive surface inventory and a deterministic ownership matrix.
+   - Phase B (staged candidate write):
+     - Write/overwrite: `<FEATURE_DIR>/logs/spec-manifest/staged/pre-planning/spec_manifest.md` using the template structure, with an exhaustive surface inventory and a deterministic ownership matrix.
 2) In `pre-planning/spec_manifest.md`, include:
    - The exact list of required spec docs (filenames under the feature dir).
    - A coverage matrix mapping every surface to an authoritative doc.
@@ -51,13 +52,7 @@ Output requirements:
      - If you require slice specs, `spec_manifest.md` must list them using the canonical path and consistent `<SLICE_ID>`s.
 3) If you discover missing/ambiguous ADR intent, record follow-ups inside `pre-planning/spec_manifest.md` under a “Follow-ups” section (not in ADRs).
 
-Closeout micro-lint (required):
-- Run the hard-ban scan and ambiguity scan against ONLY the tracked output you wrote in this run.
-- For this role: `<OWNED_PATHS...>` = `<FEATURE_DIR>/pre-planning/spec_manifest.md`.
-
-Concrete micro-lint commands:
-```bash
-# Hard-ban + ambiguity scans (required)
-make planning-micro-lint FEATURE_DIR="<FEATURE_DIR>" OWNED_PATHS="<OWNED_PATHS...>"
-```
+Closeout validation:
+- Do not write `<FEATURE_DIR>/pre-planning/spec_manifest.md` directly.
+- The planning runner / wrapper will promote the staged candidate into the canonical tracked path and run any required validation after promotion.
 ```

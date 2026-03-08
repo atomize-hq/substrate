@@ -21,9 +21,10 @@ Required reading:
 - `<FEATURE_DIR>/pre-planning/impact_map.md`
 
 Allowed writes:
-- Tracked (canonical): write/overwrite only `<FEATURE_DIR>/pre-planning/minimal_spec_draft.md`.
+- Tracked (canonical): none. Do not write tracked files directly.
+- Staged candidate (logs-only; promoted later by runner/wrapper): write/overwrite only `<FEATURE_DIR>/logs/min-spec-draft/staged/pre-planning/minimal_spec_draft.md`.
 - Logs (untracked; scratch + orchestration handoff): you may write under `<FEATURE_DIR>/logs/min-spec-draft/**` only.
-- Do not edit any other tracked files.
+- Do not edit any other tracked files directly.
 
 Overlap execution model (required):
 - Phase A (start immediately; logs only):
@@ -35,13 +36,13 @@ Overlap execution model (required):
 - Emit an orchestration handoff signal once your outline is usable:
   - Write/overwrite: `<FEATURE_DIR>/logs/min-spec-draft/handoff.md`
   - Write it once you have a coherent section outline + the top cross-cutting decisions/invariants.
-- Phase B (canonical write gate; required):
-  - Before writing `<FEATURE_DIR>/pre-planning/minimal_spec_draft.md`, poll until BOTH are true:
+- Phase B (staged candidate write gate; required):
+  - Before writing `<FEATURE_DIR>/logs/min-spec-draft/staged/pre-planning/minimal_spec_draft.md`, poll until BOTH are true:
     - `<FEATURE_DIR>/logs/impact-map/last_message.md` exists, and
     - `git status --porcelain=v1 -- "<FEATURE_DIR>"` is empty.
   - Default poll interval: `sleep 60` between checks.
   - If the dispatcher context indicates an orchestration overlap run, **do not** ask the operator to commit/stash/clean upstream outputs; treat a dirty `git status` as transient and keep polling until the gate clears.
-  - After the gate clears, re-read `<FEATURE_DIR>/pre-planning/impact_map.md` (not just `logs/impact-map/handoff.md`) and reconcile your draft before writing the tracked output.
+  - After the gate clears, re-read `<FEATURE_DIR>/pre-planning/impact_map.md` (not just `logs/impact-map/handoff.md`) and reconcile your draft before writing the staged candidate.
 
 Content contract for `pre-planning/minimal_spec_draft.md` (keep short, concrete, and cross-cutting):
 1) Header:
@@ -84,13 +85,7 @@ Content contract for `pre-planning/minimal_spec_draft.md` (keep short, concrete,
      - CI-checkpoint should prefer this slice list when populating the machine-readable slices list in `pre-planning/ci_checkpoint_plan.md` (still do not validate mechanically until slice tasks exist in `tasks.json`).
      - Workstream triage may propose edits to this slice skeleton as recommendations in `pre-planning/workstream_triage.md` (but must not edit this file).
 
-Closeout micro-lint (required):
-- Run the hard-ban scan and ambiguity scan against ONLY the tracked output you wrote in this run.
-- For this role: `<OWNED_PATHS...>` = `<FEATURE_DIR>/pre-planning/minimal_spec_draft.md`.
-
-Concrete micro-lint commands:
-```bash
-# Hard-ban + ambiguity scans (required)
-make planning-micro-lint FEATURE_DIR="<FEATURE_DIR>" OWNED_PATHS="<OWNED_PATHS...>"
-```
+Closeout validation:
+- Do not write `<FEATURE_DIR>/pre-planning/minimal_spec_draft.md` directly.
+- The planning runner / wrapper will promote the staged candidate into the canonical tracked path and run any required validation after promotion.
 ```

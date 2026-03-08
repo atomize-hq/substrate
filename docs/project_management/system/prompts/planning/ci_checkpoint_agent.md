@@ -25,11 +25,12 @@ Required reading:
 - `<FEATURE_DIR>/pre-planning/ci_checkpoint_plan.md` (if it already exists)
 
 Allowed writes:
-- Tracked (canonical): you may write/overwrite only:
-  - `<FEATURE_DIR>/pre-planning/ci_checkpoint_plan.md`
-  - `<FEATURE_DIR>/tasks.json` (only if required to satisfy schema-v4 cross-platform planning requirements)
+- Tracked (canonical): none. Do not write tracked files directly.
+- Staged candidates (logs-only; promoted later by runner/wrapper): you may write/overwrite only:
+  - `<FEATURE_DIR>/logs/CI-checkpoint/staged/pre-planning/ci_checkpoint_plan.md`
+  - `<FEATURE_DIR>/logs/CI-checkpoint/staged/tasks.json` (only if required to satisfy schema-v4 cross-platform planning requirements)
 - Logs (untracked; scratch + orchestration handoff): you may write under `<FEATURE_DIR>/logs/CI-checkpoint/**` only.
-- Do not edit any other tracked files.
+- Do not edit any other tracked files directly.
 
 Preflight (required; do first):
 1) Read `<FEATURE_DIR>/tasks.json` and ensure the pack baseline is set for pre-planning:
@@ -40,8 +41,8 @@ Preflight (required; do first):
    - `meta.ci_parity_platforms_required` (default: `["linux","macos","windows"]`)
    - `meta.behavior_platforms_required` (default: same as ci_parity)
    - If `spec_manifest.md` / `minimal_spec_draft.md` explicitly scopes the behavior delta to a subset of platforms (e.g., Linux-only behavior change), set `meta.behavior_platforms_required` to that subset while keeping `meta.ci_parity_platforms_required` unchanged unless explicitly justified.
-3) If any of the above is missing or wrong, update `<FEATURE_DIR>/tasks.json` (and only those fields).
-   - Overlap note: in orchestration overlap runs, Phase A is logs-only; if the Phase B gate has not cleared yet, record required `tasks.json` edits in scratch and apply them only after the Phase B gate clears.
+3) If any of the above is missing or wrong, prepare a staged candidate for `<FEATURE_DIR>/tasks.json` containing only those field changes.
+   - Overlap note: in orchestration overlap runs, Phase A is logs-only; if the Phase B gate has not cleared yet, record required `tasks.json` edits in scratch and write the staged candidate only after the Phase B gate clears.
 
 Overlap execution model (required):
 - Phase A (start immediately; logs only):
@@ -57,16 +58,16 @@ Overlap execution model (required):
       - proposed checkpoint groups (slice ranges),
       - proposed checkpoint task ids (e.g., `CP1-ci-checkpoint`),
       - the gates to run at each checkpoint (compile parity / smoke / CI testing).
-- Phase B (canonical write gate; required):
-  - Before changing tracked files, poll until BOTH are true:
+- Phase B (staged candidate write gate; required):
+  - Before writing staged candidates, poll until BOTH are true:
     - `<FEATURE_DIR>/logs/min-spec-draft/last_message.md` exists, and
     - `git status --porcelain=v1 -- "<FEATURE_DIR>"` is empty.
   - Default poll interval: `sleep 60` between checks.
   - If the dispatcher context indicates an orchestration overlap run, **do not** ask the operator to commit/stash/clean upstream outputs; treat a dirty `git status` as transient and keep polling until the gate clears.
-  - After the gate clears, re-read `<FEATURE_DIR>/pre-planning/impact_map.md` (not just upstream handoff/scratch artifacts) before writing/validating tracked outputs.
+  - After the gate clears, re-read `<FEATURE_DIR>/pre-planning/impact_map.md` (not just upstream handoff/scratch artifacts) before writing the staged candidates.
 
 Tracked output requirements (pre-planning first pass; required):
-1) Write/overwrite `<FEATURE_DIR>/pre-planning/ci_checkpoint_plan.md` using the template:
+1) Write/overwrite `<FEATURE_DIR>/logs/CI-checkpoint/staged/pre-planning/ci_checkpoint_plan.md` using the template:
    - `docs/project_management/system/templates/planning_pack/ci_checkpoint_plan.md.tmpl`
 2) Slice-awareness rule:
    - If `<FEATURE_DIR>/tasks.json` already defines slice integration tasks (`*-integ`), then:
@@ -98,13 +99,7 @@ Follow-up checklist for making this plan mechanically valid (required when slice
 - Then run (must pass):
   - `python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "<FEATURE_DIR>"`
 
-Closeout micro-lint (required):
-- Run the hard-ban scan and ambiguity scan against ONLY the tracked outputs you edited in this run.
-- For this role: `<OWNED_PATHS...>` should include `<FEATURE_DIR>/pre-planning/ci_checkpoint_plan.md` and, if edited, `<FEATURE_DIR>/tasks.json`.
-
-Concrete micro-lint commands:
-```bash
-# Hard-ban + ambiguity scans (required)
-make planning-micro-lint FEATURE_DIR="<FEATURE_DIR>" OWNED_PATHS="<OWNED_PATHS...>"
-```
+Closeout validation:
+- Do not write `<FEATURE_DIR>/pre-planning/ci_checkpoint_plan.md` or `<FEATURE_DIR>/tasks.json` directly.
+- The planning runner / wrapper will promote the staged candidate(s) into the canonical tracked path(s) and run any required validation after promotion.
 ```

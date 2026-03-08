@@ -21,11 +21,15 @@ Optional:
   --help                       Show this help
 
 Contract:
-  - spec_manifest -> <FEATURE_DIR>/pre-planning/spec_manifest.md
-  - impact_map    -> <FEATURE_DIR>/pre-planning/impact_map.md
-  - min_spec_draft -> <FEATURE_DIR>/pre-planning/minimal_spec_draft.md
-  - ci_checkpoint  -> <FEATURE_DIR>/pre-planning/ci_checkpoint_plan.md (and sometimes <FEATURE_DIR>/tasks.json)
-  - workstream_triage -> <FEATURE_DIR>/pre-planning/workstream_triage.md
+  - Pre-planning agents write staged candidates under:
+      <FEATURE_DIR>/logs/<step>/staged/<pack-relative-target>
+    and those candidates are promoted into canonical tracked paths later.
+  - spec_manifest -> staged candidate for <FEATURE_DIR>/pre-planning/spec_manifest.md
+  - impact_map    -> staged candidate for <FEATURE_DIR>/pre-planning/impact_map.md
+  - min_spec_draft -> staged candidate for <FEATURE_DIR>/pre-planning/minimal_spec_draft.md
+  - ci_checkpoint  -> staged candidate for <FEATURE_DIR>/pre-planning/ci_checkpoint_plan.md
+                      and sometimes a staged candidate for <FEATURE_DIR>/tasks.json
+  - workstream_triage -> staged candidate for <FEATURE_DIR>/pre-planning/workstream_triage.md
   - pre_planning_slice_reconcile -> <FEATURE_DIR>/pre-planning/{spec_manifest,impact_map,ci_checkpoint_plan}.md
 
 Notes:
@@ -277,36 +281,42 @@ PROMPT_FILE_REL=""
 STEP_DIR_NAME=""
 ALLOWED_OUTPUTS_REL=()
 REQUIRED_OUTPUTS_REL=()
+USE_STAGED_OUTPUTS=0
 case "${AGENT}" in
     spec_manifest)
         STEP_DIR_NAME="spec-manifest"
         PROMPT_FILE_REL="docs/project_management/system/prompts/planning/spec_manifest_agent.md"
         ALLOWED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/spec_manifest.md")
         REQUIRED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/spec_manifest.md")
+        USE_STAGED_OUTPUTS=1
         ;;
     impact_map)
         STEP_DIR_NAME="impact-map"
         PROMPT_FILE_REL="docs/project_management/system/prompts/planning/impact_map_agent.md"
         ALLOWED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/impact_map.md")
         REQUIRED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/impact_map.md")
+        USE_STAGED_OUTPUTS=1
         ;;
     min_spec_draft)
         STEP_DIR_NAME="min-spec-draft"
         PROMPT_FILE_REL="docs/project_management/system/prompts/planning/min_spec_draft_agent.md"
         ALLOWED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/minimal_spec_draft.md")
         REQUIRED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/minimal_spec_draft.md")
+        USE_STAGED_OUTPUTS=1
         ;;
     ci_checkpoint)
         STEP_DIR_NAME="CI-checkpoint"
         PROMPT_FILE_REL="docs/project_management/system/prompts/planning/ci_checkpoint_agent.md"
         ALLOWED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/ci_checkpoint_plan.md" "${FEATURE_DIR_REL}/tasks.json")
         REQUIRED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/ci_checkpoint_plan.md")
+        USE_STAGED_OUTPUTS=1
         ;;
     workstream_triage)
         STEP_DIR_NAME="workstream-triage"
         PROMPT_FILE_REL="docs/project_management/system/prompts/planning/workstream_triage_agent.md"
         ALLOWED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/workstream_triage.md")
         REQUIRED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/workstream_triage.md")
+        USE_STAGED_OUTPUTS=1
         ;;
     pre_planning_slice_reconcile)
         STEP_DIR_NAME="pre-full-planning-convergence"
@@ -502,6 +512,28 @@ STEP_DIR_ABS="${FEATURE_DIR_ABS}/logs/${STEP_DIR_NAME}"
 RUN_TS="$(date -u +%Y%m%d-%H%M%S)"
 RUN_DIR_ABS="${STEP_DIR_ABS}/runs/${RUN_TS}"
 mkdir -p "${RUN_DIR_ABS}"
+mkdir -p "${STEP_DIR_ABS}/staged"
+
+STAGED_OUTPUTS_REL=()
+REQUIRED_STAGED_OUTPUTS_REL=()
+
+stage_path_for_repo_rel() {
+    local repo_rel="$1"
+    local within_feature="${repo_rel#${FEATURE_DIR_REL}/}"
+    if [[ "${within_feature}" == "${repo_rel}" ]]; then
+        die "cannot stage path outside feature dir: ${repo_rel}"
+    fi
+    printf '%s\n' "${FEATURE_DIR_REL}/logs/${STEP_DIR_NAME}/staged/${within_feature}"
+}
+
+if [[ "${USE_STAGED_OUTPUTS}" -eq 1 ]]; then
+    for p in "${ALLOWED_OUTPUTS_REL[@]}"; do
+        STAGED_OUTPUTS_REL+=("$(stage_path_for_repo_rel "${p}")")
+    done
+    for p in "${REQUIRED_OUTPUTS_REL[@]}"; do
+        REQUIRED_STAGED_OUTPUTS_REL+=("$(stage_path_for_repo_rel "${p}")")
+    done
+fi
 
 PROMPT_OUT="${RUN_DIR_ABS}/prompt.md"
 CODEX_LAST_MESSAGE_RUN="${RUN_DIR_ABS}/last_message.run.md"
@@ -528,7 +560,16 @@ fi
 	        printf -- '- Orchestration mode: `pre_planning_research_orchestrate.sh` overlap run (do not ask the operator to commit/stash/clean; if a Phase B gate is blocked by upstream uncommitted outputs, keep polling — orchestration will commit allowlisted outputs)\n'
 	    fi
 	    printf '\nOutput allowlist (non-negotiable):\n'
-	    if [[ "${#ALLOWED_OUTPUTS_REL[@]}" -eq 0 ]]; then
+	    if [[ "${USE_STAGED_OUTPUTS}" -eq 1 ]]; then
+	        printf -- '- Tracked outputs: (none; wrapper/runner promotes staged candidates)\n'
+	        printf -- '- Staged tracked-output candidates (write only these under logs):\n'
+	        for p in "${STAGED_OUTPUTS_REL[@]}"; do
+	            printf '  - `%s`\n' "${p}"
+	        done
+	        printf -- '- Direct writes to canonical tracked paths are forbidden.\n'
+	        printf -- '- Logs allowed (untracked only): `%s/logs/%s/`\n' "${FEATURE_DIR_REL}" "${STEP_DIR_NAME}"
+	        printf -- '- Do not edit any tracked files directly. If you find follow-ups, record them inside the relevant staged/log output under a \"Follow-ups\" section.\n'
+	    elif [[ "${#ALLOWED_OUTPUTS_REL[@]}" -eq 0 ]]; then
 	        printf -- '- Tracked outputs: (none)\n'
 	        printf -- '- Do not modify any tracked files.\n'
 	        printf -- '- Logs allowed (untracked only): `%s/logs/%s/`\n' "${FEATURE_DIR_REL}" "${STEP_DIR_NAME}"
@@ -552,6 +593,22 @@ fi
 STEP_STDERR="${STEP_DIR_ABS}/stderr.log"
 STEP_PID_PATH="${STEP_DIR_ABS}/codex.pid"
 STABLE_LAST_MESSAGE="${STEP_DIR_ABS}/last_message.md"
+
+promote_staged_outputs() {
+    local i
+    for i in "${!ALLOWED_OUTPUTS_REL[@]}"; do
+        local target_rel="${ALLOWED_OUTPUTS_REL[$i]}"
+        local staged_rel="${STAGED_OUTPUTS_REL[$i]}"
+        local staged_abs="${REPO_ROOT}/${staged_rel}"
+        local target_abs="${REPO_ROOT}/${target_rel}"
+
+        if [[ ! -f "${staged_abs}" ]]; then
+            continue
+        fi
+        mkdir -p "$(dirname "${target_abs}")"
+        cp "${staged_abs}" "${target_abs}"
+    done
+}
 
 wait_for_codex_pidfile_if_running() {
     local pid_path="$1"
@@ -676,11 +733,21 @@ while IFS= read -r p; do
     UNTRACKED+=("${p}")
 done < <(git ls-files --others --exclude-standard -- "${FEATURE_DIR_REL}" | sed '/^$/d')
 
+ALLOWED_UNTRACKED_REL=()
+REQUIRED_OUTPUT_CHECK_REL=()
+if [[ "${USE_STAGED_OUTPUTS}" -eq 1 ]]; then
+    ALLOWED_UNTRACKED_REL=("${STAGED_OUTPUTS_REL[@]}")
+    REQUIRED_OUTPUT_CHECK_REL=("${REQUIRED_STAGED_OUTPUTS_REL[@]}")
+else
+    ALLOWED_UNTRACKED_REL=("${ALLOWED_OUTPUTS_REL[@]}")
+    REQUIRED_OUTPUT_CHECK_REL=("${REQUIRED_OUTPUTS_REL[@]}")
+fi
+
 UNTRACKED_UNEXPECTED=()
 for p in ${UNTRACKED[@]+"${UNTRACKED[@]}"}; do
     [[ -n "${p}" ]] || continue
     allowed=0
-    for allowed_path in ${ALLOWED_OUTPUTS_REL[@]+"${ALLOWED_OUTPUTS_REL[@]}"}; do
+    for allowed_path in ${ALLOWED_UNTRACKED_REL[@]+"${ALLOWED_UNTRACKED_REL[@]}"}; do
         [[ -n "${allowed_path}" ]] || continue
         if [[ "${allowed_path}" == "${p}" ]]; then
             allowed=1
@@ -698,10 +765,10 @@ if [[ "${#UNTRACKED_UNEXPECTED[@]}" -ne 0 ]]; then
         echo "  - ${p}" >&2
     done
     echo "  Allowed untracked outputs for this step:" >&2
-    if [[ "${#ALLOWED_OUTPUTS_REL[@]}" -eq 0 ]]; then
+    if [[ "${#ALLOWED_UNTRACKED_REL[@]}" -eq 0 ]]; then
         echo "    (none)" >&2
     else
-        for p in "${ALLOWED_OUTPUTS_REL[@]}"; do
+        for p in "${ALLOWED_UNTRACKED_REL[@]}"; do
             echo "    - ${p}" >&2
         done
     fi
@@ -711,13 +778,25 @@ if [[ "${#UNTRACKED_UNEXPECTED[@]}" -ne 0 ]]; then
 fi
 
 REQUIRED_OUTPUTS_OK=1
-for p in ${REQUIRED_OUTPUTS_REL[@]+"${REQUIRED_OUTPUTS_REL[@]}"}; do
+for p in ${REQUIRED_OUTPUT_CHECK_REL[@]+"${REQUIRED_OUTPUT_CHECK_REL[@]}"}; do
     [[ -n "${p}" ]] || continue
     if [[ ! -f "${REPO_ROOT}/${p}" ]]; then
         echo "ERROR: required output missing after agent run (agent=${AGENT}): ${p}" >&2
         REQUIRED_OUTPUTS_OK=0
     fi
 done
+
+if [[ "${USE_STAGED_OUTPUTS}" -eq 1 && "${#CHANGED_TRACKED[@]}" -ne 0 ]]; then
+    echo "ERROR: direct tracked writes are forbidden for staged-output planning agents (agent=${AGENT})" >&2
+    echo "  Write staged candidates under: ${FEATURE_DIR_REL}/logs/${STEP_DIR_NAME}/staged/" >&2
+    echo "  Changed tracked files within feature dir:" >&2
+    for p in "${CHANGED_TRACKED[@]}"; do
+        echo "    - ${p}" >&2
+    done
+    echo "  Step logs: $(relpath_in_repo "${REPO_ROOT}" "${STEP_DIR_ABS}")" >&2
+    echo "  Run logs:  $(relpath_in_repo "${REPO_ROOT}" "${RUN_DIR_ABS}")" >&2
+    exit 2
+fi
 
 violations=()
 for p in ${CHANGED_TRACKED[@]+"${CHANGED_TRACKED[@]}"}; do
@@ -735,7 +814,7 @@ for p in ${CHANGED_TRACKED[@]+"${CHANGED_TRACKED[@]}"}; do
     fi
 done
 
-if [[ "${#violations[@]}" -ne 0 ]]; then
+if [[ "${USE_STAGED_OUTPUTS}" -eq 0 && "${#violations[@]}" -ne 0 ]]; then
     echo "ERROR: output allowlist violated for ${FEATURE_DIR_REL} (agent=${AGENT})" >&2
     echo "  Allowed tracked outputs:" >&2
     if [[ "${#ALLOWED_OUTPUTS_REL[@]}" -eq 0 ]]; then
@@ -797,12 +876,17 @@ run_closeout_validation() {
 }
 
 if [[ "${CODEX_EXIT}" -eq 0 && "${LAST_MESSAGE_OK}" -eq 1 && "${REQUIRED_OUTPUTS_OK}" -eq 1 ]]; then
-    run_closeout_validation
-    if ! cp "${CODEX_LAST_MESSAGE_RUN}" "${STABLE_LAST_MESSAGE}"; then
-        echo "ERROR: failed to promote stable last_message.md for step ${FEATURE_DIR_REL}/logs/${STEP_DIR_NAME}" >&2
-        echo "  From: $(relpath_in_repo "${REPO_ROOT}" "${CODEX_LAST_MESSAGE_RUN}")" >&2
-        echo "  To:   $(relpath_in_repo "${REPO_ROOT}" "${STABLE_LAST_MESSAGE}")" >&2
-        exit 2
+    if [[ "${USE_STAGED_OUTPUTS}" -eq 1 && "${PM_PLANNING_ORCHESTRATED:-0}" != "1" ]]; then
+        promote_staged_outputs
+    fi
+    if [[ "${USE_STAGED_OUTPUTS}" -eq 0 || "${PM_PLANNING_ORCHESTRATED:-0}" != "1" ]]; then
+        run_closeout_validation
+        if ! cp "${CODEX_LAST_MESSAGE_RUN}" "${STABLE_LAST_MESSAGE}"; then
+            echo "ERROR: failed to promote stable last_message.md for step ${FEATURE_DIR_REL}/logs/${STEP_DIR_NAME}" >&2
+            echo "  From: $(relpath_in_repo "${REPO_ROOT}" "${CODEX_LAST_MESSAGE_RUN}")" >&2
+            echo "  To:   $(relpath_in_repo "${REPO_ROOT}" "${STABLE_LAST_MESSAGE}")" >&2
+            exit 2
+        fi
     fi
 fi
 
@@ -818,7 +902,9 @@ if [[ "${CODEX_EXIT}" -eq 0 && "${REQUIRED_OUTPUTS_OK}" -ne 1 ]]; then
     exit 2
 fi
 
-if [[ "${#ALLOWED_OUTPUTS_REL[@]}" -eq 0 ]]; then
+if [[ "${USE_STAGED_OUTPUTS}" -eq 1 && "${PM_PLANNING_ORCHESTRATED:-0}" = "1" ]]; then
+    echo "OK: staged outputs within allowlist"
+elif [[ "${#ALLOWED_OUTPUTS_REL[@]}" -eq 0 ]]; then
     echo "OK: logs-only step (no tracked changes)"
 else
     echo "OK: tracked outputs within allowlist"

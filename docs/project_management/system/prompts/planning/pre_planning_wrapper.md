@@ -41,11 +41,13 @@ START_AT=""              # optional: spec-manifest|impact-map|min-spec-draft|CI-
   - `$FEATURE_DIR/pre-planning/alignment_report.md` (tracked pack artifact; if present)
   - `$FEATURE_DIR/logs/<step>/runs/<RUN_TS>/last_message.run.md`
   - `$FEATURE_DIR/logs/<step>/stderr.log`
+  - `$FEATURE_DIR/logs/<step>/staged/<pack-relative-target>` (the staged candidate that was awaiting promotion)
 
 ## Output to operator
 Return a concise summary that includes:
 - Which tracked artifacts changed and were committed
-- Stable sentinels written (`$FEATURE_DIR/logs/<step>/last_message.md`)
+- Stable sentinels written (`$FEATURE_DIR/logs/<step>/last_message.md`) after staged promotion + commit
+- Where staged candidates live before promotion (`$FEATURE_DIR/logs/<step>/staged/…`)
 - Where the tracked workstream triage artifact is (`$FEATURE_DIR/pre-planning/workstream_triage.md`)
 - Where the workstream triage draft/evidence is (`$FEATURE_DIR/logs/workstream-triage/workstream_triage_draft.md`)
 - Where the wrapper-compiled alignment + consolidated follow-ups report is (`$FEATURE_DIR/logs/pre_planning_wrapper/<UTC_TS>/alignment_report.md`) and any “hard gates” it flags

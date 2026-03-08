@@ -102,9 +102,15 @@ if [[ "${PM_SYSTEM_ROOT}" != /* ]]; then
     PM_SYSTEM_ROOT="${REPO_ROOT}/${PM_SYSTEM_ROOT}"
 fi
 PLANNING_SCRIPTS_DIR="${PM_SYSTEM_ROOT}/scripts/planning"
-RUNNER="${PLANNING_SCRIPTS_DIR}/run_planning_agent.sh"
+RUNNER="${PM_PRE_PLANNING_RUNNER:-${PLANNING_SCRIPTS_DIR}/run_planning_agent.sh}"
+if [[ "${RUNNER}" != /* ]]; then
+    RUNNER="${REPO_ROOT}/${RUNNER}"
+fi
 [[ -x "${RUNNER}" ]] || die "missing runner: ${RUNNER}"
-ALIGNMENT_REPORTER="${PLANNING_SCRIPTS_DIR}/wrapper_alignment_report.py"
+ALIGNMENT_REPORTER="${PM_PRE_PLANNING_ALIGNMENT_REPORTER:-${PLANNING_SCRIPTS_DIR}/wrapper_alignment_report.py}"
+if [[ "${ALIGNMENT_REPORTER}" != /* ]]; then
+    ALIGNMENT_REPORTER="${REPO_ROOT}/${ALIGNMENT_REPORTER}"
+fi
 
 FEATURE_DIR_REL="$(python3 "${PLANNING_SCRIPTS_DIR}/pm_paths.py" resolve-feature-dir --feature-dir "${FEATURE_DIR_RAW}")"
 FEATURE_DIR_REL="${FEATURE_DIR_REL%/}"
@@ -255,41 +261,161 @@ kill_downstream() {
     done
 }
 
+step_commit_message() {
+    local step="$1"
+    case "${step}" in
+        spec-manifest) printf '%s\n' "docs: pre-planning spec manifest" ;;
+        impact-map) printf '%s\n' "docs: pre-planning impact map" ;;
+        min-spec-draft) printf '%s\n' "docs: pre-planning minimal spec draft" ;;
+        CI-checkpoint) printf '%s\n' "docs: pre-planning CI checkpoint plan" ;;
+        workstream-triage) printf '%s\n' "docs: pre-planning workstream triage" ;;
+        *) die "unknown step: ${step}" ;;
+    esac
+}
+
+step_allowlist() {
+    local step="$1"
+    case "${step}" in
+        spec-manifest) printf '%s\n' "${PRE_PLANNING_DIR_REL}/spec_manifest.md" ;;
+        impact-map) printf '%s\n' "${PRE_PLANNING_DIR_REL}/impact_map.md" ;;
+        min-spec-draft) printf '%s\n' "${PRE_PLANNING_DIR_REL}/minimal_spec_draft.md" ;;
+        CI-checkpoint)
+            printf '%s\n' "${PRE_PLANNING_DIR_REL}/ci_checkpoint_plan.md"
+            printf '%s\n' "${FEATURE_DIR_REL}/tasks.json"
+            ;;
+        workstream-triage) printf '%s\n' "${PRE_PLANNING_DIR_REL}/workstream_triage.md" ;;
+        *) die "unknown step: ${step}" ;;
+    esac
+}
+
+step_required_outputs() {
+    local step="$1"
+    case "${step}" in
+        spec-manifest) printf '%s\n' "${PRE_PLANNING_DIR_REL}/spec_manifest.md" ;;
+        impact-map) printf '%s\n' "${PRE_PLANNING_DIR_REL}/impact_map.md" ;;
+        min-spec-draft) printf '%s\n' "${PRE_PLANNING_DIR_REL}/minimal_spec_draft.md" ;;
+        CI-checkpoint) printf '%s\n' "${PRE_PLANNING_DIR_REL}/ci_checkpoint_plan.md" ;;
+        workstream-triage) printf '%s\n' "${PRE_PLANNING_DIR_REL}/workstream_triage.md" ;;
+        *) die "unknown step: ${step}" ;;
+    esac
+}
+
+step_staged_rel() {
+    local step="$1"
+    local repo_rel="$2"
+    local within_feature="${repo_rel#${FEATURE_DIR_REL}/}"
+    if [[ "${within_feature}" == "${repo_rel}" ]]; then
+        die "cannot resolve staged path outside feature dir: ${repo_rel}"
+    fi
+    printf '%s\n' "${FEATURE_DIR_REL}/logs/${step}/staged/${within_feature}"
+}
+
+run_step_closeout_validation() {
+    local step="$1"
+    case "${step}" in
+        impact-map)
+            bash "${PLANNING_SCRIPTS_DIR}/micro_lint.sh" --feature-dir "${FEATURE_DIR_ABS}" --agent impact_map -- "${PRE_PLANNING_DIR_ABS}/impact_map.md"
+            ;;
+        workstream-triage)
+            bash "${PLANNING_SCRIPTS_DIR}/micro_lint.sh" --feature-dir "${FEATURE_DIR_ABS}" --agent workstream_triage -- "${PRE_PLANNING_DIR_ABS}/workstream_triage.md"
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+}
+
+latest_run_dir_for_step() {
+    local step="$1"
+    local runs_dir="${LOGS_DIR}/${step}/runs"
+    [[ -d "${runs_dir}" ]] || return 1
+    find "${runs_dir}" -mindepth 1 -maxdepth 1 -type d | sort | tail -n 1
+}
+
+publish_stable_last_message() {
+    local step="$1"
+    local run_dir
+    run_dir="$(latest_run_dir_for_step "${step}")" || die "missing run dir for ${step}"
+    local src="${run_dir}/last_message.run.md"
+    local dest="${LOGS_DIR}/${step}/last_message.md"
+    [[ -f "${src}" ]] || die "missing run last_message for ${step}: ${src}"
+    cp "${src}" "${dest}"
+}
+
 commit_step_outputs() {
     local idx="$1"
     local step="${steps[$idx]}"
-    local msg=""
+    local msg
+    msg="$(step_commit_message "${step}")"
+
     local -a allow=()
-    local allowlisted=""
-    local allow_p=""
+    local -a required=()
+    local p
+    while IFS= read -r p; do
+        [[ -n "${p}" ]] || continue
+        allow+=("${p}")
+    done < <(step_allowlist "${step}")
+    while IFS= read -r p; do
+        [[ -n "${p}" ]] || continue
+        required+=("${p}")
+    done < <(step_required_outputs "${step}")
 
-    case "${step}" in
-        spec-manifest)
-            msg="docs: pre-planning spec manifest"
-            allow=("${PRE_PLANNING_DIR_REL}/spec_manifest.md")
-            ;;
-        impact-map)
-            msg="docs: pre-planning impact map"
-            allow=("${PRE_PLANNING_DIR_REL}/impact_map.md")
-            ;;
-        min-spec-draft)
-            msg="docs: pre-planning minimal spec draft"
-            allow=("${PRE_PLANNING_DIR_REL}/minimal_spec_draft.md")
-            ;;
-        CI-checkpoint)
-            msg="docs: pre-planning CI checkpoint plan"
-            allow=("${PRE_PLANNING_DIR_REL}/ci_checkpoint_plan.md" "${FEATURE_DIR_REL}/tasks.json")
-            ;;
-        workstream-triage)
-            msg="docs: pre-planning workstream triage"
-            allow=("${PRE_PLANNING_DIR_REL}/workstream_triage.md")
-            ;;
-        *)
-            die "unknown step: ${step}"
-            ;;
-    esac
+    local backup_dir="${WRAPPER_DIR}/promotion_backup/${step}"
+    rm -rf "${backup_dir}"
+    mkdir -p "${backup_dir}"
 
-    # Safety: refuse to commit if any unexpected tracked changes exist under the feature dir.
+    local promoted_any=0
+    local target_rel staged_rel target_abs staged_abs backup_abs
+    for target_rel in "${allow[@]}"; do
+        staged_rel="$(step_staged_rel "${step}" "${target_rel}")"
+        staged_abs="${REPO_ROOT}/${staged_rel}"
+        target_abs="${REPO_ROOT}/${target_rel}"
+        if [[ ! -f "${staged_abs}" ]]; then
+            continue
+        fi
+
+        backup_abs="${backup_dir}/${target_rel#${FEATURE_DIR_REL}/}"
+        mkdir -p "$(dirname "${backup_abs}")"
+        if [[ -f "${target_abs}" ]]; then
+            cp "${target_abs}" "${backup_abs}"
+        else
+            : > "${backup_abs}.absent"
+        fi
+
+        mkdir -p "$(dirname "${target_abs}")"
+        cp "${staged_abs}" "${target_abs}"
+        promoted_any=1
+    done
+
+    restore_failed_promotion() {
+        local target_rel_local="$1"
+        local target_abs_local="${REPO_ROOT}/${target_rel_local}"
+        local backup_base="${backup_dir}/${target_rel_local#${FEATURE_DIR_REL}/}"
+        if [[ -f "${backup_base}.absent" ]]; then
+            rm -f "${target_abs_local}"
+        elif [[ -f "${backup_base}" ]]; then
+            mkdir -p "$(dirname "${target_abs_local}")"
+            cp "${backup_base}" "${target_abs_local}"
+        fi
+    }
+
+    for p in "${required[@]}"; do
+        if [[ ! -f "${REPO_ROOT}/${p}" ]]; then
+            for target_rel in "${allow[@]}"; do
+                restore_failed_promotion "${target_rel}"
+            done
+            die "required promoted output missing for ${step}: ${p}"
+        fi
+    done
+
+    if ! run_step_closeout_validation "${step}"; then
+        for target_rel in "${allow[@]}"; do
+            restore_failed_promotion "${target_rel}"
+        done
+        die "closeout validation failed after staged promotion (step=${step})"
+    fi
+
+    local allowlisted allow_p
     while IFS= read -r p; do
         [[ -n "${p}" ]] || continue
         allowlisted=0
@@ -300,17 +426,19 @@ commit_step_outputs() {
             fi
         done
         if [[ "${allowlisted}" -eq 0 ]]; then
+            for target_rel in "${allow[@]}"; do
+                restore_failed_promotion "${target_rel}"
+            done
             die "refusing to commit: unexpected tracked change within feature dir: ${p} (step=${step})"
         fi
     done < <(git diff --name-only -- "${FEATURE_DIR_REL}" | sed '/^$/d')
 
-    # Stage allowlisted paths only.
     git add -- "${allow[@]}" >/dev/null 2>&1 || true
     if git diff --cached --quiet; then
+        publish_stable_last_message "${step}"
         return 0
     fi
 
-    # Safety: ensure we are only committing allowlisted paths.
     while IFS= read -r p; do
         [[ -n "${p}" ]] || continue
         allowlisted=0
@@ -321,12 +449,16 @@ commit_step_outputs() {
             fi
         done
         if [[ "${allowlisted}" -eq 0 ]]; then
+            for target_rel in "${allow[@]}"; do
+                restore_failed_promotion "${target_rel}"
+            done
             die "refusing to commit non-allowlisted path: ${p} (step=${step})"
         fi
     done < <(git diff --cached --name-only | sed '/^$/d')
 
     git commit -m "${msg}" >/dev/null
     commit_shas[idx]="$(git rev-parse HEAD)"
+    publish_stable_last_message "${step}"
 }
 
 fmt_hms() {

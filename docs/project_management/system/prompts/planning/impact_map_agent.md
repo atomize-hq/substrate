@@ -39,9 +39,10 @@ Discovery requirements (must do):
 
 Output requirements:
 0) Allowed writes:
-   - Tracked (canonical): write/overwrite only `<FEATURE_DIR>/pre-planning/impact_map.md`.
+   - Tracked (canonical): none. Do not write tracked files directly.
+   - Staged candidate (logs-only; promoted later by runner/wrapper): write/overwrite only `<FEATURE_DIR>/logs/impact-map/staged/pre-planning/impact_map.md`.
    - Logs (untracked; scratch + orchestration handoff): you may write under `<FEATURE_DIR>/logs/impact-map/**` only.
-   - Do not edit ADRs or any other tracked files.
+   - Do not edit ADRs or any other tracked files directly.
 1) Overlap execution model (required):
    - Phase A (start immediately; logs only):
      - Perform discovery and draft an initial touch set + implication buckets.
@@ -57,33 +58,20 @@ Output requirements:
        - a concrete preliminary Touch Set (paths or directory prefixes), and
        - the main implication buckets.
       - Target: emit this handoff within the first 10 minutes (do not wait for cross-queue scan completion).
-2) Phase B (canonical write gate; required):
-   - Before writing `<FEATURE_DIR>/pre-planning/impact_map.md`, poll until BOTH are true:
+2) Phase B (staged candidate write gate; required):
+   - Before writing `<FEATURE_DIR>/logs/impact-map/staged/pre-planning/impact_map.md`, poll until BOTH are true:
      - `<FEATURE_DIR>/logs/spec-manifest/last_message.md` exists, and
      - `git status --porcelain=v1 -- "<FEATURE_DIR>"` is empty.
    - Default poll interval: `sleep 60` between checks.
    - If the dispatcher context indicates an orchestration overlap run, **do not** ask the operator to commit/stash/clean upstream outputs; treat a dirty `git status` as transient and keep polling until the gate clears.
-3) Then write/overwrite `<FEATURE_DIR>/pre-planning/impact_map.md` using the template.
+3) Then write/overwrite `<FEATURE_DIR>/logs/impact-map/staged/pre-planning/impact_map.md` using the template.
    - The Touch Set must have concrete repo-relative file paths (no vague “update some files”).
    - Strict Touch Set existence rule (non-negotiable):
      - If a path is listed under `### Edit`, `### Deprecate`, or `### Delete`, it MUST exist in the repo at authoring time.
      - If it does not exist, it MUST be moved to `### Create` (if it will be created) or corrected/removed (if it was a guessed path).
      - If you cannot determine the exact file yet, prefer an existing directory prefix entry ending with `/` (and record a Follow-up to tighten it later) rather than guessing a filename.
 4) If you discover a missing surface or ownership gap, record follow-ups inside `impact_map.md` under a “Follow-ups” section (not in ADRs).
-5) Closeout validation (required; must pass before you end the session):
-   - Run the strict Touch Set validator and capture output to logs:
-     - `python3 docs/project_management/system/scripts/planning/validate_impact_map.py --feature-dir "<FEATURE_DIR>" > "<FEATURE_DIR>/logs/impact-map/validate_impact_map.txt" 2>&1`
-   - If it fails:
-     - Fix `<FEATURE_DIR>/pre-planning/impact_map.md`, then rerun the validator until it passes.
-   - Only then end the session (exit successfully).
-
-6) Closeout micro-lint (required):
-   - Run the hard-ban scan and ambiguity scan against ONLY the tracked output you wrote in this run.
-   - For this role: `<OWNED_PATHS...>` = `<FEATURE_DIR>/pre-planning/impact_map.md`.
-
-Concrete micro-lint commands:
-```bash
-# Hard-ban + ambiguity scans (required)
-make planning-micro-lint FEATURE_DIR="<FEATURE_DIR>" AGENT="impact_map" OWNED_PATHS="<OWNED_PATHS...>"
-```
+5) Closeout validation:
+   - Do not write `<FEATURE_DIR>/pre-planning/impact_map.md` directly.
+   - The planning runner / wrapper will promote the staged candidate into the canonical tracked path and run the strict Touch Set validator plus closeout validation after promotion.
 ```
