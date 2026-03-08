@@ -35,6 +35,7 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md`
 - `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM1/BEDPM1-spec.md`
 - `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md`
+- `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM3/BEDPM3-spec.md`
 
 ### Edit
 - `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md`
@@ -122,7 +123,7 @@ For each externally visible change, list:
     - `docs/reference/env/contract.md` must add `PKG_MANAGER` as a legacy installer override with explicit precedence and allowed values.
     - The hermetic test hook must be either fully absent from production or fully documented as one Linux-only installer env var.
   - Cascading impact:
-    - `contract.md` must define the exact test-hook rule used by `BEDPM2`.
+    - `contract.md` must define the exact test-hook rule used by `BEDPM3`.
     - `spec_manifest.md` must pin the same rule so downstream packs stop treating the hook as undecided.
     - `tests/installers/pkg_manager_detection_smoke.sh` must use the selected mechanism and no alternative mechanism.
   - Contradiction risks:
@@ -166,7 +167,7 @@ For each externally visible change, list:
     - `tests/installers/pkg_manager_detection_smoke.sh` becomes the exact repo test path for stubbed PATH/os-release validation.
     - `docs/project_management/packs/draft/best-effort-distro-package-manager/smoke/linux-smoke.sh` becomes the feature-local wrapper that calls the same assertions and captures planning evidence.
   - Cascading impact:
-    - `BEDPM2-spec.md` must make the repo test authoritative and the feature-local smoke script a thin orchestrating wrapper.
+    - `BEDPM3-spec.md` must make the repo test authoritative and the feature-local smoke script a thin orchestrating wrapper.
     - `docs/INSTALLATION.md` and `manual_testing_playbook.md` must reference the same visible stderr line and override/remediation examples as the repo test.
   - Contradiction risks:
     - ADR-0031 says no new platform smoke scripts are required beyond the hermetic test, while the spec manifest requires `smoke/linux-smoke.sh` as part of the pack artifact set.
@@ -315,7 +316,7 @@ List overlaps/conflicts with other in-flight work and resolve them deterministic
 
 - Spec and planning updates required:
   - `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/spec_manifest.md` — pin `tests/installers/pkg_manager_detection_smoke.sh` as the exact hermetic repo test path and align the selected `SUBSTRATE_INSTALL_OS_RELEASE_PATH` contract.
-  - `docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json` — narrow the pack to Linux-only behavior and CI parity metadata, then add `BEDPM0`, `BEDPM1`, and `BEDPM2` triads.
+  - `docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json` — narrow the pack to Linux-only behavior and CI parity metadata, then add `BEDPM0`, `BEDPM1`, `BEDPM2`, and `BEDPM3` triads.
   - `docs/project_management/packs/sequencing.json` — add the feature entry and sequence ADR-0031 ahead of `persist-detected-linux-distro-pkg-manager`.
 
 - Ownership-gap reminders:
