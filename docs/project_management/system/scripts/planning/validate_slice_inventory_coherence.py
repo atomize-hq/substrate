@@ -205,7 +205,10 @@ def _extract_checkpoint_plan(feature_dir: Path) -> SliceSource | None:
     if plan_path is None:
         return None
 
-    plan = vccp._extract_json_block(plan_path.read_text(encoding="utf-8"))
+    plan = vccp._extract_json_block(
+        plan_path.read_text(encoding="utf-8"),
+        accept_draft_header=True,
+    )
     _, checkpoints = vccp._parse_checkpoints(plan)
     ordered: list[str] = []
     for checkpoint in checkpoints:

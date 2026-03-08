@@ -51,10 +51,14 @@ def _triage_text(slice_prefix: str, accepted_slice_order: list[str]) -> str:
     )
 
 
-def _checkpoint_plan_text(slice_ids: list[str]) -> str:
+def _checkpoint_plan_text(
+    slice_ids: list[str],
+    *,
+    header: str = "## Machine-readable plan (linted)",
+) -> str:
     return (
         "# Fixture checkpoint plan\n\n"
-        "## Machine-readable plan (linted)\n\n"
+        f"{header}\n\n"
         "```json\n"
         + json.dumps(
             {
@@ -175,6 +179,29 @@ class TestValidateCiCheckpointPlan(unittest.TestCase):
         res = self._run(feature_dir)
         self.assertEqual(res.returncode, 0, msg=res.stderr)
         self.assertIn("OK: ci_checkpoint_plan validation passed", res.stdout)
+
+    def test_rejects_draft_header_for_mechanical_validation(self) -> None:
+        feature_dir = self.tmp_root / "draft_header_rejected"
+        if feature_dir.exists():
+            shutil.rmtree(feature_dir)
+
+        _write_text(
+            feature_dir / "pre-planning" / "ci_checkpoint_plan.md",
+            _checkpoint_plan_text(
+                ["WDAP0", "WDAP1"],
+                header="## Machine-readable plan (draft; not yet mechanically validated)",
+            ),
+        )
+        _write_text(feature_dir / "kickoff_prompts" / "CP1-ci-checkpoint.md", "# kickoff\n")
+        _write_text(
+            feature_dir / "tasks.json",
+            json.dumps(_tasks_json(["WDAP0", "WDAP1"], "WDAP1"), indent=2, sort_keys=True),
+        )
+
+        res = self._run(feature_dir)
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("missing required header", res.stderr)
+        self.assertIn("Machine-readable plan (linted)", res.stderr)
 
     def test_fails_when_checkpoint_order_disagrees_with_v2_authority(self) -> None:
         feature_dir = self._make_feature_dir(

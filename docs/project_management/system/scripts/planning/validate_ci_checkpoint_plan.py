@@ -37,19 +37,40 @@ def _read_tasks_json(feature_dir: Path) -> dict[str, Any]:
     return {}
 
 
-def _extract_json_block(text: str) -> dict[str, Any]:
+LINTED_HEADER = "## Machine-readable plan (linted)"
+DRAFT_HEADER = "## Machine-readable plan (draft; not yet mechanically validated)"
+
+
+def _extract_json_block(text: str, *, accept_draft_header: bool = False) -> dict[str, Any]:
     """
-    Extract the single JSON code block under '## Machine-readable plan (linted)'.
+    Extract the single JSON code block under the machine-readable plan section.
+
+    The dedicated mechanical validator remains strict by default and requires the
+    linted header. Some pre-full-planning readers need to inspect the same JSON
+    while the plan is still explicitly marked as a draft first pass.
     """
-    header = "## Machine-readable plan (linted)"
-    start = text.find(header)
+    headers = [LINTED_HEADER]
+    if accept_draft_header:
+        headers.append(DRAFT_HEADER)
+
+    start = -1
+    matched_header: str | None = None
+    for header in headers:
+        header_start = text.find(header)
+        if header_start >= 0 and (start < 0 or header_start < start):
+            start = header_start
+            matched_header = header
     if start < 0:
-        _fail(f"ci_checkpoint_plan.md missing required header: {header!r}")
+        if accept_draft_header:
+            allowed = " or ".join(repr(header) for header in headers)
+            _fail(f"ci_checkpoint_plan.md missing required header: {allowed}")
+        _fail(f"ci_checkpoint_plan.md missing required header: {LINTED_HEADER!r}")
 
     remainder = text[start:]
     m = re.search(r"```json\s*\n(?P<body>[\s\S]*?)\n```", remainder)
     if not m:
-        _fail("ci_checkpoint_plan.md missing a ```json code block under 'Machine-readable plan'")
+        label = matched_header or "Machine-readable plan"
+        _fail(f"ci_checkpoint_plan.md missing a ```json code block under {label!r}")
 
     body = m.group("body").strip()
     try:

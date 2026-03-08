@@ -55,10 +55,14 @@ def _triage_text(slice_prefix: str, accepted_slice_order: list[str], *, triage_v
     )
 
 
-def _checkpoint_plan_text(slice_ids: list[str]) -> str:
+def _checkpoint_plan_text(
+    slice_ids: list[str],
+    *,
+    header: str = "## Machine-readable plan (linted)",
+) -> str:
     return (
         "# Fixture checkpoint plan\n\n"
-        "## Machine-readable plan (linted)\n\n"
+        f"{header}\n\n"
         "```json\n"
         + json.dumps(
             {
@@ -160,6 +164,23 @@ class TestPreFullPlanningConvergence(unittest.TestCase):
         data = json.loads(res.stdout)
         self.assertEqual(data["status"], "pass")
         self.assertEqual(data["accepted_slice_order"], ["WDAP0", "WDAP2", "WDAP1", "WDAP3"])
+
+    def test_helper_accepts_draft_checkpoint_header_during_pre_full_planning(self) -> None:
+        feature_dir = self._make_feature_dir(
+            "helper_draft_checkpoint_header",
+            accepted_slice_order=["WDAP0", "WDAP2", "WDAP1", "WDAP3"],
+        )
+        _write_text(
+            feature_dir / "pre-planning" / "ci_checkpoint_plan.md",
+            _checkpoint_plan_text(
+                ["WDAP0", "WDAP2", "WDAP1", "WDAP3"],
+                header="## Machine-readable plan (draft; not yet mechanically validated)",
+            ),
+        )
+        res = self._run_helper(feature_dir)
+        self.assertEqual(res.returncode, 0, msg=res.stderr)
+        data = json.loads(res.stdout)
+        self.assertEqual(data["status"], "pass")
 
     def test_helper_classifies_needs_remediation(self) -> None:
         feature_dir = self._make_feature_dir(
