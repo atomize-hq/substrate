@@ -16,6 +16,7 @@
   - remediation text invariants (must include `substrate world enable --provision-deps`)
   - `--dry-run` / `--verbose` behavior under fail-early
 - Required operator-doc update targets (exact paths + headings) that must land to remove “runtime APT” contradictions.
+- Validate the operator-doc and upstream contract targets required to keep the provisioning-time-only APT story single-sourced.
 
 ## Behavior (authoritative)
 
@@ -113,18 +114,15 @@ instead of restating contract tables.
 - `docs/COMMANDS.md` (heading: `### world Subcommand` row for `substrate world enable` flags)
 
 ## Acceptance criteria
-- AC-WDAP1-01: `substrate world deps current sync` with an in-scope APT-backed item and an unsatisfied APT requirement exits `4`, emits remediation to stderr that includes `substrate world enable --provision-deps`, and does not execute `apt`, `apt-get`, or mutating `dpkg`.
-- AC-WDAP1-02: `substrate world deps current install <ITEM...>` with an explicit APT-backed item and an unsatisfied APT requirement exits `4`, emits remediation to stderr that includes `substrate world enable --provision-deps`, and does not execute `apt`, `apt-get`, or mutating `dpkg`.
-- AC-WDAP1-03: `substrate world deps current install <ITEM...>` does not include enabled items implicitly: if the effective enabled set contains an APT-backed item, but `<ITEM...>` contains only non-APT items, the APT fail-early posture does not trigger.
-- AC-WDAP1-04: `substrate world deps current sync --all` applies the fail-early posture to any visible in-scope APT-backed items (not only the effective enabled set).
-- AC-WDAP1-05: With `--dry-run`, `deps current sync|install` performs no mutation, still exits `4` when APT requirements are unsatisfied, and prints the normalized APT requirement rendering to stdout (stable order; `name` or `name=version`).
-- AC-WDAP1-06: With `--verbose` and exit `4` due to unsatisfied APT requirements, stderr includes the normalized APT requirement rendering (stable order; `name` or `name=version`).
-- AC-WDAP1-07: On Linux host-native, fail-early remediation includes the exact phrase `Substrate will not mutate the host OS`.
-- AC-WDAP1-08: On Windows, fail-early remediation includes the exact phrase `unsupported on Windows`.
-- AC-WDAP1-09: If normalized requirement derivation encounters a version-pin conflict (DR-0001), `deps current sync|install` exits `2`, prints a deterministic conflict report to stderr, and performs no world-agent execution and no non-APT installs.
-- AC-WDAP1-10: If world-agent connectivity is required for the read-only presence probe and cannot be established, `deps current sync|install` exits `3` with actionable stderr.
+- AC-WDAP1-01: `substrate world deps current sync|install` with an in-scope APT-backed item and an unsatisfied APT requirement exits `4`, emits remediation to stderr that includes `substrate world enable --provision-deps`, and does not execute `apt`, `apt-get`, or mutating `dpkg`.
+- AC-WDAP1-02: `substrate world deps current install <ITEM...>` does not include enabled items implicitly: if the effective enabled set contains an APT-backed item, but `<ITEM...>` contains only non-APT items, the APT fail-early posture does not trigger.
+- AC-WDAP1-03: `substrate world deps current sync --all` applies the fail-early posture to any visible in-scope APT-backed items, not only the effective enabled set.
+- AC-WDAP1-04: With `--dry-run`, `deps current sync|install` performs no mutation, still exits `4` when APT requirements are unsatisfied, and prints the normalized APT requirement rendering to stdout (stable order; `name` or `name=version`).
+- AC-WDAP1-05: With `--verbose` and exit `4` due to unsatisfied APT requirements, stderr includes the normalized APT requirement rendering (stable order; `name` or `name=version`).
+- AC-WDAP1-06: Fail-early remediation includes backend-specific guidance: Linux host-native includes the exact phrase `Substrate will not mutate the host OS`, and Windows includes the exact phrase `unsupported on Windows`.
+- AC-WDAP1-07: Error-path determinism remains fail-closed: if normalized requirement derivation encounters a version-pin conflict, `deps current sync|install` exits `2` and performs no world-agent execution or non-APT installs; if world-agent connectivity is required for the read-only presence probe and cannot be established, `deps current sync|install` exits `3` with actionable stderr.
+- AC-WDAP1-08: The required operator-doc and upstream contract targets listed in this spec are updated so they state runtime APT is prohibited, identify `substrate world enable --provision-deps` as the operator remediation, and link to `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md` instead of duplicating contract tables.
 
 ## Out of scope
 - Provisioning-time APT execution (`substrate world enable --provision-deps`) details (owned by `WDAP0`).
-- Helper/installer wiring and ordering changes (owned by `WDAP2`).
-- Operator-doc updates (owned by `WDAP3`), except for enumerating the required targets in this spec.
+- Doc updates outside the explicit targets listed in this spec.

@@ -487,13 +487,13 @@
       ],
       "ac_ids": [
         "AC-WDAP1-01",
+        "AC-WDAP1-02",
         "AC-WDAP1-03",
         "AC-WDAP1-04",
         "AC-WDAP1-05",
         "AC-WDAP1-06",
         "AC-WDAP1-07",
-        "AC-WDAP1-09",
-        "AC-WDAP1-10"
+        "AC-WDAP1-08"
       ],
       "start_checklist": [
         "git checkout feat/world-deps-apt-provisioning && git pull --ff-only",
@@ -550,13 +550,13 @@
       ],
       "ac_ids": [
         "AC-WDAP1-01",
+        "AC-WDAP1-02",
         "AC-WDAP1-03",
         "AC-WDAP1-04",
         "AC-WDAP1-05",
         "AC-WDAP1-06",
         "AC-WDAP1-07",
-        "AC-WDAP1-09",
-        "AC-WDAP1-10"
+        "AC-WDAP1-08"
       ],
       "start_checklist": [
         "git checkout feat/world-deps-apt-provisioning && git pull --ff-only",
@@ -857,13 +857,13 @@
       ],
       "ac_ids": [
         "AC-WDAP1-01",
+        "AC-WDAP1-02",
         "AC-WDAP1-03",
         "AC-WDAP1-04",
         "AC-WDAP1-05",
         "AC-WDAP1-06",
         "AC-WDAP1-07",
-        "AC-WDAP1-09",
-        "AC-WDAP1-10"
+        "AC-WDAP1-08"
       ],
       "start_checklist": [
         "git checkout feat/world-deps-apt-provisioning && git pull --ff-only",

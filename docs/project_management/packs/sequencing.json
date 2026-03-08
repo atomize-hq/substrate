@@ -413,6 +413,29 @@
       ]
     },
     {
+      "order": 30.3,
+      "id": "world_deps_apt_provisioning",
+      "title": "World deps APT provisioning",
+      "branch": "feat/world-deps-apt-provisioning",
+      "directory": "docs/project_management/packs/draft/world-deps-apt-provisioning",
+      "plan": "docs/project_management/packs/draft/world-deps-apt-provisioning/plan.md",
+      "status": "not_started",
+      "sequence": [
+        {
+          "id": "WDAP0",
+          "spec": "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP0/WDAP0-spec.md"
+        },
+        {
+          "id": "WDAP1",
+          "spec": "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP1/WDAP1-spec.md"
+        }
+      ],
+      "notes": [
+        "Implements ADR-0030: provisioning-time APT system-package installation plus runtime fail-early remediation for APT-backed world deps.",
+        "Sequence after the world-deps packages/bundles contract so install.method=apt semantics are already canonical, and before manager-aware non-APT provisioning packs that extend the shared --provision-deps UX."
+      ]
+    },
+    {
       "order": 30.35,
       "id": "world_deps_host_visible_hardening",
       "title": "World deps host-visible hardening",

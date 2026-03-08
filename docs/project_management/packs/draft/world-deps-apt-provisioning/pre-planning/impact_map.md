@@ -24,9 +24,17 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - To compute pack-derived Work Lift v1 from this Touch Set: `make pm-lift-pack PACK="docs/project_management/packs/draft/world-deps-apt-provisioning"` (strict packs only).
 
 ### Create
+- None
+
+### Edit
+- `docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md`
+- `docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/spec_manifest.md`
+- `docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/workstream_triage.md`
 - `docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/ci_checkpoint_plan.md`
+- `docs/project_management/packs/draft/world-deps-apt-provisioning/tasks.json`
 - `docs/project_management/packs/draft/world-deps-apt-provisioning/plan.md`
 - `docs/project_management/packs/draft/world-deps-apt-provisioning/session_log.md`
+- `docs/project_management/packs/draft/world-deps-apt-provisioning/quality_gate_report.md`
 - `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`
 - `docs/project_management/packs/draft/world-deps-apt-provisioning/decision_register.md`
 - `docs/project_management/packs/draft/world-deps-apt-provisioning/manual_testing_playbook.md`
@@ -35,11 +43,6 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - `docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/windows-smoke.ps1`
 - `docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP0/WDAP0-spec.md`
 - `docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP1/WDAP1-spec.md`
-
-### Edit
-- `docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md`
-- `docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/spec_manifest.md`
-- `docs/project_management/packs/draft/world-deps-apt-provisioning/tasks.json`
 - `crates/shell/src/execution/cli.rs`
 - `crates/shell/src/execution/platform/mod.rs`
 - `crates/shell/src/execution/routing/dispatch/world_ops.rs`

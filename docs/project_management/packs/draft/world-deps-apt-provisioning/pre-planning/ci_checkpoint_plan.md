@@ -10,7 +10,9 @@ Standard:
 - `docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/impact_map.md`
 - `docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/spec_manifest.md`
 - `docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/minimal_spec_draft.md` (draft slice skeleton + cross-cutting invariants)
-- Slice specs: see `docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/spec_manifest.md` (slice specs live under `docs/project_management/packs/draft/world-deps-apt-provisioning/slices/<SLICE_ID>/<SLICE_ID>-spec.md`).
+- Slice specs:
+  - `docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP0/WDAP0-spec.md`
+  - `docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP1/WDAP1-spec.md`
 - Required platforms (authoritative; from `tasks.json`):
   - Behavior smoke platforms: `linux`, `macos`, `windows`
   - CI parity platforms: `linux`, `macos`, `windows`
@@ -19,7 +21,7 @@ Standard:
 - This plan is authoritative for **CI cadence**.
 - If you discover a mismatch between the plan and reality (slice ids, platform scope, contract surfaces), update this plan first, then update `tasks.json` and kickoff prompts.
 - For schema v4+ cross-platform automation packs: update `tasks.json` `meta.checkpoint_boundaries` to list the **last slice** in each checkpoint group (this is linted once slice tasks exist in `tasks.json`).
-- Pre-planning note: `tasks.json` does not define slice triads (`*-integ`) yet, so this plan is not mechanically validated yet; the slice list below is derived from the draft slice skeleton in `minimal_spec_draft.md`.
+- The accepted execution slice order is `WDAP0` then `WDAP1`, and `tasks.json` is already wired to this order.
 
 ## Machine-readable plan (linted)
 
@@ -101,34 +103,9 @@ Standard:
   - Ensures cross-document contract updates remain coherent and don’t reintroduce runtime APT semantics.
   - Full CI testing provides broader regression coverage because this feature touches shared scripts + world-agent behavior + shell builtins.
 
-## Follow-ups
+## Current execution-ready alignment
 
-This plan cannot be mechanically validated yet because `tasks.json` does not currently define slice integration tasks (`*-integ`) or checkpoint ops tasks.
-
-Before running:
-`python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "docs/project_management/packs/draft/world-deps-apt-provisioning"`
-
-…complete these wiring steps:
-
-1) Confirm slice ids and ordering
-   - Ensure the final slice ids in `tasks.json` match the accepted slice ids (expect `WDAP0`, `WDAP1` unless full planning splits/merges).
-   - Ensure this plan’s JSON `slices` lists match the deterministic slice order from `tasks.json`.
-
-2) Add `tasks.json` checkpoint boundary metadata (schema v4 cross-platform)
-   - Set `meta.checkpoint_boundaries = ["WDAP0", "WDAP1"]` to match the checkpoint boundaries (last slice in each checkpoint group).
-
-3) Add checkpoint task(s) + kickoff prompt(s) + deps
-   - Add ops tasks:
-     - `CP1-ci-checkpoint`:
-       - `type: "ops"`
-       - `depends_on: ["WDAP0-integ-core"]`
-       - `kickoff_prompt: docs/project_management/packs/draft/world-deps-apt-provisioning/kickoff_prompts/CP1-ci-checkpoint.md`
-     - `CP2-ci-checkpoint`:
-       - `type: "ops"`
-       - `depends_on: ["WDAP1-integ-core"]`
-       - `kickoff_prompt: docs/project_management/packs/draft/world-deps-apt-provisioning/kickoff_prompts/CP2-ci-checkpoint.md`
-
-4) Wire gating between checkpoints
-   - Ensure the `WDAP1` checkpoint group tasks depend on `CP1-ci-checkpoint` so work cannot proceed past the provisioning seam without completing CP1.
-   - If additional slices/checkpoints are added later, wire gating so the next checkpoint group’s first slice code/test tasks depend on the prior checkpoint task.
-
+- `tasks.json` `meta.checkpoint_boundaries` is `["WDAP0", "WDAP1"]`.
+- `CP1-ci-checkpoint` depends on `WDAP0-integ-core`.
+- `WDAP1-code` and `WDAP1-test` depend on `WDAP0-integ` and `CP1-ci-checkpoint`, so checkpoint gating is explicit.
+- `CP2-ci-checkpoint` depends on `WDAP1-integ-core`.

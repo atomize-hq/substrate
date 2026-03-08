@@ -26,8 +26,8 @@
 - Each task (code/test/integ) must fit within 108,800 tokens of context.
 
 ## Triads (slice order)
-- `WDAP0`: provisioning-time APT surface (`world enable --provision-deps`).
-- `WDAP1`: runtime fail-early + remediation for APT-backed items.
+- `WDAP0`: provisioning-time APT surface (`world enable --provision-deps`) plus helper and installer ordering.
+- `WDAP1`: runtime fail-early + remediation for APT-backed items plus operator-doc and upstream contract reconciliation.
 
 Note:
 - The checkpoint plan partitions only `WDAP0` and `WDAP1`; `tasks.json` wires only these slices.

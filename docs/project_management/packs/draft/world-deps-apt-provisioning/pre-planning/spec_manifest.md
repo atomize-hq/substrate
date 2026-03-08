@@ -32,212 +32,55 @@ Canonical slice IDs selected for this feature:
 
 ## Required spec documents (authoritative)
 
-Each entry is feature-local (must live under `docs/project_management/packs/draft/world-deps-apt-provisioning/`) and is authoritative only for the surfaces listed.
+Every backticked token in this section is an existing document or directory path. Non-path identifiers, commands, AC IDs, and slice labels are described in prose only.
 
-Spec templates:
+Spec templates used while authoring this pack:
 - `docs/project_management/system/templates/planning_pack/`
 - `docs/project_management/system/templates/spec/`
 
 ### Planning pack scaffolding (required)
 
 - `docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/spec_manifest.md`
-  - Owns (authoritative):
-    - required-doc selection for this feature directory
-    - surface → authoritative-doc ownership map (coverage matrix)
-    - follow-ups required to remove ADR ambiguity before quality gate
-    - canonical slice ID set for this feature (no `C0/C1/...`)
-  - Must define (deterministic items):
-    - an explicit “no implied surfaces” posture for any surface category not used by ADR-0030
-    - the slice ID mapping from ADR-0030 (`C0`/`C1`) to `WDAP0`/`WDAP1`
-  - Links to (non-authoritative):
-    - `docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md`
-    - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
-
+  - Owns required-doc selection, the authority map, follow-ups, and the canonical slice set for this feature.
 - `docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/impact_map.md`
-  - Owns (authoritative):
-    - touch set + cascading implications + cross-queue conflicts for slices `WDAP0` and `WDAP1`
-  - Must define (deterministic items):
-    - explicit create/edit touch allowlists by path for `WDAP0-{code,test,integ}` and `WDAP1-{code,test,integ}`
-    - explicit list of operator-doc update targets (by exact path) required by ADR-0030, including the “link-to-contract.md; do not restate contract tables” rule
-    - cross-pack dependency/conflict notes, including:
-      - `world-deps-packages-bundles-contract` (inventory schema and existing `install.method=apt` semantics), and
-      - `add-non-apt-system-package-provisioning-support` (explicit downstream dependency on `WDAP0` APT provisioning contract)
-  - Links to (non-authoritative):
-    - all feature-local docs listed in this section
-
+  - Owns the touch set, cascading implications, cross-queue conflicts, and exact operator-doc update targets.
 - `docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/ci_checkpoint_plan.md`
-  - Owns (authoritative):
-    - checkpoint grouping + CI gates for this pack (schema v4 cross-platform automation packs)
-  - Must define (deterministic items):
-    - checkpoint groups and which slice(s) end each checkpoint group (MUST include `WDAP0` and `WDAP1`)
-    - alignment rule: `tasks.json` MUST define `meta.checkpoint_boundaries` and it MUST match this plan
-  - Links to (non-authoritative):
-    - `docs/project_management/packs/draft/world-deps-apt-provisioning/tasks.json`
-
+  - Owns checkpoint grouping, accepted checkpoint boundaries, and CI gate cadence.
 - `docs/project_management/packs/draft/world-deps-apt-provisioning/plan.md`
-  - Owns (authoritative):
-    - execution runbook + sequencing overview (including required validation evidence)
-  - Must define (deterministic items):
-    - orchestration branch name (MUST match `tasks.json` `meta.automation.orchestration_branch`)
-    - canonical locations for pre-planning artifacts for this pack:
-      - `pre-planning/spec_manifest.md`
-      - `pre-planning/impact_map.md`
-      - `pre-planning/ci_checkpoint_plan.md`
-    - slice ordering (single explicit order): `WDAP0` then `WDAP1`
-    - required validation commands per ADR-0030:
-      - unit/integration test targets (by exact `cargo test ...` command or `make` target)
-      - manual playbook completion criteria (by exact path)
-      - smoke script run requirements (by exact path) and required platforms (Linux/macOS/Windows)
-  - Links to (non-authoritative):
-    - `docs/project_management/packs/draft/world-deps-apt-provisioning/tasks.json`
-    - `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`
-    - slice specs under `docs/project_management/packs/draft/world-deps-apt-provisioning/slices/`
-
-- `docs/project_management/packs/draft/world-deps-apt-provisioning/tasks.json` (already exists)
-  - Owns (authoritative):
-    - task IDs, dependency graph, and automation metadata (branch/worktree/prompt paths)
-  - Must define (deterministic items):
-    - `meta.checkpoint_boundaries` (required for schema v4 cross-platform automation packs)
-    - triad tasks for both slices:
-      - `WDAP0-code`, `WDAP0-test`, `WDAP0-integ`
-      - `WDAP1-code`, `WDAP1-test`, `WDAP1-integ`
-    - each task’s acceptance criteria MUST reference `AC-WDAP0-*` or `AC-WDAP1-*` IDs from the corresponding slice spec
-  - Links to (non-authoritative):
-    - `docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP0/WDAP0-spec.md`
-    - `docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP1/WDAP1-spec.md`
-
+  - Owns the execution runbook, accepted slice ordering, and required validation evidence.
+- `docs/project_management/packs/draft/world-deps-apt-provisioning/tasks.json`
+  - Owns task IDs, dependency graph, automation metadata, and checkpoint boundary wiring.
 - `docs/project_management/packs/draft/world-deps-apt-provisioning/session_log.md`
-  - Owns (authoritative):
-    - append-only planning/execution log for this pack
-  - Must define (deterministic items):
-    - initialization from `docs/project_management/system/templates/planning_pack/session_log.md.tmpl`
-    - “every task start/end must be logged with timestamp + task id” rule
-  - Links to (non-authoritative):
-    - `docs/project_management/packs/draft/world-deps-apt-provisioning/tasks.json`
-
+  - Owns the append-only planning and execution log.
 - `docs/project_management/packs/draft/world-deps-apt-provisioning/quality_gate_report.md`
-  - Owns (authoritative):
-    - planning quality gate outcome for starting triads
-  - Must define (deterministic items):
-    - initialization from `docs/project_management/system/templates/planning_pack/PLANNING_GATE_REPORT_TEMPLATE.md`
-    - rule: execution triads MUST NOT start unless `RECOMMENDATION: ACCEPT` is present
-  - Links to (non-authoritative):
-    - every required artifact referenced by `RECOMMENDATION`
+  - Owns the planning quality gate outcome recorded before execution triads begin.
 
-### Feature contract + decisions (required by ADR-0030)
+### Feature contract and decision docs (required)
 
 - `docs/project_management/packs/draft/world-deps-apt-provisioning/decision_register.md`
-  - Owns (authoritative):
-    - DR-0001 — package-list conflict policy for APT requirement derivation (duplicate names; version pins)
-    - DR-0002 — provisioned-state tracking posture (probe-only vs persisted state)
-    - DR-0003 — provisioning execution isolation model (hardened runtime preserved; provisioning-time mutation boundary)
-  - Must define (deterministic items):
-    - exactly two options (A/B) per DR and exactly one selection per DR
-    - the exact surfaces impacted by each DR (which spec docs must change)
-  - Links to (non-authoritative):
-    - `docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md`
-    - `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`
-    - `docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP0/WDAP0-spec.md`
-
+  - Owns DR-0001, DR-0002, and DR-0003 plus the impacted surfaces each decision constrains.
 - `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`
-  - Owns (authoritative):
-    - operator-facing contract introduced/changed by ADR-0030 for:
-      - provisioning entrypoint: `substrate world enable --provision-deps [--dry-run] [--verbose]`
-      - runtime invariant: `substrate world deps current sync|install` MUST NOT invoke APT/dpkg
-    - exit-code meanings used by this feature (taxonomy-aligned; ADR-0030 subset: `0/3/4/5`, plus taxonomy defaults for all other codes)
-    - platform/backends support matrix for provisioning and runtime remediation:
-      - Linux host-native (unsupported; no host OS mutation)
-      - macOS Lima guest (supported)
-      - Windows WSL guest (explicitly scoped per Follow-ups)
-    - remediation message invariants (including the required exact command string `substrate world enable --provision-deps`)
-    - protected paths / OS-mutation invariants required by ADR-0030 (hardened runtime remains fail-closed; provisioning is explicit)
-    - explicit statement: this feature introduces no new config keys and no new environment variables
-  - Must define (deterministic items):
-    - provisioning success/no-op semantics:
-      - behavior when the effective enabled world-deps set contains zero `install.method=apt` items
-    - provisioning failure semantics:
-      - backend unavailable / cannot connect to world-agent (exit `3`)
-      - provisioning unsupported on this backend (exit `4`) with required “no host OS mutation” messaging on Linux host-native
-      - hardening conflict / fail-closed safety violation (exit `5`; reserved meaning for provisioning misconfiguration)
-    - runtime fail-early trigger definition (high level; operational details live in slice specs):
-      - how `current sync` and `current install` determine whether APT-backed items are in scope
-    - `--dry-run` contract for provisioning:
-      - prints the derived APT package list and intended actions
-      - performs no mutation
-    - minimum guaranteed `--verbose` additions and the required stream(s) (`stdout` vs `stderr`)
-  - Links to (non-authoritative):
-    - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
-    - `docs/CONFIGURATION.md` (`SUBSTRATE_WORLD_REQUEST_PROFILE`; baseline only)
-    - `docs/WORLD.md` (world-deps command syntax baseline; baseline only)
+  - Owns the operator-facing CLI, remediation, exit-code, platform, and safety contract for this feature.
 
-### Validation artifacts (required by ADR-0030)
+### Validation artifacts (required)
 
 - `docs/project_management/packs/draft/world-deps-apt-provisioning/manual_testing_playbook.md`
-  - Owns (authoritative):
-    - human validation workflow for ADR-0030 (commands + expected key output + exit codes)
-  - Must define (deterministic items):
-    - guest provisioning success path (macOS Lima; Windows WSL per Follow-ups)
-    - runtime remediation behavior for `world deps current sync` and `world deps current install`
-    - Linux host-native unsupported provisioning behavior (explicit “no host OS mutation” posture)
-    - required preconditions and how to establish them (including how to ensure at least one enabled dep uses `install.method=apt`)
-  - Links to (non-authoritative):
-    - `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`
-    - slice specs under `docs/project_management/packs/draft/world-deps-apt-provisioning/slices/`
-
-- Smoke scripts (feature-local; cross-platform):
-  - `docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/linux-smoke.sh`
-  - `docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/macos-smoke.sh`
-  - `docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/windows-smoke.ps1`
-  - Own (authoritative):
-    - automated validation steps per platform and pass/fail expectations aligned to `manual_testing_playbook.md`
-  - Must define (deterministic items):
-    - exact commands executed and exact assertions performed for:
-      - provisioning supported vs unsupported paths (per platform/backend)
-      - runtime fail-early remediation behavior
-    - exit-code expectations for the smoke scripts themselves
-  - Link to (non-authoritative):
-    - `docs/project_management/packs/draft/world-deps-apt-provisioning/manual_testing_playbook.md`
+  - Owns deterministic manual validation setup, commands, expected output, and exit-code expectations.
+- `docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/linux-smoke.sh`
+  - Owns Linux smoke validation for provisioning posture and runtime fail-early behavior.
+- `docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/macos-smoke.sh`
+  - Owns macOS smoke validation for provisioning posture and runtime fail-early behavior.
+- `docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/windows-smoke.ps1`
+  - Owns Windows smoke validation for provisioning posture and runtime fail-early behavior.
 
 ### Slice specs (required)
 
-Slice specs MUST use the canonical layout:
-- `docs/project_management/packs/draft/world-deps-apt-provisioning/slices/<SLICE_ID>/<SLICE_ID>-spec.md`
+Accepted full-planning slice order is WDAP0 then WDAP1.
 
 - `docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP0/WDAP0-spec.md`
-  - Owns (authoritative):
-    - vertical slice behavior + acceptance criteria for ADR-0030 C0 (provisioning-time APT)
-  - Must define (deterministic items):
-    - acceptance criteria (AC-WDAP0-*) that prove:
-      - the APT requirement set is derived from the effective enabled world-deps set and filtered by `install.method=apt`
-      - the derived package list is deterministic (de-dup + stable ordering) and includes explicit version pins when present
-      - provisioning executes APT installs only on supported guest backends and never mutates the Linux host OS
-      - provisioning uses an execution posture that can mutate guest OS packages without weakening hardened runtime execution (selected by DR-0003)
-      - `--dry-run` produces deterministic output and performs no mutation
-    - the exact APT invocation contract:
-      - command(s), flags, and environment required for non-interactive installs
-      - idempotency definition (what “already installed” means)
-      - error → exit-code mapping aligned to `contract.md`
-  - Links to (non-authoritative):
-    - `docs/project_management/packs/implemented/world-deps-packages-bundles-contract/contract.md`
-    - `docs/project_management/packs/draft/world-deps-apt-provisioning/decision_register.md`
-    - `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`
-
+  - Owns provisioning-time APT requirement derivation, guest-only execution posture, and helper and installer ordering invariants.
 - `docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP1/WDAP1-spec.md`
-  - Owns (authoritative):
-    - vertical slice behavior + acceptance criteria for ADR-0030 C1 (runtime fail-early + remediation for APT items)
-  - Must define (deterministic items):
-    - acceptance criteria (AC-WDAP1-*) that prove:
-      - `substrate world deps current sync` MUST NOT invoke APT/dpkg and fails early when APT-backed items are in scope
-      - `substrate world deps current install` MUST NOT invoke APT/dpkg and fails early when APT-backed items are in scope
-      - the failure is actionable:
-        - includes the exact remediation command `substrate world enable --provision-deps`
-        - includes manual guidance on backends where provisioning is unsupported and explicitly states “no host OS mutation”
-      - exit code is `4` for the fail-early posture (aligned to `contract.md`)
-    - the exact scope rule for determining “APT-backed items are in scope” for both commands (enabled-set vs explicit args)
-    - operator-doc update requirements (by exact path/headings) for the “APT is provisioning-time” contract (listed in `impact_map.md`)
-  - Links to (non-authoritative):
-    - `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`
-    - `docs/project_management/packs/draft/world-deps-apt-provisioning/decision_register.md`
+  - Owns runtime fail-early behavior, remediation invariants, and operator-doc and upstream contract reconciliation targets.
 
 ## Coverage matrix (surface → authoritative doc)
 

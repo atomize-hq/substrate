@@ -1,4 +1,4 @@
-# WDAP0-spec — Provisioning-time APT requirements + guest-only execution
+# WDAP0-spec — Provisioning-time APT requirements + provisioning wiring
 
 ## Behavior delta (single)
 - Existing: `substrate world deps current sync|install` may invoke APT/dpkg at runtime for `install.method=apt` items, which can fail under hardened worlds and can violate the “no host OS mutation” posture on Linux host-native backends. `substrate world enable` provisions the world backend via a helper script and does not provide an explicit, deterministic provisioning-time APT workflow.
@@ -11,6 +11,7 @@
 - Implement probe-only “already satisfied” detection (DR-0002).
 - Implement guest-only APT execution using Agent API request `profile=world-deps-provision`, ignoring `SUBSTRATE_WORLD_REQUEST_PROFILE` (DR-0003).
 - Define deterministic stdout/stderr invariants for `--dry-run` and `--verbose` for the provisioning workflow.
+- Wire helper and installer flows so provisioning-time APT occurs before runtime `world deps current sync`, and so downstream remediation remains deterministic.
 
 ## Behavior (authoritative)
 ### Inputs and derivation
@@ -106,16 +107,35 @@ When `--verbose` is present with `--provision-deps` (dry-run or non-dry-run), st
 - the selected provisioning request profile value (`world-deps-provision`), and
 - the derived normalized APT requirement set (same content and ordering as `--dry-run`).
 
+### Helper and installer wiring
+When invoked as `substrate world enable --provision-deps` (without `--dry-run`):
+- `scripts/substrate/world-enable.sh` MUST be invoked with `--no-sync-deps`.
+- The helper MUST emit the exact line `Skipping world deps sync (--no-sync-deps)` when `--no-sync-deps` is present.
+- `substrate world deps current sync` MUST run only after provisioning-time APT completes successfully or is a no-op by contract.
+
+When invoked as `substrate world enable --provision-deps --dry-run`:
+- no helper script is executed, and
+- no `substrate world deps current sync` execution occurs.
+
+Installer rule:
+- When `scripts/substrate/install-substrate.sh --sync-deps` observes downstream `substrate world deps current sync` exit `4`, stderr MUST include the exact remediation command:
+
+  ```text
+  substrate world enable --provision-deps
+  ```
+
+- The installer MUST still exit `0` after emitting the remediation note.
+
 ## Acceptance criteria
-- AC-WDAP0-01: `substrate world enable --provision-deps --dry-run` prints the normalized APT requirement set to stdout with one entry per line rendered as `name` or `name=version`, in sorted-by-name order.
-- AC-WDAP0-02: If two enabled items require the same APT `name` with two distinct non-empty `version` pins, `substrate world enable --provision-deps` exits `2`, prints a deterministic conflict report to stderr, and performs no world-agent execution.
-- AC-WDAP0-03: On Linux host-native, `substrate world enable --provision-deps` exits `4` and stderr includes the exact phrase `Substrate will not mutate the host OS`.
-- AC-WDAP0-04: On supported guest backends, provisioning probe/install requests use Agent API `profile=world-deps-provision` even when `SUBSTRATE_WORLD_REQUEST_PROFILE` is set to a different value.
-- AC-WDAP0-05: When the normalized APT requirement set is empty, `substrate world enable --provision-deps` exits `0` and performs no in-world probe/install execution.
-- AC-WDAP0-06: When all normalized APT requirements are already satisfied, `substrate world enable --provision-deps` exits `0` without invoking `apt-get` or `dpkg`.
-- AC-WDAP0-07: If world-agent connectivity is required for probe/install and cannot be established, `substrate world enable --provision-deps` exits `3` with actionable stderr.
-- AC-WDAP0-08: With `--verbose`, stdout includes `world-deps-provision` and the normalized APT requirement set (same content/order as `--dry-run`).
+- AC-WDAP0-01: `substrate world enable --provision-deps --dry-run` prints the normalized APT requirement set to stdout with one entry per line rendered as `name` or `name=version`, in sorted-by-name order, and performs no helper, world-agent, APT, or mutating `dpkg` execution.
+- AC-WDAP0-02: If two enabled items require the same APT `name` with two distinct non-empty `version` pins, `substrate world enable --provision-deps` exits `2`, prints a deterministic conflict report to stderr, and performs no helper or world-agent execution.
+- AC-WDAP0-03: On Linux host-native and Windows, `substrate world enable --provision-deps` exits `4`; Linux stderr includes the exact phrase `Substrate will not mutate the host OS`, and Windows stderr includes the exact phrase `unsupported on Windows`.
+- AC-WDAP0-04: On supported guest backends, provisioning probe and install requests use Agent API `profile=world-deps-provision` even when `SUBSTRATE_WORLD_REQUEST_PROFILE` is set to a different value.
+- AC-WDAP0-05: When the normalized APT requirement set is empty, `substrate world enable --provision-deps` exits `0` and the APT provisioning phase is a no-op.
+- AC-WDAP0-06: When all normalized APT requirements are already satisfied, `substrate world enable --provision-deps` exits `0` without invoking `apt-get` or mutating `dpkg`.
+- AC-WDAP0-07: With `substrate world enable --provision-deps` (non-dry-run), `scripts/substrate/world-enable.sh` is invoked with `--no-sync-deps`, the helper emits `Skipping world deps sync (--no-sync-deps)`, and runtime `substrate world deps current sync` runs only after provisioning-time APT completes.
+- AC-WDAP0-08: If world-agent connectivity is required for probe or install and cannot be established, `substrate world enable --provision-deps` exits `3` with actionable stderr; when `scripts/substrate/install-substrate.sh --sync-deps` observes downstream exit `4`, it prints remediation containing `substrate world enable --provision-deps` and still exits `0`.
 
 ## Out of scope
 - Runtime fail-early behavior for `substrate world deps current sync|install` (owned by `WDAP1`).
-- Script/installer wiring and checkpoint/skeleton updates (owned by `WDAP2` and `WDAP-PWS-tasks_checkpoints`).
+- Planning-pack task wiring and checkpoint scaffolding (`tasks.json`, kickoff prompts, quality gate report).

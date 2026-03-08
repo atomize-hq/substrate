@@ -24,7 +24,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: afeef29383051614b0a9908db231e53d3b6feeef7d582aa4ab2ce432d524e988
+ADR_BODY_SHA256: 3170d703467337b54ade435f6d6ae36cc0c8c2f6df64535f73bf77fa5db54635
 
 ### Changes (operator-facing)
 
