@@ -38,3 +38,11 @@
   - `python3 docs/project_management/system/scripts/planning/validate_slice_inventory_coherence.py --feature-dir "docs/project_management/packs/draft/world-deps-apt-provisioning" --phase execution_ready` → `PASS`
   - `python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "docs/project_management/packs/draft/world-deps-apt-provisioning"` → `PASS`
   - `make planning-lint FEATURE_DIR="docs/project_management/packs/draft/world-deps-apt-provisioning"` → `PASS`
+
+## START — 2026-03-09T00:56:27Z — code — WDAP0-code
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/draft/world-deps-apt-provisioning" SLICE_ID="WDAP0"`
+
+## START — 2026-03-09T00:56:27Z — test — WDAP0-test
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/draft/world-deps-apt-provisioning" SLICE_ID="WDAP0"`
