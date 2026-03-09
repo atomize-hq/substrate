@@ -58,3 +58,23 @@
 ## START — 2026-03-09T01:20:03Z — integration — WDAP0-integ-core
 - Dispatch:
   - `make triad-task-start FEATURE_DIR="/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/draft/world-deps-apt-provisioning" TASK_ID="WDAP0-integ-core" LAUNCH_CODEX=1`
+
+## END — 2026-03-09T02:15:47Z — integration — WDAP0-integ-core
+- HEAD: `8d1f1a3aa4d227fca390bac1301807d424a51435`
+- Summary of changes (exhaustive):
+  - Merged `world-deps-apt-provisioning-wdap0-code` and `world-deps-apt-provisioning-wdap0-test` into the integration worktree and reconciled the merged result to the WDAP0 spec.
+  - Fixed WDAP0 test-module wiring so workspace clippy passes by importing shared test helpers through the existing `support` module in `crates/shell/tests/world_enable_provision_deps_wdap0.rs`.
+  - Stabilized the unrelated PTY rendering regression in `crates/shell/tests/repl_world_first_rendering_v1.rs` so `make integ-checks` is green under full-suite load.
+  - Updated the orchestration-branch impact map to include `crates/shell/tests/repl_world_first_rendering_v1.rs`, which was touched during integration deflake work.
+- Local gates run (with results):
+  - `cargo fmt --all --check` → `PASS`
+  - `cargo clippy --workspace --all-targets -- -D warnings` → `PASS`
+  - `cargo test -p shell --test world_enable_provision_deps_wdap0 -- --nocapture` → `PASS`
+  - `bash tests/mac/installer_parity_fixture.sh --scenario sync-deps-remediation` → `PASS`
+  - `make integ-checks` → `PASS`
+  - `make triad-task-finish TASK_ID="WDAP0-integ-core"` → `PASS`
+- Behavioral smoke preflight:
+  - `cargo build --bin substrate && PATH="$PWD/target/debug:$PATH" bash "docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/macos-smoke.sh"` → `FAIL`
+  - Failure is in the smoke harness, not the WDAP0 implementation: Case A captures file contents with command substitution (`out="$(cat ...)"`), which strips the trailing newline before comparing against `expected_stdout=$'smoke-apt-a\nsmoke-apt-b=1\n'`. The actual file bytes match the expected output including the trailing newline.
+- Next step:
+  - Run `CP1-ci-checkpoint` from the orchestration checkout. Do not dispatch checkpoint CI from the WDAP0 integration worktree.
