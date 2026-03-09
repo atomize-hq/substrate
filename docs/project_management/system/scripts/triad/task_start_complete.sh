@@ -332,7 +332,7 @@ finish_one() {
         printf 'TASK_BRANCH=dry-run\nWORKTREE=%s\nHEAD=dry-run\nCOMMITS=dry-run\nCHECKS=dry-run\nSMOKE_RUN=\nMERGED_TO_ORCH=\n' "${worktree}" >"${out}"
         return 0
     fi
-    (cd "${worktree}" && make triad-task-finish TASK_ID="${task_id}") >"${out}" 2>>"${LOG_PATH}"
+    (cd "${worktree}" && "${TRIAD_SCRIPTS_DIR}/task_finish.sh" --task-id "${task_id}") >"${out}" 2>>"${LOG_PATH}"
     cat "${out}" >>"${LOG_PATH}"
     printf '\n' >>"${LOG_PATH}"
 }
