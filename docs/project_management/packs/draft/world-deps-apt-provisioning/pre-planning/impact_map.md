@@ -24,7 +24,8 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - To compute pack-derived Work Lift v1 from this Touch Set: `make pm-lift-pack PACK="docs/project_management/packs/draft/world-deps-apt-provisioning"` (strict packs only).
 
 ### Create
-- None
+- `crates/shell/src/builtins/world_enable/runner/provision_deps.rs`
+- `crates/shell/tests/world_enable_provision_deps_wdap0.rs`
 
 ### Edit
 - `docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md`
@@ -49,14 +50,12 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - `crates/shell/src/builtins/world_enable/runner.rs`
 - `crates/shell/src/builtins/world_enable/runner/helper_script.rs`
 - `crates/shell/src/builtins/world_enable/runner/log_ops.rs`
-- `crates/shell/src/builtins/world_enable/runner/provision_deps.rs`
 - `crates/shell/src/builtins/world_deps/mod.rs`
 - `crates/shell/src/builtins/world_deps/inventory.rs`
 - `crates/shell/src/builtins/world_deps/errors.rs`
 - `crates/shell/src/builtins/world_deps/surfaces.rs`
 - `crates/world-agent/src/service.rs`
 - `crates/shell/tests/world_enable.rs`
-- `crates/shell/tests/world_enable_provision_deps_wdap0.rs`
 - `crates/shell/tests/world_deps_apt_install_wdp5.rs`
 - `scripts/substrate/world-enable.sh`
 - `scripts/substrate/install-substrate.sh`
