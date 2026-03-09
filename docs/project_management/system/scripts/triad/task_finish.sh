@@ -381,7 +381,7 @@ enforce_impact_map_touchset() {
 
     local allow_json
     if ! allow_json="$(cd "${orch_wt}" && python3 "${PLANNING_SCRIPTS_DIR}/validate_impact_map.py" --feature-dir "${FEATURE_DIR_RELPATH}" --emit-json)"; then
-        die "impact_map Touch Set validation failed on orchestration branch; fix ${FEATURE_DIR_RELPATH}/impact_map.md in ${ORCH_BRANCH} before completing the task"
+        die "impact_map Touch Set validation failed on orchestration branch; fix ${FEATURE_DIR_RELPATH}/pre-planning/impact_map.md in ${ORCH_BRANCH} before completing the task"
     fi
 
     allow_exact_text="$(jq -r '.create[]?, .edit[]?, .deprecate[]?, .delete[]?' <<<"${allow_json}")"
@@ -441,7 +441,7 @@ enforce_impact_map_touchset() {
     done
     echo "" >&2
     echo "To proceed:" >&2
-    echo "1) In orchestration worktree (${orch_wt}) on branch ${ORCH_BRANCH}: update ${FEATURE_DIR_RELPATH}/impact_map.md to include these paths (Create/Edit/Deprecate/Delete)." >&2
+    echo "1) In orchestration worktree (${orch_wt}) on branch ${ORCH_BRANCH}: update ${FEATURE_DIR_RELPATH}/pre-planning/impact_map.md to include these paths (Create/Edit/Deprecate/Delete)." >&2
     echo "2) Commit planning docs update." >&2
     echo "3) Re-run: make triad-task-finish TASK_ID=\"${TASK_ID}\"" >&2
 

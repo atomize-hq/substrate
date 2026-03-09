@@ -141,7 +141,10 @@ TRIAD_SCRIPTS_DIR="${PM_SYSTEM_ROOT}/scripts/triad"
 FEATURE_DIR_ABS="$(python_abs_path "${FEATURE_DIR}")"
 TASKS_JSON="${FEATURE_DIR_ABS}/tasks.json"
 SESSION_LOG="${FEATURE_DIR_ABS}/session_log.md"
-CI_CHECKPOINT_PLAN="${FEATURE_DIR_ABS}/ci_checkpoint_plan.md"
+CI_CHECKPOINT_PLAN="${FEATURE_DIR_ABS}/pre-planning/ci_checkpoint_plan.md"
+if [[ ! -f "${CI_CHECKPOINT_PLAN}" ]]; then
+    CI_CHECKPOINT_PLAN="${FEATURE_DIR_ABS}/ci_checkpoint_plan.md"
+fi
 
 if [[ ! -f "${TASKS_JSON}" ]]; then
     die "Missing tasks.json: ${TASKS_JSON}"
