@@ -54,3 +54,7 @@
 ## END — 2026-03-09T01:20:03Z — test — WDAP0-test
 - HEAD: `f058e78432318f7088445832fc68e3e6741b2bb9`
 - Codex last message: `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/draft/world-deps-apt-provisioning/logs/WDAP0/test/last_message.md`
+
+## START — 2026-03-09T01:20:03Z — integration — WDAP0-integ-core
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/draft/world-deps-apt-provisioning" TASK_ID="WDAP0-integ-core" LAUNCH_CODEX=1`
