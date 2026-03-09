@@ -128,7 +128,6 @@ PRE_PLANNING_DIR_ABS="${FEATURE_DIR_ABS}/pre-planning"
 mkdir -p "${PRE_PLANNING_DIR_ABS}"
 
 RUN_TS="$(date -u +%Y%m%d-%H%M%S)"
-LOG_DIR_REL="${FEATURE_DIR_REL}/logs/pre-full-planning-convergence"
 LOG_DIR_ABS="${FEATURE_DIR_ABS}/logs/pre-full-planning-convergence"
 RUN_DIR_ABS="${LOG_DIR_ABS}/${RUN_TS}"
 mkdir -p "${RUN_DIR_ABS}"

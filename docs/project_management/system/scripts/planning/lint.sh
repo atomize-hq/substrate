@@ -104,7 +104,6 @@ require_any_path "impact_map.md" "${FEATURE_DIR}/pre-planning/impact_map.md" "${
 
 FEATURE_DIR_RELPATH="$(python3 "${PLANNING_SCRIPTS_DIR}/pm_paths.py" resolve-feature-dir --feature-dir "${FEATURE_DIR}")"
 pm_roots_json="$(python3 "${PLANNING_SCRIPTS_DIR}/pm_paths.py" print-roots)"
-PM_ROOT="$(jq -r '.pm_root' <<<"${pm_roots_json}")"
 PM_PACKS_ROOT="$(jq -r '.pm_packs_root' <<<"${pm_roots_json}")"
 
 PM_PACKS_PREFIX="${PM_PACKS_ROOT%/}/"

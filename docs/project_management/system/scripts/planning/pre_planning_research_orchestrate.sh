@@ -364,7 +364,6 @@ commit_step_outputs() {
     rm -rf "${backup_dir}"
     mkdir -p "${backup_dir}"
 
-    local promoted_any=0
     local target_rel staged_rel target_abs staged_abs backup_abs
     for target_rel in "${allow[@]}"; do
         staged_rel="$(step_staged_rel "${step}" "${target_rel}")"
@@ -384,7 +383,6 @@ commit_step_outputs() {
 
         mkdir -p "$(dirname "${target_abs}")"
         cp "${staged_abs}" "${target_abs}"
-        promoted_any=1
     done
 
     restore_failed_promotion() {

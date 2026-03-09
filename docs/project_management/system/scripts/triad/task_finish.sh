@@ -238,7 +238,6 @@ if [[ "${current_branch}" != "${TASK_BRANCH}" ]]; then
 fi
 
 pm_roots_json="$(python3 "${PLANNING_SCRIPTS_DIR}/pm_paths.py" print-roots 2>/dev/null)" || die "Failed to resolve PM roots (pm_paths.py print-roots)"
-PM_ROOT="$(jq -r '.pm_root' <<<"${pm_roots_json}")"
 PM_PACKS_ROOT="$(jq -r '.pm_packs_root' <<<"${pm_roots_json}")"
 
 PM_PACKS_PREFIX="${PM_PACKS_ROOT%/}/"
