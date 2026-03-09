@@ -1,0 +1,850 @@
+{
+  "meta": {
+    "schema_version": 4,
+    "cross_platform": true,
+    "ci_parity_platforms_required": [
+      "linux",
+      "macos",
+      "windows"
+    ],
+    "behavior_platforms_required": [
+      "linux",
+      "macos",
+      "windows"
+    ],
+    "automation": {
+      "enabled": true,
+      "orchestration_branch": "feat/world-disabled-diagnostics"
+    },
+    "slice_spec_version": 2,
+    "feature": "world-disabled-diagnostics",
+    "adr_paths": [
+      "docs/project_management/adrs/draft/ADR-0036-quieting-lemur.md"
+    ],
+    "checkpoint_boundaries": [
+      "WDD2"
+    ]
+  },
+  "tasks": [
+    {
+      "id": "WDD0-code",
+      "name": "WDD0 slice (code)",
+      "type": "code",
+      "phase": "WDD0",
+      "status": "pending",
+      "description": "Implement the shared effective `world.enabled` resolver seam for diagnostics (WDD0).",
+      "references": [
+        "docs/project_management/packs/draft/world-disabled-diagnostics/plan.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/tasks.json",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/session_log.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/slices/WDD0/WDD0-spec.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/contract.md",
+        "docs/project_management/adrs/draft/ADR-0036-quieting-lemur.md",
+        "docs/reference/env/contract.md"
+      ],
+      "acceptance_criteria": [
+        "Diagnostics compute `effective_world_enabled` via the existing effective-config resolver (no ad-hoc precedence).",
+        "Effective-config resolution failures fail fast with exit code 2 and do not proceed to probing/output.",
+        "Code is formatted and clippy-clean per the triad standards."
+      ],
+      "ac_ids": [
+        "AC-WDD0-01",
+        "AC-WDD0-02",
+        "AC-WDD0-03",
+        "AC-WDD0-04"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-disabled-diagnostics && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDD0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/world-disabled-diagnostics\" SLICE_ID=\"WDD0\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDD0-code\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-disabled-diagnostics-wdd0-code",
+      "integration_task": "WDD0-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/world-disabled-diagnostics/slices/WDD0/kickoff_prompts/WDD0-code.md",
+      "depends_on": [],
+      "concurrent_with": [
+        "WDD0-test"
+      ],
+      "git_branch": "world-disabled-diagnostics-wdd0-code",
+      "required_make_targets": [
+        "triad-code-checks"
+      ]
+    },
+    {
+      "id": "WDD0-test",
+      "name": "WDD0 slice (test)",
+      "type": "test",
+      "phase": "WDD0",
+      "status": "pending",
+      "description": "Add/extend tests for diagnostics effective-config resolution precedence and failure posture (WDD0).",
+      "references": [
+        "docs/project_management/packs/draft/world-disabled-diagnostics/plan.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/tasks.json",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/session_log.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/slices/WDD0/WDD0-spec.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/contract.md",
+        "docs/project_management/adrs/draft/ADR-0036-quieting-lemur.md",
+        "docs/reference/env/contract.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover precedence and CLI override behavior per WDD0 ACs.",
+        "Tests cover invalid YAML / unreadable config failure posture (exit 2; no probing).",
+        "Tests are deterministic and do not depend on global machine state (use temp dirs + scoped env vars)."
+      ],
+      "ac_ids": [
+        "AC-WDD0-01",
+        "AC-WDD0-02",
+        "AC-WDD0-03",
+        "AC-WDD0-04"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-disabled-diagnostics && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDD0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/world-disabled-diagnostics\" SLICE_ID=\"WDD0\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "Run the targeted tests you add/touch",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDD0-test\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-disabled-diagnostics-wdd0-test",
+      "integration_task": "WDD0-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/world-disabled-diagnostics/slices/WDD0/kickoff_prompts/WDD0-test.md",
+      "depends_on": [],
+      "concurrent_with": [
+        "WDD0-code"
+      ],
+      "git_branch": "world-disabled-diagnostics-wdd0-test",
+      "required_make_targets": [
+        "triad-test-checks"
+      ]
+    },
+    {
+      "id": "WDD0-integ",
+      "name": "WDD0 slice (integration)",
+      "type": "integration",
+      "phase": "WDD0",
+      "status": "pending",
+      "description": "Integrate WDD0 and make it green on the primary dev platform.",
+      "references": [
+        "docs/project_management/packs/draft/world-disabled-diagnostics/plan.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/tasks.json",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/session_log.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/slices/WDD0/WDD0-spec.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/contract.md",
+        "docs/project_management/adrs/draft/ADR-0036-quieting-lemur.md"
+      ],
+      "acceptance_criteria": [
+        "WDD0 behavior matches the spec and is test-backed per WDD0 acceptance criteria.",
+        "Local integration gates are green (fmt, clippy, tests, integ-checks)."
+      ],
+      "ac_ids": [
+        "AC-WDD0-01",
+        "AC-WDD0-02",
+        "AC-WDD0-03",
+        "AC-WDD0-04"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-disabled-diagnostics && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDD0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/world-disabled-diagnostics\" TASK_ID=\"WDD0-integ\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDD0-integ\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-disabled-diagnostics-wdd0-integ",
+      "integration_task": "WDD0-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/world-disabled-diagnostics/slices/WDD0/kickoff_prompts/WDD0-integ.md",
+      "depends_on": [
+        "WDD0-code",
+        "WDD0-test"
+      ],
+      "concurrent_with": [],
+      "git_branch": "world-disabled-diagnostics-wdd0-integ",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": true
+    },
+    {
+      "id": "WDD1-code",
+      "name": "WDD1 slice (code)",
+      "type": "code",
+      "phase": "WDD1",
+      "status": "pending",
+      "description": "Implement shim-doctor disabled/skipped gating, text branching, and JSON status emission/omission rules (WDD1).",
+      "references": [
+        "docs/project_management/packs/draft/world-disabled-diagnostics/plan.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/tasks.json",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/session_log.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/slices/WDD1/WDD1-spec.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/contract.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/decision_register.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/world-disabled-diagnostics-json-schema-spec.md",
+        "docs/project_management/adrs/draft/ADR-0036-quieting-lemur.md"
+      ],
+      "acceptance_criteria": [
+        "When `effective_world_enabled=false`, shim doctor short-circuits probes and emits disabled/skipped statuses (text + JSON) per spec/contract.",
+        "When enabled, shim doctor remains fail-visible (no masking).",
+        "Code is formatted and clippy-clean per the triad standards."
+      ],
+      "ac_ids": [
+        "AC-WDD1-01",
+        "AC-WDD1-02",
+        "AC-WDD1-03",
+        "AC-WDD1-04",
+        "AC-WDD1-05"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-disabled-diagnostics && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDD1-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/world-disabled-diagnostics\" SLICE_ID=\"WDD1\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDD1-code\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-disabled-diagnostics-wdd1-code",
+      "integration_task": "WDD1-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/world-disabled-diagnostics/slices/WDD1/kickoff_prompts/WDD1-code.md",
+      "depends_on": [
+        "WDD0-integ"
+      ],
+      "concurrent_with": [
+        "WDD1-test"
+      ],
+      "git_branch": "world-disabled-diagnostics-wdd1-code",
+      "required_make_targets": [
+        "triad-code-checks"
+      ]
+    },
+    {
+      "id": "WDD1-test",
+      "name": "WDD1 slice (test)",
+      "type": "test",
+      "phase": "WDD1",
+      "status": "pending",
+      "description": "Add/extend shim-doctor integration tests for disabled/skipped behavior, omission rules, and no-probes boundary (WDD1).",
+      "references": [
+        "docs/project_management/packs/draft/world-disabled-diagnostics/plan.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/tasks.json",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/session_log.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/slices/WDD1/WDD1-spec.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/contract.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/decision_register.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/world-disabled-diagnostics-json-schema-spec.md",
+        "docs/project_management/adrs/draft/ADR-0036-quieting-lemur.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover disabled mode (no probes; status enums; legacy field omissions) per WDD1 ACs.",
+        "Tests cover enabled-but-broken mode is fail-visible (no masking as disabled).",
+        "Tests are deterministic and do not depend on global machine state."
+      ],
+      "ac_ids": [
+        "AC-WDD1-01",
+        "AC-WDD1-02",
+        "AC-WDD1-03",
+        "AC-WDD1-04",
+        "AC-WDD1-05"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-disabled-diagnostics && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDD1-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/world-disabled-diagnostics\" SLICE_ID=\"WDD1\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "Run the targeted tests you add/touch",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDD1-test\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-disabled-diagnostics-wdd1-test",
+      "integration_task": "WDD1-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/world-disabled-diagnostics/slices/WDD1/kickoff_prompts/WDD1-test.md",
+      "depends_on": [
+        "WDD0-integ"
+      ],
+      "concurrent_with": [
+        "WDD1-code"
+      ],
+      "git_branch": "world-disabled-diagnostics-wdd1-test",
+      "required_make_targets": [
+        "triad-test-checks"
+      ]
+    },
+    {
+      "id": "WDD1-integ",
+      "name": "WDD1 slice (integration)",
+      "type": "integration",
+      "phase": "WDD1",
+      "status": "pending",
+      "description": "Integrate WDD1 and make it green on the primary dev platform.",
+      "references": [
+        "docs/project_management/packs/draft/world-disabled-diagnostics/plan.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/tasks.json",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/session_log.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/slices/WDD1/WDD1-spec.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/contract.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/decision_register.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/world-disabled-diagnostics-json-schema-spec.md",
+        "docs/project_management/adrs/draft/ADR-0036-quieting-lemur.md"
+      ],
+      "acceptance_criteria": [
+        "WDD1 behavior matches the spec and is test-backed per WDD1 acceptance criteria.",
+        "Local integration gates are green (fmt, clippy, tests, integ-checks)."
+      ],
+      "ac_ids": [
+        "AC-WDD1-01",
+        "AC-WDD1-02",
+        "AC-WDD1-03",
+        "AC-WDD1-04",
+        "AC-WDD1-05"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-disabled-diagnostics && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDD1-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/world-disabled-diagnostics\" TASK_ID=\"WDD1-integ\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDD1-integ\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-disabled-diagnostics-wdd1-integ",
+      "integration_task": "WDD1-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/world-disabled-diagnostics/slices/WDD1/kickoff_prompts/WDD1-integ.md",
+      "depends_on": [
+        "WDD1-code",
+        "WDD1-test"
+      ],
+      "concurrent_with": [],
+      "git_branch": "world-disabled-diagnostics-wdd1-integ",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": true
+    },
+    {
+      "id": "WDD2-code",
+      "name": "WDD2 slice (code)",
+      "type": "code",
+      "phase": "WDD2",
+      "status": "pending",
+      "description": "Implement health disabled/skipped summary and docs alignment (WDD2).",
+      "references": [
+        "docs/project_management/packs/draft/world-disabled-diagnostics/plan.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/tasks.json",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/session_log.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/slices/WDD2/WDD2-spec.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/contract.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/decision_register.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/world-disabled-diagnostics-json-schema-spec.md",
+        "docs/project_management/adrs/draft/ADR-0036-quieting-lemur.md"
+      ],
+      "acceptance_criteria": [
+        "When `effective_world_enabled=false`, `substrate health` treats disabled/skipped as non-error and prints deterministic copy per contract.",
+        "`substrate health --json` follows the schema spec for disabled/skipped summary and omission rules.",
+        "Code is formatted and clippy-clean per the triad standards."
+      ],
+      "ac_ids": [
+        "AC-WDD2-01",
+        "AC-WDD2-02",
+        "AC-WDD2-03",
+        "AC-WDD2-04"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-disabled-diagnostics && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDD2-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/world-disabled-diagnostics\" SLICE_ID=\"WDD2\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDD2-code\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-disabled-diagnostics-wdd2-code",
+      "integration_task": "WDD2-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/world-disabled-diagnostics/slices/WDD2/kickoff_prompts/WDD2-code.md",
+      "depends_on": [
+        "WDD1-integ"
+      ],
+      "concurrent_with": [
+        "WDD2-test"
+      ],
+      "git_branch": "world-disabled-diagnostics-wdd2-code",
+      "required_make_targets": [
+        "triad-code-checks"
+      ]
+    },
+    {
+      "id": "WDD2-test",
+      "name": "WDD2 slice (test)",
+      "type": "test",
+      "phase": "WDD2",
+      "status": "pending",
+      "description": "Add/extend health integration tests for disabled/skipped summary behavior and docs alignment assertions (WDD2).",
+      "references": [
+        "docs/project_management/packs/draft/world-disabled-diagnostics/plan.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/tasks.json",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/session_log.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/slices/WDD2/WDD2-spec.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/contract.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/decision_register.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/world-disabled-diagnostics-json-schema-spec.md",
+        "docs/project_management/adrs/draft/ADR-0036-quieting-lemur.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover disabled-mode summary fields and remediation suppression per WDD2 ACs.",
+        "Tests cover enabled-but-broken remains fail-visible per WDD2 ACs.",
+        "Tests are deterministic and do not depend on global machine state."
+      ],
+      "ac_ids": [
+        "AC-WDD2-01",
+        "AC-WDD2-02",
+        "AC-WDD2-03",
+        "AC-WDD2-04"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-disabled-diagnostics && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDD2-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/world-disabled-diagnostics\" SLICE_ID=\"WDD2\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "Run the targeted tests you add/touch",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDD2-test\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-disabled-diagnostics-wdd2-test",
+      "integration_task": "WDD2-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/world-disabled-diagnostics/slices/WDD2/kickoff_prompts/WDD2-test.md",
+      "depends_on": [
+        "WDD1-integ"
+      ],
+      "concurrent_with": [
+        "WDD2-code"
+      ],
+      "git_branch": "world-disabled-diagnostics-wdd2-test",
+      "required_make_targets": [
+        "triad-test-checks"
+      ]
+    },
+    {
+      "id": "WDD2-integ-core",
+      "name": "WDD2 slice (integration core)",
+      "type": "integration",
+      "phase": "WDD2",
+      "status": "pending",
+      "description": "Integrate WDD2 and make it green on the primary dev platform (pre-checkpoint).",
+      "references": [
+        "docs/project_management/packs/draft/world-disabled-diagnostics/plan.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/tasks.json",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/session_log.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/slices/WDD2/WDD2-spec.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/contract.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/decision_register.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/world-disabled-diagnostics-json-schema-spec.md",
+        "docs/project_management/adrs/draft/ADR-0036-quieting-lemur.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/smoke/linux-smoke.sh",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/smoke/macos-smoke.sh",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/smoke/windows-smoke.ps1"
+      ],
+      "acceptance_criteria": [
+        "Local integration gates are green for WDD2 (fmt, clippy, tests, integ-checks).",
+        "Core integration branch is ready for checkpoint validation (`CP1-ci-checkpoint`)."
+      ],
+      "start_checklist": [
+        "git checkout feat/world-disabled-diagnostics && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDD2-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/world-disabled-diagnostics\" TASK_ID=\"WDD2-integ-core\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "On the orchestration branch, run checkpoint task: CP1-ci-checkpoint",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDD2-integ-core\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-disabled-diagnostics-wdd2-integ-core",
+      "integration_task": "WDD2-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/world-disabled-diagnostics/slices/WDD2/kickoff_prompts/WDD2-integ-core.md",
+      "depends_on": [
+        "WDD2-code",
+        "WDD2-test"
+      ],
+      "concurrent_with": [],
+      "git_branch": "world-disabled-diagnostics-wdd2-integ-core",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "CP1-ci-checkpoint",
+      "name": "CP1 CI checkpoint (cross-platform validation)",
+      "type": "ops",
+      "phase": "CP1",
+      "status": "pending",
+      "description": "Run cross-platform compile parity + feature smoke for the checkpoint boundary slice (schema v4).",
+      "references": [
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/tasks.json",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/session_log.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/smoke/linux-smoke.sh",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/smoke/macos-smoke.sh",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/smoke/windows-smoke.ps1",
+        "docs/project_management/system/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md"
+      ],
+      "acceptance_criteria": [
+        "CI audit ledger is created/updated for the checkpoint.",
+        "Compile parity is green for the checkpoint checkout SHA.",
+        "Feature smoke is green for the checkpoint checkout SHA on behavior platforms."
+      ],
+      "start_checklist": [
+        "git checkout feat/world-disabled-diagnostics && git pull --ff-only",
+        "Read ci_checkpoint_plan.md, tasks.json, session_log.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs"
+      ],
+      "end_checklist": [
+        "Run ci_audit for ci-testing and feature-smoke (record the audit output lines in session_log.md)",
+        "Dispatch compile parity and feature smoke per kickoff prompt; record run ids/URLs",
+        "Set status to completed; add END entry; commit docs"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/packs/draft/world-disabled-diagnostics/kickoff_prompts/CP1-ci-checkpoint.md",
+      "depends_on": [
+        "WDD2-integ-core"
+      ],
+      "concurrent_with": []
+    },
+    {
+      "id": "WDD2-integ-linux",
+      "name": "WDD2 slice (integration Linux)",
+      "type": "integration",
+      "phase": "WDD2",
+      "status": "pending",
+      "description": "Linux platform-fix integration task (may be a no-op if already green).",
+      "references": [
+        "docs/project_management/packs/draft/world-disabled-diagnostics/plan.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/tasks.json",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/session_log.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/slices/WDD2/WDD2-spec.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/contract.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/decision_register.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/world-disabled-diagnostics-json-schema-spec.md",
+        "docs/project_management/adrs/draft/ADR-0036-quieting-lemur.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/smoke/linux-smoke.sh",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/smoke/macos-smoke.sh",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/smoke/windows-smoke.ps1"
+      ],
+      "acceptance_criteria": [
+        "linux smoke is green for this checkpoint boundary slice"
+      ],
+      "start_checklist": [
+        "Run on linux host if possible",
+        "git checkout feat/world-disabled-diagnostics && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDD2-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/world-disabled-diagnostics\" TASK_ID=\"WDD2-integ-linux\""
+      ],
+      "end_checklist": [
+        "Dispatch platform smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/packs/draft/world-disabled-diagnostics\" PLATFORM=linux SMOKE_SLICE_ID=\"WDD2\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-disabled-diagnostics\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1",
+        "If needed: fix + fmt/clippy + targeted tests",
+        "Ensure smoke is green; record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDD2-integ-linux\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-disabled-diagnostics-wdd2-integ-linux",
+      "integration_task": "WDD2-integ-linux",
+      "kickoff_prompt": "docs/project_management/packs/draft/world-disabled-diagnostics/slices/WDD2/kickoff_prompts/WDD2-integ-linux.md",
+      "depends_on": [
+        "WDD2-integ-core",
+        "CP1-ci-checkpoint"
+      ],
+      "concurrent_with": [],
+      "platform": "linux",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/feature-smoke.yml",
+      "git_branch": "world-disabled-diagnostics-wdd2-integ-linux",
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "WDD2-integ-macos",
+      "name": "WDD2 slice (integration macOS)",
+      "type": "integration",
+      "phase": "WDD2",
+      "status": "pending",
+      "description": "macOS platform-fix integration task (may be a no-op if already green).",
+      "references": [
+        "docs/project_management/packs/draft/world-disabled-diagnostics/plan.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/tasks.json",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/session_log.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/slices/WDD2/WDD2-spec.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/contract.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/decision_register.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/world-disabled-diagnostics-json-schema-spec.md",
+        "docs/project_management/adrs/draft/ADR-0036-quieting-lemur.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/smoke/linux-smoke.sh",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/smoke/macos-smoke.sh",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/smoke/windows-smoke.ps1"
+      ],
+      "acceptance_criteria": [
+        "macos smoke is green for this checkpoint boundary slice"
+      ],
+      "start_checklist": [
+        "Run on macos host if possible",
+        "git checkout feat/world-disabled-diagnostics && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDD2-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/world-disabled-diagnostics\" TASK_ID=\"WDD2-integ-macos\""
+      ],
+      "end_checklist": [
+        "Dispatch platform smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/packs/draft/world-disabled-diagnostics\" PLATFORM=macos SMOKE_SLICE_ID=\"WDD2\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-disabled-diagnostics\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1",
+        "If needed: fix + fmt/clippy + targeted tests",
+        "Ensure smoke is green; record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDD2-integ-macos\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-disabled-diagnostics-wdd2-integ-macos",
+      "integration_task": "WDD2-integ-macos",
+      "kickoff_prompt": "docs/project_management/packs/draft/world-disabled-diagnostics/slices/WDD2/kickoff_prompts/WDD2-integ-macos.md",
+      "depends_on": [
+        "WDD2-integ-core",
+        "CP1-ci-checkpoint"
+      ],
+      "concurrent_with": [],
+      "platform": "macos",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/feature-smoke.yml",
+      "git_branch": "world-disabled-diagnostics-wdd2-integ-macos",
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "WDD2-integ-windows",
+      "name": "WDD2 slice (integration Windows)",
+      "type": "integration",
+      "phase": "WDD2",
+      "status": "pending",
+      "description": "Windows platform-fix integration task (may be a no-op if already green).",
+      "references": [
+        "docs/project_management/packs/draft/world-disabled-diagnostics/plan.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/tasks.json",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/session_log.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/slices/WDD2/WDD2-spec.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/contract.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/decision_register.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/world-disabled-diagnostics-json-schema-spec.md",
+        "docs/project_management/adrs/draft/ADR-0036-quieting-lemur.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/smoke/linux-smoke.sh",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/smoke/macos-smoke.sh",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/smoke/windows-smoke.ps1"
+      ],
+      "acceptance_criteria": [
+        "windows smoke is green for this checkpoint boundary slice"
+      ],
+      "start_checklist": [
+        "Run on windows host if possible",
+        "git checkout feat/world-disabled-diagnostics && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDD2-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/world-disabled-diagnostics\" TASK_ID=\"WDD2-integ-windows\""
+      ],
+      "end_checklist": [
+        "Dispatch platform smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/packs/draft/world-disabled-diagnostics\" PLATFORM=windows SMOKE_SLICE_ID=\"WDD2\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world-disabled-diagnostics\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1",
+        "If needed: fix + fmt/clippy + targeted tests",
+        "Ensure smoke is green; record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDD2-integ-windows\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-disabled-diagnostics-wdd2-integ-windows",
+      "integration_task": "WDD2-integ-windows",
+      "kickoff_prompt": "docs/project_management/packs/draft/world-disabled-diagnostics/slices/WDD2/kickoff_prompts/WDD2-integ-windows.md",
+      "depends_on": [
+        "WDD2-integ-core",
+        "CP1-ci-checkpoint"
+      ],
+      "concurrent_with": [],
+      "platform": "windows",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/feature-smoke.yml",
+      "git_branch": "world-disabled-diagnostics-wdd2-integ-windows",
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "WDD2-integ",
+      "name": "WDD2 slice (integration final)",
+      "type": "integration",
+      "phase": "WDD2",
+      "status": "pending",
+      "description": "Finalize WDD2 with cross-platform merge after checkpoint + any platform fixes.",
+      "references": [
+        "docs/project_management/packs/draft/world-disabled-diagnostics/plan.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/tasks.json",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/session_log.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/slices/WDD2/WDD2-spec.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/contract.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/decision_register.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/world-disabled-diagnostics-json-schema-spec.md",
+        "docs/project_management/adrs/draft/ADR-0036-quieting-lemur.md"
+      ],
+      "acceptance_criteria": [
+        "Checkpoint CI gates are completed and recorded in session_log.md.",
+        "All required feature smoke runs for the checkpoint boundary slice are green.",
+        "Any platform-specific follow-ups are merged and the slice is green locally (integ-checks)."
+      ],
+      "ac_ids": [
+        "AC-WDD2-01",
+        "AC-WDD2-02",
+        "AC-WDD2-03",
+        "AC-WDD2-04"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-disabled-diagnostics && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, WDD2-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/world-disabled-diagnostics\" TASK_ID=\"WDD2-integ\""
+      ],
+      "end_checklist": [
+        "Merge platform-fix branches (if any) + resolve conflicts",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDD2-integ\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world-disabled-diagnostics-wdd2-integ",
+      "integration_task": "WDD2-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/world-disabled-diagnostics/slices/WDD2/kickoff_prompts/WDD2-integ.md",
+      "depends_on": [
+        "WDD2-integ-core",
+        "CP1-ci-checkpoint",
+        "WDD2-integ-linux",
+        "WDD2-integ-macos",
+        "WDD2-integ-windows"
+      ],
+      "concurrent_with": [],
+      "git_branch": "world-disabled-diagnostics-wdd2-integ",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": true
+    },
+    {
+      "id": "FZ-feature-cleanup",
+      "name": "Feature cleanup (worktrees + branches)",
+      "type": "ops",
+      "phase": "FZ",
+      "status": "pending",
+      "description": "Close out the feature (documentation and cleanup).",
+      "references": [
+        "docs/project_management/packs/draft/world-disabled-diagnostics/plan.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/tasks.json",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/session_log.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/slices/WDD0/WDD0-spec.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/slices/WDD1/WDD1-spec.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/slices/WDD2/WDD2-spec.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/contract.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/decision_register.md",
+        "docs/project_management/packs/draft/world-disabled-diagnostics/world-disabled-diagnostics-json-schema-spec.md",
+        "docs/project_management/adrs/draft/ADR-0036-quieting-lemur.md"
+      ],
+      "acceptance_criteria": [
+        "All tasks are completed and merged as intended.",
+        "Feature directory documents are consistent and ready for promotion to active when approved.",
+        "All temporary worktrees are removed."
+      ],
+      "start_checklist": [
+        "git checkout feat/world-disabled-diagnostics && git pull --ff-only",
+        "Confirm all tasks are completed and merged as intended",
+        "Set status to in_progress; add START entry; commit docs"
+      ],
+      "end_checklist": [
+        "Run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/packs/draft/world-disabled-diagnostics\" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1",
+        "Then run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/packs/draft/world-disabled-diagnostics\" REMOVE_WORKTREES=1 PRUNE_LOCAL=1",
+        "Set status to completed; add END entry with script summary; commit docs"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/packs/draft/world-disabled-diagnostics/kickoff_prompts/FZ-feature-cleanup.md",
+      "depends_on": [
+        "WDD2-integ"
+      ],
+      "concurrent_with": []
+    }
+  ]
+}

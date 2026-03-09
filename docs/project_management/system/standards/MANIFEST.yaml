@@ -24,6 +24,14 @@ standards:
     category: planning
     path: docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md
     description: "Research planning rubric and alignment standard."
+  - id: planning_work_lift_advisory
+    category: planning
+    path: docs/project_management/system/standards/planning/PLANNING_WORK_LIFT_ADVISORY.md
+    description: "Advisory-first Work Lift usage in the planning workflow (Make targets + script recipes)."
+  - id: planning_work_lift_strict_mode
+    category: planning
+    path: docs/project_management/system/standards/planning/PLANNING_WORK_LIFT_STRICT_MODE.md
+    description: "Opt-in, gated strict mode checks for Work Lift (post-calibration enforcement surface)."
 
   - id: execution_preflight_gate_standard
     category: execution
@@ -77,8 +85,15 @@ standards:
     category: shared
     path: docs/project_management/system/standards/shared/SECRETS_DELIVERY_CHANNEL_RUBRIC.md
     description: "Rubric for secrets delivery channels."
+  - id: work_lift_rubric
+    category: shared
+    path: docs/project_management/system/standards/shared/WORK_LIFT_RUBRIC.md
+    description: "Rubric for authoring Lift Vector v1 blocks (markers, null semantics, examples, conformance checklist)."
+  - id: work_lift_model_v1_goldens
+    category: shared
+    path: docs/project_management/system/standards/shared/WORK_LIFT_MODEL_V1_GOLDENS.md
+    description: "Golden Lift Vector v1 cases + conformance checklist for work_lift_model.v1.json (CONTRACT-2)."
   - id: rust_standards
     category: shared
     path: docs/project_management/system/standards/shared/rustStandards.md
     description: "Rust coding and style standards."
-

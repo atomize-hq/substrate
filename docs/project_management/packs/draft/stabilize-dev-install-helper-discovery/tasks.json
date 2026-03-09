@@ -1,0 +1,25 @@
+{
+  "meta": {
+    "schema_version": 4,
+    "cross_platform": true,
+    "ci_parity_platforms_required": [
+      "linux",
+      "macos",
+      "windows"
+    ],
+    "behavior_platforms_required": [
+      "linux",
+      "macos"
+    ],
+    "automation": {
+      "enabled": true,
+      "orchestration_branch": "feat/stabilize-dev-install-helper-discovery"
+    },
+    "slice_spec_version": 2,
+    "feature": "stabilize-dev-install-helper-discovery",
+    "adr_paths": [
+      "docs/project_management/adrs/draft/ADR-0034-staging-beaver.md"
+    ]
+  },
+  "tasks": []
+}

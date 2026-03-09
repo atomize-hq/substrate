@@ -6,14 +6,12 @@
 - Owner(s): TBD (ASSUMPTION: Substrate shell maintainers)
 
 ## Scope
-- Feature directory: `docs/project_management/packs/active/world-disabled-diagnostics/` (ASSUMPTION: new pack)
+- Feature directory: `docs/project_management/packs/draft/world-disabled-diagnostics/` (ASSUMPTION: new pack)
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
+  - `docs/project_management/system/standards/adr/EXECUTIVE_SUMMARY_STANDARD.md`
 
-## Related Docs
+## Related Docs (links only)
 - Intake: `docs/project_management/intake/adrs/quieting_lemur_adr_intake.md`
 - World config precedence + exported state: `docs/CONFIGURATION.md`
 - Env/config contract (authoritative precedence + `SUBSTRATE_OVERRIDE_WORLD`): `docs/reference/env/contract.md`
@@ -23,7 +21,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: eca85e8a7a65e0ca27cfcb7c46f5f001cde40e534bb2c17f7a4758bd412f9a73
+ADR_BODY_SHA256: 8ad8c9d462d0994cf25b517bc3b3d6bdcfadeadc1a38687bbd455e9ebc443579
 
 ### Changes (operator-facing)
 - Quiet diagnostics when world isolation is intentionally disabled
@@ -142,6 +140,41 @@ Keep shim-doctor behavior largely intact, but in `crates/shell/src/builtins/heal
 - Adjacent work (not required for this ADR):
   - Attribution improvements for “why disabled” messaging (`clarifying_owl` intake).
 
+## Work Lift (discovery estimate)
+
+<!-- PM_LIFT_VECTOR:BEGIN -->
+```json
+{
+  "touch": {
+    "create_files": null,
+    "edit_files": 2,
+    "delete_files": 0,
+    "deprecate_files": 0,
+    "crates_touched": 1,
+    "boundary_crossings": null
+  },
+  "contract": {
+    "cli_flags": 0,
+    "config_keys": 0,
+    "exit_codes": 0,
+    "file_formats": 0,
+    "behavior_deltas": 1
+  },
+  "qa": { "new_test_files": null, "new_test_cases": null },
+  "docs": { "new_docs_files": 0 },
+  "ops": { "new_smoke_steps": 0, "ci_changes": 0 },
+  "risk": {
+    "cross_platform": true,
+    "security_sensitive": false,
+    "concurrency_or_ordering": false,
+    "migration_or_backfill": false,
+    "unknowns_high": null
+  },
+  "notes": "Discovery estimate; doctor/health status plumbing + skip world-deps probing when world is disabled."
+}
+```
+<!-- PM_LIFT_VECTOR:END -->
+
 ## Security / Safety Posture
 - Degrade posture:
   - When `world.enabled=false`, diagnostics degrade by skipping probes; they MUST NOT imply world health or world-deps “applied” state.
@@ -163,16 +196,16 @@ Keep shim-doctor behavior largely intact, but in `crates/shell/src/builtins/heal
     - no “world deps unavailable” failure is emitted solely due to probing.
 
 ### Manual validation
-- Manual playbook: `docs/project_management/packs/active/world-disabled-diagnostics/manual_testing_playbook.md` (TBD), covering:
+- Manual playbook: `docs/project_management/packs/draft/world-disabled-diagnostics/manual_testing_playbook.md` (TBD), covering:
   - Set `world.enabled: false` in `$SUBSTRATE_HOME/config.yaml`.
   - Run `substrate shim doctor` and confirm world/world-deps show disabled/skip (non-error).
   - Run `substrate health` and confirm overall status is not “attention required” solely due to world-disabled.
   - Flip to `world.enabled: true` with an intentionally broken socket/agent and confirm “needs attention” still triggers.
 
 ### Smoke scripts
-- Linux: `docs/project_management/packs/active/world-disabled-diagnostics/smoke/linux-smoke.sh` (TBD)
-- macOS: `docs/project_management/packs/active/world-disabled-diagnostics/smoke/macos-smoke.sh` (TBD)
-- Windows: `docs/project_management/packs/active/world-disabled-diagnostics/smoke/windows-smoke.ps1` (TBD)
+- Linux: `docs/project_management/packs/draft/world-disabled-diagnostics/smoke/linux-smoke.sh` (TBD)
+- macOS: `docs/project_management/packs/draft/world-disabled-diagnostics/smoke/macos-smoke.sh` (TBD)
+- Windows: `docs/project_management/packs/draft/world-disabled-diagnostics/smoke/windows-smoke.ps1` (TBD)
 
 ## Rollout / Backwards Compatibility
 - Policy: greenfield breaking is allowed
@@ -181,12 +214,16 @@ Keep shim-doctor behavior largely intact, but in `crates/shell/src/builtins/heal
   - Existing fields should remain present, but operators and internal tooling should migrate to the explicit status enums for disabled/skip detection.
 
 ## Decision Summary
-- This ADR locks the behavior delta:
-  - Disabled world is explicit and non-error in diagnostics.
-  - World-deps “applied” probing is skipped when disabled (no escape hatch).
-  - JSON carries stable, machine-detectable disabled/skip status values (additive fields).
-- Decision Register entries (pack-local) MUST capture the remaining implementation choices that should *not* live in the ADR body:
-  - Exact JSON field names and enum spellings for world + world-deps status.
-  - Whether disabled status is represented as a nested field (e.g., `world.status`) vs top-level summary fields (e.g., `summary.world_status`).
-  - Whether legacy `error` fields remain populated for disabled/skip (recommended: do not use `error` for disabled/skip).
-  - Exact operator-facing copy for disabled/skip messaging (keep it consistent across `health` and `shim doctor`).
+- Decision Register entries (if applicable):
+  - ASSUMPTION: `docs/project_management/packs/draft/world-disabled-diagnostics/decision_register.md`:
+    - DR-0001 (JSON field names + enum spellings for world/world-deps status)
+    - DR-0002 (legacy error-field behavior for disabled/skip states)
+    - DR-0003 (operator-facing copy standardization across `health`/`shim doctor`)
+- Options (required; at least two):
+  - A) `substrate shim doctor` resolves effective config and short-circuits probes, emitting `disabled` / `skipped_disabled` statuses (recommended).
+  - B) `substrate health` post-processes shim-doctor output to suppress disabled-related failures (shim-doctor remains noisy).
+- Selection:
+  - Chosen: A
+  - Rationale: Fixes the root cause by preventing world-backend probing when world is disabled, and keeps `health` and `shim doctor` consistent (text + JSON).
+  - Choose A when: we want consistent behavior across diagnostics surfaces and want to avoid triggering backend probes when disabled.
+  - Choose B when: we need the smallest immediate change in `health` and can accept shim-doctor remaining inconsistent until a follow-up.

@@ -419,3 +419,143 @@ For `api:*` backends, the canonical field-name family is defined by:
   - document router-derived `workflow_router_*` event types and required join keys,
   - list reserved workflow/toolbox correlation ids (`workflow_run_id`, `workflow_node_id`, `tool_call_id`),
   - and state safe-by-default redaction/caps posture (raw wrapper logs remain per-session artifacts; no heuristic joins).
+
+## Potential Crates/repos to use:
+
+- https://crates.io/crates/mpatch
+- https://crates.io/crates/pmat
+- https://crates.io/crates/pmcp
+- https://crates.io/crates/claude-codes
+- https://github.com/meawoppl/rust-claude-codes
+- https://crates.io/crates/rmcp-openapi
+- https://crates.io/crates/codex-helper
+- https://crates.io/crates/langchain-rust
+- https://crates.io/crates/worktrunk
+- https://crates.io/crates/fluxencrypt
+- https://crates.io/crates/workmux
+- https://crates.io/crates/vtcode-file-search
+- https://crates.io/crates/aichat-search
+- https://github.com/9j/claude-code-mux
+- https://crates.io/crates/claude-hook-advisor
+- https://crates.io/crates/agents-core#quick-start
+- https://github.com/Recusive/agentsdk
+- https://github.com/erans/lunaroute
+- https://github.com/sopaco/cortex-mem
+- https://github.com/sopaco/deepwiki-rs
+- https://github.com/0xPlaygrounds/rig?tab=readme-ov-file
+- https://github.com/aipack-ai/aipack
+- https://github.com/CSCSoftware/AiDex
+- https://chatgpt.com/c/6925064b-cd44-8331-b06c-fab4a5b622a2
+
+Detailed table
+
+Star/commit counts are from the current GitHub pages; release info is from docs.rs where I could see it. Some “last release” cells are “n/a” where I didn’t have enough budget to pull exact versions/dates.
+
+Legend for “Candidate for substrate?”
+
+Crate = realistically usable as a direct Cargo dependency
+
+Clone bits = probably read & selectively copy internal code
+
+Reference = mostly architectural / API inspiration
+
+No = not really in scope for Substrate
+
+1. Core agent / runtime / LLM crates
+   Library / Tool Description / Purpose Stars (GH) Commits (GH) Latest release / activity (approx) docs.rs URL GitHub URL Candidate for substrate?
+   agents-runtime Tokio-powered runtime that glues together planners, tools, prompts, state stores, tracing; part of Rust Deep Agents SDK. 13 100 Crate agents-runtime 0.0.25 (0.x, active). https://docs.rs/agents-runtime/latest/agents_runtime/
+   https://github.com/yafatek/rust-deep-agents-sdk
+   Crate (for an orchestration/“deep agent” layer), but I’d treat it carefully and probably wrap it behind your own traits.
+   agents-core Core traits, events, state, tool system and persistence primitives for the Deep Agents SDK. 13 (same repo) 100 Crate agents-core 0.0.25 (same workspace). https://docs.rs/agents-core/latest/agents_core/
+   https://github.com/yafatek/rust-deep-agents-sdk
+   Crate – useful for your internal event/state/tool types even if you don’t adopt their runtime wholesale.
+   genai Multi-provider generative AI client for Rust (OpenAI, Anthropic, Gemini, Groq, DeepSeek, Cohere, Ollama, etc.); unified Client API. 566 554 Crate genai 0.4.4 (actively maintained). https://docs.rs/genai/latest/genai/
+   https://github.com/jeremychone/rust-genai
+   Crate – my top pick for Substrate’s LLM gateway layer. Wrap this in a substrate-llm crate with token/cost tracking + policy.
+   open-agent-sdk (open_agent) Production-ready, streaming-first Rust SDK for building agents against local OpenAI-compatible servers (LM Studio, Ollama, llama.cpp, vLLM) with tools, hooks, interrupts, etc. 6 70 Crate open_agent 0.6.0 (well-documented). https://docs.rs/open-agent-sdk/latest/open_agent/
+   https://github.com/slb350/open-agent-sdk-rust
+   Crate (optional) – nice drop-in backend for “local models” support if you don’t want to hand-roll it on top of genai.
+   llm-toolkit “Basic llm tools for rust” – small toolbox / helper crates for LLM work. 2 368 n/a (didn’t inspect crate metadata). https://docs.rs/llm-toolkit/latest/llm_toolkit/
+   https://github.com/ynishi/llm-toolkit
+   Reference – lots of small utilities; but given its low adoption and the overlap with genai/rig/etc., I’d treat it as a code/idea reference, not a core dep.
+   radkit Rust Agent Development Kit; provides agent primitives, macros, examples, docs; seems aimed at their own “agents-sh” ecosystem. 41 110 n/a https://docs.rs/radkit/latest/radkit/
+   https://github.com/agents-sh/radkit
+   Reference – useful to study how they do agent composition & tooling, but you already have your own substrate architecture emerging.
+   cloudllm Batteries‑included Rust toolkit for building intelligent agents with LLM integration, multi‑protocol tools (incl. MCP), LLMSession for token‑aware context, and a council multi-agent orchestration engine; supports OpenAI, Claude, Gemini, Grok, and OpenAI-compatible endpoints. 7 193 Crate exists (not inspected), repo quite active. https://docs.rs/cloudllm/latest/cloudllm/
+   https://github.com/CloudLLM-ai/cloudllm
+   Clone bits / Reference – extremely aligned with your goals, but almost overlaps the entire Substrate vision. Great source for ideas (esp. LLMSession, MCPServerBuilder, council patterns); I’d avoid taking it wholesale as a dependency.
+   ai-lib Unified multi-provider AI SDK for Rust; production-grade, provider-agnostic API for 20+ platforms (OpenAI, Groq, Anthropic, Gemini, Mistral, Azure, Ollama, DeepSeek, etc.). 3 153 Has published crate(s), actively maintained. https://docs.rs/ai-lib/latest/ai_lib/
+   https://github.com/hiddenpath/ai-lib
+   Reference – another multi-provider option, but with far less adoption than genai. Good design reference, but I’d standardize on genai rather than juggling multiple gateways.
+   rig (rig-core) Large framework for modular and scalable LLM apps (tools, vector stores, connectors, etc.), with many sub-crates. 5k 751 Actively releasing multiple rig-\* crates. https://docs.rs/rig-core/latest/rig/
+   https://github.com/0xPlaygrounds/rig
+   Reference – great to steal patterns (tools, resource abstractions, multi-backend support), but it’s its own world. Using it directly would make substrate “Rig with extra steps.”
+2. MCP / tool ecosystem
+   Library / Tool Description / Purpose Stars Commits Latest release / activity docs.rs URL GitHub URL Candidate for substrate?
+   pmat Pragmatic AI Labs MCP Agent Toolkit – an MCP server & toolkit designed to make agent code more deterministic; a very large, batteries‑included monorepo with a whole CLI and ecosystem. 104 2,396 Crate pmat 2.205.0 (extremely active). https://docs.rs/crate/pmat/latest
+   https://github.com/paiml/paiml-mcp-agent-toolkit
+   Reference – this is essentially its own agent platform. Great to mine for patterns and maybe some code (diagnostics, CLI ergonomics), but using it as a dependency would blur the line between Substrate and PMAT.
+   pmcp (rust-mcp-sdk) Pragmatic AI Labs MCP SDK – focused MCP client/server library (with cargo pmcp tooling) that pmat builds on; full-featured, includes streaming, file watching, etc. 18 769 Crate pmcp (well-documented, 100% docs coverage). https://docs.rs/pmcp/latest/pmcp/
+   https://github.com/paiml/rust-mcp-sdk
+   Crate – strong candidate for your MCP client + registry layer (connecting to arbitrary MCP servers), especially early on.
+   prism-mcp-rs “Enterprise-grade Rust implementation of Anthropic’s MCP protocol” – heavy focus on correctness, testing, and enterprise concerns (supply chain, deny.toml, etc.). 39 132 Crate prism-mcp-rs exists and is actively updated. https://docs.rs/prism-mcp-rs/latest/prism_mcp_rs/
+   https://github.com/prismworks-ai/prism-mcp-rs
+   Crate – top contender for the substrate-level MCP server engine (especially if you want strong testing & security posture). You can still use pmcp for client-side integration with the broader MCP ecosystem.
+   AIPack “Run, Build, Share your AI Packs” – opinionated agent packaging/runtime with its own CLI and concepts (packs, etc.). 165 1,328 Very active repository & releases. https://docs.rs/crate/aipack/latest
+   https://github.com/aipack-ai/aipack
+   Reference – great to look at for UX, config, and packaging ideas, but not something you embed; Substrate should define its own mental model.
+   aichat Very popular all‑in‑one LLM CLI (shell assistant, REPL, RAG, tools/agents; supports OpenAI, Claude, Gemini, Ollama, Groq, etc.). 8.7k 985 Very active with frequent tags/releases. https://docs.rs/crate/aichat/latest
+   https://github.com/sigoden/aichat
+   Reference – this is “what substrate wants to orchestrate rather than replace.” Treat as competitor + design reference (commands, config, tool UX).
+3. Claude / Codex / routing ecosystem
+   Library / Tool Description / Purpose Stars Commits Latest release / activity docs.rs URL GitHub URL Candidate for substrate?
+   claude-code-mux High-performance AI routing proxy in Rust (automatic failover, priority routing, supports 15+ providers including Anthropic, OpenAI, Cerebras, Minimax, Kimi, etc.). 374 38 Very active; used as a stand‑alone proxy. https://docs.rs/crate/claude-code-mux/latest
+   https://github.com/9j/claude-code-mux
+   Clone bits – extremely relevant to your LLM gateway; worth studying and possibly copying routing/failover strategies, but I’d keep your gateway integrated directly into Substrate instead of relying on an external proxy.
+   cc-sdk / claude-code-api-rs High-performance Rust implementation of an OpenAI-compatible API gateway for Claude Code CLI; includes claude-code-sdk-rs library used by others (e.g., url-preview). 53 28 Actively updated (release notes, v0.3.0, etc.). https://docs.rs/cc-sdk/latest/cc_sdk/
+   https://github.com/ZhangHanDong/claude-code-api-rs
+   Clone bits – a good blueprint if you ever want Substrate to expose an OpenAI-compatible HTTP API. For core substrate, I’d keep Claude Code integration at the CLI level and only reuse ideas/wire types.
+   kodegen_claude_agent “Claude Agent SDK for Rust” – Rust bindings around Claude Code; async, strong typing; small crate (0.3.3). ~0 ~7 Crate 0.3.3 present but early-stage. https://docs.rs/kodegen_claude_agent/latest/kodegen_claude_agent/
+   https://github.com/cyrup-ai/kodegen-claude-agent
+   Reference – good for protocol examples, but too early-stage to depend on. Your own Codex wrapper is already further along conceptually.
+   turboclaudeagent Interactive Agent SDK for TurboClaude; designed for in‑IDE agents with hooks, permission callbacks, interactive sessions, etc. 5 15 Crate turboclaudeagent 0.1.0. https://docs.rs/turboclaudeagent/latest/turboclaudeagent/
+   https://github.com/Epistates/turboclaude
+   Reference – great for ideas about IDE‑style permission gating and hooks; not something you want as a hard dependency.
+   claude-agent-sdk Claude Agent SDK for Rust, also targeting Claude Code CLI; similar story to kodegen_claude_agent. 7 8 Crate 0.1.1. https://docs.rs/claude-agent-sdk/latest/claude_agent_sdk/
+   https://github.com/Wally869/claude_agent_sdk_rust
+   Reference – more protocol examples; but you’d end up with a lot of overlapping abstractions if you pulled it in.
+   claude-agent-sdk-rs Another Claude Code SDK (“Rust SDK for Claude Code CLI – build production-ready AI agents with type safety”). 12 18 Has crate claude-agent-sdk-rs on docs.rs (not inspected). https://docs.rs/claude-agent-sdk-rs/latest/claude_agent_sdk_rs/
+   https://github.com/tyrchen/claude-agent-sdk-rs
+   Reference / maybe Clone bits – if you decide to reuse one Claude SDK’s types, this is the one I’d inspect first, but I’d still lean toward your own thin wrapper over the CLI.
+   codex-helper Small helper library around Codex/Claude Code (providing convenience wrappers and example configs). 6 13 Crate exists (codex-helper), small and simple. https://docs.rs/crate/codex-helper/latest
+   https://github.com/Latias94/codex-helper
+   Reference – useful to see how others manage Codex configs and invocation, but Substrate’s codex wrapper is more central and should stay in your control.
+   url-preview High‑performance library for generating rich URL previews; already uses claude-code-api as a backend for LLM-based extraction. 10 33 Crate url-preview with v0.6.0 using claude-code-api. https://docs.rs/url-preview/latest/url_preview/
+   https://github.com/ZhangHanDong/url-preview
+   Crate – very nice candidate for a substrate-level MCP/tool that “previews URLs” for agents. Clean, self-contained.
+4. Security, structure, and “infrastructure helpers”
+   Library / Tool Description / Purpose Stars Commits Latest release / activity docs.rs URL GitHub URL Candidate for substrate?
+   llm-security “Comprehensive LLM security layer to prevent prompt injection and manipulation attacks.” Includes examples and docs; relatively small but focused. 8 8 Has crate llm-security, active but young. https://docs.rs/llm-security/latest/llm_security/
+   https://github.com/redasgard/llm-security
+   Crate – this is almost exactly the kind of thing you want at the orchestration layer for request/response sanitization and policy enforcement.
+   rstructor “Pydantic + Instructor for Rust” – structured output / schema enforcement around LLM calls; integrates nicely into Rust type system. 14 68 Crate rstructor published and maintained. https://docs.rs/rstructor/latest/rstructor/
+   https://github.com/clifton/rstructor
+   Crate – strong candidate for typed tool results, config schemas, and JSON output across your --json modes.
+   sublinear-time-solve Repo name suggests algorithmic / problem-solving utilities; I couldn’t successfully fetch the GitHub page via the tools (internal error). n/a n/a n/a (no docs.rs crate) https://github.com/ruvnet/sublinear-time-solve
+   No – appears unrelated to agent orchestration / LLM infrastructure.
+5. Big “agent OS / CLI” systems
+   Library / Tool Description / Purpose Stars Commits Latest release / activity docs.rs URL GitHub URL Candidate for substrate?
+   pmat (see above) – full MCP agent toolkit + CLI. 104 2,396 Very active. https://docs.rs/crate/pmat/latest
+   https://github.com/paiml/paiml-mcp-agent-toolkit
+   Reference – too opinionated to embed.
+   AIPack Agent/pack-based environment; you run/build/share “AI Packs” with their CLI. 165 1,328 Rapid development, multiple issues & discussions. https://docs.rs/crate/aipack/latest
+   https://github.com/aipack-ai/aipack
+   Reference – learn from their UX and packaging, but Substrate should keep its own UX.
+   aichat All‑in‑one LLM CLI with shell assistant, chat REPL, RAG, tools & agent support. 8.7k 985 Very active. https://docs.rs/crate/aichat/latest
+   https://github.com/sigoden/aichat
+   Reference – treat as “competition and inspiration” rather than dependency.
+6. Miscellaneous / automation
+   Library / Tool Description / Purpose Stars Commits Latest release / activity docs.rs URL GitHub URL Candidate for substrate?
+   terminator-rs Playwright-style SDK for automating desktop GUI apps (cross-platform, lots of crates under the hood). ~1.2k 2,140 Crate terminator-rs 0.23.22 (releasing very frequently lately). https://docs.rs/crate/terminator-rs/latest
+   https://github.com/mediar-ai/terminator
+   Reference (future) – not core to “CLI-first substrate,” but very interesting if you later add “GUI execution agents.”

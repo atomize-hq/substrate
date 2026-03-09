@@ -114,6 +114,17 @@ STRICT Touch Set rules (for `## Touch set (explicit)` only):
 - Path rules: POSIX `/` separators, no `..` segments, no globs, no backslashes, no absolute/`~`/drive-letter paths; leading `./` is allowed but normalized away; directory allow entries must end with `/`.
 - Strict Touch Set must include at least one non-None entry total across all sections.
 
+### Directory/prefix entries (advisory lift semantics)
+
+- Directory/prefix allow entries MUST end with `/` (e.g., `` `crates/world-agent/` ``).
+- Directory/prefix entries count as **1** Touch Set token for raw derived counts.
+- Directory/prefix presence is surfaced to downstream tooling via `validate_impact_map.py --emit-json` as:
+  - `dir_prefixes` (see `CONTRACT-4:impact_map_emit_json_v1`)
+- Prefix expansion (for lift estimation only) is advisory and deterministic:
+  - tooling MAY expand prefixes against the repo file list (e.g., `git ls-files <prefix>`),
+  - tooling MUST NOT rewrite `impact_map.md`,
+  - presence of prefixes typically degrades lift confidence (see SEAM-4 invariants / decision log).
+
 Downstream consumers:
 - Execution-time enforcement (triad `task_finish`) consumes the validator’s `--emit-json` output (see Initiative 2 S2).
 

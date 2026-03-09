@@ -17,14 +17,25 @@ On Linux/macOS:
 make planning-lint FEATURE_DIR="$FEATURE_DIR"
 ```
 
+Optional (recommended for strict packs): include Work Lift advisory output in the lint run (still non-blocking by default):
+```bash
+PM_LIFT_ADVISORY=1 make planning-lint FEATURE_DIR="$FEATURE_DIR"
+```
+
 On Windows:
 ```powershell
 make planning-lint-ps FEATURE_DIR=$env:FEATURE_DIR
 ```
 
+Optional (recommended for strict packs): include Work Lift advisory output in the lint run (still non-blocking by default):
+```powershell
+$env:PM_LIFT_ADVISORY="1"; make planning-lint-ps FEATURE_DIR=$env:FEATURE_DIR
+```
+
 This runner checks (at minimum):
 - Required Planning Pack artifacts exist (`plan.md`, `spec_manifest.md`, `impact_map.md`, `tasks.json`, `session_log.md`, `kickoff_prompts/`, and `smoke/*` when applicable)
   - For cross-platform automation packs (schema v3+ + meta.automation.enabled=true): `ci_checkpoint_plan.md` must exist and pass mechanical validation.
+- Advisory: validates `pre-planning/workstream_triage.md` contains a valid `PM_PWS_INDEX` fenced JSON block (warn-only for now; future orchestration input).
 - `spec_manifest.md` exists when an ADR is present or referenced
 - All backticked required-doc paths listed in `spec_manifest.md` exist on disk
 - `impact_map.md` exists as part of the required-doc list (replaces legacy `integration_map.md`)
@@ -42,6 +53,11 @@ This runner checks (at minimum):
 - Manual playbook must reference smoke scripts (when both exist)
 - `sequencing.json` includes this feature directory
 - `sequencing.json` completed sprint pointers resolve (supports archived Planning Packs under `docs/project_management/_archived/`)
+
+When `PM_LIFT_ADVISORY=1` is set, lint also prints a Work Lift advisory report (see: `docs/project_management/system/standards/planning/PLANNING_WORK_LIFT_ADVISORY.md`).
+
+Note:
+- The pre-planning `workstream_triage` step now enforces `PM_PWS_INDEX` validity as a hard gate (bad/ambiguous `assumes` vs `depends_on` relationships must be corrected before the artifact is committed).
 
 ## Debugging a failure (optional)
 

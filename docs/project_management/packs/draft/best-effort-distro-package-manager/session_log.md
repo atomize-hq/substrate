@@ -1,0 +1,53 @@
+# best-effort-distro-package-manager — session log
+
+## START — 2026-03-08T03:37:01Z — BEDPM-PWS-tasks_checkpoints — execution wiring
+- Feature: `docs/project_management/packs/draft/best-effort-distro-package-manager/`
+- Goal: wire the schema v4 triad graph, checkpoint task, kickoff prompts, and planning-gate artifacts for `BEDPM0` through `BEDPM3`
+- Inputs read end-to-end:
+  - `pre-planning/workstream_triage.md`
+  - `pre-planning/minimal_spec_draft.md`
+  - `pre-planning/spec_manifest.md`
+  - `pre-planning/impact_map.md`
+  - `pre-planning/ci_checkpoint_plan.md`
+  - `pre-planning/alignment_report.md`
+  - `slices/BEDPM0/BEDPM0-spec.md`
+  - `slices/BEDPM1/BEDPM1-spec.md`
+  - `slices/BEDPM2/BEDPM2-spec.md`
+  - `slices/BEDPM3/BEDPM3-spec.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
+- Commands planned:
+  - `python3 docs/project_management/system/scripts/planning/validate_tasks_json.py --feature-dir "docs/project_management/packs/draft/best-effort-distro-package-manager"`
+  - `python3 docs/project_management/system/scripts/planning/validate_slice_specs.py --feature-dir "docs/project_management/packs/draft/best-effort-distro-package-manager"`
+  - `python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "docs/project_management/packs/draft/best-effort-distro-package-manager"`
+  - `make planning-micro-lint FEATURE_DIR="docs/project_management/packs/draft/best-effort-distro-package-manager" OWNED_PATHS="<tracked outputs written by this run>"`
+
+## END — 2026-03-08T03:37:01Z — BEDPM-PWS-tasks_checkpoints — execution wiring
+- Summary of changes:
+  - wired `tasks.json` to the schema v4 boundary-only triad model for `BEDPM0` through `BEDPM3`
+  - updated `pre-planning/ci_checkpoint_plan.md` to reflect the finished checkpoint wiring
+  - created `plan.md`, kickoff prompts, and the planning quality-gate report
+  - logged an allowlist request plus draft patch for the blocked `pre-planning/spec_manifest.md` reconciliation
+- Files created or updated:
+  - `pre-planning/ci_checkpoint_plan.md`
+  - `plan.md`
+  - `tasks.json`
+  - `session_log.md`
+  - `quality_gate_report.md`
+  - `kickoff_prompts/CP1-ci-checkpoint.md`
+  - `kickoff_prompts/FZ-feature-cleanup.md`
+  - `slices/BEDPM0/kickoff_prompts/*`
+  - `slices/BEDPM1/kickoff_prompts/*`
+  - `slices/BEDPM2/kickoff_prompts/*`
+  - `slices/BEDPM3/kickoff_prompts/*`
+- Commands run:
+  - `jq -e docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json` → `0`
+  - `python3 docs/project_management/system/scripts/planning/validate_tasks_json.py --feature-dir "docs/project_management/packs/draft/best-effort-distro-package-manager"` → `0`
+  - `python3 docs/project_management/system/scripts/planning/validate_slice_specs.py --feature-dir "docs/project_management/packs/draft/best-effort-distro-package-manager"` → `0`
+  - `python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "docs/project_management/packs/draft/best-effort-distro-package-manager"` → `0`
+  - `jq -e docs/project_management/packs/sequencing.json` → `0`
+  - required-field audit on `tasks.json` → `0`
+  - `make planning-lint FEATURE_DIR="docs/project_management/packs/draft/best-effort-distro-package-manager"` → `2`
+  - `make planning-micro-lint FEATURE_DIR="docs/project_management/packs/draft/best-effort-distro-package-manager" OWNED_PATHS="pre-planning/ci_checkpoint_plan.md plan.md tasks.json session_log.md quality_gate_report.md kickoff_prompts slices/BEDPM0/kickoff_prompts slices/BEDPM1/kickoff_prompts slices/BEDPM2/kickoff_prompts slices/BEDPM3/kickoff_prompts"` → `0`
+- Blockers:
+  - `pre-planning/spec_manifest.md` remains outside the tracked-output allowlist and still blocks `planning-lint`
+  - see `logs/pws/BEDPM-PWS-tasks_checkpoints/allowlist_request.json`

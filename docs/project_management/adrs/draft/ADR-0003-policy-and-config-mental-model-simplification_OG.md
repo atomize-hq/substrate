@@ -6,7 +6,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 693dfb346c0cf6caa6a83cf63917a112bf551b2bbe7ceab008f089126e416f3d
+ADR_BODY_SHA256: 5818dec3bff910da1adb9d2237ce5f24c1267f37a14de7d98183001eca37e9a0
 ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after editing>
 
 - Existing: This file preserves the original (untemplated) ADR draft content that motivated the stricter, templated ADR.

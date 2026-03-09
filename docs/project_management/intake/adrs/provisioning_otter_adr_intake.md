@@ -12,17 +12,18 @@ lockdown_prompt: docs/project_management/system/prompts/discovery/adr_lockdown.m
 
 # ADR Intake Sheet — provisioning_otter
 
-1. **Codename:** `provisioning_otter`  
-   **Created:** 2026-02-19T23:25:00Z  
-   **Status:** ready_for_lockdown  
-   **Dependencies:** []  
-   **Related intakes (coordination only):** `quieting_lemur`, `clarifying_owl`, `summoning_wombat`
+## 1. Codename + date + status
 
-2. **Working Title (tentative)**
+- Codename: `provisioning_otter`
+- Created: 2026-02-19T23:25:00Z
+- Status: ready_for_lockdown
+- ADR draft: `docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md`
+
+## 2. Working Title (tentative)
 
 Route `install.method=apt` world-deps installs to provisioning-time (hardened-world compatible)
 
-3. **Problem / Motivation**
+## 3. Problem / Motivation
 
 - In hardened world execution paths (across platforms/backends), runtime world execution happens under restrictive sandboxing and/or read-only mounts (e.g. systemd `ProtectSystem=strict`, full-cage read-only bind mounts), so `/` is effectively read-only and `apt/dpkg` cannot mutate system paths.
 - `substrate world deps current sync` currently attempts `apt-get install` for `install.method=apt` packages and can fail with “Read-only file system” for `dpkg` state/log paths.
@@ -31,12 +32,12 @@ Route `install.method=apt` world-deps installs to provisioning-time (hardened-wo
 - Operators need a supported, auditable way to install OS/system packages needed by world-deps without weakening the runtime sandbox.
 - On Linux host-native backends, provisioning-time OS mutation is also a safety concern: “apt install” would mutate the workstation OS, which is typically disallowed by the threat model (even if it weren’t blocked by hardening).
 
-4. **Proposed Outcome**
+## 4. Proposed Outcome
 
 - Provide an explicit **provisioning-time** workflow to install apt/system dependencies for world-deps packages on backends where OS mutation is permitted/safe (guest worlds; future Linux guest-rootfs).
 - Ensure runtime `world deps current sync|install` does not attempt OS mutation that will fail under hardening (or violate posture); instead it should guide the operator to the provisioning step (or to manual instructions when provisioning is unsupported).
 
-5. **Non-Goals**
+## 5. Non-Goals
 
 - Do not redesign the world-deps inventory schema.
 - Do not relax hardened runtime write restrictions by default (no broadening `ReadWritePaths`, no “make / writable”).
@@ -46,7 +47,7 @@ Route `install.method=apt` world-deps installs to provisioning-time (hardened-wo
 - Do not add new “guest prerequisite” checks beyond the apt provisioning/workflow delta (track separately; see Candidate B).
 - Do not change `world.enabled` / world-disabled UX in `substrate health` / `substrate shim doctor` (tracked separately; see related intakes).
 
-6. **Constraints / Invariants**
+## 6. Constraints / Invariants
 
 - **Security:** hardened runtime execution remains effectively read-only outside Substrate-managed writable surfaces (e.g. `/var/lib/substrate/world-deps`, `/tmp`).
 - **Explicitness:** OS mutation is opt-in and operator-invoked (a distinct provisioning command/surface).
@@ -57,7 +58,7 @@ Route `install.method=apt` world-deps installs to provisioning-time (hardened-wo
 - **UX:** failure modes must be actionable (clear remediation steps; stable exit codes).
 - **Compatibility:** preserve the current `world deps` packages/bundles contract and exit code taxonomy.
 
-7. **Interfaces / Contracts (concrete changes)**
+## 7. Interfaces / Contracts (concrete changes)
 
 CLI additions/changes (locked surface; see Options for alternatives we rejected):
 - Add an explicit **world provisioning** flag to install in-world OS (`apt`) requirements for apt-backed world-deps items (explicit OS mutation; operator-invoked):
@@ -77,7 +78,7 @@ Docs:
 - Operator guidance for script authoring and hardening constraints (already started under `docs/reference/world/deps/`).
 - Add an operator-visible explanation that apt-backed packages are provisioning-time under hardening.
 
-8. **Options**
+## 8. Options
 
 ### Option A — Extend `substrate world enable` to provision apt-backed world-deps (recommended)
 
@@ -148,7 +149,7 @@ command.
 **Risk notes**
 - Increased support load and drift across machines/guests.
 
-9. **Recommendation (locked)**
+## 9. Recommendation (locked)
 
 Recommend **Option A**.
 
@@ -156,7 +157,7 @@ Choose Option A when:
 - The world-agent runtime sandbox must remain hardened by default, and
 - We want a deterministic, explicit operator workflow for OS mutation.
 
-10. **Slice Decomposition (required)**
+## 10. Slice Decomposition (required)
 
 ### ADR Candidate A (this one): provisioning-time apt deps
 
@@ -176,7 +177,7 @@ Likely slices:
 
 - If ever needed, implement a safer split between runtime execution and provisioning execution inside the guest.
 
-11. **Acceptance Criteria Draft**
+## 11. Acceptance Criteria Draft
 
 - On guest-world backends (macOS Lima, Windows WSL), running `substrate world enable --provision-deps` can provision apt-backed world-deps without encountering read-only filesystem errors from `dpkg`.
 - On Linux host-native, provisioning remains explicitly unsupported (no host OS mutation); Substrate prints clear manual guidance (and/or points to the Linux guest-rootfs track if configured).
@@ -184,7 +185,71 @@ Likely slices:
 - Script-based world-deps continue to work when they write only under `/var/lib/substrate/world-deps` (and `/tmp`).
 - Exit codes remain consistent with taxonomy (`3` backend unavailable, `4` unmet prerequisites, `5` hardening conflict, etc.).
 
-12. **Open Questions / Unknowns**
+## 12. Dependencies
+
+- depends_on_adrs: []
+- depends_on_work_items: []
+- blocks: []
+- Related intakes (coordination only): [`quieting_lemur`, `clarifying_owl`, `summoning_wombat`]
+
+## 13. Lift Summary
+
+### Lift Vector v1
+
+<!-- PM_LIFT_VECTOR:BEGIN -->
+```json
+{
+  "touch": {
+    "create_files": null,
+    "edit_files": 3,
+    "delete_files": 0,
+    "deprecate_files": 0,
+    "crates_touched": 2,
+    "boundary_crossings": null
+  },
+  "contract": {
+    "cli_flags": 1,
+    "config_keys": 0,
+    "exit_codes": 0,
+    "file_formats": 0,
+    "behavior_deltas": 1
+  },
+  "qa": { "new_test_files": null, "new_test_cases": null },
+  "docs": { "new_docs_files": 0 },
+  "ops": { "new_smoke_steps": 0, "ci_changes": 0 },
+  "risk": {
+    "cross_platform": true,
+    "security_sensitive": true,
+    "concurrency_or_ordering": false,
+    "migration_or_backfill": false,
+    "unknowns_high": null
+  },
+  "notes": "Discovery estimate; provisioning-time OS mutation flag + runtime fail-early remediation."
+}
+```
+<!-- PM_LIFT_VECTOR:END -->
+
+### Computed outputs (from `make pm-lift-intake`)
+
+```text
+Lift Score (v1): 24
+Estimated slices: 2
+Confidence: low
+Triggers:
+- missing_inputs:qa.new_test_cases
+- missing_inputs:qa.new_test_files
+- missing_inputs:risk.unknowns_high
+- missing_inputs:touch.boundary_crossings
+- missing_inputs:touch.create_files
+Missing inputs:
+- qa.new_test_cases
+- qa.new_test_files
+- risk.unknowns_high
+- touch.boundary_crossings
+- touch.create_files
+```
+
+## 14. Open Questions / Unknowns
 
 P0:
 - Runtime behavior choice (preferred direction: **fail early with friendly remediation**):
@@ -195,7 +260,7 @@ P1:
 - How do we want to represent/record “provisioned” state (probe-only vs state file)?
 - Should “guest prerequisites” checks (e.g. `ca-certificates`) be handled by Candidate B (separate ADR), or do we want to pull a minimal subset into Candidate A?
 
-13. **Ready to Draft ADR? checklist**
+## 15. Ready-to-lockdown checklist
 
 - [x] One behavior delta sentence locked (one sentence; no extra deltas).
 - [x] Command surface chosen (`substrate world enable --provision-deps` on effective enabled set).

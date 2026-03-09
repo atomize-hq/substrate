@@ -1,6 +1,7 @@
 	param(
 	    [Parameter(Mandatory = $true)]
 	    [string]$Feature,
+	    [string]$Bucket = "",
 	    [string]$SlicePrefix = "",
 	    [switch]$SliceDirs,
 	    [switch]$FlatSliceFiles,
@@ -22,7 +23,15 @@ $pmRootsJson = (& python3 (Join-Path $PSScriptRoot "pm_paths.py") print-roots) |
 $pmRoots = $pmRootsJson | ConvertFrom-Json
 if (-not $pmRoots.pm_packs_root) { throw "ERROR: pm_paths.py print-roots returned empty pm_packs_root" }
 
-$featureDir = "$($pmRoots.pm_packs_root)/active/$Feature"
+$bucketResolved = $Bucket
+if ([string]::IsNullOrWhiteSpace($bucketResolved)) {
+    $bucketResolved = $pmRoots.pm_default_pack_bucket
+}
+if ([string]::IsNullOrWhiteSpace($bucketResolved)) {
+    $bucketResolved = "active"
+}
+
+$featureDir = "$($pmRoots.pm_packs_root)/$bucketResolved/$Feature"
 $planningTemplatesDir = "docs/project_management/system/templates/planning_pack"
 $kickoffTemplatesDir = "docs/project_management/system/templates/kickoff"
 

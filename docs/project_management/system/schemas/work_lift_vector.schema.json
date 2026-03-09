@@ -1,0 +1,219 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Work Lift Vector v1",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["touch", "contract", "qa", "docs", "ops", "risk", "notes"],
+    "properties": {
+        "model_version": {
+            "type": "integer",
+            "const": 1,
+            "description": "Lift Vector schema/model version. Optional; consumers default to 1 when omitted."
+        },
+        "touch": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "create_files": {
+                    "type": ["integer", "null"],
+                    "minimum": 0,
+                    "description": "Count of created files. null means unknown at discovery time."
+                },
+                "edit_files": {
+                    "type": ["integer", "null"],
+                    "minimum": 0,
+                    "description": "Count of edited files. null means unknown at discovery time."
+                },
+                "delete_files": {
+                    "type": ["integer", "null"],
+                    "minimum": 0,
+                    "description": "Count of deleted files. null means unknown at discovery time."
+                },
+                "deprecate_files": {
+                    "type": ["integer", "null"],
+                    "minimum": 0,
+                    "description": "Count of deprecated files. null means unknown at discovery time."
+                },
+                "crates_touched": {
+                    "type": ["integer", "null"],
+                    "minimum": 0,
+                    "description": "Rough count of crates/major modules touched. null means unknown at discovery time."
+                },
+                "boundary_crossings": {
+                    "type": ["integer", "null"],
+                    "minimum": 0,
+                    "description": "Count of subsystem boundary crossings. null means unknown at discovery time."
+                }
+            }
+        },
+        "contract": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "cli_flags": {
+                    "type": ["integer", "null"],
+                    "minimum": 0,
+                    "description": "Count of new/changed CLI flags or commands. null means unknown at discovery time."
+                },
+                "config_keys": {
+                    "type": ["integer", "null"],
+                    "minimum": 0,
+                    "description": "Count of new/changed config keys. null means unknown at discovery time."
+                },
+                "exit_codes": {
+                    "type": ["integer", "null"],
+                    "minimum": 0,
+                    "description": "Count of new/changed exit codes. null means unknown at discovery time."
+                },
+                "file_formats": {
+                    "type": ["integer", "null"],
+                    "minimum": 0,
+                    "description": "Count of new/changed on-disk file formats/schemas. null means unknown at discovery time."
+                },
+                "behavior_deltas": {
+                    "type": ["integer", "null"],
+                    "minimum": 1,
+                    "description": "Count of behavior deltas. null means unknown at discovery time."
+                }
+            }
+        },
+        "qa": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "new_test_files": {
+                    "type": ["integer", "null"],
+                    "minimum": 0,
+                    "description": "Count of new test files. null means unknown at discovery time."
+                },
+                "new_test_cases": {
+                    "type": ["integer", "null"],
+                    "minimum": 0,
+                    "description": "Count of new test cases (or assertions). null means unknown at discovery time."
+                }
+            }
+        },
+        "docs": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "new_docs_files": {
+                    "type": ["integer", "null"],
+                    "minimum": 0,
+                    "description": "Count of new documentation files. null means unknown at discovery time."
+                }
+            }
+        },
+        "ops": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "new_smoke_steps": {
+                    "type": ["integer", "null"],
+                    "minimum": 0,
+                    "description": "Count of new smoke-test steps. null means unknown at discovery time."
+                },
+                "ci_changes": {
+                    "type": ["integer", "null"],
+                    "minimum": 0,
+                    "description": "Count of CI changes. null means unknown at discovery time."
+                }
+            }
+        },
+        "risk": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "cross_platform": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "True if behavior or support across multiple platforms is required."
+                },
+                "security_sensitive": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "True if work touches security-sensitive behavior, secrets, policy, or exploit surface."
+                },
+                "concurrency_or_ordering": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "True if work involves concurrency, ordering, or race-prone behavior."
+                },
+                "migration_or_backfill": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "True if work requires a migration or backfill."
+                },
+                "unknowns_high": {
+                    "type": ["integer", "null"],
+                    "minimum": 0,
+                    "description": "Count of high/blocked unknowns. null means unknown at discovery time."
+                }
+            }
+        },
+        "notes": {
+            "type": "string",
+            "description": "Freeform notes; may be empty."
+        }
+    },
+    "examples": [
+        {
+            "model_version": 1,
+            "touch": {
+                "create_files": 0,
+                "edit_files": 0,
+                "delete_files": 0,
+                "deprecate_files": 0,
+                "crates_touched": null,
+                "boundary_crossings": null
+            },
+            "contract": {
+                "cli_flags": 0,
+                "config_keys": 0,
+                "exit_codes": 0,
+                "file_formats": 0,
+                "behavior_deltas": 1
+            },
+            "qa": { "new_test_files": 0, "new_test_cases": 0 },
+            "docs": { "new_docs_files": 0 },
+            "ops": { "new_smoke_steps": 0, "ci_changes": 0 },
+            "risk": {
+                "cross_platform": false,
+                "security_sensitive": false,
+                "concurrency_or_ordering": false,
+                "migration_or_backfill": false,
+                "unknowns_high": 0
+            },
+            "notes": ""
+        },
+        {
+            "model_version": 1,
+            "touch": {
+                "create_files": 1,
+                "edit_files": 2,
+                "delete_files": 0,
+                "deprecate_files": 0,
+                "crates_touched": 2,
+                "boundary_crossings": 1
+            },
+            "contract": {
+                "cli_flags": 1,
+                "config_keys": 0,
+                "exit_codes": 0,
+                "file_formats": 0,
+                "behavior_deltas": 1
+            },
+            "qa": { "new_test_files": 1, "new_test_cases": 3 },
+            "docs": { "new_docs_files": 1 },
+            "ops": { "new_smoke_steps": 1, "ci_changes": 0 },
+            "risk": {
+                "cross_platform": false,
+                "security_sensitive": false,
+                "concurrency_or_ordering": false,
+                "migration_or_backfill": false,
+                "unknowns_high": 0
+            },
+            "notes": "Fully specified example."
+        }
+    ]
+}

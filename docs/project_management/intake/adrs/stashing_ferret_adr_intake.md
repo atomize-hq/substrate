@@ -13,13 +13,12 @@ lockdown_prompt: docs/project_management/system/prompts/discovery/adr_lockdown.m
 
 # ADR Intake Sheet
 
-## 1. Codename + Created date/time + Status
+## 1. Codename + date + status
 
 - Codename: `stashing_ferret`
 - Created: 2026-02-20T19:09:29Z
 - Status: ready_for_lockdown
-- Dependencies: [`detecting_badger`]
-- Related intakes (coordination only): `provisioning_otter`
+- ADR draft: `docs/project_management/adrs/draft/ADR-0032-stashing-ferret.md`
 
 ## 2. Working Title (tentative)
 
@@ -146,13 +145,65 @@ Choose Option 2 only if we decide `install_state.json` must remain “event-only
 - If `/etc/os-release` is missing/unreadable, install proceeds and still records `pkg_manager.selected` with `source=path_probe` (or similar).
 - Existing uninstall flows continue to work unchanged (schema_version remains `1`).
 
-## 12. Open Questions / Unknowns (with priority)
+## 12. Dependencies
+
+- depends_on_adrs: [`detecting_badger`]
+- depends_on_work_items: []
+- blocks: []
+- Related intakes (coordination only): [`provisioning_otter`]
+
+## 13. Lift Summary
+
+### Lift Vector v1
+
+<!-- PM_LIFT_VECTOR:BEGIN -->
+```json
+{
+  "touch": {
+    "create_files": 0,
+    "edit_files": 1,
+    "delete_files": 0,
+    "deprecate_files": 0,
+    "crates_touched": 0,
+    "boundary_crossings": 0
+  },
+  "contract": {
+    "cli_flags": 0,
+    "config_keys": 0,
+    "exit_codes": 0,
+    "file_formats": 1,
+    "behavior_deltas": 1
+  },
+  "qa": { "new_test_files": 0, "new_test_cases": 0 },
+  "docs": { "new_docs_files": 0 },
+  "ops": { "new_smoke_steps": 0, "ci_changes": 0 },
+  "risk": {
+    "cross_platform": false,
+    "security_sensitive": false,
+    "concurrency_or_ordering": false,
+    "migration_or_backfill": true,
+    "unknowns_high": 0
+  },
+  "notes": "Estimate: extend install_state.json (schema_version=1) with additive platform metadata and ensure file is written on successful installs."
+}
+```
+<!-- PM_LIFT_VECTOR:END -->
+
+### Computed outputs (from `make pm-lift-intake`)
+
+```text
+Lift Score (v1): 9
+Estimated slices: 1
+Confidence: high
+```
+
+## 14. Open Questions / Unknowns (with priority)
 
 - (Locked) Installs with `--no-world` still write `install_state.json` platform metadata.
 - (Locked) Field naming + nesting under `host_state.platform.*` as specified in Interfaces/Contracts.
 - P1: Should we record `VERSION_TAG` / installer version in `install_state.json` for debugging, or keep that elsewhere?
 
-## 13. “Ready to Draft ADR?” checklist (yes/no with reasons)
+## 15. Ready-to-lockdown checklist (yes/no with reasons)
 
 - [x] Option is locked (Option 1).
 - [x] Field names are locked (stable JSON keys).

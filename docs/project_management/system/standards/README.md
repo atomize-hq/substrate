@@ -18,6 +18,8 @@ This directory contains **standards only** (normative rules). Prompt payloads li
 - `docs/project_management/system/standards/planning/PLANNING_IMPACT_MAP_STANDARD.md`
 - `docs/project_management/system/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`
 - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+- `docs/project_management/system/standards/planning/PLANNING_WORK_LIFT_ADVISORY.md`
+- `docs/project_management/system/standards/planning/PLANNING_WORK_LIFT_STRICT_MODE.md`
 
 ### Execution
 
@@ -45,6 +47,8 @@ This directory contains **standards only** (normative rules). Prompt payloads li
 - `docs/project_management/system/standards/shared/CONTRACT_SURFACE_STANDARD.md`
 - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 - `docs/project_management/system/standards/shared/SECRETS_DELIVERY_CHANNEL_RUBRIC.md`
+- `docs/project_management/system/standards/shared/WORK_LIFT_MODEL_V1_GOLDENS.md`
+- `docs/project_management/system/standards/shared/WORK_LIFT_RUBRIC.md`
 - `docs/project_management/system/standards/shared/rustStandards.md`
 
 ## Canonical paths
@@ -75,4 +79,3 @@ Schema:
 Machine-readable map:
 
 - `docs/project_management/system/standards/MANIFEST.yaml`
-

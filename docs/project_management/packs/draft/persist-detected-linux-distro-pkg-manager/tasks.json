@@ -1,0 +1,879 @@
+{
+  "meta": {
+    "schema_version": 4,
+    "cross_platform": true,
+    "ci_parity_platforms_required": [
+      "linux",
+      "macos",
+      "windows"
+    ],
+    "behavior_platforms_required": [
+      "linux"
+    ],
+    "checkpoint_boundaries": [
+      "PDLDPM2"
+    ],
+    "automation": {
+      "enabled": true,
+      "orchestration_branch": "feat/persist-detected-linux-distro-pkg-manager"
+    },
+    "slice_spec_version": 2,
+    "feature": "persist-detected-linux-distro-pkg-manager",
+    "adr_paths": [
+      "docs/project_management/adrs/draft/ADR-0032-stashing-ferret.md"
+    ]
+  },
+  "tasks": [
+    {
+      "id": "PDLDPM0-code",
+      "name": "PDLDPM0 slice (code)",
+      "type": "code",
+      "phase": "PDLDPM0",
+      "status": "pending",
+      "description": "Implement PDLDPM0 persisted platform-metadata production changes.",
+      "references": [
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/plan.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/tasks.json",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/session_log.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/alignment_report.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM0/PDLDPM0-spec.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/contract.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/install-state-schema-spec.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/decision_register.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md",
+        "docs/project_management/adrs/draft/ADR-0032-stashing-ferret.md"
+      ],
+      "acceptance_criteria": [
+        "Production code implements the PDLDPM0 AC set.",
+        "Linux platform metadata persistence stays additive and formatter/lint gates pass."
+      ],
+      "ac_ids": [
+        "AC-PDLDPM0-01",
+        "AC-PDLDPM0-02",
+        "AC-PDLDPM0-03",
+        "AC-PDLDPM0-04",
+        "AC-PDLDPM0-05",
+        "AC-PDLDPM0-06"
+      ],
+      "start_checklist": [
+        "git checkout feat/persist-detected-linux-distro-pkg-manager && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, PDLDPM0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager\" SLICE_ID=\"PDLDPM0\""
+      ],
+      "end_checklist": [
+        "Record a targeted baseline command before edits and rerun it after edits",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"PDLDPM0-code\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/persist-detected-linux-distro-pkg-manager-pdldpm0-code",
+      "integration_task": "PDLDPM0-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM0/kickoff_prompts/PDLDPM0-code.md",
+      "depends_on": [],
+      "concurrent_with": [
+        "PDLDPM0-test"
+      ],
+      "git_branch": "persist-detected-linux-distro-pkg-manager-pdldpm0-code",
+      "required_make_targets": [
+        "triad-code-checks"
+      ]
+    },
+    {
+      "id": "PDLDPM0-test",
+      "name": "PDLDPM0 slice (test)",
+      "type": "test",
+      "phase": "PDLDPM0",
+      "status": "pending",
+      "description": "Add tests that enforce the PDLDPM0 persisted platform-metadata contract.",
+      "references": [
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/plan.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/tasks.json",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/session_log.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/alignment_report.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM0/PDLDPM0-spec.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/contract.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/install-state-schema-spec.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/decision_register.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md",
+        "docs/project_management/adrs/draft/ADR-0032-stashing-ferret.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover the PDLDPM0 AC set for field nesting, verbatim copy-through, and additive compatibility.",
+        "Test-only changes stay isolated from production code."
+      ],
+      "ac_ids": [
+        "AC-PDLDPM0-01",
+        "AC-PDLDPM0-02",
+        "AC-PDLDPM0-03",
+        "AC-PDLDPM0-04",
+        "AC-PDLDPM0-05",
+        "AC-PDLDPM0-06"
+      ],
+      "start_checklist": [
+        "git checkout feat/persist-detected-linux-distro-pkg-manager && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, PDLDPM0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager\" SLICE_ID=\"PDLDPM0\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "Run the targeted tests you add or touch",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"PDLDPM0-test\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/persist-detected-linux-distro-pkg-manager-pdldpm0-test",
+      "integration_task": "PDLDPM0-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM0/kickoff_prompts/PDLDPM0-test.md",
+      "depends_on": [],
+      "concurrent_with": [
+        "PDLDPM0-code"
+      ],
+      "git_branch": "persist-detected-linux-distro-pkg-manager-pdldpm0-test",
+      "required_make_targets": [
+        "triad-test-checks"
+      ]
+    },
+    {
+      "id": "PDLDPM0-integ",
+      "name": "PDLDPM0 slice (integration)",
+      "type": "integration",
+      "phase": "PDLDPM0",
+      "status": "pending",
+      "description": "Merge PDLDPM0 and make the persisted platform-metadata slice green.",
+      "references": [
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/plan.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/tasks.json",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/session_log.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/alignment_report.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM0/PDLDPM0-spec.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/contract.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/install-state-schema-spec.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/decision_register.md",
+        "docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md",
+        "docs/project_management/adrs/draft/ADR-0032-stashing-ferret.md",
+        "tests/installers/install_state_smoke.sh"
+      ],
+      "acceptance_criteria": [
+        "Local integration gates are green for PDLDPM0 (fmt, clippy, relevant tests, integ-checks).",
+        "PDLDPM0 is merged back to the orchestration branch."
+      ],
+      "ac_ids": [
+        "AC-PDLDPM0-01",
+        "AC-PDLDPM0-02",
+        "AC-PDLDPM0-03",
+        "AC-PDLDPM0-04",
+        "AC-PDLDPM0-05",
+        "AC-PDLDPM0-06"
+      ],
+      "start_checklist": [
+        "git checkout feat/persist-detected-linux-distro-pkg-manager && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, PDLDPM0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager\" TASK_ID=\"PDLDPM0-integ\""
+      ],
+      "end_checklist": [
+        "Merge PDLDPM0-code and PDLDPM0-test",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"PDLDPM0-integ\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/persist-detected-linux-distro-pkg-manager-pdldpm0-integ",
+      "integration_task": "PDLDPM0-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM0/kickoff_prompts/PDLDPM0-integ.md",
+      "depends_on": [
+        "PDLDPM0-code",
+        "PDLDPM0-test"
+      ],
+      "concurrent_with": [],
+      "git_branch": "persist-detected-linux-distro-pkg-manager-pdldpm0-integ",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": true
+    },
+    {
+      "id": "PDLDPM1-code",
+      "name": "PDLDPM1 slice (code)",
+      "type": "code",
+      "phase": "PDLDPM1",
+      "status": "pending",
+      "description": "Implement PDLDPM1 reliable install-state write production changes.",
+      "references": [
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/plan.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/tasks.json",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/session_log.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/alignment_report.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM1/PDLDPM1-spec.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/contract.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/install-state-schema-spec.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/decision_register.md",
+        "docs/project_management/adrs/draft/ADR-0032-stashing-ferret.md",
+        "tests/installers/install_state_smoke.sh"
+      ],
+      "acceptance_criteria": [
+        "Production code implements the PDLDPM1 AC set.",
+        "Reliable Linux install-state writes stay warning-only on metadata failure and formatter/lint gates pass."
+      ],
+      "ac_ids": [
+        "AC-PDLDPM1-01",
+        "AC-PDLDPM1-02",
+        "AC-PDLDPM1-03",
+        "AC-PDLDPM1-04",
+        "AC-PDLDPM1-05",
+        "AC-PDLDPM1-06"
+      ],
+      "start_checklist": [
+        "git checkout feat/persist-detected-linux-distro-pkg-manager && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, PDLDPM1-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager\" SLICE_ID=\"PDLDPM1\""
+      ],
+      "end_checklist": [
+        "Record a targeted baseline command before edits and rerun it after edits",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"PDLDPM1-code\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/persist-detected-linux-distro-pkg-manager-pdldpm1-code",
+      "integration_task": "PDLDPM1-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM1/kickoff_prompts/PDLDPM1-code.md",
+      "depends_on": [
+        "PDLDPM0-integ"
+      ],
+      "concurrent_with": [
+        "PDLDPM1-test"
+      ],
+      "git_branch": "persist-detected-linux-distro-pkg-manager-pdldpm1-code",
+      "required_make_targets": [
+        "triad-code-checks"
+      ]
+    },
+    {
+      "id": "PDLDPM1-test",
+      "name": "PDLDPM1 slice (test)",
+      "type": "test",
+      "phase": "PDLDPM1",
+      "status": "pending",
+      "description": "Add tests that enforce the PDLDPM1 reliable install-state write contract.",
+      "references": [
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/plan.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/tasks.json",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/session_log.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/alignment_report.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM1/PDLDPM1-spec.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/contract.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/install-state-schema-spec.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/decision_register.md",
+        "docs/project_management/adrs/draft/ADR-0032-stashing-ferret.md",
+        "tests/installers/install_state_smoke.sh"
+      ],
+      "acceptance_criteria": [
+        "Tests cover the PDLDPM1 AC set for write triggers, idempotency, and warning-only degradation.",
+        "Test-only changes stay isolated from production code."
+      ],
+      "ac_ids": [
+        "AC-PDLDPM1-01",
+        "AC-PDLDPM1-02",
+        "AC-PDLDPM1-03",
+        "AC-PDLDPM1-04",
+        "AC-PDLDPM1-05",
+        "AC-PDLDPM1-06"
+      ],
+      "start_checklist": [
+        "git checkout feat/persist-detected-linux-distro-pkg-manager && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, PDLDPM1-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager\" SLICE_ID=\"PDLDPM1\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "Run the targeted tests you add or touch",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"PDLDPM1-test\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/persist-detected-linux-distro-pkg-manager-pdldpm1-test",
+      "integration_task": "PDLDPM1-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM1/kickoff_prompts/PDLDPM1-test.md",
+      "depends_on": [
+        "PDLDPM0-integ"
+      ],
+      "concurrent_with": [
+        "PDLDPM1-code"
+      ],
+      "git_branch": "persist-detected-linux-distro-pkg-manager-pdldpm1-test",
+      "required_make_targets": [
+        "triad-test-checks"
+      ]
+    },
+    {
+      "id": "PDLDPM1-integ",
+      "name": "PDLDPM1 slice (integration)",
+      "type": "integration",
+      "phase": "PDLDPM1",
+      "status": "pending",
+      "description": "Merge PDLDPM1 and make the reliable install-state write slice green.",
+      "references": [
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/plan.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/tasks.json",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/session_log.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/alignment_report.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM1/PDLDPM1-spec.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/contract.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/install-state-schema-spec.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/decision_register.md",
+        "docs/project_management/adrs/draft/ADR-0032-stashing-ferret.md",
+        "tests/installers/install_state_smoke.sh"
+      ],
+      "acceptance_criteria": [
+        "Local integration gates are green for PDLDPM1 (fmt, clippy, relevant tests, integ-checks).",
+        "PDLDPM1 is merged back to the orchestration branch."
+      ],
+      "ac_ids": [
+        "AC-PDLDPM1-01",
+        "AC-PDLDPM1-02",
+        "AC-PDLDPM1-03",
+        "AC-PDLDPM1-04",
+        "AC-PDLDPM1-05",
+        "AC-PDLDPM1-06"
+      ],
+      "start_checklist": [
+        "git checkout feat/persist-detected-linux-distro-pkg-manager && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, PDLDPM1-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager\" TASK_ID=\"PDLDPM1-integ\""
+      ],
+      "end_checklist": [
+        "Merge PDLDPM1-code and PDLDPM1-test",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"PDLDPM1-integ\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/persist-detected-linux-distro-pkg-manager-pdldpm1-integ",
+      "integration_task": "PDLDPM1-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM1/kickoff_prompts/PDLDPM1-integ.md",
+      "depends_on": [
+        "PDLDPM1-code",
+        "PDLDPM1-test"
+      ],
+      "concurrent_with": [],
+      "git_branch": "persist-detected-linux-distro-pkg-manager-pdldpm1-integ",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": true
+    },
+    {
+      "id": "PDLDPM2-code",
+      "name": "PDLDPM2 slice (code)",
+      "type": "code",
+      "phase": "PDLDPM2",
+      "status": "pending",
+      "description": "Implement the non-test PDLDPM2 changes required for smoke evidence and operator wording alignment.",
+      "references": [
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/plan.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/tasks.json",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/session_log.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/alignment_report.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM2/PDLDPM2-spec.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/contract.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/install-state-schema-spec.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/decision_register.md",
+        "docs/project_management/adrs/draft/ADR-0032-stashing-ferret.md",
+        "docs/INSTALLATION.md",
+        "tests/installers/install_state_smoke.sh"
+      ],
+      "acceptance_criteria": [
+        "Non-test work implements the PDLDPM2 AC set.",
+        "Formatter and lint gates pass for the merged slice inputs."
+      ],
+      "ac_ids": [
+        "AC-PDLDPM2-01",
+        "AC-PDLDPM2-02",
+        "AC-PDLDPM2-03",
+        "AC-PDLDPM2-04",
+        "AC-PDLDPM2-05",
+        "AC-PDLDPM2-06"
+      ],
+      "start_checklist": [
+        "git checkout feat/persist-detected-linux-distro-pkg-manager && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, PDLDPM2-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager\" SLICE_ID=\"PDLDPM2\""
+      ],
+      "end_checklist": [
+        "Record a targeted baseline command before edits and rerun it after edits",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"PDLDPM2-code\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/persist-detected-linux-distro-pkg-manager-pdldpm2-code",
+      "integration_task": "PDLDPM2-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM2/kickoff_prompts/PDLDPM2-code.md",
+      "depends_on": [
+        "PDLDPM1-integ"
+      ],
+      "concurrent_with": [
+        "PDLDPM2-test"
+      ],
+      "git_branch": "persist-detected-linux-distro-pkg-manager-pdldpm2-code",
+      "required_make_targets": [
+        "triad-code-checks"
+      ]
+    },
+    {
+      "id": "PDLDPM2-test",
+      "name": "PDLDPM2 slice (test)",
+      "type": "test",
+      "phase": "PDLDPM2",
+      "status": "pending",
+      "description": "Add tests that enforce the PDLDPM2 smoke-harness and operator-evidence contract.",
+      "references": [
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/plan.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/tasks.json",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/session_log.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/alignment_report.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM2/PDLDPM2-spec.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/contract.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/install-state-schema-spec.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/decision_register.md",
+        "docs/project_management/adrs/draft/ADR-0032-stashing-ferret.md",
+        "docs/INSTALLATION.md",
+        "tests/installers/install_state_smoke.sh"
+      ],
+      "acceptance_criteria": [
+        "Tests cover the PDLDPM2 AC set for no-event success, missing os-release degradation, and additive compatibility.",
+        "Test-only changes stay isolated from non-test work."
+      ],
+      "ac_ids": [
+        "AC-PDLDPM2-01",
+        "AC-PDLDPM2-02",
+        "AC-PDLDPM2-03",
+        "AC-PDLDPM2-04",
+        "AC-PDLDPM2-05",
+        "AC-PDLDPM2-06"
+      ],
+      "start_checklist": [
+        "git checkout feat/persist-detected-linux-distro-pkg-manager && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, PDLDPM2-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager\" SLICE_ID=\"PDLDPM2\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "Run the targeted tests you add or touch",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"PDLDPM2-test\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/persist-detected-linux-distro-pkg-manager-pdldpm2-test",
+      "integration_task": "PDLDPM2-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM2/kickoff_prompts/PDLDPM2-test.md",
+      "depends_on": [
+        "PDLDPM1-integ"
+      ],
+      "concurrent_with": [
+        "PDLDPM2-code"
+      ],
+      "git_branch": "persist-detected-linux-distro-pkg-manager-pdldpm2-test",
+      "required_make_targets": [
+        "triad-test-checks"
+      ]
+    },
+    {
+      "id": "PDLDPM2-integ-core",
+      "name": "PDLDPM2 slice (integration core)",
+      "type": "integration",
+      "phase": "PDLDPM2",
+      "status": "pending",
+      "description": "Merge PDLDPM2 code and test work and validate local integration gates before CP1.",
+      "references": [
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/plan.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/tasks.json",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/session_log.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/alignment_report.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM2/PDLDPM2-spec.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/contract.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/install-state-schema-spec.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/decision_register.md",
+        "docs/project_management/adrs/draft/ADR-0032-stashing-ferret.md",
+        "docs/INSTALLATION.md",
+        "tests/installers/install_state_smoke.sh"
+      ],
+      "acceptance_criteria": [
+        "Local integration gates are green for PDLDPM2 (fmt, clippy, relevant tests, integ-checks).",
+        "The PDLDPM2 core branch is ready for the CP1 checkpoint run."
+      ],
+      "start_checklist": [
+        "git checkout feat/persist-detected-linux-distro-pkg-manager && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, PDLDPM2-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager\" TASK_ID=\"PDLDPM2-integ-core\""
+      ],
+      "end_checklist": [
+        "Merge PDLDPM2-code and PDLDPM2-test",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"PDLDPM2-integ-core\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/persist-detected-linux-distro-pkg-manager-pdldpm2-integ-core",
+      "integration_task": "PDLDPM2-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM2/kickoff_prompts/PDLDPM2-integ-core.md",
+      "depends_on": [
+        "PDLDPM2-code",
+        "PDLDPM2-test"
+      ],
+      "concurrent_with": [],
+      "git_branch": "persist-detected-linux-distro-pkg-manager-pdldpm2-integ-core",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "CP1-ci-checkpoint",
+      "name": "CP1 CI checkpoint (cross-platform validation)",
+      "type": "ops",
+      "phase": "CP1",
+      "status": "pending",
+      "description": "Run compile parity, feature smoke, and CI Testing quick for checkpoint boundary slice PDLDPM2.",
+      "references": [
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/tasks.json",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/session_log.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM2/PDLDPM2-spec.md",
+        "docs/project_management/adrs/draft/ADR-0032-stashing-ferret.md",
+        "docs/INSTALLATION.md",
+        "tests/installers/install_state_smoke.sh"
+      ],
+      "acceptance_criteria": [
+        "CI audit ledger is created or updated for the checkpoint.",
+        "Compile parity is green for the checkpoint checkout SHA.",
+        "Feature smoke is green for the checkpoint checkout SHA on linux.",
+        "CI Testing quick is green for the checkpoint checkout SHA."
+      ],
+      "start_checklist": [
+        "git checkout feat/persist-detected-linux-distro-pkg-manager && git pull --ff-only",
+        "Read pre-planning/ci_checkpoint_plan.md, tasks.json, session_log.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs"
+      ],
+      "end_checklist": [
+        "Run ci_audit for ci-testing and feature-smoke; record audit output lines in session_log.md",
+        "Dispatch compile parity, CI Testing quick, and feature smoke per kickoff prompt; record run ids and URLs",
+        "Set status to completed; add END entry; commit docs"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/kickoff_prompts/CP1-ci-checkpoint.md",
+      "depends_on": [
+        "PDLDPM2-integ-core"
+      ],
+      "concurrent_with": []
+    },
+    {
+      "id": "PDLDPM2-integ-linux",
+      "name": "PDLDPM2 slice (integration linux)",
+      "type": "integration",
+      "phase": "PDLDPM2",
+      "status": "pending",
+      "description": "Resolve PDLDPM2 Linux behavior-smoke failures reported by CP1.",
+      "references": [
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/plan.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/tasks.json",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/session_log.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/alignment_report.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM2/PDLDPM2-spec.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/contract.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/install-state-schema-spec.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/decision_register.md",
+        "docs/project_management/adrs/draft/ADR-0032-stashing-ferret.md",
+        "docs/INSTALLATION.md",
+        "tests/installers/install_state_smoke.sh"
+      ],
+      "acceptance_criteria": [
+        "Linux feature-smoke failures reported by CP1 are resolved.",
+        "Local quality gates for the Linux platform-fix worktree are green."
+      ],
+      "start_checklist": [
+        "git checkout feat/persist-detected-linux-distro-pkg-manager && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, PDLDPM2-spec.md, the CP1 results, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager\" TASK_ID=\"PDLDPM2-integ-linux\""
+      ],
+      "end_checklist": [
+        "Merge PDLDPM2-integ-core into the worktree before platform fixes",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run the failing Linux smoke command set again until it passes",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"PDLDPM2-integ-linux\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/persist-detected-linux-distro-pkg-manager-pdldpm2-integ-linux",
+      "integration_task": "PDLDPM2-integ-linux",
+      "kickoff_prompt": "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM2/kickoff_prompts/PDLDPM2-integ-linux.md",
+      "depends_on": [
+        "PDLDPM2-integ-core",
+        "CP1-ci-checkpoint"
+      ],
+      "concurrent_with": [],
+      "platform": "linux",
+      "git_branch": "persist-detected-linux-distro-pkg-manager-pdldpm2-integ-linux",
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "PDLDPM2-integ-macos",
+      "name": "PDLDPM2 slice (integration macos)",
+      "type": "integration",
+      "phase": "PDLDPM2",
+      "status": "pending",
+      "description": "Resolve PDLDPM2 macOS CI parity failures reported by CP1.",
+      "references": [
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/plan.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/tasks.json",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/session_log.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/alignment_report.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM2/PDLDPM2-spec.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/contract.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/install-state-schema-spec.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/decision_register.md",
+        "docs/project_management/adrs/draft/ADR-0032-stashing-ferret.md",
+        "docs/INSTALLATION.md"
+      ],
+      "acceptance_criteria": [
+        "macOS parity issues reported by CP1 are resolved.",
+        "Local quality gates for the macOS platform-fix worktree are green."
+      ],
+      "start_checklist": [
+        "git checkout feat/persist-detected-linux-distro-pkg-manager && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, PDLDPM2-spec.md, the CP1 results, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager\" TASK_ID=\"PDLDPM2-integ-macos\""
+      ],
+      "end_checklist": [
+        "Merge PDLDPM2-integ-core into the worktree before platform fixes",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run the failing macOS command set again until it passes",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"PDLDPM2-integ-macos\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/persist-detected-linux-distro-pkg-manager-pdldpm2-integ-macos",
+      "integration_task": "PDLDPM2-integ-macos",
+      "kickoff_prompt": "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM2/kickoff_prompts/PDLDPM2-integ-macos.md",
+      "depends_on": [
+        "PDLDPM2-integ-core",
+        "CP1-ci-checkpoint"
+      ],
+      "concurrent_with": [],
+      "platform": "macos",
+      "git_branch": "persist-detected-linux-distro-pkg-manager-pdldpm2-integ-macos",
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "PDLDPM2-integ-windows",
+      "name": "PDLDPM2 slice (integration windows)",
+      "type": "integration",
+      "phase": "PDLDPM2",
+      "status": "pending",
+      "description": "Resolve PDLDPM2 Windows CI parity failures reported by CP1.",
+      "references": [
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/plan.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/tasks.json",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/session_log.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/alignment_report.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM2/PDLDPM2-spec.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/contract.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/install-state-schema-spec.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/decision_register.md",
+        "docs/project_management/adrs/draft/ADR-0032-stashing-ferret.md",
+        "docs/INSTALLATION.md"
+      ],
+      "acceptance_criteria": [
+        "Windows parity issues reported by CP1 are resolved.",
+        "Local quality gates for the Windows platform-fix worktree are green."
+      ],
+      "start_checklist": [
+        "git checkout feat/persist-detected-linux-distro-pkg-manager && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, PDLDPM2-spec.md, the CP1 results, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager\" TASK_ID=\"PDLDPM2-integ-windows\""
+      ],
+      "end_checklist": [
+        "Merge PDLDPM2-integ-core into the worktree before platform fixes",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run the failing Windows command set again until it passes",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"PDLDPM2-integ-windows\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/persist-detected-linux-distro-pkg-manager-pdldpm2-integ-windows",
+      "integration_task": "PDLDPM2-integ-windows",
+      "kickoff_prompt": "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM2/kickoff_prompts/PDLDPM2-integ-windows.md",
+      "depends_on": [
+        "PDLDPM2-integ-core",
+        "CP1-ci-checkpoint"
+      ],
+      "concurrent_with": [],
+      "platform": "windows",
+      "git_branch": "persist-detected-linux-distro-pkg-manager-pdldpm2-integ-windows",
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "PDLDPM2-integ",
+      "name": "PDLDPM2 slice (integration final)",
+      "type": "integration",
+      "phase": "PDLDPM2",
+      "status": "pending",
+      "description": "Merge PDLDPM2 core and platform-fix work and merge the slice back to orchestration.",
+      "references": [
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/plan.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/tasks.json",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/session_log.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/alignment_report.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM2/PDLDPM2-spec.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/contract.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/install-state-schema-spec.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/decision_register.md",
+        "docs/project_management/adrs/draft/ADR-0032-stashing-ferret.md",
+        "docs/INSTALLATION.md",
+        "tests/installers/install_state_smoke.sh"
+      ],
+      "acceptance_criteria": [
+        "All CP1 parity and feature-smoke failures for PDLDPM2 are resolved.",
+        "PDLDPM2 is merged back to the orchestration branch."
+      ],
+      "ac_ids": [
+        "AC-PDLDPM2-01",
+        "AC-PDLDPM2-02",
+        "AC-PDLDPM2-03",
+        "AC-PDLDPM2-04",
+        "AC-PDLDPM2-05",
+        "AC-PDLDPM2-06"
+      ],
+      "start_checklist": [
+        "git checkout feat/persist-detected-linux-distro-pkg-manager && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, PDLDPM2-spec.md, the CP1 results, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager\" TASK_ID=\"PDLDPM2-integ\""
+      ],
+      "end_checklist": [
+        "Merge PDLDPM2-integ-core, PDLDPM2-integ-linux, PDLDPM2-integ-macos, and PDLDPM2-integ-windows",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "Verify CP1-ci-checkpoint is completed and recorded in session_log.md",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"PDLDPM2-integ\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/persist-detected-linux-distro-pkg-manager-pdldpm2-integ",
+      "integration_task": "PDLDPM2-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/slices/PDLDPM2/kickoff_prompts/PDLDPM2-integ.md",
+      "depends_on": [
+        "PDLDPM2-integ-core",
+        "PDLDPM2-integ-linux",
+        "PDLDPM2-integ-macos",
+        "PDLDPM2-integ-windows"
+      ],
+      "concurrent_with": [],
+      "git_branch": "persist-detected-linux-distro-pkg-manager-pdldpm2-integ",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": true
+    },
+    {
+      "id": "FZ-feature-cleanup",
+      "name": "Feature cleanup",
+      "type": "ops",
+      "phase": "FZ",
+      "status": "pending",
+      "description": "Remove retained triad worktrees after all slice integrations finish.",
+      "references": [
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/plan.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/tasks.json",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/session_log.md",
+        "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/adrs/draft/ADR-0032-stashing-ferret.md"
+      ],
+      "acceptance_criteria": [
+        "All triad tasks are completed and merged as intended.",
+        "Cleanup records the script summary in session_log.md."
+      ],
+      "start_checklist": [
+        "git checkout feat/persist-detected-linux-distro-pkg-manager && git pull --ff-only",
+        "Confirm all tasks are completed and merged as intended",
+        "Set status to in_progress; add START entry; commit docs"
+      ],
+      "end_checklist": [
+        "Run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager\" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1",
+        "Then run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager\" REMOVE_WORKTREES=1 PRUNE_LOCAL=1",
+        "Set status to completed; add END entry with the cleanup summary; commit docs"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/kickoff_prompts/FZ-feature-cleanup.md",
+      "depends_on": [
+        "PDLDPM2-integ",
+        "CP1-ci-checkpoint"
+      ],
+      "concurrent_with": []
+    }
+  ]
+}

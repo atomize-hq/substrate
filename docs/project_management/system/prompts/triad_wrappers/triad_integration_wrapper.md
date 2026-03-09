@@ -2,7 +2,7 @@
 
 Use this when you want a single orchestration run to:
 - start `<SLICE>-integ-core`, run it with Codex enabled, and capture its final message,
-- run cross-platform compile parity and Feature Smoke for the integ-core commit **only when `<SLICE>` is a CI checkpoint boundary** (see `ci_checkpoint_plan.md`),
+- run cross-platform compile parity and Feature Smoke for the integ-core commit **only when `<SLICE>` is a CI checkpoint boundary** (see `pre-planning/ci_checkpoint_plan.md`; legacy root fallback may still exist on older packs),
 - start only the failing `<SLICE>-integ-<platform>` tasks (optionally with Codex enabled) and capture their final messages,
 - start `<SLICE>-integ` (final aggregator) and capture its final message,
 - report exit codes + artifact paths for all runs.
@@ -75,7 +75,7 @@ LEDGER_PATH="$FEATURE_DIR/logs/$SLICE_ID/ci-audit/ledger.jsonl"
      - Only then proceed to cross-platform CI dispatch (compile parity and Feature Smoke).
 
 2) Confirm `<SLICE_ID>` is a CI checkpoint boundary for this feature:
-   - Read: `$FEATURE_DIR/ci_checkpoint_plan.md`
+   - Read: `$FEATURE_DIR/pre-planning/ci_checkpoint_plan.md` (legacy fallback: `$FEATURE_DIR/ci_checkpoint_plan.md` for older packs)
    - Find the checkpoint that contains `$SLICE_ID`.
    - If `$SLICE_ID` is not the **last** slice listed in that checkpoint’s `slices[]`, stop after step (1.5) and return a summary. Do not dispatch cross-platform CI from this wrapper.
 

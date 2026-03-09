@@ -13,13 +13,12 @@ lockdown_prompt: docs/project_management/system/prompts/discovery/adr_lockdown.m
 
 # ADR Intake Sheet
 
-## 1. Codename + Created date/time + Status
+## 1. Codename + date + status
 
 - Codename: `routing_weasel`
 - Created: 2026-02-20T20:11:06Z
 - Status: ready_for_lockdown
-- Dependencies: [`provisioning_otter`]
-- Related intakes (coordination only): `detecting_badger`, `stashing_ferret`
+- ADR draft: `docs/project_management/adrs/draft/ADR-0033-routing-weasel.md`
 
 ## 2. Working Title (tentative)
 
@@ -123,13 +122,78 @@ Choose Option 2 only if we’re ready to own package-name translation across dis
 - On unsupported worlds, the command fails with an actionable error and does not suggest apt/pacman incorrectly.
 - Runtime `substrate world deps current sync|install` continues to fail early for system packages (no OS mutation).
 
-## 12. Open Questions / Unknowns (with priority)
+## 12. Dependencies
+
+- depends_on_adrs: [`provisioning_otter`]
+- depends_on_work_items: []
+- blocks: []
+- Related intakes (coordination only): [`detecting_badger`, `stashing_ferret`]
+
+## 13. Lift Summary
+
+### Lift Vector v1
+
+<!-- PM_LIFT_VECTOR:BEGIN -->
+```json
+{
+  "touch": {
+    "create_files": null,
+    "edit_files": 3,
+    "delete_files": 0,
+    "deprecate_files": 0,
+    "crates_touched": 2,
+    "boundary_crossings": null
+  },
+  "contract": {
+    "cli_flags": 0,
+    "config_keys": 0,
+    "exit_codes": 0,
+    "file_formats": 1,
+    "behavior_deltas": 1
+  },
+  "qa": { "new_test_files": null, "new_test_cases": null },
+  "docs": { "new_docs_files": 0 },
+  "ops": { "new_smoke_steps": 0, "ci_changes": 0 },
+  "risk": {
+    "cross_platform": true,
+    "security_sensitive": true,
+    "concurrency_or_ordering": false,
+    "migration_or_backfill": false,
+    "unknowns_high": null
+  },
+  "notes": "Discovery estimate; add pacman provisioning support (inventory method + provisioning-time implementation)."
+}
+```
+<!-- PM_LIFT_VECTOR:END -->
+
+### Computed outputs (from `make pm-lift-intake`)
+
+```text
+Lift Score (v1): 27
+Estimated slices: 3
+Confidence: low
+Triggers:
+- likely_split:lift_score>24
+- missing_inputs:qa.new_test_cases
+- missing_inputs:qa.new_test_files
+- missing_inputs:risk.unknowns_high
+- missing_inputs:touch.boundary_crossings
+- missing_inputs:touch.create_files
+Missing inputs:
+- qa.new_test_cases
+- qa.new_test_files
+- risk.unknowns_high
+- touch.boundary_crossings
+- touch.create_files
+```
+
+## 14. Open Questions / Unknowns (with priority)
 
 - (Locked) World OS detection source of truth: in-world probe during provisioning.
 - P0: Where does “provisioning supported” live for Linux (blocked on ADR-0009 guest-rootfs) vs guest worlds?
 - P1: Do we want built-in inventory items to include pacman variants now, or only enable pacman for user-defined inventory first?
 
-## 13. “Ready to Draft ADR?” checklist (yes/no with reasons)
+## 15. Ready-to-lockdown checklist (yes/no with reasons)
 
 - [x] One behavior delta locked (add `pacman` provisioning support).
 - [x] World OS detection contract chosen (in-world probe).

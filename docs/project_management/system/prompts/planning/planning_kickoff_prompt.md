@@ -18,6 +18,7 @@ Required reading (end-to-end):
 - `docs/project_management/system/standards/planning/PLANNING_IMPACT_MAP_STANDARD.md`
 - `docs/project_management/system/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md` (cross-platform automation packs)
 - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+- `docs/project_management/system/standards/planning/PLANNING_WORK_LIFT_ADVISORY.md`
 - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
 - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
 - `docs/project_management/system/standards/ci/PLATFORM_INTEGRATION_AND_CI.md` (when cross-platform / smoke scripts exist)
@@ -25,19 +26,19 @@ Required reading (end-to-end):
 - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 - `docs/project_management/system/templates/planning_pack/PLANNING_SESSION_LOG_TEMPLATE.md`
 - `docs/project_management/packs/sequencing.json`
-- `<FEATURE_DIR>/spec_manifest.md`
-- `<FEATURE_DIR>/impact_map.md`
+- `<FEATURE_DIR>/pre-planning/spec_manifest.md`
+- `<FEATURE_DIR>/pre-planning/impact_map.md`
 - All existing planning docs relevant to <FEATURE> (if any).
 
 Required deliverables (must create or update):
 1) Planning Pack (minimum):
    - `<FEATURE_DIR>/plan.md`
-   - `<FEATURE_DIR>/spec_manifest.md` (authoritative spec list + surface ownership)
-   - `<FEATURE_DIR>/impact_map.md` (touch set + cascading implications + cross-queue conflicts; replaces legacy `integration_map.md`)
-   - `<FEATURE_DIR>/ci_checkpoint_plan.md` (cross-platform automation packs only; bounded CI checkpoints between groups of triads)
+   - `<FEATURE_DIR>/pre-planning/spec_manifest.md` (authoritative spec list + surface ownership)
+   - `<FEATURE_DIR>/pre-planning/impact_map.md` (touch set + cascading implications + cross-queue conflicts; replaces legacy `integration_map.md`)
+   - `<FEATURE_DIR>/pre-planning/ci_checkpoint_plan.md` (cross-platform automation packs only; bounded CI checkpoints between groups of triads)
    - `<FEATURE_DIR>/tasks.json`
    - `<FEATURE_DIR>/session_log.md` (START/END entries only)
-   - Specs: the exact spec docs listed in `spec_manifest.md` (no extras, no missing docs)
+   - Specs: the exact spec docs listed in `pre-planning/spec_manifest.md` (no extras, no missing docs)
    - Kickoff prompts:
      - Slice tasks: `<FEATURE_DIR>/slices/<SLICE_ID>/kickoff_prompts/<task-id>.md`
      - Feature/ops tasks: `<FEATURE_DIR>/kickoff_prompts/<task-id>.md` (e.g., `F0-exec-preflight.md`, `CP1-ci-checkpoint.md`)
@@ -51,22 +52,22 @@ Required deliverables (must create or update):
 	     - `make planning-new-feature FEATURE=<feature> CROSS_PLATFORM=1 AUTOMATION=1 BEHAVIOR_PLATFORMS=linux CI_PARITY_PLATFORMS=linux,macos,windows`
 	2) If decision-heavy or cross-platform:
 	   - `<FEATURE_DIR>/decision_register.md`
-	   - `<FEATURE_DIR>/impact_map.md`
+	   - `<FEATURE_DIR>/pre-planning/impact_map.md`
 	   - `<FEATURE_DIR>/manual_testing_playbook.md`
    - `<FEATURE_DIR>/smoke/{linux-smoke.sh,macos-smoke.sh,windows-smoke.ps1}`
 
 Required interoperability rules:
 - `tasks.json` must match the required fields and workflow described in `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`.
-- `spec_manifest.md` is authoritative for which spec documents must exist. If you discover a missing surface, update `spec_manifest.md` first, then create/update the required spec doc (do not proceed with implied/undocumented surfaces).
-- `impact_map.md` is required (non-negotiable); it is the authoritative touch set + cascade/contradiction analysis (legacy: `integration_map.md` is deprecated).
+- `pre-planning/spec_manifest.md` is authoritative for which spec documents must exist. If you discover a missing surface, update `pre-planning/spec_manifest.md` first, then create/update the required spec doc (do not proceed with implied/undocumented surfaces).
+- `pre-planning/impact_map.md` is required (non-negotiable); it is the authoritative touch set + cascade/contradiction analysis (legacy: `integration_map.md` is deprecated).
 - Planning Pack consistency is required:
   - Cross-compare all Planning Pack docs (ADR/spec_manifest/impact_map/specs/contract/tasks/playbook/smoke/kickoffs) to ensure names, defaults, precedence, schemas, exit codes, and behavior statements match exactly.
   - If a conflict is found, resolve it by updating the authoritative doc for that surface (do not “paper over” inconsistencies by duplicating contract text).
 - Every task must have a kickoff prompt file and must include the exact rule: `Do not edit planning docs inside the worktree.`
 - For cross-platform automation packs (schema v3+ + `meta.automation.enabled=true` + `meta.cross_platform=true`):
-  - `ci_checkpoint_plan.md` is required and authoritative for CI cadence.
-  - Cross-platform CI dispatch (compile parity / Feature Smoke / CI Testing) must occur only at the bounded checkpoints defined by `ci_checkpoint_plan.md` (default checkpoint size bounds: min=4 triads, max=8 triads unless explicitly justified).
-  - `ci_checkpoint_plan.md` must be wired into `tasks.json` via checkpoint tasks (see `docs/project_management/system/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md`).
+  - `pre-planning/ci_checkpoint_plan.md` is required and authoritative for CI cadence.
+  - Cross-platform CI dispatch (compile parity / Feature Smoke / CI Testing) must occur only at the bounded checkpoints defined by `pre-planning/ci_checkpoint_plan.md` (default checkpoint size bounds: min=4 triads, max=8 triads unless explicitly justified).
+  - `pre-planning/ci_checkpoint_plan.md` must be wired into `tasks.json` via checkpoint tasks (see `docs/project_management/system/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md`).
 - Integration tasks must include the required validation gates and record results in `session_log.md`:
   - **Behavior platforms**: run the feature-local smoke script via CI (`make feature-smoke`) when `FEATURE_DIR/smoke/` exists.
   - **CI parity platforms**: run cross-platform compile parity (and CI Testing when required by the slice/workflow); smoke is not required for CI parity-only platforms.
@@ -85,7 +86,7 @@ Required interoperability rules:
     - Task model depends on schema version:
       - Schema v2/v3 (legacy): per slice, create the full task shape: `X-integ-core`, `X-integ-<platform>` (for each CI parity platform), and `X-integ` (final aggregator).
       - Schema v4+ (boundary-only): include full platform-fix tasks only for checkpoint-boundary slices:
-        - `meta.checkpoint_boundaries` lists the slice ids that are the **last slice** in each checkpoint group (must match `ci_checkpoint_plan.md`).
+        - `meta.checkpoint_boundaries` lists the slice ids that are the **last slice** in each checkpoint group (must match `pre-planning/ci_checkpoint_plan.md`).
         - Normal slices use only `X-integ` as the per-slice merge task.
         - Boundary slices use `B-integ-core`, `B-integ-<platform>`, and `B-integ`.
     - This is enforced mechanically by `make planning-validate FEATURE_DIR="$FEATURE_DIR"`.

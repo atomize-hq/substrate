@@ -5,11 +5,31 @@ Inputs:
 - Read the intake file at:
   docs/project_management/intake/(adrs|work_items)/<CODENAME>\*...\_intake.md
 
+Required reading (ADR):
+- `docs/project_management/system/standards/adr/DRAFT_ADR_LOCKDOWN_STANDARD.md`
+- `docs/project_management/system/standards/adr/EXECUTIVE_SUMMARY_STANDARD.md`
+
 Task:
 
 - If ADR intake: generate a vertical-slice ADR draft that matches repo ADR standards.
 - If WI intake: generate a Work Item record suitable for the work_items queue.
-- No hours/days. Provide Lift Vector + Lift Score + estimated slices.
+- No hours/days.
+
+Naming + link sync (ADR only; required):
+
+- The intake `codename` is **intake-only**. It must NOT appear in the ADR filename.
+- Use `## 2. Working Title (tentative)` as the naming source of truth:
+  1) Decide the **final ADR title** (may refine wording, but must preserve intent).
+  2) Derive a **kebab-case slug** from that title for filenames and the pack name.
+     - Example: `Add non-apt system package provisioning support` → `add-non-apt-system-package-provisioning-support`
+  3) Use the slug consistently in:
+     - ADR filename: `docs/project_management/adrs/draft/ADR-000X-<kebab-slug>.md`
+     - ADR `Feature directory`: `docs/project_management/packs/draft/<kebab-slug>/`
+     - ADR `Related Docs (links only)` pack paths (must match the feature directory)
+     - Seeds: `Suggested pack name` (must match the ADR feature directory slug)
+- Update the intake file (so intake → ADR links are correct after naming is finalized):
+  - Update YAML frontmatter `adr_path:` to the final ADR path, and
+  - Update the “ADR draft:” link in the intake body to the same final ADR path.
 
 Hard requirements:
 
@@ -20,6 +40,9 @@ Hard requirements:
   - explicit out-of-scope
   - slice decomposition (1–3 slices)
   - dependencies section
+  - Lift Vector v1 JSON block (`PM_LIFT_VECTOR`) in the ADR (copy from intake if present; do not run lift tooling during lockdown)
+  - NOTE: “Draft ADR” is still a full ADR with the normal ADR structure; `Draft` only affects Status and pack bucket paths (see the draft ADR lockdown standard).
+  - NOTE: The ADR `Related Docs` section is links-only; do not create the referenced planning pack files during lockdown.
 - Work Item MUST include:
   - “why not ADR”
   - bounded scope

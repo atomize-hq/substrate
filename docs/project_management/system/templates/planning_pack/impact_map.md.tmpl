@@ -21,6 +21,7 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - Each entry is a top-level bullet containing exactly one backticked path token.
 - Empty section is exactly `- None` (case-sensitive, no extra text).
 - The Touch Set must include at least one non-None entry total across all sections.
+- To compute pack-derived Work Lift v1 from this Touch Set: `make pm-lift-pack PACK="{{FEATURE_DIR}}"` (strict packs only).
 
 ### Create
 - None

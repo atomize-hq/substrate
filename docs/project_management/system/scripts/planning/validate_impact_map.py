@@ -335,9 +335,11 @@ def main(argv: list[str]) -> int:
             _eprint("WARN: impact_map touch-set enforcement disabled (meta.slice_spec_version < 2).")
         return 0
 
-    impact_map = feature_dir / "impact_map.md"
+    preferred = feature_dir / "pre-planning" / "impact_map.md"
+    legacy = feature_dir / "impact_map.md"
+    impact_map = preferred if preferred.exists() else legacy
     if not impact_map.exists():
-        _fail(f"missing required path: {impact_map}")
+        _fail(f"missing required path: {preferred} (also missing legacy: {legacy})")
 
     repo_root = _repo_root_strict()
     lines = impact_map.read_text(encoding="utf-8").splitlines(keepends=True)

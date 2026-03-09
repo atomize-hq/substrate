@@ -79,16 +79,31 @@ require_path() {
     fi
 }
 
+require_any_path() {
+    local label="$1"
+    shift
+    local p
+    for p in "$@"; do
+        if [[ -e "$p" ]]; then
+            return 0
+        fi
+    done
+    echo "Missing required path (${label}); expected one of:" >&2
+    for p in "$@"; do
+        echo "  - $p" >&2
+    done
+    exit 1
+}
+
 require_path "${FEATURE_DIR}/plan.md"
 require_path "${FEATURE_DIR}/tasks.json"
 require_path "${FEATURE_DIR}/session_log.md"
 require_path "${FEATURE_DIR}/kickoff_prompts"
-require_path "${FEATURE_DIR}/spec_manifest.md"
-require_path "${FEATURE_DIR}/impact_map.md"
+require_any_path "spec_manifest.md" "${FEATURE_DIR}/pre-planning/spec_manifest.md" "${FEATURE_DIR}/spec_manifest.md"
+require_any_path "impact_map.md" "${FEATURE_DIR}/pre-planning/impact_map.md" "${FEATURE_DIR}/impact_map.md"
 
 FEATURE_DIR_RELPATH="$(python3 "${PLANNING_SCRIPTS_DIR}/pm_paths.py" resolve-feature-dir --feature-dir "${FEATURE_DIR}")"
 pm_roots_json="$(python3 "${PLANNING_SCRIPTS_DIR}/pm_paths.py" print-roots)"
-PM_ROOT="$(jq -r '.pm_root' <<<"${pm_roots_json}")"
 PM_PACKS_ROOT="$(jq -r '.pm_packs_root' <<<"${pm_roots_json}")"
 
 PM_PACKS_PREFIX="${PM_PACKS_ROOT%/}/"
@@ -98,8 +113,11 @@ automation_enabled="$(jq -r '.meta.automation.enabled // false' "${FEATURE_DIR}/
 cross_platform_enabled="$(jq -r '.meta.cross_platform // false' "${FEATURE_DIR}/tasks.json")"
 
 if [[ "${schema_version}" -ge 3 && "${automation_enabled}" == "true" && "${cross_platform_enabled}" == "true" ]]; then
-    require_path "${FEATURE_DIR}/ci_checkpoint_plan.md"
+    require_any_path "ci_checkpoint_plan.md" "${FEATURE_DIR}/pre-planning/ci_checkpoint_plan.md" "${FEATURE_DIR}/ci_checkpoint_plan.md"
 fi
+
+echo "-- workstream_triage PM_PWS_INDEX (advisory)"
+python3 "${PLANNING_SCRIPTS_DIR}/validate_pws_index.py" --feature-dir "${FEATURE_DIR}" --advisory
 
 if [[ -d "${FEATURE_DIR}/smoke" ]]; then
     behavior_platforms_csv="$(jq -r '[.meta.behavior_platforms_required // .meta.ci_parity_platforms_required // .meta.platforms_required // []] | flatten | join(",")' "${FEATURE_DIR}/tasks.json")"
@@ -176,6 +194,14 @@ python3 "${PLANNING_SCRIPTS_DIR}/validate_slice_specs.py" --feature-dir "${FEATU
 
 echo "-- impact_map.md Touch Set validation (gated by meta.slice_spec_version)"
 python3 "${PLANNING_SCRIPTS_DIR}/validate_impact_map.py" --feature-dir "${FEATURE_DIR}"
+
+echo "-- slice inventory coherence"
+python3 "${PLANNING_SCRIPTS_DIR}/validate_slice_inventory_coherence.py" --feature-dir "${FEATURE_DIR}" --phase execution_ready
+
+if [[ "${PM_LIFT_ADVISORY:-0}" = "1" ]]; then
+    echo "-- Work Lift advisory report (PM_LIFT_ADVISORY=1)"
+    python3 "${PLANNING_SCRIPTS_DIR}/pm_lift_report.py" --feature-dir "${FEATURE_DIR}"
+fi
 
 if [[ "${schema_version}" -ge 3 && "${automation_enabled}" == "true" && "${cross_platform_enabled}" == "true" ]]; then
     echo "-- ci_checkpoint_plan.md invariants"

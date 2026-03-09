@@ -12,13 +12,12 @@ lockdown_prompt: docs/project_management/system/prompts/discovery/adr_lockdown.m
 
 # ADR Intake Sheet
 
-## 1. Codename + Created date/time + Status
+## 1. Codename + date + status
 
 - Codename: `detecting_badger`
 - Created: 2026-02-20T18:57:43Z
 - Status: ready_for_lockdown
-- Dependencies: []
-- Related intakes (coordination only): `provisioning_otter`
+- ADR draft: `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md`
 
 ## 2. Working Title (tentative)
 
@@ -160,7 +159,59 @@ Choose Option 1 when we want the smallest safe improvement (override + visibilit
 - When distro detection fails, the installer still falls back to command-exists detection and prints what it chose.
 - When no supported package manager can be chosen, the installer exits with an error that lists required commands and how to proceed (manual install or override).
 
-## 12. Open Questions / Unknowns (with priority)
+## 12. Dependencies
+
+- depends_on_adrs: []
+- depends_on_work_items: []
+- blocks: []
+- Related intakes (coordination only): [`provisioning_otter`]
+
+## 13. Lift Summary
+
+### Lift Vector v1
+
+<!-- PM_LIFT_VECTOR:BEGIN -->
+```json
+{
+  "touch": {
+    "create_files": 1,
+    "edit_files": 1,
+    "delete_files": 0,
+    "deprecate_files": 0,
+    "crates_touched": 0,
+    "boundary_crossings": 0
+  },
+  "contract": {
+    "cli_flags": 1,
+    "config_keys": 0,
+    "exit_codes": 0,
+    "file_formats": 0,
+    "behavior_deltas": 1
+  },
+  "qa": { "new_test_files": 1, "new_test_cases": 3 },
+  "docs": { "new_docs_files": 0 },
+  "ops": { "new_smoke_steps": 0, "ci_changes": 0 },
+  "risk": {
+    "cross_platform": false,
+    "security_sensitive": true,
+    "concurrency_or_ordering": false,
+    "migration_or_backfill": false,
+    "unknowns_high": 0
+  },
+  "notes": "Estimate based on: add one user-facing installer flag + one hermetic installer test file."
+}
+```
+<!-- PM_LIFT_VECTOR:END -->
+
+### Computed outputs (from `make pm-lift-intake`)
+
+```text
+Lift Score (v1): 16
+Estimated slices: 2
+Confidence: high
+```
+
+## 14. Open Questions / Unknowns (with priority)
 
 - (Locked) Initial distro-family mapping set is defined in Interfaces/Contracts.
 - (Locked) No `--distro-id` flag in Candidate A; keep only `--pkg-manager` override.
@@ -168,7 +219,7 @@ Choose Option 1 when we want the smallest safe improvement (override + visibilit
 - (Locked) Testing strategy: hermetic test under `tests/installers/`; optional container smoke in `.github/workflows/ci-testing.yml`.
 - (Locked) Optional container smoke runs locally via `make installers-container-smoke` (not CI).
 
-## 13. “Ready to Draft ADR?” checklist (yes/no with reasons)
+## 15. Ready-to-lockdown checklist (yes/no with reasons)
 
 - [x] Candidate A behavior delta is locked (Option 2).
 - [x] Flag names are locked (`--pkg-manager` required).

@@ -31,6 +31,14 @@ function Require-Path([string]$Path) {
     }
 }
 
+function Require-AnyPath([string]$Label, [string[]]$Paths) {
+    foreach ($p in $Paths) {
+        if (Test-Path -LiteralPath $p) { return }
+    }
+    $bullets = ($Paths | ForEach-Object { "  - $_" }) -join "`n"
+    throw "Missing required path ($Label); expected one of:`n$bullets"
+}
+
 Write-Host "== Planning lint: $FeatureDir =="
 
 Require-Path $FeatureDir
@@ -38,8 +46,14 @@ Require-Path (Join-Path $FeatureDir "plan.md")
 Require-Path (Join-Path $FeatureDir "tasks.json")
 Require-Path (Join-Path $FeatureDir "session_log.md")
 Require-Path (Join-Path $FeatureDir "kickoff_prompts")
-Require-Path (Join-Path $FeatureDir "spec_manifest.md")
-Require-Path (Join-Path $FeatureDir "impact_map.md")
+Require-AnyPath "spec_manifest.md" @(
+    (Join-Path $FeatureDir "pre-planning/spec_manifest.md"),
+    (Join-Path $FeatureDir "spec_manifest.md")
+)
+Require-AnyPath "impact_map.md" @(
+    (Join-Path $FeatureDir "pre-planning/impact_map.md"),
+    (Join-Path $FeatureDir "impact_map.md")
+)
 
 $featureDirRel = & python (Join-Path $planningScriptsDir "pm_paths.py") resolve-feature-dir --feature-dir $FeatureDir
 if ($LASTEXITCODE -ne 0) { throw "FAIL: could not normalize feature dir via pm_paths.py" }
@@ -57,8 +71,14 @@ $automationEnabled = & jq -r '.meta.automation.enabled // false' (Join-Path $Fea
 $crossPlatformEnabled = & jq -r '.meta.cross_platform // false' (Join-Path $FeatureDir "tasks.json")
 
 if ([int]$schemaVersion -ge 3 -and $automationEnabled -eq "true" -and $crossPlatformEnabled -eq "true") {
-    Require-Path (Join-Path $FeatureDir "ci_checkpoint_plan.md")
+    Require-AnyPath "ci_checkpoint_plan.md" @(
+        (Join-Path $FeatureDir "pre-planning/ci_checkpoint_plan.md"),
+        (Join-Path $FeatureDir "ci_checkpoint_plan.md")
+    )
 }
+
+Write-Host "-- workstream_triage PM_PWS_INDEX (advisory)"
+& python (Join-Path $planningScriptsDir "validate_pws_index.py") --feature-dir $FeatureDir --advisory
 
 if (Test-Path -LiteralPath (Join-Path $FeatureDir "smoke")) {
     $behaviorPlatforms = @()
@@ -131,6 +151,16 @@ if ($LASTEXITCODE -ne 0) { throw "FAIL: slice spec invariants failed" }
 Write-Host "-- impact_map.md Touch Set validation (gated by meta.slice_spec_version)"
 & python (Join-Path $planningScriptsDir "validate_impact_map.py") --feature-dir $FeatureDir
 if ($LASTEXITCODE -ne 0) { throw "FAIL: impact_map Touch Set validation failed" }
+
+Write-Host "-- slice inventory coherence"
+& python (Join-Path $planningScriptsDir "validate_slice_inventory_coherence.py") --feature-dir $FeatureDir --phase execution_ready
+if ($LASTEXITCODE -ne 0) { throw "FAIL: slice inventory coherence failed" }
+
+if ($env:PM_LIFT_ADVISORY -eq "1") {
+    Write-Host "-- Work Lift advisory report (PM_LIFT_ADVISORY=1)"
+    & python (Join-Path $planningScriptsDir "pm_lift_report.py") --feature-dir $FeatureDir
+    if ($LASTEXITCODE -ne 0) { throw "FAIL: Work Lift advisory report failed" }
+}
 
 if ([int]$schemaVersion -ge 3 -and $automationEnabled -eq "true" -and $crossPlatformEnabled -eq "true") {
     Write-Host "-- ci_checkpoint_plan.md invariants"

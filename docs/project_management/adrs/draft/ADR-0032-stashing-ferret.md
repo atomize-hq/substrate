@@ -6,25 +6,23 @@
 - Owner(s): TBD (ASSUMPTION: installer/host-provisioning maintainers)
 
 ## Scope
-- Feature directory: `docs/project_management/packs/active/stashing-ferret/` (to be created during planning)
+- Feature directory: `docs/project_management/packs/draft/stashing-ferret/` (to be created during planning)
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
-  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+  - `docs/project_management/system/standards/adr/EXECUTIVE_SUMMARY_STANDARD.md`
 
-## Related Docs
+## Related Docs (links only)
 - Intake: `docs/project_management/intake/adrs/stashing_ferret_adr_intake.md`
-- Plan: `docs/project_management/packs/active/stashing-ferret/plan.md`
-- Tasks: `docs/project_management/packs/active/stashing-ferret/tasks.json`
-- Spec manifest: `docs/project_management/packs/active/stashing-ferret/spec_manifest.md`
+- Plan: `docs/project_management/packs/draft/stashing-ferret/plan.md`
+- Tasks: `docs/project_management/packs/draft/stashing-ferret/tasks.json`
+- Spec manifest: `docs/project_management/packs/draft/stashing-ferret/spec_manifest.md`
 - Specs: (TBD; at minimum an installer/metadata spec)
-- Decision Register: `docs/project_management/packs/active/stashing-ferret/decision_register.md`
-- Impact Map: `docs/project_management/packs/active/stashing-ferret/impact_map.md` (if required by planning)
+- Decision Register (if required): `docs/project_management/packs/draft/stashing-ferret/decision_register.md`
+- Impact Map (if required): `docs/project_management/packs/draft/stashing-ferret/impact_map.md`
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: fd7159c30e9a134154397264008dfa2d8f36ef9f4f246f7563e17aeb4685616c
+ADR_BODY_SHA256: 45d3c1ee693075301345bff0e7fffea5197a59a57b8941c04e7c9c458fd321ec
 
 ### Changes (operator-facing)
 - Linux installer writes stable host-detection metadata to `$SUBSTRATE_HOME/install_state.json`
@@ -106,6 +104,41 @@ ADR_BODY_SHA256: fd7159c30e9a134154397264008dfa2d8f36ef9f4f246f7563e17aeb4685616
   - Dependency (from intake): `detecting_badger` must land first if it defines/standardizes the installer’s detection logic used here.
 - Coordination-only related intake: `provisioning_otter` (must not be blocked by this ADR; follow-up may consume the persisted metadata).
 
+## Work Lift (discovery estimate)
+
+<!-- PM_LIFT_VECTOR:BEGIN -->
+```json
+{
+  "touch": {
+    "create_files": 0,
+    "edit_files": 1,
+    "delete_files": 0,
+    "deprecate_files": 0,
+    "crates_touched": 0,
+    "boundary_crossings": 0
+  },
+  "contract": {
+    "cli_flags": 0,
+    "config_keys": 0,
+    "exit_codes": 0,
+    "file_formats": 1,
+    "behavior_deltas": 1
+  },
+  "qa": { "new_test_files": 0, "new_test_cases": 0 },
+  "docs": { "new_docs_files": 0 },
+  "ops": { "new_smoke_steps": 0, "ci_changes": 0 },
+  "risk": {
+    "cross_platform": false,
+    "security_sensitive": false,
+    "concurrency_or_ordering": false,
+    "migration_or_backfill": true,
+    "unknowns_high": 0
+  },
+  "notes": "Estimate: extend install_state.json (schema_version=1) with additive platform metadata and ensure file is written on successful installs."
+}
+```
+<!-- PM_LIFT_VECTOR:END -->
+
 ## Security / Safety Posture
 - Fail-closed vs degrade:
   - Degrade: If platform metadata cannot be read or written, installer must not hard-fail solely due to metadata persistence (best-effort write; success path continues).
@@ -137,28 +170,16 @@ ADR_BODY_SHA256: fd7159c30e9a134154397264008dfa2d8f36ef9f4f246f7563e17aeb4685616
 - Compat work: none beyond ensuring older uninstall flows ignore unknown keys.
 
 ## Decision Summary
-- This ADR defines the end-to-end contract for persisting Linux platform detection metadata and making `install_state.json` reliably present after install.
-- Fine-grained A/B decisions (pack-local; must live in the Decision Register and not be duplicated here):
-  - Where to persist metadata (extend `install_state.json` vs separate file vs config).
-  - Exact field naming and nesting (confirm/lock `host_state.platform.*`).
-  - Source attribution enumeration values for `pkg_manager.source`.
-- Decision Register entries:
-  - `docs/project_management/packs/active/stashing-ferret/decision_register.md`:
+- Decision Register entries (if applicable):
+  - `docs/project_management/packs/draft/stashing-ferret/decision_register.md`:
     - DR-0001 (metadata persistence location)
     - DR-0002 (field naming + nesting)
     - DR-0003 (pkg_manager.source enum set)
-
-## Options Considered (Summary)
-
-### Option A — Extend `install_state.json` (`schema_version=1`) with platform metadata (recommended)
-- Add optional keys under `host_state.platform.*` and ensure the file is written on successful Linux installs even without group/linger events.
-
-### Option B — Write a separate `$SUBSTRATE_HOME/host_platform.json`
-- Keep `install_state.json` strictly for uninstall-coupled host-state events; store detection output in a dedicated file.
-
-### Option C — Store detection in `$SUBSTRATE_HOME/config.yaml` (avoid)
-- Persist detected host facts as config values (conflates detected facts with user intent).
-
-### Recommendation guardrails
-- Choose Option A when you want a single canonical, documented metadata store and can keep the change strictly additive (`schema_version=1` unchanged).
-- Choose Option B when you must keep `install_state.json` “event-only” and are willing to accept an additional state file and documentation surface.
+- Options (required; at least two):
+  - A) Extend `$SUBSTRATE_HOME/install_state.json` (`schema_version=1`) with additive `host_state.platform.*` metadata (recommended).
+  - B) Write a separate `$SUBSTRATE_HOME/host_platform.json` file for host detection metadata.
+- Selection:
+  - Chosen: A
+  - Rationale: Keeps one canonical, documented installer metadata store while remaining backwards compatible (`schema_version=1` unchanged) and avoids state fragmentation across multiple files.
+  - Choose A when: we can keep `install_state.json` strictly additive and are willing to write it on successful installs even when no “event” records occurred.
+  - Choose B when: we decide `install_state.json` must remain “event-only” for uninstall coupling and can accept an additional state file + documentation surface.

@@ -61,8 +61,8 @@ class TestCheckAdrExecSummary(unittest.TestCase):
     def test_fails_on_legacy_standards_refs(self) -> None:
         adr_path = self.tmp_root / "ADR-9991-legacy-refs.md"
         legacy = (
-            "- `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`\n"
-            "- `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`\n"
+            "- `docs/project_management/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`\n"
+            "- `docs/project_management/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`\n"
         )
         _write_text(adr_path, _make_adr_text(standards_lines=legacy))
         rc = mod.check_adr(path=adr_path, fix=False)
@@ -71,10 +71,10 @@ class TestCheckAdrExecSummary(unittest.TestCase):
     def test_fix_rewrites_legacy_refs_and_updates_hash(self) -> None:
         adr_path = self.tmp_root / "ADR-9992-fix-legacy-refs.md"
         legacy = (
-            "- `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`\n"
-            "- `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`\n"
-            "- `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`\n"
-            "- Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`\n"
+            "- `docs/project_management/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`\n"
+            "- `docs/project_management/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`\n"
+            "- `docs/project_management/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`\n"
+            "- Exit code taxonomy: `docs/project_management/standards/shared/EXIT_CODE_TAXONOMY.md`\n"
         )
         _write_text(adr_path, _make_adr_text(standards_lines=legacy))
 
@@ -123,4 +123,3 @@ class TestCheckAdrExecSummary(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

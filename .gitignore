@@ -1,9 +1,11 @@
 target
 .claude
+.codex
 .vscode
 .swo
 .swp
 .gitignore
+.pytest_cache
 test_script.sh
 test_pty.sh
 debug.log

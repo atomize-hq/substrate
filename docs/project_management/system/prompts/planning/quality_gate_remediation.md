@@ -74,6 +74,7 @@ Remediation workflow (required):
    - `export FEATURE_DIR="<FEATURE_DIR>"`
    - Run:
      - `make planning-lint FEATURE_DIR="$FEATURE_DIR"`
+     - (optional; strict packs) `PM_LIFT_ADVISORY=1 make planning-lint FEATURE_DIR="$FEATURE_DIR"`
      - `make planning-validate FEATURE_DIR="$FEATURE_DIR"`
      - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null`
      - `jq -e . docs/project_management/packs/sequencing.json >/dev/null`

@@ -395,6 +395,13 @@ Planning:
 - `make planning-lint FEATURE_DIR=...`
 - `make pm-run-planning-agent FEATURE_DIR=... AGENT=spec_manifest|impact_map`
 
+Work Lift (optional; advisory-first):
+
+- `make pm-lift-intake FILE=... [EMIT_JSON=1]` (intake/ADR markdown with a `PM_LIFT_VECTOR` block)
+- `make pm-lift-pack PACK=... [EMIT_JSON=1]` (pack-derived lift is meaningful only for strict packs: `tasks.json.meta.slice_spec_version >= 2`)
+- `make pm-lift-diff BASE=... HEAD=... [EMIT_JSON=1]` (post-implementation calibration)
+- `PM_LIFT_ADVISORY=1 make planning-lint FEATURE_DIR=...` (prints advisory report in lint; still non-blocking by default)
+
 Triad execution:
 
 - `make triad-orch-ensure FEATURE_DIR=...`

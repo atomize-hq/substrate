@@ -12,12 +12,12 @@ lockdown_prompt: docs/project_management/system/prompts/discovery/adr_lockdown.m
 
 # ADR Intake Sheet
 
-## 1. Codename + Created + Status
+## 1. Codename + date + status
 
 - Codename: `summoning_wombat`
 - Created: 2026-02-20T00:48:09Z
 - Status: brainstorming
-- Dependencies: []
+- ADR draft: `docs/project_management/adrs/draft/ADR-0035-summoning-wombat.md`
 
 ## 2. Working Title (tentative)
 
@@ -141,7 +141,70 @@ Choose **Option 3** when we want the smallest vertical slice with minimal behavi
 - `substrate health` no longer reports a world-deps error that is solely caused by the missing `world-agent` binary after the chosen fix is applied.
 - No regression: installs from `install-substrate.sh --no-world` continue to be enable-able later via `substrate world enable` (bundle contains `world-agent`).
 
-## 12. Open Questions / Unknowns (with priority)
+## 12. Dependencies
+
+- depends_on_adrs: []
+- depends_on_work_items: []
+- blocks: []
+
+## 13. Lift Summary
+
+### Lift Vector v1
+
+<!-- PM_LIFT_VECTOR:BEGIN -->
+```json
+{
+  "touch": {
+    "create_files": null,
+    "edit_files": 2,
+    "delete_files": 0,
+    "deprecate_files": 0,
+    "crates_touched": 1,
+    "boundary_crossings": null
+  },
+  "contract": {
+    "cli_flags": 0,
+    "config_keys": 0,
+    "exit_codes": 0,
+    "file_formats": 0,
+    "behavior_deltas": 1
+  },
+  "qa": { "new_test_files": null, "new_test_cases": null },
+  "docs": { "new_docs_files": 0 },
+  "ops": { "new_smoke_steps": 0, "ci_changes": 0 },
+  "risk": {
+    "cross_platform": true,
+    "security_sensitive": false,
+    "concurrency_or_ordering": false,
+    "migration_or_backfill": false,
+    "unknowns_high": null
+  },
+  "notes": "Discovery estimate; dev-install/no-world follow-up enable path (artifact staging + deterministic remediation)."
+}
+```
+<!-- PM_LIFT_VECTOR:END -->
+
+### Computed outputs (from `make pm-lift-intake`)
+
+```text
+Lift Score (v1): 10
+Estimated slices: 1
+Confidence: low
+Triggers:
+- missing_inputs:qa.new_test_cases
+- missing_inputs:qa.new_test_files
+- missing_inputs:risk.unknowns_high
+- missing_inputs:touch.boundary_crossings
+- missing_inputs:touch.create_files
+Missing inputs:
+- qa.new_test_cases
+- qa.new_test_files
+- risk.unknowns_high
+- touch.boundary_crossings
+- touch.create_files
+```
+
+## 14. Open Questions / Unknowns (with priority)
 
 - P0: What is the desired dev meaning of `--no-world`? “Skip provisioning only” (build ok) vs. “Skip everything world-related” (skip build too).
 - P0: Should `substrate world enable` be allowed to invoke `cargo build` automatically (Option 1), or must it remain provisioning-only (Option 2/3)?
@@ -149,7 +212,7 @@ Choose **Option 3** when we want the smallest vertical slice with minimal behavi
 - P1: Should we gate any new behavior behind an explicit flag/env (e.g., `SUBSTRATE_WORLD_ENABLE_BUILD=1`) to avoid surprises?
 - P2: Do we want a dedicated “world prerequisites” check that can be run without any socket probing when world is disabled?
 
-## 13. “Ready to Draft ADR?” checklist
+## 15. Ready-to-lockdown checklist
 
 - [ ] One behavior delta is locked (Option 1 vs 2 vs 3).
 - [ ] Scope boundaries agreed (Linux-only vs cross-platform).
