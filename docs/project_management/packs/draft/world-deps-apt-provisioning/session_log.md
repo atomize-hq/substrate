@@ -78,3 +78,7 @@
   - Failure is in the smoke harness, not the WDAP0 implementation: Case A captures file contents with command substitution (`out="$(cat ...)"`), which strips the trailing newline before comparing against `expected_stdout=$'smoke-apt-a\nsmoke-apt-b=1\n'`. The actual file bytes match the expected output including the trailing newline.
 - Next step:
   - Run `CP1-ci-checkpoint` from the orchestration checkout. Do not dispatch checkpoint CI from the WDAP0 integration worktree.
+
+## END — 2026-03-09T02:21:16Z — integration — WDAP0-integ-core
+- HEAD: `8d1f1a3aa4d227fca390bac1301807d424a51435`
+- Codex last message: `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/draft/world-deps-apt-provisioning/logs/WDAP0/integ-core/last_message.md`
