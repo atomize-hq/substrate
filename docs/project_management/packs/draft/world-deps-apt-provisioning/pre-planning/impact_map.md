@@ -57,6 +57,7 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - `crates/world-agent/src/service.rs`
 - `crates/shell/tests/world_enable.rs`
 - `crates/shell/tests/world_deps_apt_install_wdp5.rs`
+- `crates/shell/tests/repl_world_first_rendering_v1.rs`
 - `scripts/substrate/world-enable.sh`
 - `scripts/substrate/install-substrate.sh`
 - `tests/mac/installer_parity_fixture.sh`
