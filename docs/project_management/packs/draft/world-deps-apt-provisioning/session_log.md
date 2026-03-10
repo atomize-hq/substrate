@@ -82,3 +82,7 @@
 ## END — 2026-03-09T02:21:16Z — integration — WDAP0-integ-core
 - HEAD: `8d1f1a3aa4d227fca390bac1301807d424a51435`
 - Codex last message: `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/draft/world-deps-apt-provisioning/logs/WDAP0/integ-core/last_message.md`
+
+## START — 2026-03-10T23:33:02Z — checkpoint — CP1-ci-checkpoint
+- Dispatch:
+  - Resume-safe wrapper checkpoint bookkeeping on orchestration checkout for `WDAP0` validating `CHECKOUT_SHA=8d1f1a3aa4d227fca390bac1301807d424a51435`

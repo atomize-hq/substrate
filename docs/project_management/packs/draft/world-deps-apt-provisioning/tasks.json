@@ -237,7 +237,7 @@
         "Read pre-planning/ci_checkpoint_plan.md and kickoff prompt",
         "Run CI audit (ci-testing + feature-smoke) and dispatch required gates"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "ops",
       "worktree": null
     },
