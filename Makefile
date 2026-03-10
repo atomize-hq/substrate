@@ -175,6 +175,17 @@ pm-pre-full-planning-converge:
 	if [ "$(CODEX_JSONL)" = "1" ]; then cmd="$$cmd --codex-jsonl"; fi; \
 	eval "$$cmd"
 
+.PHONY: pm-post-full-planning-converge
+pm-post-full-planning-converge:
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
+	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
+	@set -euo pipefail; \
+	cmd="$(PM_SYSTEM_SCRIPTS)/planning/post_full_planning_converge.sh --feature-dir \"$(FEATURE_DIR)\""; \
+	if [ -n "$(CODEX_PROFILE)" ]; then cmd="$$cmd --codex-profile \"$(CODEX_PROFILE)\""; fi; \
+	if [ -n "$(CODEX_MODEL)" ]; then cmd="$$cmd --codex-model \"$(CODEX_MODEL)\""; fi; \
+	if [ "$(CODEX_JSONL)" = "1" ]; then cmd="$$cmd --codex-jsonl"; fi; \
+	eval "$$cmd"
+
 .PHONY: pm-planning-pipeline
 pm-planning-pipeline:
 	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi

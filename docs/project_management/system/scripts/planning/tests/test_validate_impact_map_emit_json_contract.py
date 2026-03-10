@@ -130,6 +130,37 @@ class TestValidateImpactMapEmitJsonContract(unittest.TestCase):
         self.assertEqual(out["create"], ["__impact_map_test__/d.txt"])
         self.assertEqual(out["dir_prefixes"], [])
 
+    def test_strict_d_validates_alternate_impact_map_path(self) -> None:
+        feature_dir = self._make_feature_dir("strict_alt_path", slice_spec_version=2, impact_map_text=None)
+        staged = feature_dir / "logs" / "impact-map" / "staged" / "pre-planning" / "impact_map.md"
+        _write_text(staged, _impact_map_strict(["__impact_map_test__/alt.txt"]))
+
+        res = self._run(["--feature-dir", str(feature_dir), "--impact-map-path", str(staged), "--emit-json"])
+        self.assertEqual(res.returncode, 0, msg=res.stderr)
+        out = json.loads(res.stdout)
+        self.assertEqual(out["create"], ["__impact_map_test__/alt.txt"])
+
+    def test_strict_e_alternate_impact_map_path_rejects_missing_edit_path(self) -> None:
+        feature_dir = self._make_feature_dir("strict_alt_wrong_section", slice_spec_version=2, impact_map_text=None)
+        staged = feature_dir / "logs" / "impact-map" / "staged" / "pre-planning" / "impact_map.md"
+        _write_text(
+            staged,
+            "# Impact Map Fixture\n\n"
+            "## Touch set (explicit)\n\n"
+            "### Create\n"
+            "- None\n\n"
+            "### Edit\n"
+            "- `__impact_map_test__/missing.rs`\n\n"
+            "### Deprecate\n"
+            "- None\n\n"
+            "### Delete\n"
+            "- None\n",
+        )
+
+        res = self._run(["--feature-dir", str(feature_dir), "--impact-map-path", str(staged)])
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("declared path does not exist", res.stderr)
+
     def test_legacy_a_emits_full_shape_with_empty_arrays(self) -> None:
         feature_dir = self._make_feature_dir("legacy_a", slice_spec_version=1, impact_map_text=None)
         res = self._run(["--feature-dir", str(feature_dir), "--emit-json"])
@@ -172,4 +203,3 @@ class TestValidateImpactMapEmitJsonContract(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

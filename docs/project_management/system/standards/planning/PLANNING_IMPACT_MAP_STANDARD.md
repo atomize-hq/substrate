@@ -39,7 +39,8 @@ Scaffolding:
 
 1) **Touch set is explicit**
    - Every expected file creation/edit/deprecation/removal must be listed (best-effort, but exhaustive for contract-bearing files).
-   - Use concrete paths (repo-relative) and name the responsible component/crate.
+   - Use concrete repo-relative paths by default and name the responsible component/crate.
+   - Directory/prefix entries are fallback-only and must be tightened later when exact files become defensible.
 
 2) **Cascading implications are explicit**
    - For every user-facing change (CLI/config/exit codes/paths/provisioning flows), state:
@@ -113,10 +114,14 @@ STRICT Touch Set rules (for `## Touch set (explicit)` only):
 - Placeholder tokens are forbidden (e.g., `<path>`, `TBD`, `TODO`, `WIP`, `None yet.`).
 - Path rules: POSIX `/` separators, no `..` segments, no globs, no backslashes, no absolute/`~`/drive-letter paths; leading `./` is allowed but normalized away; directory allow entries must end with `/`.
 - Strict Touch Set must include at least one non-None entry total across all sections.
+- Exact repo-relative file paths are the default expectation whenever they can be defended from ADR/spec-manifest/repo discovery.
+- `### Edit`, `### Deprecate`, and `### Delete` may reference only paths that exist at authoring time.
+- Non-existent paths belong under `### Create`, not under non-Create sections.
 
 ### Directory/prefix entries (advisory lift semantics)
 
 - Directory/prefix allow entries MUST end with `/` (e.g., `` `crates/world-agent/` ``).
+- Directory/prefix entries are allowed for triad/task-finish strict packs as a fallback only; the directory MUST already exist and the impact map MUST record a follow-up to tighten the entry later.
 - Directory/prefix entries count as **1** Touch Set token for raw derived counts.
 - Directory/prefix presence is surfaced to downstream tooling via `validate_impact_map.py --emit-json` as:
   - `dir_prefixes` (see `CONTRACT-4:impact_map_emit_json_v1`)
@@ -127,6 +132,8 @@ STRICT Touch Set rules (for `## Touch set (explicit)` only):
 
 Downstream consumers:
 - Execution-time enforcement (triad `task_finish`) consumes the validator’s `--emit-json` output (see Initiative 2 S2).
+- The triad/task-finish strict contract still accepts exact paths plus existing directory-prefix fallback entries from `validate_impact_map.py --emit-json`.
+- This is intentionally different from the separate Work Lift strict wrapper, which may impose tighter prefix rules for lift calibration.
 
 ---
 

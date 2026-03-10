@@ -8,11 +8,11 @@ usage() {
 Run a focused planning agent (output-allowlisted) via Codex.
 
 Usage:
-  run_planning_agent.sh --feature-dir <path> --agent <spec_manifest|impact_map|min_spec_draft|ci_checkpoint|workstream_triage|pre_planning_slice_reconcile> [options]
+  run_planning_agent.sh --feature-dir <path> --agent <spec_manifest|impact_map|min_spec_draft|ci_checkpoint|workstream_triage|pre_planning_slice_reconcile|post_full_planning_reconcile> [options]
 
 Required:
   --feature-dir <path>         Feature directory (relative or absolute)
-  --agent <id>                 Agent id: spec_manifest | impact_map | min_spec_draft | ci_checkpoint | workstream_triage | pre_planning_slice_reconcile
+  --agent <id>                 Agent id: spec_manifest | impact_map | min_spec_draft | ci_checkpoint | workstream_triage | pre_planning_slice_reconcile | post_full_planning_reconcile
 
 Optional:
   --codex-profile <profile>    Passed to `codex exec --profile`
@@ -31,6 +31,7 @@ Contract:
                       and sometimes a staged candidate for <FEATURE_DIR>/tasks.json
   - workstream_triage -> staged candidate for <FEATURE_DIR>/pre-planning/workstream_triage.md
   - pre_planning_slice_reconcile -> <FEATURE_DIR>/pre-planning/{spec_manifest,impact_map,ci_checkpoint_plan}.md
+  - post_full_planning_reconcile -> safe late-pack execution-readiness docs
 
 Notes:
   - Uses roots from: `pm_paths.py` (sibling in this directory)
@@ -328,12 +329,36 @@ case "${AGENT}" in
         )
         REQUIRED_OUTPUTS_REL=()
         ;;
+    post_full_planning_reconcile)
+        STEP_DIR_NAME="post-full-planning-convergence"
+        PROMPT_FILE_REL="docs/project_management/system/prompts/planning/post_full_planning_reconcile_agent.md"
+        ALLOWED_OUTPUTS_REL=(
+            "${PRE_PLANNING_DIR_REL}/impact_map.md"
+            "${FEATURE_DIR_REL}/plan.md"
+            "${FEATURE_DIR_REL}/tasks.json"
+            "${FEATURE_DIR_REL}/manual_testing_playbook.md"
+            "${FEATURE_DIR_REL}/execution_preflight_report.md"
+        )
+        REQUIRED_OUTPUTS_REL=()
+        ;;
     *)
-        die "unknown --agent: ${AGENT} (expected spec_manifest|impact_map|min_spec_draft|ci_checkpoint|workstream_triage|pre_planning_slice_reconcile)"
+        die "unknown --agent: ${AGENT} (expected spec_manifest|impact_map|min_spec_draft|ci_checkpoint|workstream_triage|pre_planning_slice_reconcile|post_full_planning_reconcile)"
         ;;
 esac
 
 [[ -f "${REPO_ROOT}/${PROMPT_FILE_REL}" ]] || die "missing prompt file: ${PROMPT_FILE_REL}"
+
+if [[ "${AGENT}" == "post_full_planning_reconcile" ]]; then
+    while IFS= read -r kickoff_path; do
+        [[ -n "${kickoff_path}" ]] || continue
+        ALLOWED_OUTPUTS_REL+=("$(relpath_in_repo "${REPO_ROOT}" "${kickoff_path}")")
+    done < <(jq -r '.tasks[]?.kickoff_prompt // empty' "${TASKS_JSON_ABS}")
+
+    while IFS= read -r closeout_path; do
+        [[ -n "${closeout_path}" ]] || continue
+        ALLOWED_OUTPUTS_REL+=("$(relpath_in_repo "${REPO_ROOT}" "${closeout_path}")")
+    done < <(find "${FEATURE_DIR_ABS}/slices" -type f -name '*-closeout_report.md' 2>/dev/null || true)
+fi
 
 FEATURE_SLUG="$(basename "${FEATURE_DIR_REL}")"
 
@@ -875,7 +900,28 @@ run_closeout_validation() {
     exit 1
 }
 
+run_staged_candidate_validation() {
+    if [[ "${USE_STAGED_OUTPUTS}" -ne 1 || "${AGENT}" != "impact_map" ]]; then
+        return 0
+    fi
+
+    local staged_rel="${STAGED_OUTPUTS_REL[0]}"
+    local staged_abs="${REPO_ROOT}/${staged_rel}"
+
+    if python3 "${PLANNING_SCRIPTS_DIR}/validate_impact_map.py" --feature-dir "${FEATURE_DIR_ABS}" --impact-map-path "${staged_abs}"; then
+        return 0
+    fi
+
+    echo "ERROR: staged impact_map validation failed for ${FEATURE_DIR_REL}" >&2
+    echo "  Staged artifact: ${staged_rel}" >&2
+    echo "  Step logs: $(relpath_in_repo "${REPO_ROOT}" "${STEP_DIR_ABS}")" >&2
+    echo "  Run logs:  $(relpath_in_repo "${REPO_ROOT}" "${RUN_DIR_ABS}")" >&2
+    echo "  Hint: fix the staged Touch Set candidate before promotion or orchestration resume." >&2
+    exit 1
+}
+
 if [[ "${CODEX_EXIT}" -eq 0 && "${LAST_MESSAGE_OK}" -eq 1 && "${REQUIRED_OUTPUTS_OK}" -eq 1 ]]; then
+    run_staged_candidate_validation
     if [[ "${USE_STAGED_OUTPUTS}" -eq 1 && "${PM_PLANNING_ORCHESTRATED:-0}" != "1" ]]; then
         promote_staged_outputs
     fi

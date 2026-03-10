@@ -54,6 +54,12 @@ This runner checks (at minimum):
 - `sequencing.json` includes this feature directory
 - `sequencing.json` completed sprint pointers resolve (supports archived Planning Packs under `docs/project_management/_archived/`)
 
+Orchestration note:
+- `planning-lint` is still mechanical only; it does not spawn remediation agents.
+- Pre-full convergence is the slice inventory/order gate before full planning starts.
+- Post-full convergence is the execution-readiness gate after full planning completes.
+- The post-full gate is used by the pre-planning/full-planning orchestration pipeline; legacy root-layout packs keep current lint/task-finish behavior unless they opt into that pipeline.
+
 When `PM_LIFT_ADVISORY=1` is set, lint also prints a Work Lift advisory report (see: `docs/project_management/system/standards/planning/PLANNING_WORK_LIFT_ADVISORY.md`).
 
 Note:

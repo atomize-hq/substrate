@@ -22,6 +22,7 @@ Codex options (optional; forwarded to run_pws_agent.sh):
 Behavior:
   - Requires a clean orchestration checkout (git status must be empty).
   - Runs pre-full-planning convergence before loading the tracked alignment report.
+  - Runs post-full-planning convergence after the last PWS completes and before reporting success.
   - Refreshes pre-planning/alignment_report.md before the tasks/checkpoints pre-task gate.
   - Runs <PREFIX>-PWS-contract first.
   - Runs all remaining runnable PWS sequentially in a stable, dependency-respecting order.
@@ -118,6 +119,10 @@ PRE_FULL_PLANNING_CONVERGE="${PM_FULL_PLANNING_CONVERGE_SCRIPT:-${PLANNING_SCRIP
 if [[ "${PRE_FULL_PLANNING_CONVERGE}" != /* ]]; then
     PRE_FULL_PLANNING_CONVERGE="${REPO_ROOT}/${PRE_FULL_PLANNING_CONVERGE}"
 fi
+POST_FULL_PLANNING_CONVERGE="${PM_FULL_PLANNING_POST_CONVERGE_SCRIPT:-${PLANNING_SCRIPTS_DIR}/post_full_planning_converge.sh}"
+if [[ "${POST_FULL_PLANNING_CONVERGE}" != /* ]]; then
+    POST_FULL_PLANNING_CONVERGE="${REPO_ROOT}/${POST_FULL_PLANNING_CONVERGE}"
+fi
 ALIGNMENT_REPORTER="${PM_FULL_PLANNING_ALIGNMENT_REPORTER:-${PLANNING_SCRIPTS_DIR}/wrapper_alignment_report.py}"
 if [[ "${ALIGNMENT_REPORTER}" != /* ]]; then
     ALIGNMENT_REPORTER="${REPO_ROOT}/${ALIGNMENT_REPORTER}"
@@ -126,6 +131,7 @@ ALLOWLIST_REQUEST_PARSER="${PLANNING_SCRIPTS_DIR}/parse_allowlist_request.py"
 SLICE_COHERENCE_VALIDATOR="${PLANNING_SCRIPTS_DIR}/validate_slice_inventory_coherence.py"
 [[ -x "${RUNNER}" ]] || die "missing runner: ${RUNNER}"
 [[ -x "${PRE_FULL_PLANNING_CONVERGE}" ]] || [[ -f "${PRE_FULL_PLANNING_CONVERGE}" ]] || die "missing convergence script: ${PRE_FULL_PLANNING_CONVERGE}"
+[[ -x "${POST_FULL_PLANNING_CONVERGE}" ]] || [[ -f "${POST_FULL_PLANNING_CONVERGE}" ]] || die "missing post-full convergence script: ${POST_FULL_PLANNING_CONVERGE}"
 [[ -f "${ALIGNMENT_REPORTER}" ]] || die "missing alignment reporter: ${ALIGNMENT_REPORTER}"
 [[ -f "${ALLOWLIST_REQUEST_PARSER}" ]] || die "missing allowlist request parser: ${ALLOWLIST_REQUEST_PARSER}"
 [[ -f "${SLICE_COHERENCE_VALIDATOR}" ]] || die "missing slice coherence validator: ${SLICE_COHERENCE_VALIDATOR}"
@@ -140,6 +146,14 @@ FEATURE_DIR_ABS="${REPO_ROOT}/${FEATURE_DIR_REL}"
 
 run_pre_full_planning_convergence() {
     local -a args=("${PRE_FULL_PLANNING_CONVERGE}" --feature-dir "${FEATURE_DIR_ABS}" --workstream-triage "${WORKSTREAM_TRIAGE_REL}")
+    if [[ -n "${CODEX_PROFILE}" ]]; then args+=(--codex-profile "${CODEX_PROFILE}"); fi
+    if [[ -n "${CODEX_MODEL}" ]]; then args+=(--codex-model "${CODEX_MODEL}"); fi
+    if [[ "${CODEX_JSONL}" -eq 1 ]]; then args+=(--codex-jsonl); fi
+    "${args[@]}"
+}
+
+run_post_full_planning_convergence() {
+    local -a args=("${POST_FULL_PLANNING_CONVERGE}" --feature-dir "${FEATURE_DIR_ABS}")
     if [[ -n "${CODEX_PROFILE}" ]]; then args+=(--codex-profile "${CODEX_PROFILE}"); fi
     if [[ -n "${CODEX_MODEL}" ]]; then args+=(--codex-model "${CODEX_MODEL}"); fi
     if [[ "${CODEX_JSONL}" -eq 1 ]]; then args+=(--codex-jsonl); fi
@@ -1068,6 +1082,9 @@ while IFS= read -r pid; do
 
     echo ""
 done < <(jq -r '.run_order[]' "${PLAN_JSON_ABS}")
+
+append_summary "- Running post-full-planning convergence"
+run_post_full_planning_convergence
 
 append_summary ""
 append_summary "OK: full planning orchestration completed"

@@ -132,6 +132,86 @@ EOF
         self.assertEqual(trace_file.read_text(encoding="utf-8").splitlines(), ["convergence"])
         self.assertTrue((feature_dir / "pre-planning" / "alignment_report.md").exists())
 
+    def test_pipeline_picks_up_post_full_convergence_via_full_planning(self) -> None:
+        feature_dir = self._make_feature_dir("pipeline_post_full")
+        trace_file = feature_dir / "pipeline_post_full_trace.log"
+        tools_dir = feature_dir / "tools"
+        pre_planning = tools_dir / "stub_pre_planning.sh"
+        pipeline_convergence = tools_dir / "stub_pipeline_convergence.sh"
+        full_runner = tools_dir / "fake_runner.sh"
+        make_stub = tools_dir / "make"
+        git_stub = tools_dir / "git"
+        inner_convergence = tools_dir / "stub_inner_convergence.sh"
+        post_full = tools_dir / "stub_post_full.sh"
+
+        self._write_stub(pre_planning, "pre_planning")
+        self._write_stub(pipeline_convergence, "pipeline_pre_full")
+        self._write_stub(
+            inner_convergence,
+            "full_planning_pre_full",
+            extra_body=f"""mkdir -p "{feature_dir / "pre-planning"}"
+cat >"{feature_dir / "pre-planning" / "alignment_report.md"}" <<'EOF'
+# Alignment report
+EOF
+""",
+        )
+        self._write_stub(post_full, "post_full")
+        self._write_stub(
+            full_runner,
+            "full_runner",
+            extra_body="""pws_id=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --pws-id)
+      pws_id="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+mkdir -p "$(dirname "$PIPELINE_TRACE_FILE")/logs/pws/${pws_id}"
+: >"$(dirname "$PIPELINE_TRACE_FILE")/logs/pws/${pws_id}/stderr.log"
+printf '%s-thread\n' "${pws_id}" >"$(dirname "$PIPELINE_TRACE_FILE")/logs/pws/${pws_id}/last_thread_id.txt"
+""",
+        )
+        self._write_stub(make_stub, "micro_lint")
+        _write_text(
+            git_stub,
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            'if [[ "${1:-}" == "status" && "${2:-}" == "--porcelain=v1" ]]; then exit 0; fi\n'
+            'exec "${REAL_GIT}" "$@"\n',
+        )
+        os.chmod(git_stub, 0o755)
+
+        env = os.environ.copy()
+        env["PIPELINE_TRACE_FILE"] = str(trace_file)
+        env["PM_PRE_PLANNING_ORCHESTRATOR"] = str(pre_planning)
+        env["PM_PRE_FULL_PLANNING_CONVERGE_SCRIPT"] = str(pipeline_convergence)
+        env["PM_FULL_PLANNING_ORCHESTRATOR"] = str(self.full_planning_script)
+        env["PM_FULL_PLANNING_CONVERGE_SCRIPT"] = str(inner_convergence)
+        env["PM_FULL_PLANNING_POST_CONVERGE_SCRIPT"] = str(post_full)
+        env["PM_FULL_PLANNING_RUNNER"] = str(full_runner)
+        env["REAL_GIT"] = subprocess.check_output(["which", "git"], text=True, cwd=str(self.repo_root)).strip()
+        env["PATH"] = str(tools_dir) + os.pathsep + env["PATH"]
+
+        res = subprocess.run(
+            ["bash", str(self.pipeline_script), "--feature-dir", str(feature_dir)],
+            text=True,
+            capture_output=True,
+            check=False,
+            cwd=str(self.repo_root),
+            env=env,
+        )
+        self.assertEqual(res.returncode, 0, msg=res.stderr)
+        trace = trace_file.read_text(encoding="utf-8").splitlines()
+        self.assertIn("post_full", trace)
+        self.assertLess(trace.index("pre_planning"), trace.index("pipeline_pre_full"))
+        self.assertLess(trace.index("pipeline_pre_full"), trace.index("full_planning_pre_full"))
+        self.assertLess(trace.index("full_runner"), trace.index("post_full"))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -197,6 +197,21 @@ make pm-run-planning-agent FEATURE_DIR="$FEATURE_DIR" AGENT=spec_manifest
 make pm-run-planning-agent FEATURE_DIR="$FEATURE_DIR" AGENT=impact_map
 ```
 
+Convergence/orchestration entrypoints:
+
+```bash
+make pm-pre-full-planning-converge FEATURE_DIR="$FEATURE_DIR"
+make pm-full-planning-orchestrate FEATURE_DIR="$FEATURE_DIR"
+make pm-post-full-planning-converge FEATURE_DIR="$FEATURE_DIR"
+make pm-planning-pipeline FEATURE_DIR="$FEATURE_DIR"
+```
+
+Convergence stages:
+
+- `pm-pre-full-planning-converge`: fixes pre-planning slice inventory/order drift before full planning starts.
+- `pm-post-full-planning-converge`: runs after full planning and blocks success until the pack is execution-ready.
+- `pm-full-planning-orchestrate`: runs the PWS sequence and now includes the post-full execution-readiness gate before reporting success.
+
 Lint / validate:
 
 ```bash
@@ -205,6 +220,7 @@ make planning-validate FEATURE_DIR="$FEATURE_DIR"
 ```
 
 > Tip: treat `planning-lint` as your “pre-flight checklist” before starting _any_ execution tasks.
+> `planning-lint` remains mechanical and standalone. The convergence orchestrators are what run bounded remediation when the pipeline uses them.
 
 ---
 
