@@ -42,10 +42,12 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
 - `docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json`
 - `docs/project_management/packs/sequencing.json`
+- `scripts/ci-audit/ci_audit.sh`
 - `scripts/substrate/install-substrate.sh`
 - `scripts/substrate/install.sh`
 - `docs/INSTALLATION.md`
 - `docs/reference/env/contract.md`
+- `tests/installers/pkg_manager_container_smoke.sh`
 
 ### Deprecate
 - None

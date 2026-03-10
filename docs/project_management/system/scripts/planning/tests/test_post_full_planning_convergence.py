@@ -6,6 +6,7 @@ import subprocess
 import sys
 import unittest
 from contextlib import redirect_stdout
+from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -105,6 +106,33 @@ class TestPostFullPlanningConvergence(unittest.TestCase):
         with patch.object(self.module, "inspect_post_full_planning", return_value=[issue]):
             data = self._run_main(feature_dir)
         self.assertEqual(data["status"], "hard_fail")
+
+    def test_planning_lint_failure_prefers_message_named_hard_fail_doc(self) -> None:
+        feature_dir = self._make_feature_dir("planning_lint_message_path")
+        feature_dir_rel = feature_dir.relative_to(self.repo_root).as_posix()
+        output = "\n".join(
+            [
+                f"== Planning lint: {feature_dir_rel} ==",
+                f"OK: tasks.json validation passed: {feature_dir_rel}/tasks.json",
+                "FAIL: spec_manifest.md required-docs section contains placeholder token: `--pkg-manager <apt-get|dnf|yum|pacman|zypper>`",
+            ]
+        )
+
+        with patch.object(
+            self.module.subprocess,
+            "run",
+            return_value=SimpleNamespace(returncode=2, stdout=output, stderr=""),
+        ):
+            issues = self.module._run_validator(
+                "planning-lint",
+                ["make", "planning-lint", f"FEATURE_DIR={feature_dir_rel}"],
+                feature_dir,
+                feature_dir_rel,
+            )
+
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0].path, "pre-planning/spec_manifest.md")
+        self.assertEqual(issues[0].remediation, "hard_fail")
 
     def _write_alignment_reporter(self, path: Path) -> None:
         _write_text(

@@ -28,6 +28,21 @@ HARD_FAIL_EXACT = {
     "pre-planning/ci_checkpoint_plan.md",
 }
 
+KNOWN_MESSAGE_PATHS = {
+    "impact_map.md": "pre-planning/impact_map.md",
+    "spec_manifest.md": "pre-planning/spec_manifest.md",
+    "workstream_triage.md": "pre-planning/workstream_triage.md",
+    "minimal_spec_draft.md": "pre-planning/minimal_spec_draft.md",
+    "ci_checkpoint_plan.md": "pre-planning/ci_checkpoint_plan.md",
+    "alignment_report.md": "pre-planning/alignment_report.md",
+    "contract.md": "contract.md",
+    "decision_register.md": "decision_register.md",
+    "plan.md": "plan.md",
+    "tasks.json": "tasks.json",
+    "manual_testing_playbook.md": "manual_testing_playbook.md",
+    "execution_preflight_report.md": "execution_preflight_report.md",
+}
+
 
 @dataclass(frozen=True)
 class ConvergenceIssue:
@@ -103,6 +118,14 @@ def _message_from_output(output: str) -> str:
     return "validator failed without a message"
 
 
+def _paths_from_message(message: str) -> list[str]:
+    mentioned: list[str] = []
+    for needle, rel_path in KNOWN_MESSAGE_PATHS.items():
+        if needle in message and rel_path not in mentioned:
+            mentioned.append(rel_path)
+    return mentioned
+
+
 def _run_validator(name: str, argv: list[str], feature_dir: Path, feature_dir_rel: str) -> list[ConvergenceIssue]:
     res = subprocess.run(argv, text=True, capture_output=True, check=False)
     if res.returncode == 0:
@@ -110,7 +133,9 @@ def _run_validator(name: str, argv: list[str], feature_dir: Path, feature_dir_re
 
     output = "\n".join(part for part in (res.stderr.strip(), res.stdout.strip()) if part).strip()
     message = _message_from_output(output)
-    mentioned_paths = _extract_path_mentions(output, feature_dir, feature_dir_rel)
+    mentioned_paths = _paths_from_message(message)
+    if not mentioned_paths:
+        mentioned_paths = _extract_path_mentions(output, feature_dir, feature_dir_rel)
 
     if not mentioned_paths:
         return [

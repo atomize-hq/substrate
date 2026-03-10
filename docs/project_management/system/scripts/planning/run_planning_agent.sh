@@ -552,10 +552,10 @@ stage_path_for_repo_rel() {
 }
 
 if [[ "${USE_STAGED_OUTPUTS}" -eq 1 ]]; then
-    for p in "${ALLOWED_OUTPUTS_REL[@]}"; do
+    for p in ${ALLOWED_OUTPUTS_REL[@]+"${ALLOWED_OUTPUTS_REL[@]}"}; do
         STAGED_OUTPUTS_REL+=("$(stage_path_for_repo_rel "${p}")")
     done
-    for p in "${REQUIRED_OUTPUTS_REL[@]}"; do
+    for p in ${REQUIRED_OUTPUTS_REL[@]+"${REQUIRED_OUTPUTS_REL[@]}"}; do
         REQUIRED_STAGED_OUTPUTS_REL+=("$(stage_path_for_repo_rel "${p}")")
     done
 fi
@@ -588,7 +588,7 @@ fi
 	    if [[ "${USE_STAGED_OUTPUTS}" -eq 1 ]]; then
 	        printf -- '- Tracked outputs: (none; wrapper/runner promotes staged candidates)\n'
 	        printf -- '- Staged tracked-output candidates (write only these under logs):\n'
-	        for p in "${STAGED_OUTPUTS_REL[@]}"; do
+	        for p in ${STAGED_OUTPUTS_REL[@]+"${STAGED_OUTPUTS_REL[@]}"}; do
 	            printf '  - `%s`\n' "${p}"
 	        done
 	        printf -- '- Direct writes to canonical tracked paths are forbidden.\n'
@@ -601,7 +601,7 @@ fi
 	        printf -- '- If you find follow-ups, record them inside your logs draft(s) under that logs directory.\n'
 	    else
 	        printf -- '- Tracked outputs (only these may change):\n'
-	        for p in "${ALLOWED_OUTPUTS_REL[@]}"; do
+	        for p in ${ALLOWED_OUTPUTS_REL[@]+"${ALLOWED_OUTPUTS_REL[@]}"}; do
 	            printf '  - `%s`\n' "${p}"
 	        done
 	        printf -- '- Logs allowed (untracked only): `%s/logs/%s/`\n' "${FEATURE_DIR_REL}" "${STEP_DIR_NAME}"
@@ -691,6 +691,38 @@ write_missing_last_message_stub() {
     } >"${CODEX_LAST_MESSAGE_RUN}" 2>/dev/null || true
 }
 
+path_fingerprint() {
+    local repo_rel="$1"
+    local abs_path="${REPO_ROOT}/${repo_rel}"
+    if [[ -e "${abs_path}" ]]; then
+        shasum -a 256 -- "${abs_path}" | awk '{print $1}'
+    else
+        printf '__missing__\n'
+    fi
+}
+
+record_feature_snapshot_from_stdin() {
+    local snapshot_path="$1"
+    : > "${snapshot_path}"
+    while IFS= read -r repo_rel; do
+        [[ -n "${repo_rel}" ]] || continue
+        printf '%s\t%s\n' "${repo_rel}" "$(path_fingerprint "${repo_rel}")" >> "${snapshot_path}"
+    done
+}
+
+snapshot_has_same_fingerprint() {
+    local snapshot_path="$1"
+    local repo_rel="$2"
+    local baseline_fingerprint
+    baseline_fingerprint="$(
+        awk -F '\t' -v target="${repo_rel}" '
+            $1 == target { print $2; found = 1; exit }
+            END { if (!found) exit 1 }
+        ' "${snapshot_path}" 2>/dev/null
+    )" || return 1
+    [[ "${baseline_fingerprint}" == "$(path_fingerprint "${repo_rel}")" ]]
+}
+
 codex_pid=""
 cleanup_codex() {
     local rc="$?"
@@ -705,6 +737,11 @@ trap cleanup_codex EXIT INT TERM
 mkdir -p "${STEP_DIR_ABS}"
 wait_for_codex_pidfile_if_running "${STEP_PID_PATH}"
 : > "${STEP_STDERR}"
+
+BASELINE_CHANGED_TRACKED_SNAPSHOT="${RUN_DIR_ABS}/baseline_changed_tracked.tsv"
+BASELINE_UNTRACKED_SNAPSHOT="${RUN_DIR_ABS}/baseline_untracked.tsv"
+record_feature_snapshot_from_stdin "${BASELINE_CHANGED_TRACKED_SNAPSHOT}" < <(git diff --name-only -- "${FEATURE_DIR_REL}" | sed '/^$/d')
+record_feature_snapshot_from_stdin "${BASELINE_UNTRACKED_SNAPSHOT}" < <(git ls-files --others --exclude-standard -- "${FEATURE_DIR_REL}" | sed '/^$/d')
 
 codex_args=(codex exec --dangerously-bypass-approvals-and-sandbox --cd "${REPO_ROOT}")
 # Planning agents do not need Figma MCP and it can hang when no local MCP endpoint is running.
@@ -749,23 +786,29 @@ fi
 CHANGED_TRACKED=()
 while IFS= read -r p; do
     [[ -n "${p}" ]] || continue
+    if snapshot_has_same_fingerprint "${BASELINE_CHANGED_TRACKED_SNAPSHOT}" "${p}"; then
+        continue
+    fi
     CHANGED_TRACKED+=("${p}")
 done < <(git diff --name-only -- "${FEATURE_DIR_REL}" | sed '/^$/d')
 
 UNTRACKED=()
 while IFS= read -r p; do
     [[ -n "${p}" ]] || continue
+    if snapshot_has_same_fingerprint "${BASELINE_UNTRACKED_SNAPSHOT}" "${p}"; then
+        continue
+    fi
     UNTRACKED+=("${p}")
 done < <(git ls-files --others --exclude-standard -- "${FEATURE_DIR_REL}" | sed '/^$/d')
 
 ALLOWED_UNTRACKED_REL=()
 REQUIRED_OUTPUT_CHECK_REL=()
 if [[ "${USE_STAGED_OUTPUTS}" -eq 1 ]]; then
-    ALLOWED_UNTRACKED_REL=("${STAGED_OUTPUTS_REL[@]}")
-    REQUIRED_OUTPUT_CHECK_REL=("${REQUIRED_STAGED_OUTPUTS_REL[@]}")
+    ALLOWED_UNTRACKED_REL=(${STAGED_OUTPUTS_REL[@]+"${STAGED_OUTPUTS_REL[@]}"})
+    REQUIRED_OUTPUT_CHECK_REL=(${REQUIRED_STAGED_OUTPUTS_REL[@]+"${REQUIRED_STAGED_OUTPUTS_REL[@]}"})
 else
-    ALLOWED_UNTRACKED_REL=("${ALLOWED_OUTPUTS_REL[@]}")
-    REQUIRED_OUTPUT_CHECK_REL=("${REQUIRED_OUTPUTS_REL[@]}")
+    ALLOWED_UNTRACKED_REL=(${ALLOWED_OUTPUTS_REL[@]+"${ALLOWED_OUTPUTS_REL[@]}"})
+    REQUIRED_OUTPUT_CHECK_REL=(${REQUIRED_OUTPUTS_REL[@]+"${REQUIRED_OUTPUTS_REL[@]}"})
 fi
 
 UNTRACKED_UNEXPECTED=()

@@ -33,7 +33,6 @@
       "description": "Implement distro detection, distro-family mapping, and stable decision-line reporting.",
       "references": [
         "docs/project_management/packs/draft/best-effort-distro-package-manager/plan.md",
-        "docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/spec_manifest.md",
         "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md",
         "docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md",
         "docs/project_management/adrs/draft/ADR-0031-detecting-badger.md"
@@ -83,7 +82,6 @@
       "description": "Add or extend tests for distro detection, mapping, and single-line reporting behavior.",
       "references": [
         "docs/project_management/packs/draft/best-effort-distro-package-manager/plan.md",
-        "docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/spec_manifest.md",
         "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md",
         "docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md",
         "docs/project_management/adrs/draft/ADR-0031-detecting-badger.md"
@@ -185,7 +183,6 @@
       "description": "Implement explicit override precedence, fixed PATH fallback order, and fail-closed error branches.",
       "references": [
         "docs/project_management/packs/draft/best-effort-distro-package-manager/plan.md",
-        "docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/spec_manifest.md",
         "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM1/BEDPM1-spec.md",
         "docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md",
         "docs/project_management/adrs/draft/ADR-0031-detecting-badger.md"
@@ -238,7 +235,6 @@
       "description": "Add or extend tests for precedence, warning, and failure-class behavior.",
       "references": [
         "docs/project_management/packs/draft/best-effort-distro-package-manager/plan.md",
-        "docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/spec_manifest.md",
         "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM1/BEDPM1-spec.md",
         "docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md",
         "docs/project_management/adrs/draft/ADR-0031-detecting-badger.md"
@@ -344,7 +340,6 @@
       "description": "Implement wrapper exit-code pass-through and operator-contract propagation surfaces.",
       "references": [
         "docs/project_management/packs/draft/best-effort-distro-package-manager/plan.md",
-        "docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/spec_manifest.md",
         "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md",
         "docs/INSTALLATION.md",
         "docs/reference/env/contract.md"
@@ -396,7 +391,6 @@
       "description": "Add or extend tests for wrapper parity and operator-contract propagation behavior.",
       "references": [
         "docs/project_management/packs/draft/best-effort-distro-package-manager/plan.md",
-        "docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/spec_manifest.md",
         "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md",
         "docs/INSTALLATION.md",
         "docs/reference/env/contract.md"
