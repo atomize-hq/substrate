@@ -1,0 +1,15 @@
+{
+  "meta": {
+    "schema_version": 4,
+    "slice_spec_version": 2,
+    "cross_platform": true,
+    "automation": {
+      "enabled": true,
+      "orchestration_branch": "feat/test"
+    },
+    "checkpoint_boundaries": [
+      "WDRA0"
+    ]
+  },
+  "tasks": []
+}

@@ -25,6 +25,9 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 
 ### Create
 - `tests/installers/pkg_manager_detection_smoke.sh`
+
+### Edit
+- `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md`
 - `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`
 - `docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md`
 - `docs/project_management/packs/draft/best-effort-distro-package-manager/plan.md`
@@ -36,9 +39,6 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM1/BEDPM1-spec.md`
 - `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md`
 - `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM3/BEDPM3-spec.md`
-
-### Edit
-- `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md`
 - `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
 - `docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json`
 - `docs/project_management/packs/sequencing.json`

@@ -157,10 +157,12 @@ No separate protocol, schema, telemetry, filesystem-semantics, platform-parity, 
     - the Linux-only path semantics and platform guarantees for this feature
   - Must define:
     - the exact installer entrypoint: `scripts/substrate/install-substrate.sh`
-    - the exact new flag:
-      - `--pkg-manager <apt-get|dnf|yum|pacman|zypper>`
+    - the exact new flag name:
+      - `--pkg-manager`
+      - allowed values are exactly `apt-get`, `dnf`, `yum`, `pacman`, `zypper`
     - the exact legacy override env var:
-      - `PKG_MANAGER=<apt-get|dnf|yum|pacman|zypper>`
+      - `PKG_MANAGER`
+      - allowed values are exactly `apt-get`, `dnf`, `yum`, `pacman`, `zypper`
     - the exact selection precedence:
       - `--pkg-manager`
       - `PKG_MANAGER`
@@ -175,7 +177,7 @@ No separate protocol, schema, telemetry, filesystem-semantics, platform-parity, 
       - Linux-only read path
       - keys read: `ID`, `ID_LIKE`
       - safe parsing rule
-      - exact `<unknown>` sentinel behavior when the file is missing or unreadable
+      - exact sentinel behavior when the file is missing or unreadable; the emitted sentinel string is `&lt;unknown&gt;`
       - exact rule that detection performs no network call
     - the exact distro-family mapping table for:
       - Debian/Ubuntu
@@ -184,7 +186,7 @@ No separate protocol, schema, telemetry, filesystem-semantics, platform-parity, 
       - SUSE
     - the exact fallback `PATH` probe order and the exact ambiguity-warning rule when more than one supported manager is present
     - the exact stderr decision line template:
-      - `Detected distro: <id> (like: <id_like>), using package manager: <pkg_manager> (source: <flag|env|os_release|path_probe>)`
+      - `Detected distro: {id} (like: {id_like}), using package manager: {pkg_manager} (source: {flag|env|os_release|path_probe})`
     - the exact exit-code mapping for all feature-relevant outcomes:
       - `0`
       - `2`
@@ -249,8 +251,7 @@ No separate protocol, schema, telemetry, filesystem-semantics, platform-parity, 
 
 ### Slice specs (required)
 
-Slice specs MUST use the canonical layout:
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/<SLICE_ID>/<SLICE_ID>-spec.md`
+Slice specs MUST use one canonical per-slice file under `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/`, with the concrete accepted paths listed below.
 
 - `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md`
   - Owns (authoritative):
@@ -261,7 +262,7 @@ Slice specs MUST use the canonical layout:
       - mapped Debian-family input selects `apt-get`
       - mapped Arch-family input selects `pacman`
       - Fedora/RHEL-family input prefers `dnf` and falls back to `yum` when `dnf` is unavailable
-      - unreadable or missing `/etc/os-release` renders `<unknown>` fields and does not block fallback
+      - unreadable or missing `/etc/os-release` renders `&lt;unknown&gt;` fields and does not block fallback
       - the decision line appears exactly once before prerequisite installation begins
     - the contract-link rule: this slice spec links to `contract.md` and does not redefine the operator-facing contract
   - Links (non-authoritative):
@@ -358,10 +359,10 @@ Every surface touched by ADR-0031 must appear here.
 | --- | --- | --- |
 | Canonical feature directory and canonical slice IDs (`BEDPM0`, `BEDPM1`, `BEDPM2`, `BEDPM3`) | `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/spec_manifest.md` | exact directory path; exact slice ids; exact slice spec paths; explicit rejection of `C0/C1/C2` in planning artifacts |
 | Installer entrypoint `scripts/substrate/install-substrate.sh` | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | script scope, Linux-only behavior delta, explicit no-change surfaces |
-| CLI flag `--pkg-manager <apt-get|dnf|yum|pacman|zypper>` | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | allowed values, precedence, validation, availability checks, exit-code mapping |
+| CLI flag `--pkg-manager` | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | exact flag name; allowed values `apt-get`, `dnf`, `yum`, `pacman`, `zypper`; precedence; validation; availability checks; exit-code mapping |
 | Legacy env override `PKG_MANAGER` | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | allowed values, precedence, validation, failure posture |
 | Alternate os-release env var `SUBSTRATE_INSTALL_OS_RELEASE_PATH` | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | exact name, absolute-path validation, precedence against `/etc/os-release`, invalid-path semantics, Linux-only scope |
-| `/etc/os-release` read semantics | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | exact path, keys read, safe parsing rule, missing-file behavior, `<unknown>` sentinel |
+| `/etc/os-release` read semantics | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | exact path, keys read, safe parsing rule, missing-file behavior, `&lt;unknown&gt;` sentinel |
 | Distro-family mapping table | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | exact families, exact match rules, exact preferred manager per family |
 | Emitted selected-manager vocabulary | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | exact strings `apt-get|dnf|yum|pacman|zypper`; exact conditions that emit each |
 | Emitted `pkg_manager.source` vocabulary | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | exact strings `flag|env|os_release|path_probe`; exact conditions that emit each |
@@ -390,7 +391,7 @@ Every surface touched by ADR-0031 must appear here.
 
 - `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`
   - MUST define one exact precedence order and one exact emitted vocabulary for selected manager and source.
-  - MUST define one exact `/etc/os-release` parsing and absence contract, including `<unknown>` behavior.
+  - MUST define one exact `/etc/os-release` parsing and absence contract, including `&lt;unknown&gt;` behavior.
   - MUST define one exact fallback `PATH` probe order and one exact ambiguity-warning or ambiguity-failure contract.
   - MUST define one exact stderr decision line template and placement rule.
   - MUST define one exact exit-code mapping for invalid overrides, unavailable forced managers, and unsupported selection failures.
