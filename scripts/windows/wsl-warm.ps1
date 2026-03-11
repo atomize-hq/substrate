@@ -76,10 +76,21 @@ if (-not $cargoToolchain -and $env:RUSTUP_TOOLCHAIN) {
     $cargoToolchain = $env:RUSTUP_TOOLCHAIN
 }
 $rustupExe = $null
+$cargoResolvedViaRustup = $false
 if ($cargoExe) {
     $candidateRustupExe = Join-Path (Split-Path -Parent $cargoExe) 'rustup.exe'
     if (Test-Path $candidateRustupExe) {
         $rustupExe = $candidateRustupExe
+    }
+}
+if ($cargoToolchain -and $rustupExe) {
+    $resolvedCargoExe = (& $rustupExe which cargo --toolchain $cargoToolchain 2>$null | Select-Object -Last 1)
+    if ($LASTEXITCODE -eq 0 -and $resolvedCargoExe) {
+        $resolvedCargoExe = $resolvedCargoExe.Trim()
+        if ($resolvedCargoExe -and (Test-Path $resolvedCargoExe)) {
+            $cargoExe = $resolvedCargoExe
+            $cargoResolvedViaRustup = $true
+        }
     }
 }
 
@@ -258,14 +269,10 @@ if ($projectHasCargo) {
         Push-Location $projectPath
         try {
             $forwarderBuildArgs = @('build', '-p', 'substrate-forwarder', '--release')
-            if ($cargoToolchain -and $rustupExe) {
-                & $rustupExe run $cargoToolchain cargo @forwarderBuildArgs
-            } else {
-                if ($cargoToolchain) {
-                    $env:RUSTUP_TOOLCHAIN = $cargoToolchain
-                }
-                & $cargoExe @forwarderBuildArgs
+            if ($cargoToolchain -and -not $cargoResolvedViaRustup) {
+                $env:RUSTUP_TOOLCHAIN = $cargoToolchain
             }
+            & $cargoExe @forwarderBuildArgs
         } finally {
             Pop-Location
         }
