@@ -91,6 +91,7 @@
   - Behavior smoke run `22929212356` → `CANCELLED` after `linux_self_hosted` failed preflight (`/run/substrate.sock` missing), `macos_self_hosted` failed on the smoke harness newline-comparison bug, and `windows_self_hosted` remained queued
   - Behavior smoke run `22931331235` (workflow ref `world-deps-apt-provisioning-wdap0-integ-macos`) → `CANCELLED` after `macos_self_hosted` passed and `linux_self_hosted` failed because `sudo -n` was unavailable on the Linux runner, preventing `scripts/linux/world-provision.sh --profile release --skip-build --sudo-noninteractive`
   - Hosted Windows smoke runs `22932886416`, `22933186355`, and `22933497530` were operator-authorized exploratory reruns on GitHub-hosted Windows and all failed inside `docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/windows-smoke.ps1`
+  - Hosted Linux smoke run `22933937566` against `CHECKOUT_SHA=83efb8fe2a41faf2608df4fc03bc5816edb23926` (workflow ref `world-deps-apt-provisioning-wdap0-integ-macos`) → `FAIL`; `linux_hosted` reached the smoke script but failed Case A preflight because `substrate world doctor` reported the world backend unhealthy (`https://github.com/atomize-hq/substrate/actions/runs/22933937566/job/66561113342`)
 
 ## END — 2026-03-11T02:28:44Z — integration — WDAP0-integ-macos
 - HEAD: `83efb8fe2a41faf2608df4fc03bc5816edb23926`
