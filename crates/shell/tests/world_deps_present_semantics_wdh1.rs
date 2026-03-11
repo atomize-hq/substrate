@@ -252,8 +252,12 @@ fn test_current_sync_fails_closed_on_entrypoint_collision_exit_5() {
         ),
     );
 
-    let (_sock_tmp, socket_path, _socket, records) =
-        start_world_socket_execute_record("substrate-wdh1-collision-", "", "", 0);
+    let (_sock_tmp, socket_path, _socket, records) = start_world_socket_execute_record(
+        "substrate-wdh1-collision-",
+        "__SUBSTRATE_WDAP1__ dup 1 1.0.0\n",
+        "",
+        0,
+    );
 
     substrate_command_for_home(&fixture)
         .current_dir(&ws_root)
@@ -266,8 +270,13 @@ fn test_current_sync_fails_closed_on_entrypoint_collision_exit_5() {
 
     let cmds = recorded_cmds(&records);
     assert!(
-        cmds.is_empty(),
-        "expected no /v1/execute requests when entrypoint collisions are detected; cmds={cmds:?}"
+        cmds.iter().any(|cmd| cmd.contains("dpkg-query")),
+        "expected the read-only APT probe before collision detection; cmds={cmds:?}"
+    );
+    assert!(
+        cmds.iter()
+            .all(|cmd| !cmd.contains("apt-get") && !cmd.contains("echo noop")),
+        "expected collision detection to stop before any mutating install commands; cmds={cmds:?}"
     );
 }
 
@@ -297,8 +306,12 @@ fn test_current_sync_creates_apt_entrypoint_wrappers_wdh1() {
         ),
     );
 
-    let (_sock_tmp, socket_path, _socket, records) =
-        start_world_socket_execute_record("substrate-wdh1-apt-wrappers-", "", "", 0);
+    let (_sock_tmp, socket_path, _socket, records) = start_world_socket_execute_record(
+        "substrate-wdh1-apt-wrappers-",
+        "__SUBSTRATE_WDAP1__ npm 1 10.0.0-1\n",
+        "",
+        0,
+    );
 
     substrate_command_for_home(&fixture)
         .current_dir(&ws_root)
@@ -309,6 +322,10 @@ fn test_current_sync_creates_apt_entrypoint_wrappers_wdh1() {
         .success();
 
     let cmds = recorded_cmds(&records);
+    assert!(
+        cmds.iter().any(|cmd| cmd.contains("dpkg-query")),
+        "expected a read-only APT probe before wrapper creation; cmds={cmds:?}"
+    );
     assert!(
         cmds.iter()
             .any(|cmd| cmd.contains("exec /usr/bin/npm \"$@\"") && cmd.contains("#!/bin/sh")),
