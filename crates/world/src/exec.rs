@@ -468,7 +468,7 @@ pub fn execute_shell_command_with_project_bind_mount(
             }
         }
 
-        if !isolation_full && !status.success() {
+        if !isolation_full && mount.fs_mode != WorldFsMode::ReadOnly && !status.success() {
             if let Ok(stderr_str) = std::str::from_utf8(&stderr_buf) {
                 let trimmed = stderr_str.trim();
                 if trimmed.starts_with("mount:") || trimmed.starts_with("unshare:") {
