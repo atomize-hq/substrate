@@ -120,7 +120,21 @@ impl SessionWorld {
         Ok(())
     }
 
-    fn create_directories(&self) -> Result<()> {
+    fn fallback_cgroup_path(&self) -> PathBuf {
+        let uid = unsafe { libc::geteuid() } as u32;
+        if let Ok(xdg) = std::env::var("XDG_RUNTIME_DIR") {
+            if !xdg.is_empty() {
+                return PathBuf::from(xdg).join("substrate/cgroup").join(&self.id);
+            }
+        }
+        let run = PathBuf::from(format!("/run/user/{uid}/substrate/cgroup/{}", self.id));
+        if run.parent().unwrap_or(Path::new("/run")).exists() {
+            return run;
+        }
+        PathBuf::from(format!("/tmp/substrate-{uid}-cgroup/{}", self.id))
+    }
+
+    fn create_directories(&mut self) -> Result<()> {
         if let Err(e) = std::fs::create_dir_all(&self.root_dir) {
             tracing::error!(
                 error = %e,
@@ -130,6 +144,24 @@ impl SessionWorld {
             return Err(e).context("Failed to create world root directory");
         }
         if let Err(e) = std::fs::create_dir_all(&self.cgroup_path) {
+            let fallback_allowed = unsafe { libc::geteuid() } != 0
+                && matches!(
+                    e.kind(),
+                    std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::ReadOnlyFilesystem
+                );
+            if fallback_allowed {
+                let fallback = self.fallback_cgroup_path();
+                tracing::warn!(
+                    error = %e,
+                    path = %self.cgroup_path.display(),
+                    fallback = %fallback.display(),
+                    "[world] failed to create cgroup directory; using unprivileged fallback path"
+                );
+                std::fs::create_dir_all(&fallback)
+                    .context("Failed to create fallback cgroup directory")?;
+                self.cgroup_path = fallback;
+                return Ok(());
+            }
             tracing::error!(
                 error = %e,
                 path = %self.cgroup_path.display(),

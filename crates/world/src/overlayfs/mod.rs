@@ -27,6 +27,7 @@ const MAX_TRACKED_DIRS: usize = 100;
 const MAX_DIFF_SIZE_BYTES: usize = 10 * 1024 * 1024; // 10MB
 
 pub use strategy::run_enumeration_probe;
+pub use strategy::select_strategy;
 pub use strategy::{ENUMERATION_PROBE_FILE, ENUMERATION_PROBE_ID};
 pub use strategy_state::WorldFsStrategyMeta;
 

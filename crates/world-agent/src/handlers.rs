@@ -17,6 +17,7 @@ use axum::{
 };
 use chrono::SecondsFormat;
 use serde_json::{json, Value};
+use substrate_common::{WorldFsMode, WorldFsStrategyProbeResult};
 
 /// Wrapper type to implement IntoResponse for ApiError
 #[derive(Debug)]
@@ -83,19 +84,28 @@ pub async fn doctor_world(
         let support = world::landlock::detect_support();
 
         let probe_root = std::env::temp_dir();
-        let probe_raw = world::overlayfs::run_enumeration_probe(
+        let probe_raw = match world::overlayfs::select_strategy(
             "doctor_world",
-            substrate_common::WorldFsStrategy::Overlay,
             &probe_root,
-        );
+            WorldFsMode::Writable,
+        ) {
+            Ok(selection) => selection.probe,
+            Err(err) => {
+                let mut probe = world::overlayfs::run_enumeration_probe(
+                    "doctor_world",
+                    substrate_common::WorldFsStrategy::Overlay,
+                    &probe_root,
+                );
+                if probe.failure_reason.is_none() {
+                    probe.failure_reason = Some(err.to_string());
+                }
+                probe
+            }
+        };
 
         let probe_result = match probe_raw.result {
-            substrate_common::WorldFsStrategyProbeResult::Pass => {
-                WorldDoctorWorldFsStrategyProbeResultV1::Pass
-            }
-            substrate_common::WorldFsStrategyProbeResult::Fail => {
-                WorldDoctorWorldFsStrategyProbeResultV1::Fail
-            }
+            WorldFsStrategyProbeResult::Pass => WorldDoctorWorldFsStrategyProbeResultV1::Pass,
+            WorldFsStrategyProbeResult::Fail => WorldDoctorWorldFsStrategyProbeResultV1::Fail,
         };
 
         (

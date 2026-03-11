@@ -2778,6 +2778,8 @@ fn run_world_command_for_deps_at(
     cwd_override: Option<&str>,
 ) -> Result<agent_api_types::ExecuteResponse> {
     let (client, mut request, _) = build_agent_client_and_request(cmd)?;
+    // Runtime world-deps execution must not borrow the provisioning request profile.
+    request.profile = None;
 
     if let Some(cwd) = cwd_override {
         request.cwd = Some(cwd.to_string());
