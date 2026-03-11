@@ -143,3 +143,7 @@
 ## START — 2026-03-11T17:31:00Z — integration — WDAP0-integ
 - Dispatch:
   - `make triad-task-start FEATURE_DIR="docs/project_management/packs/draft/world-deps-apt-provisioning" TASK_ID="WDAP0-integ" LAUNCH_CODEX=1`
+
+## END — 2026-03-11T17:36:00Z — integration — WDAP0-integ
+- HEAD: `e0ef4123ca8a841ca49c4c2c148931e2badb095c`
+- Codex last message: `docs/project_management/packs/draft/world-deps-apt-provisioning/logs/WDAP0/integ/last_message.md`
