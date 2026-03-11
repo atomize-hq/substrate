@@ -48,7 +48,7 @@ function Invoke-Substrate {
   $old = @{}
   foreach ($k in $Env.Keys) {
     $old[$k] = (Get-Item -Path "Env:$k" -ErrorAction SilentlyContinue).Value
-    $env:$k = $Env[$k]
+    Set-Item -Path "Env:$k" -Value $Env[$k]
   }
 
   try {
@@ -59,7 +59,7 @@ function Invoke-Substrate {
       if ($null -eq $old[$k]) {
         Remove-Item -Path "Env:$k" -ErrorAction SilentlyContinue
       } else {
-        $env:$k = $old[$k]
+        Set-Item -Path "Env:$k" -Value $old[$k]
       }
     }
   }
