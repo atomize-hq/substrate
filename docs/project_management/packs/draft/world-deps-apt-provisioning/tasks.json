@@ -83,7 +83,7 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/world-deps-apt-provisioning\" SLICE_ID=\"WDAP0\""
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "code",
       "worktree": "wt/world-deps-apt-provisioning-wdap0-code"
     },
@@ -287,7 +287,7 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/world-deps-apt-provisioning\" TASK_ID=\"WDAP0-integ-linux\" TASK_PLATFORM=linux"
       ],
-      "status": "completed",
+      "status": "pending",
       "type": "integration",
       "worktree": "wt/world-deps-apt-provisioning-wdap0-integ-linux"
     },
