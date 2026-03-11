@@ -12,6 +12,7 @@ use support::{substrate_command_for_home, AgentSocket, ShellEnvFixture, SocketRe
 #[cfg(unix)]
 use tempfile::Builder;
 
+#[cfg(unix)]
 fn write_file(path: &Path, contents: &str) {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).expect("create parent dirs");
