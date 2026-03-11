@@ -187,3 +187,25 @@
 ## START — 2026-03-11T19:52:21Z — integration — WDAP1-integ-windows
 - Dispatch:
   - `make triad-task-start FEATURE_DIR="docs/project_management/packs/draft/world-deps-apt-provisioning" TASK_ID="WDAP1-integ-windows" TASK_PLATFORM=windows LAUNCH_CODEX=1`
+
+## END — 2026-03-11T22:02:32Z — integration — WDAP1-integ-linux
+- HEAD: `985e740acd3c5b252f6c48a59f202dfc97c3dca0`
+- Feature smoke: `22975895887` https://github.com/atomize-hq/substrate/actions/runs/22975895887
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/world-deps-apt-provisioning/logs/WDAP1/integ-linux/last_message.md`
+
+## END — 2026-03-11T22:02:32Z — integration — WDAP1-integ-macos
+- Result: no macOS-only fix required; latest verified behavior smoke PASS
+- Feature smoke: `22975719947` https://github.com/atomize-hq/substrate/actions/runs/22975719947
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/world-deps-apt-provisioning/logs/WDAP1/integ-macos/last_message.md`
+
+## END — 2026-03-11T22:02:32Z — integration — WDAP1-integ-windows
+- Result: completed as no-op after operator decision to treat Windows as unsupported for WDAP1 behavior validation
+- Prior failing smoke (no longer blocking WDAP1 behavior gates): `22976062346` https://github.com/atomize-hq/substrate/actions/runs/22976062346
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/world-deps-apt-provisioning/logs/WDAP1/integ-windows/last_message.md`
+
+## END — 2026-03-11T22:02:32Z — checkpoint — CP2-ci-checkpoint
+- Checkout SHA: `985e740acd3c5b252f6c48a59f202dfc97c3dca0`
+- CI compile parity PASS: `22975896193` https://github.com/atomize-hq/substrate/actions/runs/22975896193
+- Linux behavior smoke PASS: `22975895887` https://github.com/atomize-hq/substrate/actions/runs/22975895887
+- macOS behavior smoke PASS: `22975719947` https://github.com/atomize-hq/substrate/actions/runs/22975719947
+- Windows behavior smoke de-scoped for WDAP1 on 2026-03-11; `tasks.json` `meta.behavior_platforms_required=["linux","macos"]`

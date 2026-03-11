@@ -9,8 +9,7 @@
     },
     "behavior_platforms_required": [
       "linux",
-      "macos",
-      "windows"
+      "macos"
     ],
     "checkpoint_boundaries": [
       "WDAP0",
@@ -672,7 +671,7 @@
         "Read pre-planning/ci_checkpoint_plan.md and kickoff prompt",
         "Run CI audit (ci-testing + feature-smoke) and dispatch required gates"
       ],
-      "status": "in_progress",
+      "status": "completed",
       "type": "ops",
       "worktree": null
     },
@@ -722,7 +721,7 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/world-deps-apt-provisioning\" TASK_ID=\"WDAP1-integ-linux\" TASK_PLATFORM=linux"
       ],
-      "status": "in_progress",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/world-deps-apt-provisioning-wdap1-integ-linux"
     },
@@ -772,7 +771,7 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/world-deps-apt-provisioning\" TASK_ID=\"WDAP1-integ-macos\" TASK_PLATFORM=macos"
       ],
-      "status": "in_progress",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/world-deps-apt-provisioning-wdap1-integ-macos"
     },
@@ -822,7 +821,7 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/world-deps-apt-provisioning\" TASK_ID=\"WDAP1-integ-windows\" TASK_PLATFORM=windows"
       ],
-      "status": "in_progress",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/world-deps-apt-provisioning-wdap1-integ-windows"
     },
