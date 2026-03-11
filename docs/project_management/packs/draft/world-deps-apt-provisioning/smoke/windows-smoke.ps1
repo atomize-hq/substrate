@@ -114,6 +114,7 @@ $tmpRoot = if ($env:SUBSTRATE_SMOKE_ROOT -and $env:SUBSTRATE_SMOKE_ROOT.Trim() -
 $keep = ($env:SUBSTRATE_SMOKE_KEEP -and $env:SUBSTRATE_SMOKE_KEEP.Trim() -eq "1")
 $hostHome = $env:HOME
 $hostUserProfile = $env:USERPROFILE
+$hostCargoExe = (Get-Command cargo -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1)
 
 try {
   $homeDir = Join-Path $tmpRoot "home"
@@ -130,6 +131,9 @@ try {
   }
   if ($hostUserProfile -and $hostUserProfile.Trim() -ne "") {
     $env:SUBSTRATE_HOST_USERPROFILE = $hostUserProfile
+  }
+  if ($hostCargoExe -and $hostCargoExe.Trim() -ne "") {
+    $env:SUBSTRATE_WINDOWS_CARGO_EXE = $hostCargoExe
   }
 
   & $SubstrateExe config global init | Out-Null
