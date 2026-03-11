@@ -71,6 +71,17 @@ $cargoExe = $cargoCandidates | Where-Object { $_ -and (Test-Path $_) } | Select-
 if (-not $usesBundledArtifacts -and -not $cargoExe) {
     Write-ErrorAndExit "cargo.exe not found via SUBSTRATE_WINDOWS_CARGO_EXE, SUBSTRATE_HOST_USERPROFILE, USERPROFILE, or PATH. Install Rust on the Windows host."
 }
+$cargoToolchain = $env:RUSTUP_TOOLCHAIN
+if (-not $cargoToolchain -and $env:RUST_TOOLCHAIN) {
+    $cargoToolchain = $env:RUST_TOOLCHAIN
+}
+$rustupExe = $null
+if ($cargoExe) {
+    $candidateRustupExe = Join-Path (Split-Path -Parent $cargoExe) 'rustup.exe'
+    if (Test-Path $candidateRustupExe) {
+        $rustupExe = $candidateRustupExe
+    }
+}
 
 # Ensure WSL installed
 $wslStatus = & wsl --status 2>$null
@@ -246,7 +257,15 @@ if ($projectHasCargo) {
         Write-Info "Building substrate-forwarder (release)"
         Push-Location $projectPath
         try {
-            & $cargoExe build -p substrate-forwarder --release
+            $forwarderBuildArgs = @('build', '-p', 'substrate-forwarder', '--release')
+            if ($cargoToolchain -and $rustupExe) {
+                & $rustupExe run $cargoToolchain cargo @forwarderBuildArgs
+            } else {
+                if ($cargoToolchain) {
+                    $env:RUSTUP_TOOLCHAIN = $cargoToolchain
+                }
+                & $cargoExe @forwarderBuildArgs
+            }
         } finally {
             Pop-Location
         }
