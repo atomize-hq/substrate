@@ -123,7 +123,10 @@ fn resolve_windows_cargo_exe_from_host_env() -> Option<PathBuf> {
     }))
     .or_else(|| {
         existing_path(std::env::var_os("CARGO_HOME").map(|home| {
-            PathBuf::from(home).join("bin").join("cargo.exe").into_os_string()
+            PathBuf::from(home)
+                .join("bin")
+                .join("cargo.exe")
+                .into_os_string()
         }))
     })
     .or_else(|| {
