@@ -185,14 +185,14 @@ probe:
     Require-Contains $r.Stderr "unsupported on Windows"
     Require-Contains $r.Stderr "substrate world enable --provision-deps"
 
-    Write-Host "== Preflight: world doctor =="
-    $r = Invoke-Substrate -Label "world doctor" -ExpectedExit 0 -CliArgs @("world", "doctor")
-
     if ($env:SUBSTRATE_SMOKE_SLICE_ID -eq "WDAP0") {
       Write-Host "== Runtime cases are skipped for WDAP0 (owned by WDAP1) =="
       Write-Host "OK: WDAP windows smoke"
       exit 0
     }
+
+    Write-Host "== Preflight: world doctor =="
+    $r = Invoke-Substrate -Label "world doctor" -ExpectedExit 0 -CliArgs @("world", "doctor")
 
     Write-Host "== Case B: runtime current sync fails early for APT requirements =="
     $r = Invoke-Substrate -Label "deps current sync --dry-run" -ExpectedExit 4 -CliArgs @("world", "deps", "current", "sync", "--dry-run")
