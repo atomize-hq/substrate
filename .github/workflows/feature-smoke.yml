@@ -196,8 +196,10 @@ jobs:
           cargo clippy --workspace --all-targets -- -D warnings
           cargo test --workspace --all-targets
 
-      - name: Build substrate (debug)
-        run: cargo build --bin substrate --bin substrate-shim
+      - name: Build substrate + world-agent (debug)
+        run: |
+          cargo build --bin substrate --bin substrate-shim
+          cargo build -p world-agent --bin world-agent
 
       - name: Add substrate to PATH
         run: echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
@@ -208,7 +210,58 @@ jobs:
           set -euo pipefail
           export SUBSTRATE_BIN="$GITHUB_WORKSPACE/target/debug/substrate"
           export SUBSTRATE_WORLD_REQUEST_PROFILE="world-deps-provision"
-          bash "${{ inputs.feature_dir }}/smoke/linux-smoke.sh"
+
+          manual_sock=""
+          manual_log=""
+          agent_pid=""
+          cleanup() {
+            if [[ -n "${agent_pid}" ]]; then
+              kill "${agent_pid}" >/dev/null 2>&1 || true
+              wait "${agent_pid}" >/dev/null 2>&1 || true
+            fi
+            if [[ -n "${manual_sock}" ]]; then
+              rm -f "${manual_sock}" >/dev/null 2>&1 || true
+            fi
+          }
+          trap cleanup EXIT
+
+          if [[ -S /run/substrate.sock && -w /run/substrate.sock ]]; then
+            export SUBSTRATE_WORLD_SOCKET="/run/substrate.sock"
+          else
+            socket_activate="$(command -v systemd-socket-activate || true)"
+            if [[ -z "${socket_activate}" ]]; then
+              echo "ERROR: systemd-socket-activate is required when /run/substrate.sock is unavailable" >&2
+              exit 1
+            fi
+
+            manual_sock="${RUNNER_TEMP:-/tmp}/substrate-world-agent.sock"
+            manual_log="${RUNNER_TEMP:-/tmp}/substrate-world-agent.log"
+            rm -f "${manual_sock}" "${manual_log}"
+
+            "${socket_activate}" --listen="${manual_sock}" --fdname=substrate-world-agent "$GITHUB_WORKSPACE/target/debug/world-agent" >"${manual_log}" 2>&1 &
+            agent_pid=$!
+
+            for _ in $(seq 1 50); do
+              if [[ -S "${manual_sock}" ]]; then
+                break
+              fi
+              sleep 0.2
+            done
+
+            if [[ ! -S "${manual_sock}" ]]; then
+              echo "ERROR: failed to start user-scoped world-agent socket fallback" >&2
+              [[ -f "${manual_log}" ]] && cat "${manual_log}" >&2
+              exit 1
+            fi
+
+            export SUBSTRATE_WORLD_SOCKET="${manual_sock}"
+            echo "Using user-scoped world-agent socket fallback: ${manual_sock}"
+          fi
+
+          if ! bash "${{ inputs.feature_dir }}/smoke/linux-smoke.sh"; then
+            [[ -n "${manual_log}" && -f "${manual_log}" ]] && cat "${manual_log}" >&2
+            exit 1
+          fi
 
   linux_self_hosted:
     needs: feature_meta

@@ -56,7 +56,16 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - `crates/shell/src/builtins/world_deps/inventory.rs`
 - `crates/shell/src/builtins/world_deps/errors.rs`
 - `crates/shell/src/builtins/world_deps/surfaces.rs`
+- `crates/replay/src/replay/executor.rs`
 - `crates/world-agent/src/service.rs`
+- `crates/world-agent/src/handlers.rs`
+- `crates/world-agent/tests/repl_persistent_session_bootstrap_v1.rs`
+- `crates/world-agent/tests/repl_persistent_session_exec_v1.rs`
+- `crates/world-mac-lima/src/forwarding.rs`
+- `crates/world/src/exec.rs`
+- `crates/world/src/overlayfs/layering.rs`
+- `crates/world/src/overlayfs/mod.rs`
+- `crates/world/src/session.rs`
 - `crates/shell/tests/world_enable.rs`
 - `crates/shell/tests/world_deps_apt_install_wdp5.rs`
 - `crates/shell/tests/world_deps_current_dry_run_wdp3.rs`
