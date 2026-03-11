@@ -175,3 +175,15 @@
 ## START — 2026-03-11T19:45:07Z — checkpoint — CP2-ci-checkpoint
 - Dispatch:
   - `Checkpoint bookkeeping on orchestration checkout for WDAP1 validating CHECKOUT_SHA=f0ce46505852de5935086ce7cdaa5dbde68cf52e`
+
+## START — 2026-03-11T19:52:21Z — integration — WDAP1-integ-linux
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="docs/project_management/packs/draft/world-deps-apt-provisioning" TASK_ID="WDAP1-integ-linux" TASK_PLATFORM=linux LAUNCH_CODEX=1`
+
+## START — 2026-03-11T19:52:21Z — integration — WDAP1-integ-macos
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="docs/project_management/packs/draft/world-deps-apt-provisioning" TASK_ID="WDAP1-integ-macos" TASK_PLATFORM=macos LAUNCH_CODEX=1`
+
+## START — 2026-03-11T19:52:21Z — integration — WDAP1-integ-windows
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="docs/project_management/packs/draft/world-deps-apt-provisioning" TASK_ID="WDAP1-integ-windows" TASK_PLATFORM=windows LAUNCH_CODEX=1`
