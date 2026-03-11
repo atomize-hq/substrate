@@ -2,10 +2,12 @@
 
 mod support;
 
-use support::{substrate_command_for_home, ShellEnvFixture};
+use support::{substrate_command_for_home, AgentSocket, ShellEnvFixture, SocketResponse};
 
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+use tempfile::Builder;
 
 fn write_file(path: &Path, contents: &str) {
     if let Some(parent) = path.parent() {
@@ -63,6 +65,54 @@ fn workspace_root(fixture: &ShellEnvFixture) -> PathBuf {
 
 fn workspace_config_path(workspace_root: &Path) -> PathBuf {
     workspace_root.join(".substrate/workspace.yaml")
+}
+
+fn fake_world_bin_dir(fixture: &ShellEnvFixture) -> PathBuf {
+    fixture.home().join("fake-world-bin")
+}
+
+fn install_fake_apt_probe_tools(fixture: &ShellEnvFixture) {
+    let bin_dir = fake_world_bin_dir(fixture);
+    fs::create_dir_all(&bin_dir).expect("create fake world bin");
+    write_file(
+        &bin_dir.join("dpkg-query"),
+        r#"#!/bin/sh
+set -eu
+pkg=""
+for arg in "$@"; do
+  pkg="$arg"
+done
+case "$pkg" in
+  nodejs)
+    printf 'install ok installed 20.0.0-1\n'
+    ;;
+  npm)
+    printf 'install ok installed 10.0.0-1\n'
+    ;;
+  *)
+    exit 1
+    ;;
+esac
+"#,
+    );
+    let mut perms = fs::metadata(bin_dir.join("dpkg-query"))
+        .expect("metadata")
+        .permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(bin_dir.join("dpkg-query"), perms).expect("chmod");
+}
+
+fn start_world_socket_host_execute(prefix: &str) -> (tempfile::TempDir, PathBuf, AgentSocket) {
+    let sock_tmp = Builder::new()
+        .prefix(prefix)
+        .tempdir_in("/tmp")
+        .expect("socket tempdir");
+    let socket_path = sock_tmp.path().join("world.sock");
+    let socket = AgentSocket::start(
+        &socket_path,
+        SocketResponse::CapabilitiesAndHostExecute { scopes: vec![] },
+    );
+    (sock_tmp, socket_path, socket)
 }
 
 fn seed_global_inventory(fixture: &ShellEnvFixture) {
@@ -148,14 +198,23 @@ fn test_current_install_dry_run_prints_deterministic_plan_and_orders_apt_before_
     fs::create_dir_all(&ws_root).expect("create ws root");
 
     seed_global_inventory(&fixture);
+    install_fake_apt_probe_tools(&fixture);
     write_global_config_builtins_disabled(&fixture, "    enabled: []\n");
 
-    let missing_socket = ws_root.join("missing.sock");
+    let (_sock_tmp, socket_path, _socket) =
+        start_world_socket_host_execute("substrate-wdp3-install-dry-run-");
+    let host_path = std::env::var("PATH").unwrap_or_default();
+    let test_path = format!("{}:{host_path}", fake_world_bin_dir(&fixture).display());
 
     let mut cmd1 = substrate_command_for_home(&fixture);
     cmd1.current_dir(&ws_root)
-        .env("SUBSTRATE_WORLD_SOCKET", &missing_socket)
+        .env("PATH", &test_path)
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
         .env("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE", "manual")
+        .env(
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
+            fake_world_bin_dir(&fixture),
+        )
         .args([
             "world",
             "deps",
@@ -184,8 +243,13 @@ fn test_current_install_dry_run_prints_deterministic_plan_and_orders_apt_before_
 
     let mut cmd2 = substrate_command_for_home(&fixture);
     cmd2.current_dir(&ws_root)
-        .env("SUBSTRATE_WORLD_SOCKET", &missing_socket)
+        .env("PATH", &test_path)
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
         .env("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE", "manual")
+        .env(
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
+            fake_world_bin_dir(&fixture),
+        )
         .args([
             "world",
             "deps",
@@ -217,6 +281,7 @@ fn test_current_sync_dry_run_prints_plan_for_effective_enabled_set() {
     fs::create_dir_all(&ws_root).expect("create ws root");
 
     seed_global_inventory(&fixture);
+    install_fake_apt_probe_tools(&fixture);
     write_global_config_builtins_disabled(
         &fixture,
         "    enabled: [\"node-runtime\", \"bun\", \"bun\"]\n",
@@ -230,12 +295,20 @@ fn test_current_sync_dry_run_prints_plan_for_effective_enabled_set() {
     let workspace_before =
         fs::read_to_string(workspace_config_path(&ws_root)).expect("read workspace.yaml");
 
-    let missing_socket = ws_root.join("missing.sock");
+    let (_sock_tmp, socket_path, _socket) =
+        start_world_socket_host_execute("substrate-wdp3-sync-dry-run-");
+    let host_path = std::env::var("PATH").unwrap_or_default();
+    let test_path = format!("{}:{host_path}", fake_world_bin_dir(&fixture).display());
 
     let mut cmd1 = substrate_command_for_home(&fixture);
     cmd1.current_dir(&ws_root)
-        .env("SUBSTRATE_WORLD_SOCKET", &missing_socket)
+        .env("PATH", &test_path)
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
         .env("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE", "manual")
+        .env(
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
+            fake_world_bin_dir(&fixture),
+        )
         .args(["world", "deps", "current", "sync", "--dry-run"]);
     let out1 = cmd1.output().expect("run substrate");
     assert!(
@@ -267,8 +340,13 @@ fn test_current_sync_dry_run_prints_plan_for_effective_enabled_set() {
 
     let mut cmd2 = substrate_command_for_home(&fixture);
     cmd2.current_dir(&ws_root)
-        .env("SUBSTRATE_WORLD_SOCKET", &missing_socket)
+        .env("PATH", &test_path)
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
         .env("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE", "manual")
+        .env(
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
+            fake_world_bin_dir(&fixture),
+        )
         .args(["world", "deps", "current", "sync", "--dry-run"]);
     let out2 = cmd2.output().expect("run substrate (second time)");
     assert!(
