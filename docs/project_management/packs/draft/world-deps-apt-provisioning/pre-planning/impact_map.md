@@ -62,6 +62,7 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - `crates/world-agent/tests/repl_persistent_session_bootstrap_v1.rs`
 - `crates/world-agent/tests/repl_persistent_session_exec_v1.rs`
 - `crates/world-mac-lima/src/forwarding.rs`
+- `crates/world-windows-wsl/src/warm.rs`
 - `crates/world/src/exec.rs`
 - `crates/world/src/overlayfs/layering.rs`
 - `crates/world/src/overlayfs/mod.rs`
