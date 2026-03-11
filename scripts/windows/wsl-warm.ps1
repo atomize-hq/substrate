@@ -54,6 +54,9 @@ if ($env:SUBSTRATE_WINDOWS_CARGO_EXE) {
 if ($env:CARGO -and $env:CARGO.Trim().ToLowerInvariant().EndsWith('cargo.exe')) {
     $cargoCandidates += $env:CARGO
 }
+if ($env:CARGO_HOME) {
+    $cargoCandidates += (Join-Path $env:CARGO_HOME 'bin\cargo.exe')
+}
 if ($env:SUBSTRATE_HOST_USERPROFILE) {
     $cargoCandidates += (Join-Path $env:SUBSTRATE_HOST_USERPROFILE '.cargo\bin\cargo.exe')
 }

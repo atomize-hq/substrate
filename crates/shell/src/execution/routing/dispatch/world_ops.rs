@@ -33,7 +33,7 @@ use world::LinuxLocalBackend;
 #[cfg(target_os = "linux")]
 use world_api::{ResourceLimits, WorldBackend, WorldSpec};
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 const WORLD_PROJECT_DIR_OVERRIDE_ENV: &str = "SUBSTRATE_WORLD_PROJECT_DIR";
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -945,7 +945,7 @@ fn build_agent_client_and_request_impl(
     Ok((client, request, agent_id))
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 fn preserve_world_project_dir_override(env_map: &mut std::collections::HashMap<String, String>) {
     let project_dir = crate::execution::settings::world_root_from_env().path;
     env_map.insert(

@@ -571,7 +571,7 @@ impl WorldAgentService {
                 WorldFsMode::ReadOnly
             };
 
-            let always_isolate = !matches!(req.profile.as_deref(), Some("world-deps-provision"));
+            let always_isolate = should_always_isolate_for_profile(req.profile.as_deref());
 
             let spec = WorldSpec {
                 reuse_session: true,
@@ -684,7 +684,7 @@ impl WorldAgentService {
                 WorldFsMode::ReadOnly
             };
 
-            let always_isolate = !matches!(req.profile.as_deref(), Some("world-deps-provision"));
+            let always_isolate = should_always_isolate_for_profile(req.profile.as_deref());
 
             let spec = WorldSpec {
                 reuse_session: true,
@@ -768,7 +768,7 @@ impl WorldAgentService {
                 WorldFsMode::ReadOnly
             };
 
-            let always_isolate = !matches!(req.profile.as_deref(), Some("world-deps-provision"));
+            let always_isolate = should_always_isolate_for_profile(req.profile.as_deref());
 
             let spec = WorldSpec {
                 reuse_session: true,
@@ -914,7 +914,7 @@ impl WorldAgentService {
                 WorldFsMode::ReadOnly
             };
 
-            let always_isolate = !matches!(req.profile.as_deref(), Some("world-deps-provision"));
+            let always_isolate = should_always_isolate_for_profile(req.profile.as_deref());
 
             let spec = WorldSpec {
                 reuse_session: true,
@@ -1346,10 +1346,15 @@ impl StreamSink for StreamingSink {
 }
 
 fn should_always_isolate(req: &ExecuteRequest) -> bool {
+    should_always_isolate_for_profile(req.profile.as_deref())
+}
+
+fn should_always_isolate_for_profile(profile: Option<&str>) -> bool {
     // `world deps provision` is explicitly intended to mutate guest system packages (apt/dpkg),
-    // which is incompatible with the default cage's write restrictions. Use a request profile to
-    // opt out of `always_isolate` for that explicit provisioning workflow.
-    !matches!(req.profile.as_deref(), Some("world-deps-provision"))
+    // which is incompatible with the default cage's write restrictions. The internal
+    // `world-deps-probe` profile shares that relaxed posture for read-only dpkg-query probes so
+    // fail-early validation still works on runners where unprivileged user namespaces are blocked.
+    !matches!(profile, Some("world-deps-provision" | "world-deps-probe"))
 }
 
 #[derive(Debug, thiserror::Error)]

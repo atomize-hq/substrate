@@ -580,9 +580,10 @@ fn render_apt_requirement_v1(requirement: &AptSpecV1) -> String {
 fn probe_world_apt_requirements_v1(
     requirements: &[AptSpecV1],
 ) -> Result<Vec<AptRequirementProbeStatusV1>> {
-    let out = run_world_command_output_for_deps(
+    let out = run_world_command_output_for_deps_with_profile(
         &build_world_apt_probe_command_v1(requirements),
         Some("/tmp"),
+        Some("world-deps-probe"),
     )
     .map_err(classify_world_backend_error)?;
 
@@ -1018,12 +1019,21 @@ struct WorldCommandOutputV1 {
     stderr: String,
 }
 
+#[allow(dead_code)]
 fn run_world_command_output_for_deps(
     cmd: &str,
     cwd_override: Option<&str>,
 ) -> Result<WorldCommandOutputV1> {
-    let response =
-        run_world_command_for_deps_at(cmd, cwd_override).map_err(classify_world_backend_error)?;
+    run_world_command_output_for_deps_with_profile(cmd, cwd_override, None)
+}
+
+fn run_world_command_output_for_deps_with_profile(
+    cmd: &str,
+    cwd_override: Option<&str>,
+    profile_override: Option<&str>,
+) -> Result<WorldCommandOutputV1> {
+    let response = run_world_command_for_deps_at(cmd, cwd_override, profile_override)
+        .map_err(classify_world_backend_error)?;
     let stdout = BASE64
         .decode(response.stdout_b64.as_bytes())
         .unwrap_or_default();
@@ -1345,8 +1355,8 @@ fn build_world_script_install_command_v1(
 }
 
 fn run_world_command_checked_for_deps(cmd: &str, cwd_override: Option<&str>) -> Result<()> {
-    let response =
-        run_world_command_for_deps_at(cmd, cwd_override).map_err(classify_world_backend_error)?;
+    let response = run_world_command_for_deps_at(cmd, cwd_override, None)
+        .map_err(classify_world_backend_error)?;
 
     if response.exit == 0 {
         return Ok(());
@@ -2770,16 +2780,20 @@ fn build_world_probe_script(checks: &[PackageWorldCheck]) -> String {
 }
 
 fn run_world_command_for_deps(cmd: &str) -> Result<agent_api_types::ExecuteResponse> {
-    run_world_command_for_deps_at(cmd, None)
+    run_world_command_for_deps_at(cmd, None, None)
 }
 
 fn run_world_command_for_deps_at(
     cmd: &str,
     cwd_override: Option<&str>,
+    profile_override: Option<&str>,
 ) -> Result<agent_api_types::ExecuteResponse> {
     let (client, mut request, _) = build_agent_client_and_request(cmd)?;
     // Runtime world-deps execution must not borrow the provisioning request profile.
     request.profile = None;
+    if let Some(profile) = profile_override {
+        request.profile = Some(profile.to_string());
+    }
 
     if let Some(cwd) = cwd_override {
         request.cwd = Some(cwd.to_string());
