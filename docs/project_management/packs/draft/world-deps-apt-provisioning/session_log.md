@@ -163,3 +163,7 @@
 ## END — 2026-03-11T17:43:27Z — test — WDAP1-test
 - HEAD: `bd50c2170f01497db0aa44773faed30641920faf`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/world-deps-apt-provisioning/logs/WDAP1/test/last_message.md`
+
+## START — 2026-03-11T17:43:27Z — integration — WDAP1-integ-core
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/world-deps-apt-provisioning" TASK_ID="WDAP1-integ-core" LAUNCH_CODEX=1`
