@@ -16,6 +16,7 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
 fi
 
 SUBSTRATE_BIN="${SUBSTRATE_BIN:-substrate}"
+HOST_HOME="${HOME:-}"
 
 if [[ "$SUBSTRATE_BIN" == "substrate" ]]; then
   command -v substrate >/dev/null 2>&1 || { echo "FAIL: substrate not found on PATH"; exit 3; }
@@ -57,22 +58,17 @@ require_not_contains() {
 require_exact_stdout() {
   local got_file="$1"
   local expected="$2"
-  local expected_file
-  expected_file="$(mktemp "$tmp_root/expected.stdout.XXXXXX")"
-  printf '%s' "$expected" > "$expected_file"
-
+  local expected_file="$tmp_root/expected.stdout.txt"
+  printf '%s' "$expected" >"$expected_file"
   if ! cmp -s "$got_file" "$expected_file"; then
     echo "FAIL: unexpected stdout content" >&2
     printf 'EXPECTED:\n' >&2
-    cat "$expected_file" >&2
+    cat "$expected_file" >&2 || true
     printf '\nGOT:\n' >&2
-    cat "$got_file" >&2
+    cat "$got_file" >&2 || true
     printf '\n' >&2
-    rm -f "$expected_file"
     return 1
   fi
-
-  rm -f "$expected_file"
 }
 
 require_line_order() {
@@ -106,6 +102,8 @@ run_expect() {
   set -e
 
   local out err
+  RUN_STDOUT_FILE="$stdout_file"
+  RUN_STDERR_FILE="$stderr_file"
   out="$(cat "$stdout_file" 2>/dev/null || true)"
   err="$(cat "$stderr_file" 2>/dev/null || true)"
 
@@ -115,8 +113,6 @@ run_expect() {
     exit 1
   fi
 
-  RUN_STDOUT_FILE="$stdout_file"
-  RUN_STDERR_FILE="$stderr_file"
   RUN_STDOUT="$out"
   RUN_STDERR="$err"
 }
@@ -236,9 +232,16 @@ require_contains "$RUN_STDERR" "2"
 "$SUBSTRATE_BIN" world deps workspace add smoke-hello smoke-apt-a smoke-apt-b >/dev/null
 
 echo "== Preflight: world doctor =="
-if ! "$SUBSTRATE_BIN" world doctor >/dev/null 2>&1; then
+if ! HOME="${HOST_HOME}" USERPROFILE="${HOST_HOME}" "$SUBSTRATE_BIN" world doctor >/dev/null 2>&1; then
   echo "WDAP macos smoke: world backend not healthy; run 'substrate world doctor' remediation and retry" >&2
   exit 4
+fi
+
+if [[ "${SUBSTRATE_SMOKE_SLICE_ID:-}" == "WDAP0" ]]; then
+  echo "== Runtime cases are skipped for WDAP0 (owned by WDAP1) =="
+  popd >/dev/null
+  echo "OK: WDAP macos smoke"
+  exit 0
 fi
 
 echo "== Case D: runtime current sync fails early for APT requirements =="

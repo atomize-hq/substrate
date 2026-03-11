@@ -180,6 +180,12 @@ probe:
     Write-Host "== Preflight: world doctor =="
     $r = Invoke-Substrate -Label "world doctor" -ExpectedExit 0 -Args @("world", "doctor")
 
+    if ($env:SUBSTRATE_SMOKE_SLICE_ID -eq "WDAP0") {
+      Write-Host "== Runtime cases are skipped for WDAP0 (owned by WDAP1) =="
+      Write-Host "OK: WDAP windows smoke"
+      exit 0
+    }
+
     Write-Host "== Case B: runtime current sync fails early for APT requirements =="
     $r = Invoke-Substrate -Label "deps current sync --dry-run" -ExpectedExit 4 -Args @("world", "deps", "current", "sync", "--dry-run")
     Require-LineOrder $r.Stdout "smoke-apt-a" "smoke-apt-b=1"
@@ -204,4 +210,3 @@ probe:
     Remove-Item -Recurse -Force -Path $tmpRoot -ErrorAction SilentlyContinue
   }
 }
-

@@ -165,6 +165,13 @@ if ! "$SUBSTRATE_BIN" world doctor >/dev/null 2>&1; then
   exit 4
 fi
 
+if [[ "${SUBSTRATE_SMOKE_SLICE_ID:-}" == "WDAP0" ]]; then
+  echo "== Runtime cases are skipped for WDAP0 (owned by WDAP1) =="
+  popd >/dev/null
+  echo "OK: WDAP linux smoke"
+  exit 0
+fi
+
 echo "== Case B: runtime current sync fails early for APT requirements =="
 run_expect "deps-sync-dry-run" 4 "$SUBSTRATE_BIN" world deps current sync --dry-run
 require_line_order "$RUN_STDOUT" "smoke-apt-a" "smoke-apt-b=1"
@@ -182,4 +189,3 @@ require_contains "$RUN_STDERR" "substrate world enable --provision-deps"
 popd >/dev/null
 
 echo "OK: WDAP linux smoke"
-
