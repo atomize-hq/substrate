@@ -159,17 +159,17 @@ run_expect "world-enable-provision-dry-run" 4 "$SUBSTRATE_BIN" world enable --pr
 require_contains "$RUN_STDERR" "Substrate will not mutate the host OS"
 require_contains "$RUN_STDERR" "substrate world enable --provision-deps"
 
-echo "== Preflight: world doctor =="
-if ! "$SUBSTRATE_BIN" world doctor --world >/dev/null 2>&1; then
-  echo "WDAP linux smoke: world backend not healthy; run 'substrate world doctor' remediation and retry" >&2
-  exit 4
-fi
-
 if [[ "${SUBSTRATE_SMOKE_SLICE_ID:-}" == "WDAP0" ]]; then
   echo "== Runtime cases are skipped for WDAP0 (owned by WDAP1) =="
   popd >/dev/null
   echo "OK: WDAP linux smoke"
   exit 0
+fi
+
+echo "== Preflight: world doctor =="
+if ! "$SUBSTRATE_BIN" world doctor --world >/dev/null 2>&1; then
+  echo "WDAP linux smoke: world backend not healthy; run 'substrate world doctor' remediation and retry" >&2
+  exit 4
 fi
 
 echo "== Case B: runtime current sync fails early for APT requirements =="

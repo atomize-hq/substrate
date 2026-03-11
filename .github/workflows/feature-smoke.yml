@@ -569,6 +569,7 @@ jobs:
       - name: Run Windows smoke
         shell: pwsh
         env:
+          SUBSTRATE_NO_SHIMS: "1"
           SUBSTRATE_EXE: ${{ github.workspace }}\target\debug\substrate.exe
         run: pwsh -File "${{ inputs.feature_dir }}/smoke/windows-smoke.ps1"
 
@@ -645,6 +646,7 @@ jobs:
         env:
           # Force pipe transport regardless of runner-global environment.
           SUBSTRATE_FORWARDER_TCP: "0"
+          SUBSTRATE_NO_SHIMS: "1"
           SUBSTRATE_EXE: ${{ github.workspace }}\target\debug\substrate.exe
         run: pwsh -File "${{ inputs.feature_dir }}/smoke/windows-smoke.ps1"
 
