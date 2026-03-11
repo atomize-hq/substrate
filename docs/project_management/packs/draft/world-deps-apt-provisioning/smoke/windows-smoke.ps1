@@ -52,8 +52,32 @@ function Invoke-Substrate {
   }
 
   try {
-    & $SubstrateExe @Args 1> $stdout.FullName 2> $stderr.FullName
-    $rc = $LASTEXITCODE
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $SubstrateExe
+    foreach ($arg in $Args) {
+      [void]$psi.ArgumentList.Add($arg)
+    }
+    $psi.WorkingDirectory = (Get-Location).Path
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.UseShellExecute = $false
+
+    foreach ($name in [System.Environment]::GetEnvironmentVariables().Keys) {
+      $stringName = [string]$name
+      $psi.Environment[$stringName] = [string][System.Environment]::GetEnvironmentVariable($stringName)
+    }
+
+    $proc = New-Object System.Diagnostics.Process
+    $proc.StartInfo = $psi
+    if (-not $proc.Start()) {
+      throw "failed to start $SubstrateExe"
+    }
+    $out = $proc.StandardOutput.ReadToEnd()
+    $err = $proc.StandardError.ReadToEnd()
+    $proc.WaitForExit()
+    $rc = $proc.ExitCode
+    Set-Content -Path $stdout.FullName -Value $out -NoNewline
+    Set-Content -Path $stderr.FullName -Value $err -NoNewline
   } finally {
     foreach ($k in $Env.Keys) {
       if ($null -eq $old[$k]) {

@@ -387,7 +387,7 @@ jobs:
             echo "Using user-scoped world-agent socket fallback: ${manual_sock}"
           fi
 
-          if ! bash "${{ inputs.feature_dir }}/smoke/linux-smoke.sh"; then
+          if ! bash "$GITHUB_WORKSPACE/${{ inputs.feature_dir }}/smoke/linux-smoke.sh"; then
             [[ -n "${manual_log}" && -f "${manual_log}" ]] && cat "${manual_log}" >&2
             exit 1
           fi
@@ -578,18 +578,28 @@ jobs:
     if: needs.feature_meta.outputs.run_windows == '1' && inputs.runner_kind == 'self-hosted'
     runs-on: [self-hosted, Windows]
     steps:
-      - name: Checkout repository (override ref)
+      - name: Checkout repository (workflow ref)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Checkout repository (candidate ref)
         if: inputs.checkout_ref != ''
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.checkout_ref }}
           submodules: recursive
+          path: candidate
 
-      - name: Checkout repository
-        if: inputs.checkout_ref == ''
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - name: Select build checkout
+        id: checkout_dir
+        shell: pwsh
+        run: |
+          if (Test-Path (Join-Path $env:GITHUB_WORKSPACE "candidate")) {
+            "dir=candidate" >> $env:GITHUB_OUTPUT
+          } else {
+            "dir=." >> $env:GITHUB_OUTPUT
+          }
 
       - name: Ensure Rust toolchain (self-hosted)
         shell: pwsh
@@ -620,6 +630,7 @@ jobs:
       - name: Run integration checks (Windows self-hosted)
         if: inputs.run_integ_checks
         shell: pwsh
+        working-directory: ${{ steps.checkout_dir.outputs.dir }}
         run: |
           cargo fmt --all -- --check
           cargo clippy --workspace --all-targets -- -D warnings
@@ -635,20 +646,33 @@ jobs:
         run: pwsh -File scripts/windows/wsl-warm.ps1 -DistroName substrate-wsl -ProjectPath (Resolve-Path .)
 
       - name: Build substrate (debug)
+        working-directory: ${{ steps.checkout_dir.outputs.dir }}
         run: cargo build --bin substrate --bin substrate-shim
 
       - name: Add substrate to PATH
         shell: pwsh
-        run: Add-Content -LiteralPath $env:GITHUB_PATH -Value "$pwd\\target\\debug"
+        run: |
+          $dir = "${{ steps.checkout_dir.outputs.dir }}"
+          if ($dir -eq "candidate") {
+            Add-Content -LiteralPath $env:GITHUB_PATH -Value "$env:GITHUB_WORKSPACE\\candidate\\target\\debug"
+          } else {
+            Add-Content -LiteralPath $env:GITHUB_PATH -Value "$env:GITHUB_WORKSPACE\\target\\debug"
+          }
 
       - name: Run Windows smoke
         shell: pwsh
+        working-directory: ${{ steps.checkout_dir.outputs.dir }}
         env:
           # Force pipe transport regardless of runner-global environment.
           SUBSTRATE_FORWARDER_TCP: "0"
           SUBSTRATE_NO_SHIMS: "1"
-          SUBSTRATE_EXE: ${{ github.workspace }}\target\debug\substrate.exe
-        run: pwsh -File "${{ inputs.feature_dir }}/smoke/windows-smoke.ps1"
+        run: |
+          if ("${{ steps.checkout_dir.outputs.dir }}" -eq "candidate") {
+            $env:SUBSTRATE_EXE = "$env:GITHUB_WORKSPACE\\candidate\\target\\debug\\substrate.exe"
+          } else {
+            $env:SUBSTRATE_EXE = "$env:GITHUB_WORKSPACE\\target\\debug\\substrate.exe"
+          }
+          pwsh -File "$env:GITHUB_WORKSPACE\\${{ inputs.feature_dir }}\\smoke\\windows-smoke.ps1"
 
   wsl:
     needs: validate_inputs
