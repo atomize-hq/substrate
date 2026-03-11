@@ -117,6 +117,7 @@ try {
   $env:USERPROFILE = $homeDir
   $env:SUBSTRATE_HOME = $substrateHome
 
+  & $SubstrateExe config global init | Out-Null
   & $SubstrateExe workspace init $ws | Out-Null
 
   @"
