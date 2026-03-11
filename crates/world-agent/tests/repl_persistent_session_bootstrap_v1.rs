@@ -2,6 +2,7 @@
 
 use axum::routing::get;
 use axum::Router;
+use base64::Engine;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -265,6 +266,16 @@ fn looks_like_missing_world_prereqs(frame: &Value) -> bool {
         || message.contains("operation not permitted")
 }
 
+fn legacy_stdout_indicates_missing_world_prereqs(stdout: &str) -> bool {
+    let stdout = stdout.to_ascii_lowercase();
+    let setup_marker =
+        stdout.contains("mount:") || stdout.contains("unshare:") || stdout.contains("mkdir:");
+    let permission_marker = stdout.contains("operation not permitted")
+        || stdout.contains("permission denied")
+        || stdout.contains("wrong fs type");
+    setup_marker && permission_marker
+}
+
 async fn connect_and_start_session_or_skip(
     addr: SocketAddr,
     cwd: &std::path::Path,
@@ -316,12 +327,18 @@ async fn legacy_one_shot_start_remains_accepted() {
     .expect("send start");
 
     let mut saw_stdout = false;
+    let mut stdout_text = String::new();
     let mut exit_code = None;
     for _ in 0..50 {
         let frame = recv_json(&mut ws).await;
         match frame.get("type").and_then(Value::as_str) {
             Some("stdout") => {
                 saw_stdout = true;
+                if let Some(data_b64) = frame.get("data_b64").and_then(Value::as_str) {
+                    if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(data_b64) {
+                        stdout_text.push_str(&String::from_utf8_lossy(&bytes));
+                    }
+                }
             }
             Some("exit") => {
                 exit_code = frame.get("code").and_then(Value::as_i64);
@@ -339,6 +356,16 @@ async fn legacy_one_shot_start_remains_accepted() {
             }
             other => panic!("unexpected server frame type: {other:?} frame={frame}"),
         }
+    }
+
+    let missing_world_prereqs = matches!(exit_code, Some(1 | 32))
+        && legacy_stdout_indicates_missing_world_prereqs(&stdout_text);
+    if missing_world_prereqs {
+        eprintln!(
+            "skipping legacy /v1/stream assertions: world prereqs missing during legacy start: {stdout_text}"
+        );
+        server.abort();
+        return;
     }
 
     assert!(saw_stdout, "expected at least one stdout frame");

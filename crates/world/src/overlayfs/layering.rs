@@ -118,27 +118,34 @@ pub(crate) fn mount_fuse_only(overlay: &mut OverlayFs, lower_dir: &Path) -> Resu
     let bind_lower = overlay.overlay_dir.join("lower");
     std::fs::create_dir_all(&bind_lower)?;
     let _ = umount2(&bind_lower, MntFlags::MNT_DETACH);
-    mount(
+    let fuse_lower = match mount(
         Some(lower_dir),
         &bind_lower,
         None::<&str>,
         MsFlags::MS_BIND,
         None::<&str>,
-    )
-    .with_context(|| {
-        format!(
-            "Failed to bind-mount lower {} -> {}",
-            lower_dir.display(),
-            bind_lower.display()
-        )
-    })?;
-    overlay.bind_lower_dir = Some(bind_lower.clone());
+    ) {
+        Ok(()) => {
+            overlay.bind_lower_dir = Some(bind_lower.clone());
+            bind_lower
+        }
+        Err(err) => {
+            tracing::warn!(
+                target: "world::overlayfs",
+                error = %err,
+                lower = %lower_dir.display(),
+                bind_lower = %bind_lower.display(),
+                "fuse-overlayfs lowerdir bind mount failed; retrying with the original lowerdir"
+            );
+            lower_dir.to_path_buf()
+        }
+    };
 
     let fuse_bin =
         which::which("fuse-overlayfs").context("fuse-overlayfs binary not found in PATH")?;
     let fuse_opts = format!(
         "lowerdir={},upperdir={},workdir={}",
-        bind_lower.display(),
+        fuse_lower.display(),
         overlay.upper_dir.display(),
         overlay.work_dir.display()
     );
@@ -184,27 +191,34 @@ pub(crate) fn mount_fuse_only_read_only(overlay: &mut OverlayFs, lower_dir: &Pat
     let bind_lower = overlay.overlay_dir.join("lower");
     std::fs::create_dir_all(&bind_lower)?;
     let _ = umount2(&bind_lower, MntFlags::MNT_DETACH);
-    mount(
+    let fuse_lower = match mount(
         Some(lower_dir),
         &bind_lower,
         None::<&str>,
         MsFlags::MS_BIND,
         None::<&str>,
-    )
-    .with_context(|| {
-        format!(
-            "Failed to bind-mount lower {} -> {}",
-            lower_dir.display(),
-            bind_lower.display()
-        )
-    })?;
-    overlay.bind_lower_dir = Some(bind_lower.clone());
+    ) {
+        Ok(()) => {
+            overlay.bind_lower_dir = Some(bind_lower.clone());
+            bind_lower
+        }
+        Err(err) => {
+            tracing::warn!(
+                target: "world::overlayfs",
+                error = %err,
+                lower = %lower_dir.display(),
+                bind_lower = %bind_lower.display(),
+                "read-only fuse-overlayfs lowerdir bind mount failed; retrying with the original lowerdir"
+            );
+            lower_dir.to_path_buf()
+        }
+    };
 
     let fuse_bin =
         which::which("fuse-overlayfs").context("fuse-overlayfs binary not found in PATH")?;
     let fuse_opts = format!(
         "lowerdir={},upperdir={},workdir={},ro",
-        bind_lower.display(),
+        fuse_lower.display(),
         overlay.upper_dir.display(),
         overlay.work_dir.display()
     );

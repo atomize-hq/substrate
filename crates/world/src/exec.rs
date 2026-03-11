@@ -2,6 +2,7 @@
 
 use crate::stream::{emit_chunk, StreamKind};
 use anyhow::{anyhow, Context, Result};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::io::Read;
 use std::path::Path;
@@ -76,6 +77,8 @@ pub const PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT: &str = r#"set -eu
 set -f
 
 mount --make-rprivate / 2>/dev/null || mount --make-private / 2>/dev/null || true
+world_deps_host_root="${SUBSTRATE_WORLD_DEPS_HOST_ROOT:-/var/lib/substrate/world-deps}"
+mkdir -p "$world_deps_host_root"
 
 if [ "${SUBSTRATE_WORLD_FS_ISOLATION:-workspace}" = "full" ]; then
   new_root="$(mktemp -d /tmp/substrate-full-isolation.XXXXXX)"
@@ -107,9 +110,8 @@ if [ "${SUBSTRATE_WORLD_FS_ISOLATION:-workspace}" = "full" ]; then
   mount -o remount,bind,ro "$new_root/dev"
 
   # /var/lib/substrate/world-deps: bind-mounted read-write.
-  mkdir -p /var/lib/substrate/world-deps
   mkdir -p "$new_root/var/lib/substrate/world-deps"
-  mount --rbind /var/lib/substrate/world-deps "$new_root/var/lib/substrate/world-deps"
+  mount --rbind "$world_deps_host_root" "$new_root/var/lib/substrate/world-deps"
 
   # Fresh /proc and writable /tmp.
   #
@@ -279,6 +281,9 @@ if [ "${SUBSTRATE_WORLD_FS_ISOLATION:-workspace}" = "full" ]; then
 else
   # ADR-0004: place the overlay mount at the project path via mount --move (not mount --bind).
   mount --move "$SUBSTRATE_MOUNT_MERGED_DIR" "$SUBSTRATE_MOUNT_PROJECT_DIR"
+  mount -t tmpfs tmpfs /var/lib
+  mkdir -p /var/lib/substrate/world-deps
+  mount --rbind "$world_deps_host_root" /var/lib/substrate/world-deps
   if [ "${SUBSTRATE_MOUNT_FS_MODE:-writable}" = "read_only" ]; then
     mount -o remount,bind,ro "$SUBSTRATE_MOUNT_PROJECT_DIR"
   fi
@@ -295,6 +300,29 @@ cd "$SUBSTRATE_MOUNT_CWD"
 if [ -n "${SUBSTRATE_LANDLOCK_HELPER_PATH:-}" ] && [ -x "${SUBSTRATE_LANDLOCK_HELPER_PATH}" ]; then
   exec "$SUBSTRATE_LANDLOCK_HELPER_PATH" "__substrate_world_landlock_exec"
 fi
+if [ "${SUBSTRATE_INNER_LOGIN_SHELL:-0}" = "1" ]; then
+  exec sh -lc "$SUBSTRATE_INNER_CMD"
+else
+  exec sh -c "$SUBSTRATE_INNER_CMD"
+fi
+"#;
+
+pub const WORLD_DEPS_BIND_MOUNT_FALLBACK_SCRIPT: &str = r#"set -eu
+set -f
+
+mount --make-rprivate / 2>/dev/null || mount --make-private / 2>/dev/null || true
+
+mkdir -p "$SUBSTRATE_WORLD_DEPS_HOST_ROOT"
+mount -t tmpfs tmpfs /var/lib
+mkdir -p /var/lib/substrate/world-deps
+mount --rbind "$SUBSTRATE_WORLD_DEPS_HOST_ROOT" /var/lib/substrate/world-deps
+
+mkdir -p "${HOME:-/tmp/substrate-home}" 2>/dev/null || true
+mkdir -p "${XDG_CACHE_HOME:-/tmp/substrate-xdg/cache}" 2>/dev/null || true
+mkdir -p "${XDG_CONFIG_HOME:-/tmp/substrate-xdg/config}" 2>/dev/null || true
+mkdir -p "${XDG_DATA_HOME:-/tmp/substrate-xdg/data}" 2>/dev/null || true
+
+cd "$SUBSTRATE_FALLBACK_CWD"
 if [ "${SUBSTRATE_INNER_LOGIN_SHELL:-0}" = "1" ]; then
   exec sh -lc "$SUBSTRATE_INNER_CMD"
 else
@@ -348,6 +376,12 @@ pub fn execute_shell_command_with_project_bind_mount(
         env_map.insert(
             "SUBSTRATE_MOUNT_CWD".to_string(),
             mount.desired_cwd.display().to_string(),
+        );
+        env_map.insert(
+            "SUBSTRATE_WORLD_DEPS_HOST_ROOT".to_string(),
+            stable_world_deps_fallback_root(mount.project_dir)
+                .display()
+                .to_string(),
         );
         env_map.insert(
             "SUBSTRATE_MOUNT_FS_MODE".to_string(),
@@ -468,12 +502,165 @@ pub fn execute_shell_command_with_project_bind_mount(
             }
         }
 
+        if !isolation_full && mount.fs_mode != WorldFsMode::ReadOnly && !status.success() {
+            if let Ok(stderr_str) = std::str::from_utf8(&stderr_buf) {
+                let trimmed = stderr_str.trim();
+                if trimmed.starts_with("mount:") || trimmed.starts_with("unshare:") {
+                    anyhow::bail!("project bind mount setup failed: {trimmed}");
+                }
+            }
+        }
+
         Ok(Output {
             status,
             stdout: stdout_buf,
             stderr: stderr_buf,
         })
     }
+}
+
+pub fn execute_shell_command_with_world_deps_bind_mount(
+    cmd: &str,
+    cwd: &Path,
+    env: &HashMap<String, String>,
+    login_shell: bool,
+    world_deps_root: &Path,
+    #[allow(unused_variables)] cgroup_path: Option<&Path>,
+) -> Result<Output> {
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = cmd;
+        let _ = cwd;
+        let _ = env;
+        let _ = login_shell;
+        let _ = world_deps_root;
+        Err(anyhow!(
+            "world-deps bind mount fallback is only supported on Linux"
+        ))
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        use nix::unistd::Uid;
+
+        std::fs::create_dir_all(world_deps_root).with_context(|| {
+            format!(
+                "failed to create world-deps fallback root {}",
+                world_deps_root.display()
+            )
+        })?;
+
+        let mut env_map = env.clone();
+        env_map.insert(
+            "SUBSTRATE_WORLD_DEPS_HOST_ROOT".to_string(),
+            world_deps_root.display().to_string(),
+        );
+        env_map.insert(
+            "SUBSTRATE_FALLBACK_CWD".to_string(),
+            cwd.display().to_string(),
+        );
+        env_map.insert("SUBSTRATE_INNER_CMD".to_string(), cmd.to_string());
+        env_map.insert(
+            "SUBSTRATE_INNER_LOGIN_SHELL".to_string(),
+            if login_shell {
+                "1".to_string()
+            } else {
+                "0".to_string()
+            },
+        );
+        env_map
+            .entry("HOME".to_string())
+            .or_insert_with(|| "/tmp/substrate-home".to_string());
+        env_map
+            .entry("XDG_CACHE_HOME".to_string())
+            .or_insert_with(|| "/tmp/substrate-xdg/cache".to_string());
+        env_map
+            .entry("XDG_CONFIG_HOME".to_string())
+            .or_insert_with(|| "/tmp/substrate-xdg/config".to_string());
+        env_map
+            .entry("XDG_DATA_HOME".to_string())
+            .or_insert_with(|| "/tmp/substrate-xdg/data".to_string());
+
+        let mut command = Command::new("unshare");
+        command.arg("--mount");
+        command.arg("--fork");
+        if !Uid::effective().is_root() {
+            command.arg("--user");
+            command.arg("--map-root-user");
+        }
+        command.arg("--");
+        command.arg("sh");
+        command.arg("-c");
+        command.arg(WORLD_DEPS_BIND_MOUNT_FALLBACK_SCRIPT);
+        command.current_dir("/");
+        command.env_clear();
+        command.envs(env_map);
+        command.stdout(Stdio::piped());
+        command.stderr(Stdio::piped());
+
+        let mut child = command
+            .spawn()
+            .with_context(|| format!("Failed to spawn command: {cmd}"))?;
+
+        if let Some(cgroup_path) = cgroup_path {
+            let procs = cgroup_path.join("cgroup.procs");
+            if let Err(err) = std::fs::create_dir_all(cgroup_path)
+                .and_then(|_| std::fs::write(&procs, format!("{}\n", child.id())))
+            {
+                warn!(
+                    error = %err,
+                    path = %procs.display(),
+                    pid = child.id(),
+                    "world: failed to attach fallback command to cgroup"
+                );
+            }
+        }
+
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| anyhow!("Failed to capture stdout pipe"))?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| anyhow!("Failed to capture stderr pipe"))?;
+
+        let stdout_handle = spawn_reader(stdout, StreamKind::Stdout);
+        let stderr_handle = spawn_reader(stderr, StreamKind::Stderr);
+
+        let status = child
+            .wait()
+            .context("Failed to wait for child process completion")?;
+
+        let stdout_buf = join_reader(stdout_handle, "stdout");
+        let stderr_buf = join_reader(stderr_handle, "stderr");
+
+        Ok(Output {
+            status,
+            stdout: stdout_buf,
+            stderr: stderr_buf,
+        })
+    }
+}
+
+pub fn stable_world_deps_fallback_root(project_dir: &Path) -> std::path::PathBuf {
+    let uid = current_uid();
+    let mut hasher = Sha256::new();
+    hasher.update(project_dir.to_string_lossy().as_bytes());
+    let digest = format!("{:x}", hasher.finalize());
+    std::env::temp_dir()
+        .join(format!("substrate-{uid}-world-deps"))
+        .join(digest)
+}
+
+#[cfg(unix)]
+fn current_uid() -> u32 {
+    unsafe { libc::geteuid() as u32 }
+}
+
+#[cfg(not(unix))]
+fn current_uid() -> u32 {
+    0
 }
 
 fn spawn_reader<R>(mut reader: R, kind: StreamKind) -> thread::JoinHandle<Result<Vec<u8>>>
@@ -560,5 +747,134 @@ mod tests {
             !project.path().join("abs_escape.txt").exists(),
             "file should not appear in host project dir"
         );
+    }
+
+    #[test]
+    fn world_deps_bind_mount_fallback_exposes_default_guest_path() {
+        let cwd = tempdir().expect("cwd tempdir");
+        let world_deps_root = tempdir().expect("world-deps tempdir");
+        let env: HashMap<String, String> = HashMap::new();
+        let cmd = r#"mkdir -p /var/lib/substrate/world-deps/bin && printf '#!/bin/sh\nexit 0\n' > /var/lib/substrate/world-deps/bin/probe && chmod +x /var/lib/substrate/world-deps/bin/probe"#;
+
+        let output = match execute_shell_command_with_world_deps_bind_mount(
+            cmd,
+            cwd.path(),
+            &env,
+            false,
+            world_deps_root.path(),
+            None,
+        ) {
+            Ok(output) => output,
+            Err(err) => {
+                let message = err.to_string();
+                if message.contains("Operation not permitted")
+                    || message.contains("EPERM")
+                    || message.contains("unshare")
+                {
+                    println!("Skipping world-deps bind fallback test: {}", message);
+                    return;
+                }
+                panic!(
+                    "unexpected error running world-deps fallback wrapper: {:#}",
+                    err
+                );
+            }
+        };
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if stderr.contains("Operation not permitted")
+                || stderr.contains("EPERM")
+                || stderr.contains("unshare:")
+            {
+                println!("Skipping world-deps bind fallback test: {stderr}");
+                return;
+            }
+        }
+
+        assert!(
+            output.status.success(),
+            "expected world-deps fallback wrapper to succeed, stdout={}, stderr={}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            world_deps_root.path().join("bin/probe").exists(),
+            "expected helper to bind guest world-deps path to fallback root"
+        );
+    }
+
+    #[test]
+    fn stable_world_deps_fallback_root_is_deterministic_per_project() {
+        let project = tempdir().expect("project tempdir");
+        let first = stable_world_deps_fallback_root(project.path());
+        let second = stable_world_deps_fallback_root(project.path());
+        assert_eq!(first, second);
+        assert!(
+            first.starts_with(std::env::temp_dir()),
+            "expected fallback root under temp dir, got {}",
+            first.display()
+        );
+    }
+
+    #[test]
+    fn world_deps_bind_mount_fallback_persists_across_commands() {
+        let project = tempdir().expect("project tempdir");
+        let cwd = tempdir().expect("cwd tempdir");
+        let world_deps_root = stable_world_deps_fallback_root(project.path());
+        let mut env: HashMap<String, String> = HashMap::new();
+        env.insert(
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR".to_string(),
+            "/var/lib/substrate/world-deps/bin".to_string(),
+        );
+        env.insert(
+            "PATH".to_string(),
+            "/var/lib/substrate/world-deps/bin:/usr/bin:/bin".to_string(),
+        );
+
+        let install = execute_shell_command_with_world_deps_bind_mount(
+            r#"mkdir -p /var/lib/substrate/world-deps/bin && printf '#!/bin/sh\necho smoke-hello\n' > /var/lib/substrate/world-deps/bin/smoke-hello && chmod +x /var/lib/substrate/world-deps/bin/smoke-hello"#,
+            cwd.path(),
+            &env,
+            false,
+            &world_deps_root,
+            None,
+        )
+        .expect("install command should run");
+
+        if !install.status.success() {
+            let stderr = String::from_utf8_lossy(&install.stderr);
+            if stderr.contains("Operation not permitted")
+                || stderr.contains("EPERM")
+                || stderr.contains("unshare:")
+            {
+                println!("Skipping persistent world-deps fallback test: {stderr}");
+                return;
+            }
+        }
+        assert!(
+            install.status.success(),
+            "expected install command to succeed, stdout={}, stderr={}",
+            String::from_utf8_lossy(&install.stdout),
+            String::from_utf8_lossy(&install.stderr)
+        );
+
+        let probe = execute_shell_command_with_world_deps_bind_mount(
+            "smoke-hello",
+            cwd.path(),
+            &env,
+            false,
+            &world_deps_root,
+            None,
+        )
+        .expect("probe command should run");
+
+        assert!(
+            probe.status.success(),
+            "expected probe command to succeed, stdout={}, stderr={}",
+            String::from_utf8_lossy(&probe.stdout),
+            String::from_utf8_lossy(&probe.stderr)
+        );
+        assert_eq!(String::from_utf8_lossy(&probe.stdout).trim(), "smoke-hello");
     }
 }
