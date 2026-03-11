@@ -139,3 +139,7 @@
 - Validated HEAD: `83efb8fe2a41faf2608df4fc03bc5816edb23926`
 - Compile parity: `22962676818` (`https://github.com/atomize-hq/substrate/actions/runs/22962676818`)
 - Behavior smoke: `22964186614` (`https://github.com/atomize-hq/substrate/actions/runs/22964186614`)
+
+## START — 2026-03-11T17:31:00Z — integration — WDAP0-integ
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="docs/project_management/packs/draft/world-deps-apt-provisioning" TASK_ID="WDAP0-integ" LAUNCH_CODEX=1`
