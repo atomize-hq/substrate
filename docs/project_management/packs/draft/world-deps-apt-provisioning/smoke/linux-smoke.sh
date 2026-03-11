@@ -91,13 +91,15 @@ run_expect() {
 
 home_dir="$tmp_root/home"
 substrate_home="$tmp_root/substrate-home"
+world_deps_bin="$tmp_root/world-deps-bin"
 ws="$tmp_root/ws"
 
-mkdir -p "$home_dir" "$substrate_home/deps/packages" "$ws"
+mkdir -p "$home_dir" "$substrate_home/deps/packages" "$world_deps_bin" "$ws"
 
 export HOME="$home_dir"
 export USERPROFILE="$home_dir"
 export SUBSTRATE_HOME="$substrate_home"
+export SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR="$world_deps_bin"
 
 "$SUBSTRATE_BIN" workspace init "$ws" >/dev/null
 
@@ -111,12 +113,12 @@ install:
   method: script
   script: |
     set -euo pipefail
-    mkdir -p /var/lib/substrate/world-deps/bin
-    cat > /var/lib/substrate/world-deps/bin/smoke-hello <<'EOF'
+    mkdir -p "${SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR:?missing world deps bin}"
+    cat > "${SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR:?missing world deps bin}/smoke-hello" <<'EOF'
     #!/bin/sh
     echo smoke-hello
     EOF
-    chmod +x /var/lib/substrate/world-deps/bin/smoke-hello
+    chmod +x "${SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR:?missing world deps bin}/smoke-hello"
 probe:
   command: "smoke-hello"
 YAML
