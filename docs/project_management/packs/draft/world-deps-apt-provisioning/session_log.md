@@ -167,3 +167,7 @@
 ## START — 2026-03-11T17:43:27Z — integration — WDAP1-integ-core
 - Dispatch:
   - `make triad-task-start FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/world-deps-apt-provisioning" TASK_ID="WDAP1-integ-core" LAUNCH_CODEX=1`
+
+## END — 2026-03-11T17:57:57Z — integration — WDAP1-integ-core
+- HEAD: `f0ce46505852de5935086ce7cdaa5dbde68cf52e`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/world-deps-apt-provisioning/logs/WDAP1/integ-core/last_message.md`
