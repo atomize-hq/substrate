@@ -75,6 +75,13 @@ $cargoToolchain = $env:RUSTUP_TOOLCHAIN
 if (-not $cargoToolchain -and $env:RUST_TOOLCHAIN) {
     $cargoToolchain = $env:RUST_TOOLCHAIN
 }
+$rustupExe = $null
+if ($cargoExe) {
+    $candidateRustupExe = Join-Path (Split-Path -Parent $cargoExe) 'rustup.exe'
+    if (Test-Path $candidateRustupExe) {
+        $rustupExe = $candidateRustupExe
+    }
+}
 
 # Ensure WSL installed
 $wslStatus = & wsl --status 2>$null
@@ -250,10 +257,15 @@ if ($projectHasCargo) {
         Write-Info "Building substrate-forwarder (release)"
         Push-Location $projectPath
         try {
-            if ($cargoToolchain) {
-                $env:RUSTUP_TOOLCHAIN = $cargoToolchain
+            $forwarderBuildArgs = @('build', '-p', 'substrate-forwarder', '--release')
+            if ($cargoToolchain -and $rustupExe) {
+                & $rustupExe run $cargoToolchain cargo @forwarderBuildArgs
+            } else {
+                if ($cargoToolchain) {
+                    $env:RUSTUP_TOOLCHAIN = $cargoToolchain
+                }
+                & $cargoExe @forwarderBuildArgs
             }
-            & $cargoExe build -p substrate-forwarder --release
         } finally {
             Pop-Location
         }
