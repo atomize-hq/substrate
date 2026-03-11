@@ -477,6 +477,80 @@ fn compute_install_plan_v1(view: &InventoryViewV1, item_names: &[String]) -> Res
     })
 }
 
+pub(crate) fn resolve_enabled_apt_requirements_v1(
+    view: &InventoryViewV1,
+    item_names: &[String],
+) -> Result<Vec<AptSpecV1>> {
+    let package_names = expand_items_to_packages_v1(view, item_names)?;
+    normalize_apt_requirements_v1(view, &package_names)
+}
+
+fn normalize_apt_requirements_v1(
+    view: &InventoryViewV1,
+    package_names: &[String],
+) -> Result<Vec<AptSpecV1>> {
+    let mut grouped: HashMap<String, Vec<String>> = HashMap::new();
+
+    for pkg_name in package_names {
+        let pkg = view.packages.get(pkg_name).ok_or_else(|| {
+            config_model::user_error(format!(
+                "invalid deps inventory: referenced package '{pkg_name}' is not visible for this platform"
+            ))
+        })?;
+        if pkg.install.method != InstallMethodV1::Apt {
+            continue;
+        }
+        for spec in &pkg.install.apt {
+            grouped.entry(spec.name.clone()).or_default().extend(
+                spec.version
+                    .iter()
+                    .map(|value| value.trim().to_string())
+                    .filter(|value| !value.is_empty()),
+            );
+        }
+    }
+
+    let mut names: Vec<String> = grouped.keys().cloned().collect();
+    names.sort();
+
+    let mut conflicts: Vec<(String, Vec<String>)> = Vec::new();
+    let mut normalized: Vec<AptSpecV1> = Vec::with_capacity(names.len());
+
+    for name in names {
+        let mut versions = grouped.remove(&name).unwrap_or_default();
+        versions.sort();
+        versions.dedup();
+        match versions.len() {
+            0 => normalized.push(AptSpecV1 {
+                name,
+                version: None,
+            }),
+            1 => normalized.push(AptSpecV1 {
+                name,
+                version: versions.into_iter().next(),
+            }),
+            _ => conflicts.push((name, versions)),
+        }
+    }
+
+    if conflicts.is_empty() {
+        return Ok(normalized);
+    }
+
+    let mut message = String::from("substrate: conflicting APT requirements for provisioning:\n");
+    for (name, versions) in conflicts {
+        message.push_str(&format!(
+            "  - {name}: {}\n",
+            versions
+                .into_iter()
+                .map(|version| format!("{name}={version}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+    Err(config_model::user_error(message.trim_end().to_string()))
+}
+
 fn apply_install_plan_v1(
     view: &InventoryViewV1,
     plan: &InstallPlanV1,
@@ -512,7 +586,11 @@ fn apply_install_plan_v1(
             .context("failed to reconcile world-deps wrappers")?;
     }
 
-    if !plan.apt.is_empty() {
+    let skip_apt_install = std::env::var("SUBSTRATE_WORLD_DEPS_SKIP_APT")
+        .ok()
+        .is_some_and(|value| value == "1");
+
+    if !plan.apt.is_empty() && !skip_apt_install {
         apply_apt_install_plan_v1(&plan.apt)?;
     }
     apply_apt_entrypoint_wrappers_v1(view, &plan.apt_packages)?;
@@ -2743,7 +2821,7 @@ fn workspace_marker_path(workspace_root: &Path) -> PathBuf {
     workspace_root.join(".substrate").join("workspace.yaml")
 }
 
-pub(super) fn resolve_current_inventory_view(
+pub(crate) fn resolve_current_inventory_view(
     cwd: &std::path::Path,
     cfg: &config_model::SubstrateConfig,
 ) -> Result<InventoryViewV1> {

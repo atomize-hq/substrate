@@ -14,6 +14,7 @@ Scenarios:
   prod-build        Production installer fallback when Linux agent missing (build in Lima).
   dev-build         Dev installer (host cargo stub + in-guest build path).
   sync-deps         Production installer with --sync-deps (world deps current sync wired).
+  sync-deps-remediation  Production installer handles sync exit 4 with remediation guidance.
   cleanup-guidance  Uninstaller cleanup-state guidance on mac hosts.
   all               Run every scenario (default).
 
@@ -328,7 +329,14 @@ prepare_release_bundle() {
   local artifact_dir="${WORK_ROOT}/artifacts-${label}"
   rm -rf "${stage}" "${artifact_dir}"
   mkdir -p "${stage}/bin/linux" "${stage}/scripts/mac" "${stage}/scripts/substrate" "${stage}/config" "${artifact_dir}"
-  cp "${REPO_ROOT}/config/manager_hooks.yaml" "${stage}/config/manager_hooks.yaml"
+  if [[ -f "${REPO_ROOT}/config/manager_hooks.yaml" ]]; then
+    cp "${REPO_ROOT}/config/manager_hooks.yaml" "${stage}/config/manager_hooks.yaml"
+  else
+    cat >"${stage}/config/manager_hooks.yaml" <<'MANIFEST'
+version: 1
+tools: []
+MANIFEST
+  fi
   cp "${REPO_ROOT}/scripts/substrate/world-deps.yaml" "${stage}/scripts/substrate/world-deps.yaml"
   cat >"${stage}/scripts/mac/lima-warm.sh" <<'LIMA'
 #!/usr/bin/env bash
@@ -365,15 +373,19 @@ set -euo pipefail
 if [[ -n "${SUBSTRATE_TEST_SUBSTRATE_LOG:-}" ]]; then
   printf '%s\n' "$*" >>"${SUBSTRATE_TEST_SUBSTRATE_LOG}"
 fi
-if [[ "$1" == "--shim-deploy" ]]; then
-  printf '[fake-substrate] shim deploy\n' >&2
+  if [[ "$1" == "--shim-deploy" ]]; then
+    printf '[fake-substrate] shim deploy\n' >&2
+    exit 0
+  fi
+  if [[ "$1" == "--version" ]]; then
+    printf 'fake\n'
+    exit 0
+  fi
+  if [[ "${SUBSTRATE_TEST_SYNC_DEPS_EXIT_4:-0}" == "1" && "$*" == "world deps current sync" ]]; then
+    printf 'substrate world enable --provision-deps\n' >&2
+    exit 4
+  fi
   exit 0
-fi
-if [[ "$1" == "--version" ]]; then
-  printf 'fake\n'
-  exit 0
-fi
-exit 0
 BIN
   chmod +x "${stage}/bin/substrate"
   printf '%s\n' "${SUBSTRATE_TEST_FILE_SENTINEL:-ELF-STUB}" >"${stage}/bin/linux/substrate"
@@ -507,6 +519,39 @@ run_sync_deps_scenario() {
   info "  substrate log: ${substrate_log}"
 }
 
+run_sync_deps_remediation_scenario() {
+  local label="sync-deps-remediation"
+  info "Running scenario ${label}"
+  setup_workspace "${label}"
+  install_common_stubs
+  local artifact_dir
+  artifact_dir="$(prepare_release_bundle "${label}" 1)"
+  local prefix="${WORK_ROOT}/${label}-prefix"
+  mkdir -p "${prefix}"
+  local log="${WORK_ROOT}/${label}.log"
+  local substrate_log="${WORK_ROOT}/${label}-substrate.log"
+  export SUBSTRATE_TEST_SUBSTRATE_LOG="${substrate_log}"
+  export SUBSTRATE_TEST_SYNC_DEPS_EXIT_4=1
+  if ! "${REPO_ROOT}/scripts/substrate/install-substrate.sh" \
+    --version "${FAKE_VERSION}" \
+    --prefix "${prefix}" \
+    --artifact-dir "${artifact_dir}" \
+    --no-shims \
+    --sync-deps >"${log}" 2>&1; then
+    cat "${log}" >&2 || true
+    fatal "install-substrate failed for ${label}"
+  fi
+  assert_contains "${substrate_log}" "world deps current sync" \
+    "sync-deps remediation should still invoke world deps current sync"
+  assert_contains "${log}" "substrate world enable --provision-deps" \
+    "sync-deps remediation should print the provision-deps remediation"
+  unset SUBSTRATE_TEST_SYNC_DEPS_EXIT_4
+  unset SUBSTRATE_TEST_SUBSTRATE_LOG
+  info "Scenario ${label} complete:"
+  info "  install log: ${log}"
+  info "  substrate log: ${substrate_log}"
+}
+
 run_cleanup_guidance() {
   local label="cleanup-guidance"
   info "Running scenario ${label}"
@@ -557,6 +602,9 @@ run_selected() {
     sync-deps)
       run_sync_deps_scenario
       ;;
+    sync-deps-remediation)
+      run_sync_deps_remediation_scenario
+      ;;
     cleanup-guidance)
       run_cleanup_guidance
       ;;
@@ -565,6 +613,7 @@ run_selected() {
       run_prod_scenario "prod-build" 0
       run_dev_scenario
       run_sync_deps_scenario
+      run_sync_deps_remediation_scenario
       run_cleanup_guidance
       ;;
     *)

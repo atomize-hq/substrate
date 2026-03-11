@@ -499,7 +499,7 @@ fn c4_pty_passthrough_forwards_raw_bytes_and_buffers_structured_events() {
         marker: marker.to_string(),
         bytes: prefix.into_bytes(),
         suffix_bytes: Some(suffix.clone().into_bytes()),
-        delay_before_suffix_ms: Some(1700),
+        delay_before_suffix_ms: Some(3000),
         out_of_band_after_complete: None,
     };
 
@@ -509,23 +509,30 @@ fn c4_pty_passthrough_forwards_raw_bytes_and_buffers_structured_events() {
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
 
-    // Schedule structured agent events that fire while PTY passthrough is active.
-    repl.send_line(":demo-agent");
+    // Schedule structured agent events that fire while PTY passthrough is active. Use
+    // `:demo-burst` here because it prints an acknowledgement synchronously, which gives the
+    // test a deterministic readiness point before we submit the PTY command.
+    repl.send_line(":demo-burst 1 3 1500");
+    repl.wait_for_output(
+        "scheduled burst: agents=1, events_per_agent=3, delay_ms=1500",
+        Duration::from_secs(3),
+    )
+    .expect("demo burst scheduled");
 
     repl.send_line(&format!(":pty echo {marker}"));
-    repl.wait_for_output(&format!("BEGIN {marker}"), Duration::from_secs(3))
+    repl.wait_for_output(&format!("BEGIN {marker}"), Duration::from_secs(8))
         .expect("pty prefix");
 
     // While PTY passthrough is active, typed Ctrl+C must be forwarded as byte 0x03 (not as a signal).
     repl.send_bytes(b"x");
     repl.send_bytes(&[0x03]);
 
-    repl.wait_for_output(&format!("END {marker}"), Duration::from_secs(5))
+    repl.wait_for_output(&format!("END {marker}"), Duration::from_secs(8))
         .expect("pty suffix");
 
     // Structured agent output should be buffered during passthrough and appear after the PTY command ends.
-    repl.wait_for_output("Demo agent event #1", Duration::from_secs(3))
-        .expect("demo event");
+    repl.wait_for_output("chunk #00001", Duration::from_secs(5))
+        .expect("burst event");
 
     // Give any additional buffered output a moment to flush, then exit.
     std::thread::sleep(Duration::from_millis(150));
@@ -536,10 +543,10 @@ fn c4_pty_passthrough_forwards_raw_bytes_and_buffers_structured_events() {
 
     let end_idx =
         find_substring(&out, &format!("END {marker}")).expect("expected END marker in output");
-    let ev1 = find_substring(&out, "Demo agent event #1");
+    let ev1 = find_substring(&out, "chunk #00001");
     assert!(
         ev1.is_some(),
-        "expected demo event to appear somewhere in output (buffered or not); output:\n{out}"
+        "expected burst event to appear somewhere in output (buffered or not); output:\n{out}"
     );
 
     // C4 contract: during PTY passthrough, structured host output SHOULD be buffered and rendered

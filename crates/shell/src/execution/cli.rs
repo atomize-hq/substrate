@@ -549,6 +549,9 @@ pub struct WorldEnableArgs {
     /// Provisioning profile label passed to the helper script
     #[arg(long = "profile", value_name = "NAME", default_value = "release")]
     pub profile: String,
+    /// Provision APT-backed world deps during world enable instead of at runtime.
+    #[arg(long = "provision-deps")]
+    pub provision_deps: bool,
     /// Show provisioning actions without executing them
     #[arg(long = "dry-run")]
     pub dry_run: bool,

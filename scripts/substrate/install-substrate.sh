@@ -1566,7 +1566,14 @@ sync_world_deps() {
   fi
 
   log "Syncing world dependencies via 'substrate world deps current sync'..."
+  local rc=0
   if ! "${substrate_bin}" world deps current sync; then
+    rc=$?
+  fi
+  if [[ "${rc}" -ne 0 ]]; then
+    if [[ "${rc}" -eq 4 ]]; then
+      warn "world deps sync requires provisioning-time system packages; run 'substrate world enable --provision-deps'."
+    fi
     warn "world deps sync failed; run 'substrate world deps current sync' later to finish provisioning."
   fi
   print_world_deps_summary "${substrate_bin}"
