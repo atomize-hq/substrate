@@ -235,18 +235,25 @@ pub async fn execute_with_world_backends(
         agent_socket = None;
     }
 
-    if let Some(result) = try_world_backend(state, &project_dir, verbose).await? {
-        record_replay_strategy(
-            state,
-            "world-backend",
-            agent_socket.as_deref(),
-            agent_fallback_reason.as_deref(),
-            json!({
-                "project_dir": project_dir.display().to_string(),
-                "backend": "world-api"
-            }),
-        );
-        return Ok(result);
+    #[cfg(target_os = "linux")]
+    let try_local_world_backend = agent_fallback_reason.is_none();
+    #[cfg(not(target_os = "linux"))]
+    let try_local_world_backend = true;
+
+    if try_local_world_backend {
+        if let Some(result) = try_world_backend(state, &project_dir, verbose).await? {
+            record_replay_strategy(
+                state,
+                "world-backend",
+                agent_socket.as_deref(),
+                agent_fallback_reason.as_deref(),
+                json!({
+                    "project_dir": project_dir.display().to_string(),
+                    "backend": "world-api"
+                }),
+            );
+            return Ok(result);
+        }
     }
 
     #[cfg(target_os = "linux")]
@@ -341,6 +348,7 @@ pub fn execute_on_linux(
     let world_id = &state.span_id;
     let bash_cmd = format!("bash -lc '{}'", state.raw_cmd.replace("'", "'\\''"));
     let start = std::time::Instant::now();
+    let prefer_copydiff = agent_fallback_reason.is_some();
 
     let mut cgroup_mgr = world::cgroups::CgroupManager::new(world_id);
     let mut cgroup_active = false;
@@ -560,7 +568,7 @@ pub fn execute_on_linux(
         }
     }
 
-    if overlay_kernel_ok {
+    if overlay_kernel_ok && !prefer_copydiff {
         let mut ovl = overlayfs::OverlayFs::new(world_id)?;
         ovl.mount(project_dir)?;
         let (output, fs_diff, using_fuse, upper_entries) = run_in_overlay(
@@ -616,7 +624,7 @@ pub fn execute_on_linux(
         .status()
         .map(|s| s.success())
         .unwrap_or(false);
-    if fuse_dev && fuse_bin_ok {
+    if fuse_dev && fuse_bin_ok && !prefer_copydiff {
         let mut ovl = overlayfs::OverlayFs::new(world_id)?;
         if let Ok(_m) = ovl.mount_fuse_only(project_dir) {
             let (output, fs_diff, using_fuse, upper_entries) = run_in_overlay(
