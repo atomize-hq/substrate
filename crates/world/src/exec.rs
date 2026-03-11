@@ -456,11 +456,8 @@ pub fn execute_shell_command_with_project_bind_mount(
         }
 
         if !isolation_full && mount.fs_mode != WorldFsMode::ReadOnly && !status.success() {
-            if let Ok(stderr_str) = std::str::from_utf8(&stderr_buf) {
-                let trimmed = stderr_str.trim();
-                if trimmed.starts_with("mount:") || trimmed.starts_with("unshare:") {
-                    anyhow::bail!("project bind mount setup failed: {trimmed}");
-                }
+            if let Some(trimmed) = mount_namespace_setup_failure(&stderr_buf) {
+                anyhow::bail!("project bind mount setup failed: {trimmed}");
             }
         }
 
@@ -526,6 +523,16 @@ fn project_bind_mount_env_map(
     }
 
     env_map
+}
+
+fn mount_namespace_setup_failure(stderr: &[u8]) -> Option<&str> {
+    let stderr_str = std::str::from_utf8(stderr).ok()?;
+    let trimmed = stderr_str.trim();
+    if trimmed.starts_with("mount:") || trimmed.starts_with("unshare:") {
+        Some(trimmed)
+    } else {
+        None
+    }
 }
 
 pub fn execute_shell_command_with_world_deps_bind_mount(
@@ -643,6 +650,12 @@ pub fn execute_shell_command_with_world_deps_bind_mount(
 
         let stdout_buf = join_reader(stdout_handle, "stdout");
         let stderr_buf = join_reader(stderr_handle, "stderr");
+
+        if !status.success() {
+            if let Some(trimmed) = mount_namespace_setup_failure(&stderr_buf) {
+                anyhow::bail!("world-deps bind mount fallback setup failed: {trimmed}");
+            }
+        }
 
         Ok(Output {
             status,
@@ -802,6 +815,32 @@ mod tests {
         assert!(
             !env_map.contains_key("SUBSTRATE_WORLD_DEPS_HOST_ROOT"),
             "expected primary bind mount env setup to rely on the shared script default world-deps root"
+        );
+    }
+
+    #[test]
+    fn mount_namespace_setup_failure_matches_unshare_errors() {
+        assert_eq!(
+            mount_namespace_setup_failure(b"unshare: unshare failed: Operation not permitted\n"),
+            Some("unshare: unshare failed: Operation not permitted")
+        );
+    }
+
+    #[test]
+    fn mount_namespace_setup_failure_matches_mount_errors() {
+        assert_eq!(
+            mount_namespace_setup_failure(
+                b"mount: /tmp/foo: wrong fs type, bad option, bad superblock\n"
+            ),
+            Some("mount: /tmp/foo: wrong fs type, bad option, bad superblock")
+        );
+    }
+
+    #[test]
+    fn mount_namespace_setup_failure_ignores_command_failures() {
+        assert_eq!(
+            mount_namespace_setup_failure(b"sh: smoke-hello: not found\n"),
+            None
         );
     }
 
