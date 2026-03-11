@@ -138,7 +138,7 @@ Provisioning-time APT is owned by:
 - `substrate world enable --provision-deps`
 
 Contract source:
-- `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`
+- `docs/reference/world/deps/README.md`
 
 Implementation lives in:
 - runtime preflight/probe: `crates/shell/src/builtins/world_deps/surfaces.rs`

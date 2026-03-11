@@ -209,7 +209,7 @@ snippet (plus a `.bak` backup) to `~/.substrate_bashenv`.
 | `--prefix <path>` | Override the installation prefix (default: `~/.substrate`) |
 | `--no-world` | Skip provisioning the world backend (use `substrate world enable` later) |
 | `--no-shims` | Skip shim deployment (useful for CI images) |
-| `--sync-deps` | Run `substrate world deps current sync` after provisioning completes (applies the enabled deps list into the world) |
+| `--sync-deps` | Run `substrate world deps current sync` after provisioning completes (best-effort; applies the enabled deps list into the world and may remediate APT-backed misses to `substrate world enable --provision-deps`) |
 | `--dry-run` | Print all actions without executing them |
 | `--archive <path>` | Install from a local tarball instead of downloading |
 

@@ -195,7 +195,7 @@ Notes
   run with the expected world-agent behavior. Runtime `substrate world deps current ...` commands do
   not use that provisioning profile and never perform runtime APT mutation.
 - Provisioning-time APT and runtime fail-early details live in:
-  `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`
+  `docs/reference/world/deps/README.md`
 
 ---
 

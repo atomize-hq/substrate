@@ -75,9 +75,33 @@ Operator workflow:
 - Run `substrate world enable --provision-deps` before runtime `world deps current ...` commands.
 - On Linux host-native, Substrate will not mutate the host OS at runtime.
 - On Windows, provisioning-time APT is unsupported on Windows.
+- Runtime `current sync` and `current install` exit `4` when required APT packages are missing.
+- Missing-package remediation includes `substrate world enable --provision-deps`.
 
-Contract source:
-- `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`
+### Provisioning contract
+
+`substrate world enable --provision-deps` is the only operator-facing Substrate workflow that performs
+APT package mutation for world deps, and only on supported guest backends.
+
+Behavior:
+- Supported on guest-backed worlds such as macOS Lima.
+- Unsupported on Linux host-native; Substrate must not mutate the host OS.
+- Unsupported on Windows.
+- Uses the effective enabled world-deps set for the current directory.
+- `--dry-run` prints the derived APT requirement set without mutating the world.
+- `--verbose` additionally shows the provisioning request posture used for the world-agent call.
+
+### Runtime contract
+
+For APT-backed items, `substrate world deps current sync` and `substrate world deps current install`
+remain probe-only at runtime.
+
+Behavior:
+- They derive the in-scope APT requirement set and probe it read-only with `dpkg-query`.
+- If any required APT package is missing, they fail early with exit `4`.
+- If all required APT packages are already present, APT-backed items are treated as satisfied/no-op and
+  Substrate continues with non-APT work.
+- Runtime execution never invokes `apt`, `apt-get`, or mutating `dpkg`.
 
 Internal details and rationale:
 - `docs/internals/world/deps.md`
