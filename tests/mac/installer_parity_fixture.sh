@@ -15,6 +15,7 @@ Scenarios:
   dev-build         Dev installer (host cargo stub + in-guest build path).
   sync-deps         Production installer with --sync-deps (world deps current sync wired).
   sync-deps-remediation  Production installer handles sync exit 4 with remediation guidance.
+  sync-deps-generic-failure  Production installer handles non-4 sync failures with a generic warning only.
   cleanup-guidance  Uninstaller cleanup-state guidance on mac hosts.
   all               Run every scenario (default).
 
@@ -381,9 +382,19 @@ fi
     printf 'fake\n'
     exit 0
   fi
-  if [[ "${SUBSTRATE_TEST_SYNC_DEPS_EXIT_4:-0}" == "1" && "$*" == "world deps current sync" ]]; then
-    printf 'substrate world enable --provision-deps\n' >&2
-    exit 4
+  if [[ "$*" == "world deps current sync" ]]; then
+    sync_deps_exit_code="${SUBSTRATE_TEST_SYNC_DEPS_EXIT_CODE:-0}"
+    if [[ "${SUBSTRATE_TEST_SYNC_DEPS_EXIT_4:-0}" == "1" ]]; then
+      sync_deps_exit_code=4
+    fi
+    if [[ "${sync_deps_exit_code}" != "0" ]]; then
+      if [[ "${sync_deps_exit_code}" == "4" ]]; then
+        printf 'substrate world enable --provision-deps\n' >&2
+      else
+        printf 'sync failed\n' >&2
+      fi
+      exit "${sync_deps_exit_code}"
+    fi
   fi
   exit 0
 BIN
@@ -545,7 +556,44 @@ run_sync_deps_remediation_scenario() {
     "sync-deps remediation should still invoke world deps current sync"
   assert_contains "${log}" "substrate world enable --provision-deps" \
     "sync-deps remediation should print the provision-deps remediation"
+  assert_contains "${log}" "world deps sync failed; run 'substrate world deps current sync' later to finish provisioning." \
+    "sync-deps remediation should still print the generic follow-up warning"
   unset SUBSTRATE_TEST_SYNC_DEPS_EXIT_4
+  unset SUBSTRATE_TEST_SUBSTRATE_LOG
+  info "Scenario ${label} complete:"
+  info "  install log: ${log}"
+  info "  substrate log: ${substrate_log}"
+}
+
+run_sync_deps_generic_failure_scenario() {
+  local label="sync-deps-generic-failure"
+  info "Running scenario ${label}"
+  setup_workspace "${label}"
+  install_common_stubs
+  local artifact_dir
+  artifact_dir="$(prepare_release_bundle "${label}" 1)"
+  local prefix="${WORK_ROOT}/${label}-prefix"
+  mkdir -p "${prefix}"
+  local log="${WORK_ROOT}/${label}.log"
+  local substrate_log="${WORK_ROOT}/${label}-substrate.log"
+  export SUBSTRATE_TEST_SUBSTRATE_LOG="${substrate_log}"
+  export SUBSTRATE_TEST_SYNC_DEPS_EXIT_CODE=7
+  if ! "${REPO_ROOT}/scripts/substrate/install-substrate.sh" \
+    --version "${FAKE_VERSION}" \
+    --prefix "${prefix}" \
+    --artifact-dir "${artifact_dir}" \
+    --no-shims \
+    --sync-deps >"${log}" 2>&1; then
+    cat "${log}" >&2 || true
+    fatal "install-substrate failed for ${label}"
+  fi
+  assert_contains "${substrate_log}" "world deps current sync" \
+    "sync-deps generic failure should still invoke world deps current sync"
+  assert_contains "${log}" "world deps sync failed; run 'substrate world deps current sync' later to finish provisioning." \
+    "sync-deps generic failure should print the generic follow-up warning"
+  assert_not_contains "${log}" "substrate world enable --provision-deps" \
+    "sync-deps generic failure should not print the exit-4 remediation"
+  unset SUBSTRATE_TEST_SYNC_DEPS_EXIT_CODE
   unset SUBSTRATE_TEST_SUBSTRATE_LOG
   info "Scenario ${label} complete:"
   info "  install log: ${log}"
@@ -605,6 +653,9 @@ run_selected() {
     sync-deps-remediation)
       run_sync_deps_remediation_scenario
       ;;
+    sync-deps-generic-failure)
+      run_sync_deps_generic_failure_scenario
+      ;;
     cleanup-guidance)
       run_cleanup_guidance
       ;;
@@ -614,6 +665,7 @@ run_selected() {
       run_dev_scenario
       run_sync_deps_scenario
       run_sync_deps_remediation_scenario
+      run_sync_deps_generic_failure_scenario
       run_cleanup_guidance
       ;;
     *)

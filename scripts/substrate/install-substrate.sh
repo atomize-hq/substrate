@@ -1567,7 +1567,9 @@ sync_world_deps() {
 
   log "Syncing world dependencies via 'substrate world deps current sync'..."
   local rc=0
-  if ! "${substrate_bin}" world deps current sync; then
+  if "${substrate_bin}" world deps current sync; then
+    rc=0
+  else
     rc=$?
   fi
   if [[ "${rc}" -ne 0 ]]; then
