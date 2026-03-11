@@ -55,13 +55,24 @@ require_not_contains() {
 }
 
 require_exact_stdout() {
-  local got="$1"
+  local got_file="$1"
   local expected="$2"
-  if [[ "$got" != "$expected" ]]; then
+  local expected_file
+  expected_file="$(mktemp "$tmp_root/expected.stdout.XXXXXX")"
+  printf '%s' "$expected" > "$expected_file"
+
+  if ! cmp -s "$got_file" "$expected_file"; then
     echo "FAIL: unexpected stdout content" >&2
-    printf 'EXPECTED:\n%s\nGOT:\n%s\n' "$expected" "$got" >&2
+    printf 'EXPECTED:\n' >&2
+    cat "$expected_file" >&2
+    printf '\nGOT:\n' >&2
+    cat "$got_file" >&2
+    printf '\n' >&2
+    rm -f "$expected_file"
     return 1
   fi
+
+  rm -f "$expected_file"
 }
 
 require_line_order() {
@@ -104,6 +115,8 @@ run_expect() {
     exit 1
   fi
 
+  RUN_STDOUT_FILE="$stdout_file"
+  RUN_STDERR_FILE="$stderr_file"
   RUN_STDOUT="$out"
   RUN_STDERR="$err"
 }
@@ -204,7 +217,7 @@ pushd "$ws" >/dev/null
 echo "== Case A: provisioning dry-run prints normalized APT requirement set =="
 run_expect "world-enable-provision-dry-run" 0 "$SUBSTRATE_BIN" world enable --provision-deps --dry-run
 expected_stdout=$'smoke-apt-a\nsmoke-apt-b=1\n'
-require_exact_stdout "$RUN_STDOUT" "$expected_stdout"
+require_exact_stdout "$RUN_STDOUT_FILE" "$expected_stdout"
 
 echo "== Case B: provisioning ignores SUBSTRATE_WORLD_REQUEST_PROFILE =="
 run_expect "world-enable-provision-dry-run-verbose" 0 env SUBSTRATE_WORLD_REQUEST_PROFILE="wdap-smoke-profile" "$SUBSTRATE_BIN" world enable --provision-deps --dry-run --verbose
@@ -244,4 +257,3 @@ require_contains "$RUN_STDERR" "substrate world enable --provision-deps"
 popd >/dev/null
 
 echo "OK: WDAP macos smoke"
-
