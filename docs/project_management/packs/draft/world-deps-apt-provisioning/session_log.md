@@ -86,3 +86,17 @@
 ## START — 2026-03-10T23:33:02Z — checkpoint — CP1-ci-checkpoint
 - Dispatch:
   - Resume-safe wrapper checkpoint bookkeeping on orchestration checkout for `WDAP0` validating `CHECKOUT_SHA=8d1f1a3aa4d227fca390bac1301807d424a51435`
+- Checkpoint evidence:
+  - Compile parity run `22929114889` → `PASS` (`https://github.com/atomize-hq/substrate/actions/runs/22929114889`)
+  - Behavior smoke run `22929212356` → `CANCELLED` after `linux_self_hosted` failed preflight (`/run/substrate.sock` missing), `macos_self_hosted` failed on the smoke harness newline-comparison bug, and `windows_self_hosted` remained queued
+  - Behavior smoke run `22931331235` (workflow ref `world-deps-apt-provisioning-wdap0-integ-macos`) → `CANCELLED` after `macos_self_hosted` passed and `linux_self_hosted` failed because `sudo -n` was unavailable on the Linux runner, preventing `scripts/linux/world-provision.sh --profile release --skip-build --sudo-noninteractive`
+  - Hosted Windows smoke runs `22932886416`, `22933186355`, and `22933497530` were operator-authorized exploratory reruns on GitHub-hosted Windows and all failed inside `docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/windows-smoke.ps1`
+
+## END — 2026-03-11T02:28:44Z — integration — WDAP0-integ-macos
+- HEAD: `83efb8fe2a41faf2608df4fc03bc5816edb23926`
+- Validation:
+  - Local macOS smoke preflight with `SUBSTRATE_SMOKE_SLICE_ID=WDAP0` → `PASS`
+  - `macos_self_hosted` in run `22931331235` → `PASS` (`https://github.com/atomize-hq/substrate/actions/runs/22931331235/job/66553365246`)
+- Branch/worktree:
+  - Branch: `world-deps-apt-provisioning-wdap0-integ-macos`
+  - Worktree: `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/wt/world-deps-apt-provisioning-wdap0-integ-macos`
