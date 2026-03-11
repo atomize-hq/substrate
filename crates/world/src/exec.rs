@@ -77,6 +77,8 @@ pub const PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT: &str = r#"set -eu
 set -f
 
 mount --make-rprivate / 2>/dev/null || mount --make-private / 2>/dev/null || true
+world_deps_host_root="${SUBSTRATE_WORLD_DEPS_HOST_ROOT:-/var/lib/substrate/world-deps}"
+mkdir -p "$world_deps_host_root"
 
 if [ "${SUBSTRATE_WORLD_FS_ISOLATION:-workspace}" = "full" ]; then
   new_root="$(mktemp -d /tmp/substrate-full-isolation.XXXXXX)"
@@ -108,9 +110,8 @@ if [ "${SUBSTRATE_WORLD_FS_ISOLATION:-workspace}" = "full" ]; then
   mount -o remount,bind,ro "$new_root/dev"
 
   # /var/lib/substrate/world-deps: bind-mounted read-write.
-  mkdir -p /var/lib/substrate/world-deps
   mkdir -p "$new_root/var/lib/substrate/world-deps"
-  mount --rbind /var/lib/substrate/world-deps "$new_root/var/lib/substrate/world-deps"
+  mount --rbind "$world_deps_host_root" "$new_root/var/lib/substrate/world-deps"
 
   # Fresh /proc and writable /tmp.
   #
@@ -280,6 +281,9 @@ if [ "${SUBSTRATE_WORLD_FS_ISOLATION:-workspace}" = "full" ]; then
 else
   # ADR-0004: place the overlay mount at the project path via mount --move (not mount --bind).
   mount --move "$SUBSTRATE_MOUNT_MERGED_DIR" "$SUBSTRATE_MOUNT_PROJECT_DIR"
+  mount -t tmpfs tmpfs /var/lib
+  mkdir -p /var/lib/substrate/world-deps
+  mount --rbind "$world_deps_host_root" /var/lib/substrate/world-deps
   if [ "${SUBSTRATE_MOUNT_FS_MODE:-writable}" = "read_only" ]; then
     mount -o remount,bind,ro "$SUBSTRATE_MOUNT_PROJECT_DIR"
   fi
@@ -372,6 +376,12 @@ pub fn execute_shell_command_with_project_bind_mount(
         env_map.insert(
             "SUBSTRATE_MOUNT_CWD".to_string(),
             mount.desired_cwd.display().to_string(),
+        );
+        env_map.insert(
+            "SUBSTRATE_WORLD_DEPS_HOST_ROOT".to_string(),
+            stable_world_deps_fallback_root(mount.project_dir)
+                .display()
+                .to_string(),
         );
         env_map.insert(
             "SUBSTRATE_MOUNT_FS_MODE".to_string(),
