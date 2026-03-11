@@ -725,6 +725,8 @@ jobs:
           SUBSTRATE_FORWARDER_TCP: "0"
           SUBSTRATE_NO_SHIMS: "1"
         run: |
+          $cargoCmd = Get-Command cargo -ErrorAction Stop
+          $env:SUBSTRATE_WINDOWS_CARGO_EXE = $cargoCmd.Path
           if ("${{ steps.checkout_dir.outputs.dir }}" -eq "candidate") {
             $env:SUBSTRATE_EXE = "$env:GITHUB_WORKSPACE\\candidate\\target\\debug\\substrate.exe"
           } else {
