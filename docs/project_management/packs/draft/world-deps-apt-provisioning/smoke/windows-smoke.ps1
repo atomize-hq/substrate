@@ -112,6 +112,8 @@ function Require-LineOrder([string]$Text, [string]$First, [string]$Second) {
 
 $tmpRoot = if ($env:SUBSTRATE_SMOKE_ROOT -and $env:SUBSTRATE_SMOKE_ROOT.Trim() -ne "") { $env:SUBSTRATE_SMOKE_ROOT } else { New-TempDir "wdap-smoke" }
 $keep = ($env:SUBSTRATE_SMOKE_KEEP -and $env:SUBSTRATE_SMOKE_KEEP.Trim() -eq "1")
+$hostHome = $env:HOME
+$hostUserProfile = $env:USERPROFILE
 
 try {
   $homeDir = Join-Path $tmpRoot "home"
@@ -123,6 +125,12 @@ try {
   $env:HOME = $homeDir
   $env:USERPROFILE = $homeDir
   $env:SUBSTRATE_HOME = $substrateHome
+  if ($hostHome -and $hostHome.Trim() -ne "") {
+    $env:SUBSTRATE_HOST_HOME = $hostHome
+  }
+  if ($hostUserProfile -and $hostUserProfile.Trim() -ne "") {
+    $env:SUBSTRATE_HOST_USERPROFILE = $hostUserProfile
+  }
 
   & $SubstrateExe config global init | Out-Null
   & $SubstrateExe workspace init $ws | Out-Null
@@ -201,7 +209,7 @@ probe:
     Require-Contains $r.Stderr "unsupported on Windows"
 
     Write-Host "== Case C: current install explicit args do not add enabled items implicitly =="
-    $r = Invoke-Substrate -Label "deps current install smoke-hello" -ExpectedExit 0 -Args @("world", "deps", "current", "install", "smoke-hello")
+    $r = Invoke-Substrate -Label "deps current install smoke-hello" -ExpectedExit 0 -CliArgs @("world", "deps", "current", "install", "smoke-hello")
 
     Write-Host "== Case D: current install fails early for explicit APT-backed items =="
     $r = Invoke-Substrate -Label "deps current install smoke-apt-a --dry-run" -ExpectedExit 4 -CliArgs @("world", "deps", "current", "install", "smoke-apt-a", "--dry-run")
