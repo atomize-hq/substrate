@@ -183,6 +183,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y jq ripgrep pkg-config libseccomp-dev
 
+      - name: Enable unprivileged user namespaces
+        run: |
+          sudo sysctl -w kernel.unprivileged_userns_clone=1
+          sudo sysctl -w user.max_user_namespaces=28633 || true
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
