@@ -2789,8 +2789,10 @@ fn run_world_command_for_deps_at(
     profile_override: Option<&str>,
 ) -> Result<agent_api_types::ExecuteResponse> {
     let (client, mut request, _) = build_agent_client_and_request(cmd)?;
-    // Runtime world-deps execution must not borrow the provisioning request profile.
-    request.profile = None;
+    // Runtime world-deps execution uses a dedicated internal profile so read-only probes and
+    // world-deps wrapper installs can run on runners that block unprivileged user namespaces,
+    // without borrowing the operator-facing provisioning profile.
+    request.profile = Some("world-deps-probe".to_string());
     if let Some(profile) = profile_override {
         request.profile = Some(profile.to_string());
     }
