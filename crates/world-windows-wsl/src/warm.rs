@@ -65,14 +65,23 @@ impl WarmCmd {
             "running wsl warm script"
         );
 
-        let output = Command::new("pwsh")
+        let mut command = Command::new("pwsh");
+        command
             .arg("-NoLogo")
             .arg("-File")
             .arg(script)
             .arg("-DistroName")
             .arg(&self.distro)
             .arg("-ProjectPath")
-            .arg(&self.project_path)
+            .arg(&self.project_path);
+
+        if std::env::var_os("SUBSTRATE_WINDOWS_CARGO_EXE").is_none() {
+            if let Some(cargo_exe) = resolve_windows_cargo_exe_from_host_env() {
+                command.env("SUBSTRATE_WINDOWS_CARGO_EXE", cargo_exe);
+            }
+        }
+
+        let output = command
             .output()
             .context("failed to spawn pwsh for warm script")?;
 
@@ -98,4 +107,41 @@ impl WarmCmd {
             ))
         }
     }
+}
+
+fn resolve_windows_cargo_exe_from_host_env() -> Option<PathBuf> {
+    fn existing_path(candidate: Option<std::ffi::OsString>) -> Option<PathBuf> {
+        let path = candidate.map(PathBuf::from)?;
+        path.is_file().then_some(path)
+    }
+
+    existing_path(std::env::var_os("CARGO").filter(|value| {
+        value
+            .to_string_lossy()
+            .to_ascii_lowercase()
+            .ends_with("cargo.exe")
+    }))
+    .or_else(|| {
+        existing_path(std::env::var_os("CARGO_HOME").map(|home| {
+            PathBuf::from(home).join("bin").join("cargo.exe").into_os_string()
+        }))
+    })
+    .or_else(|| {
+        existing_path(std::env::var_os("SUBSTRATE_HOST_USERPROFILE").map(|home| {
+            PathBuf::from(home)
+                .join(".cargo")
+                .join("bin")
+                .join("cargo.exe")
+                .into_os_string()
+        }))
+    })
+    .or_else(|| {
+        existing_path(std::env::var_os("USERPROFILE").map(|home| {
+            PathBuf::from(home)
+                .join(".cargo")
+                .join("bin")
+                .join("cargo.exe")
+                .into_os_string()
+        }))
+    })
 }
