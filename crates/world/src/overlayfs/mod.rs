@@ -616,7 +616,7 @@ pub fn execute_with_overlay(
             }
             let target_dir = merged_dir.join(&rel);
             let fallback_world_deps_root =
-                std::env::temp_dir().join(format!("substrate-world-deps-{world_id}"));
+                crate::exec::stable_world_deps_fallback_root(project_dir);
             match crate::exec::execute_shell_command_with_world_deps_bind_mount(
                 &command_to_run,
                 &target_dir,

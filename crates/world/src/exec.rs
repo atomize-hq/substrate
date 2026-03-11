@@ -2,6 +2,7 @@
 
 use crate::stream::{emit_chunk, StreamKind};
 use anyhow::{anyhow, Context, Result};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::io::Read;
 use std::path::Path;
@@ -632,6 +633,16 @@ pub fn execute_shell_command_with_world_deps_bind_mount(
     }
 }
 
+pub fn stable_world_deps_fallback_root(project_dir: &Path) -> std::path::PathBuf {
+    let uid = unsafe { libc::geteuid() } as u32;
+    let mut hasher = Sha256::new();
+    hasher.update(project_dir.to_string_lossy().as_bytes());
+    let digest = format!("{:x}", hasher.finalize());
+    std::env::temp_dir()
+        .join(format!("substrate-{uid}-world-deps"))
+        .join(digest)
+}
+
 fn spawn_reader<R>(mut reader: R, kind: StreamKind) -> thread::JoinHandle<Result<Vec<u8>>>
 where
     R: Read + Send + 'static,
@@ -771,5 +782,79 @@ mod tests {
             world_deps_root.path().join("bin/probe").exists(),
             "expected helper to bind guest world-deps path to fallback root"
         );
+    }
+
+    #[test]
+    fn stable_world_deps_fallback_root_is_deterministic_per_project() {
+        let project = tempdir().expect("project tempdir");
+        let first = stable_world_deps_fallback_root(project.path());
+        let second = stable_world_deps_fallback_root(project.path());
+        assert_eq!(first, second);
+        assert!(
+            first.starts_with(std::env::temp_dir()),
+            "expected fallback root under temp dir, got {}",
+            first.display()
+        );
+    }
+
+    #[test]
+    fn world_deps_bind_mount_fallback_persists_across_commands() {
+        let project = tempdir().expect("project tempdir");
+        let cwd = tempdir().expect("cwd tempdir");
+        let world_deps_root = stable_world_deps_fallback_root(project.path());
+        let mut env: HashMap<String, String> = HashMap::new();
+        env.insert(
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR".to_string(),
+            "/var/lib/substrate/world-deps/bin".to_string(),
+        );
+        env.insert(
+            "PATH".to_string(),
+            "/var/lib/substrate/world-deps/bin:/usr/bin:/bin".to_string(),
+        );
+
+        let install = execute_shell_command_with_world_deps_bind_mount(
+            r#"mkdir -p /var/lib/substrate/world-deps/bin && printf '#!/bin/sh\necho smoke-hello\n' > /var/lib/substrate/world-deps/bin/smoke-hello && chmod +x /var/lib/substrate/world-deps/bin/smoke-hello"#,
+            cwd.path(),
+            &env,
+            false,
+            &world_deps_root,
+            None,
+        )
+        .expect("install command should run");
+
+        if !install.status.success() {
+            let stderr = String::from_utf8_lossy(&install.stderr);
+            if stderr.contains("Operation not permitted")
+                || stderr.contains("EPERM")
+                || stderr.contains("unshare:")
+            {
+                println!("Skipping persistent world-deps fallback test: {stderr}");
+                return;
+            }
+        }
+        assert!(
+            install.status.success(),
+            "expected install command to succeed, stdout={}, stderr={}",
+            String::from_utf8_lossy(&install.stdout),
+            String::from_utf8_lossy(&install.stderr)
+        );
+
+        let probe = execute_shell_command_with_world_deps_bind_mount(
+            "smoke-hello",
+            cwd.path(),
+            &env,
+            false,
+            &world_deps_root,
+            None,
+        )
+        .expect("probe command should run");
+
+        assert!(
+            probe.status.success(),
+            "expected probe command to succeed, stdout={}, stderr={}",
+            String::from_utf8_lossy(&probe.stdout),
+            String::from_utf8_lossy(&probe.stderr)
+        );
+        assert_eq!(String::from_utf8_lossy(&probe.stdout).trim(), "smoke-hello");
     }
 }

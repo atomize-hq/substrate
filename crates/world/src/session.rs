@@ -255,7 +255,8 @@ impl SessionWorld {
                         rel = PathBuf::from(".");
                     }
                     let target_dir = merged_dir.join(&rel);
-                    let fallback_world_deps_root = self.root_dir.join(&self.id).join("world-deps");
+                    let fallback_world_deps_root =
+                        crate::exec::stable_world_deps_fallback_root(&self.project_dir);
                     match crate::exec::execute_shell_command_with_world_deps_bind_mount(
                         &command_to_run,
                         &target_dir,
