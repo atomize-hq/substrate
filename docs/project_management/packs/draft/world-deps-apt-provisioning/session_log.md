@@ -101,3 +101,10 @@
 - Branch/worktree:
   - Branch: `world-deps-apt-provisioning-wdap0-integ-macos`
   - Worktree: `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/wt/world-deps-apt-provisioning-wdap0-integ-macos`
+
+- Checkpoint evidence refresh for `CHECKOUT_SHA=83efb8fe2a41faf2608df4fc03bc5816edb23926`:
+  - Compile parity run `22954393969` → `PASS` (`https://github.com/atomize-hq/substrate/actions/runs/22954393969`)
+  - Behavior smoke run `22954501646` → `FAIL` (`https://github.com/atomize-hq/substrate/actions/runs/22954501646`)
+    - `linux_self_hosted` failed runner preflight because `/run/substrate.sock` is missing (`https://github.com/atomize-hq/substrate/actions/runs/22954501646/job/66627480526`)
+    - `windows_self_hosted` failed Case A because `world enable --provision-deps --dry-run` exited `0` instead of expected exit `4` (`https://github.com/atomize-hq/substrate/actions/runs/22954501646/job/66627480389`)
+    - `macos_self_hosted` failed on the known newline-comparison smoke harness bug (`https://github.com/atomize-hq/substrate/actions/runs/22954501646/job/66627480282`)
