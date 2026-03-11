@@ -102,6 +102,10 @@ Standard:
   - Ensures the runtime fail-early behavior is consistent across platforms/backends and doesn’t regress provisioning safety guard rails.
   - Ensures cross-document contract updates remain coherent and don’t reintroduce runtime APT semantics.
   - Full CI testing provides broader regression coverage because this feature touches shared scripts + world-agent behavior + shell builtins.
+- CP2 execution note:
+  - Treat GitHub-hosted Ubuntu as the authoritative Linux smoke environment for `WDAP1`.
+  - Rationale: this slice validates the APT-backed fail-early/operator contract, and a distro-specific self-hosted Linux runner can introduce drift unrelated to the slice contract.
+  - macOS and Windows remain self-hosted behavior-smoke gates for this checkpoint.
 
 ## Current execution-ready alignment
 
