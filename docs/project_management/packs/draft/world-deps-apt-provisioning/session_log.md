@@ -209,3 +209,13 @@
 - Linux behavior smoke PASS: `22975895887` https://github.com/atomize-hq/substrate/actions/runs/22975895887
 - macOS behavior smoke PASS: `22975719947` https://github.com/atomize-hq/substrate/actions/runs/22975719947
 - Windows behavior smoke de-scoped for WDAP1 on 2026-03-11; `tasks.json` `meta.behavior_platforms_required=["linux","macos"]`
+
+## START — 2026-03-11T22:03:08Z — integration — WDAP1-integ
+- Dispatch:
+  - `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/packs/draft/world-deps-apt-provisioning" SLICE_ID="WDAP1" LAUNCH_CODEX=1`
+
+## END — 2026-03-11T22:14:44Z — integration — WDAP1-integ
+- HEAD: `232b5bea0207c42c2ed4b40b8618898887e40a15`
+- Validation: `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, WDAP1-focused tests, `make integ-checks`
+- Merge result: merged `world-deps-apt-provisioning-wdap1-integ` back to `feat/world-deps-apt-provisioning`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/world-deps-apt-provisioning/logs/WDAP1/integ/last_message.md`

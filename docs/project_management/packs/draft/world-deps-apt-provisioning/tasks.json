@@ -886,7 +886,7 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/world-deps-apt-provisioning\" TASK_ID=\"WDAP1-integ\""
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/world-deps-apt-provisioning-wdap1-integ"
     },
