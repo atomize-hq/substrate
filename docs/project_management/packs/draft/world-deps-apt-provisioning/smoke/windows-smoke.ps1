@@ -112,6 +112,9 @@ function Require-LineOrder([string]$Text, [string]$First, [string]$Second) {
 
 $tmpRoot = if ($env:SUBSTRATE_SMOKE_ROOT -and $env:SUBSTRATE_SMOKE_ROOT.Trim() -ne "") { $env:SUBSTRATE_SMOKE_ROOT } else { New-TempDir "wdap-smoke" }
 $keep = ($env:SUBSTRATE_SMOKE_KEEP -and $env:SUBSTRATE_SMOKE_KEEP.Trim() -eq "1")
+$hostHome = $env:HOME
+$hostUserProfile = $env:USERPROFILE
+$hostCargoExe = (Get-Command cargo -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1)
 
 try {
   $homeDir = Join-Path $tmpRoot "home"
@@ -123,6 +126,15 @@ try {
   $env:HOME = $homeDir
   $env:USERPROFILE = $homeDir
   $env:SUBSTRATE_HOME = $substrateHome
+  if ($hostHome -and $hostHome.Trim() -ne "") {
+    $env:SUBSTRATE_HOST_HOME = $hostHome
+  }
+  if ($hostUserProfile -and $hostUserProfile.Trim() -ne "") {
+    $env:SUBSTRATE_HOST_USERPROFILE = $hostUserProfile
+  }
+  if ($hostCargoExe -and $hostCargoExe.Trim() -ne "") {
+    $env:SUBSTRATE_WINDOWS_CARGO_EXE = $hostCargoExe
+  }
 
   & $SubstrateExe config global init | Out-Null
   & $SubstrateExe workspace init $ws | Out-Null
