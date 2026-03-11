@@ -364,59 +364,12 @@ pub fn execute_shell_command_with_project_bind_mount(
         // reference into the host project dir would bypass the bind mount (absolute-path escape).
         let script = PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT;
 
-        let mut env_map = env.clone();
-        env_map.insert(
-            "SUBSTRATE_MOUNT_MERGED_DIR".to_string(),
-            mount.merged_dir.display().to_string(),
-        );
-        env_map.insert(
-            "SUBSTRATE_MOUNT_PROJECT_DIR".to_string(),
-            mount.project_dir.display().to_string(),
-        );
-        env_map.insert(
-            "SUBSTRATE_MOUNT_CWD".to_string(),
-            mount.desired_cwd.display().to_string(),
-        );
-        env_map.insert(
-            "SUBSTRATE_WORLD_DEPS_HOST_ROOT".to_string(),
-            stable_world_deps_fallback_root(mount.project_dir)
-                .display()
-                .to_string(),
-        );
-        env_map.insert(
-            "SUBSTRATE_MOUNT_FS_MODE".to_string(),
-            mount.fs_mode.as_str().to_string(),
-        );
-        env_map.insert("SUBSTRATE_INNER_CMD".to_string(), cmd.to_string());
-        env_map.insert(
-            "SUBSTRATE_INNER_LOGIN_SHELL".to_string(),
-            if login_shell {
-                "1".to_string()
-            } else {
-                "0".to_string()
-            },
-        );
-
+        let env_map = project_bind_mount_env_map(cmd, &mount, env, login_shell);
         let isolation = env_map
             .get("SUBSTRATE_WORLD_FS_ISOLATION")
             .map(|raw| raw.trim().to_ascii_lowercase())
             .unwrap_or_else(|| "workspace".to_string());
         let isolation_full = isolation == "full";
-        let isolation_enabled = matches!(isolation.as_str(), "full" | "workspace" | "project");
-        if isolation_enabled {
-            env_map
-                .entry("HOME".to_string())
-                .or_insert_with(|| "/tmp/substrate-home".to_string());
-            env_map
-                .entry("XDG_CACHE_HOME".to_string())
-                .or_insert_with(|| "/tmp/substrate-xdg/cache".to_string());
-            env_map
-                .entry("XDG_CONFIG_HOME".to_string())
-                .or_insert_with(|| "/tmp/substrate-xdg/config".to_string());
-            env_map
-                .entry("XDG_DATA_HOME".to_string())
-                .or_insert_with(|| "/tmp/substrate-xdg/data".to_string());
-        }
 
         let mut command = Command::new("unshare");
         command.arg("--mount");
@@ -517,6 +470,62 @@ pub fn execute_shell_command_with_project_bind_mount(
             stderr: stderr_buf,
         })
     }
+}
+
+fn project_bind_mount_env_map(
+    cmd: &str,
+    mount: &ProjectBindMount<'_>,
+    env: &HashMap<String, String>,
+    login_shell: bool,
+) -> HashMap<String, String> {
+    let mut env_map = env.clone();
+    env_map.insert(
+        "SUBSTRATE_MOUNT_MERGED_DIR".to_string(),
+        mount.merged_dir.display().to_string(),
+    );
+    env_map.insert(
+        "SUBSTRATE_MOUNT_PROJECT_DIR".to_string(),
+        mount.project_dir.display().to_string(),
+    );
+    env_map.insert(
+        "SUBSTRATE_MOUNT_CWD".to_string(),
+        mount.desired_cwd.display().to_string(),
+    );
+    env_map.insert(
+        "SUBSTRATE_MOUNT_FS_MODE".to_string(),
+        mount.fs_mode.as_str().to_string(),
+    );
+    env_map.insert("SUBSTRATE_INNER_CMD".to_string(), cmd.to_string());
+    env_map.insert(
+        "SUBSTRATE_INNER_LOGIN_SHELL".to_string(),
+        if login_shell {
+            "1".to_string()
+        } else {
+            "0".to_string()
+        },
+    );
+
+    let isolation = env_map
+        .get("SUBSTRATE_WORLD_FS_ISOLATION")
+        .map(|raw| raw.trim().to_ascii_lowercase())
+        .unwrap_or_else(|| "workspace".to_string());
+    let isolation_enabled = matches!(isolation.as_str(), "full" | "workspace" | "project");
+    if isolation_enabled {
+        env_map
+            .entry("HOME".to_string())
+            .or_insert_with(|| "/tmp/substrate-home".to_string());
+        env_map
+            .entry("XDG_CACHE_HOME".to_string())
+            .or_insert_with(|| "/tmp/substrate-xdg/cache".to_string());
+        env_map
+            .entry("XDG_CONFIG_HOME".to_string())
+            .or_insert_with(|| "/tmp/substrate-xdg/config".to_string());
+        env_map
+            .entry("XDG_DATA_HOME".to_string())
+            .or_insert_with(|| "/tmp/substrate-xdg/data".to_string());
+    }
+
+    env_map
 }
 
 pub fn execute_shell_command_with_world_deps_bind_mount(
@@ -746,6 +755,53 @@ mod tests {
         assert!(
             !project.path().join("abs_escape.txt").exists(),
             "file should not appear in host project dir"
+        );
+    }
+
+    #[test]
+    fn project_bind_mount_env_map_preserves_world_deps_host_root() {
+        let merged = tempdir().expect("merged tempdir");
+        let project = tempdir().expect("project tempdir");
+        let shared_world_deps_root = tempdir().expect("shared world-deps tempdir");
+
+        let mount = ProjectBindMount {
+            merged_dir: merged.path(),
+            project_dir: project.path(),
+            desired_cwd: project.path(),
+            fs_mode: WorldFsMode::Writable,
+        };
+
+        let mut env: HashMap<String, String> = HashMap::new();
+        env.insert(
+            "SUBSTRATE_WORLD_DEPS_HOST_ROOT".to_string(),
+            shared_world_deps_root.path().display().to_string(),
+        );
+        let env_map = project_bind_mount_env_map("true", &mount, &env, false);
+
+        assert_eq!(
+            env_map.get("SUBSTRATE_WORLD_DEPS_HOST_ROOT"),
+            Some(&shared_world_deps_root.path().display().to_string()),
+            "expected primary bind mount env setup to preserve the configured shared world-deps root"
+        );
+    }
+
+    #[test]
+    fn project_bind_mount_env_map_uses_script_default_world_deps_root_when_unset() {
+        let merged = tempdir().expect("merged tempdir");
+        let project = tempdir().expect("project tempdir");
+
+        let mount = ProjectBindMount {
+            merged_dir: merged.path(),
+            project_dir: project.path(),
+            desired_cwd: project.path(),
+            fs_mode: WorldFsMode::Writable,
+        };
+
+        let env_map = project_bind_mount_env_map("true", &mount, &HashMap::new(), false);
+
+        assert!(
+            !env_map.contains_key("SUBSTRATE_WORLD_DEPS_HOST_ROOT"),
+            "expected primary bind mount env setup to rely on the shared script default world-deps root"
         );
     }
 
