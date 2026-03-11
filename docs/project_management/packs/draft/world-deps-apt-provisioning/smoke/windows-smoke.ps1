@@ -181,12 +181,12 @@ probe:
     & $SubstrateExe world deps workspace add smoke-hello smoke-apt-a smoke-apt-b | Out-Null
 
     Write-Host "== Case A: provisioning fails closed on Windows =="
-    $r = Invoke-Substrate -Label "world enable --provision-deps --dry-run" -ExpectedExit 4 -Args @("world", "enable", "--provision-deps", "--dry-run")
+    $r = Invoke-Substrate -Label "world enable --provision-deps --dry-run" -ExpectedExit 4 -CliArgs @("world", "enable", "--provision-deps", "--dry-run")
     Require-Contains $r.Stderr "unsupported on Windows"
     Require-Contains $r.Stderr "substrate world enable --provision-deps"
 
     Write-Host "== Preflight: world doctor =="
-    $r = Invoke-Substrate -Label "world doctor" -ExpectedExit 0 -Args @("world", "doctor")
+    $r = Invoke-Substrate -Label "world doctor" -ExpectedExit 0 -CliArgs @("world", "doctor")
 
     if ($env:SUBSTRATE_SMOKE_SLICE_ID -eq "WDAP0") {
       Write-Host "== Runtime cases are skipped for WDAP0 (owned by WDAP1) =="
@@ -195,7 +195,7 @@ probe:
     }
 
     Write-Host "== Case B: runtime current sync fails early for APT requirements =="
-    $r = Invoke-Substrate -Label "deps current sync --dry-run" -ExpectedExit 4 -Args @("world", "deps", "current", "sync", "--dry-run")
+    $r = Invoke-Substrate -Label "deps current sync --dry-run" -ExpectedExit 4 -CliArgs @("world", "deps", "current", "sync", "--dry-run")
     Require-LineOrder $r.Stdout "smoke-apt-a" "smoke-apt-b=1"
     Require-Contains $r.Stderr "substrate world enable --provision-deps"
     Require-Contains $r.Stderr "unsupported on Windows"
@@ -204,7 +204,7 @@ probe:
     $r = Invoke-Substrate -Label "deps current install smoke-hello" -ExpectedExit 0 -Args @("world", "deps", "current", "install", "smoke-hello")
 
     Write-Host "== Case D: current install fails early for explicit APT-backed items =="
-    $r = Invoke-Substrate -Label "deps current install smoke-apt-a --dry-run" -ExpectedExit 4 -Args @("world", "deps", "current", "install", "smoke-apt-a", "--dry-run")
+    $r = Invoke-Substrate -Label "deps current install smoke-apt-a --dry-run" -ExpectedExit 4 -CliArgs @("world", "deps", "current", "install", "smoke-apt-a", "--dry-run")
     Require-Contains $r.Stdout "smoke-apt-a"
     Require-Contains $r.Stderr "substrate world enable --provision-deps"
   } finally {
