@@ -28,6 +28,7 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - `crates/shell/tests/world_enable_provision_deps_wdap0.rs`
 
 ### Edit
+- `.github/workflows/feature-smoke.yml`
 - `docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md`
 - `docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/spec_manifest.md`
 - `docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/workstream_triage.md`
