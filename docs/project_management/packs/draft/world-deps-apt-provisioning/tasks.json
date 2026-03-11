@@ -248,8 +248,7 @@
       ],
       "concurrent_with": [],
       "depends_on": [
-        "WDAP0-integ-core",
-        "CP1-ci-checkpoint"
+        "WDAP0-integ-core"
       ],
       "description": "Fix WDAP0 platform drift for linux after checkpoint results.",
       "end_checklist": [
@@ -299,8 +298,7 @@
       ],
       "concurrent_with": [],
       "depends_on": [
-        "WDAP0-integ-core",
-        "CP1-ci-checkpoint"
+        "WDAP0-integ-core"
       ],
       "description": "Fix WDAP0 platform drift for macos after checkpoint results.",
       "end_checklist": [
@@ -350,8 +348,7 @@
       ],
       "concurrent_with": [],
       "depends_on": [
-        "WDAP0-integ-core",
-        "CP1-ci-checkpoint"
+        "WDAP0-integ-core"
       ],
       "description": "Fix WDAP0 platform drift for windows after checkpoint results.",
       "end_checklist": [
@@ -686,8 +683,7 @@
       ],
       "concurrent_with": [],
       "depends_on": [
-        "WDAP1-integ-core",
-        "CP2-ci-checkpoint"
+        "WDAP1-integ-core"
       ],
       "description": "Fix WDAP1 platform drift for linux after checkpoint results.",
       "end_checklist": [
@@ -737,8 +733,7 @@
       ],
       "concurrent_with": [],
       "depends_on": [
-        "WDAP1-integ-core",
-        "CP2-ci-checkpoint"
+        "WDAP1-integ-core"
       ],
       "description": "Fix WDAP1 platform drift for macos after checkpoint results.",
       "end_checklist": [
@@ -788,8 +783,7 @@
       ],
       "concurrent_with": [],
       "depends_on": [
-        "WDAP1-integ-core",
-        "CP2-ci-checkpoint"
+        "WDAP1-integ-core"
       ],
       "description": "Fix WDAP1 platform drift for windows after checkpoint results.",
       "end_checklist": [
