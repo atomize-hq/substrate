@@ -26,6 +26,7 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 ### Create
 - `crates/shell/src/builtins/world_enable/runner/provision_deps.rs`
 - `crates/shell/tests/world_enable_provision_deps_wdap0.rs`
+- `crates/shell/tests/world_deps_apt_fail_early_wdap1.rs`
 
 ### Edit
 - `.github/workflows/feature-smoke.yml`
