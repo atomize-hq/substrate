@@ -60,17 +60,24 @@ If a third-party installer “insists” on writing to `$HOME`, set its tool-spe
 - See enabled: `substrate world deps current list enabled`
 - Enable globally: `substrate world deps global add <name...>`
 - Enable for a workspace: `substrate world deps workspace add <name...>`
+- Provision APT-backed system packages: `substrate world enable --provision-deps`
 - Apply enabled set: `substrate world deps current sync`
 - Debug an item: `substrate world deps current show <name> --explain`
 
 ## APT packages (current limitation in hardened worlds)
 
-If a package uses `install.method=apt`, installation may fail in hardened worlds because `apt/dpkg` writes outside
-`/var/lib/substrate/world-deps`.
+If a package uses `install.method=apt`, runtime `substrate world deps current sync` and
+`substrate world deps current install ...` never invoke `apt`, `apt-get`, or mutating `dpkg`.
+Instead, Substrate derives the normalized APT requirement set, probes it read-only with
+`dpkg-query`, and fails early with remediation when any requirement is missing.
 
-Preferred approaches:
-- Model the tool as a **user-space script install** under `/var/lib/substrate/world-deps`, or
-- Use an explicit **provisioning** workflow that runs outside the hardened runtime sandbox (when available).
+Operator workflow:
+- Run `substrate world enable --provision-deps` before runtime `world deps current ...` commands.
+- On Linux host-native, Substrate will not mutate the host OS at runtime.
+- On Windows, provisioning-time APT is unsupported on Windows.
 
-Internal details and rationale: `docs/internals/world/deps.md`.
+Contract source:
+- `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`
 
+Internal details and rationale:
+- `docs/internals/world/deps.md`

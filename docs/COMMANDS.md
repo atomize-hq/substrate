@@ -79,11 +79,11 @@ Once you type `graph`, `host`, `world`, `config`, `policy`, `workspace`, `shim`,
 | Invocation | Positional Arguments | Subcommand Flags | Notes |
 | --- | --- | --- | --- |
 | `substrate world doctor` | — | `--json` | World-scoped readiness report (host + world-agent facts). |
-| `substrate world enable` | — | `--prefix`, `--profile`, `--dry-run`, `--verbose`, `--force`, `--timeout` | Provisioning control per `cli.rs:197`. |
+| `substrate world enable` | — | `--prefix`, `--profile`, `--provision-deps`, `--dry-run`, `--verbose`, `--force`, `--timeout` | Provisioning control per `cli.rs:197`; `--provision-deps` is the operator-facing APT workflow. |
 | `substrate world deps current list [VIEW]` | `view` (`available`, `enabled`, `applied`) | `--all`, `--json` | `available/enabled` are host-only; `applied` queries the world backend. |
 | `substrate world deps current show <ITEM>` | `item` name | `--json`, `--explain` | `--explain` queries the world backend and prints remediation/manual instructions when blocked. |
-| `substrate world deps current install <ITEM...>` | One or more item names | `--dry-run`, `--verbose` | Applies immediately without modifying enabled list. |
-| `substrate world deps current sync` | — | `--dry-run`, `--verbose`, `--all` | Applies the effective enabled list for the current directory. |
+| `substrate world deps current install <ITEM...>` | One or more item names | `--dry-run`, `--verbose` | Applies immediately without modifying enabled list; APT-backed items are probe-only at runtime and remediate to `substrate world enable --provision-deps`. |
+| `substrate world deps current sync` | — | `--dry-run`, `--verbose`, `--all` | Applies the effective enabled list for the current directory; APT-backed items are probe-only at runtime and remediate to `substrate world enable --provision-deps`. |
 | `substrate world deps global list [VIEW]` | `view` (`available`, `enabled`) | `--json` | Patch-scoped (global) views only; no built-ins. |
 | `substrate world deps global add|remove <ITEM...>` | One or more item names | `--json` | Updates `$SUBSTRATE_HOME/config.yaml` only; does not install/uninstall. |
 | `substrate world deps global reset` | — | `--json` | Removes `world.deps.enabled` from the global patch (inherit-only). |

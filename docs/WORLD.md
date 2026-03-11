@@ -172,7 +172,7 @@ Socket: `/run/substrate.sock`
 - `GET /v1/doctor/world`
   - World enforcement readiness report (guest-kernel + agent view; used by `substrate world doctor`)
 - `POST /v1/execute` (non‑PTY)
-  - Body: `{ cmd, cwd, env, pty: false, agent_id, budget? }`
+  - Body: `{ cmd, cwd, env, pty: false, agent_id, budget?, profile? }`
   - Returns: `{ exit, span_id, stdout_b64, stderr_b64, scopes_used }`
 - `GET /v1/stream` (WebSocket, PTY)
   - Client → Server frames (text JSON):
@@ -190,6 +190,10 @@ Socket: `/run/substrate.sock`
 
 Notes
 - Protocol is stable; no TLS by design (UDS only).
+- `profile` is an advanced request field used for backend-specific execution posture. For example,
+  `substrate world enable --provision-deps` sets `profile=world-deps-provision` so provisioning can
+  run with the expected world-agent behavior. Runtime `substrate world deps current ...` commands do
+  not use that provisioning profile and never perform runtime APT mutation.
 
 ---
 
