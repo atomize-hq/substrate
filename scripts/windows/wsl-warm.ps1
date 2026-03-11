@@ -71,9 +71,9 @@ $cargoExe = $cargoCandidates | Where-Object { $_ -and (Test-Path $_) } | Select-
 if (-not $usesBundledArtifacts -and -not $cargoExe) {
     Write-ErrorAndExit "cargo.exe not found via SUBSTRATE_WINDOWS_CARGO_EXE, SUBSTRATE_HOST_USERPROFILE, USERPROFILE, or PATH. Install Rust on the Windows host."
 }
-$cargoToolchain = $env:RUSTUP_TOOLCHAIN
-if (-not $cargoToolchain -and $env:RUST_TOOLCHAIN) {
-    $cargoToolchain = $env:RUST_TOOLCHAIN
+$cargoToolchain = $env:RUST_TOOLCHAIN
+if (-not $cargoToolchain -and $env:RUSTUP_TOOLCHAIN) {
+    $cargoToolchain = $env:RUSTUP_TOOLCHAIN
 }
 $rustupExe = $null
 if ($cargoExe) {
