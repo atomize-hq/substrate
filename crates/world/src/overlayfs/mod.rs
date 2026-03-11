@@ -615,12 +615,38 @@ pub fn execute_with_overlay(
                 rel = PathBuf::from(".");
             }
             let target_dir = merged_dir.join(&rel);
-            crate::exec::execute_shell_command(&command_to_run, &target_dir, env, false)
-                .with_context(|| {
-                    format!(
-                        "Failed to execute command in overlay after mount-namespace bind failed: {err:#}"
+            if cmd.contains("/var/lib/substrate/world-deps") {
+                let fallback_world_deps_root =
+                    std::env::temp_dir().join(format!("substrate-world-deps-{world_id}"));
+                match crate::exec::execute_shell_command_with_world_deps_bind_mount(
+                    &command_to_run,
+                    &target_dir,
+                    env,
+                    false,
+                    &fallback_world_deps_root,
+                    None,
+                ) {
+                    Ok(output) => output,
+                    Err(world_deps_err) => crate::exec::execute_shell_command(
+                        &command_to_run,
+                        &target_dir,
+                        env,
+                        false,
                     )
-                })?
+                    .with_context(|| {
+                        format!(
+                            "Failed to execute command in overlay after mount-namespace bind failed: {err:#}; world-deps fallback also failed: {world_deps_err:#}"
+                        )
+                    })?,
+                }
+            } else {
+                crate::exec::execute_shell_command(&command_to_run, &target_dir, env, false)
+                    .with_context(|| {
+                        format!(
+                            "Failed to execute command in overlay after mount-namespace bind failed: {err:#}"
+                        )
+                    })?
+            }
         }
     };
 

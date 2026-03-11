@@ -302,6 +302,29 @@ else
 fi
 "#;
 
+pub const WORLD_DEPS_BIND_MOUNT_FALLBACK_SCRIPT: &str = r#"set -eu
+set -f
+
+mount --make-rprivate / 2>/dev/null || mount --make-private / 2>/dev/null || true
+
+mkdir -p "$SUBSTRATE_WORLD_DEPS_HOST_ROOT"
+mount -t tmpfs tmpfs /var/lib
+mkdir -p /var/lib/substrate/world-deps
+mount --rbind "$SUBSTRATE_WORLD_DEPS_HOST_ROOT" /var/lib/substrate/world-deps
+
+mkdir -p "${HOME:-/tmp/substrate-home}" 2>/dev/null || true
+mkdir -p "${XDG_CACHE_HOME:-/tmp/substrate-xdg/cache}" 2>/dev/null || true
+mkdir -p "${XDG_CONFIG_HOME:-/tmp/substrate-xdg/config}" 2>/dev/null || true
+mkdir -p "${XDG_DATA_HOME:-/tmp/substrate-xdg/data}" 2>/dev/null || true
+
+cd "$SUBSTRATE_FALLBACK_CWD"
+if [ "${SUBSTRATE_INNER_LOGIN_SHELL:-0}" = "1" ]; then
+  exec sh -lc "$SUBSTRATE_INNER_CMD"
+else
+  exec sh -c "$SUBSTRATE_INNER_CMD"
+fi
+"#;
+
 pub fn execute_shell_command_with_project_bind_mount(
     cmd: &str,
     mount: ProjectBindMount<'_>,
@@ -485,6 +508,130 @@ pub fn execute_shell_command_with_project_bind_mount(
     }
 }
 
+pub fn execute_shell_command_with_world_deps_bind_mount(
+    cmd: &str,
+    cwd: &Path,
+    env: &HashMap<String, String>,
+    login_shell: bool,
+    world_deps_root: &Path,
+    #[allow(unused_variables)] cgroup_path: Option<&Path>,
+) -> Result<Output> {
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = cmd;
+        let _ = cwd;
+        let _ = env;
+        let _ = login_shell;
+        let _ = world_deps_root;
+        Err(anyhow!(
+            "world-deps bind mount fallback is only supported on Linux"
+        ))
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        use nix::unistd::Uid;
+
+        std::fs::create_dir_all(world_deps_root).with_context(|| {
+            format!(
+                "failed to create world-deps fallback root {}",
+                world_deps_root.display()
+            )
+        })?;
+
+        let mut env_map = env.clone();
+        env_map.insert(
+            "SUBSTRATE_WORLD_DEPS_HOST_ROOT".to_string(),
+            world_deps_root.display().to_string(),
+        );
+        env_map.insert(
+            "SUBSTRATE_FALLBACK_CWD".to_string(),
+            cwd.display().to_string(),
+        );
+        env_map.insert("SUBSTRATE_INNER_CMD".to_string(), cmd.to_string());
+        env_map.insert(
+            "SUBSTRATE_INNER_LOGIN_SHELL".to_string(),
+            if login_shell {
+                "1".to_string()
+            } else {
+                "0".to_string()
+            },
+        );
+        env_map
+            .entry("HOME".to_string())
+            .or_insert_with(|| "/tmp/substrate-home".to_string());
+        env_map
+            .entry("XDG_CACHE_HOME".to_string())
+            .or_insert_with(|| "/tmp/substrate-xdg/cache".to_string());
+        env_map
+            .entry("XDG_CONFIG_HOME".to_string())
+            .or_insert_with(|| "/tmp/substrate-xdg/config".to_string());
+        env_map
+            .entry("XDG_DATA_HOME".to_string())
+            .or_insert_with(|| "/tmp/substrate-xdg/data".to_string());
+
+        let mut command = Command::new("unshare");
+        command.arg("--mount");
+        command.arg("--fork");
+        if !Uid::effective().is_root() {
+            command.arg("--user");
+            command.arg("--map-root-user");
+        }
+        command.arg("--");
+        command.arg("sh");
+        command.arg("-c");
+        command.arg(WORLD_DEPS_BIND_MOUNT_FALLBACK_SCRIPT);
+        command.current_dir("/");
+        command.env_clear();
+        command.envs(env_map);
+        command.stdout(Stdio::piped());
+        command.stderr(Stdio::piped());
+
+        let mut child = command
+            .spawn()
+            .with_context(|| format!("Failed to spawn command: {cmd}"))?;
+
+        if let Some(cgroup_path) = cgroup_path {
+            let procs = cgroup_path.join("cgroup.procs");
+            if let Err(err) = std::fs::create_dir_all(cgroup_path)
+                .and_then(|_| std::fs::write(&procs, format!("{}\n", child.id())))
+            {
+                warn!(
+                    error = %err,
+                    path = %procs.display(),
+                    pid = child.id(),
+                    "world: failed to attach fallback command to cgroup"
+                );
+            }
+        }
+
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| anyhow!("Failed to capture stdout pipe"))?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| anyhow!("Failed to capture stderr pipe"))?;
+
+        let stdout_handle = spawn_reader(stdout, StreamKind::Stdout);
+        let stderr_handle = spawn_reader(stderr, StreamKind::Stderr);
+
+        let status = child
+            .wait()
+            .context("Failed to wait for child process completion")?;
+
+        let stdout_buf = join_reader(stdout_handle, "stdout");
+        let stderr_buf = join_reader(stderr_handle, "stderr");
+
+        Ok(Output {
+            status,
+            stdout: stdout_buf,
+            stderr: stderr_buf,
+        })
+    }
+}
+
 fn spawn_reader<R>(mut reader: R, kind: StreamKind) -> thread::JoinHandle<Result<Vec<u8>>>
 where
     R: Read + Send + 'static,
@@ -568,6 +715,61 @@ mod tests {
         assert!(
             !project.path().join("abs_escape.txt").exists(),
             "file should not appear in host project dir"
+        );
+    }
+
+    #[test]
+    fn world_deps_bind_mount_fallback_exposes_default_guest_path() {
+        let cwd = tempdir().expect("cwd tempdir");
+        let world_deps_root = tempdir().expect("world-deps tempdir");
+        let env: HashMap<String, String> = HashMap::new();
+        let cmd = r#"mkdir -p /var/lib/substrate/world-deps/bin && printf '#!/bin/sh\nexit 0\n' > /var/lib/substrate/world-deps/bin/probe && chmod +x /var/lib/substrate/world-deps/bin/probe"#;
+
+        let output = match execute_shell_command_with_world_deps_bind_mount(
+            cmd,
+            cwd.path(),
+            &env,
+            false,
+            world_deps_root.path(),
+            None,
+        ) {
+            Ok(output) => output,
+            Err(err) => {
+                let message = err.to_string();
+                if message.contains("Operation not permitted")
+                    || message.contains("EPERM")
+                    || message.contains("unshare")
+                {
+                    println!("Skipping world-deps bind fallback test: {}", message);
+                    return;
+                }
+                panic!(
+                    "unexpected error running world-deps fallback wrapper: {:#}",
+                    err
+                );
+            }
+        };
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if stderr.contains("Operation not permitted")
+                || stderr.contains("EPERM")
+                || stderr.contains("unshare:")
+            {
+                println!("Skipping world-deps bind fallback test: {stderr}");
+                return;
+            }
+        }
+
+        assert!(
+            output.status.success(),
+            "expected world-deps fallback wrapper to succeed, stdout={}, stderr={}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            world_deps_root.path().join("bin/probe").exists(),
+            "expected helper to bind guest world-deps path to fallback root"
         );
     }
 }
