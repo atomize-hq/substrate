@@ -644,13 +644,23 @@ pub fn execute_shell_command_with_world_deps_bind_mount(
 }
 
 pub fn stable_world_deps_fallback_root(project_dir: &Path) -> std::path::PathBuf {
-    let uid = unsafe { libc::geteuid() } as u32;
+    let uid = current_uid();
     let mut hasher = Sha256::new();
     hasher.update(project_dir.to_string_lossy().as_bytes());
     let digest = format!("{:x}", hasher.finalize());
     std::env::temp_dir()
         .join(format!("substrate-{uid}-world-deps"))
         .join(digest)
+}
+
+#[cfg(unix)]
+fn current_uid() -> u32 {
+    unsafe { libc::geteuid() as u32 }
+}
+
+#[cfg(not(unix))]
+fn current_uid() -> u32 {
+    0
 }
 
 fn spawn_reader<R>(mut reader: R, kind: StreamKind) -> thread::JoinHandle<Result<Vec<u8>>>

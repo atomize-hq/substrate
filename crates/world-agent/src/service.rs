@@ -53,6 +53,7 @@ use crate::enforcement_plan;
 
 pub(crate) const ANCHOR_MODE_ENV: &str = "SUBSTRATE_ANCHOR_MODE";
 pub(crate) const ANCHOR_PATH_ENV: &str = "SUBSTRATE_ANCHOR_PATH";
+pub(crate) const WORLD_PROJECT_DIR_OVERRIDE_ENV: &str = "SUBSTRATE_WORLD_PROJECT_DIR";
 #[cfg(target_os = "linux")]
 pub(crate) const WORLD_FS_MODE_ENV: &str = "SUBSTRATE_WORLD_FS_MODE";
 pub(crate) const WORLD_FS_ISOLATION_ENV: &str = "SUBSTRATE_WORLD_FS_ISOLATION";
@@ -477,6 +478,7 @@ impl WorldAgentService {
 
         // Prepare execution request
         let mut env_map = req.env.unwrap_or_default();
+        env_map.remove(WORLD_PROJECT_DIR_OVERRIDE_ENV);
         // Snapshot isolation should not rely on callers setting legacy env toggles.
         let isolation = if isolation_full { "full" } else { "workspace" };
         env_map.insert(WORLD_FS_ISOLATION_ENV.to_string(), isolation.to_string());
@@ -1108,6 +1110,7 @@ impl WorldAgentService {
             cwd: cwd.clone(),
             env: {
                 let mut env_map = req.env.clone().unwrap_or_default();
+                env_map.remove(WORLD_PROJECT_DIR_OVERRIDE_ENV);
                 let isolation = if isolation_full { "full" } else { "workspace" };
                 env_map.insert(WORLD_FS_ISOLATION_ENV.to_string(), isolation.to_string());
                 if isolation_full && !write_allowlist_prefixes.is_empty() {
@@ -1528,6 +1531,14 @@ pub(crate) fn resolve_project_dir(
     env: Option<&HashMap<String, String>>,
     cwd: Option<&Path>,
 ) -> Result<PathBuf> {
+    if let Some(path) = env
+        .and_then(|map| map.get(WORLD_PROJECT_DIR_OVERRIDE_ENV))
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+    {
+        return Ok(PathBuf::from(path));
+    }
+
     let cwd_path = cwd
         .map(|path| path.to_path_buf())
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
@@ -1774,6 +1785,25 @@ mod tests {
     async fn test_service_creation() {
         let service = WorldAgentService::new().unwrap();
         assert_eq!(service.worlds.read().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn resolve_project_dir_prefers_internal_override() {
+        let mut env = HashMap::new();
+        env.insert(
+            WORLD_PROJECT_DIR_OVERRIDE_ENV.to_string(),
+            "/tmp/substrate-project-root".to_string(),
+        );
+        env.insert(ANCHOR_MODE_ENV.to_string(), "follow-cwd".to_string());
+        env.insert(
+            ANCHOR_PATH_ENV.to_string(),
+            "/tmp/ignored-anchor".to_string(),
+        );
+
+        let project_dir =
+            resolve_project_dir(Some(&env), Some(Path::new("/tmp/overridden-cwd"))).unwrap();
+
+        assert_eq!(project_dir, PathBuf::from("/tmp/substrate-project-root"));
     }
 
     #[cfg(not(target_os = "linux"))]

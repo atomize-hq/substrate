@@ -17,6 +17,7 @@ use axum::{
 };
 use chrono::SecondsFormat;
 use serde_json::{json, Value};
+#[cfg(target_os = "linux")]
 use substrate_common::{WorldFsMode, WorldFsStrategyProbeResult};
 
 /// Wrapper type to implement IntoResponse for ApiError

@@ -121,7 +121,7 @@ impl SessionWorld {
     }
 
     fn fallback_cgroup_path(&self) -> PathBuf {
-        let uid = unsafe { libc::geteuid() } as u32;
+        let uid = current_uid();
         if let Ok(xdg) = std::env::var("XDG_RUNTIME_DIR") {
             if !xdg.is_empty() {
                 return PathBuf::from(xdg).join("substrate/cgroup").join(&self.id);
@@ -144,7 +144,7 @@ impl SessionWorld {
             return Err(e).context("Failed to create world root directory");
         }
         if let Err(e) = std::fs::create_dir_all(&self.cgroup_path) {
-            let fallback_allowed = unsafe { libc::geteuid() } != 0
+            let fallback_allowed = current_uid() != 0
                 && matches!(
                     e.kind(),
                     std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::ReadOnlyFilesystem
@@ -444,6 +444,16 @@ impl SessionWorld {
         // TODO: Implement policy application
         Ok(())
     }
+}
+
+#[cfg(unix)]
+fn current_uid() -> u32 {
+    unsafe { libc::geteuid() as u32 }
+}
+
+#[cfg(not(unix))]
+fn current_uid() -> u32 {
+    0
 }
 
 fn is_truthy(value: &str) -> bool {
