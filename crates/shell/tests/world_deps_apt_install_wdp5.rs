@@ -285,7 +285,7 @@ fn test_current_list_available_ignores_legacy_world_deps_paths() {
 }
 
 #[test]
-fn test_current_install_executes_apt_before_scripts_and_does_not_mutate_enabled_patches() {
+fn test_current_install_probes_apt_before_scripts_and_does_not_mutate_enabled_patches() {
     let fixture = ShellEnvFixture::new();
     let ws_root = workspace_root(&fixture);
     fs::create_dir_all(ws_root.join(".substrate")).expect("create workspace .substrate");
@@ -299,8 +299,12 @@ fn test_current_install_executes_apt_before_scripts_and_does_not_mutate_enabled_
     let workspace_before =
         fs::read_to_string(workspace_config_path(&ws_root)).expect("read workspace.yaml");
 
-    let (_sock_tmp, socket_path, _socket, records) =
-        start_world_socket_execute_record("substrate-wdp5-install-", "", "", 0);
+    let (_sock_tmp, socket_path, _socket, records) = start_world_socket_execute_record(
+        "substrate-wdp5-install-",
+        "__SUBSTRATE_WDAP1__ nodejs 1 20.19.4\n",
+        "",
+        0,
+    );
 
     substrate_command_for_home(&fixture)
         .current_dir(&ws_root)
@@ -323,21 +327,24 @@ fn test_current_install_executes_apt_before_scripts_and_does_not_mutate_enabled_
     );
 
     let cmds = recorded_cmds(&records);
-    let apt_idx = first_index_containing(&cmds, "DEBIAN_FRONTEND=noninteractive")
-        .or_else(|| first_index_containing(&cmds, "apt-get"));
+    let probe_idx = first_index_containing(&cmds, "dpkg-query");
     let script_idx = first_index_containing(&cmds, script_token);
 
     assert!(
-        apt_idx.is_some(),
-        "expected at least one apt install command to be sent to world-agent; cmds={cmds:?}"
+        probe_idx.is_some(),
+        "expected a dpkg-query probe to be sent to world-agent; cmds={cmds:?}"
     );
     assert!(
         script_idx.is_some(),
         "expected script install command to include token {script_token:?}; cmds={cmds:?}"
     );
     assert!(
-        apt_idx.unwrap() < script_idx.unwrap(),
-        "expected apt execution before script execution; cmds={cmds:?}"
+        probe_idx.unwrap() < script_idx.unwrap(),
+        "expected apt probe before script execution; cmds={cmds:?}"
+    );
+    assert!(
+        cmds.iter().all(|cmd| !cmd.contains("apt-get")),
+        "expected no apt-get execution at runtime; cmds={cmds:?}"
     );
 }
 
@@ -356,8 +363,12 @@ fn test_current_sync_applies_effective_enabled_set_and_does_not_mutate_patches()
     let workspace_before =
         fs::read_to_string(workspace_config_path(&ws_root)).expect("read workspace.yaml");
 
-    let (_sock_tmp, socket_path, _socket, records) =
-        start_world_socket_execute_record("substrate-wdp5-sync-", "", "", 0);
+    let (_sock_tmp, socket_path, _socket, records) = start_world_socket_execute_record(
+        "substrate-wdp5-sync-",
+        "__SUBSTRATE_WDAP1__ nodejs 1 20.19.4\n",
+        "",
+        0,
+    );
 
     substrate_command_for_home(&fixture)
         .current_dir(&ws_root)
@@ -381,42 +392,64 @@ fn test_current_sync_applies_effective_enabled_set_and_does_not_mutate_patches()
 
     let cmds = recorded_cmds(&records);
     assert!(
-        first_index_containing(&cmds, "DEBIAN_FRONTEND=noninteractive")
-            .or_else(|| first_index_containing(&cmds, "apt-get"))
-            .is_some(),
-        "expected apt execution during sync; cmds={cmds:?}"
+        first_index_containing(&cmds, "dpkg-query").is_some(),
+        "expected a dpkg-query probe during sync; cmds={cmds:?}"
     );
     assert!(
         first_index_containing(&cmds, script_token).is_some(),
         "expected script execution during sync; cmds={cmds:?}"
     );
+    assert!(
+        cmds.iter().all(|cmd| !cmd.contains("apt-get")),
+        "expected no apt-get execution during sync; cmds={cmds:?}"
+    );
 }
 
 #[test]
-fn test_current_install_hardening_violation_exits_5_with_actionable_message() {
+fn test_current_install_unsatisfied_apt_exits_4_with_provisioning_remediation() {
     let fixture = ShellEnvFixture::new();
     let ws_root = workspace_root(&fixture);
     fs::create_dir_all(ws_root.join(".substrate")).expect("create workspace .substrate");
 
-    seed_inventory_for_apt_and_script(&fixture, "SCRIPT_TOKEN_UNUSED");
+    let script_token = "SCRIPT_TOKEN_UNUSED";
+    seed_inventory_for_apt_and_script(&fixture, script_token);
     write_global_config_builtins_disabled(&fixture, "[]");
     write_workspace_config(&ws_root, "[]");
 
-    let (_sock_tmp, socket_path, _socket, _records) = start_world_socket_execute_record(
-        "substrate-wdp5-hardening-",
+    let (_sock_tmp, socket_path, _socket, records) = start_world_socket_execute_record(
+        "substrate-wdp5-unsatisfied-",
+        "__SUBSTRATE_WDAP1__ nodejs 0 -\n",
         "",
-        "Permission denied: /var/lib/substrate/world-deps",
-        13,
+        0,
     );
 
     substrate_command_for_home(&fixture)
         .current_dir(&ws_root)
         .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
         .env("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE", "manual")
-        .args(["world", "deps", "current", "install", "node"])
+        .args(["world", "deps", "current", "install", "node", "hello"])
         .assert()
-        .code(5)
-        .stderr(predicate::str::contains("blocked by hardening/cage"));
+        .code(4)
+        .stderr(predicate::str::contains(
+            "substrate world enable --provision-deps",
+        ))
+        .stderr(predicate::str::contains(
+            "Substrate will not mutate the host OS",
+        ));
+
+    let cmds = recorded_cmds(&records);
+    assert!(
+        first_index_containing(&cmds, "dpkg-query").is_some(),
+        "expected a dpkg-query probe before fail-early; cmds={cmds:?}"
+    );
+    assert!(
+        cmds.iter().all(|cmd| !cmd.contains("apt-get")),
+        "expected no apt-get execution at runtime; cmds={cmds:?}"
+    );
+    assert!(
+        first_index_containing(&cmds, script_token).is_none(),
+        "expected fail-early before script installs; cmds={cmds:?}"
+    );
 }
 
 #[test]

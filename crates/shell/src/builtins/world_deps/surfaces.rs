@@ -350,6 +350,8 @@ fn run_current_install(args: &WorldDepsCurrentInstallArgs) -> Result<()> {
         eprintln!("substrate: note: expanded packages: {}", expanded.join(","));
     }
 
+    preflight_runtime_apt_requirements_v1(&plan.apt, args.dry_run, args.verbose)?;
+
     if args.dry_run {
         print_install_plan_v1(&plan);
         return Ok(());
@@ -389,6 +391,8 @@ fn run_current_sync(args: &WorldDepsCurrentSyncArgs) -> Result<()> {
         eprintln!("substrate: note: expanded packages: {}", expanded.join(","));
     }
 
+    preflight_runtime_apt_requirements_v1(&plan.apt, args.dry_run, args.verbose)?;
+
     if args.dry_run {
         print_install_plan_v1(&plan);
         return Ok(());
@@ -410,13 +414,12 @@ enum ApplyInstallMode {
 fn compute_install_plan_v1(view: &InventoryViewV1, item_names: &[String]) -> Result<InstallPlanV1> {
     let package_names = expand_items_to_packages_v1(view, item_names)?;
 
-    let mut apt_versions: HashMap<String, Option<String>> = HashMap::new();
     let mut apt_packages: Vec<String> = Vec::new();
     let mut script_packages: Vec<String> = Vec::new();
     let mut manual_packages: Vec<ManualPackagePlanV1> = Vec::new();
 
-    for pkg_name in package_names {
-        let pkg = view.packages.get(&pkg_name).ok_or_else(|| {
+    for pkg_name in &package_names {
+        let pkg = view.packages.get(pkg_name).ok_or_else(|| {
             config_model::user_error(format!(
                 "invalid deps inventory: referenced package '{pkg_name}' is not visible for this platform"
             ))
@@ -425,21 +428,6 @@ fn compute_install_plan_v1(view: &InventoryViewV1, item_names: &[String]) -> Res
         match pkg.install.method {
             InstallMethodV1::Apt => {
                 apt_packages.push(pkg.name.clone());
-                for spec in &pkg.install.apt {
-                    match apt_versions.get(&spec.name) {
-                        None => {
-                            apt_versions.insert(spec.name.clone(), spec.version.clone());
-                        }
-                        Some(existing) => {
-                            if existing != &spec.version {
-                                return Err(config_model::user_error(format!(
-                                    "invalid deps inventory: conflicting apt version requirements for '{}': {:?} vs {:?}",
-                                    spec.name, existing, spec.version
-                                )));
-                            }
-                        }
-                    }
-                }
             }
             InstallMethodV1::Script => {
                 script_packages.push(pkg.name.clone());
@@ -457,12 +445,7 @@ fn compute_install_plan_v1(view: &InventoryViewV1, item_names: &[String]) -> Res
         }
     }
 
-    let mut apt: Vec<AptSpecV1> = apt_versions
-        .into_iter()
-        .map(|(name, version)| AptSpecV1 { name, version })
-        .collect();
-    apt.sort_by(|a, b| a.name.cmp(&b.name));
-
+    let apt = normalize_apt_requirements_v1(view, &package_names)?;
     let apt_packages = dedupe_ordered(&apt_packages);
     let script_packages = dedupe_ordered(&script_packages);
 
@@ -537,7 +520,7 @@ fn normalize_apt_requirements_v1(
         return Ok(normalized);
     }
 
-    let mut message = String::from("substrate: conflicting APT requirements for provisioning:\n");
+    let mut message = String::from("substrate: conflicting APT requirements:\n");
     for (name, versions) in conflicts {
         message.push_str(&format!(
             "  - {name}: {}\n",
@@ -549,6 +532,194 @@ fn normalize_apt_requirements_v1(
         ));
     }
     Err(config_model::user_error(message.trim_end().to_string()))
+}
+
+#[derive(Debug, Clone)]
+struct AptRequirementProbeStatusV1 {
+    requirement: AptSpecV1,
+    satisfied: bool,
+    installed_version: Option<String>,
+}
+
+fn preflight_runtime_apt_requirements_v1(
+    requirements: &[AptSpecV1],
+    dry_run: bool,
+    verbose: bool,
+) -> Result<()> {
+    if requirements.is_empty() {
+        return Ok(());
+    }
+
+    if dry_run {
+        print_normalized_apt_requirements_v1(requirements);
+    }
+
+    let statuses = probe_world_apt_requirements_v1(requirements)?;
+    if statuses.iter().all(|status| status.satisfied) {
+        return Ok(());
+    }
+
+    Err(anyhow!(WorldDepsUnmetPrerequisiteError::new(
+        build_runtime_apt_remediation_v1(requirements, &statuses, verbose)
+    )))
+}
+
+fn print_normalized_apt_requirements_v1(requirements: &[AptSpecV1]) {
+    for requirement in requirements {
+        println!("{}", render_apt_requirement_v1(requirement));
+    }
+}
+
+fn render_apt_requirement_v1(requirement: &AptSpecV1) -> String {
+    match &requirement.version {
+        Some(version) if !version.trim().is_empty() => format!("{}={version}", requirement.name),
+        _ => requirement.name.clone(),
+    }
+}
+
+fn probe_world_apt_requirements_v1(
+    requirements: &[AptSpecV1],
+) -> Result<Vec<AptRequirementProbeStatusV1>> {
+    let out = run_world_command_output_for_deps(
+        &build_world_apt_probe_command_v1(requirements),
+        Some("/tmp"),
+    )
+    .map_err(classify_world_backend_error)?;
+
+    if out.exit != 0 {
+        let snippet = output_snippet_for_error(&out);
+        return Err(anyhow!(WorldDepsBackendUnavailableError::new(format!(
+            "world apt probe failed (exit={}): {}",
+            out.exit,
+            if snippet.trim().is_empty() {
+                "unknown error".to_string()
+            } else {
+                snippet
+            }
+        ))));
+    }
+
+    let mut observed: HashMap<String, (bool, Option<String>)> = HashMap::new();
+    for line in out.stdout.lines() {
+        let Some(rest) = line.strip_prefix("__SUBSTRATE_WDAP1__ ") else {
+            continue;
+        };
+        let mut parts = rest.splitn(3, ' ');
+        let Some(name) = parts.next() else {
+            continue;
+        };
+        let satisfied = matches!(parts.next(), Some("1"));
+        let installed_version = parts
+            .next()
+            .map(str::trim)
+            .filter(|value| !value.is_empty() && *value != "-")
+            .map(ToOwned::to_owned);
+        observed.insert(name.to_string(), (satisfied, installed_version));
+    }
+
+    Ok(requirements
+        .iter()
+        .cloned()
+        .map(|requirement| {
+            let (satisfied, installed_version) = observed
+                .get(&requirement.name)
+                .cloned()
+                .unwrap_or((false, None));
+            AptRequirementProbeStatusV1 {
+                requirement,
+                satisfied,
+                installed_version,
+            }
+        })
+        .collect())
+}
+
+fn build_world_apt_probe_command_v1(requirements: &[AptSpecV1]) -> String {
+    let mut script = String::new();
+    script.push_str("set +e\n");
+    script.push_str("probe_pkg() {\n");
+    script.push_str("  pkg_name=\"$1\"\n");
+    script.push_str("  expected_version=\"$2\"\n");
+    script.push_str("  if ! command -v dpkg-query >/dev/null 2>&1; then\n");
+    script.push_str("    printf '__SUBSTRATE_WDAP1__ %s 0 -\\n' \"$pkg_name\"\n");
+    script.push_str("    return 0\n");
+    script.push_str("  fi\n");
+    script.push_str("  output=\"$(dpkg-query -W -f='${Status} ${Version}\\n' \"$pkg_name\" 2>/dev/null || true)\"\n");
+    script.push_str("  case \"$output\" in\n");
+    script.push_str("    install\\ ok\\ installed\\ *)\n");
+    script.push_str("      installed_version=\"${output#install ok installed }\"\n");
+    script.push_str("      if [ -n \"$expected_version\" ] && [ \"$installed_version\" != \"$expected_version\" ]; then\n");
+    script.push_str(
+        "        printf '__SUBSTRATE_WDAP1__ %s 0 %s\\n' \"$pkg_name\" \"$installed_version\"\n",
+    );
+    script.push_str("      else\n");
+    script.push_str(
+        "        printf '__SUBSTRATE_WDAP1__ %s 1 %s\\n' \"$pkg_name\" \"$installed_version\"\n",
+    );
+    script.push_str("      fi\n");
+    script.push_str("      ;;\n");
+    script.push_str("    *)\n");
+    script.push_str("      printf '__SUBSTRATE_WDAP1__ %s 0 -\\n' \"$pkg_name\"\n");
+    script.push_str("      ;;\n");
+    script.push_str("  esac\n");
+    script.push_str("}\n");
+
+    for requirement in requirements {
+        script.push_str("probe_pkg ");
+        script.push_str(&sh_quote(&requirement.name));
+        script.push(' ');
+        script.push_str(&sh_quote(requirement.version.as_deref().unwrap_or("")));
+        script.push('\n');
+    }
+
+    script.push_str("exit 0\n");
+    script
+}
+
+fn build_runtime_apt_remediation_v1(
+    requirements: &[AptSpecV1],
+    statuses: &[AptRequirementProbeStatusV1],
+    verbose: bool,
+) -> String {
+    const PROVISION_COMMAND: &str = "substrate world enable --provision-deps";
+
+    let mut lines: Vec<String> = vec![
+        "substrate: APT-backed world deps are not satisfied in this world.".to_string(),
+        "substrate: provision APT packages during world enable, then retry.".to_string(),
+        PROVISION_COMMAND.to_string(),
+    ];
+
+    if cfg!(target_os = "linux") {
+        lines.push("Substrate will not mutate the host OS.".to_string());
+    } else if cfg!(windows) {
+        lines.push("APT provisioning is unsupported on Windows.".to_string());
+    }
+
+    let unsatisfied = statuses
+        .iter()
+        .filter(|status| !status.satisfied)
+        .map(|status| match &status.installed_version {
+            Some(version) => format!(
+                "{} (installed {})",
+                render_apt_requirement_v1(&status.requirement),
+                version
+            ),
+            None => render_apt_requirement_v1(&status.requirement),
+        })
+        .collect::<Vec<_>>();
+    if !unsatisfied.is_empty() {
+        lines.push(format!(
+            "substrate: unsatisfied APT requirements: {}",
+            unsatisfied.join(", ")
+        ));
+    }
+
+    if verbose {
+        lines.push("substrate: normalized APT requirements:".to_string());
+        lines.extend(requirements.iter().map(render_apt_requirement_v1));
+    }
+
+    lines.join("\n")
 }
 
 fn apply_install_plan_v1(
@@ -586,13 +757,6 @@ fn apply_install_plan_v1(
             .context("failed to reconcile world-deps wrappers")?;
     }
 
-    let skip_apt_install = std::env::var("SUBSTRATE_WORLD_DEPS_SKIP_APT")
-        .ok()
-        .is_some_and(|value| value == "1");
-
-    if !plan.apt.is_empty() && !skip_apt_install {
-        apply_apt_install_plan_v1(&plan.apt)?;
-    }
     apply_apt_entrypoint_wrappers_v1(view, &plan.apt_packages)?;
 
     for pkg_name in &plan.script_packages {
@@ -879,102 +1043,6 @@ fn output_snippet_for_error(out: &WorldCommandOutputV1) -> String {
         return stderr.to_string();
     }
     out.stdout.trim().to_string()
-}
-
-fn looks_like_hardening_violation_message(message: &str) -> bool {
-    let hardening_paths = [
-        "/var/lib/substrate/world-deps",
-        "/var/lib/apt",
-        "/var/cache/apt",
-        "/var/lib/dpkg",
-        "/etc/apt",
-    ];
-    hardening_paths.iter().any(|path| message.contains(path))
-        && (message.contains("Permission denied")
-            || message.contains("permission denied")
-            || message.contains("Read-only file system")
-            || message.contains("read-only file system"))
-}
-
-fn apply_apt_install_plan_v1(apt: &[AptSpecV1]) -> Result<()> {
-    if apt.is_empty() {
-        return Ok(());
-    }
-
-    let cmd = build_world_apt_install_command_v1(apt);
-    let out = run_world_command_output_for_deps(&cmd, Some("/tmp"))?;
-    if out.exit == 0 {
-        return Ok(());
-    }
-
-    let snippet = output_snippet_for_error(&out);
-    if out.exit == 5 {
-        return Err(anyhow!(WorldDepsSafetyViolationError::new(format!(
-            "world apt install blocked (exit=5): {snippet}"
-        ))));
-    }
-    if looks_like_hardening_violation_message(&snippet) {
-        return Err(anyhow!(
-            "world apt install failed (exit={}): {}",
-            out.exit,
-            snippet
-        ));
-    }
-
-    Err(anyhow!(WorldDepsUnmetPrerequisiteError::new(format!(
-        "world apt install failed (exit={}): {}",
-        out.exit,
-        if snippet.trim().is_empty() {
-            "unknown error".to_string()
-        } else {
-            snippet
-        }
-    ))))
-}
-
-fn build_world_apt_install_command_v1(apt: &[AptSpecV1]) -> String {
-    let mut pkgs: Vec<String> = Vec::with_capacity(apt.len());
-    for spec in apt {
-        if let Some(version) = &spec.version {
-            pkgs.push(format!("{}={}", spec.name, version));
-        } else {
-            pkgs.push(spec.name.clone());
-        }
-    }
-
-    let escaped = pkgs
-        .iter()
-        .map(|pkg| sh_quote(pkg))
-        .collect::<Vec<_>>()
-        .join(" ");
-
-    let mut script = String::new();
-    script.push_str("set -eu\n");
-    script.push_str("if ! command -v apt-get >/dev/null 2>&1; then\n");
-    script.push_str("  echo 'apt-get not found in world; install.method=apt requires an apt-based world image' >&2\n");
-    script.push_str("  exit 127\n");
-    script.push_str("fi\n");
-    script.push_str("apt_dir='/var/lib/substrate/world-deps/apt'\n");
-    script.push_str(
-        "mkdir -p \"$apt_dir/state\" \"$apt_dir/lists/partial\" \"$apt_dir/cache/archives\"\n",
-    );
-    script.push_str("APT_OPTS=\"-o APT::Sandbox::User=root -o Dir::State=$apt_dir/state -o Dir::State::lists=$apt_dir/lists -o Dir::Cache=$apt_dir/cache -o Dir::Cache::archives=$apt_dir/cache/archives\"\n");
-    script.push_str("SUDO=''\n");
-    script.push_str("if [ \"$(id -u)\" -ne 0 ]; then\n");
-    script.push_str("  if command -v sudo >/dev/null 2>&1; then\n");
-    script.push_str("    SUDO='sudo -n'\n");
-    script.push_str("  else\n");
-    script.push_str(
-        "    echo 'not running as root and sudo is unavailable; cannot run apt-get' >&2\n",
-    );
-    script.push_str("    exit 126\n");
-    script.push_str("  fi\n");
-    script.push_str("fi\n");
-    script.push_str("$SUDO env DEBIAN_FRONTEND=noninteractive apt-get $APT_OPTS update\n");
-    script.push_str("$SUDO env DEBIAN_FRONTEND=noninteractive apt-get $APT_OPTS install -y ");
-    script.push_str(&escaped);
-    script.push('\n');
-    script
 }
 
 fn apply_script_package_v1(pkg: &super::inventory::PackageDefV1) -> Result<()> {
