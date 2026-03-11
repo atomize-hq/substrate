@@ -87,6 +87,25 @@ fn looks_like_missing_world_prereqs(frame: &Value) -> bool {
         || message.contains("operation not permitted")
 }
 
+fn decode_stdout_frame(frame: &Value) -> Option<Vec<u8>> {
+    let data_b64 = frame.get("data_b64").and_then(Value::as_str)?;
+    BASE64.decode(data_b64).ok()
+}
+
+fn stdout_indicates_missing_world_prereqs(stdout: &[u8]) -> bool {
+    let stdout = String::from_utf8_lossy(stdout).to_ascii_lowercase();
+    (stdout.contains("mount:") || stdout.contains("unshare:"))
+        && (stdout.contains("wrong fs type")
+            || stdout.contains("operation not permitted")
+            || stdout.contains("permission denied"))
+}
+
+fn completion_indicates_missing_world_prereqs(stdout: &[u8], frame: &Value) -> bool {
+    frame.get("type").and_then(Value::as_str) == Some("command_complete")
+        && frame.get("exit").and_then(Value::as_i64) == Some(32)
+        && stdout_indicates_missing_world_prereqs(stdout)
+}
+
 fn start_session_frame(
     cwd: &std::path::Path,
     policy_snapshot: Value,
@@ -160,20 +179,25 @@ async fn connect_and_start_session_with_env_or_skip(
     panic!("unexpected terminal frame for start_session: {frame}");
 }
 
-async fn collect_until_completion(ws: &mut Ws) -> (Vec<u8>, Value) {
+async fn collect_until_completion(ws: &mut Ws) -> Option<(Vec<u8>, Value)> {
     let mut stdout = Vec::<u8>::new();
     for _ in 0..200 {
         let frame = recv_json(ws).await;
         match frame.get("type").and_then(Value::as_str) {
             Some("stdout") => {
-                let b64 = frame
-                    .get("data_b64")
-                    .and_then(Value::as_str)
-                    .expect("stdout frame has data_b64");
-                let bytes = BASE64.decode(b64).expect("stdout.data_b64 decodes");
+                let bytes = decode_stdout_frame(&frame).expect("stdout.data_b64 decodes");
                 stdout.extend_from_slice(&bytes);
             }
-            Some("command_complete") => return (stdout, frame),
+            Some("command_complete") => {
+                if completion_indicates_missing_world_prereqs(&stdout, &frame) {
+                    eprintln!(
+                        "skipping persistent exec tests: world prereqs missing during exec: {}",
+                        String::from_utf8_lossy(&stdout)
+                    );
+                    return None;
+                }
+                return Some((stdout, frame));
+            }
             Some("error") => panic!("unexpected error while awaiting completion: {frame}"),
             Some(other) => panic!("unexpected server frame type: {other:?} frame={frame}"),
             None => panic!("server frame missing type: {frame}"),
@@ -359,6 +383,18 @@ async fn exec_while_busy_is_fatal_protocol_error() {
         .expect("send exec 2 while exec 1 in-flight");
 
     let frame = recv_json(&mut ws).await;
+    if frame.get("type").and_then(Value::as_str) == Some("stdout")
+        && decode_stdout_frame(&frame)
+            .as_deref()
+            .is_some_and(stdout_indicates_missing_world_prereqs)
+    {
+        eprintln!(
+            "skipping exec-while-busy test: world prereqs missing during exec: {}",
+            String::from_utf8_lossy(&decode_stdout_frame(&frame).unwrap_or_default())
+        );
+        server.abort();
+        return;
+    }
     assert_eq!(frame.get("type").and_then(Value::as_str), Some("error"));
     assert_eq!(
         frame.get("code").and_then(Value::as_str),
@@ -400,7 +436,13 @@ async fn stdout_is_drained_before_command_complete() {
     .await
     .expect("send exec");
 
-    let (stdout, complete) = collect_until_completion(&mut ws).await;
+    let (stdout, complete) = match collect_until_completion(&mut ws).await {
+        Some(value) => value,
+        None => {
+            server.abort();
+            return;
+        }
+    };
     assert_eq!(
         complete.get("type").and_then(Value::as_str),
         Some("command_complete")
@@ -485,7 +527,13 @@ async fn stdin_is_dropped_unless_passthrough_and_never_leaks_across_commands() {
     ))
     .await
     .expect("send exec 1");
-    let (stdout1, _) = collect_until_completion(&mut ws).await;
+    let (stdout1, _) = match collect_until_completion(&mut ws).await {
+        Some(value) => value,
+        None => {
+            server.abort();
+            return;
+        }
+    };
     let s1 = String::from_utf8_lossy(&stdout1);
     assert!(
         s1.contains("NOLEAK_IDLE"),
@@ -509,7 +557,13 @@ async fn stdin_is_dropped_unless_passthrough_and_never_leaks_across_commands() {
     ))
     .await
     .expect("send exec 2");
-    let (stdout2, _) = collect_until_completion(&mut ws).await;
+    let (stdout2, _) = match collect_until_completion(&mut ws).await {
+        Some(value) => value,
+        None => {
+            server.abort();
+            return;
+        }
+    };
     let s2 = String::from_utf8_lossy(&stdout2);
     assert!(
         s2.contains("NOLEAK_LATE"),
@@ -528,7 +582,13 @@ async fn stdin_is_dropped_unless_passthrough_and_never_leaks_across_commands() {
     ))
     .await
     .expect("send stdin during eof");
-    let (stdout3, _) = collect_until_completion(&mut ws).await;
+    let (stdout3, _) = match collect_until_completion(&mut ws).await {
+        Some(value) => value,
+        None => {
+            server.abort();
+            return;
+        }
+    };
     let s3 = String::from_utf8_lossy(&stdout3);
     assert!(s3.contains("DONE_EOF"), "expected exec to complete");
 
@@ -542,7 +602,13 @@ async fn stdin_is_dropped_unless_passthrough_and_never_leaks_across_commands() {
     ))
     .await
     .expect("send exec 4");
-    let (stdout4, _) = collect_until_completion(&mut ws).await;
+    let (stdout4, _) = match collect_until_completion(&mut ws).await {
+        Some(value) => value,
+        None => {
+            server.abort();
+            return;
+        }
+    };
     let s4 = String::from_utf8_lossy(&stdout4);
     assert!(
         s4.contains("NOLEAK_EOF"),
@@ -585,7 +651,13 @@ async fn signal_targets_foreground_process_group_and_session_survives() {
     .await
     .expect("send signal INT");
 
-    let (_stdout, complete) = collect_until_completion(&mut ws).await;
+    let (_stdout, complete) = match collect_until_completion(&mut ws).await {
+        Some(value) => value,
+        None => {
+            server.abort();
+            return;
+        }
+    };
     assert_eq!(complete.get("seq").and_then(Value::as_u64), Some(1));
     assert_eq!(
         complete.get("token_hex").and_then(Value::as_str),
@@ -602,7 +674,13 @@ async fn signal_targets_foreground_process_group_and_session_survives() {
     ))
     .await
     .expect("send exec 2");
-    let (stdout2, complete2) = collect_until_completion(&mut ws).await;
+    let (stdout2, complete2) = match collect_until_completion(&mut ws).await {
+        Some(value) => value,
+        None => {
+            server.abort();
+            return;
+        }
+    };
     assert_eq!(complete2.get("seq").and_then(Value::as_u64), Some(2));
     assert!(
         String::from_utf8_lossy(&stdout2).contains("STILL_OK"),
@@ -661,7 +739,13 @@ echo SET_OK"#
     ))
     .await
     .expect("send exec 1");
-    let (stdout1, complete1) = collect_until_completion(&mut ws).await;
+    let (stdout1, complete1) = match collect_until_completion(&mut ws).await {
+        Some(value) => value,
+        None => {
+            server.abort();
+            return;
+        }
+    };
     assert!(
         String::from_utf8_lossy(&stdout1).contains("SET_OK"),
         "expected exec 1 to run"
@@ -683,7 +767,13 @@ echo SET_OK"#
     ))
     .await
     .expect("send exec 2");
-    let (stdout2, complete2) = collect_until_completion(&mut ws).await;
+    let (stdout2, complete2) = match collect_until_completion(&mut ws).await {
+        Some(value) => value,
+        None => {
+            server.abort();
+            return;
+        }
+    };
     let s2 = String::from_utf8_lossy(&stdout2);
     assert!(s2.contains(&real), "expected persisted pwd -P, got: {s2:?}");
     assert!(s2.contains(&val), "expected persisted FOO, got: {s2:?}");
@@ -731,7 +821,13 @@ async fn caged_session_prevents_escape_from_anchor() {
     ))
     .await
     .expect("send exec 1");
-    let (stdout1, complete1) = collect_until_completion(&mut ws).await;
+    let (stdout1, complete1) = match collect_until_completion(&mut ws).await {
+        Some(value) => value,
+        None => {
+            server.abort();
+            return;
+        }
+    };
 
     let out = String::from_utf8_lossy(&stdout1);
     let cwd1 = complete1
@@ -782,7 +878,13 @@ test -z "${PROMPT_COMMAND-}" && echo PROMPT_COMMAND_EMPTY"#;
     ))
     .await
     .expect("send exec");
-    let (stdout, _complete) = collect_until_completion(&mut ws).await;
+    let (stdout, _complete) = match collect_until_completion(&mut ws).await {
+        Some(value) => value,
+        None => {
+            server.abort();
+            return;
+        }
+    };
     let s = String::from_utf8_lossy(&stdout);
     assert!(
         s.contains("/bin/bash") && s.contains("--noprofile") && s.contains("--norc"),
@@ -831,7 +933,13 @@ async fn incomplete_construct_does_not_hang_and_session_returns_to_idle() {
     ))
     .await
     .expect("send exec");
-    let (_stdout, complete) = collect_until_completion(&mut ws).await;
+    let (_stdout, complete) = match collect_until_completion(&mut ws).await {
+        Some(value) => value,
+        None => {
+            server.abort();
+            return;
+        }
+    };
     assert_ne!(
         complete.get("exit").and_then(Value::as_i64),
         Some(0),
@@ -841,7 +949,13 @@ async fn incomplete_construct_does_not_hang_and_session_returns_to_idle() {
     ws.send(Message::Text(exec_frame(2, "eof", b"echo OK2").to_string()))
         .await
         .expect("send exec 2");
-    let (stdout2, complete2) = collect_until_completion(&mut ws).await;
+    let (stdout2, complete2) = match collect_until_completion(&mut ws).await {
+        Some(value) => value,
+        None => {
+            server.abort();
+            return;
+        }
+    };
     assert_eq!(complete2.get("exit").and_then(Value::as_i64), Some(0));
     assert!(
         String::from_utf8_lossy(&stdout2).contains("OK2"),
@@ -899,7 +1013,13 @@ async fn program_text_sent_over_stdin_is_not_executed() {
     ws.send(Message::Text(exec_frame(1, "eof", b"echo OK").to_string()))
         .await
         .expect("send exec");
-    let (stdout, _complete) = collect_until_completion(&mut ws).await;
+    let (stdout, _complete) = match collect_until_completion(&mut ws).await {
+        Some(value) => value,
+        None => {
+            server.abort();
+            return;
+        }
+    };
     let s = String::from_utf8_lossy(&stdout);
     assert!(s.contains("OK"), "expected exec output, got: {s:?}");
     assert!(
@@ -941,7 +1061,13 @@ done"#;
     ))
     .await
     .expect("send exec");
-    let (stdout, _complete) = collect_until_completion(&mut ws).await;
+    let (stdout, _complete) = match collect_until_completion(&mut ws).await {
+        Some(value) => value,
+        None => {
+            server.abort();
+            return;
+        }
+    };
     let s = String::from_utf8_lossy(&stdout);
     assert!(
         !s.contains("socket:"),
