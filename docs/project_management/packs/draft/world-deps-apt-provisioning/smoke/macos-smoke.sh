@@ -17,6 +17,11 @@ fi
 
 SUBSTRATE_BIN="${SUBSTRATE_BIN:-substrate}"
 HOST_HOME="${HOME:-}"
+HOST_LIMA_HOME="${LIMA_HOME:-}"
+
+if [[ -z "${HOST_LIMA_HOME}" && -n "${HOST_HOME}" ]]; then
+  HOST_LIMA_HOME="${HOST_HOME}/.lima"
+fi
 
 if [[ "$SUBSTRATE_BIN" == "substrate" ]]; then
   command -v substrate >/dev/null 2>&1 || { echo "FAIL: substrate not found on PATH"; exit 3; }
@@ -126,6 +131,9 @@ mkdir -p "$home_dir" "$substrate_home/deps/packages" "$ws"
 export HOME="$home_dir"
 export USERPROFILE="$home_dir"
 export SUBSTRATE_HOME="$substrate_home"
+if [[ -n "${HOST_LIMA_HOME}" ]]; then
+  export LIMA_HOME="$HOST_LIMA_HOME"
+fi
 
 "$SUBSTRATE_BIN" workspace init "$ws" >/dev/null
 
