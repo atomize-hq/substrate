@@ -147,3 +147,11 @@
 ## END — 2026-03-11T17:36:00Z — integration — WDAP0-integ
 - HEAD: `e0ef4123ca8a841ca49c4c2c148931e2badb095c`
 - Codex last message: `docs/project_management/packs/draft/world-deps-apt-provisioning/logs/WDAP0/integ/last_message.md`
+
+## START — 2026-03-11T17:29:20Z — code — WDAP1-code
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/world-deps-apt-provisioning" SLICE_ID="WDAP1"`
+
+## START — 2026-03-11T17:29:20Z — test — WDAP1-test
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/world-deps-apt-provisioning" SLICE_ID="WDAP1"`
