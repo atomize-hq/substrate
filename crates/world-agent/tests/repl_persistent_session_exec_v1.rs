@@ -31,7 +31,11 @@ fn minimal_policy_snapshot() -> Value {
 
 async fn spawn_world_agent_ws(
     service: WorldAgentService,
-) -> (SocketAddr, tokio::task::JoinHandle<()>) {
+) -> (
+    SocketAddr,
+    tokio::sync::oneshot::Sender<()>,
+    tokio::task::JoinHandle<()>,
+) {
     let router = Router::new()
         .route("/v1/stream", get(world_agent::handlers::stream))
         .with_state(service);
@@ -41,15 +45,33 @@ async fn spawn_world_agent_ws(
         .expect("bind ws listener");
     let addr = listener.local_addr().expect("ws listener addr");
     let std_listener = listener.into_std().expect("into_std listener");
+    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
 
     let server = tokio::spawn(async move {
         let _ = axum::Server::from_tcp(std_listener)
             .expect("from_tcp")
             .serve(router.into_make_service())
+            .with_graceful_shutdown(async move {
+                let _ = shutdown_rx.await;
+            })
             .await;
     });
 
-    (addr, server)
+    (addr, shutdown_tx, server)
+}
+
+async fn stop_server(
+    shutdown: tokio::sync::oneshot::Sender<()>,
+    mut server: tokio::task::JoinHandle<()>,
+) {
+    let _ = shutdown.send(());
+    match timeout(Duration::from_millis(200), &mut server).await {
+        Ok(_) => {}
+        Err(_) => {
+            server.abort();
+            let _ = server.await;
+        }
+    }
 }
 
 async fn ws_connect(addr: SocketAddr) -> Ws {
@@ -232,7 +254,7 @@ async fn recv_for_duration(ws: &mut Ws, duration: Duration) -> Vec<Value> {
     frames
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn exec_rejects_invalid_base64_fail_closed() {
     let service = match WorldAgentService::new() {
         Ok(svc) => svc,
@@ -242,14 +264,14 @@ async fn exec_rejects_invalid_base64_fail_closed() {
         }
     };
 
-    let (addr, server) = spawn_world_agent_ws(service).await;
+    let (addr, shutdown, server) = spawn_world_agent_ws(service).await;
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
     let mut ws = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
         Some(ws) => ws,
         None => {
-            server.abort();
+            stop_server(shutdown, server).await;
             return;
         }
     };
@@ -269,10 +291,11 @@ async fn exec_rejects_invalid_base64_fail_closed() {
     assert_eq!(frame.get("fatal").and_then(Value::as_bool), Some(true));
     assert_eq!(frame.get("seq").and_then(Value::as_u64), Some(1));
 
-    server.abort();
+    drop(ws);
+    stop_server(shutdown, server).await;
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn exec_rejects_invalid_utf8_fail_closed() {
     let service = match WorldAgentService::new() {
         Ok(svc) => svc,
@@ -282,14 +305,14 @@ async fn exec_rejects_invalid_utf8_fail_closed() {
         }
     };
 
-    let (addr, server) = spawn_world_agent_ws(service).await;
+    let (addr, shutdown, server) = spawn_world_agent_ws(service).await;
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
     let mut ws = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
         Some(ws) => ws,
         None => {
-            server.abort();
+            stop_server(shutdown, server).await;
             return;
         }
     };
@@ -308,10 +331,11 @@ async fn exec_rejects_invalid_utf8_fail_closed() {
     assert_eq!(frame.get("fatal").and_then(Value::as_bool), Some(true));
     assert_eq!(frame.get("seq").and_then(Value::as_u64), Some(1));
 
-    server.abort();
+    drop(ws);
+    stop_server(shutdown, server).await;
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn exec_rejects_nul_fail_closed() {
     let service = match WorldAgentService::new() {
         Ok(svc) => svc,
@@ -321,14 +345,14 @@ async fn exec_rejects_nul_fail_closed() {
         }
     };
 
-    let (addr, server) = spawn_world_agent_ws(service).await;
+    let (addr, shutdown, server) = spawn_world_agent_ws(service).await;
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
     let mut ws = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
         Some(ws) => ws,
         None => {
-            server.abort();
+            stop_server(shutdown, server).await;
             return;
         }
     };
@@ -347,10 +371,11 @@ async fn exec_rejects_nul_fail_closed() {
     assert_eq!(frame.get("fatal").and_then(Value::as_bool), Some(true));
     assert_eq!(frame.get("seq").and_then(Value::as_u64), Some(1));
 
-    server.abort();
+    drop(ws);
+    stop_server(shutdown, server).await;
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn exec_while_busy_is_fatal_protocol_error() {
     let service = match WorldAgentService::new() {
         Ok(svc) => svc,
@@ -360,14 +385,14 @@ async fn exec_while_busy_is_fatal_protocol_error() {
         }
     };
 
-    let (addr, server) = spawn_world_agent_ws(service).await;
+    let (addr, shutdown, server) = spawn_world_agent_ws(service).await;
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
     let mut ws = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
         Some(ws) => ws,
         None => {
-            server.abort();
+            stop_server(shutdown, server).await;
             return;
         }
     };
@@ -394,7 +419,8 @@ async fn exec_while_busy_is_fatal_protocol_error() {
             "skipping exec-while-busy test: world prereqs missing during exec: {}",
             String::from_utf8_lossy(&decode_stdout_frame(&frame).unwrap_or_default())
         );
-        server.abort();
+        drop(ws);
+        stop_server(shutdown, server).await;
         return;
     }
     assert_eq!(frame.get("type").and_then(Value::as_str), Some("error"));
@@ -405,10 +431,11 @@ async fn exec_while_busy_is_fatal_protocol_error() {
     assert_eq!(frame.get("fatal").and_then(Value::as_bool), Some(true));
     assert_eq!(frame.get("seq").and_then(Value::as_u64), Some(2));
 
-    server.abort();
+    drop(ws);
+    stop_server(shutdown, server).await;
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn stdout_is_drained_before_command_complete() {
     let service = match WorldAgentService::new() {
         Ok(svc) => svc,
@@ -418,14 +445,14 @@ async fn stdout_is_drained_before_command_complete() {
         }
     };
 
-    let (addr, server) = spawn_world_agent_ws(service).await;
+    let (addr, shutdown, server) = spawn_world_agent_ws(service).await;
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
     let mut ws = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
         Some(ws) => ws,
         None => {
-            server.abort();
+            stop_server(shutdown, server).await;
             return;
         }
     };
@@ -441,7 +468,8 @@ async fn stdout_is_drained_before_command_complete() {
     let (stdout, complete) = match collect_until_completion(&mut ws).await {
         Some(value) => value,
         None => {
-            server.abort();
+            drop(ws);
+            stop_server(shutdown, server).await;
             return;
         }
     };
@@ -487,10 +515,11 @@ async fn stdout_is_drained_before_command_complete() {
         );
     }
 
-    server.abort();
+    drop(ws);
+    stop_server(shutdown, server).await;
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn stdin_is_dropped_unless_passthrough_and_never_leaks_across_commands() {
     let service = match WorldAgentService::new() {
         Ok(svc) => svc,
@@ -500,14 +529,14 @@ async fn stdin_is_dropped_unless_passthrough_and_never_leaks_across_commands() {
         }
     };
 
-    let (addr, server) = spawn_world_agent_ws(service).await;
+    let (addr, shutdown, server) = spawn_world_agent_ws(service).await;
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
     let mut ws = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
         Some(ws) => ws,
         None => {
-            server.abort();
+            stop_server(shutdown, server).await;
             return;
         }
     };
@@ -532,7 +561,8 @@ async fn stdin_is_dropped_unless_passthrough_and_never_leaks_across_commands() {
     let (stdout1, _) = match collect_until_completion(&mut ws).await {
         Some(value) => value,
         None => {
-            server.abort();
+            drop(ws);
+            stop_server(shutdown, server).await;
             return;
         }
     };
@@ -562,7 +592,8 @@ async fn stdin_is_dropped_unless_passthrough_and_never_leaks_across_commands() {
     let (stdout2, _) = match collect_until_completion(&mut ws).await {
         Some(value) => value,
         None => {
-            server.abort();
+            drop(ws);
+            stop_server(shutdown, server).await;
             return;
         }
     };
@@ -587,7 +618,8 @@ async fn stdin_is_dropped_unless_passthrough_and_never_leaks_across_commands() {
     let (stdout3, _) = match collect_until_completion(&mut ws).await {
         Some(value) => value,
         None => {
-            server.abort();
+            drop(ws);
+            stop_server(shutdown, server).await;
             return;
         }
     };
@@ -607,7 +639,8 @@ async fn stdin_is_dropped_unless_passthrough_and_never_leaks_across_commands() {
     let (stdout4, _) = match collect_until_completion(&mut ws).await {
         Some(value) => value,
         None => {
-            server.abort();
+            drop(ws);
+            stop_server(shutdown, server).await;
             return;
         }
     };
@@ -617,10 +650,11 @@ async fn stdin_is_dropped_unless_passthrough_and_never_leaks_across_commands() {
         "expected stdin during eof to be dropped (no buffering), got stdout: {s4:?}"
     );
 
-    server.abort();
+    drop(ws);
+    stop_server(shutdown, server).await;
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn signal_targets_foreground_process_group_and_session_survives() {
     let service = match WorldAgentService::new() {
         Ok(svc) => svc,
@@ -630,14 +664,14 @@ async fn signal_targets_foreground_process_group_and_session_survives() {
         }
     };
 
-    let (addr, server) = spawn_world_agent_ws(service).await;
+    let (addr, shutdown, server) = spawn_world_agent_ws(service).await;
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
     let mut ws = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
         Some(ws) => ws,
         None => {
-            server.abort();
+            stop_server(shutdown, server).await;
             return;
         }
     };
@@ -656,7 +690,8 @@ async fn signal_targets_foreground_process_group_and_session_survives() {
     let (_stdout, complete) = match collect_until_completion(&mut ws).await {
         Some(value) => value,
         None => {
-            server.abort();
+            drop(ws);
+            stop_server(shutdown, server).await;
             return;
         }
     };
@@ -679,7 +714,8 @@ async fn signal_targets_foreground_process_group_and_session_survives() {
     let (stdout2, complete2) = match collect_until_completion(&mut ws).await {
         Some(value) => value,
         None => {
-            server.abort();
+            drop(ws);
+            stop_server(shutdown, server).await;
             return;
         }
     };
@@ -689,10 +725,11 @@ async fn signal_targets_foreground_process_group_and_session_survives() {
         "expected session to remain usable after SIGINT"
     );
 
-    server.abort();
+    drop(ws);
+    stop_server(shutdown, server).await;
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn persists_physical_cwd_and_exported_env_across_execs() {
     let service = match WorldAgentService::new() {
         Ok(svc) => svc,
@@ -702,7 +739,7 @@ async fn persists_physical_cwd_and_exported_env_across_execs() {
         }
     };
 
-    let (addr, server) = spawn_world_agent_ws(service).await;
+    let (addr, shutdown, server) = spawn_world_agent_ws(service).await;
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
@@ -717,7 +754,7 @@ async fn persists_physical_cwd_and_exported_env_across_execs() {
     let mut ws = match connect_and_start_session_with_env_or_skip(addr, cwd.as_path(), env).await {
         Some(ws) => ws,
         None => {
-            server.abort();
+            stop_server(shutdown, server).await;
             return;
         }
     };
@@ -744,7 +781,8 @@ echo SET_OK"#
     let (stdout1, complete1) = match collect_until_completion(&mut ws).await {
         Some(value) => value,
         None => {
-            server.abort();
+            drop(ws);
+            stop_server(shutdown, server).await;
             return;
         }
     };
@@ -772,7 +810,8 @@ echo SET_OK"#
     let (stdout2, complete2) = match collect_until_completion(&mut ws).await {
         Some(value) => value,
         None => {
-            server.abort();
+            drop(ws);
+            stop_server(shutdown, server).await;
             return;
         }
     };
@@ -787,10 +826,11 @@ echo SET_OK"#
         .to_string();
     assert_eq!(cwd2, real, "expected persisted physical cwd");
 
-    server.abort();
+    drop(ws);
+    stop_server(shutdown, server).await;
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn caged_session_prevents_escape_from_anchor() {
     let service = match WorldAgentService::new() {
         Ok(svc) => svc,
@@ -800,7 +840,7 @@ async fn caged_session_prevents_escape_from_anchor() {
         }
     };
 
-    let (addr, server) = spawn_world_agent_ws(service).await;
+    let (addr, shutdown, server) = spawn_world_agent_ws(service).await;
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
@@ -813,7 +853,7 @@ async fn caged_session_prevents_escape_from_anchor() {
     let mut ws = match connect_and_start_session_with_env_or_skip(addr, cwd.as_path(), env).await {
         Some(ws) => ws,
         None => {
-            server.abort();
+            stop_server(shutdown, server).await;
             return;
         }
     };
@@ -826,7 +866,8 @@ async fn caged_session_prevents_escape_from_anchor() {
     let (stdout1, complete1) = match collect_until_completion(&mut ws).await {
         Some(value) => value,
         None => {
-            server.abort();
+            drop(ws);
+            stop_server(shutdown, server).await;
             return;
         }
     };
@@ -844,10 +885,11 @@ async fn caged_session_prevents_escape_from_anchor() {
         cwd.display()
     );
 
-    server.abort();
+    drop(ws);
+    stop_server(shutdown, server).await;
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn evaluator_is_bash_noprofile_norc_and_prompts_suppressed() {
     let service = match WorldAgentService::new() {
         Ok(svc) => svc,
@@ -857,14 +899,14 @@ async fn evaluator_is_bash_noprofile_norc_and_prompts_suppressed() {
         }
     };
 
-    let (addr, server) = spawn_world_agent_ws(service).await;
+    let (addr, shutdown, server) = spawn_world_agent_ws(service).await;
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
     let mut ws = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
         Some(ws) => ws,
         None => {
-            server.abort();
+            stop_server(shutdown, server).await;
             return;
         }
     };
@@ -883,7 +925,8 @@ test -z "${PROMPT_COMMAND-}" && echo PROMPT_COMMAND_EMPTY"#;
     let (stdout, _complete) = match collect_until_completion(&mut ws).await {
         Some(value) => value,
         None => {
-            server.abort();
+            drop(ws);
+            stop_server(shutdown, server).await;
             return;
         }
     };
@@ -905,10 +948,11 @@ test -z "${PROMPT_COMMAND-}" && echo PROMPT_COMMAND_EMPTY"#;
         "expected prompts suppressed: {s:?}"
     );
 
-    server.abort();
+    drop(ws);
+    stop_server(shutdown, server).await;
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn incomplete_construct_does_not_hang_and_session_returns_to_idle() {
     let service = match WorldAgentService::new() {
         Ok(svc) => svc,
@@ -918,14 +962,14 @@ async fn incomplete_construct_does_not_hang_and_session_returns_to_idle() {
         }
     };
 
-    let (addr, server) = spawn_world_agent_ws(service).await;
+    let (addr, shutdown, server) = spawn_world_agent_ws(service).await;
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
     let mut ws = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
         Some(ws) => ws,
         None => {
-            server.abort();
+            stop_server(shutdown, server).await;
             return;
         }
     };
@@ -938,7 +982,8 @@ async fn incomplete_construct_does_not_hang_and_session_returns_to_idle() {
     let (_stdout, complete) = match collect_until_completion(&mut ws).await {
         Some(value) => value,
         None => {
-            server.abort();
+            drop(ws);
+            stop_server(shutdown, server).await;
             return;
         }
     };
@@ -954,7 +999,8 @@ async fn incomplete_construct_does_not_hang_and_session_returns_to_idle() {
     let (stdout2, complete2) = match collect_until_completion(&mut ws).await {
         Some(value) => value,
         None => {
-            server.abort();
+            drop(ws);
+            stop_server(shutdown, server).await;
             return;
         }
     };
@@ -964,10 +1010,11 @@ async fn incomplete_construct_does_not_hang_and_session_returns_to_idle() {
         "expected session to return to idle after syntax error"
     );
 
-    server.abort();
+    drop(ws);
+    stop_server(shutdown, server).await;
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn program_text_sent_over_stdin_is_not_executed() {
     let service = match WorldAgentService::new() {
         Ok(svc) => svc,
@@ -977,14 +1024,14 @@ async fn program_text_sent_over_stdin_is_not_executed() {
         }
     };
 
-    let (addr, server) = spawn_world_agent_ws(service).await;
+    let (addr, shutdown, server) = spawn_world_agent_ws(service).await;
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
     let mut ws = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
         Some(ws) => ws,
         None => {
-            server.abort();
+            stop_server(shutdown, server).await;
             return;
         }
     };
@@ -1018,7 +1065,8 @@ async fn program_text_sent_over_stdin_is_not_executed() {
     let (stdout, _complete) = match collect_until_completion(&mut ws).await {
         Some(value) => value,
         None => {
-            server.abort();
+            drop(ws);
+            stop_server(shutdown, server).await;
             return;
         }
     };
@@ -1029,10 +1077,11 @@ async fn program_text_sent_over_stdin_is_not_executed() {
         "unexpected output from stdin-as-program: {s:?}"
     );
 
-    server.abort();
+    drop(ws);
+    stop_server(shutdown, server).await;
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn evaluator_cannot_see_inherited_socket_fds_dr22_smoke() {
     let service = match WorldAgentService::new() {
         Ok(svc) => svc,
@@ -1042,14 +1091,14 @@ async fn evaluator_cannot_see_inherited_socket_fds_dr22_smoke() {
         }
     };
 
-    let (addr, server) = spawn_world_agent_ws(service).await;
+    let (addr, shutdown, server) = spawn_world_agent_ws(service).await;
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
     let mut ws = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
         Some(ws) => ws,
         None => {
-            server.abort();
+            stop_server(shutdown, server).await;
             return;
         }
     };
@@ -1066,7 +1115,8 @@ done"#;
     let (stdout, _complete) = match collect_until_completion(&mut ws).await {
         Some(value) => value,
         None => {
-            server.abort();
+            drop(ws);
+            stop_server(shutdown, server).await;
             return;
         }
     };
@@ -1076,5 +1126,6 @@ done"#;
         "evaluator must not inherit control-plane socket fds: {s:?}"
     );
 
-    server.abort();
+    drop(ws);
+    stop_server(shutdown, server).await;
 }
