@@ -82,7 +82,10 @@ async fn ws_connect(addr: SocketAddr) -> Ws {
 }
 
 async fn recv_json(ws: &mut Ws) -> Value {
-    let msg = timeout(Duration::from_secs(2), ws.next())
+    // Ubuntu CI occasionally takes longer than 2s to surface the next PTY frame
+    // after world setup or shell error handling. These tests assert protocol
+    // behavior, not a sub-2s latency budget.
+    let msg = timeout(Duration::from_secs(5), ws.next())
         .await
         .expect("timed out waiting for ws message")
         .expect("ws closed without a message")
