@@ -171,6 +171,7 @@ pub(crate) fn mount_fuse_only(overlay: &mut OverlayFs, lower_dir: &Path) -> Resu
     }
     if !ready {
         let _ = child.kill();
+        let _ = child.wait();
         anyhow::bail!(
             "fuse-overlayfs did not mount {} within timeout",
             overlay.merged_dir.display()
@@ -244,6 +245,7 @@ pub(crate) fn mount_fuse_only_read_only(overlay: &mut OverlayFs, lower_dir: &Pat
     }
     if !ready {
         let _ = child.kill();
+        let _ = child.wait();
         anyhow::bail!(
             "fuse-overlayfs did not mount {} within timeout",
             overlay.merged_dir.display()
@@ -268,6 +270,7 @@ pub(crate) fn unmount_linux(overlay: &mut OverlayFs) -> Result<()> {
             let _ = umount2(&overlay.merged_dir, MntFlags::MNT_DETACH);
             if let Some(mut ch) = overlay.fuse_child.take() {
                 let _ = ch.kill();
+                let _ = ch.wait();
             }
         } else {
             umount2(&overlay.merged_dir, MntFlags::MNT_DETACH)

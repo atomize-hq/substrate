@@ -33,7 +33,11 @@ fn minimal_policy_snapshot() -> Value {
 
 async fn spawn_world_agent_ws(
     service: WorldAgentService,
-) -> (SocketAddr, tokio::task::JoinHandle<()>) {
+) -> (
+    SocketAddr,
+    tokio::sync::oneshot::Sender<()>,
+    tokio::task::JoinHandle<()>,
+) {
     let router = Router::new()
         .route("/v1/stream", get(world_agent::handlers::stream))
         .with_state(service);
@@ -43,15 +47,33 @@ async fn spawn_world_agent_ws(
         .expect("bind ws listener");
     let addr = listener.local_addr().expect("ws listener addr");
     let std_listener = listener.into_std().expect("into_std listener");
+    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
 
     let server = tokio::spawn(async move {
         let _ = axum::Server::from_tcp(std_listener)
             .expect("from_tcp")
             .serve(router.into_make_service())
+            .with_graceful_shutdown(async move {
+                let _ = shutdown_rx.await;
+            })
             .await;
     });
 
-    (addr, server)
+    (addr, shutdown_tx, server)
+}
+
+async fn stop_server(
+    shutdown: tokio::sync::oneshot::Sender<()>,
+    mut server: tokio::task::JoinHandle<()>,
+) {
+    let _ = shutdown.send(());
+    match timeout(Duration::from_secs(2), &mut server).await {
+        Ok(_) => {}
+        Err(_) => {
+            server.abort();
+            let _ = server.await;
+        }
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -295,7 +317,7 @@ async fn connect_and_start_session_or_skip(
     Some((ws, frame))
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn legacy_one_shot_start_remains_accepted() {
     let service = match WorldAgentService::new() {
         Ok(svc) => svc,
@@ -305,7 +327,7 @@ async fn legacy_one_shot_start_remains_accepted() {
         }
     };
 
-    let (addr, server) = spawn_world_agent_ws(service).await;
+    let (addr, shutdown, server) = spawn_world_agent_ws(service).await;
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
@@ -349,7 +371,8 @@ async fn legacy_one_shot_start_remains_accepted() {
                     eprintln!(
                         "skipping legacy /v1/stream assertions: world prereqs missing: {frame}"
                     );
-                    server.abort();
+                    drop(ws);
+                    stop_server(shutdown, server).await;
                     return;
                 }
                 panic!("unexpected error for legacy start: {frame}");
@@ -364,17 +387,19 @@ async fn legacy_one_shot_start_remains_accepted() {
         eprintln!(
             "skipping legacy /v1/stream assertions: world prereqs missing during legacy start: {stdout_text}"
         );
-        server.abort();
+        drop(ws);
+        stop_server(shutdown, server).await;
         return;
     }
 
     assert!(saw_stdout, "expected at least one stdout frame");
     assert_eq!(exit_code, Some(0), "expected exit code 0");
 
-    server.abort();
+    drop(ws);
+    stop_server(shutdown, server).await;
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn persistent_session_enforces_first_frame_start_session() {
     let service = match WorldAgentService::new() {
         Ok(svc) => svc,
@@ -384,7 +409,7 @@ async fn persistent_session_enforces_first_frame_start_session() {
         }
     };
 
-    let (addr, server) = spawn_world_agent_ws(service).await;
+    let (addr, shutdown, server) = spawn_world_agent_ws(service).await;
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
@@ -422,10 +447,11 @@ async fn persistent_session_enforces_first_frame_start_session() {
     .await
     .ok();
 
-    server.abort();
+    drop(ws);
+    stop_server(shutdown, server).await;
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn start_session_rejects_policy_snapshot_with_unknown_fields_fail_closed() {
     let service = match WorldAgentService::new() {
         Ok(svc) => svc,
@@ -435,7 +461,7 @@ async fn start_session_rejects_policy_snapshot_with_unknown_fields_fail_closed()
         }
     };
 
-    let (addr, server) = spawn_world_agent_ws(service).await;
+    let (addr, shutdown, server) = spawn_world_agent_ws(service).await;
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
@@ -460,10 +486,11 @@ async fn start_session_rejects_policy_snapshot_with_unknown_fields_fail_closed()
     );
     assert_eq!(frame.get("fatal").and_then(Value::as_bool), Some(true));
 
-    server.abort();
+    drop(ws);
+    stop_server(shutdown, server).await;
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn start_session_requires_policy_snapshot_fail_closed() {
     let service = match WorldAgentService::new() {
         Ok(svc) => svc,
@@ -473,7 +500,7 @@ async fn start_session_requires_policy_snapshot_fail_closed() {
         }
     };
 
-    let (addr, server) = spawn_world_agent_ws(service).await;
+    let (addr, shutdown, server) = spawn_world_agent_ws(service).await;
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
@@ -499,10 +526,11 @@ async fn start_session_requires_policy_snapshot_fail_closed() {
     );
     assert_eq!(frame.get("fatal").and_then(Value::as_bool), Some(true));
 
-    server.abort();
+    drop(ws);
+    stop_server(shutdown, server).await;
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn start_session_yields_ready_with_fresh_hex32_session_nonce() {
     let service = match WorldAgentService::new() {
         Ok(svc) => svc,
@@ -512,20 +540,21 @@ async fn start_session_yields_ready_with_fresh_hex32_session_nonce() {
         }
     };
 
-    let (addr, server) = spawn_world_agent_ws(service).await;
+    let (addr, shutdown, server) = spawn_world_agent_ws(service).await;
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
-    let (_ws, frame) = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
+    let (ws, frame) = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
         Some(ok) => ok,
         None => {
             eprintln!("skipping start_session ready assertions: world prereqs missing");
-            server.abort();
+            stop_server(shutdown, server).await;
             return;
         }
     };
     if looks_like_missing_world_prereqs(&frame) {
         eprintln!("skipping start_session ready assertions: world prereqs missing: {frame}");
-        server.abort();
+        drop(ws);
+        stop_server(shutdown, server).await;
         return;
     }
     assert_eq!(frame.get("type").and_then(Value::as_str), Some("ready"));
@@ -550,10 +579,11 @@ async fn start_session_yields_ready_with_fresh_hex32_session_nonce() {
         "ready.session_nonce must be lowercase hex"
     );
 
-    server.abort();
+    drop(ws);
+    stop_server(shutdown, server).await;
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn session_nonce_is_unique_per_session_restart() {
     let service = match WorldAgentService::new() {
         Ok(svc) => svc,
@@ -566,18 +596,19 @@ async fn session_nonce_is_unique_per_session_restart() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
-    let (addr1, server1) = spawn_world_agent_ws(service.clone()).await;
-    let (_ws1, ready1) = match connect_and_start_session_or_skip(addr1, cwd.as_path()).await {
+    let (addr1, shutdown1, server1) = spawn_world_agent_ws(service.clone()).await;
+    let (ws1, ready1) = match connect_and_start_session_or_skip(addr1, cwd.as_path()).await {
         Some(ok) => ok,
         None => {
             eprintln!("skipping session_nonce uniqueness assertions: world prereqs missing");
-            server1.abort();
+            stop_server(shutdown1, server1).await;
             return;
         }
     };
     if looks_like_missing_world_prereqs(&ready1) {
         eprintln!("skipping session_nonce uniqueness assertions: world prereqs missing: {ready1}");
-        server1.abort();
+        drop(ws1);
+        stop_server(shutdown1, server1).await;
         return;
     }
     let nonce1 = ready1
@@ -585,20 +616,22 @@ async fn session_nonce_is_unique_per_session_restart() {
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string();
-    server1.abort();
+    drop(ws1);
+    stop_server(shutdown1, server1).await;
 
-    let (addr2, server2) = spawn_world_agent_ws(service).await;
-    let (_ws2, ready2) = match connect_and_start_session_or_skip(addr2, cwd.as_path()).await {
+    let (addr2, shutdown2, server2) = spawn_world_agent_ws(service).await;
+    let (ws2, ready2) = match connect_and_start_session_or_skip(addr2, cwd.as_path()).await {
         Some(ok) => ok,
         None => {
             eprintln!("skipping session_nonce uniqueness assertions: world prereqs missing");
-            server2.abort();
+            stop_server(shutdown2, server2).await;
             return;
         }
     };
     if looks_like_missing_world_prereqs(&ready2) {
         eprintln!("skipping session_nonce uniqueness assertions: world prereqs missing: {ready2}");
-        server2.abort();
+        drop(ws2);
+        stop_server(shutdown2, server2).await;
         return;
     }
     let nonce2 = ready2
@@ -606,14 +639,15 @@ async fn session_nonce_is_unique_per_session_restart() {
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string();
-    server2.abort();
+    drop(ws2);
+    stop_server(shutdown2, server2).await;
 
     assert!(!nonce1.is_empty(), "session_nonce missing for session 1");
     assert!(!nonce2.is_empty(), "session_nonce missing for session 2");
     assert_ne!(nonce1, nonce2, "session_nonce must change per session");
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn start_session_fails_closed_when_fionread_watermark_is_unavailable() {
     // DR-23 preflight is fail-closed: if the required PTY watermark query is unavailable for
     // protocol v1 (Linux ioctl(FIONREAD)), world-agent MUST NOT emit `ready`.
@@ -622,7 +656,7 @@ async fn start_session_fails_closed_when_fionread_watermark_is_unavailable() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
-    let (mut ws, frame) = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
+    let (ws, frame) = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
         Some(ok) => ok,
         None => {
             eprintln!("skipping DR-23 FIONREAD assertions: world prereqs missing");
@@ -633,7 +667,7 @@ async fn start_session_fails_closed_when_fionread_watermark_is_unavailable() {
     };
     if looks_like_missing_world_prereqs(&frame) {
         eprintln!("skipping DR-23 FIONREAD assertions: world prereqs missing: {frame}");
-        let _ = ws.close(None).await;
+        drop(ws);
         let _ = shutdown.send(());
         let _ = server_thread.join();
         return;
@@ -641,12 +675,12 @@ async fn start_session_fails_closed_when_fionread_watermark_is_unavailable() {
     assert_eq!(frame.get("type").and_then(Value::as_str), Some("error"));
     assert_eq!(frame.get("fatal").and_then(Value::as_bool), Some(true));
 
-    let _ = ws.close(None).await;
+    drop(ws);
     let _ = shutdown.send(());
     let _ = server_thread.join();
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn start_session_is_robust_to_inheritable_non_stdio_fds() {
     // DR-22 preflight: the evaluator MUST NOT inherit non-stdio fds.
     // This test opens a non-CLOEXEC fd in the world-agent process and requires that the
@@ -668,24 +702,26 @@ async fn start_session_is_robust_to_inheritable_non_stdio_fds() {
     let rc = unsafe { libc::fcntl(fd, libc::F_SETFD, 0) };
     assert_eq!(rc, 0, "clear CLOEXEC");
 
-    let (addr, server) = spawn_world_agent_ws(service).await;
-    let (_ws, frame) = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
+    let (addr, shutdown, server) = spawn_world_agent_ws(service).await;
+    let (ws, frame) = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
         Some(ok) => ok,
         None => {
             eprintln!("skipping DR-22 inheritable-fd assertions: world prereqs missing");
-            server.abort();
+            stop_server(shutdown, server).await;
             drop(fd_leak_guard);
             return;
         }
     };
     if looks_like_missing_world_prereqs(&frame) {
         eprintln!("skipping DR-22 inheritable-fd assertions: world prereqs missing: {frame}");
-        server.abort();
+        drop(ws);
+        stop_server(shutdown, server).await;
         drop(fd_leak_guard);
         return;
     }
     assert_eq!(frame.get("type").and_then(Value::as_str), Some("ready"));
 
-    server.abort();
+    drop(ws);
+    stop_server(shutdown, server).await;
     drop(fd_leak_guard);
 }
