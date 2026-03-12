@@ -622,7 +622,7 @@ async fn start_session_fails_closed_when_fionread_watermark_is_unavailable() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let cwd = tmp.path().to_path_buf();
 
-    let (_ws, frame) = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
+    let (mut ws, frame) = match connect_and_start_session_or_skip(addr, cwd.as_path()).await {
         Some(ok) => ok,
         None => {
             eprintln!("skipping DR-23 FIONREAD assertions: world prereqs missing");
@@ -633,6 +633,7 @@ async fn start_session_fails_closed_when_fionread_watermark_is_unavailable() {
     };
     if looks_like_missing_world_prereqs(&frame) {
         eprintln!("skipping DR-23 FIONREAD assertions: world prereqs missing: {frame}");
+        let _ = ws.close(None).await;
         let _ = shutdown.send(());
         let _ = server_thread.join();
         return;
@@ -640,6 +641,7 @@ async fn start_session_fails_closed_when_fionread_watermark_is_unavailable() {
     assert_eq!(frame.get("type").and_then(Value::as_str), Some("error"));
     assert_eq!(frame.get("fatal").and_then(Value::as_bool), Some(true));
 
+    let _ = ws.close(None).await;
     let _ = shutdown.send(());
     let _ = server_thread.join();
 }
