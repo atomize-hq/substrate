@@ -469,6 +469,7 @@ pub fn execute_shell_command_with_project_bind_mount(
     }
 }
 
+#[cfg(target_os = "linux")]
 fn project_bind_mount_env_map(
     cmd: &str,
     mount: &ProjectBindMount<'_>,
@@ -525,6 +526,7 @@ fn project_bind_mount_env_map(
     env_map
 }
 
+#[cfg(target_os = "linux")]
 fn mount_namespace_setup_failure(stderr: &[u8]) -> Option<&str> {
     let stderr_str = std::str::from_utf8(stderr).ok()?;
     let trimmed = stderr_str.trim();
