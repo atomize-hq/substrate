@@ -65,6 +65,7 @@ Prompts:
 - Triad wrapper: `docs/project_management/system/prompts/triad_wrappers/triad_wrapper.md`
 - Triad integration wrapper: `docs/project_management/system/prompts/triad_wrappers/triad_integration_wrapper.md`
 - Triad unified wrapper (checkpoint-aware): `docs/project_management/system/prompts/triad_wrappers/triad_unified_wrapper_checkpoint_aware.md`
+- Triad unified wrapper (checkpoint-aware, resume-safe): `docs/project_management/system/prompts/triad_wrappers/triad_unified_wrapper_checkpoint_resume_safe.md`
 
 Templates:
 

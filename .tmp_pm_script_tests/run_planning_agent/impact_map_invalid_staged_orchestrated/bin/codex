@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+output_last=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --output-last-message)
+      output_last="$2"
+      shift 2
+      ;;
+    --cd|--config|--profile|--model)
+      shift 2
+      ;;
+    exec|--dangerously-bypass-approvals-and-sandbox|--json|-)
+      shift
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+cat >/dev/null
+write_mode="${TEST_RUNNER_WRITE_MODE:-staged}"
+
+if [[ -n "${TEST_RUNNER_PRIMARY_DEST:-}" ]]; then
+  mkdir -p "$(dirname "${TEST_RUNNER_PRIMARY_DEST}")"
+  cp "${TEST_RUNNER_PRIMARY_SOURCE}" "${TEST_RUNNER_PRIMARY_DEST}"
+fi
+
+if [[ "${write_mode}" == "staged_with_tasks" && -n "${TEST_RUNNER_SECONDARY_DEST:-}" ]]; then
+  mkdir -p "$(dirname "${TEST_RUNNER_SECONDARY_DEST}")"
+  cp "${TEST_RUNNER_SECONDARY_SOURCE}" "${TEST_RUNNER_SECONDARY_DEST}"
+fi
+
+printf 'runner stub summary
+' >"${output_last}"

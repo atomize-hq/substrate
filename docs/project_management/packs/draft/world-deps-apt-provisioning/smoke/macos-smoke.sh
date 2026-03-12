@@ -16,6 +16,7 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
 fi
 
 SUBSTRATE_BIN="${SUBSTRATE_BIN:-substrate}"
+HOST_HOME="${HOME:-}"
 
 if [[ "$SUBSTRATE_BIN" == "substrate" ]]; then
   command -v substrate >/dev/null 2>&1 || { echo "FAIL: substrate not found on PATH"; exit 3; }
@@ -55,11 +56,17 @@ require_not_contains() {
 }
 
 require_exact_stdout() {
-  local got="$1"
+  local got_file="$1"
   local expected="$2"
-  if [[ "$got" != "$expected" ]]; then
+  local expected_file="$tmp_root/expected.stdout.txt"
+  printf '%s' "$expected" >"$expected_file"
+  if ! cmp -s "$got_file" "$expected_file"; then
     echo "FAIL: unexpected stdout content" >&2
-    printf 'EXPECTED:\n%s\nGOT:\n%s\n' "$expected" "$got" >&2
+    printf 'EXPECTED:\n' >&2
+    cat "$expected_file" >&2 || true
+    printf '\nGOT:\n' >&2
+    cat "$got_file" >&2 || true
+    printf '\n' >&2
     return 1
   fi
 }
@@ -95,6 +102,7 @@ run_expect() {
   set -e
 
   local out err
+  RUN_STDOUT_FILE="$stdout_file"
   out="$(cat "$stdout_file" 2>/dev/null || true)"
   err="$(cat "$stderr_file" 2>/dev/null || true)"
 
@@ -204,7 +212,7 @@ pushd "$ws" >/dev/null
 echo "== Case A: provisioning dry-run prints normalized APT requirement set =="
 run_expect "world-enable-provision-dry-run" 0 "$SUBSTRATE_BIN" world enable --provision-deps --dry-run
 expected_stdout=$'smoke-apt-a\nsmoke-apt-b=1\n'
-require_exact_stdout "$RUN_STDOUT" "$expected_stdout"
+require_exact_stdout "$RUN_STDOUT_FILE" "$expected_stdout"
 
 echo "== Case B: provisioning ignores SUBSTRATE_WORLD_REQUEST_PROFILE =="
 run_expect "world-enable-provision-dry-run-verbose" 0 env SUBSTRATE_WORLD_REQUEST_PROFILE="wdap-smoke-profile" "$SUBSTRATE_BIN" world enable --provision-deps --dry-run --verbose
@@ -223,9 +231,16 @@ require_contains "$RUN_STDERR" "2"
 "$SUBSTRATE_BIN" world deps workspace add smoke-hello smoke-apt-a smoke-apt-b >/dev/null
 
 echo "== Preflight: world doctor =="
-if ! "$SUBSTRATE_BIN" world doctor >/dev/null 2>&1; then
+if ! HOME="${HOST_HOME}" USERPROFILE="${HOST_HOME}" "$SUBSTRATE_BIN" world doctor >/dev/null 2>&1; then
   echo "WDAP macos smoke: world backend not healthy; run 'substrate world doctor' remediation and retry" >&2
   exit 4
+fi
+
+if [[ "${SUBSTRATE_SMOKE_SLICE_ID:-}" == "WDAP0" ]]; then
+  echo "== Runtime cases are skipped for WDAP0 (owned by WDAP1) =="
+  popd >/dev/null
+  echo "OK: WDAP macos smoke"
+  exit 0
 fi
 
 echo "== Case D: runtime current sync fails early for APT requirements =="
@@ -244,4 +259,3 @@ require_contains "$RUN_STDERR" "substrate world enable --provision-deps"
 popd >/dev/null
 
 echo "OK: WDAP macos smoke"
-

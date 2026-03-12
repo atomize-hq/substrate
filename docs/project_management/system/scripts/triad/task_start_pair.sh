@@ -275,7 +275,7 @@ fi
 parse_kv() {
     local key="$1"
     local text="$2"
-    printf '%s\n' "${text}" | awk -F= -v k="${key}" '$1==k { sub(/^[^=]*=/, "", $0); print $0; exit }'
+    awk -F= -v k="${key}" '$1==k { sub(/^[^=]*=/, "", $0); print $0; exit }' <<<"${text}"
 }
 
 log "Creating code worktree: ${CODE_TASK_ID}"

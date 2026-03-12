@@ -58,6 +58,19 @@ require_cmd() {
     fi
 }
 
+array_contains() {
+    local needle="$1"
+    shift
+
+    local item
+    for item in "$@"; do
+        if [[ "${item}" == "${needle}" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 python_abs_path() {
     python3 - "$1" <<'PY'
 import os
@@ -265,12 +278,10 @@ PY
             normalized+=("${p}")
         fi
     done
-    declare -A seen=()
     PLATFORMS=()
     for p in "${normalized[@]}"; do
         [[ -z "${p}" ]] && continue
-        if [[ -z "${seen[${p}]:-}" ]]; then
-            seen["${p}"]=1
+        if ! array_contains "${p}" "${PLATFORMS[@]}"; then
             PLATFORMS+=("${p}")
         fi
     done
@@ -302,16 +313,16 @@ fi
 parse_kv() {
     local key="$1"
     local text="$2"
-    printf '%s\n' "${text}" | awk -F= -v k="${key}" '$1==k { sub(/^[^=]*=/, "", $0); print $0; exit }'
+    awk -F= -v k="${key}" '$1==k { sub(/^[^=]*=/, "", $0); print $0; exit }' <<<"${text}"
 }
 
-declare -A task_worktree=()
-declare -A task_branch=()
-declare -A task_kickoff=()
-declare -A task_codex_out_dir=()
-declare -A task_codex_last_message=()
-declare -A task_codex_events=()
-declare -A task_codex_stderr=()
+task_worktree=()
+task_branch=()
+task_kickoff=()
+task_codex_out_dir=()
+task_codex_last_message=()
+task_codex_events=()
+task_codex_stderr=()
 
 selected_task_ids=()
 for p in "${PLATFORMS[@]}"; do
@@ -329,7 +340,8 @@ for p in "${PLATFORMS[@]}"; do
     selected_task_ids+=("${task_id}")
 done
 
-for task_id in "${selected_task_ids[@]}"; do
+for ((i=0; i<${#selected_task_ids[@]}; i++)); do
+    task_id="${selected_task_ids[$i]}"
     log "Creating platform-fix worktree: ${task_id}"
     args=("${TRIAD_SCRIPTS_DIR}/task_start.sh" --feature-dir "${FEATURE_DIR_ABS}" --task-id "${task_id}")
     if [[ "${DRY_RUN}" -eq 1 ]]; then args+=(--dry-run); fi
@@ -351,29 +363,30 @@ for task_id in "${selected_task_ids[@]}"; do
     if [[ -z "${out_dir}" || -z "${last_message}" || -z "${events}" || -z "${stderr}" ]]; then
         die "Failed to parse CODEX_* paths from task_start output for ${task_id}"
     fi
-    task_worktree["${task_id}"]="${worktree}"
-    task_branch["${task_id}"]="${branch}"
-    task_kickoff["${task_id}"]="${kickoff}"
+    task_worktree[$i]="${worktree}"
+    task_branch[$i]="${branch}"
+    task_kickoff[$i]="${kickoff}"
 
-    task_codex_out_dir["${task_id}"]="${out_dir}"
-    task_codex_last_message["${task_id}"]="${last_message}"
-    task_codex_events["${task_id}"]="${events}"
-    task_codex_stderr["${task_id}"]="${stderr}"
+    task_codex_out_dir[$i]="${out_dir}"
+    task_codex_last_message[$i]="${last_message}"
+    task_codex_events[$i]="${events}"
+    task_codex_stderr[$i]="${stderr}"
 done
 
-declare -A codex_exit=()
-for task_id in "${selected_task_ids[@]}"; do
-    codex_exit["${task_id}"]=""
+codex_exit=()
+for ((i=0; i<${#selected_task_ids[@]}; i++)); do
+    codex_exit[$i]=""
 done
 
 launch_codex_one() {
-    local task_id="$1"
-    local worktree="$2"
-    local kickoff="$3"
-    local out_dir="${task_codex_out_dir[${task_id}]}"
-    local last_message="${task_codex_last_message[${task_id}]}"
-    local events="${task_codex_events[${task_id}]}"
-    local stderr="${task_codex_stderr[${task_id}]}"
+    local idx="$1"
+    local task_id="${selected_task_ids[$idx]}"
+    local worktree="${task_worktree[$idx]}"
+    local kickoff="${task_kickoff[$idx]}"
+    local out_dir="${task_codex_out_dir[$idx]}"
+    local last_message="${task_codex_last_message[$idx]}"
+    local events="${task_codex_events[$idx]}"
+    local stderr="${task_codex_stderr[$idx]}"
     local pid_path="${out_dir}/codex.pid"
 
     mkdir -p "${out_dir}"
@@ -396,25 +409,26 @@ if [[ "${LAUNCH_CODEX}" -eq 1 ]]; then
     require_cmd codex
     if [[ "${DRY_RUN}" -eq 1 ]]; then
         log "DRY_RUN=1: skipping codex exec"
-        for task_id in "${selected_task_ids[@]}"; do
-            codex_exit["${task_id}"]="dry-run"
+        for ((i=0; i<${#selected_task_ids[@]}; i++)); do
+            codex_exit[$i]="dry-run"
         done
     else
         log "Launching Codex headless for platform-fix tasks (in parallel)"
-        declare -A pids=()
+        pids=()
         set +e
-        for task_id in "${selected_task_ids[@]}"; do
-            launch_codex_one "${task_id}" "${task_worktree[${task_id}]}" "${task_kickoff[${task_id}]}" &
-            pids["${task_id}"]=$!
+        for ((i=0; i<${#selected_task_ids[@]}; i++)); do
+            launch_codex_one "$i" &
+            pids[$i]=$!
         done
-        for task_id in "${selected_task_ids[@]}"; do
-            wait "${pids[${task_id}]}"
-            codex_exit["${task_id}"]="$?"
+        for ((i=0; i<${#selected_task_ids[@]}; i++)); do
+            wait "${pids[$i]}"
+            codex_exit[$i]="$?"
         done
         set -e
-        for task_id in "${selected_task_ids[@]}"; do
-            if [[ "${codex_exit[${task_id}]}" -ne 0 ]]; then
-                echo "WARN: codex exec failed for ${task_id} (exit=${codex_exit[${task_id}]})" >&2
+        for ((i=0; i<${#selected_task_ids[@]}; i++)); do
+            task_id="${selected_task_ids[$i]}"
+            if [[ "${codex_exit[$i]}" -ne 0 ]]; then
+                echo "WARN: codex exec failed for ${task_id} (exit=${codex_exit[$i]})" >&2
             fi
         done
     fi
@@ -424,22 +438,23 @@ printf 'ORCH_BRANCH=%s\n' "${ORCH_BRANCH}"
 printf 'SLICE_ID=%s\n' "${SLICE_ID}"
 printf 'SMOKE_RUN_ID=%s\n' "${SMOKE_RUN_ID}"
 printf 'FAILED_PLATFORMS=%s\n' "${failed_platforms_csv}"
-for p in "${PLATFORMS[@]}"; do
-    task_id="${SLICE_ID}-integ-${p}"
+for ((i=0; i<${#PLATFORMS[@]}; i++)); do
+    p="${PLATFORMS[$i]}"
+    task_id="${selected_task_ids[$i]}"
     printf 'PLATFORM=%s\n' "${p}"
     printf 'TASK_ID=%s\n' "${task_id}"
-    printf 'WORKTREE=%s\n' "${task_worktree[${task_id}]}"
-    printf 'TASK_BRANCH=%s\n' "${task_branch[${task_id}]}"
-    printf 'CODEX_EXIT=%s\n' "${codex_exit[${task_id}]}"
-    printf 'CODEX_OUT_DIR=%s\n' "${task_codex_out_dir[${task_id}]}"
-    printf 'CODEX_LAST_MESSAGE_PATH=%s\n' "${task_codex_last_message[${task_id}]}"
-    printf 'CODEX_EVENTS_PATH=%s\n' "${task_codex_events[${task_id}]}"
-    printf 'CODEX_STDERR_PATH=%s\n' "${task_codex_stderr[${task_id}]}"
+    printf 'WORKTREE=%s\n' "${task_worktree[$i]}"
+    printf 'TASK_BRANCH=%s\n' "${task_branch[$i]}"
+    printf 'CODEX_EXIT=%s\n' "${codex_exit[$i]}"
+    printf 'CODEX_OUT_DIR=%s\n' "${task_codex_out_dir[$i]}"
+    printf 'CODEX_LAST_MESSAGE_PATH=%s\n' "${task_codex_last_message[$i]}"
+    printf 'CODEX_EVENTS_PATH=%s\n' "${task_codex_events[$i]}"
+    printf 'CODEX_STDERR_PATH=%s\n' "${task_codex_stderr[$i]}"
 done
 
 if [[ "${LAUNCH_CODEX}" -eq 1 && "${DRY_RUN}" -eq 0 ]]; then
-    for task_id in "${selected_task_ids[@]}"; do
-        if [[ "${codex_exit[${task_id}]}" != "dry-run" && "${codex_exit[${task_id}]}" -ne 0 ]]; then
+    for ((i=0; i<${#selected_task_ids[@]}; i++)); do
+        if [[ "${codex_exit[$i]}" != "dry-run" && "${codex_exit[$i]}" -ne 0 ]]; then
             exit 1
         fi
     done

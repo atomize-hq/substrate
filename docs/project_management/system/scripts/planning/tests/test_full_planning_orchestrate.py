@@ -264,6 +264,7 @@ fi
         runner = tools_dir / "fake_runner.sh"
         convergence = tools_dir / "fake_convergence.sh"
         reporter = tools_dir / "fake_alignment_reporter.py"
+        post_full = tools_dir / "fake_post_full.sh"
         fake_make = tools_dir / "make"
         fake_git = tools_dir / "git"
         self._write_runner_stub(runner, trace_path)
@@ -271,10 +272,13 @@ fi
         self._write_alignment_reporter(reporter, body="# Alignment report\n\n- generated\n")
         self._write_make_stub(fake_make)
         self._write_git_wrapper(fake_git)
+        _write_text(post_full, "#!/usr/bin/env bash\nset -euo pipefail\n")
+        os.chmod(post_full, 0o755)
 
         env = os.environ.copy()
         env["PM_FULL_PLANNING_RUNNER"] = str(runner)
         env["PM_FULL_PLANNING_CONVERGE_SCRIPT"] = str(convergence)
+        env["PM_FULL_PLANNING_POST_CONVERGE_SCRIPT"] = str(post_full)
         env["PM_FULL_PLANNING_ALIGNMENT_REPORTER"] = str(reporter)
         env["PM_FULL_PLANNING_MAX_RESUMES"] = "2"
         env["REAL_GIT"] = subprocess.check_output(["which", "git"], text=True, cwd=str(self.repo_root)).strip()
@@ -309,6 +313,7 @@ fi
         runner = tools_dir / "fake_runner.sh"
         convergence = tools_dir / "fake_convergence.sh"
         reporter = tools_dir / "fake_alignment_reporter.py"
+        post_full = tools_dir / "fake_post_full.sh"
         fake_make = tools_dir / "make"
         fake_git = tools_dir / "git"
         self._write_runner_stub(runner, trace_path, fail_tasks=False, expected_alignment_text="fresh-marker")
@@ -316,10 +321,13 @@ fi
         self._write_alignment_reporter(reporter, body="# Alignment report\n\nfresh-marker\n")
         self._write_make_stub(fake_make)
         self._write_git_wrapper(fake_git)
+        _write_text(post_full, "#!/usr/bin/env bash\nset -euo pipefail\n")
+        os.chmod(post_full, 0o755)
 
         env = os.environ.copy()
         env["PM_FULL_PLANNING_RUNNER"] = str(runner)
         env["PM_FULL_PLANNING_CONVERGE_SCRIPT"] = str(convergence)
+        env["PM_FULL_PLANNING_POST_CONVERGE_SCRIPT"] = str(post_full)
         env["PM_FULL_PLANNING_ALIGNMENT_REPORTER"] = str(reporter)
         env["REAL_GIT"] = subprocess.check_output(["which", "git"], text=True, cwd=str(self.repo_root)).strip()
         env["PATH"] = str(tools_dir) + os.pathsep + env["PATH"]
@@ -337,6 +345,80 @@ fi
         alignment_report = (feature_dir / "pre-planning" / "alignment_report.md").read_text(encoding="utf-8")
         self.assertIn("fresh-marker", alignment_report)
         self.assertNotIn("stale-marker", alignment_report)
+
+    def test_runs_post_full_convergence_before_success(self) -> None:
+        feature_dir = self._make_feature_dir("post_full_order")
+        tools_dir = feature_dir / "tools"
+        trace_path = feature_dir / "order_trace.log"
+        convergence = tools_dir / "fake_convergence.sh"
+        reporter = tools_dir / "fake_alignment_reporter.py"
+        fake_make = tools_dir / "make"
+        fake_git = tools_dir / "git"
+        runner = tools_dir / "order_runner.sh"
+        post_full = tools_dir / "post_full.sh"
+        self._write_convergence_stub(convergence)
+        self._write_alignment_reporter(reporter, body="# Alignment report\n\n- generated\n")
+        self._write_make_stub(fake_make)
+        self._write_git_wrapper(fake_git)
+        _write_text(
+            runner,
+            f"""#!/usr/bin/env bash
+set -euo pipefail
+pws_id=""
+feature_dir=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --feature-dir)
+      feature_dir="$2"
+      shift 2
+      ;;
+    --pws-id)
+      pws_id="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+echo "${{pws_id}}" >>"{trace_path}"
+mkdir -p "${{feature_dir}}/logs/pws/${{pws_id}}"
+: >"${{feature_dir}}/logs/pws/${{pws_id}}/stderr.log"
+printf '%s-thread\\n' "${{pws_id}}" >"${{feature_dir}}/logs/pws/${{pws_id}}/last_thread_id.txt"
+""",
+        )
+        os.chmod(runner, 0o755)
+        _write_text(
+            post_full,
+            f"""#!/usr/bin/env bash
+set -euo pipefail
+echo "post_full" >>"{trace_path}"
+""",
+        )
+        os.chmod(post_full, 0o755)
+
+        env = os.environ.copy()
+        env["PM_FULL_PLANNING_RUNNER"] = str(runner)
+        env["PM_FULL_PLANNING_CONVERGE_SCRIPT"] = str(convergence)
+        env["PM_FULL_PLANNING_POST_CONVERGE_SCRIPT"] = str(post_full)
+        env["PM_FULL_PLANNING_ALIGNMENT_REPORTER"] = str(reporter)
+        env["REAL_GIT"] = subprocess.check_output(["which", "git"], text=True, cwd=str(self.repo_root)).strip()
+        env["PATH"] = str(tools_dir) + os.pathsep + env["PATH"]
+
+        res = subprocess.run(
+            ["bash", str(self.script), "--feature-dir", str(feature_dir)],
+            text=True,
+            capture_output=True,
+            check=False,
+            cwd=str(self.repo_root),
+            env=env,
+        )
+
+        self.assertEqual(res.returncode, 0, msg=res.stderr)
+        trace = trace_path.read_text(encoding="utf-8").splitlines()
+        self.assertTrue(trace)
+        self.assertEqual(trace[-1], "post_full")
+        self.assertIn("OK: full planning orchestration completed", res.stdout)
 
 
 if __name__ == "__main__":

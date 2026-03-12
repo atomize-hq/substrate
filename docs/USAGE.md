@@ -233,10 +233,10 @@ manager and point `BASH_ENV` at `~/.substrate_bashenv` explicitly.
   when install/config/env disables it (metadata remains unchanged)
 
 - `substrate world enable` – provision the backend later if `--no-world` was
-  used at install time
+  used at install time; add `--provision-deps` to provision APT-backed world deps on supported guest backends
 - `substrate world deps current list [available|enabled|applied] [--json]` – inspect the effective inventory/enabled/applied views for the current directory.
-- `substrate world deps current sync [--dry-run] [--verbose]` – apply the effective enabled deps list into the world.
-- `substrate world deps current install <ITEM...> [--dry-run] [--verbose]` – apply specific deps immediately without changing enabled config.
+- `substrate world deps current sync [--dry-run] [--verbose]` – apply the effective enabled deps list into the world; APT-backed items are probe-only at runtime and remediate to `substrate world enable --provision-deps` when packages are missing.
+- `substrate world deps current install <ITEM...> [--dry-run] [--verbose]` – apply specific deps immediately without changing enabled config; APT-backed items are probe-only at runtime.
 - `substrate world deps global|workspace add|remove|reset` – edit enabled patches only (no install/uninstall).
 
 World root (anchor) precedence, highest wins: CLI flags

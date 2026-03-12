@@ -6,10 +6,54 @@ import re
 import sys
 from pathlib import Path
 
+ROOT_LEVEL_FILENAMES = {
+    "Makefile",
+    "Cargo.toml",
+    "Cargo.lock",
+    "package.json",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+    "tasks.json",
+    "plan.md",
+    "contract.md",
+    "decision_register.md",
+    "manual_testing_playbook.md",
+    "session_log.md",
+    "quality_gate_report.md",
+    "execution_preflight_report.md",
+}
+
+REPO_ROOT_PREFIXES = (
+    "docs/",
+    "scripts/",
+    "tests/",
+    "src/",
+    "crates/",
+    ".github/",
+    "bin/",
+)
+
 
 def _fail(msg: str) -> None:
     print(f"FAIL: {msg}", file=sys.stderr)
     raise SystemExit(1)
+
+
+def _looks_like_required_doc_path(token: str) -> bool:
+    if not token or any(ch.isspace() for ch in token):
+        return False
+    if token.startswith("/"):
+        return False
+    if any(ch in token for ch in ("*", "?", "[")):
+        return False
+    if token in ROOT_LEVEL_FILENAMES:
+        return True
+    if "/" not in token:
+        return False
+    if token.endswith("/"):
+        return True
+    return "." in Path(token).name
 
 
 def _extract_required_doc_paths(spec_manifest_text: str) -> list[str]:
@@ -34,15 +78,20 @@ def _extract_required_doc_paths(spec_manifest_text: str) -> list[str]:
     next_h2 = re.search(r"(?m)^##\s+", remainder)
     section_body = remainder[: next_h2.start()] if next_h2 else remainder
 
-    tokens = re.findall(r"`([^`]+)`", section_body)
-    if not tokens:
+    tokens: list[str] = []
+    for line in section_body.splitlines():
+        match = re.match(r"^- `([^`]+)`(?:\s|$)", line)
+        if match:
+            tokens.append(match.group(1))
+    path_tokens = [t for t in tokens if _looks_like_required_doc_path(t)]
+    if not path_tokens:
         _fail("spec_manifest.md required-docs section contains no backticked paths")
 
-    for t in tokens:
+    for t in path_tokens:
         if any(x in t for x in ("{{", "}}", "<", ">")):
             _fail(f"spec_manifest.md required-docs section contains placeholder token: `{t}`")
 
-    return tokens
+    return path_tokens
 
 
 def main() -> int:
@@ -85,7 +134,7 @@ def main() -> int:
             raw_norm = raw.replace("\\", "/").lstrip("./")
             # If the manifest lists repo-root-relative paths (common in this repo),
             # treat them as relative to CWD (repo root when invoked via make).
-            if raw_norm.startswith("docs/") or raw_norm.startswith(feature_dir_prefix) or raw_norm == feature_dir.as_posix():
+            if raw_norm.startswith(REPO_ROOT_PREFIXES) or raw_norm.startswith(feature_dir_prefix) or raw_norm == feature_dir.as_posix():
                 p = Path(raw_norm)
             else:
                 p = feature_dir / raw_norm

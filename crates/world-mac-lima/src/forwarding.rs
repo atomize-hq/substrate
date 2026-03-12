@@ -335,10 +335,18 @@ fn create_ssh_tcp_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
     })
 }
 
-fn lima_ssh_config_path(vm_name: &str) -> Result<PathBuf> {
-    let path = dirs::home_dir()
+fn lima_home_dir() -> Result<PathBuf> {
+    if let Some(path) = std::env::var_os("LIMA_HOME").filter(|value| !value.is_empty()) {
+        return Ok(PathBuf::from(path));
+    }
+
+    Ok(dirs::home_dir()
         .ok_or_else(|| anyhow::anyhow!("No home directory"))?
-        .join(format!(".lima/{}/ssh.config", vm_name));
+        .join(".lima"))
+}
+
+fn lima_ssh_config_path(vm_name: &str) -> Result<PathBuf> {
+    let path = lima_home_dir()?.join(vm_name).join("ssh.config");
 
     if !path.exists() {
         anyhow::bail!("Lima SSH config not found at: {}", path.display());
@@ -418,8 +426,10 @@ exit 0
         }
 
         let prev_home = env::var_os("HOME");
+        let prev_lima_home = env::var_os("LIMA_HOME");
         let prev_path = env::var_os("PATH");
         env::set_var("HOME", &home);
+        env::set_var("LIMA_HOME", home.join(".lima"));
         let new_path = match prev_path.as_ref() {
             Some(p) => format!("{}:{}", bin.display(), p.to_string_lossy()),
             None => bin.display().to_string(),
@@ -442,9 +452,36 @@ exit 0
             Some(v) => env::set_var("HOME", v),
             None => env::remove_var("HOME"),
         }
+        match prev_lima_home {
+            Some(v) => env::set_var("LIMA_HOME", v),
+            None => env::remove_var("LIMA_HOME"),
+        }
         match prev_path {
             Some(v) => env::set_var("PATH", v),
             None => env::remove_var("PATH"),
+        }
+    }
+
+    #[test]
+    fn lima_ssh_config_path_prefers_lima_home_override() {
+        let temp = tempdir().expect("tempdir");
+        let override_home = temp.path().join("lima-home");
+        fs::create_dir_all(override_home.join("substrate")).expect("lima home dir");
+        fs::write(
+            override_home.join("substrate/ssh.config"),
+            "Host lima-substrate\n  User stub\n",
+        )
+        .expect("write ssh config");
+
+        let prev_lima_home = env::var_os("LIMA_HOME");
+        env::set_var("LIMA_HOME", &override_home);
+
+        let path = lima_ssh_config_path("substrate").expect("ssh config path");
+        assert_eq!(path, override_home.join("substrate/ssh.config"));
+
+        match prev_lima_home {
+            Some(v) => env::set_var("LIMA_HOME", v),
+            None => env::remove_var("LIMA_HOME"),
         }
     }
 }

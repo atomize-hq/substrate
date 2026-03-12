@@ -19,6 +19,7 @@ Required reading:
 - `docs/project_management/system/standards/planning/PLANNING_IMPACT_MAP_STANDARD.md`
 - `docs/project_management/system/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`
 - `docs/project_management/system/standards/adr/ADR_STANDARD_AND_TEMPLATE.md`
+- `docs/project_management/system/USER_GUIDE.md` (strict pack `task_finish` reads the orchestration worktree copy of `impact_map.md`)
 
 Inputs:
 - ADR(s): <list exact paths>
@@ -65,13 +66,17 @@ Output requirements:
    - Default poll interval: `sleep 60` between checks.
    - If the dispatcher context indicates an orchestration overlap run, **do not** ask the operator to commit/stash/clean upstream outputs; treat a dirty `git status` as transient and keep polling until the gate clears.
 3) Then write/overwrite `<FEATURE_DIR>/logs/impact-map/staged/pre-planning/impact_map.md` using the template.
-   - The Touch Set must have concrete repo-relative file paths (no vague “update some files”).
+   - The Touch Set must be authored for triad execution compatibility, not just planning syntax.
+   - The Touch Set must default to exact repo-relative file paths (no vague “update some files”).
    - Strict Touch Set existence rule (non-negotiable):
      - If a path is listed under `### Edit`, `### Deprecate`, or `### Delete`, it MUST exist in the repo at authoring time.
      - If it does not exist, it MUST be moved to `### Create` (if it will be created) or corrected/removed (if it was a guessed path).
-     - If you cannot determine the exact file yet, prefer an existing directory prefix entry ending with `/` (and record a Follow-up to tighten it later) rather than guessing a filename.
+     - If you cannot determine the exact file yet, directory-prefix entries are the fallback only:
+       - the directory MUST already exist,
+       - the token MUST end with `/`,
+       - and you MUST record a Follow-up to tighten it to exact file paths later.
 4) If you discover a missing surface or ownership gap, record follow-ups inside `impact_map.md` under a “Follow-ups” section (not in ADRs).
 5) Closeout validation:
    - Do not write `<FEATURE_DIR>/pre-planning/impact_map.md` directly.
-   - The planning runner / wrapper will promote the staged candidate into the canonical tracked path and run the strict Touch Set validator plus closeout validation after promotion.
+   - The planning runner / wrapper validates the staged candidate before success; direct runs promote it only after that validation passes.
 ```

@@ -465,21 +465,35 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
   - `substrate: note: run 'substrate world deps current sync' to apply enabled deps changes`
 - Exit codes: `0` success (including no-op); `2` actionable user error; `1` unexpected
 
-#### `substrate world deps current install <item_name...> [--dry-run] [--verbose]`
+#### substrate world deps current install <item_name...>
 - Applies items immediately without modifying the enabled list.
 - It MUST:
   1) Expand bundles → packages.
-  2) Apply **world image** installs first (apt).
-  3) Apply **world deps prefix** installs second (scripts + entrypoints under `/var/lib/substrate/world-deps/bin`).
-  4) Never execute `manual` installs; instead print `manual_instructions` and exit `4`.
+  2) Derive the normalized APT requirement set for any `install.method=apt` items.
+  3) Probe APT requirements read-only with `dpkg-query`.
+  4) Treat APT-backed items as satisfied/no-op when every requirement is already present.
+  5) Apply **world deps prefix** installs second (scripts + entrypoints under `/var/lib/substrate/world-deps/bin`).
+  6) Never execute runtime `apt`, `apt-get`, or mutating `dpkg`.
+  7) Never execute `manual` installs; instead print `manual_instructions` and exit `4`.
+- When any required APT package is unsatisfied:
+  - It MUST exit `4` before any non-APT install work begins.
+  - `stderr` MUST include `substrate world enable --provision-deps`.
+  - Linux host-native guidance MUST include `Substrate will not mutate the host OS`.
+  - Windows guidance MUST include `unsupported on Windows`.
 - `--dry-run`:
-  - MUST print the computed plan (apt list + script package list) and exit `0` without side effects.
+  - MUST still apply the fail-early APT probe and exit `4` when requirements are unsatisfied.
+  - When APT requirements exist, stdout MUST include the normalized requirement rendering (`name` or `name=version`) in stable order.
+- `--verbose`:
+  - When fail-early exits `4`, stderr MUST include the normalized APT requirement rendering in stable order.
 - On success, it MUST print:
-  - A short summary of what was applied (world image + world deps prefix), then:
+  - A short summary of what was applied (APT-backed items are probe-only at runtime; script items may mutate the world-deps prefix), then:
   - `substrate: note: this updates the world only (enabled list not modified)`
   - `substrate: hint: run 'substrate world deps current list applied' to verify`
 - Guarantee (runnable packages):
   - After success, runnable package entrypoints are invokable in-world via the standard world execution path (interactive `substrate>` and non-interactive runs) without requiring shell RC sourcing.
+- Runtime APT remediation/provisioning contract:
+  - `docs/reference/world/deps/README.md`
+  - `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`
 - Exit codes:
   - `0` success
   - `2` unknown item name / invalid YAML / invalid inventory
@@ -488,10 +502,16 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
   - `5` hardening conflict (world is writable only under `/var/lib/substrate/world-deps` but the install needs broader writes)
   - `1` unexpected
 
-#### `substrate world deps current sync [--dry-run] [--verbose] [--all]`
+#### substrate world deps current sync [--dry-run] ...
 - Applies the **current enabled list** (effective for `cwd`) using the same engine as `deps current install`.
 - `--all`:
-  - Ignores enabled list and applies every visible inventory item (debug/bring-up only).
+  - Ignores enabled list and applies every visible inventory item (debug/bring-up only), including any visible APT-backed items in the fail-early probe scope.
+- Runtime APT is provisioning-time only:
+  - `deps current sync` never executes runtime `apt`, `apt-get`, or mutating `dpkg`.
+  - Unsatisfied APT requirements MUST fail early with exit `4` and remediation that points to `substrate world enable --provision-deps`.
+  - The detailed provisioning/remediation contract lives in:
+    `docs/reference/world/deps/README.md`
+    and `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`
 - On success, it MUST print:
   - A one-line confirmation plus:
   - `substrate: note: applied effective enabled deps list for this directory (sources: workspace, global, defaults as applicable)`

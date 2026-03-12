@@ -38,7 +38,7 @@ function Invoke-Substrate {
   param(
     [string]$Label,
     [int]$ExpectedExit,
-    [string[]]$Args,
+    [string[]]$CliArgs,
     [hashtable]$Env = @{}
   )
 
@@ -48,18 +48,25 @@ function Invoke-Substrate {
   $old = @{}
   foreach ($k in $Env.Keys) {
     $old[$k] = (Get-Item -Path "Env:$k" -ErrorAction SilentlyContinue).Value
-    $env:$k = $Env[$k]
+    Set-Item -Path "Env:$k" -Value $Env[$k]
   }
 
   try {
-    & $SubstrateExe @Args 1> $stdout.FullName 2> $stderr.FullName
-    $rc = $LASTEXITCODE
+    $proc = Start-Process `
+      -FilePath $SubstrateExe `
+      -ArgumentList $CliArgs `
+      -WorkingDirectory (Get-Location).Path `
+      -RedirectStandardOutput $stdout.FullName `
+      -RedirectStandardError $stderr.FullName `
+      -PassThru `
+      -Wait
+    $rc = $proc.ExitCode
   } finally {
     foreach ($k in $Env.Keys) {
       if ($null -eq $old[$k]) {
         Remove-Item -Path "Env:$k" -ErrorAction SilentlyContinue
       } else {
-        $env:$k = $old[$k]
+        Set-Item -Path "Env:$k" -Value $old[$k]
       }
     }
   }
@@ -105,6 +112,9 @@ function Require-LineOrder([string]$Text, [string]$First, [string]$Second) {
 
 $tmpRoot = if ($env:SUBSTRATE_SMOKE_ROOT -and $env:SUBSTRATE_SMOKE_ROOT.Trim() -ne "") { $env:SUBSTRATE_SMOKE_ROOT } else { New-TempDir "wdap-smoke" }
 $keep = ($env:SUBSTRATE_SMOKE_KEEP -and $env:SUBSTRATE_SMOKE_KEEP.Trim() -eq "1")
+$hostHome = $env:HOME
+$hostUserProfile = $env:USERPROFILE
+$hostCargoExe = (Get-Command cargo -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1)
 
 try {
   $homeDir = Join-Path $tmpRoot "home"
@@ -116,7 +126,17 @@ try {
   $env:HOME = $homeDir
   $env:USERPROFILE = $homeDir
   $env:SUBSTRATE_HOME = $substrateHome
+  if ($hostHome -and $hostHome.Trim() -ne "") {
+    $env:SUBSTRATE_HOST_HOME = $hostHome
+  }
+  if ($hostUserProfile -and $hostUserProfile.Trim() -ne "") {
+    $env:SUBSTRATE_HOST_USERPROFILE = $hostUserProfile
+  }
+  if ($hostCargoExe -and $hostCargoExe.Trim() -ne "") {
+    $env:SUBSTRATE_WINDOWS_CARGO_EXE = $hostCargoExe
+  }
 
+  & $SubstrateExe config global init | Out-Null
   & $SubstrateExe workspace init $ws | Out-Null
 
   @"
@@ -173,15 +193,21 @@ probe:
     & $SubstrateExe world deps workspace add smoke-hello smoke-apt-a smoke-apt-b | Out-Null
 
     Write-Host "== Case A: provisioning fails closed on Windows =="
-    $r = Invoke-Substrate -Label "world enable --provision-deps --dry-run" -ExpectedExit 4 -Args @("world", "enable", "--provision-deps", "--dry-run")
+    $r = Invoke-Substrate -Label "world enable --provision-deps --dry-run" -ExpectedExit 4 -CliArgs @("world", "enable", "--provision-deps", "--dry-run")
     Require-Contains $r.Stderr "unsupported on Windows"
     Require-Contains $r.Stderr "substrate world enable --provision-deps"
 
+    if ($env:SUBSTRATE_SMOKE_SLICE_ID -eq "WDAP0") {
+      Write-Host "== Runtime cases are skipped for WDAP0 (owned by WDAP1) =="
+      Write-Host "OK: WDAP windows smoke"
+      exit 0
+    }
+
     Write-Host "== Preflight: world doctor =="
-    $r = Invoke-Substrate -Label "world doctor" -ExpectedExit 0 -Args @("world", "doctor")
+    $r = Invoke-Substrate -Label "world doctor" -ExpectedExit 0 -CliArgs @("world", "doctor")
 
     Write-Host "== Case B: runtime current sync fails early for APT requirements =="
-    $r = Invoke-Substrate -Label "deps current sync --dry-run" -ExpectedExit 4 -Args @("world", "deps", "current", "sync", "--dry-run")
+    $r = Invoke-Substrate -Label "deps current sync --dry-run" -ExpectedExit 4 -CliArgs @("world", "deps", "current", "sync", "--dry-run")
     Require-LineOrder $r.Stdout "smoke-apt-a" "smoke-apt-b=1"
     Require-Contains $r.Stderr "substrate world enable --provision-deps"
     Require-Contains $r.Stderr "unsupported on Windows"
@@ -190,7 +216,7 @@ probe:
     $r = Invoke-Substrate -Label "deps current install smoke-hello" -ExpectedExit 0 -Args @("world", "deps", "current", "install", "smoke-hello")
 
     Write-Host "== Case D: current install fails early for explicit APT-backed items =="
-    $r = Invoke-Substrate -Label "deps current install smoke-apt-a --dry-run" -ExpectedExit 4 -Args @("world", "deps", "current", "install", "smoke-apt-a", "--dry-run")
+    $r = Invoke-Substrate -Label "deps current install smoke-apt-a --dry-run" -ExpectedExit 4 -CliArgs @("world", "deps", "current", "install", "smoke-apt-a", "--dry-run")
     Require-Contains $r.Stdout "smoke-apt-a"
     Require-Contains $r.Stderr "substrate world enable --provision-deps"
   } finally {
@@ -204,4 +230,3 @@ probe:
     Remove-Item -Recurse -Force -Path $tmpRoot -ErrorAction SilentlyContinue
   }
 }
-

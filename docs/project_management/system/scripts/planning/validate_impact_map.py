@@ -90,6 +90,18 @@ def _repo_root_strict() -> Path:
     return Path(out)
 
 
+def _resolve_impact_map_path(feature_dir: Path, raw_path: str | None) -> Path:
+    if raw_path is None:
+        preferred = feature_dir / "pre-planning" / "impact_map.md"
+        legacy = feature_dir / "impact_map.md"
+        return preferred if preferred.exists() else legacy
+
+    candidate = Path(raw_path)
+    if candidate.is_absolute():
+        return candidate
+    return feature_dir / candidate
+
+
 def _iter_region_lines(lines: list[str], start_lineno: int, end_lineno: int) -> Iterable[tuple[int, str]]:
     for idx in range(start_lineno, end_lineno + 1):
         yield (idx, lines[idx - 1].rstrip("\r\n"))
@@ -318,6 +330,10 @@ def main(argv: list[str]) -> int:
         required=True,
         help="Planning pack directory under docs/project_management/packs/<bucket>/<feature>",
     )
+    ap.add_argument(
+        "--impact-map-path",
+        help="Optional alternate impact_map path (absolute or feature-dir-relative). Defaults to the canonical path lookup.",
+    )
     ap.add_argument("--mode", choices=["strict", "legacy"], help="Override auto mode derivation")
     ap.add_argument("--emit-json", action="store_true", help="Emit JSON allowlists to stdout (stdout is JSON-only)")
     args = ap.parse_args(argv)
@@ -337,8 +353,10 @@ def main(argv: list[str]) -> int:
 
     preferred = feature_dir / "pre-planning" / "impact_map.md"
     legacy = feature_dir / "impact_map.md"
-    impact_map = preferred if preferred.exists() else legacy
+    impact_map = _resolve_impact_map_path(feature_dir, args.impact_map_path)
     if not impact_map.exists():
+        if args.impact_map_path is not None:
+            _fail(f"missing required path: {impact_map}")
         _fail(f"missing required path: {preferred} (also missing legacy: {legacy})")
 
     repo_root = _repo_root_strict()

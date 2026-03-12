@@ -40,6 +40,9 @@ pub(super) fn run_helper_script(
     if args.force {
         cmd.arg("--force");
     }
+    if args.provision_deps {
+        cmd.arg("--no-sync-deps");
+    }
     if let Some(socket_path) = socket_override {
         cmd.env("SUBSTRATE_WORLD_SOCKET", socket_path);
     }

@@ -183,6 +183,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y jq ripgrep pkg-config libseccomp-dev
 
+      - name: Enable unprivileged user namespaces
+        run: |
+          sudo sysctl -w kernel.unprivileged_userns_clone=1
+          sudo sysctl -w user.max_user_namespaces=28633 || true
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -196,14 +201,72 @@ jobs:
           cargo clippy --workspace --all-targets -- -D warnings
           cargo test --workspace --all-targets
 
-      - name: Build substrate (debug)
-        run: cargo build --bin substrate --bin substrate-shim
+      - name: Build substrate + world-agent (debug)
+        run: |
+          cargo build --bin substrate --bin substrate-shim
+          cargo build -p world-agent --bin world-agent
 
       - name: Add substrate to PATH
         run: echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
 
       - name: Run linux smoke
-        run: bash "${{ inputs.feature_dir }}/smoke/linux-smoke.sh"
+        shell: bash
+        run: |
+          set -euo pipefail
+          export SUBSTRATE_BIN="$GITHUB_WORKSPACE/target/debug/substrate"
+          export SUBSTRATE_WORLD_REQUEST_PROFILE="world-deps-provision"
+
+          manual_sock=""
+          manual_log=""
+          agent_pid=""
+          cleanup() {
+            if [[ -n "${agent_pid}" ]]; then
+              kill "${agent_pid}" >/dev/null 2>&1 || true
+              wait "${agent_pid}" >/dev/null 2>&1 || true
+            fi
+            if [[ -n "${manual_sock}" ]]; then
+              rm -f "${manual_sock}" >/dev/null 2>&1 || true
+            fi
+          }
+          trap cleanup EXIT
+
+          if [[ -S /run/substrate.sock && -w /run/substrate.sock ]]; then
+            export SUBSTRATE_WORLD_SOCKET="/run/substrate.sock"
+          else
+            socket_activate="$(command -v systemd-socket-activate || true)"
+            if [[ -z "${socket_activate}" ]]; then
+              echo "ERROR: systemd-socket-activate is required when /run/substrate.sock is unavailable" >&2
+              exit 1
+            fi
+
+            manual_sock="${RUNNER_TEMP:-/tmp}/substrate-world-agent.sock"
+            manual_log="${RUNNER_TEMP:-/tmp}/substrate-world-agent.log"
+            rm -f "${manual_sock}" "${manual_log}"
+
+            "${socket_activate}" --listen="${manual_sock}" --fdname=substrate-world-agent "$GITHUB_WORKSPACE/target/debug/world-agent" >"${manual_log}" 2>&1 &
+            agent_pid=$!
+
+            for _ in $(seq 1 50); do
+              if [[ -S "${manual_sock}" ]]; then
+                break
+              fi
+              sleep 0.2
+            done
+
+            if [[ ! -S "${manual_sock}" ]]; then
+              echo "ERROR: failed to start user-scoped world-agent socket fallback" >&2
+              [[ -f "${manual_log}" ]] && cat "${manual_log}" >&2
+              exit 1
+            fi
+
+            export SUBSTRATE_WORLD_SOCKET="${manual_sock}"
+            echo "Using user-scoped world-agent socket fallback: ${manual_sock}"
+          fi
+
+          if ! bash "${{ inputs.feature_dir }}/smoke/linux-smoke.sh"; then
+            [[ -n "${manual_log}" && -f "${manual_log}" ]] && cat "${manual_log}" >&2
+            exit 1
+          fi
 
   linux_self_hosted:
     needs: feature_meta
@@ -234,45 +297,36 @@ jobs:
             echo "dir=." >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Provision world-agent (Linux self-hosted; WAPS)
+        if: startsWith(inputs.feature_dir, 'docs/project_management/packs/draft/world-deps-apt-provisioning') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/next/world-sync') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/world-agent-policy-snapshot') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/full-isolation-landlock-overlayfs-compat')
+        working-directory: ${{ steps.checkout_dir.outputs.dir }}
+        run: |
+          set -euo pipefail
+          if [[ -S /run/substrate.sock && -w /run/substrate.sock ]]; then
+            echo "Using existing system world-agent socket"
+          elif sudo -n true >/dev/null 2>&1; then
+            cargo build -p world-agent --release
+            scripts/linux/world-provision.sh --profile release --skip-build --sudo-noninteractive
+          else
+            echo "WARN: sudo -n unavailable on this runner; smoke will fall back to a user-scoped socket if needed" >&2
+          fi
+
       - name: Preflight substrate world socket (Linux self-hosted)
         shell: bash
         run: |
           set -euo pipefail
           sock="/run/substrate.sock"
 
-          if [[ ! -S "${sock}" ]]; then
-            echo "SUBSTRATE_RUNNER_MISPROVISIONED=1"
-            echo "SUBSTRATE_RUNNER_MISPROVISIONED_REASON=substrate_sock_missing"
-            echo "Runner is missing required world-agent socket: ${sock}" >&2
-            echo "" >&2
-            echo "Remediation (runner provisioning):" >&2
-            echo "  1) Provision the world agent + socket units on this machine:" >&2
-            echo "     - Linux: scripts/linux/world-provision.sh --profile release" >&2
-            echo "  2) Ensure the socket is root:substrate 0660 (like provisioning script does)." >&2
-            echo "  3) Ensure the runner user is in the substrate group and restart the runner service so group membership applies." >&2
-            echo "" >&2
-            echo "Diagnostics:" >&2
-            echo "  id: $(id -a || true)" >&2
-            echo "  ls -l /run: $(ls -la /run | head -n 50 || true)" >&2
-            exit 1
+          if [[ -S "${sock}" && -w "${sock}" ]]; then
+            exit 0
           fi
 
-          if [[ ! -w "${sock}" ]]; then
-            echo "SUBSTRATE_RUNNER_MISPROVISIONED=1"
-            echo "SUBSTRATE_RUNNER_MISPROVISIONED_REASON=substrate_sock_permission_denied"
-            echo "Runner cannot access required world-agent socket: ${sock} (need write permission to connect)" >&2
-            echo "" >&2
-            echo "Remediation (runner provisioning):" >&2
-            echo "  1) Ensure the runner user is in the substrate group: id -nG \"$USER\" | rg -n '\\\\bsubstrate\\\\b'" >&2
-            echo "  2) Restart the runner service (or reboot) so the new group list applies." >&2
-            echo "  3) Confirm socket perms: ls -l ${sock} (expected root:substrate 0660)" >&2
-            echo "" >&2
-            echo "Diagnostics:" >&2
+          echo "WARN: system world-agent socket unavailable; smoke will try a user-scoped socket fallback" >&2
+          if [[ -e "${sock}" ]]; then
             ls -l "${sock}" >&2 || true
             stat "${sock}" >&2 || true
-            echo "  id: $(id -a || true)" >&2
-            exit 1
           fi
+          echo "  id: $(id -a || true)" >&2
 
       - name: Ensure rustup is on PATH (Linux self-hosted)
         shell: bash
@@ -311,18 +365,6 @@ jobs:
             exit 1
           fi
 
-      - name: Provision world-agent (Linux self-hosted; WAPS)
-        if: startsWith(inputs.feature_dir, 'docs/project_management/_archived/next/world-sync') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/world-agent-policy-snapshot') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/full-isolation-landlock-overlayfs-compat')
-        working-directory: ${{ steps.checkout_dir.outputs.dir }}
-        run: |
-          set -euo pipefail
-          if sudo -n true >/dev/null 2>&1; then
-            cargo build -p world-agent --release
-            scripts/linux/world-provision.sh --profile release --skip-build --sudo-noninteractive
-          else
-            echo "WARN: sudo -n unavailable on this runner; skipping world-agent provisioning" >&2
-          fi
-
       - name: Run integration checks (Linux self-hosted)
         if: inputs.run_integ_checks
         working-directory: ${{ steps.checkout_dir.outputs.dir }}
@@ -331,9 +373,11 @@ jobs:
           cargo clippy --workspace --all-targets -- -D warnings
           cargo test --workspace --all-targets
 
-      - name: Build substrate (debug)
+      - name: Build substrate + world-agent (debug)
         working-directory: ${{ steps.checkout_dir.outputs.dir }}
-        run: cargo build --bin substrate --bin substrate-shim
+        run: |
+          cargo build --bin substrate --bin substrate-shim
+          cargo build -p world-agent --bin world-agent
 
       - name: Add substrate to PATH
         shell: bash
@@ -347,7 +391,64 @@ jobs:
           fi
 
       - name: Run linux smoke
-        run: bash "${{ inputs.feature_dir }}/smoke/linux-smoke.sh"
+        working-directory: ${{ steps.checkout_dir.outputs.dir }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export SUBSTRATE_BIN="$PWD/target/debug/substrate"
+          export SUBSTRATE_WORLD_REQUEST_PROFILE="world-deps-provision"
+
+          manual_sock=""
+          manual_log=""
+          agent_pid=""
+          cleanup() {
+            if [[ -n "${agent_pid}" ]]; then
+              kill "${agent_pid}" >/dev/null 2>&1 || true
+              wait "${agent_pid}" >/dev/null 2>&1 || true
+            fi
+            if [[ -n "${manual_sock}" ]]; then
+              rm -f "${manual_sock}" >/dev/null 2>&1 || true
+            fi
+          }
+          trap cleanup EXIT
+
+          if [[ -S /run/substrate.sock && -w /run/substrate.sock ]]; then
+            export SUBSTRATE_WORLD_SOCKET="/run/substrate.sock"
+          else
+            socket_activate="$(command -v systemd-socket-activate || true)"
+            if [[ -z "${socket_activate}" ]]; then
+              echo "ERROR: systemd-socket-activate is required when /run/substrate.sock is unavailable" >&2
+              exit 1
+            fi
+
+            manual_sock="${RUNNER_TEMP:-/tmp}/substrate-world-agent.sock"
+            manual_log="${RUNNER_TEMP:-/tmp}/substrate-world-agent.log"
+            rm -f "${manual_sock}" "${manual_log}"
+
+            "${socket_activate}" --listen="${manual_sock}" --fdname=substrate-world-agent "$PWD/target/debug/world-agent" >"${manual_log}" 2>&1 &
+            agent_pid=$!
+
+            for _ in $(seq 1 50); do
+              if [[ -S "${manual_sock}" ]]; then
+                break
+              fi
+              sleep 0.2
+            done
+
+            if [[ ! -S "${manual_sock}" ]]; then
+              echo "ERROR: failed to start user-scoped world-agent socket fallback" >&2
+              [[ -f "${manual_log}" ]] && cat "${manual_log}" >&2
+              exit 1
+            fi
+
+            export SUBSTRATE_WORLD_SOCKET="${manual_sock}"
+            echo "Using user-scoped world-agent socket fallback: ${manual_sock}"
+          fi
+
+          if ! bash "$GITHUB_WORKSPACE/${{ inputs.feature_dir }}/smoke/linux-smoke.sh"; then
+            [[ -n "${manual_log}" && -f "${manual_log}" ]] && cat "${manual_log}" >&2
+            exit 1
+          fi
 
   macos_hosted:
     needs: feature_meta
@@ -401,7 +502,11 @@ jobs:
         run: echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
 
       - name: Run macOS smoke
-        run: bash "${{ inputs.feature_dir }}/smoke/macos-smoke.sh"
+        shell: bash
+        run: |
+          set -euo pipefail
+          export SUBSTRATE_BIN="$GITHUB_WORKSPACE/target/debug/substrate"
+          bash "${{ inputs.feature_dir }}/smoke/macos-smoke.sh"
 
   macos_self_hosted:
     needs: feature_meta
@@ -439,7 +544,7 @@ jobs:
         run: caffeinate -dimsu &
 
       - name: Warm Lima world (macOS self-hosted; WAPS)
-        if: startsWith(inputs.feature_dir, 'docs/project_management/_archived/next/world-sync') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/world-agent-policy-snapshot') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/full-isolation-landlock-overlayfs-compat')
+        if: startsWith(inputs.feature_dir, 'docs/project_management/packs/draft/world-deps-apt-provisioning') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/next/world-sync') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/world-agent-policy-snapshot') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/full-isolation-landlock-overlayfs-compat')
         working-directory: ${{ steps.checkout_dir.outputs.dir }}
         run: bash scripts/mac/lima-warm.sh "$PWD"
 
@@ -473,7 +578,12 @@ jobs:
           fi
 
       - name: Run macOS smoke
-        run: bash "${{ inputs.feature_dir }}/smoke/macos-smoke.sh"
+        working-directory: ${{ steps.checkout_dir.outputs.dir }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export SUBSTRATE_BIN="$PWD/target/debug/substrate"
+          bash "${{ inputs.feature_dir }}/smoke/macos-smoke.sh"
 
   windows_hosted:
     needs: feature_meta
@@ -516,6 +626,9 @@ jobs:
 
       - name: Run Windows smoke
         shell: pwsh
+        env:
+          SUBSTRATE_NO_SHIMS: "1"
+          SUBSTRATE_EXE: ${{ github.workspace }}\target\debug\substrate.exe
         run: pwsh -File "${{ inputs.feature_dir }}/smoke/windows-smoke.ps1"
 
   windows_self_hosted:
@@ -523,18 +636,28 @@ jobs:
     if: needs.feature_meta.outputs.run_windows == '1' && inputs.runner_kind == 'self-hosted'
     runs-on: [self-hosted, Windows]
     steps:
-      - name: Checkout repository (override ref)
+      - name: Checkout repository (workflow ref)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Checkout repository (candidate ref)
         if: inputs.checkout_ref != ''
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.checkout_ref }}
           submodules: recursive
+          path: candidate
 
-      - name: Checkout repository
-        if: inputs.checkout_ref == ''
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - name: Select build checkout
+        id: checkout_dir
+        shell: pwsh
+        run: |
+          if (Test-Path (Join-Path $env:GITHUB_WORKSPACE "candidate")) {
+            "dir=candidate" >> $env:GITHUB_OUTPUT
+          } else {
+            "dir=." >> $env:GITHUB_OUTPUT
+          }
 
       - name: Ensure Rust toolchain (self-hosted)
         shell: pwsh
@@ -565,6 +688,7 @@ jobs:
       - name: Run integration checks (Windows self-hosted)
         if: inputs.run_integ_checks
         shell: pwsh
+        working-directory: ${{ steps.checkout_dir.outputs.dir }}
         run: |
           cargo fmt --all -- --check
           cargo clippy --workspace --all-targets -- -D warnings
@@ -580,18 +704,35 @@ jobs:
         run: pwsh -File scripts/windows/wsl-warm.ps1 -DistroName substrate-wsl -ProjectPath (Resolve-Path .)
 
       - name: Build substrate (debug)
+        working-directory: ${{ steps.checkout_dir.outputs.dir }}
         run: cargo build --bin substrate --bin substrate-shim
 
       - name: Add substrate to PATH
         shell: pwsh
-        run: Add-Content -LiteralPath $env:GITHUB_PATH -Value "$pwd\\target\\debug"
+        run: |
+          $dir = "${{ steps.checkout_dir.outputs.dir }}"
+          if ($dir -eq "candidate") {
+            Add-Content -LiteralPath $env:GITHUB_PATH -Value "$env:GITHUB_WORKSPACE\\candidate\\target\\debug"
+          } else {
+            Add-Content -LiteralPath $env:GITHUB_PATH -Value "$env:GITHUB_WORKSPACE\\target\\debug"
+          }
 
       - name: Run Windows smoke
         shell: pwsh
+        working-directory: ${{ steps.checkout_dir.outputs.dir }}
         env:
           # Force pipe transport regardless of runner-global environment.
           SUBSTRATE_FORWARDER_TCP: "0"
-        run: pwsh -File "${{ inputs.feature_dir }}/smoke/windows-smoke.ps1"
+          SUBSTRATE_NO_SHIMS: "1"
+        run: |
+          $cargoCmd = Get-Command cargo -ErrorAction Stop
+          $env:SUBSTRATE_WINDOWS_CARGO_EXE = $cargoCmd.Path
+          if ("${{ steps.checkout_dir.outputs.dir }}" -eq "candidate") {
+            $env:SUBSTRATE_EXE = "$env:GITHUB_WORKSPACE\\candidate\\target\\debug\\substrate.exe"
+          } else {
+            $env:SUBSTRATE_EXE = "$env:GITHUB_WORKSPACE\\target\\debug\\substrate.exe"
+          }
+          pwsh -File "$env:GITHUB_WORKSPACE\\${{ inputs.feature_dir }}\\smoke\\windows-smoke.ps1"
 
   wsl:
     needs: validate_inputs

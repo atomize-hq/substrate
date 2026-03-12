@@ -26,12 +26,11 @@ Do not edit planning docs inside the worktree.
     - `scripts/ci-audit/ci_audit.sh --ledger-path "docs/project_management/packs/draft/world-deps-apt-provisioning/logs/WDAP1/ci-audit/ledger.jsonl" --kind feature-smoke --orch-branch "feat/world-deps-apt-provisioning" --required-platforms linux`
 - Local smoke preflight:
   - `cargo build --bin substrate && export PATH=\"$PWD/target/debug:$PATH\" && bash \"docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/linux-smoke.sh\"`
-- Feature Smoke (repeat after fixes):
-  - `make feature-smoke FEATURE_DIR="docs/project_management/packs/draft/world-deps-apt-provisioning" PLATFORM=linux SMOKE_SLICE_ID="WDAP1" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/world-deps-apt-provisioning" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
+- Feature Smoke (authoritative Linux gate; repeat after fixes):
+  - `make feature-smoke FEATURE_DIR="docs/project_management/packs/draft/world-deps-apt-provisioning" PLATFORM=linux SMOKE_SLICE_ID="WDAP1" RUNNER_KIND=github-hosted WORKFLOW_REF="feat/world-deps-apt-provisioning" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
 
 ## End Checklist
 1. Ensure the required gate is green for linux and capture the run id/URL.
 2. From inside the worktree, run: `make triad-task-finish TASK_ID="WDAP1-integ-linux"`
 3. Hand off run id/URL and any platform-specific notes to the operator (do not edit planning docs inside the worktree).
 4. Do not delete the worktree (feature cleanup removes worktrees at feature end).
-

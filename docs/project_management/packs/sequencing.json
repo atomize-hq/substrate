@@ -331,45 +331,45 @@
       "id": "world_sync",
       "title": "World sync + internal git checkpoints",
       "branch": "feat/world-sync",
-      "directory": "docs/project_management/packs/active/world-sync",
-      "plan": "docs/project_management/packs/active/world-sync/plan.md",
+      "directory": "docs/project_management/packs/implemented/world-sync",
+      "plan": "docs/project_management/packs/implemented/world-sync/plan.md",
       "status": "completed",
       "sequence": [
         {
           "id": "WS0",
-          "spec": "docs/project_management/packs/active/world-sync/WS0-spec.md"
+          "spec": "docs/project_management/packs/implemented/world-sync/WS0-spec.md"
         },
         {
           "id": "WS1",
-          "spec": "docs/project_management/packs/active/world-sync/WS1-spec.md"
+          "spec": "docs/project_management/packs/implemented/world-sync/WS1-spec.md"
         },
         {
           "id": "WS2",
-          "spec": "docs/project_management/packs/active/world-sync/WS2-spec.md"
+          "spec": "docs/project_management/packs/implemented/world-sync/WS2-spec.md"
         },
         {
           "id": "WS3",
-          "spec": "docs/project_management/packs/active/world-sync/WS3-spec.md"
+          "spec": "docs/project_management/packs/implemented/world-sync/WS3-spec.md"
         },
         {
           "id": "WS4",
-          "spec": "docs/project_management/packs/active/world-sync/WS4-spec.md"
+          "spec": "docs/project_management/packs/implemented/world-sync/WS4-spec.md"
         },
         {
           "id": "WS5",
-          "spec": "docs/project_management/packs/active/world-sync/WS5-spec.md"
+          "spec": "docs/project_management/packs/implemented/world-sync/WS5-spec.md"
         },
         {
           "id": "WS6",
-          "spec": "docs/project_management/packs/active/world-sync/WS6-spec.md"
+          "spec": "docs/project_management/packs/implemented/world-sync/WS6-spec.md"
         },
         {
           "id": "WS7",
-          "spec": "docs/project_management/packs/active/world-sync/WS7-spec.md"
+          "spec": "docs/project_management/packs/implemented/world-sync/WS7-spec.md"
         }
       ],
       "notes": [
-        "This Planning Pack is triad/planning v4 (slice ids WS0..WS7) and uses bounded CI checkpoints per docs/project_management/packs/active/world-sync/ci_checkpoint_plan.md.",
+        "This Planning Pack is triad/planning v4 (slice ids WS0..WS7) and uses bounded CI checkpoints per docs/project_management/packs/implemented/world-sync/ci_checkpoint_plan.md.",
         "Workspace layout and protected excludes must remain aligned with ADR-0008 (.substrate/ only; protected excludes are .git/** and .substrate/**)."
       ]
     },
@@ -433,6 +433,37 @@
       "notes": [
         "Implements ADR-0030: provisioning-time APT system-package installation plus runtime fail-early remediation for APT-backed world deps.",
         "Sequence after the world-deps packages/bundles contract so install.method=apt semantics are already canonical, and before manager-aware non-APT provisioning packs that extend the shared --provision-deps UX."
+      ]
+    },
+    {
+      "order": 30.31,
+      "id": "best_effort_distro_package_manager",
+      "title": "Best-effort distro package manager",
+      "branch": "feat/best-effort-distro-package-manager",
+      "directory": "docs/project_management/packs/draft/best-effort-distro-package-manager",
+      "plan": "docs/project_management/packs/draft/best-effort-distro-package-manager/plan.md",
+      "status": "not_started",
+      "sequence": [
+        {
+          "id": "BEDPM0",
+          "spec": "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md"
+        },
+        {
+          "id": "BEDPM1",
+          "spec": "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM1/BEDPM1-spec.md"
+        },
+        {
+          "id": "BEDPM2",
+          "spec": "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md"
+        },
+        {
+          "id": "BEDPM3",
+          "spec": "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM3/BEDPM3-spec.md"
+        }
+      ],
+      "notes": [
+        "Implements ADR-0031: Linux-only package-manager selection via explicit override, os-release mapping, and fixed PATH fallback with stable operator-facing reporting.",
+        "Sequence this pack before persist-detected-linux-distro-pkg-manager so the detection contract, pkg_manager.source vocabulary, and <unknown> sentinel are canonical before downstream persistence planning lands."
       ]
     },
     {

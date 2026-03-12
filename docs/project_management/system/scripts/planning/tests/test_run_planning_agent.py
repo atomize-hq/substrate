@@ -58,6 +58,26 @@ def _checkpoint_plan_text() -> str:
     return "# Fixture checkpoint plan\n\n## Machine-readable plan (draft)\n\n```json\n{\"version\":1}\n```\n"
 
 
+def _impact_map_text(*, create: list[str] | None = None, edit: list[str] | None = None) -> str:
+    def _section(tokens: list[str] | None) -> str:
+        if not tokens:
+            return "- None"
+        return "\n".join(f"- `{token}`" for token in tokens)
+
+    return (
+        "# Impact Map Fixture\n\n"
+        "## Touch set (explicit)\n\n"
+        "### Create\n"
+        f"{_section(create)}\n\n"
+        "### Edit\n"
+        f"{_section(edit)}\n\n"
+        "### Deprecate\n"
+        "- None\n\n"
+        "### Delete\n"
+        "- None\n"
+    )
+
+
 class TestRunPlanningAgent(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -335,6 +355,37 @@ exec "${REAL_GIT}" "$@"
         self.assertTrue((feature_dir / "pre-planning" / "ci_checkpoint_plan.md").is_file())
         tasks = json.loads((feature_dir / "tasks.json").read_text(encoding="utf-8"))
         self.assertEqual(tasks["meta"]["checkpoint_boundaries"], ["WDRA0"])
+
+    def test_impact_map_runner_rejects_invalid_staged_candidate(self) -> None:
+        feature_dir, _ = self._make_feature_dir("impact_map_invalid_staged")
+        artifact_source = feature_dir / "invalid_impact_map.md"
+        _write_text(artifact_source, _impact_map_text(edit=["__impact_map_test__/missing.rs"]))
+
+        res = self._run(
+            feature_dir,
+            agent="impact_map",
+            primary_source=artifact_source,
+            primary_dest_rel="logs/impact-map/staged/pre-planning/impact_map.md",
+        )
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("staged impact_map validation failed", res.stderr)
+        self.assertFalse((feature_dir / "pre-planning" / "impact_map.md").exists())
+
+    def test_impact_map_runner_orchestrated_rejects_invalid_staged_candidate(self) -> None:
+        feature_dir, _ = self._make_feature_dir("impact_map_invalid_staged_orchestrated")
+        artifact_source = feature_dir / "invalid_impact_map.md"
+        _write_text(artifact_source, _impact_map_text(edit=["__impact_map_test__/missing.rs"]))
+
+        res = self._run(
+            feature_dir,
+            agent="impact_map",
+            primary_source=artifact_source,
+            primary_dest_rel="logs/impact-map/staged/pre-planning/impact_map.md",
+            orchestrated=True,
+        )
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("staged impact_map validation failed", res.stderr)
+        self.assertFalse((feature_dir / "pre-planning" / "impact_map.md").exists())
 
 
 if __name__ == "__main__":

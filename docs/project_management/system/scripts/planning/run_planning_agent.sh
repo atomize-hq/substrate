@@ -8,11 +8,11 @@ usage() {
 Run a focused planning agent (output-allowlisted) via Codex.
 
 Usage:
-  run_planning_agent.sh --feature-dir <path> --agent <spec_manifest|impact_map|min_spec_draft|ci_checkpoint|workstream_triage|pre_planning_slice_reconcile> [options]
+  run_planning_agent.sh --feature-dir <path> --agent <spec_manifest|impact_map|min_spec_draft|ci_checkpoint|workstream_triage|pre_planning_slice_reconcile|post_full_planning_reconcile> [options]
 
 Required:
   --feature-dir <path>         Feature directory (relative or absolute)
-  --agent <id>                 Agent id: spec_manifest | impact_map | min_spec_draft | ci_checkpoint | workstream_triage | pre_planning_slice_reconcile
+  --agent <id>                 Agent id: spec_manifest | impact_map | min_spec_draft | ci_checkpoint | workstream_triage | pre_planning_slice_reconcile | post_full_planning_reconcile
 
 Optional:
   --codex-profile <profile>    Passed to `codex exec --profile`
@@ -31,6 +31,7 @@ Contract:
                       and sometimes a staged candidate for <FEATURE_DIR>/tasks.json
   - workstream_triage -> staged candidate for <FEATURE_DIR>/pre-planning/workstream_triage.md
   - pre_planning_slice_reconcile -> <FEATURE_DIR>/pre-planning/{spec_manifest,impact_map,ci_checkpoint_plan}.md
+  - post_full_planning_reconcile -> safe late-pack execution-readiness docs
 
 Notes:
   - Uses roots from: `pm_paths.py` (sibling in this directory)
@@ -328,12 +329,36 @@ case "${AGENT}" in
         )
         REQUIRED_OUTPUTS_REL=()
         ;;
+    post_full_planning_reconcile)
+        STEP_DIR_NAME="post-full-planning-convergence"
+        PROMPT_FILE_REL="docs/project_management/system/prompts/planning/post_full_planning_reconcile_agent.md"
+        ALLOWED_OUTPUTS_REL=(
+            "${PRE_PLANNING_DIR_REL}/impact_map.md"
+            "${FEATURE_DIR_REL}/plan.md"
+            "${FEATURE_DIR_REL}/tasks.json"
+            "${FEATURE_DIR_REL}/manual_testing_playbook.md"
+            "${FEATURE_DIR_REL}/execution_preflight_report.md"
+        )
+        REQUIRED_OUTPUTS_REL=()
+        ;;
     *)
-        die "unknown --agent: ${AGENT} (expected spec_manifest|impact_map|min_spec_draft|ci_checkpoint|workstream_triage|pre_planning_slice_reconcile)"
+        die "unknown --agent: ${AGENT} (expected spec_manifest|impact_map|min_spec_draft|ci_checkpoint|workstream_triage|pre_planning_slice_reconcile|post_full_planning_reconcile)"
         ;;
 esac
 
 [[ -f "${REPO_ROOT}/${PROMPT_FILE_REL}" ]] || die "missing prompt file: ${PROMPT_FILE_REL}"
+
+if [[ "${AGENT}" == "post_full_planning_reconcile" ]]; then
+    while IFS= read -r kickoff_path; do
+        [[ -n "${kickoff_path}" ]] || continue
+        ALLOWED_OUTPUTS_REL+=("$(relpath_in_repo "${REPO_ROOT}" "${kickoff_path}")")
+    done < <(jq -r '.tasks[]?.kickoff_prompt // empty' "${TASKS_JSON_ABS}")
+
+    while IFS= read -r closeout_path; do
+        [[ -n "${closeout_path}" ]] || continue
+        ALLOWED_OUTPUTS_REL+=("$(relpath_in_repo "${REPO_ROOT}" "${closeout_path}")")
+    done < <(find "${FEATURE_DIR_ABS}/slices" -type f -name '*-closeout_report.md' 2>/dev/null || true)
+fi
 
 FEATURE_SLUG="$(basename "${FEATURE_DIR_REL}")"
 
@@ -527,10 +552,10 @@ stage_path_for_repo_rel() {
 }
 
 if [[ "${USE_STAGED_OUTPUTS}" -eq 1 ]]; then
-    for p in "${ALLOWED_OUTPUTS_REL[@]}"; do
+    for p in ${ALLOWED_OUTPUTS_REL[@]+"${ALLOWED_OUTPUTS_REL[@]}"}; do
         STAGED_OUTPUTS_REL+=("$(stage_path_for_repo_rel "${p}")")
     done
-    for p in "${REQUIRED_OUTPUTS_REL[@]}"; do
+    for p in ${REQUIRED_OUTPUTS_REL[@]+"${REQUIRED_OUTPUTS_REL[@]}"}; do
         REQUIRED_STAGED_OUTPUTS_REL+=("$(stage_path_for_repo_rel "${p}")")
     done
 fi
@@ -563,7 +588,7 @@ fi
 	    if [[ "${USE_STAGED_OUTPUTS}" -eq 1 ]]; then
 	        printf -- '- Tracked outputs: (none; wrapper/runner promotes staged candidates)\n'
 	        printf -- '- Staged tracked-output candidates (write only these under logs):\n'
-	        for p in "${STAGED_OUTPUTS_REL[@]}"; do
+	        for p in ${STAGED_OUTPUTS_REL[@]+"${STAGED_OUTPUTS_REL[@]}"}; do
 	            printf '  - `%s`\n' "${p}"
 	        done
 	        printf -- '- Direct writes to canonical tracked paths are forbidden.\n'
@@ -576,7 +601,7 @@ fi
 	        printf -- '- If you find follow-ups, record them inside your logs draft(s) under that logs directory.\n'
 	    else
 	        printf -- '- Tracked outputs (only these may change):\n'
-	        for p in "${ALLOWED_OUTPUTS_REL[@]}"; do
+	        for p in ${ALLOWED_OUTPUTS_REL[@]+"${ALLOWED_OUTPUTS_REL[@]}"}; do
 	            printf '  - `%s`\n' "${p}"
 	        done
 	        printf -- '- Logs allowed (untracked only): `%s/logs/%s/`\n' "${FEATURE_DIR_REL}" "${STEP_DIR_NAME}"
@@ -666,6 +691,38 @@ write_missing_last_message_stub() {
     } >"${CODEX_LAST_MESSAGE_RUN}" 2>/dev/null || true
 }
 
+path_fingerprint() {
+    local repo_rel="$1"
+    local abs_path="${REPO_ROOT}/${repo_rel}"
+    if [[ -e "${abs_path}" ]]; then
+        shasum -a 256 -- "${abs_path}" | awk '{print $1}'
+    else
+        printf '__missing__\n'
+    fi
+}
+
+record_feature_snapshot_from_stdin() {
+    local snapshot_path="$1"
+    : > "${snapshot_path}"
+    while IFS= read -r repo_rel; do
+        [[ -n "${repo_rel}" ]] || continue
+        printf '%s\t%s\n' "${repo_rel}" "$(path_fingerprint "${repo_rel}")" >> "${snapshot_path}"
+    done
+}
+
+snapshot_has_same_fingerprint() {
+    local snapshot_path="$1"
+    local repo_rel="$2"
+    local baseline_fingerprint
+    baseline_fingerprint="$(
+        awk -F '\t' -v target="${repo_rel}" '
+            $1 == target { print $2; found = 1; exit }
+            END { if (!found) exit 1 }
+        ' "${snapshot_path}" 2>/dev/null
+    )" || return 1
+    [[ "${baseline_fingerprint}" == "$(path_fingerprint "${repo_rel}")" ]]
+}
+
 codex_pid=""
 cleanup_codex() {
     local rc="$?"
@@ -680,6 +737,11 @@ trap cleanup_codex EXIT INT TERM
 mkdir -p "${STEP_DIR_ABS}"
 wait_for_codex_pidfile_if_running "${STEP_PID_PATH}"
 : > "${STEP_STDERR}"
+
+BASELINE_CHANGED_TRACKED_SNAPSHOT="${RUN_DIR_ABS}/baseline_changed_tracked.tsv"
+BASELINE_UNTRACKED_SNAPSHOT="${RUN_DIR_ABS}/baseline_untracked.tsv"
+record_feature_snapshot_from_stdin "${BASELINE_CHANGED_TRACKED_SNAPSHOT}" < <(git diff --name-only -- "${FEATURE_DIR_REL}" | sed '/^$/d')
+record_feature_snapshot_from_stdin "${BASELINE_UNTRACKED_SNAPSHOT}" < <(git ls-files --others --exclude-standard -- "${FEATURE_DIR_REL}" | sed '/^$/d')
 
 codex_args=(codex exec --dangerously-bypass-approvals-and-sandbox --cd "${REPO_ROOT}")
 # Planning agents do not need Figma MCP and it can hang when no local MCP endpoint is running.
@@ -724,23 +786,29 @@ fi
 CHANGED_TRACKED=()
 while IFS= read -r p; do
     [[ -n "${p}" ]] || continue
+    if snapshot_has_same_fingerprint "${BASELINE_CHANGED_TRACKED_SNAPSHOT}" "${p}"; then
+        continue
+    fi
     CHANGED_TRACKED+=("${p}")
 done < <(git diff --name-only -- "${FEATURE_DIR_REL}" | sed '/^$/d')
 
 UNTRACKED=()
 while IFS= read -r p; do
     [[ -n "${p}" ]] || continue
+    if snapshot_has_same_fingerprint "${BASELINE_UNTRACKED_SNAPSHOT}" "${p}"; then
+        continue
+    fi
     UNTRACKED+=("${p}")
 done < <(git ls-files --others --exclude-standard -- "${FEATURE_DIR_REL}" | sed '/^$/d')
 
 ALLOWED_UNTRACKED_REL=()
 REQUIRED_OUTPUT_CHECK_REL=()
 if [[ "${USE_STAGED_OUTPUTS}" -eq 1 ]]; then
-    ALLOWED_UNTRACKED_REL=("${STAGED_OUTPUTS_REL[@]}")
-    REQUIRED_OUTPUT_CHECK_REL=("${REQUIRED_STAGED_OUTPUTS_REL[@]}")
+    ALLOWED_UNTRACKED_REL=(${STAGED_OUTPUTS_REL[@]+"${STAGED_OUTPUTS_REL[@]}"})
+    REQUIRED_OUTPUT_CHECK_REL=(${REQUIRED_STAGED_OUTPUTS_REL[@]+"${REQUIRED_STAGED_OUTPUTS_REL[@]}"})
 else
-    ALLOWED_UNTRACKED_REL=("${ALLOWED_OUTPUTS_REL[@]}")
-    REQUIRED_OUTPUT_CHECK_REL=("${REQUIRED_OUTPUTS_REL[@]}")
+    ALLOWED_UNTRACKED_REL=(${ALLOWED_OUTPUTS_REL[@]+"${ALLOWED_OUTPUTS_REL[@]}"})
+    REQUIRED_OUTPUT_CHECK_REL=(${REQUIRED_OUTPUTS_REL[@]+"${REQUIRED_OUTPUTS_REL[@]}"})
 fi
 
 UNTRACKED_UNEXPECTED=()
@@ -875,7 +943,28 @@ run_closeout_validation() {
     exit 1
 }
 
+run_staged_candidate_validation() {
+    if [[ "${USE_STAGED_OUTPUTS}" -ne 1 || "${AGENT}" != "impact_map" ]]; then
+        return 0
+    fi
+
+    local staged_rel="${STAGED_OUTPUTS_REL[0]}"
+    local staged_abs="${REPO_ROOT}/${staged_rel}"
+
+    if python3 "${PLANNING_SCRIPTS_DIR}/validate_impact_map.py" --feature-dir "${FEATURE_DIR_ABS}" --impact-map-path "${staged_abs}"; then
+        return 0
+    fi
+
+    echo "ERROR: staged impact_map validation failed for ${FEATURE_DIR_REL}" >&2
+    echo "  Staged artifact: ${staged_rel}" >&2
+    echo "  Step logs: $(relpath_in_repo "${REPO_ROOT}" "${STEP_DIR_ABS}")" >&2
+    echo "  Run logs:  $(relpath_in_repo "${REPO_ROOT}" "${RUN_DIR_ABS}")" >&2
+    echo "  Hint: fix the staged Touch Set candidate before promotion or orchestration resume." >&2
+    exit 1
+}
+
 if [[ "${CODEX_EXIT}" -eq 0 && "${LAST_MESSAGE_OK}" -eq 1 && "${REQUIRED_OUTPUTS_OK}" -eq 1 ]]; then
+    run_staged_candidate_validation
     if [[ "${USE_STAGED_OUTPUTS}" -eq 1 && "${PM_PLANNING_ORCHESTRATED:-0}" != "1" ]]; then
         promote_staged_outputs
     fi

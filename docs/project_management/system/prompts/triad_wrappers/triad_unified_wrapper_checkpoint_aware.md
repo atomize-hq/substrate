@@ -13,6 +13,9 @@ Non-negotiables:
 - Do not edit planning docs inside any task worktree.
 - Do not dispatch cross-platform CI from per-slice integration worktrees; dispatch only from the checkpoint ops task.
 
+If you need an interruption-safe variant that can resume from whatever stage was already completed, use:
+- `docs/project_management/system/prompts/triad_wrappers/triad_unified_wrapper_checkpoint_resume_safe.md`
+
 ## Copy/Paste Prompt Template
 
 Fill in only:

@@ -91,13 +91,15 @@ run_expect() {
 
 home_dir="$tmp_root/home"
 substrate_home="$tmp_root/substrate-home"
+world_deps_bin="$tmp_root/world-deps-bin"
 ws="$tmp_root/ws"
 
-mkdir -p "$home_dir" "$substrate_home/deps/packages" "$ws"
+mkdir -p "$home_dir" "$substrate_home/deps/packages" "$world_deps_bin" "$ws"
 
 export HOME="$home_dir"
 export USERPROFILE="$home_dir"
 export SUBSTRATE_HOME="$substrate_home"
+export SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR="$world_deps_bin"
 
 "$SUBSTRATE_BIN" workspace init "$ws" >/dev/null
 
@@ -111,12 +113,12 @@ install:
   method: script
   script: |
     set -euo pipefail
-    mkdir -p /var/lib/substrate/world-deps/bin
-    cat > /var/lib/substrate/world-deps/bin/smoke-hello <<'EOF'
+    mkdir -p "${SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR:?missing world deps bin}"
+    cat > "${SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR:?missing world deps bin}/smoke-hello" <<'EOF'
     #!/bin/sh
     echo smoke-hello
     EOF
-    chmod +x /var/lib/substrate/world-deps/bin/smoke-hello
+    chmod +x "${SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR:?missing world deps bin}/smoke-hello"
 probe:
   command: "smoke-hello"
 YAML
@@ -159,8 +161,15 @@ run_expect "world-enable-provision-dry-run" 4 "$SUBSTRATE_BIN" world enable --pr
 require_contains "$RUN_STDERR" "Substrate will not mutate the host OS"
 require_contains "$RUN_STDERR" "substrate world enable --provision-deps"
 
+if [[ "${SUBSTRATE_SMOKE_SLICE_ID:-}" == "WDAP0" ]]; then
+  echo "== Runtime cases are skipped for WDAP0 (owned by WDAP1) =="
+  popd >/dev/null
+  echo "OK: WDAP linux smoke"
+  exit 0
+fi
+
 echo "== Preflight: world doctor =="
-if ! "$SUBSTRATE_BIN" world doctor >/dev/null 2>&1; then
+if ! "$SUBSTRATE_BIN" world doctor --world >/dev/null 2>&1; then
   echo "WDAP linux smoke: world backend not healthy; run 'substrate world doctor' remediation and retry" >&2
   exit 4
 fi
@@ -182,4 +191,3 @@ require_contains "$RUN_STDERR" "substrate world enable --provision-deps"
 popd >/dev/null
 
 echo "OK: WDAP linux smoke"
-

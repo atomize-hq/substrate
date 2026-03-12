@@ -429,6 +429,63 @@ It does not:
 
 Those remain outside the convergence loop and should fail deterministically when encountered.
 
+### Step 5.6 — Post-full-planning execution convergence
+
+After the last PWS finishes, full planning now runs a second bounded convergence gate before orchestration success is reported.
+
+#### Landed contract
+
+1) The gate is execution-readiness oriented, not slice-authority oriented.
+- It runs after full planning completes.
+- It is the final blocker before `full_planning_orchestrate.sh` reports success.
+
+2) The gate uses the existing mechanical validators plus one new touch-set coherence check.
+- Baseline dry run:
+  - `validate_tasks_json.py`
+  - `validate_slice_inventory_coherence.py --phase execution_ready`
+  - `validate_slice_specs.py`
+  - `validate_ci_checkpoint_plan.py` when applicable
+  - `validate_impact_map.py`
+  - `make planning-lint FEATURE_DIR=...`
+- New gap-filler:
+  - `validate_execution_touchset_coherence.py`
+  - This checks explicit repo-relative, non-pack implementation-facing paths referenced by late-pack outputs against `impact_map.md`.
+
+3) Classification matches the pre-full model.
+- `post_full_planning_convergence.py` classifies the pack as:
+  - `pass`
+  - `needs_remediation`
+  - `hard_fail`
+
+4) Safe remediation scope is fixed and narrow.
+- The reconcile agent may edit only:
+  - `pre-planning/impact_map.md`
+  - `plan.md`
+  - `tasks.json`
+  - kickoff prompts referenced by `tasks.json`
+  - `manual_testing_playbook.md`
+  - `execution_preflight_report.md`
+  - existing per-slice closeout reports
+- It must not edit:
+  - ADRs
+  - `contract.md`
+  - `decision_register.md`
+  - slice specs
+  - pre-planning slice-authority docs (`workstream_triage.md`, `minimal_spec_draft.md`, `spec_manifest.md`, `ci_checkpoint_plan.md`)
+
+5) `alignment_report.md` remains generated here too.
+- `post_full_planning_converge.sh` regenerates `pre-planning/alignment_report.md` after successful convergence.
+- The report is still generated, not agent-authored.
+
+#### Landed entrypoints
+
+- `make pm-post-full-planning-converge FEATURE_DIR=...`
+  - runs only the post-full execution-readiness gate
+- `make pm-full-planning-orchestrate FEATURE_DIR=...`
+  - now runs post-full convergence after the PWS loop and before reporting success
+- `make pm-planning-pipeline FEATURE_DIR=...`
+  - picks up post-full convergence transitively through full planning; it does not add a second top-level post-full step
+
 ### Step 6 — Add safe parallelism (worktrees)
 
 - Only after Step 4/5 is stable:

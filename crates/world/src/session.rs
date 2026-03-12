@@ -120,7 +120,21 @@ impl SessionWorld {
         Ok(())
     }
 
-    fn create_directories(&self) -> Result<()> {
+    fn fallback_cgroup_path(&self) -> PathBuf {
+        let uid = current_uid();
+        if let Ok(xdg) = std::env::var("XDG_RUNTIME_DIR") {
+            if !xdg.is_empty() {
+                return PathBuf::from(xdg).join("substrate/cgroup").join(&self.id);
+            }
+        }
+        let run = PathBuf::from(format!("/run/user/{uid}/substrate/cgroup/{}", self.id));
+        if run.parent().unwrap_or(Path::new("/run")).exists() {
+            return run;
+        }
+        PathBuf::from(format!("/tmp/substrate-{uid}-cgroup/{}", self.id))
+    }
+
+    fn create_directories(&mut self) -> Result<()> {
         if let Err(e) = std::fs::create_dir_all(&self.root_dir) {
             tracing::error!(
                 error = %e,
@@ -130,6 +144,24 @@ impl SessionWorld {
             return Err(e).context("Failed to create world root directory");
         }
         if let Err(e) = std::fs::create_dir_all(&self.cgroup_path) {
+            let fallback_allowed = current_uid() != 0
+                && matches!(
+                    e.kind(),
+                    std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::ReadOnlyFilesystem
+                );
+            if fallback_allowed {
+                let fallback = self.fallback_cgroup_path();
+                tracing::warn!(
+                    error = %e,
+                    path = %self.cgroup_path.display(),
+                    fallback = %fallback.display(),
+                    "[world] failed to create cgroup directory; using unprivileged fallback path"
+                );
+                std::fs::create_dir_all(&fallback)
+                    .context("Failed to create fallback cgroup directory")?;
+                self.cgroup_path = fallback;
+                return Ok(());
+            }
             tracing::error!(
                 error = %e,
                 path = %self.cgroup_path.display(),
@@ -223,8 +255,29 @@ impl SessionWorld {
                         rel = PathBuf::from(".");
                     }
                     let target_dir = merged_dir.join(&rel);
-                    crate::exec::execute_shell_command(&command_to_run, &target_dir, &env, false)
-                        .with_context(|| format!("Failed to execute command in overlay after mount-namespace bind failed: {err:#}"))?
+                    let fallback_world_deps_root =
+                        crate::exec::stable_world_deps_fallback_root(&self.project_dir);
+                    match crate::exec::execute_shell_command_with_world_deps_bind_mount(
+                        &command_to_run,
+                        &target_dir,
+                        &env,
+                        false,
+                        &fallback_world_deps_root,
+                        Some(self.cgroup_path.as_path()),
+                    ) {
+                        Ok(output) => output,
+                        Err(world_deps_err) => crate::exec::execute_shell_command(
+                            &command_to_run,
+                            &target_dir,
+                            &env,
+                            false,
+                        )
+                        .with_context(|| {
+                            format!(
+                                "Failed to execute command in overlay after mount-namespace bind failed: {err:#}; world-deps fallback also failed: {world_deps_err:#}"
+                            )
+                        })?,
+                    }
                 }
             };
 
@@ -391,6 +444,16 @@ impl SessionWorld {
         // TODO: Implement policy application
         Ok(())
     }
+}
+
+#[cfg(unix)]
+fn current_uid() -> u32 {
+    unsafe { libc::geteuid() as u32 }
+}
+
+#[cfg(not(unix))]
+fn current_uid() -> u32 {
+    0
 }
 
 fn is_truthy(value: &str) -> bool {

@@ -47,9 +47,51 @@ if (-not $projectHasCargo -and -not (Test-Path $packagedWorldAgent)) {
     Write-ErrorAndExit "Project path must contain Cargo.toml or a packaged bin\\linux\\world-agent"
 }
 
-$cargoExe = Join-Path $env:USERPROFILE '.cargo\bin\cargo.exe'
-if (-not $usesBundledArtifacts -and -not (Test-Path $cargoExe)) {
-    Write-ErrorAndExit "cargo.exe not found at $cargoExe. Install Rust on Windows host."
+$cargoCandidates = @()
+if ($env:SUBSTRATE_WINDOWS_CARGO_EXE) {
+    $cargoCandidates += $env:SUBSTRATE_WINDOWS_CARGO_EXE
+}
+if ($env:CARGO -and $env:CARGO.Trim().ToLowerInvariant().EndsWith('cargo.exe')) {
+    $cargoCandidates += $env:CARGO
+}
+if ($env:CARGO_HOME) {
+    $cargoCandidates += (Join-Path $env:CARGO_HOME 'bin\cargo.exe')
+}
+if ($env:SUBSTRATE_HOST_USERPROFILE) {
+    $cargoCandidates += (Join-Path $env:SUBSTRATE_HOST_USERPROFILE '.cargo\bin\cargo.exe')
+}
+if ($env:USERPROFILE) {
+    $cargoCandidates += (Join-Path $env:USERPROFILE '.cargo\bin\cargo.exe')
+}
+$cargoCmd = Get-Command cargo -ErrorAction SilentlyContinue
+if ($cargoCmd) {
+    $cargoCandidates += $cargoCmd.Path
+}
+$cargoExe = $cargoCandidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+if (-not $usesBundledArtifacts -and -not $cargoExe) {
+    Write-ErrorAndExit "cargo.exe not found via SUBSTRATE_WINDOWS_CARGO_EXE, SUBSTRATE_HOST_USERPROFILE, USERPROFILE, or PATH. Install Rust on the Windows host."
+}
+$cargoToolchain = $env:RUST_TOOLCHAIN
+if (-not $cargoToolchain -and $env:RUSTUP_TOOLCHAIN) {
+    $cargoToolchain = $env:RUSTUP_TOOLCHAIN
+}
+$rustupExe = $null
+$cargoResolvedViaRustup = $false
+if ($cargoExe) {
+    $candidateRustupExe = Join-Path (Split-Path -Parent $cargoExe) 'rustup.exe'
+    if (Test-Path $candidateRustupExe) {
+        $rustupExe = $candidateRustupExe
+    }
+}
+if ($cargoToolchain -and $rustupExe) {
+    $resolvedCargoExe = (& $rustupExe which cargo --toolchain $cargoToolchain 2>$null | Select-Object -Last 1)
+    if ($LASTEXITCODE -eq 0 -and $resolvedCargoExe) {
+        $resolvedCargoExe = $resolvedCargoExe.Trim()
+        if ($resolvedCargoExe -and (Test-Path $resolvedCargoExe)) {
+            $cargoExe = $resolvedCargoExe
+            $cargoResolvedViaRustup = $true
+        }
+    }
 }
 
 # Ensure WSL installed
@@ -226,7 +268,11 @@ if ($projectHasCargo) {
         Write-Info "Building substrate-forwarder (release)"
         Push-Location $projectPath
         try {
-            & $cargoExe build -p substrate-forwarder --release
+            $forwarderBuildArgs = @('build', '-p', 'substrate-forwarder', '--release')
+            if ($cargoToolchain -and -not $cargoResolvedViaRustup) {
+                $env:RUSTUP_TOOLCHAIN = $cargoToolchain
+            }
+            & $cargoExe @forwarderBuildArgs
         } finally {
             Pop-Location
         }

@@ -1,0 +1,15 @@
+{
+  "meta": {
+    "schema_version": 4,
+    "slice_spec_version": 2,
+    "adr_paths": [
+      "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.tmp_pm_script_tests/run_planning_agent/fail_heading_json_mismatch/ADR-0001-fixture.md"
+    ],
+    "cross_platform": true,
+    "automation": {
+      "enabled": true,
+      "orchestration_branch": "feat/test"
+    }
+  },
+  "tasks": []
+}

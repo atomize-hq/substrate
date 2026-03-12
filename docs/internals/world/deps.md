@@ -10,11 +10,13 @@ Operator-facing docs live under:
 The shell:
 1) Resolves the effective inventory view (built-ins + global inventory + workspace inventory chain).
 2) Resolves the effective enabled list (global + workspace patches).
-3) Computes an install plan:
-   - `apt` packages first (world image / OS mutation)
-   - `script` packages second (Substrate-managed prefix)
-   - `manual` packages never auto-executed (blocked)
-4) Executes world-backed steps by calling world-agent (`/v1/execute`).
+3) Computes the in-scope package set and normalized APT requirement set.
+4) If APT requirements exist, probes them read-only with `dpkg-query` inside the world.
+5) If any APT requirement is unsatisfied, exits `4` with remediation that points operators to
+   `substrate world enable --provision-deps`.
+6) If APT requirements are already satisfied, treats APT-backed items as no-op and proceeds with:
+   - `script` packages under the Substrate-managed prefix
+   - `manual` packages as blocked/manual-only items
 
 Code pointers:
 - Shell engine: `crates/shell/src/builtins/world_deps/surfaces.rs`
@@ -123,24 +125,25 @@ Implementation lives in:
 
 ## APT installs vs hardening
 
-Current `apt` support uses a Substrate-managed APT state dir under:
-- `/var/lib/substrate/world-deps/apt`
+Runtime world-deps application is now probe-only for APT-backed items:
+- `substrate world deps current sync`
+- `substrate world deps current install <item...>`
 
-But `apt-get install` still invokes `dpkg`, which writes to system locations such as:
-- `/var/lib/dpkg`
-- `/var/log/apt`
-- `/usr`
-- `/etc/apt`
+These commands never invoke `apt`, `apt-get`, or mutating `dpkg` at runtime. They only run a
+read-only `dpkg-query` probe inside the selected world, then:
+- fail early with exit `4` and remediation if required packages are missing, or
+- continue with non-APT work if the packages are already present.
 
-Under `ProtectSystem=strict`, these writes fail with “Read-only file system”.
+Provisioning-time APT is owned by:
+- `substrate world enable --provision-deps`
 
-Code pointers:
-- APT command builder: `crates/shell/src/builtins/world_deps/surfaces.rs` (`build_world_apt_install_command_v1`)
-- Hardening classification for errors: `crates/shell/src/builtins/world_deps/surfaces.rs` (`looks_like_*hardening_violation*`)
+Contract source:
+- `docs/reference/world/deps/README.md`
+- `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`
 
-Planned/expected resolution directions (design space):
-- Provisioning-time system packages (run outside the hardened runtime sandbox), or
-- Prefer user-space installs for runnable toolchains in hardened worlds.
+Implementation lives in:
+- runtime preflight/probe: `crates/shell/src/builtins/world_deps/surfaces.rs`
+- provisioning-time APT runner: `crates/shell/src/builtins/world_enable/runner/provision_deps.rs`
 
 ## Debugging checklist
 

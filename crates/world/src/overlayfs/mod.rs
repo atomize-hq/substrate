@@ -27,6 +27,7 @@ const MAX_TRACKED_DIRS: usize = 100;
 const MAX_DIFF_SIZE_BYTES: usize = 10 * 1024 * 1024; // 10MB
 
 pub use strategy::run_enumeration_probe;
+pub use strategy::select_strategy;
 pub use strategy::{ENUMERATION_PROBE_FILE, ENUMERATION_PROBE_ID};
 pub use strategy_state::WorldFsStrategyMeta;
 
@@ -614,12 +615,29 @@ pub fn execute_with_overlay(
                 rel = PathBuf::from(".");
             }
             let target_dir = merged_dir.join(&rel);
-            crate::exec::execute_shell_command(&command_to_run, &target_dir, env, false)
+            let fallback_world_deps_root =
+                crate::exec::stable_world_deps_fallback_root(project_dir);
+            match crate::exec::execute_shell_command_with_world_deps_bind_mount(
+                &command_to_run,
+                &target_dir,
+                env,
+                false,
+                &fallback_world_deps_root,
+                None,
+            ) {
+                Ok(output) => output,
+                Err(world_deps_err) => crate::exec::execute_shell_command(
+                    &command_to_run,
+                    &target_dir,
+                    env,
+                    false,
+                )
                 .with_context(|| {
                     format!(
-                        "Failed to execute command in overlay after mount-namespace bind failed: {err:#}"
+                        "Failed to execute command in overlay after mount-namespace bind failed: {err:#}; world-deps fallback also failed: {world_deps_err:#}"
                     )
-                })?
+                })?,
+            }
         }
     };
 

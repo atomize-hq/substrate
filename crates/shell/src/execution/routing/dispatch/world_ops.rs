@@ -33,6 +33,9 @@ use world::LinuxLocalBackend;
 #[cfg(target_os = "linux")]
 use world_api::{ResourceLimits, WorldBackend, WorldSpec};
 
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+const WORLD_PROJECT_DIR_OVERRIDE_ENV: &str = "SUBSTRATE_WORLD_PROJECT_DIR";
+
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub(super) fn normalize_env_for_linux_guest(
     env_map: &mut std::collections::HashMap<String, String>,
@@ -925,6 +928,7 @@ fn build_agent_client_and_request_impl(
         &mut env_map,
     )?;
     ensure_world_deps_bin_on_path(&mut env_map);
+    preserve_world_project_dir_override(&mut env_map);
 
     let request = ExecuteRequest {
         profile: current_world_request_profile(),
@@ -939,6 +943,15 @@ fn build_agent_client_and_request_impl(
     };
 
     Ok((client, request, agent_id))
+}
+
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn preserve_world_project_dir_override(env_map: &mut std::collections::HashMap<String, String>) {
+    let project_dir = crate::execution::settings::world_root_from_env().path;
+    env_map.insert(
+        WORLD_PROJECT_DIR_OVERRIDE_ENV.to_string(),
+        project_dir.display().to_string(),
+    );
 }
 
 #[cfg(target_os = "linux")]
@@ -1532,7 +1545,10 @@ pub(super) fn emit_stream_chunk(agent_label: &str, data: &[u8], is_stderr: bool)
 
 #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
 mod tests {
-    use super::ensure_world_deps_bin_on_path;
+    use super::{
+        ensure_world_deps_bin_on_path, preserve_world_project_dir_override,
+        WORLD_PROJECT_DIR_OVERRIDE_ENV,
+    };
 
     #[test]
     fn ensure_world_deps_bin_sets_default_and_prepends_path() {
@@ -1577,5 +1593,39 @@ mod tests {
             env_map.get("PATH").map(String::as_str),
             Some("/tmp/custom-bin:/usr/local/bin:/usr/bin")
         );
+    }
+
+    #[test]
+    fn preserve_world_project_dir_override_records_logical_root() {
+        let prev_mode = std::env::var("SUBSTRATE_ANCHOR_MODE").ok();
+        let prev_path = std::env::var("SUBSTRATE_ANCHOR_PATH").ok();
+        let prev_caged = std::env::var("SUBSTRATE_CAGED").ok();
+
+        std::env::set_var("SUBSTRATE_ANCHOR_MODE", "custom");
+        std::env::set_var("SUBSTRATE_ANCHOR_PATH", "/tmp/substrate-world-root");
+        std::env::set_var("SUBSTRATE_CAGED", "1");
+
+        let mut env_map = std::collections::HashMap::<String, String>::new();
+        preserve_world_project_dir_override(&mut env_map);
+
+        assert_eq!(
+            env_map
+                .get(WORLD_PROJECT_DIR_OVERRIDE_ENV)
+                .map(String::as_str),
+            Some("/tmp/substrate-world-root")
+        );
+
+        match prev_mode {
+            Some(value) => std::env::set_var("SUBSTRATE_ANCHOR_MODE", value),
+            None => std::env::remove_var("SUBSTRATE_ANCHOR_MODE"),
+        }
+        match prev_path {
+            Some(value) => std::env::set_var("SUBSTRATE_ANCHOR_PATH", value),
+            None => std::env::remove_var("SUBSTRATE_ANCHOR_PATH"),
+        }
+        match prev_caged {
+            Some(value) => std::env::set_var("SUBSTRATE_CAGED", value),
+            None => std::env::remove_var("SUBSTRATE_CAGED"),
+        }
     }
 }

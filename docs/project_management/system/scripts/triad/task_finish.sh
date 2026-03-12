@@ -385,11 +385,7 @@ enforce_impact_map_touchset() {
 
     allow_exact_text="$(jq -r '.create[]?, .edit[]?, .deprecate[]?, .delete[]?' <<<"${allow_json}")"
 
-    allow_prefixes=()
-    while IFS= read -r prefix; do
-        [[ -z "${prefix}" ]] && continue
-        allow_prefixes+=("${prefix}")
-    done < <(jq -r '.dir_prefixes[]?' <<<"${allow_json}")
+    allow_prefixes_text="$(jq -r '.dir_prefixes[]?' <<<"${allow_json}")"
 
     touched_paths=()
     while IFS= read -r p; do
@@ -410,12 +406,12 @@ enforce_impact_map_touchset() {
             return 0
         fi
         local prefix
-        for prefix in "${allow_prefixes[@]}"; do
+        while IFS= read -r prefix; do
             [[ -z "${prefix}" ]] && continue
             if [[ "${p}" == "${prefix}"* ]]; then
                 return 0
             fi
-        done
+        done <<<"${allow_prefixes_text}"
         return 1
     }
 

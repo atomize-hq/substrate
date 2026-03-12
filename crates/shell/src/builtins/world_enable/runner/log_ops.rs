@@ -101,6 +101,7 @@ mod tests {
         WorldEnableArgs {
             home: None,
             profile: "release".to_string(),
+            provision_deps: false,
             dry_run: true,
             verbose: true,
             force: false,

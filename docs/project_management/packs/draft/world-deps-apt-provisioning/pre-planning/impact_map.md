@@ -24,9 +24,12 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - To compute pack-derived Work Lift v1 from this Touch Set: `make pm-lift-pack PACK="docs/project_management/packs/draft/world-deps-apt-provisioning"` (strict packs only).
 
 ### Create
-- None
+- `crates/shell/src/builtins/world_enable/runner/provision_deps.rs`
+- `crates/shell/tests/world_enable_provision_deps_wdap0.rs`
+- `crates/shell/tests/world_deps_apt_fail_early_wdap1.rs`
 
 ### Edit
+- `.github/workflows/feature-smoke.yml`
 - `docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md`
 - `docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/spec_manifest.md`
 - `docs/project_management/packs/draft/world-deps-apt-provisioning/pre-planning/workstream_triage.md`
@@ -49,14 +52,29 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - `crates/shell/src/builtins/world_enable/runner.rs`
 - `crates/shell/src/builtins/world_enable/runner/helper_script.rs`
 - `crates/shell/src/builtins/world_enable/runner/log_ops.rs`
+- `crates/shell/src/builtins/world_deps/mod.rs`
 - `crates/shell/src/builtins/world_deps/inventory.rs`
 - `crates/shell/src/builtins/world_deps/errors.rs`
 - `crates/shell/src/builtins/world_deps/surfaces.rs`
+- `crates/replay/src/replay/executor.rs`
 - `crates/world-agent/src/service.rs`
+- `crates/world-agent/src/handlers.rs`
+- `crates/world-agent/tests/repl_persistent_session_bootstrap_v1.rs`
+- `crates/world-agent/tests/repl_persistent_session_exec_v1.rs`
+- `crates/world-mac-lima/src/forwarding.rs`
+- `crates/world-windows-wsl/src/warm.rs`
+- `crates/world/src/exec.rs`
+- `crates/world/src/overlayfs/layering.rs`
+- `crates/world/src/overlayfs/mod.rs`
+- `crates/world/src/session.rs`
 - `crates/shell/tests/world_enable.rs`
 - `crates/shell/tests/world_deps_apt_install_wdp5.rs`
+- `crates/shell/tests/world_deps_current_dry_run_wdp3.rs`
+- `crates/shell/tests/world_deps_present_semantics_wdh1.rs`
+- `crates/shell/tests/repl_world_first_rendering_v1.rs`
 - `scripts/substrate/world-enable.sh`
 - `scripts/substrate/install-substrate.sh`
+- `tests/mac/installer_parity_fixture.sh`
 - `scripts/linux/world-provision.sh`
 - `scripts/mac/lima-warm.sh`
 - `scripts/mac/substrate-world-agent.service`

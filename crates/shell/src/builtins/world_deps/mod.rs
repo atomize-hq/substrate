@@ -4,6 +4,7 @@ mod surfaces;
 
 pub use surfaces::run;
 
+pub(crate) use inventory::AptSpecV1;
 pub(crate) use inventory::InventoryListItemSummaryV1;
 
 use crate::execution::config_model;
@@ -68,4 +69,10 @@ pub(crate) fn collect_doctor_snapshot_v1(
     };
 
     Ok(applied)
+}
+
+pub(crate) fn resolve_effective_enabled_apt_requirements(cwd: &Path) -> Result<Vec<AptSpecV1>> {
+    let cfg = config_model::resolve_effective_config(cwd, &Default::default())?;
+    let view = surfaces::resolve_current_inventory_view(cwd, &cfg)?;
+    surfaces::resolve_enabled_apt_requirements_v1(&view, &cfg.world.deps.enabled)
 }
