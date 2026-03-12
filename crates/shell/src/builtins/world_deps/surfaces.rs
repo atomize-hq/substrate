@@ -554,6 +554,10 @@ fn preflight_runtime_apt_requirements_v1(
         print_normalized_apt_requirements_v1(requirements);
     }
 
+    if runtime_apt_preflight_disabled_v1() {
+        return Ok(());
+    }
+
     let statuses = probe_world_apt_requirements_v1(requirements)?;
     if statuses.iter().all(|status| status.satisfied) {
         return Ok(());
@@ -562,6 +566,18 @@ fn preflight_runtime_apt_requirements_v1(
     Err(anyhow!(WorldDepsUnmetPrerequisiteError::new(
         build_runtime_apt_remediation_v1(requirements, &statuses, verbose)
     )))
+}
+
+fn runtime_apt_preflight_disabled_v1() -> bool {
+    matches!(
+        env::var("SUBSTRATE_WORLD_DEPS_SKIP_APT")
+            .ok()
+            .as_deref()
+            .map(str::trim)
+            .map(str::to_ascii_lowercase)
+            .as_deref(),
+        Some("1" | "true" | "yes")
+    )
 }
 
 fn print_normalized_apt_requirements_v1(requirements: &[AptSpecV1]) {
