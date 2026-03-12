@@ -196,6 +196,7 @@ Notes
   not use that provisioning profile and never perform runtime APT mutation.
 - Provisioning-time APT and runtime fail-early details live in:
   `docs/reference/world/deps/README.md`
+  and `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`
 
 ---
 

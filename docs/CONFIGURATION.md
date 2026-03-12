@@ -95,7 +95,7 @@ Other world-adjacent variables:
 
 | Variable | Purpose | Default | Example |
 |----------|---------|---------|---------|
-| `SUBSTRATE_WORLD_REQUEST_PROFILE` | Sets the Agent API request `profile` for world-agent executions (advanced/internal only; not the operator-facing APT provisioning workflow, which is `substrate world enable --provision-deps`; see `docs/reference/world/deps/README.md`) | *unset* | `world-deps-provision` |
+| `SUBSTRATE_WORLD_REQUEST_PROFILE` | Sets the Agent API request `profile` for world-agent executions (advanced/internal only; not the operator-facing APT provisioning workflow, which is `substrate world enable --provision-deps`; see `docs/reference/world/deps/README.md` and `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`) | *unset* | `world-deps-provision` |
 | `SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE` | Force socket activation mode reporting (`socket_activation`, `manual`, or `unknown`) for diagnostics/tests | auto-detect via systemd | `socket_activation` |
 | `SUBSTRATE_SYSTEMCTL_TIMEOUT_MS` | Timeout (ms) for `systemctl show …` probes used by Linux socket-activation detection; prevents hangs when systemd/dbus is unhealthy | `2000` | `250` |
 

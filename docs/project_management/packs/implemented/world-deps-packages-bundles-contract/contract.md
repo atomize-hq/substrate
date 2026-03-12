@@ -493,6 +493,7 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
   - After success, runnable package entrypoints are invokable in-world via the standard world execution path (interactive `substrate>` and non-interactive runs) without requiring shell RC sourcing.
 - Runtime APT remediation/provisioning contract:
   - `docs/reference/world/deps/README.md`
+  - `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`
 - Exit codes:
   - `0` success
   - `2` unknown item name / invalid YAML / invalid inventory
@@ -510,6 +511,7 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
   - Unsatisfied APT requirements MUST fail early with exit `4` and remediation that points to `substrate world enable --provision-deps`.
   - The detailed provisioning/remediation contract lives in:
     `docs/reference/world/deps/README.md`
+    and `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`
 - On success, it MUST print:
   - A one-line confirmation plus:
   - `substrate: note: applied effective enabled deps list for this directory (sources: workspace, global, defaults as applicable)`

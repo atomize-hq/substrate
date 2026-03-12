@@ -139,6 +139,7 @@ Provisioning-time APT is owned by:
 
 Contract source:
 - `docs/reference/world/deps/README.md`
+- `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`
 
 Implementation lives in:
 - runtime preflight/probe: `crates/shell/src/builtins/world_deps/surfaces.rs`
