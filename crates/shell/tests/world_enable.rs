@@ -4,10 +4,10 @@
 mod common;
 
 use assert_cmd::Command;
-use common::{shared_tmpdir, substrate_shell_driver, temp_dir};
+use common::{binary_path, shared_tmpdir, substrate_shell_driver, temp_dir};
 use serde_yaml::Value as YamlValue;
 use std::fs;
-use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+use std::os::unix::fs::{symlink, FileTypeExt, PermissionsExt};
 use std::path::PathBuf;
 use tempfile::{Builder, TempDir};
 
@@ -119,7 +119,7 @@ impl WorldEnableFixture {
         fs::set_permissions(&self.script_path, perms).expect("chmod helper");
     }
 
-    fn command(&self) -> Command {
+    fn command_with_override(&self) -> Command {
         let mut cmd = substrate_shell_driver();
         cmd.arg("world")
             .arg("enable")
@@ -136,8 +136,33 @@ impl WorldEnableFixture {
         cmd
     }
 
+    fn command(&self) -> Command {
+        self.command_with_override()
+    }
+
+    fn command_without_override(&self) -> Command {
+        let mut cmd = substrate_shell_driver();
+        cmd.arg("world")
+            .arg("enable")
+            .arg("--home")
+            .arg(&self.substrate_home)
+            .env("TMPDIR", shared_tmpdir())
+            .env("HOME", &self.home)
+            .env("USERPROFILE", &self.home)
+            .env("SUBSTRATE_WORLD_SOCKET", &self.socket_path)
+            .env("SUBSTRATE_PREFIX", &self.legacy_prefix)
+            .env("SUBSTRATE_TEST_WORLD_LOG", &self.log_path);
+        cmd
+    }
+
     fn command_skip_doctor(&self) -> Command {
         let mut cmd = self.command();
+        cmd.env("SUBSTRATE_WORLD_ENABLE_SKIP_DOCTOR", "1");
+        cmd
+    }
+
+    fn command_skip_doctor_without_override(&self) -> Command {
+        let mut cmd = self.command_without_override();
         cmd.env("SUBSTRATE_WORLD_ENABLE_SKIP_DOCTOR", "1");
         cmd
     }
@@ -203,6 +228,35 @@ impl WorldEnableFixture {
             "expected unix socket at {}",
             self.socket_path.display()
         );
+    }
+
+    fn install_prefix_runtime_bundle(&self) {
+        let helper_path = self
+            .substrate_home
+            .join("scripts/substrate/world-enable.sh");
+        fs::create_dir_all(helper_path.parent().expect("helper parent"))
+            .expect("create prefix helper dir");
+        fs::write(&helper_path, HELPER_SCRIPT).expect("write prefix helper");
+        let mut perms = fs::metadata(&helper_path)
+            .expect("prefix helper metadata")
+            .permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&helper_path, perms).expect("chmod prefix helper");
+
+        let install_helper = self
+            .substrate_home
+            .join("scripts/substrate/install-substrate.sh");
+        fs::write(&install_helper, "#!/usr/bin/env bash\nexit 0\n").expect("write install helper");
+        let mut perms = fs::metadata(&install_helper)
+            .expect("install helper metadata")
+            .permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&install_helper, perms).expect("chmod install helper");
+
+        let bin_dir = self.substrate_home.join("bin");
+        fs::create_dir_all(&bin_dir).expect("create bin dir");
+        let substrate_bin = bin_dir.join("substrate");
+        symlink(PathBuf::from(binary_path()), &substrate_bin).expect("symlink substrate binary");
     }
 }
 
@@ -363,6 +417,32 @@ fn world_enable_dry_run_skips_all_mutations() {
         "dry run should not create env.sh"
     );
     assert!(fixture.log_contents().is_none(), "helper should not run");
+}
+
+#[test]
+fn world_enable_prefers_prefix_runtime_bundle_without_override() {
+    let fixture = WorldEnableFixture::new();
+    fixture.install_prefix_runtime_bundle();
+
+    let mut cmd = fixture.command_skip_doctor_without_override();
+    cmd.arg("--dry-run");
+
+    let assert = cmd.assert().success();
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+    assert!(
+        stdout.contains(
+            &fixture
+                .substrate_home
+                .join("scripts/substrate/world-enable.sh")
+                .display()
+                .to_string()
+        ),
+        "dry-run should resolve helper from prefix runtime bundle: {stdout}"
+    );
+    assert!(
+        !stdout.contains("/target/scripts/substrate/world-enable.sh"),
+        "dry-run should not resolve helper from target scripts: {stdout}"
+    );
 }
 
 #[test]

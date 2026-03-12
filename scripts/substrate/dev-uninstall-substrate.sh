@@ -129,6 +129,28 @@ MSG
   fi
 }
 
+remove_managed_symlink() {
+  local path="$1"
+  if [[ ! -L "${path}" ]]; then
+    return 1
+  fi
+  local target
+  target="$(readlink "${path}" || true)"
+  if [[ -z "${target}" ]]; then
+    return 1
+  fi
+  case "${target}" in
+    "${REPO_ROOT}"/*)
+      rm -f "${path}"
+      log "Removing managed symlink ${path}"
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 load_host_state_metadata() {
   HOST_STATE_METADATA_LOADED=0
   RECORDED_GROUP_PREEXISTING=""
@@ -495,6 +517,25 @@ if [[ -d "${BIN_DIR}" ]]; then
   done
   rmdir "${BIN_DIR}" 2>/dev/null || true
 fi
+
+RUNTIME_SCRIPTS_DIR="${PREFIX%/}/scripts"
+if [[ -d "${RUNTIME_SCRIPTS_DIR}" ]]; then
+  remove_managed_symlink "${RUNTIME_SCRIPTS_DIR}/substrate/world-enable.sh" || true
+  remove_managed_symlink "${RUNTIME_SCRIPTS_DIR}/substrate/install-substrate.sh" || true
+  remove_managed_symlink "${RUNTIME_SCRIPTS_DIR}/substrate/world-deps.yaml" || true
+  remove_managed_symlink "${RUNTIME_SCRIPTS_DIR}/mac/lima-warm.sh" || true
+  rmdir "${RUNTIME_SCRIPTS_DIR}/substrate" 2>/dev/null || true
+  rmdir "${RUNTIME_SCRIPTS_DIR}/mac" 2>/dev/null || true
+  rmdir "${RUNTIME_SCRIPTS_DIR}" 2>/dev/null || true
+fi
+
+BIN_LINUX_DIR="${BIN_DIR}/linux"
+if [[ -d "${BIN_LINUX_DIR}" ]]; then
+  remove_managed_symlink "${BIN_LINUX_DIR}/substrate" || true
+  remove_managed_symlink "${BIN_LINUX_DIR}/world-agent" || true
+  rmdir "${BIN_LINUX_DIR}" 2>/dev/null || true
+fi
+rmdir "${BIN_DIR}" 2>/dev/null || true
 
 if [[ -d "${VERSIONS_ROOT}" ]]; then
   rmdir "${VERSIONS_ROOT}" 2>/dev/null || true

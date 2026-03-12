@@ -48,8 +48,8 @@ pub(super) fn locate_helper_script(
     let version_dir =
         version_dir.ok_or_else(|| anyhow!("missing version directory for helper discovery"))?;
     let candidates = [
-        version_dir.join("scripts/substrate/world-enable.sh"),
         prefix.join("scripts/substrate/world-enable.sh"),
+        version_dir.join("scripts/substrate/world-enable.sh"),
     ];
 
     for candidate in candidates {
@@ -172,15 +172,31 @@ mod tests {
     }
 
     #[test]
-    fn locate_helper_script_prefers_version_dir() {
+    fn locate_helper_script_prefers_prefix_bundle() {
         let temp = tempdir().unwrap();
         let version_dir = temp.path().join("version");
-        let script = version_dir.join("scripts/substrate/world-enable.sh");
-        std::fs::create_dir_all(script.parent().unwrap()).unwrap();
-        std::fs::write(&script, "#!/bin/sh\necho helper").unwrap();
+        let prefix_script = temp.path().join("scripts/substrate/world-enable.sh");
+        let version_script = version_dir.join("scripts/substrate/world-enable.sh");
+        std::fs::create_dir_all(prefix_script.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(version_script.parent().unwrap()).unwrap();
+        std::fs::write(&prefix_script, "#!/bin/sh\necho prefix").unwrap();
+        std::fs::write(&version_script, "#!/bin/sh\necho version").unwrap();
 
         let resolved =
             locate_helper_script(temp.path(), Some(version_dir.as_ref()), None).expect("script");
-        assert_eq!(resolved, script);
+        assert_eq!(resolved, prefix_script);
+    }
+
+    #[test]
+    fn locate_helper_script_falls_back_to_version_dir() {
+        let temp = tempdir().unwrap();
+        let version_dir = temp.path().join("version");
+        let version_script = version_dir.join("scripts/substrate/world-enable.sh");
+        std::fs::create_dir_all(version_script.parent().unwrap()).unwrap();
+        std::fs::write(&version_script, "#!/bin/sh\necho version").unwrap();
+
+        let resolved =
+            locate_helper_script(temp.path(), Some(version_dir.as_ref()), None).expect("script");
+        assert_eq!(resolved, version_script);
     }
 }

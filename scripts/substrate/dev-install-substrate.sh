@@ -523,6 +523,111 @@ ensure_world_enable_helper_bridge() {
   done
 }
 
+find_linux_substrate_cli() {
+  local root="$1"
+  local target_dir="$2"
+  local candidates=(
+    "${root}/bin/linux/substrate"
+    "${root}/bin/substrate-linux"
+    "${root}/bin/substrate"
+    "${root}/target/x86_64-unknown-linux-gnu/${target_dir}/substrate"
+    "${root}/target/aarch64-unknown-linux-gnu/${target_dir}/substrate"
+    "${root}/target/${target_dir}/substrate"
+  )
+  for candidate in "${candidates[@]}"; do
+    if [[ -x "${candidate}" ]]; then
+      local file_type
+      file_type="$(file -b "${candidate}" 2>/dev/null || true)"
+      if [[ -z "${file_type}" ]] || echo "${file_type}" | grep -qi "ELF"; then
+        printf '%s\n' "${candidate}"
+        return 0
+      fi
+    fi
+  done
+  return 1
+}
+
+find_linux_world_agent_elf() {
+  local root="$1"
+  local target_dir="$2"
+  local candidate
+  candidate="$(find_linux_world_agent "${root}" "${target_dir}")" || return 1
+  local file_type
+  file_type="$(file -b "${candidate}" 2>/dev/null || true)"
+  if [[ -n "${file_type}" ]] && ! echo "${file_type}" | grep -qi "ELF"; then
+    return 1
+  fi
+  printf '%s\n' "${candidate}"
+  return 0
+}
+
+stage_dev_world_runtime_bundle() {
+  local prefix_root="$1"
+  local repo_root="$2"
+  local target_dir="$3"
+  local scripts_substrate_dir="${prefix_root%/}/scripts/substrate"
+  local scripts_mac_dir="${prefix_root%/}/scripts/mac"
+  local bin_linux_dir="${prefix_root%/}/bin/linux"
+  mkdir -p "${scripts_substrate_dir}" "${scripts_mac_dir}" "${bin_linux_dir}"
+
+  local -a script_pairs=(
+    "${repo_root}/scripts/substrate/world-enable.sh:${scripts_substrate_dir}/world-enable.sh"
+    "${repo_root}/scripts/substrate/install-substrate.sh:${scripts_substrate_dir}/install-substrate.sh"
+    "${repo_root}/scripts/substrate/world-deps.yaml:${scripts_substrate_dir}/world-deps.yaml"
+    "${repo_root}/scripts/mac/lima-warm.sh:${scripts_mac_dir}/lima-warm.sh"
+  )
+  local pair src dest
+  for pair in "${script_pairs[@]}"; do
+    src="${pair%%:*}"
+    dest="${pair#*:}"
+    if [[ -f "${src}" ]]; then
+      ln -sfn "${src}" "${dest}"
+      log "Linked runtime bundle artifact into ${dest}"
+    else
+      warn "Runtime bundle source missing at ${src}; world enable may fail."
+    fi
+  done
+
+  local linux_cli
+  linux_cli="$(find_linux_substrate_cli "${repo_root}" "${target_dir}")" || true
+  if [[ -n "${linux_cli:-}" ]]; then
+    ln -sfn "${linux_cli}" "${bin_linux_dir}/substrate"
+    log "Linked Linux substrate CLI into ${bin_linux_dir}/substrate"
+  else
+    rm -f "${bin_linux_dir}/substrate"
+    log "Linux substrate CLI not available; Lima warm will build guest CLI only if needed."
+  fi
+
+  local linux_agent
+  linux_agent="$(find_linux_world_agent_elf "${repo_root}" "${target_dir}")" || true
+  if [[ -n "${linux_agent:-}" ]]; then
+    ln -sfn "${linux_agent}" "${bin_linux_dir}/world-agent"
+    log "Linked Linux world-agent into ${bin_linux_dir}/world-agent"
+  else
+    rm -f "${bin_linux_dir}/world-agent"
+    log "Linux world-agent not available; Lima warm will fall back to in-guest build."
+  fi
+}
+
+cleanup_legacy_world_enable_helper_bridge() {
+  local target_root="$1"
+  local repo_root="$2"
+  local legacy_dir="${target_root%/}/scripts/substrate"
+  local helper target
+  for helper in world-enable.sh install-substrate.sh; do
+    local path="${legacy_dir}/${helper}"
+    if [[ -L "${path}" ]]; then
+      target="$(readlink "${path}" || true)"
+      if [[ "${target}" == "${repo_root}/scripts/substrate/"* ]]; then
+        rm -f "${path}"
+        log "Removed legacy helper bridge ${path}"
+      fi
+    fi
+  done
+  rmdir "${legacy_dir}" 2>/dev/null || true
+  rmdir "${target_root%/}/scripts" 2>/dev/null || true
+}
+
 ensure_release_bin_bridge() {
   local target_root="$1"
   local profile_dir="$2"
@@ -786,9 +891,10 @@ fi
 
 if [[ -d "${REPO_ROOT}/target" ]]; then
   version_root="$(cd "${REPO_ROOT}/target" && pwd)"
-  ensure_world_enable_helper_bridge "${version_root}" "${REPO_ROOT}/scripts/substrate"
+  cleanup_legacy_world_enable_helper_bridge "${version_root}" "${REPO_ROOT}"
   ensure_release_bin_bridge "${version_root}" "${TARGET_DIR}"
 fi
+stage_dev_world_runtime_bundle "${PREFIX}" "${REPO_ROOT}" "${TARGET_DIR}"
 
 if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
   if [[ ${EUID} -ne 0 ]] && command -v sudo >/dev/null 2>&1; then
