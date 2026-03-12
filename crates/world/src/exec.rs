@@ -929,15 +929,27 @@ mod tests {
             "/var/lib/substrate/world-deps/bin:/usr/bin:/bin".to_string(),
         );
 
-        let install = execute_shell_command_with_world_deps_bind_mount(
+        let install = match execute_shell_command_with_world_deps_bind_mount(
             r#"mkdir -p /var/lib/substrate/world-deps/bin && printf '#!/bin/sh\necho smoke-hello\n' > /var/lib/substrate/world-deps/bin/smoke-hello && chmod +x /var/lib/substrate/world-deps/bin/smoke-hello"#,
             cwd.path(),
             &env,
             false,
             &world_deps_root,
             None,
-        )
-        .expect("install command should run");
+        ) {
+            Ok(output) => output,
+            Err(err) => {
+                let message = err.to_string();
+                if message.contains("Operation not permitted")
+                    || message.contains("EPERM")
+                    || message.contains("unshare")
+                {
+                    println!("Skipping persistent world-deps fallback test: {}", message);
+                    return;
+                }
+                panic!("unexpected error running install command: {:#}", err);
+            }
+        };
 
         if !install.status.success() {
             let stderr = String::from_utf8_lossy(&install.stderr);

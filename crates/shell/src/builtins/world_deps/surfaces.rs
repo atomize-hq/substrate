@@ -690,10 +690,13 @@ fn build_runtime_apt_remediation_v1(
         PROVISION_COMMAND.to_string(),
     ];
 
-    if cfg!(target_os = "linux") {
+    if cfg!(windows) {
+        lines.push(
+            "APT provisioning is unsupported on Windows. Substrate will not mutate the Windows host OS."
+                .to_string(),
+        );
+    } else {
         lines.push("Substrate will not mutate the host OS.".to_string());
-    } else if cfg!(windows) {
-        lines.push("APT provisioning is unsupported on Windows.".to_string());
     }
 
     let unsatisfied = statuses
