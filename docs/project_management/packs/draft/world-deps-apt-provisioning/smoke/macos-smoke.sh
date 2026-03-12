@@ -103,7 +103,6 @@ run_expect() {
 
   local out err
   RUN_STDOUT_FILE="$stdout_file"
-  RUN_STDERR_FILE="$stderr_file"
   out="$(cat "$stdout_file" 2>/dev/null || true)"
   err="$(cat "$stderr_file" 2>/dev/null || true)"
 
