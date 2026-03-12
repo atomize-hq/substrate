@@ -13,6 +13,7 @@ Scenarios:
   prod-copy         Production installer with bundled Linux agent (copy-first path).
   prod-build        Production installer fallback when Linux agent missing (build in Lima).
   dev-build         Dev installer (host cargo stub + in-guest build path).
+  dev-runtime-bundle  Dev installer stages the stable world-enable runtime bundle under SUBSTRATE_HOME.
   sync-deps         Production installer with --sync-deps (world deps current sync wired).
   sync-deps-remediation  Production installer handles sync exit 4 with remediation guidance.
   sync-deps-generic-failure  Production installer handles non-4 sync failures with a generic warning only.
@@ -169,6 +170,9 @@ write_stub_file() {
   write_stub file <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ "${1:-}" == "-b" ]]; then
+  shift
+fi
 if grep -q "${SUBSTRATE_TEST_FILE_SENTINEL:-ELF-STUB}" "$1" 2>/dev/null; then
   printf 'ELF 64-bit LSB executable\n'
 else
@@ -499,6 +503,88 @@ run_dev_scenario() {
   info "  capture dir: ${capture_dir}"
 }
 
+prepare_dev_repo_fixture() {
+  local repo_dir="${WORK_ROOT}/dev-repo"
+  mkdir -p \
+    "${repo_dir}/scripts/substrate" \
+    "${repo_dir}/scripts/mac" \
+    "${repo_dir}/config" \
+    "${repo_dir}/target/release"
+
+  cp "${REPO_ROOT}/scripts/substrate/dev-install-substrate.sh" "${repo_dir}/scripts/substrate/dev-install-substrate.sh"
+  chmod +x "${repo_dir}/scripts/substrate/dev-install-substrate.sh"
+
+  cat >"${repo_dir}/scripts/substrate/world-enable.sh" <<'SCRIPT'
+#!/usr/bin/env bash
+exit 0
+SCRIPT
+  chmod +x "${repo_dir}/scripts/substrate/world-enable.sh"
+
+  cat >"${repo_dir}/scripts/substrate/install-substrate.sh" <<'SCRIPT'
+#!/usr/bin/env bash
+exit 0
+SCRIPT
+  chmod +x "${repo_dir}/scripts/substrate/install-substrate.sh"
+
+  cat >"${repo_dir}/scripts/substrate/world-deps.yaml" <<'YAML'
+version: 1
+packages: []
+YAML
+
+  cat >"${repo_dir}/scripts/mac/lima-warm.sh" <<'SCRIPT'
+#!/usr/bin/env bash
+exit 0
+SCRIPT
+  chmod +x "${repo_dir}/scripts/mac/lima-warm.sh"
+
+  cat >"${repo_dir}/config/manager_hooks.yaml" <<'YAML'
+version: 1
+tools: []
+YAML
+
+  printf '%s\n' "${SUBSTRATE_TEST_FILE_SENTINEL:-ELF-STUB}" >"${repo_dir}/target/release/world-agent"
+  chmod +x "${repo_dir}/target/release/world-agent"
+
+  printf '%s\n' "${repo_dir}"
+}
+
+run_dev_runtime_bundle_scenario() {
+  local label="dev-runtime-bundle"
+  info "Running scenario ${label}"
+  setup_workspace "${label}"
+  install_common_stubs
+  write_stub_cargo
+
+  local dev_repo
+  dev_repo="$(prepare_dev_repo_fixture)"
+  local prefix="${WORK_ROOT}/${label}-prefix"
+  mkdir -p "${prefix}"
+  local log="${WORK_ROOT}/${label}.log"
+  if ! "${dev_repo}/scripts/substrate/dev-install-substrate.sh" \
+    --prefix "${prefix}" \
+    --profile release \
+    --no-world \
+    --no-shims >"${log}" 2>&1; then
+    cat "${log}" >&2 || true
+    fatal "dev-install-substrate failed for ${label}"
+  fi
+
+  [[ -L "${prefix}/scripts/substrate/world-enable.sh" ]] || fatal "expected prefix world-enable helper symlink"
+  [[ -L "${prefix}/scripts/substrate/install-substrate.sh" ]] || fatal "expected prefix install helper symlink"
+  [[ -L "${prefix}/scripts/substrate/world-deps.yaml" ]] || fatal "expected prefix world-deps symlink"
+  [[ -L "${prefix}/scripts/mac/lima-warm.sh" ]] || fatal "expected prefix lima-warm symlink"
+  [[ -L "${prefix}/bin/linux/substrate" ]] || fatal "expected prefix linux substrate symlink"
+  [[ -L "${prefix}/bin/linux/world-agent" ]] || fatal "expected prefix linux world-agent symlink"
+
+  if [[ -e "${dev_repo}/target/scripts/substrate/world-enable.sh" ]]; then
+    fatal "legacy target helper bridge should not remain after dev install"
+  fi
+
+  info "Scenario ${label} complete:"
+  info "  dev repo: ${dev_repo}"
+  info "  install log: ${log}"
+}
+
 run_sync_deps_scenario() {
   local label="sync-deps"
   info "Running scenario ${label}"
@@ -647,6 +733,9 @@ run_selected() {
     dev-build)
       run_dev_scenario
       ;;
+    dev-runtime-bundle)
+      run_dev_runtime_bundle_scenario
+      ;;
     sync-deps)
       run_sync_deps_scenario
       ;;
@@ -663,6 +752,7 @@ run_selected() {
       run_prod_scenario "prod-copy" 1
       run_prod_scenario "prod-build" 0
       run_dev_scenario
+      run_dev_runtime_bundle_scenario
       run_sync_deps_scenario
       run_sync_deps_remediation_scenario
       run_sync_deps_generic_failure_scenario
