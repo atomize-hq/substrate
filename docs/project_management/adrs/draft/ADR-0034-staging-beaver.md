@@ -29,7 +29,7 @@ ADR_BODY_SHA256: 43541d4c94fde16444d08b5577c603c1447aa3dfc22fd148ae3e7d2e29377bf
 ### Changes (operator-facing)
 - Dev installs stage a stable runtime bundle for `substrate world enable` under `$SUBSTRATE_HOME`.
   - Existing: `dev-install-substrate.sh` links `~/.substrate/bin/substrate` directly to `<repo>/target/<profile>/substrate`, and helper/runtime assets are inferred from `<repo>/target/...`; that can break after `cargo clean` and can leave macOS `world enable` unable to find `scripts/mac/lima-warm.sh`.
-  - New: `dev-install-substrate.sh` stages `world-enable.sh`, `install-substrate.sh`, `world-deps.yaml`, `scripts/mac/lima-warm.sh`, the `scripts/mac/lima/{substrate.yaml,substrate-dev.yaml}` profile subtree, and best-effort Linux guest binaries under `$SUBSTRATE_HOME/{scripts,bin/linux}/…`, so `substrate world enable` resolves a complete runtime bundle from `$SUBSTRATE_HOME`.
+  - New: `dev-install-substrate.sh` stages `world-enable.sh`, `install-substrate.sh`, `world-deps.yaml`, `scripts/mac/lima-warm.sh`, the `scripts/mac/lima/{substrate.yaml,substrate-dev.yaml}` profile subtree, and Linux guest binaries under `$SUBSTRATE_HOME/{scripts,bin/linux}/…`. On macOS, the normal world-enabled dev-install path now persists copied Linux `substrate` and `world-agent` ELFs from Lima into `$SUBSTRATE_HOME/bin/linux/`, so later `substrate world enable` can succeed from the prefix bundle without depending on repo sources.
   - Why: Decouple `world enable` runtime assets from `<repo>/target/*` build artifacts while keeping `$SUBSTRATE_HOME/bin/substrate` pointed at the live host build output.
   - Links:
     - `crates/shell/src/builtins/world_enable/runner/paths.rs#L33` (helper search order includes `$SUBSTRATE_HOME/scripts/…`)
@@ -105,7 +105,7 @@ Adopt a production-like bundle root (`bin/`, `scripts/`, `config/`) under `$SUBS
 - End-to-end flow:
   - Inputs: repo checkout path, build profile (`debug|release`), `--prefix` (`$SUBSTRATE_HOME`).
   - Derived state: `$SUBSTRATE_HOME` paths, inferred version dir (often `<repo>/target/` for dev installs).
-  - Actions: dev-install stages a stable runtime bundle into `$SUBSTRATE_HOME`; later, `substrate world enable` resolves the helper from `$SUBSTRATE_HOME` first and uses the staged macOS/Linux assets from that same root.
+  - Actions: dev-install stages a stable runtime bundle into `$SUBSTRATE_HOME`; on macOS, the world-enabled dev-install flow also caches Linux guest binaries from Lima into `$SUBSTRATE_HOME/bin/linux/`. Later, `substrate world enable` resolves the helper from `$SUBSTRATE_HOME` first and uses the staged macOS/Linux assets from that same root.
   - Outputs: stable helper/runtime resolution across `cargo clean`, deterministic macOS `world enable`, and predictable cleanup via dev-uninstall.
 
 ## Sequencing / Dependencies

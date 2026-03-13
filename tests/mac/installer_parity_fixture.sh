@@ -14,6 +14,7 @@ Scenarios:
   prod-build        Production installer fallback when Linux agent missing (build in Lima).
   dev-build         Dev installer (host cargo stub + in-guest build path).
   dev-runtime-bundle  Dev installer stages the stable world-enable runtime bundle under SUBSTRATE_HOME.
+  dev-runtime-bundle-self-contained  Dev installer persists Linux guest binaries into the prefix bundle on macOS.
   sync-deps         Production installer with --sync-deps (world deps current sync wired).
   sync-deps-remediation  Production installer handles sync exit 4 with remediation guidance.
   sync-deps-generic-failure  Production installer handles non-4 sync failures with a generic warning only.
@@ -95,6 +96,7 @@ setup_workspace() {
   mkdir -p "${SUBSTRATE_TEST_LIMACTL_CAPTURE_DIR}"
   export SUBSTRATE_TEST_CARGO_LOG="${WORK_ROOT}/cargo-${label}.log"
   export SUBSTRATE_TEST_FILE_SENTINEL="ELF-STUB"
+  export SUBSTRATE_TEST_CARGO_MARKER="MACHO-STUB"
 }
 
 write_stub() {
@@ -232,6 +234,13 @@ case "${cmd}" in
     ;;
   copy)
     record "copy $*"
+    src="${1:-}"
+    dest="${2:-}"
+    if [[ -n "${src}" && -n "${dest}" && "${src}" == *:* && "${dest}" != *:* ]]; then
+      mkdir -p "$(dirname "${dest}")"
+      printf '%s\n' "${SUBSTRATE_TEST_FILE_SENTINEL:-ELF-STUB}" >"${dest}"
+      chmod +x "${dest}"
+    fi
     ;;
   shell)
     vm="${1:-substrate}"
@@ -299,7 +308,7 @@ done
 mkdir -p "target/${target}"
 write_bin() {
   local path="$1"
-  echo "${SUBSTRATE_TEST_FILE_SENTINEL:-ELF-STUB}" >"${path}"
+  echo "${SUBSTRATE_TEST_CARGO_MARKER:-MACHO-STUB}" >"${path}"
   chmod +x "${path}"
 }
 case "$*" in
@@ -504,6 +513,7 @@ run_dev_scenario() {
 }
 
 prepare_dev_repo_fixture() {
+  local include_linux_bundle="${1:-1}"
   local repo_dir="${WORK_ROOT}/dev-repo"
   mkdir -p \
     "${repo_dir}/scripts/substrate" \
@@ -544,8 +554,13 @@ version: 1
 tools: []
 YAML
 
-  printf '%s\n' "${SUBSTRATE_TEST_FILE_SENTINEL:-ELF-STUB}" >"${repo_dir}/target/release/world-agent"
-  chmod +x "${repo_dir}/target/release/world-agent"
+  if [[ "${include_linux_bundle}" -eq 1 ]]; then
+    mkdir -p "${repo_dir}/bin/linux"
+    printf '%s\n' "${SUBSTRATE_TEST_FILE_SENTINEL:-ELF-STUB}" >"${repo_dir}/bin/linux/substrate"
+    chmod +x "${repo_dir}/bin/linux/substrate"
+    printf '%s\n' "${SUBSTRATE_TEST_FILE_SENTINEL:-ELF-STUB}" >"${repo_dir}/bin/linux/world-agent"
+    chmod +x "${repo_dir}/bin/linux/world-agent"
+  fi
 
   printf '%s\n' "${repo_dir}"
 }
@@ -558,7 +573,7 @@ run_dev_runtime_bundle_scenario() {
   write_stub_cargo
 
   local dev_repo
-  dev_repo="$(prepare_dev_repo_fixture)"
+  dev_repo="$(prepare_dev_repo_fixture 1)"
   local prefix="${WORK_ROOT}/${label}-prefix"
   mkdir -p "${prefix}"
   local log="${WORK_ROOT}/${label}.log"
@@ -605,6 +620,84 @@ TXT
   [[ ! -e "${prefix}/scripts/mac/lima/substrate-dev.yaml" ]] || fatal "expected staged dev lima profile to be removed"
   [[ ! -e "${prefix}/scripts/mac/lima-warm.sh" ]] || fatal "expected staged lima-warm to be removed"
   [[ -f "${prefix}/scripts/mac/lima/user-managed.txt" ]] || fatal "expected user-managed file to survive uninstall"
+
+  info "Scenario ${label} complete:"
+  info "  dev repo: ${dev_repo}"
+  info "  install log: ${log}"
+  info "  warm log: ${warm_log}"
+  info "  uninstall log: ${uninstall_log}"
+}
+
+run_dev_runtime_bundle_self_contained_scenario() {
+  local label="dev-runtime-bundle-self-contained"
+  info "Running scenario ${label}"
+  setup_workspace "${label}"
+  install_common_stubs
+  write_stub_cargo
+
+  local dev_repo
+  dev_repo="$(prepare_dev_repo_fixture 0)"
+  local prefix="${WORK_ROOT}/${label}-prefix"
+  mkdir -p "${prefix}"
+  local log="${WORK_ROOT}/${label}.log"
+  if ! "${dev_repo}/scripts/substrate/dev-install-substrate.sh" \
+    --prefix "${prefix}" \
+    --profile release \
+    --no-shims >"${log}" 2>&1; then
+    cat "${log}" >&2 || true
+    fatal "dev-install-substrate failed for ${label}"
+  fi
+
+  [[ -L "${prefix}/scripts/substrate/world-enable.sh" ]] || fatal "expected prefix world-enable helper symlink"
+  [[ -L "${prefix}/scripts/substrate/install-substrate.sh" ]] || fatal "expected prefix install helper symlink"
+  [[ -L "${prefix}/scripts/substrate/world-deps.yaml" ]] || fatal "expected prefix world-deps symlink"
+  [[ -L "${prefix}/scripts/mac/lima-warm.sh" ]] || fatal "expected prefix lima-warm symlink"
+  [[ -f "${prefix}/bin/linux/substrate" && ! -L "${prefix}/bin/linux/substrate" ]] || fatal "expected copied prefix linux substrate binary"
+  [[ -f "${prefix}/bin/linux/world-agent" && ! -L "${prefix}/bin/linux/world-agent" ]] || fatal "expected copied prefix linux world-agent binary"
+  assert_contains "${SUBSTRATE_TEST_LIMACTL_LOG}" "copy substrate:/usr/local/bin/substrate ${prefix}/bin/linux/substrate" \
+    "mac dev-install should cache the Linux substrate CLI into the prefix bundle"
+  assert_contains "${SUBSTRATE_TEST_LIMACTL_LOG}" "copy substrate:/usr/local/bin/substrate-world-agent ${prefix}/bin/linux/world-agent" \
+    "mac dev-install should cache the Linux world-agent into the prefix bundle"
+  local manifest="${prefix}/.dev-install-managed/mac-linux-binaries.txt"
+  [[ -f "${manifest}" ]] || fatal "expected managed mac Linux binary manifest"
+  assert_contains "${manifest}" "${prefix}/bin/linux/substrate" "manifest should record cached substrate CLI"
+  assert_contains "${manifest}" "${prefix}/bin/linux/world-agent" "manifest should record cached world-agent"
+  assert_not_contains "${log}" "World has been disabled" "self-contained dev install should keep world enabled"
+
+  : >"${SUBSTRATE_TEST_LIMACTL_LOG}"
+  rm -rf "${SUBSTRATE_TEST_LIMACTL_CAPTURE_DIR}"
+  mkdir -p "${SUBSTRATE_TEST_LIMACTL_CAPTURE_DIR}"
+
+  local warm_log="${WORK_ROOT}/${label}-warm.log"
+  if ! (cd "${prefix}" && "${prefix}/scripts/mac/lima-warm.sh" "${prefix}") >"${warm_log}" 2>&1; then
+    cat "${warm_log}" >&2 || true
+    fatal "staged lima-warm failed for ${label}"
+  fi
+  assert_contains "${warm_log}" "Installing Linux substrate CLI from ${prefix}/bin/linux/substrate" \
+    "staged lima-warm should reuse cached Linux substrate CLI"
+  assert_contains "${warm_log}" "Installing Linux world-agent from ${prefix}/bin/linux/world-agent" \
+    "staged lima-warm should reuse cached world-agent"
+  assert_not_contains "${warm_log}" "does not contain Cargo sources" \
+    "staged lima-warm should not require Cargo sources once binaries are cached"
+  if [[ -d "${SUBSTRATE_TEST_LIMACTL_CAPTURE_DIR}" ]] && grep -R "cargo build -p world-agent" "${SUBSTRATE_TEST_LIMACTL_CAPTURE_DIR}" >/dev/null 2>&1; then
+    fatal "staged lima-warm unexpectedly triggered an in-guest world-agent build"
+  fi
+
+  mkdir -p "${prefix}/bin/linux"
+  cat >"${prefix}/bin/linux/user-managed.txt" <<'TXT'
+keep me
+TXT
+
+  local uninstall_log="${WORK_ROOT}/${label}-uninstall.log"
+  if ! "${dev_repo}/scripts/substrate/dev-uninstall-substrate.sh" --prefix "${prefix}" >"${uninstall_log}" 2>&1; then
+    cat "${uninstall_log}" >&2 || true
+    fatal "dev-uninstall-substrate failed for ${label}"
+  fi
+
+  [[ ! -e "${prefix}/bin/linux/substrate" ]] || fatal "expected cached Linux substrate binary to be removed"
+  [[ ! -e "${prefix}/bin/linux/world-agent" ]] || fatal "expected cached Linux world-agent to be removed"
+  [[ ! -e "${manifest}" ]] || fatal "expected managed binary manifest to be removed"
+  [[ -f "${prefix}/bin/linux/user-managed.txt" ]] || fatal "expected user-managed Linux bundle file to survive uninstall"
 
   info "Scenario ${label} complete:"
   info "  dev repo: ${dev_repo}"
@@ -764,6 +857,9 @@ run_selected() {
     dev-runtime-bundle)
       run_dev_runtime_bundle_scenario
       ;;
+    dev-runtime-bundle-self-contained)
+      run_dev_runtime_bundle_self_contained_scenario
+      ;;
     sync-deps)
       run_sync_deps_scenario
       ;;
@@ -781,6 +877,7 @@ run_selected() {
       run_prod_scenario "prod-build" 0
       run_dev_scenario
       run_dev_runtime_bundle_scenario
+      run_dev_runtime_bundle_self_contained_scenario
       run_sync_deps_scenario
       run_sync_deps_remediation_scenario
       run_sync_deps_generic_failure_scenario

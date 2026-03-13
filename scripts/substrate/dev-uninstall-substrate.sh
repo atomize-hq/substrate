@@ -151,6 +151,29 @@ remove_managed_symlink() {
   esac
 }
 
+remove_managed_prefix_linux_binary_copies() {
+  local manifest_path="$1"
+  if [[ -z "${manifest_path}" || ! -f "${manifest_path}" ]]; then
+    return 0
+  fi
+
+  while IFS= read -r cached_path; do
+    case "${cached_path}" in
+      "${BIN_DIR}/linux/substrate"|\
+      "${BIN_DIR}/linux/world-agent")
+        if [[ -f "${cached_path}" && ! -L "${cached_path}" ]]; then
+          rm -f "${cached_path}"
+          log "Removing managed copied Linux binary ${cached_path}"
+        fi
+        ;;
+      *)
+        ;;
+    esac
+  done < "${manifest_path}"
+
+  rm -f "${manifest_path}"
+}
+
 load_host_state_metadata() {
   HOST_STATE_METADATA_LOADED=0
   RECORDED_GROUP_PREEXISTING=""
@@ -422,6 +445,8 @@ SHIMS_DIR="${PREFIX%/}/shims"
 ENV_FILE="${PREFIX%/}/dev-shim-env.sh"
 TRACE_LOG_PATH="${PREFIX%/}/trace.jsonl"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+MANAGED_STATE_DIR="${PREFIX%/}/.dev-install-managed"
+MANAGED_MAC_LINUX_BINARIES_PATH="${MANAGED_STATE_DIR}/mac-linux-binaries.txt"
 
 if [[ "${AUTO_CLEANUP}" -eq 1 ]]; then
   load_host_state_metadata "${HOST_STATE_PATH}" || true
@@ -534,11 +559,13 @@ fi
 
 BIN_LINUX_DIR="${BIN_DIR}/linux"
 if [[ -d "${BIN_LINUX_DIR}" ]]; then
+  remove_managed_prefix_linux_binary_copies "${MANAGED_MAC_LINUX_BINARIES_PATH}"
   remove_managed_symlink "${BIN_LINUX_DIR}/substrate" || true
   remove_managed_symlink "${BIN_LINUX_DIR}/world-agent" || true
   rmdir "${BIN_LINUX_DIR}" 2>/dev/null || true
 fi
 rmdir "${BIN_DIR}" 2>/dev/null || true
+rmdir "${MANAGED_STATE_DIR}" 2>/dev/null || true
 
 if [[ -d "${VERSIONS_ROOT}" ]]; then
   rmdir "${VERSIONS_ROOT}" 2>/dev/null || true
