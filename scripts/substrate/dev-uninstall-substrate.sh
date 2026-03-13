@@ -524,7 +524,10 @@ if [[ -d "${RUNTIME_SCRIPTS_DIR}" ]]; then
   remove_managed_symlink "${RUNTIME_SCRIPTS_DIR}/substrate/install-substrate.sh" || true
   remove_managed_symlink "${RUNTIME_SCRIPTS_DIR}/substrate/world-deps.yaml" || true
   remove_managed_symlink "${RUNTIME_SCRIPTS_DIR}/mac/lima-warm.sh" || true
+  remove_managed_symlink "${RUNTIME_SCRIPTS_DIR}/mac/lima/substrate.yaml" || true
+  remove_managed_symlink "${RUNTIME_SCRIPTS_DIR}/mac/lima/substrate-dev.yaml" || true
   rmdir "${RUNTIME_SCRIPTS_DIR}/substrate" 2>/dev/null || true
+  rmdir "${RUNTIME_SCRIPTS_DIR}/mac/lima" 2>/dev/null || true
   rmdir "${RUNTIME_SCRIPTS_DIR}/mac" 2>/dev/null || true
   rmdir "${RUNTIME_SCRIPTS_DIR}" 2>/dev/null || true
 fi

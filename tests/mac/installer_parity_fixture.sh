@@ -507,12 +507,15 @@ prepare_dev_repo_fixture() {
   local repo_dir="${WORK_ROOT}/dev-repo"
   mkdir -p \
     "${repo_dir}/scripts/substrate" \
+    "${repo_dir}/scripts/mac/lima" \
     "${repo_dir}/scripts/mac" \
     "${repo_dir}/config" \
     "${repo_dir}/target/release"
 
   cp "${REPO_ROOT}/scripts/substrate/dev-install-substrate.sh" "${repo_dir}/scripts/substrate/dev-install-substrate.sh"
   chmod +x "${repo_dir}/scripts/substrate/dev-install-substrate.sh"
+  cp "${REPO_ROOT}/scripts/substrate/dev-uninstall-substrate.sh" "${repo_dir}/scripts/substrate/dev-uninstall-substrate.sh"
+  chmod +x "${repo_dir}/scripts/substrate/dev-uninstall-substrate.sh"
 
   cat >"${repo_dir}/scripts/substrate/world-enable.sh" <<'SCRIPT'
 #!/usr/bin/env bash
@@ -531,11 +534,10 @@ version: 1
 packages: []
 YAML
 
-  cat >"${repo_dir}/scripts/mac/lima-warm.sh" <<'SCRIPT'
-#!/usr/bin/env bash
-exit 0
-SCRIPT
+  cp "${REPO_ROOT}/scripts/mac/lima-warm.sh" "${repo_dir}/scripts/mac/lima-warm.sh"
   chmod +x "${repo_dir}/scripts/mac/lima-warm.sh"
+  cp "${REPO_ROOT}/scripts/mac/lima/substrate.yaml" "${repo_dir}/scripts/mac/lima/substrate.yaml"
+  cp "${REPO_ROOT}/scripts/mac/lima/substrate-dev.yaml" "${repo_dir}/scripts/mac/lima/substrate-dev.yaml"
 
   cat >"${repo_dir}/config/manager_hooks.yaml" <<'YAML'
 version: 1
@@ -573,6 +575,8 @@ run_dev_runtime_bundle_scenario() {
   [[ -L "${prefix}/scripts/substrate/install-substrate.sh" ]] || fatal "expected prefix install helper symlink"
   [[ -L "${prefix}/scripts/substrate/world-deps.yaml" ]] || fatal "expected prefix world-deps symlink"
   [[ -L "${prefix}/scripts/mac/lima-warm.sh" ]] || fatal "expected prefix lima-warm symlink"
+  [[ -L "${prefix}/scripts/mac/lima/substrate.yaml" ]] || fatal "expected prefix lima profile symlink"
+  [[ -L "${prefix}/scripts/mac/lima/substrate-dev.yaml" ]] || fatal "expected prefix dev lima profile symlink"
   [[ -L "${prefix}/bin/linux/substrate" ]] || fatal "expected prefix linux substrate symlink"
   [[ -L "${prefix}/bin/linux/world-agent" ]] || fatal "expected prefix linux world-agent symlink"
 
@@ -580,9 +584,33 @@ run_dev_runtime_bundle_scenario() {
     fatal "legacy target helper bridge should not remain after dev install"
   fi
 
+  local warm_log="${WORK_ROOT}/${label}-warm.log"
+  if ! (cd "${prefix}" && "${prefix}/scripts/mac/lima-warm.sh" "${prefix}") >"${warm_log}" 2>&1; then
+    cat "${warm_log}" >&2 || true
+    fatal "staged lima-warm failed for ${label}"
+  fi
+
+  mkdir -p "${prefix}/scripts/mac/lima"
+  cat >"${prefix}/scripts/mac/lima/user-managed.txt" <<'TXT'
+keep me
+TXT
+
+  local uninstall_log="${WORK_ROOT}/${label}-uninstall.log"
+  if ! "${dev_repo}/scripts/substrate/dev-uninstall-substrate.sh" --prefix "${prefix}" >"${uninstall_log}" 2>&1; then
+    cat "${uninstall_log}" >&2 || true
+    fatal "dev-uninstall-substrate failed for ${label}"
+  fi
+
+  [[ ! -e "${prefix}/scripts/mac/lima/substrate.yaml" ]] || fatal "expected staged lima profile to be removed"
+  [[ ! -e "${prefix}/scripts/mac/lima/substrate-dev.yaml" ]] || fatal "expected staged dev lima profile to be removed"
+  [[ ! -e "${prefix}/scripts/mac/lima-warm.sh" ]] || fatal "expected staged lima-warm to be removed"
+  [[ -f "${prefix}/scripts/mac/lima/user-managed.txt" ]] || fatal "expected user-managed file to survive uninstall"
+
   info "Scenario ${label} complete:"
   info "  dev repo: ${dev_repo}"
   info "  install log: ${log}"
+  info "  warm log: ${warm_log}"
+  info "  uninstall log: ${uninstall_log}"
 }
 
 run_sync_deps_scenario() {

@@ -567,14 +567,17 @@ stage_dev_world_runtime_bundle() {
   local target_dir="$3"
   local scripts_substrate_dir="${prefix_root%/}/scripts/substrate"
   local scripts_mac_dir="${prefix_root%/}/scripts/mac"
+  local scripts_mac_lima_dir="${scripts_mac_dir}/lima"
   local bin_linux_dir="${prefix_root%/}/bin/linux"
-  mkdir -p "${scripts_substrate_dir}" "${scripts_mac_dir}" "${bin_linux_dir}"
+  mkdir -p "${scripts_substrate_dir}" "${scripts_mac_dir}" "${scripts_mac_lima_dir}" "${bin_linux_dir}"
 
   local -a script_pairs=(
     "${repo_root}/scripts/substrate/world-enable.sh:${scripts_substrate_dir}/world-enable.sh"
     "${repo_root}/scripts/substrate/install-substrate.sh:${scripts_substrate_dir}/install-substrate.sh"
     "${repo_root}/scripts/substrate/world-deps.yaml:${scripts_substrate_dir}/world-deps.yaml"
     "${repo_root}/scripts/mac/lima-warm.sh:${scripts_mac_dir}/lima-warm.sh"
+    "${repo_root}/scripts/mac/lima/substrate.yaml:${scripts_mac_lima_dir}/substrate.yaml"
+    "${repo_root}/scripts/mac/lima/substrate-dev.yaml:${scripts_mac_lima_dir}/substrate-dev.yaml"
   )
   local pair src dest
   for pair in "${script_pairs[@]}"; do
