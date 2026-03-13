@@ -12,6 +12,7 @@
 - Implement guest-only APT execution using Agent API request `profile=world-deps-provision`, ignoring `SUBSTRATE_WORLD_REQUEST_PROFILE` (DR-0003).
 - Define deterministic stdout/stderr invariants for `--dry-run` and `--verbose` for the provisioning workflow.
 - Wire helper and installer flows so provisioning-time APT occurs before runtime `world deps current sync`, and so downstream remediation remains deterministic.
+- Require at least one supported guest-backend non-dry-run validation that performs a real APT install and proves the provisioning path succeeds outside dry-run mode.
 
 ## Behavior (authoritative)
 ### Inputs and derivation
@@ -98,6 +99,11 @@ If any requirement is unsatisfied on a supported backend:
   - exit `5` when the in-world command exits `5` (safety/protected-path violation),
   - otherwise exit `4` and include a stderr snippet from the in-world failure output.
 
+Validation requirement:
+- WDAP0 validation MUST include at least one supported guest-backend non-dry-run run with a real
+  APT-backed dep whose package is absent before the run and installed after the run. Dry-run-only
+  validation is insufficient for this slice.
+
 #### Dependency-unavailable handling
 If world-agent connectivity is required (probe or install) and cannot be established:
 - The command MUST exit `3` and emit an actionable stderr message indicating the world backend is unavailable.
@@ -133,7 +139,7 @@ Installer rule:
 - AC-WDAP0-04: On supported guest backends, provisioning probe and install requests use Agent API `profile=world-deps-provision` even when `SUBSTRATE_WORLD_REQUEST_PROFILE` is set to a different value.
 - AC-WDAP0-05: When the normalized APT requirement set is empty, `substrate world enable --provision-deps` exits `0` and the APT provisioning phase is a no-op.
 - AC-WDAP0-06: When all normalized APT requirements are already satisfied, `substrate world enable --provision-deps` exits `0` without invoking `apt-get` or mutating `dpkg`.
-- AC-WDAP0-07: With `substrate world enable --provision-deps` (non-dry-run), `scripts/substrate/world-enable.sh` is invoked with `--no-sync-deps`, the helper emits `Skipping world deps sync (--no-sync-deps)`, and runtime `substrate world deps current sync` runs only after provisioning-time APT completes.
+- AC-WDAP0-07: With `substrate world enable --provision-deps` (non-dry-run), `scripts/substrate/world-enable.sh` is invoked with `--no-sync-deps`, the helper emits `Skipping world deps sync (--no-sync-deps)`, runtime `substrate world deps current sync` runs only after provisioning-time APT completes, and WDAP0 validation includes at least one supported guest-backend run (macOS Lima minimum for this pack) where a real APT-backed dep is absent before the run and installed afterward.
 - AC-WDAP0-08: If world-agent connectivity is required for probe or install and cannot be established, `substrate world enable --provision-deps` exits `3` with actionable stderr; when `scripts/substrate/install-substrate.sh --sync-deps` observes downstream exit `4`, it prints remediation containing `substrate world enable --provision-deps` and still exits `0`.
 
 ## Out of scope

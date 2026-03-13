@@ -137,6 +137,13 @@ read-only `dpkg-query` probe inside the selected world, then:
 Provisioning-time APT is owned by:
 - `substrate world enable --provision-deps`
 
+On guest Linux agents, the `world-deps-provision` request profile is executed through a transient
+`systemd-run` unit. This keeps the long-lived `substrate-world-agent.service` sandbox hardened for
+normal runtime execution while still allowing explicit provisioning-time OS mutation (`apt`,
+package postinst scripts, privilege drops to `_apt`) to touch the guest system paths it needs.
+Those internal world-deps profiles are reserved for Substrate’s built-in world-deps flows; generic
+`SUBSTRATE_WORLD_REQUEST_PROFILE` overrides do not select them.
+
 Contract source:
 - `docs/reference/world/deps/README.md`
 - `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`

@@ -8,7 +8,7 @@ This playbook is aligned to:
 Exit codes:
 - Taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 
-Smoke scripts (mirror the cases below):
+Smoke scripts (mirror the automatable subset of the cases below):
 - Linux: `smoke/linux-smoke.sh`
 - macOS: `smoke/macos-smoke.sh`
 - Windows: `smoke/windows-smoke.ps1`
@@ -231,7 +231,97 @@ Expected:
 - Stdout contains `world-deps-provision`.
 - Stdout does not contain `wdap-smoke-profile`.
 
-### Case 2.4 — Version-pin conflicts exit `2` (macOS Lima)
+### Case 2.4 — Supported guest non-dry-run provisioning succeeds with a real APT package (macOS Lima)
+
+This case intentionally performs guest OS mutation. Use a real package name that is absent in the
+guest before the run. The default below uses `sl`; if your Lima guest already has `sl` installed,
+set `WDAP_REAL_APT_PACKAGE` to another small apt package that is currently absent and rerun the
+fixture creation step in this case.
+
+When validating the current checkout rather than an already-installed host binary:
+- run this case from the repository root,
+- point `SUBSTRATE_BIN` at the checkout build you want to validate, and
+- verify package presence from the Lima guest with `limactl shell substrate ... dpkg-query ...`.
+
+A normal workspace-isolated `substrate --world` shell is not authoritative for this case because
+the general workspace posture masks `/var/lib`, which hides `/var/lib/dpkg` from guest package
+queries outside the dedicated world-deps flows.
+
+Setup:
+
+```bash
+export WDAP_REAL_APT_PACKAGE="${WDAP_REAL_APT_PACKAGE:-sl}"
+export WDAP_REAL_ROOT="${WDAP_REAL_ROOT:-$HOME/.substrate-wdap-real}"
+export SUBSTRATE_BIN="${SUBSTRATE_BIN:-$PWD/target/debug/substrate}"
+export SUBSTRATE_WORLD_ENABLE_SCRIPT="${SUBSTRATE_WORLD_ENABLE_SCRIPT:-$PWD/scripts/substrate/world-enable.sh}"
+rm -rf "$WDAP_REAL_ROOT"
+export SUBSTRATE_HOME="$WDAP_REAL_ROOT/substrate-home"
+export WDAP_WS="$WDAP_REAL_ROOT/ws"
+mkdir -p "$SUBSTRATE_HOME/deps/packages" "$SUBSTRATE_HOME/bin" "$WDAP_WS"
+ln -sf "$SUBSTRATE_BIN" "$SUBSTRATE_HOME/bin/substrate"
+"$SUBSTRATE_BIN" workspace init "$WDAP_WS" >/dev/null
+
+cat >"$SUBSTRATE_HOME/deps/packages/smoke-hello.yaml" <<'YAML'
+version: 1
+name: smoke-hello
+description: WDAP smoke fixture (script install).
+runnable: true
+entrypoints: ["smoke-hello"]
+install:
+  method: script
+  script: |
+    set -euo pipefail
+    mkdir -p /var/lib/substrate/world-deps/bin
+    cat > /var/lib/substrate/world-deps/bin/smoke-hello <<'EOF'
+    #!/bin/sh
+    echo smoke-hello
+    EOF
+    chmod +x /var/lib/substrate/world-deps/bin/smoke-hello
+probe:
+  command: "smoke-hello"
+YAML
+
+cat >"$SUBSTRATE_HOME/deps/packages/smoke-apt-real.yaml" <<YAML
+version: 1
+name: smoke-apt-real
+description: WDAP smoke fixture (real APT install).
+runnable: false
+install:
+  method: apt
+  apt:
+    - name: ${WDAP_REAL_APT_PACKAGE}
+probe:
+  command: "sh -c 'exit 1'"
+YAML
+
+"$SUBSTRATE_BIN" world deps workspace reset >/dev/null 2>&1 || true
+"$SUBSTRATE_BIN" world deps workspace add smoke-hello smoke-apt-real >/dev/null
+limactl shell substrate "dpkg-query -W -f='\${Status}\\n' ${WDAP_REAL_APT_PACKAGE} 2>/dev/null || true" \
+  >"$WDAP_TMP/real-apt-before.txt"
+cat "$WDAP_TMP/real-apt-before.txt"
+```
+
+Expected before provisioning:
+- Output does not contain `install ok installed`.
+
+Run:
+
+```bash
+"$SUBSTRATE_BIN" world enable --home "$SUBSTRATE_HOME" --profile debug --provision-deps --verbose \
+  >"$WDAP_TMP/stdout-real.txt" 2>"$WDAP_TMP/stderr-real.txt"
+echo "exit=$?"
+limactl shell substrate "dpkg-query -W -f='\${Status}\\n' ${WDAP_REAL_APT_PACKAGE}" \
+  >"$WDAP_TMP/real-apt-after.txt"
+cat "$WDAP_TMP/real-apt-after.txt"
+```
+
+Expected:
+- Exit `0`.
+- Stdout contains `world-deps-provision`.
+- Stdout contains `${WDAP_REAL_APT_PACKAGE}`.
+- Post-run `dpkg-query` output contains `install ok installed`.
+
+### Case 2.5 — Version-pin conflicts exit `2` (macOS Lima)
 
 Setup (inside the same workspace):
 
@@ -355,4 +445,3 @@ Expected:
 - Exit `4`.
 - Stdout contains `smoke-apt-a`.
 - Stderr contains `substrate world enable --provision-deps`.
-

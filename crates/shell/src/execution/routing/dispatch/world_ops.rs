@@ -35,6 +35,7 @@ use world_api::{ResourceLimits, WorldBackend, WorldSpec};
 
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 const WORLD_PROJECT_DIR_OVERRIDE_ENV: &str = "SUBSTRATE_WORLD_PROJECT_DIR";
+const RESERVED_WORLD_REQUEST_PROFILES: &[&str] = &["world-deps-provision", "world-deps-probe"];
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub(super) fn normalize_env_for_linux_guest(
@@ -897,6 +898,7 @@ fn current_world_request_profile() -> Option<String> {
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
+        .filter(|value| !RESERVED_WORLD_REQUEST_PROFILES.contains(&value.as_str()))
 }
 
 #[cfg(target_os = "linux")]
@@ -1546,9 +1548,27 @@ pub(super) fn emit_stream_chunk(agent_label: &str, data: &[u8], is_stderr: bool)
 #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
 mod tests {
     use super::{
-        ensure_world_deps_bin_on_path, preserve_world_project_dir_override,
-        WORLD_PROJECT_DIR_OVERRIDE_ENV,
+        current_world_request_profile, ensure_world_deps_bin_on_path,
+        preserve_world_project_dir_override, WORLD_PROJECT_DIR_OVERRIDE_ENV,
     };
+    use std::sync::{Mutex, OnceLock};
+
+    fn with_env_var<T>(key: &str, value: &str, f: impl FnOnce() -> T) -> T {
+        let _guard = test_env_lock().lock().expect("test env mutex poisoned");
+        let previous = std::env::var(key).ok();
+        std::env::set_var(key, value);
+        let result = f();
+        match previous {
+            Some(previous) => std::env::set_var(key, previous),
+            None => std::env::remove_var(key),
+        }
+        result
+    }
+
+    fn test_env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
 
     #[test]
     fn ensure_world_deps_bin_sets_default_and_prepends_path() {
@@ -1626,6 +1646,33 @@ mod tests {
         match prev_caged {
             Some(value) => std::env::set_var("SUBSTRATE_CAGED", value),
             None => std::env::remove_var("SUBSTRATE_CAGED"),
+        }
+    }
+
+    #[test]
+    fn current_world_request_profile_accepts_non_reserved_values() {
+        with_env_var(
+            "SUBSTRATE_WORLD_REQUEST_PROFILE",
+            "wdap-smoke-profile",
+            || {
+                assert_eq!(
+                    current_world_request_profile().as_deref(),
+                    Some("wdap-smoke-profile")
+                );
+            },
+        );
+    }
+
+    #[test]
+    fn current_world_request_profile_rejects_reserved_world_deps_profiles() {
+        for reserved in ["world-deps-provision", "world-deps-probe"] {
+            with_env_var("SUBSTRATE_WORLD_REQUEST_PROFILE", reserved, || {
+                assert_eq!(
+                    current_world_request_profile(),
+                    None,
+                    "reserved internal profile should not be forwarded from env: {reserved}"
+                );
+            });
         }
     }
 }

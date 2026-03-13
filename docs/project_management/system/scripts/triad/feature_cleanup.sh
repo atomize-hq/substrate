@@ -43,6 +43,27 @@ require_cmd() {
     fi
 }
 
+set_array_from_stdin() {
+    local array_name="$1"
+    local line
+    eval "${array_name}=()"
+    while IFS= read -r line; do
+        [[ -z "${line}" ]] && continue
+        eval "${array_name}+=(\"\${line}\")"
+    done
+}
+
+normalize_worktree_paths() {
+    local wt
+    for wt in "$@"; do
+        [[ -z "${wt}" ]] && continue
+        if [[ "${wt}" != /* ]]; then
+            wt="${REPO_ROOT}/${wt}"
+        fi
+        printf '%s\n' "${wt}"
+    done | sort -u
+}
+
 python_abs_path() {
     python3 - "$1" <<'PY'
 import os
@@ -147,22 +168,22 @@ fi
 GIT_COMMON_DIR="$(python_abs_path "$(git rev-parse --git-common-dir)")"
 REGISTRY_ABS="${GIT_COMMON_DIR}/triad/features/${FEATURE_NAME}/worktrees.json"
 
-mapfile -t worktrees < <(
+set_array_from_stdin worktrees < <(
     jq -r '.tasks[] | select(.worktree? and (.worktree | length) > 0) | .worktree' "${TASKS_JSON}" | sort -u
 )
-mapfile -t branches < <(
+set_array_from_stdin branches < <(
     jq -r '.tasks[] | select(.git_branch? and (.git_branch | length) > 0) | .git_branch' "${TASKS_JSON}" | sort -u
 )
 
 # Best-effort: merge in registry entries (if present + valid) to catch any extra spawned worktrees.
 if [[ -f "${REGISTRY_ABS}" ]]; then
     if jq -e . >/dev/null 2>&1 <"${REGISTRY_ABS}"; then
-        mapfile -t reg_worktrees < <(jq -r '.entries[]?.worktree // empty' "${REGISTRY_ABS}" | sort -u)
-        mapfile -t reg_branches < <(jq -r '.entries[]?.task_branch // empty' "${REGISTRY_ABS}" | sort -u)
+        set_array_from_stdin reg_worktrees < <(jq -r '.entries[]?.worktree // empty' "${REGISTRY_ABS}" | sort -u)
+        set_array_from_stdin reg_branches < <(jq -r '.entries[]?.task_branch // empty' "${REGISTRY_ABS}" | sort -u)
         worktrees+=("${reg_worktrees[@]}")
         branches+=("${reg_branches[@]}")
-        mapfile -t worktrees < <(printf '%s\n' "${worktrees[@]}" | rg -v '^[[:space:]]*$' | sort -u)
-        mapfile -t branches < <(printf '%s\n' "${branches[@]}" | rg -v '^[[:space:]]*$' | sort -u)
+        set_array_from_stdin worktrees < <(normalize_worktree_paths "${worktrees[@]}" | rg -v '^[[:space:]]*$')
+        set_array_from_stdin branches < <(printf '%s\n' "${branches[@]}" | rg -v '^[[:space:]]*$' | sort -u)
     else
         log "Warning: registry exists but is not valid JSON; ignoring registry: ${REGISTRY_ABS}"
     fi

@@ -504,7 +504,7 @@ impl WorldAgentService {
             );
         }
         let exec_req = world_api::ExecRequest {
-            cmd: req.cmd,
+            cmd: wrap_command_for_profile(req.profile.as_deref(), &cwd, &req.cmd),
             cwd,
             env: env_map,
             pty: req.pty,
@@ -1357,6 +1357,38 @@ fn should_always_isolate_for_profile(profile: Option<&str>) -> bool {
     !matches!(profile, Some("world-deps-provision" | "world-deps-probe"))
 }
 
+fn wrap_command_for_profile(profile: Option<&str>, cwd: &Path, cmd: &str) -> String {
+    match profile {
+        Some("world-deps-provision") => build_systemd_provision_wrapper(cwd, cmd),
+        _ => cmd.to_string(),
+    }
+}
+
+fn build_systemd_provision_wrapper(cwd: &Path, cmd: &str) -> String {
+    let working_directory = cwd.display().to_string();
+    [
+        "systemd-run".to_string(),
+        "--quiet".to_string(),
+        "--wait".to_string(),
+        "--pipe".to_string(),
+        "--collect".to_string(),
+        "--service-type=exec".to_string(),
+        format!("--working-directory={}", sh_quote(&working_directory)),
+        format!(
+            "--description={}",
+            sh_quote("Substrate world-deps provisioning")
+        ),
+        "/bin/sh".to_string(),
+        "-lc".to_string(),
+        sh_quote(cmd),
+    ]
+    .join(" ")
+}
+
+fn sh_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\"'\"'"))
+}
+
 #[derive(Debug, thiserror::Error)]
 #[error("{message}")]
 pub(crate) struct BadRequestError {
@@ -1765,6 +1797,35 @@ mod tests {
         assert_eq!(fd.writes[0], std::path::PathBuf::from("/tmp/a.txt"));
         assert!(fd.mods.is_empty());
         assert!(fd.deletes.is_empty());
+    }
+
+    #[test]
+    fn world_deps_provision_profile_wraps_command_in_transient_systemd_unit() {
+        let cmd = wrap_command_for_profile(
+            Some("world-deps-provision"),
+            Path::new("/tmp/substrate world"),
+            "echo 'hello'",
+        );
+
+        assert!(cmd.starts_with("systemd-run "));
+        assert!(cmd.contains("--wait"));
+        assert!(cmd.contains("--pipe"));
+        assert!(cmd.contains("--collect"));
+        assert!(cmd.contains("--working-directory='/tmp/substrate world'"));
+        assert!(cmd.contains("/bin/sh -lc 'echo '\"'\"'hello'\"'\"''"));
+    }
+
+    #[test]
+    fn non_provision_profiles_do_not_wrap_command() {
+        let cmd = wrap_command_for_profile(
+            Some("world-deps-probe"),
+            Path::new("/tmp/substrate world"),
+            "dpkg-query -W",
+        );
+        assert_eq!(cmd, "dpkg-query -W");
+
+        let cmd = wrap_command_for_profile(None, Path::new("/tmp"), "echo ok");
+        assert_eq!(cmd, "echo ok");
     }
 
     #[cfg(target_os = "linux")]

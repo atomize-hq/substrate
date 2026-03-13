@@ -145,6 +145,7 @@ For each externally visible change, list:
     - World-agent execution must introduce explicit guard rails: provisioning behavior is available only for the explicit provisioning workflow and never for arbitrary runtime commands on Linux host-native.
     - Provisioning-time execution must be observable (logs/trace) and must not silently fall back to host mutation.
     - Platform-specific provisioning scripts and service hardening must remain coherent with the chosen posture (systemd unit sandboxing vs in-world isolation; no “runtime hardening regression”).
+    - Validation must include at least one supported guest-backend non-dry-run success path with a real APT package; dry-run-only evidence is insufficient for the provisioning seam.
   - Contradiction risks:
     - Active work in `docs/project_management/packs/active/world_process_exec_tracing_parity/` touches `crates/world-agent/src/service.rs` and systemd capability posture; provisioning-profile changes must not break tracing/process-capture invariants.
 

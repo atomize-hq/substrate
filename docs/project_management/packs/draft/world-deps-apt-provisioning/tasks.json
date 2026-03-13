@@ -205,7 +205,7 @@
       "acceptance_criteria": [
         "Compile parity is green for the checkpoint checkout SHA.",
         "Feature smoke is green for the checkpoint checkout SHA on behavior platforms.",
-        "Run ids and checkout SHA are recorded in session_log.md."
+        "Run ids, checkout SHA, and the required supported-backend non-dry-run WDAP0 provisioning evidence are recorded in session_log.md."
       ],
       "concurrent_with": [],
       "depends_on": [

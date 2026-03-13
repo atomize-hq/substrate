@@ -192,8 +192,11 @@ Notes
 - Protocol is stable; no TLS by design (UDS only).
 - `profile` is an advanced request field used for backend-specific execution posture. For example,
   `substrate world enable --provision-deps` sets `profile=world-deps-provision` so provisioning can
-  run with the expected world-agent behavior. Runtime `substrate world deps current ...` commands do
-  not use that provisioning profile and never perform runtime APT mutation.
+  run with the expected world-agent behavior. On guest Linux agents, that profile is executed via a
+  transient `systemd-run` unit so the normal `substrate-world-agent.service` sandbox can stay
+  hardened. Internal world-deps profiles are reserved for Substrate’s built-in flows and are not
+  selected through `SUBSTRATE_WORLD_REQUEST_PROFILE`. Runtime `substrate world deps current ...`
+  commands do not use the provisioning profile and never perform runtime APT mutation.
 - Provisioning-time APT and runtime fail-early details live in:
   `docs/reference/world/deps/README.md`
   and `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`
