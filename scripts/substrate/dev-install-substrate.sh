@@ -561,6 +561,89 @@ find_linux_world_agent_elf() {
   return 0
 }
 
+is_linux_elf() {
+  local path="$1"
+  if [[ ! -f "${path}" ]]; then
+    return 1
+  fi
+  local file_type
+  file_type="$(file -b "${path}" 2>/dev/null || true)"
+  if [[ -n "${file_type}" ]] && ! echo "${file_type}" | grep -qi "ELF"; then
+    return 1
+  fi
+  return 0
+}
+
+clear_managed_prefix_linux_binary_cache() {
+  if [[ ! -f "${MANAGED_MAC_LINUX_BINARIES_PATH}" ]]; then
+    return 0
+  fi
+
+  while IFS= read -r cached_path; do
+    case "${cached_path}" in
+      "${BIN_DIR}/linux/substrate"|\
+      "${BIN_DIR}/linux/world-agent")
+        if [[ -f "${cached_path}" && ! -L "${cached_path}" ]]; then
+          rm -f "${cached_path}"
+          log "Removed cached Linux guest binary ${cached_path}"
+        fi
+        ;;
+      *)
+        ;;
+    esac
+  done < "${MANAGED_MAC_LINUX_BINARIES_PATH}"
+
+  rm -f "${MANAGED_MAC_LINUX_BINARIES_PATH}"
+  rmdir "${MANAGED_STATE_DIR}" 2>/dev/null || true
+}
+
+record_managed_prefix_linux_binary() {
+  local binary_path="$1"
+  mkdir -p "${MANAGED_STATE_DIR}"
+
+  local tmp="${MANAGED_MAC_LINUX_BINARIES_PATH}.tmp"
+  : > "${tmp}"
+  if [[ -f "${MANAGED_MAC_LINUX_BINARIES_PATH}" ]]; then
+    grep -Fxv -- "${binary_path}" "${MANAGED_MAC_LINUX_BINARIES_PATH}" > "${tmp}" || true
+  fi
+  printf '%s\n' "${binary_path}" >> "${tmp}"
+  mv "${tmp}" "${MANAGED_MAC_LINUX_BINARIES_PATH}"
+}
+
+cache_linux_binary_from_lima() {
+  local vm_path="$1"
+  local dest_path="$2"
+  local label="$3"
+
+  mkdir -p "$(dirname "${dest_path}")"
+  rm -f "${dest_path}"
+  if ! limactl copy "substrate:${vm_path}" "${dest_path}"; then
+    warn "Failed to copy Linux ${label} from Lima into ${dest_path}"
+    return 1
+  fi
+  chmod 0755 "${dest_path}" 2>/dev/null || true
+  if ! is_linux_elf "${dest_path}"; then
+    warn "Copied Linux ${label} at ${dest_path} is not a Linux ELF"
+    rm -f "${dest_path}"
+    return 1
+  fi
+  record_managed_prefix_linux_binary "${dest_path}"
+  log "Cached Linux ${label} into ${dest_path}"
+}
+
+verify_prefix_linux_bundle() {
+  local missing=0
+  local binary path
+  for binary in substrate world-agent; do
+    path="${BIN_DIR}/linux/${binary}"
+    if ! is_linux_elf "${path}"; then
+      warn "Expected cached Linux ${binary} at ${path}, but it is missing or not a Linux ELF."
+      missing=1
+    fi
+  done
+  return "${missing}"
+}
+
 stage_dev_world_runtime_bundle() {
   local prefix_root="$1"
   local repo_root="$2"
@@ -831,8 +914,11 @@ MANAGER_INIT_PATH="${PREFIX%/}/manager_init.sh"
 MANAGER_ENV_PATH="${PREFIX%/}/manager_env.sh"
 INSTALL_CONFIG_PATH="${PREFIX%/}/config.yaml"
 ENV_SH_PATH="${PREFIX%/}/env.sh"
+MANAGED_STATE_DIR="${PREFIX%/}/.dev-install-managed"
+MANAGED_MAC_LINUX_BINARIES_PATH="${MANAGED_STATE_DIR}/mac-linux-binaries.txt"
 
 mkdir -p "${PREFIX}" "${BIN_DIR}" "${VERSION_CONFIG_DIR}"
+clear_managed_prefix_linux_binary_cache
 
 # Stage config assets to mirror the production bundle layout.
 if [[ -d "${REPO_ROOT}/config" ]]; then
@@ -1075,6 +1161,23 @@ sudo chmod 755 /usr/local/bin/world'
   limactl shell substrate sudo systemctl enable substrate-world-agent.service
   limactl shell substrate sudo systemctl enable --now substrate-world-agent.socket
   limactl shell substrate sudo systemctl restart substrate-world-agent.service
+
+  cache_ok=1
+  if ! cache_linux_binary_from_lima /usr/local/bin/substrate "${BIN_DIR}/linux/substrate" "substrate CLI"; then
+    cache_ok=0
+  fi
+  if ! cache_linux_binary_from_lima /usr/local/bin/substrate-world-agent "${BIN_DIR}/linux/world-agent" "world-agent"; then
+    cache_ok=0
+  fi
+
+  if [[ "${cache_ok}" -eq 0 ]] || ! verify_prefix_linux_bundle; then
+    WORLD_ENABLED=0
+    write_install_metadata "${WORLD_ENABLED}"
+    write_env_sh_script "${WORLD_ENABLED}"
+    write_manager_env_script "${WORLD_ENABLED}"
+    warn "macOS dev-install did not produce a reusable Linux guest-binary bundle under ${BIN_DIR}/linux."
+    warn "World has been disabled in ${INSTALL_CONFIG_PATH} to avoid confusing runtime failures. Re-run dev-install after fixing Lima provisioning."
+  fi
 fi
 
 cat >"${ENV_FILE}" <<EOF_ENV
