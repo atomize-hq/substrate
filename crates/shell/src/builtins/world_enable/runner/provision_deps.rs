@@ -190,7 +190,7 @@ fn build_install_command(requirements: &[AptSpecV1]) -> String {
     script.push_str("    exit 126\n");
     script.push_str("  fi\n");
     script.push_str("fi\n");
-    script.push_str("\n");
+    script.push('\n');
     script.push_str("# DNS preflight: Lima guests can drift into a broken stub resolver state\n");
     script.push_str("# (/etc/resolv.conf -> 127.0.0.53 while systemd-resolved is inactive).\n");
     script.push_str("APT_DNS_TEST_HOST='ports.ubuntu.com'\n");
