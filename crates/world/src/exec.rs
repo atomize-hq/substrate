@@ -276,21 +276,45 @@ if [ "${SUBSTRATE_WORLD_FS_ISOLATION:-workspace}" = "full" ]; then
   umount -l /old_root 2>/dev/null || true
   rmdir /old_root 2>/dev/null || true
 
-  mkdir -p "${HOME:-/tmp/substrate-home}" 2>/dev/null || true
+  # WDH0 contract uses HOME=/root. In hardened worlds, the base / can be remounted read-only,
+  # so ensure /root is writable (tmpfs-backed) before executing the inner command.
+  mkdir -p /root 2>/dev/null || true
+  if ! touch /root/.substrate_write_probe 2>/dev/null; then
+    mount -t tmpfs tmpfs /root 2>/dev/null || true
+    chmod 0700 /root 2>/dev/null || true
+  else
+    rm -f /root/.substrate_write_probe 2>/dev/null || true
+  fi
+  mkdir -p /root/.npm /root/.cache /root/.config /root/.local/share 2>/dev/null || true
 
 else
   # ADR-0004: place the overlay mount at the project path via mount --move (not mount --bind).
   mount --move "$SUBSTRATE_MOUNT_MERGED_DIR" "$SUBSTRATE_MOUNT_PROJECT_DIR"
+  # Preserve the world-deps host root before mounting tmpfs on /var/lib. When the host root lives
+  # under /var/lib (the default), mounting tmpfs would otherwise hide it and we would end up
+  # bind-mounting an empty directory into the isolated /var/lib.
+  world_deps_hold="/run/substrate-world-deps-host"
+  mkdir -p "$world_deps_hold"
+  mount --rbind "$world_deps_host_root" "$world_deps_hold"
   mount -t tmpfs tmpfs /var/lib
   mkdir -p /var/lib/substrate/world-deps
-  mount --rbind "$world_deps_host_root" /var/lib/substrate/world-deps
+  mount --rbind "$world_deps_hold" /var/lib/substrate/world-deps
   if [ "${SUBSTRATE_MOUNT_FS_MODE:-writable}" = "read_only" ]; then
     mount -o remount,bind,ro "$SUBSTRATE_MOUNT_PROJECT_DIR"
   fi
   if [ -n "${SUBSTRATE_LANDLOCK_HELPER_SRC:-}" ] && [ -x "${SUBSTRATE_LANDLOCK_HELPER_SRC:-}" ]; then
     export SUBSTRATE_LANDLOCK_HELPER_PATH="${SUBSTRATE_LANDLOCK_HELPER_SRC}"
   fi
-  mkdir -p "${HOME:-/tmp/substrate-home}" 2>/dev/null || true
+  # WDH0 contract uses HOME=/root. In hardened worlds, the base / can be remounted read-only,
+  # so ensure /root is writable (tmpfs-backed) before executing the inner command.
+  mkdir -p /root 2>/dev/null || true
+  if ! touch /root/.substrate_write_probe 2>/dev/null; then
+    mount -t tmpfs tmpfs /root 2>/dev/null || true
+    chmod 0700 /root 2>/dev/null || true
+  else
+    rm -f /root/.substrate_write_probe 2>/dev/null || true
+  fi
+  mkdir -p /root/.npm /root/.cache /root/.config /root/.local/share 2>/dev/null || true
   mkdir -p "${XDG_CACHE_HOME:-/tmp/substrate-xdg/cache}" 2>/dev/null || true
   mkdir -p "${XDG_CONFIG_HOME:-/tmp/substrate-xdg/config}" 2>/dev/null || true
   mkdir -p "${XDG_DATA_HOME:-/tmp/substrate-xdg/data}" 2>/dev/null || true
@@ -313,11 +337,23 @@ set -f
 mount --make-rprivate / 2>/dev/null || mount --make-private / 2>/dev/null || true
 
 mkdir -p "$SUBSTRATE_WORLD_DEPS_HOST_ROOT"
+world_deps_hold="/run/substrate-world-deps-host"
+mkdir -p "$world_deps_hold"
+mount --rbind "$SUBSTRATE_WORLD_DEPS_HOST_ROOT" "$world_deps_hold"
 mount -t tmpfs tmpfs /var/lib
 mkdir -p /var/lib/substrate/world-deps
-mount --rbind "$SUBSTRATE_WORLD_DEPS_HOST_ROOT" /var/lib/substrate/world-deps
+mount --rbind "$world_deps_hold" /var/lib/substrate/world-deps
 
-mkdir -p "${HOME:-/tmp/substrate-home}" 2>/dev/null || true
+# WDH0 contract uses HOME=/root. In hardened worlds, the base / can be remounted read-only,
+# so ensure /root is writable (tmpfs-backed) before executing the inner command.
+mkdir -p /root 2>/dev/null || true
+if ! touch /root/.substrate_write_probe 2>/dev/null; then
+  mount -t tmpfs tmpfs /root 2>/dev/null || true
+  chmod 0700 /root 2>/dev/null || true
+else
+  rm -f /root/.substrate_write_probe 2>/dev/null || true
+fi
+mkdir -p /root/.npm /root/.cache /root/.config /root/.local/share 2>/dev/null || true
 mkdir -p "${XDG_CACHE_HOME:-/tmp/substrate-xdg/cache}" 2>/dev/null || true
 mkdir -p "${XDG_CONFIG_HOME:-/tmp/substrate-xdg/config}" 2>/dev/null || true
 mkdir -p "${XDG_DATA_HOME:-/tmp/substrate-xdg/data}" 2>/dev/null || true
@@ -466,6 +502,35 @@ pub fn execute_shell_command_with_project_bind_mount(
             stdout: stdout_buf,
             stderr: stderr_buf,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn workspace_isolation_preserves_world_deps_root_before_tmpfs() {
+        // Regression test: when workspace isolation mounts tmpfs on /var/lib, the default world-deps
+        // host root lives under /var/lib and would be hidden unless we bind it somewhere stable
+        // (e.g. /run) first.
+        assert!(PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT
+            .contains("world_deps_hold=\"/run/substrate-world-deps-host\""));
+        assert!(PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT
+            .contains("mount --rbind \"$world_deps_host_root\" \"$world_deps_hold\""));
+        assert!(PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT
+            .contains("mount --rbind \"$world_deps_hold\" /var/lib/substrate/world-deps"));
+
+        assert!(WORLD_DEPS_BIND_MOUNT_FALLBACK_SCRIPT
+            .contains("world_deps_hold=\"/run/substrate-world-deps-host\""));
+        assert!(WORLD_DEPS_BIND_MOUNT_FALLBACK_SCRIPT
+            .contains("mount --rbind \"$SUBSTRATE_WORLD_DEPS_HOST_ROOT\" \"$world_deps_hold\""));
+        assert!(WORLD_DEPS_BIND_MOUNT_FALLBACK_SCRIPT
+            .contains("mount --rbind \"$world_deps_hold\" /var/lib/substrate/world-deps"));
+
+        // HOME (/root) must be made writable even when / is remounted read-only by strict deny.
+        assert!(PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT.contains("mount -t tmpfs tmpfs /root"));
+        assert!(WORLD_DEPS_BIND_MOUNT_FALLBACK_SCRIPT.contains("mount -t tmpfs tmpfs /root"));
     }
 }
 
