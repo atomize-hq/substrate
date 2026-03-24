@@ -44,7 +44,8 @@ pub(super) fn normalize_env_for_linux_guest(
     // macOS host PATH often contains directories that are mounted into the guest (e.g. /Users/...),
     // which can lead to confusing behavior where `which node` points at a macOS binary that cannot
     // run inside the Linux VM. Prefer a stable Linux guest PATH.
-    const GUEST_BASE_PATH: &str = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+    const GUEST_BASE_PATH: &str =
+        "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games";
     const WORLD_DEPS_BIN: &str = "/var/lib/substrate/world-deps/bin";
     let world_deps_bin = env_map
         .get("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR")

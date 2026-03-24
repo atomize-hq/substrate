@@ -1015,14 +1015,27 @@ fn build_world_apt_entrypoint_wrapper_command_v1(entrypoints: &[String]) -> Stri
         );
         cmd.push_str("  exit 5\n");
         cmd.push_str("fi\n");
-        cmd.push_str("tmp=\"$(mktemp \\\"$world_deps_bin/.substrate-wdh1-wrapper.XXXXXX\\\")\"\n");
+        // NOTE: Do not escape quotes as `\"` here. In POSIX sh, `\"` is a literal quote character,
+        // which breaks mktemp by making the template start with `"` (nonexistent directory).
+        cmd.push_str("tmp=\"$(mktemp \"$world_deps_bin/.substrate-wdh1-wrapper.XXXXXX\")\"\n");
         cmd.push_str("cat > \"$tmp\" <<'");
         cmd.push_str(&delimiter);
         cmd.push_str("'\n");
         cmd.push_str("#!/bin/sh\n");
-        cmd.push_str("exec /usr/bin/");
+        cmd.push_str("set -eu\n");
+        // Resolve the entrypoint without recursing into the wrapper itself. Many apt packages
+        // install binaries outside `/usr/bin` (e.g. `/usr/games`), so do not assume a fixed path.
+        cmd.push_str("PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games'\n");
+        cmd.push_str("resolved=\"$(command -v ");
         cmd.push_str(entrypoint);
-        cmd.push_str(" \"$@\"\n");
+        cmd.push_str(" 2>/dev/null || true)\"\n");
+        cmd.push_str("if [ -z \"$resolved\" ]; then\n");
+        cmd.push_str("  echo \"substrate: world deps apt entrypoint not found: ");
+        cmd.push_str(entrypoint);
+        cmd.push_str("\" >&2\n");
+        cmd.push_str("  exit 127\n");
+        cmd.push_str("fi\n");
+        cmd.push_str("exec \"$resolved\" \"$@\"\n");
         cmd.push_str(&delimiter);
         cmd.push('\n');
         cmd.push_str("chmod 0755 \"$tmp\"\n");
@@ -1030,6 +1043,41 @@ fn build_world_apt_entrypoint_wrapper_command_v1(entrypoints: &[String]) -> Stri
     }
 
     cmd
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wdh1_mktemp_template_is_shell_quoted_not_literal_quotes() {
+        let cmd = build_world_apt_entrypoint_wrapper_command_v1(&["sl".to_string()]);
+        assert!(
+            cmd.contains("mktemp \"$world_deps_bin/.substrate-wdh1-wrapper.XXXXXX\""),
+            "expected mktemp template to be shell-quoted: {cmd}"
+        );
+        assert!(
+            !cmd.contains("mktemp \\\"$world_deps_bin/.substrate-wdh1-wrapper.XXXXXX\\\""),
+            "expected mktemp template to not contain literal quotes: {cmd}"
+        );
+    }
+
+    #[test]
+    fn wdh1_apt_wrapper_resolves_entrypoint_without_assuming_usr_bin() {
+        let cmd = build_world_apt_entrypoint_wrapper_command_v1(&["sl".to_string()]);
+        assert!(
+            cmd.contains("PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games'"),
+            "expected wrapper to resolve entrypoint with a sanitized PATH including /usr/games: {cmd}"
+        );
+        assert!(
+            cmd.contains("resolved=\"$(command -v sl 2>/dev/null || true)\""),
+            "expected wrapper to use command -v for entrypoint resolution: {cmd}"
+        );
+        assert!(
+            !cmd.contains("exec /usr/bin/sl"),
+            "expected wrapper to not hardcode /usr/bin for apt entrypoints: {cmd}"
+        );
+    }
 }
 
 struct WorldCommandOutputV1 {

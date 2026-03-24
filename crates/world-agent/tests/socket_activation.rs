@@ -1,6 +1,8 @@
 #![cfg(unix)]
 
 use once_cell::sync::Lazy;
+use std::cmp;
+use std::io;
 use std::os::fd::RawFd;
 use std::os::unix::io::AsRawFd;
 use std::os::unix::net::UnixStream;
@@ -28,7 +30,7 @@ fn direct_bind_mode_when_listen_fds_unset() {
 #[test]
 fn socket_activation_mode_exposes_inherited_unix_sockets() {
     let pid = std::process::id().to_string();
-    let base_fd = 200;
+    let base_fd = find_free_fd_start(2, 64);
     with_activation_env(
         &[
             ("LISTEN_FDS", "2"),
@@ -63,7 +65,7 @@ fn socket_activation_mode_exposes_inherited_unix_sockets() {
 #[test]
 fn honors_custom_fd_start_offsets() {
     let pid = std::process::id().to_string();
-    let base_fd = 280;
+    let base_fd = find_free_fd_start(3, 64);
     with_activation_env(
         &[
             ("LISTEN_FDS", "3"),
@@ -116,6 +118,10 @@ fn setup_inherited_fds(fd_start: RawFd, count: usize) -> InheritedFdSet {
     let mut targets = Vec::with_capacity(count);
     for offset in 0..count {
         let desired = fd_start + offset as RawFd;
+        assert!(
+            !fd_is_open(desired),
+            "test fixture requires fd {desired} to be unused before dup2"
+        );
         let (left, _) = UnixStream::pair().expect("create unix stream pair");
         unsafe {
             assert!(
@@ -129,6 +135,51 @@ fn setup_inherited_fds(fd_start: RawFd, count: usize) -> InheritedFdSet {
     InheritedFdSet {
         targets,
         should_close: true,
+    }
+}
+
+fn fd_is_open(fd: RawFd) -> bool {
+    unsafe {
+        if libc::fcntl(fd, libc::F_GETFD) >= 0 {
+            return true;
+        }
+    }
+    io::Error::last_os_error().raw_os_error() != Some(libc::EBADF)
+}
+
+fn find_free_fd_start(count: usize, min_fd: RawFd) -> RawFd {
+    assert!(count > 0);
+    let max_fd = rlimit_nofile_cur()
+        .saturating_sub(1)
+        .clamp(0, i32::MAX as u64) as RawFd;
+    let max_fd = cmp::min(max_fd, 1024);
+    let count_fd = count as RawFd;
+
+    let upper = max_fd.saturating_sub(count_fd - 1);
+    for base in min_fd..=upper {
+        let mut ok = true;
+        for offset in 0..count_fd {
+            if fd_is_open(base + offset) {
+                ok = false;
+                break;
+            }
+        }
+        if ok {
+            return base;
+        }
+    }
+
+    panic!("unable to find a free fd range of length {count} within [{min_fd}, {max_fd}]");
+}
+
+fn rlimit_nofile_cur() -> u64 {
+    unsafe {
+        let mut lim: libc::rlimit = std::mem::zeroed();
+        if libc::getrlimit(libc::RLIMIT_NOFILE, &mut lim) != 0 {
+            // Conservative fallback.
+            return 256;
+        }
+        lim.rlim_cur as u64
     }
 }
 

@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use tempfile::Builder;
 
 const BASELINE_PATH: &str =
-    "/var/lib/substrate/world-deps/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+    "/var/lib/substrate/world-deps/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games";
 
 fn hostile_host_path() -> String {
     "/home/test/.config/nvm/versions/node/v20.0.0/bin:/home/test/.pyenv/shims:/home/test/.cargo/bin:/home/test/.local/bin:/usr/bin:/bin".to_string()

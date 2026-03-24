@@ -14,7 +14,9 @@ pub(crate) fn build_world_env_map_for_cwd(
     use std::collections::HashMap;
 
     const DEFAULT_WORLD_DEPS_BIN: &str = "/var/lib/substrate/world-deps/bin";
-    const BASELINE_PATH: &str = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+    // Include `/usr/games` for packages like `sl` which install outside `/usr/bin`.
+    const BASELINE_PATH: &str =
+        "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games";
 
     let effective = config_model::resolve_effective_config(cwd, &CliConfigOverrides::default())
         .with_context(|| {
