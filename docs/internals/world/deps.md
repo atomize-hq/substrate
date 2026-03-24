@@ -22,7 +22,7 @@ Code pointers:
 - Shell engine: `crates/shell/src/builtins/world_deps/surfaces.rs`
 - Inventory parsing + merge: `crates/shell/src/builtins/world_deps/inventory.rs`
 
-## Why $HOME installs break in hardened worlds
+## Why `$HOME` installs are ephemeral in hardened worlds
 
 Substrate’s hardened world-agent service runs with a restrictive systemd sandbox on guest Linux (Lima/WSL), including:
 - `ProtectSystem=strict` (rootfs is effectively read-only)
@@ -37,10 +37,21 @@ Additionally, Substrate’s world env contract sets:
 
 Code pointers:
 - Env contract injection: `crates/world/src/guard.rs` (`wrap_with_world_env_contract`)
+- Mount-namespace setup (workspace/full isolation): `crates/world/src/exec.rs`
 
 Implications:
-- Any installer that tries to write to `$HOME` (e.g. `/root/.nvm`) will fail under hardening.
-- Package scripts should install to `/var/lib/substrate/world-deps/<tool>` instead.
+- The base root filesystem may be effectively read-only for world executions, but Substrate will still ensure `/root` is
+  writable (often via a tmpfs mount) so common tooling (npm/pip/git, etc.) can run.
+- `/root` should be treated as **scratch**:
+  - In non-PTY runs (`substrate -c ...`), each command may execute in a fresh mount namespace, so `$HOME` state can be
+    lost between invocations.
+  - In the interactive REPL, `$HOME` state may persist only for the lifetime of that REPL session.
+
+Practical guidance:
+- Prefer project-local installs when possible:
+  - Example: `npm i <pkg>` then run `npx <tool>` / `npm exec <tool>` (or `./node_modules/.bin/<tool>`).
+- For “world-global” CLIs that must resolve on the deterministic world PATH, create a world-deps `package`/`bundle` that
+  installs into `/var/lib/substrate/world-deps/…` and exposes an entrypoint under `/var/lib/substrate/world-deps/bin`.
 
 ## Writable surfaces (effective behavior)
 

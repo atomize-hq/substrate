@@ -73,7 +73,26 @@ Controls whether Substrate forwards a small allowlist of host environment variab
 
 See:
 - Full configuration reference (including env forwarding contract): `docs/CONFIGURATION.md`
-- Planning contract (host-visible hardening): `docs/project_management/packs/active/world-deps-host-visible-hardening/WDH0-spec.md`
+- Planning contract (host-visible hardening): `docs/project_management/packs/implemented/world-deps-host-visible-hardening/WDH0-spec.md`
+
+### Hardened worlds: `$HOME` is scratch (ephemeral)
+
+By default, Substrate’s in-world env contract sets:
+
+- `HOME=/root`
+- `XDG_*` under `/root`
+
+In hardened world executions (for example, when `world_fs.host_visible=false` / strict deny is enabled), the world backend
+may make the base root filesystem effectively read-only. Substrate will still ensure `/root` is writable so tools work,
+but you should treat it as **scratch space**:
+
+- Content under `/root` (npm cache, `npx` temp installs, tool logs) may not persist across separate `substrate -c ...`
+  invocations.
+- For persistence/reproducibility, prefer:
+  - Project-local installs (e.g. `npm i` + `npx <tool>` / `npm exec <tool>`), or
+  - World-deps packages/bundles that install CLIs into `/var/lib/substrate/world-deps/bin`.
+
+Implementation notes live in: `docs/internals/world/deps.md`.
 
 ## Related documentation
 
