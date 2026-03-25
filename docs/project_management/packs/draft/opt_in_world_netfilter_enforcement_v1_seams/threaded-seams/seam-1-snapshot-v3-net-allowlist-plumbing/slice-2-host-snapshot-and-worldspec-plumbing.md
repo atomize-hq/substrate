@@ -13,9 +13,9 @@ basis:
     - "Any change to WorldSpec.isolate_network/allowed_domains semantics (C-02/C-03)"
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: inherited
+    contract: inherited
+    revalidation: inherited
   post_exec:
     landing: pending
     closeout: pending
@@ -80,4 +80,3 @@ Checklist:
 - Test: shell-level tests for snapshot contents
 - Validate: ensure failures are diagnostic and do not silently fall back
 - Cleanup: remove any old broker-based allowlist plumbing at this layer
-

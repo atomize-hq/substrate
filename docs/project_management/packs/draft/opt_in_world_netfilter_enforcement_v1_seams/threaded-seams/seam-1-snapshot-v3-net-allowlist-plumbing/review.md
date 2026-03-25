@@ -64,12 +64,12 @@ flowchart TB
 
 ## Pre-exec gate disposition
 
-- **Review gate**: pending
+- **Review gate**: passed
+- **Contract gate**: failed (blocked by `REM-001`)
 - **Contract gate concerns**:
   - Exact normalization rules for `net_allowed` (`REM-001`)
   - Tight semantics for `WorldSpec.isolate_network` and `WorldSpec.allowed_domains` under opt-in gating
-- **Revalidation prerequisites**:
-  - `SEAM-3` publishes `C-04` so `world.net.filter` gating semantics are stable before `SEAM-1` becomes `exec-ready`.
+- **Revalidation**: pending (not attempted while contract gate is blocked)
 - **Opened remediations**:
   - None opened in this review bundle beyond existing `REM-001`.
 
@@ -84,4 +84,3 @@ flowchart TB
   - Any change to canonicalization or wildcard rejection rules
   - Any change to `WorldSpec` field meaning under opt-in gating
   - Any change to PTY/non-PTY execute request shape
-

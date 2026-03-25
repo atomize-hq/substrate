@@ -19,8 +19,8 @@ basis:
     - "Any change to host config gating semantics for world.net.filter (C-04)"
 gates:
   pre_exec:
-    review: pending
-    contract: pending
+    review: passed
+    contract: failed
     revalidation: pending
   post_exec:
     landing: pending
@@ -104,4 +104,3 @@ open_remediations:
 
 - Pack remediation log: `../../governance/remediation-log.md`
 - Seam closeout: `../../governance/seam-1-closeout.md`
-

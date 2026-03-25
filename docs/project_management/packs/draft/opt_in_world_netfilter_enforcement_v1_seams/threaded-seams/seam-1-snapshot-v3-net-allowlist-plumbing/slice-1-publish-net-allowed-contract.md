@@ -12,9 +12,9 @@ basis:
     - "Any change to net_allowed canonicalization/validation rules"
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: inherited
+    contract: inherited
+    revalidation: inherited
   post_exec:
     landing: pending
     closeout: pending
@@ -71,4 +71,3 @@ Checklist:
 - Test: unit tests for canonicalization + normalization cases
 - Validate: ensure serde default/back-compat behavior is explicitly asserted
 - Cleanup: remove any duplicate ad-hoc normalization code paths
-

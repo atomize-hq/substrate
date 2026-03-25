@@ -3,7 +3,7 @@ seam_id: SEAM-1
 status: landed
 closeout_version: v0
 seam_exit_gate:
-  source_ref:
+  source_ref: threaded-seams/seam-1-snapshot-v3-net-allowlist-plumbing/slice-4-seam-exit-gate.md
   status: pending
   promotion_readiness: blocked
 basis:
@@ -24,7 +24,7 @@ open_remediations: []
 
 ## Seam-exit gate record
 
-- **Source artifact**:
+- **Source artifact**: `threaded-seams/seam-1-snapshot-v3-net-allowlist-plumbing/slice-4-seam-exit-gate.md`
 - **Landed evidence**:
 - **Contracts published or changed**:
 - **Threads published / advanced**:
@@ -41,4 +41,3 @@ open_remediations: []
 - **Closeout gate**: pending | passed | failed
 - **Unresolved remediations**:
 - **Carried-forward remediations**:
-

@@ -2,7 +2,7 @@
 seam_id: SEAM-1
 seam_slug: snapshot-v3-net-allowlist-plumbing
 type: integration
-status: proposed
+status: decomposed
 execution_horizon: active
 plan_version: v1
 basis:
@@ -18,17 +18,18 @@ basis:
     - "Any world-agent request/response contract changes"
 gates:
   pre_exec:
-    review: pending
-    contract: pending
+    review: passed
+    contract: failed
     revalidation: pending
   post_exec:
     landing: pending
     closeout: pending
 seam_exit_gate:
   required: true
-  planned_location: reserved_final_slice
+  planned_location: S4
   status: pending
-open_remediations: []
+open_remediations:
+  - REM-001
 ---
 
 # SEAM-1 - Snapshot V3 `net_allowed` contract + host→world-agent plumbing
@@ -91,4 +92,3 @@ open_remediations: []
   - Downstream seams most likely to require revalidation:
     - `SEAM-2` if enforcement inputs/semantics change
     - `SEAM-4` if doctor schema changes
-

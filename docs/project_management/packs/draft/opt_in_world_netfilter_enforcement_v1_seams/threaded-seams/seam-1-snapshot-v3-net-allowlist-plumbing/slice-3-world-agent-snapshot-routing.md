@@ -13,9 +13,9 @@ basis:
     - "Any change to PTY/non-PTY execution path behavior"
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: inherited
+    contract: inherited
+    revalidation: inherited
   post_exec:
     landing: pending
     closeout: pending
@@ -74,4 +74,3 @@ Checklist:
 - Test: PTY + non-PTY coverage
 - Validate: ensure diagnostics are actionable for invalid allowlist entries
 - Cleanup: remove dead allowlist plumbing that bypasses Snapshot V3
-
