@@ -12,8 +12,8 @@ This pack captures seam briefs, authoritative threading, pack-level review surfa
 
 Execution horizon:
 
-- Active seam: `SEAM-1`
-- Next seam: `SEAM-2`
+- Active seam: `SEAM-3`
+- Next seam: `SEAM-1`
 
 Policy:
 
@@ -21,4 +21,3 @@ Policy:
 - the next seam may later receive seam-local review + slices, and only provisional candidate-subslice hints
 - active and next seams must eventually terminate in a dedicated final `seam-exit-gate` slice once seam-local planning begins
 - future seams remain seam briefs
-

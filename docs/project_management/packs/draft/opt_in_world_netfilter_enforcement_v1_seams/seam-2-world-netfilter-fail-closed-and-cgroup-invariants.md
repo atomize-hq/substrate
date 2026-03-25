@@ -3,7 +3,7 @@ seam_id: SEAM-2
 seam_slug: world-netfilter-fail-closed-and-cgroup-invariants
 type: platform
 status: proposed
-execution_horizon: next
+execution_horizon: future
 plan_version: v1
 basis:
   currentness: provisional
@@ -78,7 +78,7 @@ open_remediations: []
 - **Rollout / safety**:
   - Enforcement cannot activate without explicit opt-in request + `WORLD_NETFILTER_ENABLE=1`.
 - **Downstream decomposition context**:
-  - Why this seam is `next`: it is the highest-risk correctness boundary; without it, the feature is “on paper only”.
+  - Why this seam is `future`: it remains downstream of both the active config gate seam (`SEAM-3`) and the next routing seam (`SEAM-1`); promoting it earlier would force platform work ahead of unfinished control-plane contracts.
   - Which threads matter most: `THR-02`, `THR-04`.
   - What the first seam-local review should focus on: cgroup attach coverage, nftables rule correctness, and failure diagnostics that are actionable for operators.
 - **Expected seam-exit concerns**:
@@ -91,4 +91,3 @@ open_remediations: []
     - doctor/diagnostics detail level and failure taxonomy
   - Downstream seams most likely to require revalidation:
     - `SEAM-4` and `SEAM-5` as new failure modes are discovered
-

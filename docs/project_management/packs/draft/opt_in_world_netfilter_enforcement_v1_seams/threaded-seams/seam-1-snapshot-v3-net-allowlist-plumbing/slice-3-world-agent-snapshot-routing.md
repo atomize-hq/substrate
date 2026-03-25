@@ -2,7 +2,7 @@
 slice_id: S3
 seam_id: SEAM-1
 slice_kind: delivery
-execution_horizon: active
+execution_horizon: next
 status: decomposed
 plan_version: v1
 basis:

@@ -2,11 +2,11 @@
 seam_id: SEAM-3
 seam_slug: host-config-opt-in-and-parity-env-plumbing
 type: capability
-status: proposed
-execution_horizon: future
-plan_version: v1
+status: decomposed
+execution_horizon: active
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
   upstream_closeouts: []
@@ -17,17 +17,19 @@ basis:
     - "Any change to workspace detection for overrides"
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: failed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
 seam_exit_gate:
   required: true
-  planned_location: reserved_final_slice
+  planned_location: S4
   status: pending
-open_remediations: []
+open_remediations:
+  - REM-003
+  - REM-004
 ---
 
 # SEAM-3 - Config opt-in `world.net.filter` + CLI patching + env parity
@@ -78,9 +80,9 @@ open_remediations: []
 - **Rollout / safety**:
   - This is the primary back-compat gate; must land before enabling enforcement for broader users.
 - **Downstream decomposition context**:
-  - Why this seam is `future`: it is straightforward but must align with the contract/routing shape from `SEAM-1` and the operational story from `SEAM-2`.
+  - Why this seam is `active`: it is the earliest safe upstream seam on the critical path and publishes the host-side gate that `SEAM-1` and later seams cannot safely invent downstream.
   - Which threads matter most: `THR-03`.
-  - What the first seam-local review should focus on: config patch semantics, override precedence, and documentation clarity.
+  - What the first seam-local review should focus on: config patch semantics, override precedence, documentation clarity, and the exact handoff `SEAM-1` will consume.
 - **Expected seam-exit concerns**:
   - Contracts likely to publish:
     - `C-04`, `C-05`, `C-06`
@@ -90,4 +92,3 @@ open_remediations: []
     - config/export visibility in operator workflows
   - Downstream seams most likely to require revalidation:
     - `SEAM-5` for smoke expectations
-

@@ -1,7 +1,7 @@
 ---
 seam_id: SEAM-1
 review_phase: pre_exec
-execution_horizon: active
+execution_horizon: next
 basis_ref: seam.md#basis
 ---
 # Review Bundle - SEAM-1 Snapshot V3 `net_allowed` contract + host→world-agent plumbing
@@ -53,7 +53,7 @@ flowchart TB
 
 ## Likely mismatch hotspots
 
-- **Dependency inversion / unpublished config gate**: `S2` consumes `C-04` / `THR-03`, but `threading.md` still assigns that contract/thread to future `SEAM-3`; until the contract is published or the sequencing is rewritten, the active seam basis stays provisional.
+- **Dependency inversion / unpublished config gate**: `S2` consumes `C-04` / `THR-03`, and `threading.md` correctly assigns that contract/thread to active `SEAM-3`; until those owner slices land, this next seam basis stays provisional.
 - **Normalization drift**: hostname casefolding/IDNA posture implemented inconsistently across `agent-api-types`, the host snapshot builder, and the world-agent request path (decision is recorded in `S1.T1`; all consumers must share one helper).
 - **PTY vs non-PTY divergence**: `service.rs` and `pty.rs` construct different `WorldSpec`/allowlist values or source them from different places.
 - **Wildcard semantics**: `["*"]` is not canonicalized to exactly `["*"]`, or other wildcard forms slip through when isolation is requested.
@@ -62,20 +62,20 @@ flowchart TB
 ## Pre-exec findings
 
 - Hostname normalization posture (casefolding + IDNA) for `net_allowed` is now explicitly specified in `S1.T1`.
-- Revalidation against the current repo and pack control plane shows `world.net.filter` / parity override/export surfaces are not yet landed, while the active seam plan still makes `S2` depend on `C-04` / `THR-03`; that keeps the seam basis provisional.
+- The pack control plane now correctly makes `SEAM-3` active; this seam remains `next` until the owner slices in `SEAM-3` publish `C-04` / `THR-03`.
+- Revalidation remains pending because the upstream gate is not yet landed; this seam should not re-enter the active window until the `SEAM-3` owner artifact is executable and the resulting basis can be checked against code/docs.
 
 ## Pre-exec gate disposition
 
 - **Review gate**: passed
 - **Contract gate**: failed
 - **Contract gate concerns**:
-  - `threading.md` makes `C-04` / `THR-03` authoritative to `SEAM-3`, but `S2` still consumes them while `SEAM-3` remains `future`.
-  - The pack critical path and current active/next window do not yet reconcile that ownership/dependency ordering.
-- **Revalidation**: failed
+  - `threading.md` keeps `C-04` / `THR-03` authoritative to `SEAM-3`, and `S2` still cannot consume them until the active owner seam lands its slices.
+- **Revalidation**: pending
 - **Revalidation concerns**:
-  - No landed host-side `world.net.filter` config surface was found in the repo, so the gating input consumed by `S2` is still upstream future work.
+  - No landed host-side `world.net.filter` config surface was found in the repo yet, so this next seam still waits on upstream active work before it can refresh its basis.
 - **Opened remediations**:
-  - `REM-004` - publish `C-04` / `THR-03` from `SEAM-3` or resequence the pack so `SEAM-1` no longer depends on future work before promotion.
+  - `REM-004` - land the active `SEAM-3` owner slices that publish `C-04` / `THR-03`, then revalidate this seam before re-entering the active window or promoting to `exec-ready`.
 
 ## Planned seam-exit gate focus
 

@@ -37,8 +37,10 @@ status: open
 owner_seam: SEAM-3
 blocked_targets: []
 summary: Clarify operator workflow for enabling netfilter safely
-required_fix: Document the three-way gate alignment (world.net.filter, WORLD_NETFILTER_ENABLE, policy net_allowed) with examples
-resolution_evidence: []
+required_fix: Land the active `SEAM-3` owner slices that publish operator-facing semantics and examples, especially `threaded-seams/seam-3-host-config-opt-in-and-parity-env-plumbing/slice-3-operator-docs-and-routing-handoff.md`, then update `docs/reference/config/world.md` and `docs/CONFIGURATION.md` with the three-way gate alignment (`world.net.filter`, `WORLD_NETFILTER_ENABLE`, policy `net_allowed`)
+resolution_evidence:
+  - "Owner seam activated and decomposed: threaded-seams/seam-3-host-config-opt-in-and-parity-env-plumbing/seam.md"
+  - "Docs/UX execution slice recorded: threaded-seams/seam-3-host-config-opt-in-and-parity-env-plumbing/slice-3-operator-docs-and-routing-handoff.md"
 ```
 
 ```yaml
@@ -57,9 +59,12 @@ blocked_targets:
   - seam: SEAM-1
     field: status
     value: exec-ready
-summary: SEAM-1 still consumes unpublished C-04 and THR-03 from future SEAM-3, so the active seam basis is only provisional
-required_fix: Publish C-04 and THR-03 from SEAM-3 or explicitly resequence/redistribute the config-gating work so SEAM-1 no longer depends on future-seam output before promotion
-resolution_evidence: []
+summary: Publish the concrete `C-04` / `THR-03` host-side gating contract for `SEAM-1`; the contract shape is now decided, but implementation and landed closeout evidence are still missing
+required_fix: Land the active `SEAM-3` owner slices that publish `C-04` / `THR-03` and their verification surfaces: `slice-1-publish-world-net-filter-config-contract.md`, `slice-2-override-and-parity-env-plumbing.md`, and `slice-3-operator-docs-and-routing-handoff.md`; once those artifacts land, revalidate next `SEAM-1` against the published host gate before attempting `exec-ready`
+resolution_evidence:
+  - "Consumer-side contract decision recorded: threaded-seams/seam-1-snapshot-v3-net-allowlist-plumbing/slice-2-host-snapshot-and-worldspec-plumbing.md (S2.T2)"
+  - "Owner seam activated and decomposed: threaded-seams/seam-3-host-config-opt-in-and-parity-env-plumbing/seam.md"
+  - "Owner execution slices recorded: threaded-seams/seam-3-host-config-opt-in-and-parity-env-plumbing/slice-1-publish-world-net-filter-config-contract.md + slice-2-override-and-parity-env-plumbing.md + slice-3-operator-docs-and-routing-handoff.md"
 ```
 
 ## Resolved remediations

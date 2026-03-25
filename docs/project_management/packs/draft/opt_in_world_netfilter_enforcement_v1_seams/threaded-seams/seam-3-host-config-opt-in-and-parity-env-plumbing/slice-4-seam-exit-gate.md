@@ -1,8 +1,8 @@
 ---
 slice_id: S4
-seam_id: SEAM-1
+seam_id: SEAM-3
 slice_kind: seam_exit_gate
-execution_horizon: next
+execution_horizon: active
 status: decomposed
 plan_version: v1
 basis:
@@ -18,34 +18,33 @@ gates:
     landing: pending
     closeout: pending
 threads:
-  - THR-01
-  - THR-02
+  - THR-03
 contracts_produced:
-  - C-01
-  - C-02
-  - C-03
+  - C-04
+  - C-05
+  - C-06
 contracts_consumed: []
 open_remediations: []
 candidate_subslices: []
 ---
 ### S4 - seam-exit-gate
 
-- **Purpose**: convert landed execution into downstream-consumable closeout and promotion readiness.
+- **Purpose**: convert landed control-plane execution into downstream-consumable closeout and promotion readiness.
 - **Scope (in/out)**:
   - In: landed evidence capture, contract/thread publication record, review-surface delta capture, stale-trigger emission, remediation disposition, promotion-readiness statement.
   - Out: net-new feature implementation.
 - **Acceptance criteria**:
-  - `../../governance/seam-1-closeout.md` can be updated without ambiguity once code lands.
-  - Contracts published or changed are explicit (`C-01`..`C-03`).
-  - Outbound threads are advanced and explicitly recorded (`THR-01`, `THR-02`).
-  - Downstream stale triggers are explicit (especially those that would force `SEAM-2`/`SEAM-4` revalidation).
-  - Promotion blockers are explicit, including whether any pre-exec contract decisions were later reopened post-exec.
+  - `../../governance/seam-3-closeout.md` can be updated without ambiguity once code/docs land.
+  - Contracts published or changed are explicit (`C-04`..`C-06`).
+  - Outbound thread `THR-03` is advanced and explicitly recorded.
+  - Downstream stale triggers are explicit, especially those that would force `SEAM-1` and `SEAM-5` revalidation.
+  - Promotion blockers are explicit, including any carried-forward operator-doc or parity gaps.
   - Promotion readiness can be stated as `ready` or `blocked`.
 - **Dependencies**:
   - Landed work from `S1`..`S3`
-  - Post-exec evidence and diagnostics from the actual merged implementation
+  - Post-exec evidence and diagnostics from the actual merged implementation/docs
 - **Verification**:
   - Closeout review: ensure `seam_exit_gate.status` and `promotion_readiness` are populated with evidence links.
 - **Review surface refs**:
-  - `../../review_surfaces.md` (R1/R2/R3)
+  - `../../review_surfaces.md` (R1/R2)
   - `review.md` (planned mismatch hotspots and stale triggers)

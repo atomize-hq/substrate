@@ -4,8 +4,8 @@ This document is the authoritative registry for cross-seam contracts and the thr
 
 Execution horizon summary:
 
-- Active seam: `SEAM-1` (Snapshot V3 `net_allowed` contract + plumbing)
-- Next seam: `SEAM-2` (World netfilter enforcement correctness + cgroup invariants)
+- Active seam: `SEAM-3` (Config opt-in + CLI/docs)
+- Next seam: `SEAM-1` (Snapshot V3 `net_allowed` contract + plumbing)
 
 ## Contract registry
 
@@ -129,8 +129,8 @@ Execution horizon summary:
 
 ```mermaid
 flowchart LR
-  S1["SEAM-1 (Snapshot V3 plumbing)"] --> S2["SEAM-2 (World enforcement fail-closed)"]
   S3["SEAM-3 (Config opt-in + CLI/docs)"] --> S1
+  S1["SEAM-1 (Snapshot V3 plumbing)"] --> S2["SEAM-2 (World enforcement fail-closed)"]
   S2 --> S4["SEAM-4 (Doctor/diagnostics)"]
   S1 --> S4
   S4 --> S5["SEAM-5 (Tests + smoke)"]
@@ -140,7 +140,7 @@ flowchart LR
 
 ## Critical path (inferred)
 
-1. `SEAM-1`: publish Snapshot V3 `net_allowed` contract and remove in-guest broker dependency for allowlists.
-2. `SEAM-2`: make enforcement real + fail-closed under isolate_network, including cgroup attach invariants.
-3. `SEAM-3`: land opt-in config and CLI/docs, enabling safe roll-out without surprising existing workspaces.
+1. `SEAM-3`: land opt-in config and CLI/docs, establishing the back-compat gate before downstream routing or enforcement can become execution-safe.
+2. `SEAM-1`: publish Snapshot V3 `net_allowed` contract and host routing semantics against the now-published `world.net.filter` gate.
+3. `SEAM-2`: make enforcement real + fail-closed under isolate_network, including cgroup attach invariants.
 4. `SEAM-4` + `SEAM-5`: make enforcement status debuggable and lock it in with tests/smoke.

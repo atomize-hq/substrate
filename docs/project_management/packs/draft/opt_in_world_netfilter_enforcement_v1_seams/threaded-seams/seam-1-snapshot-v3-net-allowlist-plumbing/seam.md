@@ -2,8 +2,8 @@
 seam_id: SEAM-1
 seam_slug: snapshot-v3-net-allowlist-plumbing
 status: decomposed
-execution_horizon: active
-plan_version: v2
+execution_horizon: next
+plan_version: v3
 basis:
   currentness: provisional
   source_seam_brief: ../../seam-1-snapshot-v3-net-allowlist-plumbing.md
@@ -22,7 +22,7 @@ gates:
   pre_exec:
     review: passed
     contract: failed
-    revalidation: failed
+    revalidation: pending
   post_exec:
     landing: pending
     closeout: pending
@@ -56,7 +56,7 @@ open_remediations:
   - Unit tests for canonicalization/validation in `agent-api-types`.
   - Tests asserting world-agent routes allowlists from snapshot (not broker), across non-PTY and PTY execute paths.
 - **Basis posture**:
-  - Currentness: `provisional` because `S2` still consumes `C-04` / `THR-03` from future `SEAM-3`; promotion to `exec-ready` stays blocked until that dependency is published or the sequencing/ownership is rewritten.
+  - Currentness: `provisional` because `S2` still consumes `C-04` / `THR-03`; this seam now sits in `next` until the active `SEAM-3` publishes that upstream gate and the basis can be revalidated.
   - Upstream closeouts assumed: none
   - Required threads: `THR-01`, `THR-02`, `THR-03`
   - Stale triggers: see `basis.stale_triggers`
@@ -73,7 +73,7 @@ open_remediations:
   - Contracts consumed (per `../../threading.md`):
     - `C-04` (`world.net.filter` host-side opt-in gate)
   - Current blocker:
-    - `REM-004` blocks `SEAM-1 -> exec-ready` because the authoritative control plane still assigns `C-04` / `THR-03` to future `SEAM-3`.
+    - `REM-004` blocks `SEAM-1 -> exec-ready` until active `SEAM-3` lands the owner slices that publish `C-04` / `THR-03`.
 
 ## Review bundle
 

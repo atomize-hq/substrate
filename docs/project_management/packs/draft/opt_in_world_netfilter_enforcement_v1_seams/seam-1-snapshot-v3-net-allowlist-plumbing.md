@@ -3,7 +3,7 @@ seam_id: SEAM-1
 seam_slug: snapshot-v3-net-allowlist-plumbing
 type: integration
 status: decomposed
-execution_horizon: active
+execution_horizon: next
 plan_version: v2
 basis:
   currentness: provisional
@@ -75,16 +75,16 @@ open_remediations:
   - Unit tests for canonicalization/validation in `agent-api-types`.
   - Tests asserting world-agent routes allowlists from snapshot (not broker).
 - **Current blocker posture**:
-  - `S2` still consumes `C-04` / `THR-03` from future `SEAM-3`, so the active seam basis remains provisional and cannot promote to `exec-ready` until that dependency is published or the sequencing/ownership is rewritten.
+  - `S2` still consumes `C-04` / `THR-03`, so this seam now sits in `next` with a provisional basis until the active `SEAM-3` publishes the config gate and parity surfaces.
 - **Risks / unknowns**:
   - Risk: hostname normalization/IDNA behavior could introduce false denies or unexpected allows.
   - De-risk plan: keep the normalization posture explicit and test-locked (decision is recorded in `SEAM-1/S1.T1`).
 - **Rollout / safety**:
   - This seam must be back-compat additive; no behavior changes unless opt-in gate later requests isolation.
 - **Downstream decomposition context**:
-  - Why this seam is `active`: it defines the cross-boundary contract that all other seams depend on and removes hidden coupling to in-guest broker state.
+  - Why this seam is `next`: its consumer-side routing work is still real, but it should not be the active execution seam until the upstream opt-in gate (`SEAM-3`) is published.
   - Which threads matter most: `THR-01`, `THR-02`, `THR-03`.
-  - What the first seam-local review should focus on: canonicalization rules, failure diagnostics, end-to-end data flow correctness across non-PTY and PTY execute paths, and whether consuming `C-04` while `SEAM-3` remains future is still valid.
+  - What the next seam-local review should focus on: canonicalization rules, failure diagnostics, end-to-end data flow correctness across non-PTY and PTY execute paths, and whether the published `C-04` semantics from active `SEAM-3` are consumed consistently.
 - **Expected seam-exit concerns**:
   - Contracts likely to publish:
     - `C-01`, `C-02`, `C-03`

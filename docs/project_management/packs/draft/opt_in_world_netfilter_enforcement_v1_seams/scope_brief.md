@@ -4,8 +4,8 @@ pack_version: v1
 pack_status: extracted
 source_ref: user_scope_writeup_2026-03-25
 execution_horizon:
-  active_seam: SEAM-1
-  next_seam: SEAM-2
+  active_seam: SEAM-3
+  next_seam: SEAM-1
 ---
 
 # Scope Brief - Opt-in World Netfilter Enforcement (Config Gate + Snapshot V3 Plumbing)
@@ -46,4 +46,3 @@ execution_horizon:
   - `net_allowed: []` means deny-all egress (including DNS) when enforcement is active.
   - `net_allowed: ["*"]` means allow-all egress (no filtering requested).
   - Non-`"*"` wildcards (e.g. `"*.example.com"`) are rejected with a clear diagnostic when enforcement is enabled.
-
