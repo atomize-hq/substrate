@@ -17,7 +17,7 @@ basis:
     - "Any change to host routing semantics for when isolate_network is requested"
 gates:
   pre_exec:
-    review: failed
+    review: passed
     contract: passed
     revalidation: passed
   post_exec:
@@ -27,9 +27,7 @@ seam_exit_gate:
   required: true
   planned_location: S4
   status: pending
-open_remediations:
-  - REM-003
-  - REM-004
+open_remediations: []
 ---
 # SEAM-3 - Config opt-in `world.net.filter` + CLI patching + env parity
 
@@ -70,9 +68,9 @@ open_remediations:
     - `C-04` (`world.net.filter` host-side opt-in gate)
     - `C-05` (`SUBSTRATE_OVERRIDE_WORLD_NET_FILTER`)
     - `C-06` (`SUBSTRATE_WORLD_NET_FILTER`)
-  - Current blockers:
-    - `REM-003` keeps the review gate open until the operator workflow and examples are explicitly published.
-    - `REM-004` remains open as a downstream blocker until these owner slices land and `SEAM-1` can revalidate against the published gate.
+  - Current downstream posture:
+    - The host-gate contract is now published in code, env parity, and operator docs; downstream seams consume it as a
+      landed handoff and revalidate only when those semantics change.
 
 ## Review bundle
 

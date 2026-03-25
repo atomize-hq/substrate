@@ -23,8 +23,7 @@ threads:
 contracts_produced:
   - C-04
 contracts_consumed: []
-open_remediations:
-  - REM-004
+open_remediations: []
 candidate_subslices: []
 ---
 ### S1 - Publish `world.net.filter` as the authoritative host config contract

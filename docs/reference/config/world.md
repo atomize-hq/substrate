@@ -1,9 +1,10 @@
-# World Root and Caging (Config Reference)
+# World Configuration (Config Reference)
 
 This page documents the user-facing configuration keys that control:
 
 - how Substrate chooses the directory it treats as the “project” when running in a world, and
 - whether the interactive REPL is allowed to `cd` outside that project root (“caging”).
+- whether the host may request outbound netfilter enforcement from world backends.
 
 If you want the implementation details (env plumbing, REPL drift restarts, Landlock allowlists), see:
 `docs/internals/config/world_root_and_caging.md`.
@@ -56,6 +57,33 @@ Important interaction:
 - `world.caged` has **no effect** when `world.anchor_mode=follow-cwd` because the root is defined to move with the cwd.
   (The system effectively behaves uncaged in that mode.)
 
+### `world.net.filter`
+
+Controls whether the host may request outbound egress enforcement from the world backend.
+
+- `false` (default): the host never requests `isolate_network`, even if policy `net_allowed` is restrictive. This
+  preserves existing behavior for current installs and policies.
+- `true`: the host may request `isolate_network`, but only when policy `net_allowed` is restrictive after
+  canonicalization (anything other than the allow-all singleton `["*"]`).
+
+This key answers a different question than the runtime backend guard or the policy allowlist:
+
+| Signal | Question it answers | Effect |
+|----------|---------|---------|
+| `world.net.filter` | May the host request enforcement? | Enables or disables host-side `isolate_network` requests. |
+| `WORLD_NETFILTER_ENABLE=1` | May the world backend apply enforcement? | Allows the backend to honor a requested isolation run; without it, the backend fails the requested run instead of silently skipping enforcement. |
+| policy `net_allowed` | What is the allowlist once enforcement is requested? | Defines the canonicalized allow-all, deny-all, or restrictive allowlist posture used by the requested isolation run. |
+
+Practical examples:
+
+- Allow-all: `world.net.filter=true` and canonicalized `net_allowed=["*"]` still keep the host in allow-all posture, so
+  it does not request `isolate_network`.
+- Deny-all: `world.net.filter=true` and canonicalized `net_allowed=[]` cause the host to request `isolate_network=true`
+  with deny-all semantics; the backend still needs `WORLD_NETFILTER_ENABLE=1` to execute that request successfully.
+- Restrictive allowlist: `world.net.filter=true` and canonicalized `net_allowed=["github.com","crates.io"]` cause the
+  host to request `isolate_network=true` with that allowlist. The same restrictive policy does nothing when
+  `world.net.filter=false`.
+
 ## Why this matters for policy
 
 In `world_fs.isolation=full`, discover/read/write allow/deny lists are interpreted relative to the world root.
@@ -63,6 +91,9 @@ That means changing `world.anchor_mode` can change what a given relative allowli
 
 If you use restrictive allowlists (recommended), prefer `anchor_mode=workspace` or `custom` unless you explicitly want the
 root to roam.
+
+Use `world.net.filter=true` only when you want the host to turn restrictive `net_allowed` policy into an enforcement
+request. Restrictive policy alone does not request filtering.
 
 ### `world.env.inherit_from_host`
 

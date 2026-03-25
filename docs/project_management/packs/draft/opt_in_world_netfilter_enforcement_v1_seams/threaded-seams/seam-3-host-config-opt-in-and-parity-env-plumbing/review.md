@@ -58,14 +58,15 @@ flowchart TB
 ## Pre-exec findings
 
 - The pack control plane now correctly makes `SEAM-3` the active upstream seam for `C-04` / `THR-03`.
-- `REM-004` now has owner execution surfaces in this seam; `SEAM-1` no longer depends on an unowned future-seam placeholder.
-- `REM-003` remains open until the operator docs/examples land in the actual reference docs, so the review gate remains failed.
+- The operator docs/examples now land the three-way gate alignment in the actual reference docs, so `REM-003` is closed.
+- `SEAM-1` now has a published upstream handoff rule for `C-04` / `THR-03` instead of a planning placeholder, so
+  `REM-004` is no longer a contract blocker.
 
 ## Pre-exec gate disposition
 
-- **Review gate**: failed
+- **Review gate**: passed
 - **Review gate concerns**:
-  - The three-way gate alignment is still only present in planning artifacts; user-facing docs/examples have not landed yet.
+  - none; the three-way gate alignment is now published in the user-facing docs.
 - **Contract gate**: passed
 - **Contract gate concerns**:
   - none; `C-04` / `C-05` / `C-06` ownership and expected semantics are now localized to this active seam.
@@ -73,8 +74,7 @@ flowchart TB
 - **Revalidation concerns**:
   - none; this seam has no upstream contract producers.
 - **Opened remediations**:
-  - `REM-003` - operator workflow/examples still need to land in the user-facing docs.
-  - `REM-004` - downstream `SEAM-1` remains blocked until these owner slices land and its basis is revalidated.
+  - none
 
 ## Planned seam-exit gate focus
 

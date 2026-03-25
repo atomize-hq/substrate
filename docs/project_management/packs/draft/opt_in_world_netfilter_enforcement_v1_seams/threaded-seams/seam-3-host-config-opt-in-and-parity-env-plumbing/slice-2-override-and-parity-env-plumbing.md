@@ -26,8 +26,7 @@ contracts_produced:
   - C-06
 contracts_consumed:
   - C-04
-open_remediations:
-  - REM-004
+open_remediations: []
 candidate_subslices: []
 ---
 ### S2 - Publish override and parity env surfaces for the host gate

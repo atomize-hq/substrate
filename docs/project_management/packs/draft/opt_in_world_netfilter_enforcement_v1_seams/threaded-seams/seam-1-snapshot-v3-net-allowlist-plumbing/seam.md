@@ -5,7 +5,7 @@ status: decomposed
 execution_horizon: next
 plan_version: v3
 basis:
-  currentness: provisional
+  currentness: current
   source_seam_brief: ../../seam-1-snapshot-v3-net-allowlist-plumbing.md
   source_scope_ref: ../../scope_brief.md
   upstream_closeouts: []
@@ -21,8 +21,8 @@ basis:
 gates:
   pre_exec:
     review: passed
-    contract: failed
-    revalidation: pending
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
@@ -30,8 +30,7 @@ seam_exit_gate:
   required: true
   planned_location: S4
   status: pending
-open_remediations:
-  - REM-004
+open_remediations: []
 ---
 # SEAM-1 - Snapshot V3 `net_allowed` contract + host→world-agent plumbing
 
@@ -56,7 +55,8 @@ open_remediations:
   - Unit tests for canonicalization/validation in `agent-api-types`.
   - Tests asserting world-agent routes allowlists from snapshot (not broker), across non-PTY and PTY execute paths.
 - **Basis posture**:
-  - Currentness: `provisional` because `S2` still consumes `C-04` / `THR-03`; this seam now sits in `next` until the active `SEAM-3` publishes that upstream gate and the basis can be revalidated.
+  - Currentness: `current`; `SEAM-3` now publishes `C-04` / `THR-03` in landed config/env surfaces and operator docs, so
+    this seam can treat the host gate as published input instead of a provisional planning dependency.
   - Upstream closeouts assumed: none
   - Required threads: `THR-01`, `THR-02`, `THR-03`
   - Stale triggers: see `basis.stale_triggers`
@@ -72,8 +72,10 @@ open_remediations:
     - `C-03` (`WorldSpec.allowed_domains` semantics)
   - Contracts consumed (per `../../threading.md`):
     - `C-04` (`world.net.filter` host-side opt-in gate)
-  - Current blocker:
-    - `REM-004` blocks `SEAM-1 -> exec-ready` until active `SEAM-3` lands the owner slices that publish `C-04` / `THR-03`.
+  - Current upstream handoff:
+    - `SEAM-3` publishes the host-gate rule that `SEAM-1` must consume without redefinition:
+      `WorldSpec.isolate_network=true` is requested only when the effective `world.net.filter` gate is enabled and
+      canonicalized `net_allowed` is restrictive; `WORLD_NETFILTER_ENABLE=1` remains downstream runtime gating only.
 
 ## Review bundle
 

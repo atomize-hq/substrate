@@ -6,7 +6,7 @@ execution_horizon: next
 status: decomposed
 plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   basis_ref: seam.md#basis
   stale_triggers:
     - "Any change to host config gating semantics for requesting isolation (C-04)"
@@ -29,8 +29,7 @@ contracts_produced:
 contracts_consumed:
   - C-01
   - C-04
-open_remediations:
-  - REM-004
+open_remediations: []
 candidate_subslices: []
 ---
 ### S2 - Host snapshot builder populates `net_allowed` and constructs `WorldSpec` (C-02/C-03)
@@ -52,7 +51,8 @@ candidate_subslices: []
   - Upstream: active `SEAM-3` publishes `C-04` (`world.net.filter`) so the gating source is stable.
   - Contracts/threads: `C-01`/`C-02`/`C-03` and `THR-01`/`THR-02`/`THR-03`
 - **Current blocker posture**:
-  - `REM-004`: this slice remains provisional because the required `C-04` / `THR-03` publication now belongs to active `SEAM-3` owner slices that are not yet landed.
+  - `C-04` / `THR-03` are now published upstream, so this slice can treat the host gate as a landed dependency and only
+    needs revalidation when those upstream semantics change.
 - **Verification**:
   - Unit/integration tests at the shell layer asserting:
     - snapshot contains canonicalized `net_allowed`
@@ -123,4 +123,5 @@ Checklist:
     - `net_allowed=[]` with `world.net.filter=true` requests deny-all enforcement
     - missing `WORLD_NETFILTER_ENABLE` does not alter host request construction; the failure belongs to downstream execution/runtime checks
 - **Risk/rollback notes**:
-  - This contract remains an open blocker until `SEAM-3` lands the config key, parity env export, and docs/tests, and until `SEAM-1` switches routing to consume the published gate instead of broker-only state.
+  - `C-04` / `THR-03` are now published by `SEAM-3` in the config/env surfaces and operator docs. `SEAM-1` should
+    revalidate against those landed semantics instead of treating the host gate as a provisional planning note.

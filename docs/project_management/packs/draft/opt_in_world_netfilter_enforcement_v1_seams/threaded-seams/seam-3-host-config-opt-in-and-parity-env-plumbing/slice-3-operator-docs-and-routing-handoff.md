@@ -25,9 +25,7 @@ contracts_consumed:
   - C-04
   - C-05
   - C-06
-open_remediations:
-  - REM-003
-  - REM-004
+open_remediations: []
 candidate_subslices: []
 ---
 ### S3 - Publish operator docs/examples and the downstream routing handoff
@@ -44,7 +42,7 @@ candidate_subslices: []
   - Out:
     - Runtime routing implementation in `SEAM-1`
 - **Acceptance criteria**:
-  - `REM-003`'s operator-workflow gap is fully represented by this slice and the targeted docs.
+  - `REM-003`'s operator-workflow gap is resolved by this slice and the targeted docs.
   - The docs distinguish override input from exported parity output.
   - The examples make it clear that restrictive policy alone does not request enforcement unless the config gate is enabled.
   - The downstream handoff rule is explicit enough for `SEAM-1` to revalidate without inventing new semantics.

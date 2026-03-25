@@ -53,7 +53,8 @@ flowchart TB
 
 ## Likely mismatch hotspots
 
-- **Dependency inversion / unpublished config gate**: `S2` consumes `C-04` / `THR-03`, and `threading.md` correctly assigns that contract/thread to active `SEAM-3`; until those owner slices land, this next seam basis stays provisional.
+- **Upstream contract drift**: `S2` consumes the now-published `C-04` / `THR-03` host gate; any later change to
+  `world.net.filter`, override applicability, exported parity, or the three-way gate docs must force revalidation here.
 - **Normalization drift**: hostname casefolding/IDNA posture implemented inconsistently across `agent-api-types`, the host snapshot builder, and the world-agent request path (decision is recorded in `S1.T1`; all consumers must share one helper).
 - **PTY vs non-PTY divergence**: `service.rs` and `pty.rs` construct different `WorldSpec`/allowlist values or source them from different places.
 - **Wildcard semantics**: `["*"]` is not canonicalized to exactly `["*"]`, or other wildcard forms slip through when isolation is requested.
@@ -62,26 +63,30 @@ flowchart TB
 ## Pre-exec findings
 
 - Hostname normalization posture (casefolding + IDNA) for `net_allowed` is now explicitly specified in `S1.T1`.
-- The pack control plane now correctly makes `SEAM-3` active; this seam remains `next` until the owner slices in `SEAM-3` publish `C-04` / `THR-03`.
-- Revalidation remains pending because the upstream gate is not yet landed; this seam should not re-enter the active window until the `SEAM-3` owner artifact is executable and the resulting basis can be checked against code/docs.
+- `SEAM-3` now publishes `C-04` / `THR-03` in the landed config/env surfaces and operator docs, so this seam no longer
+  depends on an unpublished upstream gate.
+- This seam’s basis is refreshed against the landed host-gate rule: the host requests `isolate_network` only when the
+  effective `world.net.filter` gate is enabled and canonicalized `net_allowed` is restrictive; `WORLD_NETFILTER_ENABLE`
+  remains downstream runtime gating only.
 
 ## Pre-exec gate disposition
 
 - **Review gate**: passed
-- **Contract gate**: failed
+- **Contract gate**: passed
 - **Contract gate concerns**:
-  - `threading.md` keeps `C-04` / `THR-03` authoritative to `SEAM-3`, and `S2` still cannot consume them until the active owner seam lands its slices.
-- **Revalidation**: pending
+  - none; `C-04` / `THR-03` are now published upstream and can be consumed directly by this seam.
+- **Revalidation**: passed
 - **Revalidation concerns**:
-  - No landed host-side `world.net.filter` config surface was found in the repo yet, so this next seam still waits on upstream active work before it can refresh its basis.
+  - none; this seam has been refreshed against the published host-gate docs and config/env evidence.
 - **Opened remediations**:
-  - `REM-004` - land the active `SEAM-3` owner slices that publish `C-04` / `THR-03`, then revalidate this seam before re-entering the active window or promoting to `exec-ready`.
+  - none
 
 ## Planned seam-exit gate focus
 
 - **What must be true before downstream promotion is legal**:
   - `C-01`..`C-03` are published with tests and documented semantics.
-  - `C-04` / `THR-03` are either landed upstream or removed from `SEAM-1`'s direct dependency set via an explicit pack rewrite.
+  - `C-04` / `THR-03` remain stable upstream; any change to that host gate forces seam-local revalidation before
+    promotion.
   - `THR-01` and `THR-02` are advanced from `identified` to `published` in closeout.
   - world-agent no longer consults broker-derived allowlists for routing/enforcement.
 - **Which outbound contracts/threads matter most**: `C-01`, `C-02`, `C-03` and `THR-01`, `THR-02`.
