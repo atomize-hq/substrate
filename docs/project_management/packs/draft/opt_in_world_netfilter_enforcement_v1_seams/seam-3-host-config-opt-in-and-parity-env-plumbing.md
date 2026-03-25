@@ -1,0 +1,93 @@
+---
+seam_id: SEAM-3
+seam_slug: host-config-opt-in-and-parity-env-plumbing
+type: capability
+status: proposed
+execution_horizon: future
+plan_version: v1
+basis:
+  currentness: provisional
+  source_scope_ref: scope_brief.md
+  source_scope_version: v1
+  upstream_closeouts: []
+  required_threads:
+    - THR-03
+  stale_triggers:
+    - "Any change to config schema merge/patch behavior"
+    - "Any change to workspace detection for overrides"
+gates:
+  pre_exec:
+    review: pending
+    contract: pending
+    revalidation: pending
+  post_exec:
+    landing: pending
+    closeout: pending
+seam_exit_gate:
+  required: true
+  planned_location: reserved_final_slice
+  status: pending
+open_remediations: []
+---
+
+# SEAM-3 - Config opt-in `world.net.filter` + CLI patching + env parity
+
+- **Goal / value**: Provide an operator-controlled opt-in lever that determines whether the host requests netfilter enforcement at all, preserving back-compat by default.
+- **Scope**
+  - In:
+    - Add `world.net.filter: bool` under `WorldConfig` (default `false`) with patch/merge/explain plumbing.
+    - CLI patch application:
+      - `substrate config set world.net.filter=true|false`
+      - `substrate config reset world.net.filter`
+    - Override env (no workspace): `SUBSTRATE_OVERRIDE_WORLD_NET_FILTER=1|0|true|false`.
+    - Export env script parity: `SUBSTRATE_WORLD_NET_FILTER=1|0`.
+    - Documentation updates: `docs/reference/config/world.md` and `docs/CONFIGURATION.md`.
+  - Out:
+    - Implementing world enforcement details (`SEAM-2`).
+    - Snapshot schema/canonicalization (`SEAM-1`).
+- **Primary interfaces**
+  - Inputs:
+    - Workspace config and CLI patches.
+    - Override env input for non-workspace contexts.
+  - Outputs:
+    - Host-side routing decision: whether to ever request isolate_network based on `world.net.filter`.
+    - Exported env var for parity/debugging.
+- **Key invariants / rules**:
+  - Default is `false` (must preserve existing behavior for restrictive `net_allowed` policies).
+  - Overrides apply only when there is no workspace (must not silently override workspace config).
+- **Dependencies**
+  - Direct blockers:
+    - none
+  - Transitive blockers:
+    - none
+  - Direct consumers:
+    - `SEAM-1` consumes the config decision to decide whether to request isolation.
+  - Derived consumers:
+    - `SEAM-5` tests for config round-trip and override behavior.
+- **Touch surface**:
+  - `crates/shell/src/execution/config_model.rs`
+  - `crates/shell/src/execution/env_scripts.rs`
+  - `docs/reference/config/world.md`
+  - `docs/CONFIGURATION.md`
+- **Verification**:
+  - Config round-trip tests (`config current show`).
+  - Override env tests when no workspace exists.
+- **Risks / unknowns**:
+  - Risk: inconsistent merge/patch behavior could make the lever confusing across workspace/global config layers.
+  - De-risk plan: model patches similar to existing `world.env.*`/`world.deps.*` patterns and include explain output.
+- **Rollout / safety**:
+  - This is the primary back-compat gate; must land before enabling enforcement for broader users.
+- **Downstream decomposition context**:
+  - Why this seam is `future`: it is straightforward but must align with the contract/routing shape from `SEAM-1` and the operational story from `SEAM-2`.
+  - Which threads matter most: `THR-03`.
+  - What the first seam-local review should focus on: config patch semantics, override precedence, and documentation clarity.
+- **Expected seam-exit concerns**:
+  - Contracts likely to publish:
+    - `C-04`, `C-05`, `C-06`
+  - Threads likely to advance:
+    - `THR-03` to `defined`
+  - Review-surface areas likely to shift after landing:
+    - config/export visibility in operator workflows
+  - Downstream seams most likely to require revalidation:
+    - `SEAM-5` for smoke expectations
+
