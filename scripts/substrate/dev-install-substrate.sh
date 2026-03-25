@@ -24,6 +24,7 @@ Options:
   --profile <name>          Cargo profile to build (debug or release; default: debug)
   --version-label <name>    Version directory label under <prefix>/versions (default: dev)
   --no-world                Mark install metadata as world_disabled (skips provisioning entirely)
+  --world-netfilter         Enable Linux nftables egress scoping (sets WORLD_NETFILTER_ENABLE=1 for substrate-world-agent.service)
   --anchor-mode <mode>      Default anchor mode (workspace|follow-cwd|custom; default: workspace)
   --anchor-path <path>      Default anchor path (for custom mode)
   --caged                   Write caged=true to install metadata (default)
@@ -786,6 +787,7 @@ ANCHOR_MODE="workspace"
 ANCHOR_PATH=""
 WORLD_CAGED=1
 VERSION_LABEL="dev"
+ENABLE_WORLD_NETFILTER=0
 IS_LINUX=0
 IS_MAC=0
 HOST_STATE_PATH=""
@@ -819,6 +821,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-world)
       WORLD_ENABLED=0
+      shift
+      ;;
+    --world-netfilter)
+      ENABLE_WORLD_NETFILTER=1
       shift
       ;;
     --world-root-mode)
@@ -1005,7 +1011,11 @@ if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
 	  PROVISION_SCRIPT="${REPO_ROOT}/scripts/linux/world-provision.sh"
 	  if [[ -x "${PROVISION_SCRIPT}" ]]; then
 	    log "Provisioning Linux world-agent service via ${PROVISION_SCRIPT} (sudo may prompt)..."
-	    if ! SUBSTRATE_HOME="${PREFIX}" "${PROVISION_SCRIPT}" --profile "${PROFILE}" --skip-build; then
+	    provision_args=(--profile "${PROFILE}" --skip-build)
+	    if [[ "${ENABLE_WORLD_NETFILTER}" -eq 1 ]]; then
+	      provision_args+=(--world-netfilter)
+	    fi
+	    if ! SUBSTRATE_HOME="${PREFIX}" "${PROVISION_SCRIPT}" "${provision_args[@]}"; then
 	      WORLD_PROVISION_FAILED=1
 	      WORLD_ENABLED=0
 	      write_install_metadata "${WORLD_ENABLED}"
@@ -1034,7 +1044,11 @@ elif [[ "${WORLD_ENABLED}" -eq 1 && "${IS_MAC}" -eq 1 ]]; then
   if [[ ! -x "${LIMA_WARM}" ]]; then
     fatal "Expected Lima warm helper at ${LIMA_WARM}"
   fi
-  (cd "${REPO_ROOT}" && SUBSTRATE_LIMA_SKIP_GUEST_BUILD=1 "${LIMA_WARM}" "${REPO_ROOT}")
+  if [[ "${ENABLE_WORLD_NETFILTER}" -eq 1 ]]; then
+    (cd "${REPO_ROOT}" && SUBSTRATE_LIMA_SKIP_GUEST_BUILD=1 SUBSTRATE_WORLD_NETFILTER_ENABLE=1 "${LIMA_WARM}" "${REPO_ROOT}")
+  else
+    (cd "${REPO_ROOT}" && SUBSTRATE_LIMA_SKIP_GUEST_BUILD=1 "${LIMA_WARM}" "${REPO_ROOT}")
+  fi
 
   build_flag=""
   target_dir="debug"

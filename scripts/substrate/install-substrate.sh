@@ -20,6 +20,7 @@ NO_WORLD=0
 NO_SHIMS=0
 DRY_RUN=0
 SYNC_DEPS=0
+ENABLE_WORLD_NETFILTER=0
 ARTIFACT_DIR="${SUBSTRATE_INSTALL_ARTIFACT_DIR:-${SUBSTRATE_INSTALL_ARCHIVE:-}}"
 BASE_URL="${SUBSTRATE_INSTALL_BASE_URL:-$DEFAULT_BASE_URL}"
 TMPDIR=""
@@ -65,6 +66,7 @@ Options:
   --no-world           Skip world backend provisioning
   --no-shims           Skip shim deployment
   --sync-deps          Run 'substrate world deps current sync' after provisioning completes
+  --world-netfilter    Enable Linux nftables egress scoping (sets WORLD_NETFILTER_ENABLE=1 for substrate-world-agent.service)
   --dry-run            Print actions without executing
   --artifact-dir <dir> Use pre-downloaded host bundle + SHA256SUMS
   --archive <dir>      Alias for --artifact-dir (deprecated)
@@ -718,6 +720,10 @@ parse_args() {
         ;;
       --sync-deps)
         SYNC_DEPS=1
+        shift
+        ;;
+      --world-netfilter)
+        ENABLE_WORLD_NETFILTER=1
         shift
         ;;
       --artifact-dir|--archive)
@@ -1392,7 +1398,11 @@ provision_macos_world() {
 
   (
     cd "${release_root}" &&
-    "${lima_script}" "${release_root}"
+    if [[ "${ENABLE_WORLD_NETFILTER}" -eq 1 ]]; then
+      SUBSTRATE_WORLD_NETFILTER_ENABLE=1 "${lima_script}" "${release_root}"
+    else
+      "${lima_script}" "${release_root}"
+    fi
   )
 
   if ! limactl shell substrate test -x /usr/local/bin/substrate-world-agent >/dev/null 2>&1; then
@@ -1450,6 +1460,10 @@ provision_linux_world() {
 
   local unit_file
   unit_file="${TMPDIR}/substrate-world-agent.service"
+  local netfilter_env_line=""
+  if [[ "${ENABLE_WORLD_NETFILTER}" -eq 1 ]]; then
+    netfilter_env_line="Environment=WORLD_NETFILTER_ENABLE=1"
+  fi
   cat > "${unit_file}" <<UNIT
 [Unit]
 Description=Substrate World Agent
@@ -1465,6 +1479,7 @@ Environment=RUST_LOG=info
 Environment=SUBSTRATE_AGENT_TCP_PORT=61337
 Environment=SUBSTRATE_WORLD_SOCKET=/run/substrate.sock
 Environment=SUBSTRATE_HOME=${PREFIX}
+${netfilter_env_line}
 RuntimeDirectory=substrate
 RuntimeDirectoryMode=0750
 StateDirectory=substrate

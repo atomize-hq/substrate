@@ -14,6 +14,7 @@ PROFILE=release
 SKIP_BUILD=0
 DRY_RUN=0
 SUDO_NONINTERACTIVE=0
+ENABLE_WORLD_NETFILTER=0
 SUBSTRATE_GROUP="substrate"
 SOCKET_FS_PATH="/run/substrate.sock"
 INVOKING_USER=""
@@ -158,6 +159,7 @@ Options:
   --profile <name>   Cargo profile to build (default: release)
   --skip-build       Assume target/<profile>/world-agent already exists
   --dry-run          Print the provisioning steps without executing them
+  --world-netfilter  Enable Linux nftables egress scoping (sets WORLD_NETFILTER_ENABLE=1 for substrate-world-agent.service)
   --sudo-noninteractive  Use sudo -n (fail fast if password required)
   -h, --help         Show this help
 USAGE
@@ -175,6 +177,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --dry-run)
             DRY_RUN=1
+            shift
+            ;;
+        --world-netfilter)
+            ENABLE_WORLD_NETFILTER=1
             shift
             ;;
         --sudo-noninteractive)
@@ -245,6 +251,11 @@ if [[ -z "${SUBSTRATE_HOME_FOR_AGENT}" ]]; then
     SUBSTRATE_HOME_FOR_AGENT="${INVOKING_HOME}/.substrate"
 fi
 
+NETFILTER_ENV_LINE=""
+if [[ "${ENABLE_WORLD_NETFILTER}" -eq 1 ]]; then
+    NETFILTER_ENV_LINE="Environment=WORLD_NETFILTER_ENABLE=1"
+fi
+
 read -r -d '' SERVICE_UNIT_CONTENT <<UNIT || true
 [Unit]
 Description=Substrate World Agent
@@ -260,6 +271,7 @@ Environment=RUST_LOG=info
 Environment=SUBSTRATE_AGENT_TCP_PORT=61337
 Environment=SUBSTRATE_WORLD_SOCKET=/run/substrate.sock
 Environment=SUBSTRATE_HOME=${SUBSTRATE_HOME_FOR_AGENT}
+${NETFILTER_ENV_LINE}
 RuntimeDirectory=substrate
 RuntimeDirectoryMode=0750
 StateDirectory=substrate
