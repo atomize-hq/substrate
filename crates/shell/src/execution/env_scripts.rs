@@ -15,6 +15,13 @@ pub(crate) fn write_env_sh(cfg: &SubstrateConfig) -> Result<()> {
     write_env_sh_at(&substrate_home.join("env.sh"), &substrate_home, cfg)
 }
 
+pub(crate) fn export_runtime_config_env(cfg: &SubstrateConfig) {
+    std::env::set_var(
+        "SUBSTRATE_WORLD_NET_FILTER",
+        if cfg.world.net.filter { "1" } else { "0" },
+    );
+}
+
 pub(crate) fn write_env_sh_at(
     path: &Path,
     substrate_home: &Path,
@@ -42,6 +49,7 @@ fn render_env_sh(substrate_home: &Path, cfg: &SubstrateConfig) -> String {
         "disabled"
     };
     let caged = if cfg.world.caged { "1" } else { "0" };
+    let world_net_filter = if cfg.world.net.filter { "1" } else { "0" };
 
     let mut out = String::new();
     out.push_str("#!/usr/bin/env bash\n");
@@ -66,6 +74,10 @@ fn render_env_sh(substrate_home: &Path, cfg: &SubstrateConfig) -> String {
         "export SUBSTRATE_POLICY_MODE={}\n",
         bash_quote(cfg.policy.mode.as_str())
     ));
+    out.push_str(&format!(
+        "export SUBSTRATE_WORLD_NET_FILTER={}\n",
+        bash_quote(world_net_filter)
+    ));
     out
 }
 
@@ -81,4 +93,27 @@ fn bash_quote(raw: &str) -> String {
     }
     out.push('\'');
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::render_env_sh;
+    use crate::execution::config_model::SubstrateConfig;
+    use std::path::Path;
+
+    #[test]
+    fn render_env_sh_exports_world_net_filter_disabled_by_default() {
+        let cfg = SubstrateConfig::default();
+        let rendered = render_env_sh(Path::new("/tmp/substrate-home"), &cfg);
+        assert!(rendered.contains("export SUBSTRATE_WORLD_NET_FILTER='0'\n"));
+    }
+
+    #[test]
+    fn render_env_sh_exports_world_net_filter_when_enabled() {
+        let mut cfg = SubstrateConfig::default();
+        cfg.world.net.filter = true;
+
+        let rendered = render_env_sh(Path::new("/tmp/substrate-home"), &cfg);
+        assert!(rendered.contains("export SUBSTRATE_WORLD_NET_FILTER='1'\n"));
+    }
 }

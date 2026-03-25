@@ -6,9 +6,9 @@ use crate::execution::shim_deploy::{DeploymentStatus, ShimDeployer};
 #[cfg(target_os = "linux")]
 use crate::execution::socket_activation;
 use crate::execution::{
-    handle_config_command, handle_graph_command, handle_health_command, handle_host_command,
-    handle_policy_command, handle_replay_command, handle_shim_command, handle_trace_command,
-    handle_workspace_command, handle_world_command, update_world_env,
+    export_runtime_config_env, handle_config_command, handle_graph_command, handle_health_command,
+    handle_host_command, handle_policy_command, handle_replay_command, handle_shim_command,
+    handle_trace_command, handle_workspace_command, handle_world_command, update_world_env,
 };
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -464,6 +464,7 @@ impl ShellConfig {
                 },
             )?;
             env::set_var("SUBSTRATE_POLICY_MODE", effective.policy.mode.as_str());
+            export_runtime_config_env(&effective);
             let _ = set_global_broker(BrokerHandle::new());
             update_world_env(!effective.world.enabled);
             handle_replay_command(&span_id, &cli)?;
@@ -563,6 +564,7 @@ impl ShellConfig {
             },
         )?;
         env::set_var("SUBSTRATE_POLICY_MODE", effective.policy.mode.as_str());
+        export_runtime_config_env(&effective);
         let final_no_world = !effective.world.enabled;
         update_world_env(final_no_world);
         let manager_init_path = substrate_home.join("manager_init.sh");

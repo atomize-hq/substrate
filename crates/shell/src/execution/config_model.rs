@@ -938,7 +938,7 @@ fn resolve_effective_from_layers(
         workspace_patch
             .map(|(p, _)| p.world.net.filter)
             .unwrap_or(None),
-        None,
+        env_overrides.world_net_filter,
         None,
         workspace_enabled,
     );
@@ -1235,6 +1235,7 @@ struct EnvOverrides {
     anchor_mode: Option<WorldRootMode>,
     anchor_path: Option<String>,
     caged: Option<bool>,
+    world_net_filter: Option<bool>,
     policy_mode: Option<PolicyMode>,
     sync_auto_sync: Option<bool>,
     sync_direction: Option<SyncDirection>,
@@ -1283,6 +1284,18 @@ fn parse_env_overrides() -> Result<EnvOverrides> {
             overrides.caged = Some(parse_bool_flag(trimmed).ok_or_else(|| {
                 user_error(format!(
                     "SUBSTRATE_OVERRIDE_CAGED must be a boolean (true|false|1|0|yes|no|on|off) (found '{}')",
+                    raw
+                ))
+            })?);
+        }
+    }
+
+    if let Ok(raw) = env::var("SUBSTRATE_OVERRIDE_WORLD_NET_FILTER") {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            overrides.world_net_filter = Some(parse_bool_flag(trimmed).ok_or_else(|| {
+                user_error(format!(
+                    "SUBSTRATE_OVERRIDE_WORLD_NET_FILTER must be a boolean (true|false|1|0|yes|no|on|off) (found '{}')",
                     raw
                 ))
             })?);

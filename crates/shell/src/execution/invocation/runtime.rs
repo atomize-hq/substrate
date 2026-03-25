@@ -4,7 +4,8 @@ use super::plan::{ShellConfig, ShellMode};
 use crate::execution::config_model;
 use crate::execution::config_model::CliConfigOverrides;
 use crate::execution::{
-    configure_child_shell_env, execute_command, log_command_event, setup_signal_handlers,
+    configure_child_shell_env, execute_command, export_runtime_config_env, log_command_event,
+    setup_signal_handlers,
 };
 use anyhow::{Context, Result};
 use serde_json::json;
@@ -44,6 +45,7 @@ fn preflight_caging_required(config: &ShellConfig) -> Result<()> {
 
     let policy_mode = effective_config.policy.mode;
     std::env::set_var("SUBSTRATE_POLICY_MODE", policy_mode.as_str());
+    export_runtime_config_env(&effective_config);
     substrate_broker::set_policy_mode(match policy_mode {
         config_model::PolicyMode::Disabled => substrate_broker::PolicyMode::Disabled,
         config_model::PolicyMode::Observe => substrate_broker::PolicyMode::Observe,

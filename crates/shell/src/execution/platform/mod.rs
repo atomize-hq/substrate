@@ -152,6 +152,7 @@ pub(crate) fn handle_world_command(cmd: &WorldCmd, cli: &Cli) -> Result<()> {
                 }
             };
             env::set_var("SUBSTRATE_POLICY_MODE", effective.policy.mode.as_str());
+            crate::execution::export_runtime_config_env(&effective);
             let _ = substrate_broker::set_global_broker(substrate_broker::BrokerHandle::new());
             let _ = substrate_broker::detect_profile(&launch_cwd);
             let code = world_doctor_main(*json, effective.world.enabled);
@@ -200,6 +201,7 @@ pub(crate) fn handle_host_command(cmd: &HostCmd, cli: &Cli) -> Result<()> {
                 }
             };
             env::set_var("SUBSTRATE_POLICY_MODE", effective.policy.mode.as_str());
+            crate::execution::export_runtime_config_env(&effective);
             let _ = substrate_broker::set_global_broker(substrate_broker::BrokerHandle::new());
             let _ = substrate_broker::detect_profile(&launch_cwd);
             let code = host_doctor_main(*json, effective.world.enabled);

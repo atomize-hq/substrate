@@ -105,12 +105,24 @@ impl ConfigShowFixture {
     }
 
     fn current_show_json(&self, cwd: &Path, explain: bool) -> std::process::Output {
+        self.current_show_json_with_env(cwd, explain, &[])
+    }
+
+    fn current_show_json_with_env(
+        &self,
+        cwd: &Path,
+        explain: bool,
+        env: &[(&str, &str)],
+    ) -> std::process::Output {
         let mut cmd = self.command();
         cmd.current_dir(cwd)
             .arg("config")
             .arg("current")
             .arg("show")
             .arg("--json");
+        for (k, v) in env {
+            cmd.env(k, v);
+        }
         if explain {
             cmd.arg("--explain");
         }
@@ -420,5 +432,81 @@ fn config_current_show_reports_world_net_filter_precedence_and_explain_sources()
     assert_eq!(
         explain_layers(&explain, "world.net.filter"),
         vec!["global_patch".to_string()]
+    );
+}
+
+#[test]
+fn config_current_show_reports_world_net_filter_override_env_without_workspace() {
+    let fixture = ConfigShowFixture::new();
+    let cwd = fixture._temp.path().join("not-a-workspace");
+    fs::create_dir_all(&cwd).expect("create cwd");
+    fixture.write_global_config("world:\n  net:\n    filter: false\n");
+
+    let current = fixture.current_show_json_with_env(
+        &cwd,
+        true,
+        &[("SUBSTRATE_OVERRIDE_WORLD_NET_FILTER", "on")],
+    );
+    assert!(
+        current.status.success(),
+        "config current show should succeed with override env: {current:?}"
+    );
+    let json: JsonValue = serde_json::from_slice(&current.stdout).expect("current JSON parse");
+    assert_json_bool(&json, "/world/net/filter", true);
+    let explain = parse_explain(&current.stderr);
+    assert_eq!(
+        explain_layers(&explain, "world.net.filter"),
+        vec!["override_env".to_string()]
+    );
+}
+
+#[test]
+fn config_current_show_ignores_world_net_filter_override_env_when_workspace_exists() {
+    let fixture = ConfigShowFixture::new();
+    fixture.init_workspace();
+    fixture.write_global_config("world:\n  net:\n    filter: false\n");
+    fixture.write_workspace_config("world:\n  net:\n    filter: false\n");
+
+    let nested = fixture.workspace_root.join("nested");
+    fs::create_dir_all(&nested).expect("create nested cwd");
+
+    let current = fixture.current_show_json_with_env(
+        &nested,
+        true,
+        &[("SUBSTRATE_OVERRIDE_WORLD_NET_FILTER", "on")],
+    );
+    assert!(
+        current.status.success(),
+        "config current show should succeed with workspace present: {current:?}"
+    );
+    let json: JsonValue = serde_json::from_slice(&current.stdout).expect("current JSON parse");
+    assert_json_bool(&json, "/world/net/filter", false);
+    let explain = parse_explain(&current.stderr);
+    assert_eq!(
+        explain_layers(&explain, "world.net.filter"),
+        vec!["workspace_patch".to_string()]
+    );
+}
+
+#[test]
+fn config_current_show_rejects_invalid_world_net_filter_override_env() {
+    let fixture = ConfigShowFixture::new();
+    let cwd = fixture._temp.path().join("not-a-workspace");
+    fs::create_dir_all(&cwd).expect("create cwd");
+
+    let current = fixture.current_show_json_with_env(
+        &cwd,
+        true,
+        &[("SUBSTRATE_OVERRIDE_WORLD_NET_FILTER", "maybe")],
+    );
+    assert_eq!(
+        current.status.code(),
+        Some(2),
+        "invalid world net filter override should exit 2: {current:?}"
+    );
+    let stderr = String::from_utf8_lossy(&current.stderr);
+    assert!(
+        stderr.contains("SUBSTRATE_OVERRIDE_WORLD_NET_FILTER must be a boolean"),
+        "stderr should mention invalid override env\nstderr: {stderr}"
     );
 }

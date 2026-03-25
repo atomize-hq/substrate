@@ -679,6 +679,7 @@ fn preflight_caging_required(config: &ShellConfig) -> Result<ReplPreflight> {
 
     let policy_mode = effective_config.policy.mode;
     std::env::set_var("SUBSTRATE_POLICY_MODE", policy_mode.as_str());
+    crate::execution::export_runtime_config_env(&effective_config);
     substrate_broker::set_policy_mode(match policy_mode {
         crate::execution::config_model::PolicyMode::Disabled => {
             substrate_broker::PolicyMode::Disabled
