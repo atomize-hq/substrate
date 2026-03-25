@@ -83,6 +83,7 @@ fn resolve_policy_snapshot_v3_for_cwd(cwd: &Path) -> Result<PolicySnapshotV3> {
 
     let snapshot = PolicySnapshotV3 {
         schema_version: 3,
+        net_allowed: Vec::new(),
         world_fs: PolicySnapshotWorldFsV3 {
             host_visible: policy.world_fs_host_visible,
             fail_closed: PolicySnapshotWorldFsFailClosedV3 {

@@ -191,6 +191,7 @@ mod tests {
     fn minimal_snapshot_full_read_only() -> PolicySnapshotV3 {
         PolicySnapshotV3 {
             schema_version: 3,
+            net_allowed: Vec::new(),
             world_fs: PolicySnapshotWorldFsV3 {
                 host_visible: false,
                 fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: true },

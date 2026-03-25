@@ -262,6 +262,7 @@ fn snapshot_from_policy(policy: &substrate_broker::Policy) -> Result<PolicySnaps
 
     let snapshot = PolicySnapshotV3 {
         schema_version: 3,
+        net_allowed: policy.net_allowed.clone(),
         world_fs: PolicySnapshotWorldFsV3 {
             host_visible: policy.world_fs_host_visible,
             fail_closed: PolicySnapshotWorldFsFailClosedV3 {

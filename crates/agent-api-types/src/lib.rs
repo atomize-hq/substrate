@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::net::IpAddr;
 use substrate_common::agent_events::AgentEvent;
 pub use substrate_common::{FsDiff, WorldFsMode};
 
@@ -149,6 +150,8 @@ pub struct PolicySnapshotWorldFsV3 {
 #[serde(deny_unknown_fields)]
 pub struct PolicySnapshotV3 {
     pub schema_version: u32,
+    #[serde(default)]
+    pub net_allowed: Vec<String>,
     pub world_fs: PolicySnapshotWorldFsV3,
 }
 
@@ -162,6 +165,7 @@ impl PolicySnapshotV3 {
         }
 
         let mut snapshot = self.clone();
+        snapshot.net_allowed = canonicalize_net_allowed(&snapshot.net_allowed);
 
         if snapshot.world_fs.read.is_none() {
             snapshot.world_fs.read = Some(PolicySnapshotWorldFsDimensionV3 {
@@ -196,6 +200,116 @@ impl PolicySnapshotV3 {
         let _ = self.canonicalize()?;
         Ok(())
     }
+}
+
+pub fn canonicalize_net_allowed(entries: &[String]) -> Vec<String> {
+    let mut canonical = Vec::with_capacity(entries.len());
+
+    for raw in entries {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        let mut normalized = trimmed.to_ascii_lowercase();
+        normalized.truncate(normalized.trim_end_matches('.').len());
+        if normalized.is_empty() {
+            continue;
+        }
+
+        if normalized.starts_with('[') && normalized.ends_with(']') {
+            let inner = &normalized[1..normalized.len() - 1];
+            if matches!(inner.parse::<IpAddr>(), Ok(IpAddr::V6(_))) {
+                normalized = inner.to_string();
+            }
+        }
+
+        if normalized == "*" {
+            return vec!["*".to_string()];
+        }
+
+        if !canonical.contains(&normalized) {
+            canonical.push(normalized);
+        }
+    }
+
+    canonical
+}
+
+pub fn validate_net_allowed_for_enforcement(entries: &[String]) -> Result<(), String> {
+    let canonical = canonicalize_net_allowed(entries);
+
+    for entry in &canonical {
+        validate_net_allowed_entry_for_enforcement(entry)?;
+    }
+
+    Ok(())
+}
+
+fn validate_net_allowed_entry_for_enforcement(entry: &str) -> Result<(), String> {
+    if entry == "*" {
+        return Ok(());
+    }
+
+    if !entry.is_ascii() {
+        return Err(
+            "net_allowed entries must be ASCII; use punycode A-labels for IDNs".to_string(),
+        );
+    }
+
+    if entry.contains("://") {
+        return Err("net_allowed entries must not include URL schemes".to_string());
+    }
+    if entry.contains('/') {
+        return Err("net_allowed entries must not include paths".to_string());
+    }
+    if entry.contains('?') {
+        return Err("net_allowed entries must not include query strings".to_string());
+    }
+    if entry.contains('#') {
+        return Err("net_allowed entries must not include URL fragments".to_string());
+    }
+    if entry.contains(['*', '[', ']']) {
+        return Err("net_allowed wildcard forms other than '*' are not supported".to_string());
+    }
+
+    if entry.parse::<IpAddr>().is_ok() {
+        return Ok(());
+    }
+
+    if entry.contains(':') {
+        return Err(
+            "net_allowed entries must be hostnames or IP literals without ports".to_string(),
+        );
+    }
+
+    validate_hostname(entry)
+}
+
+fn validate_hostname(entry: &str) -> Result<(), String> {
+    if entry.starts_with('.') || entry.ends_with('.') {
+        return Err("net_allowed hostnames must not start or end with '.'".to_string());
+    }
+
+    for label in entry.split('.') {
+        if label.is_empty() {
+            return Err("net_allowed hostnames must not contain empty labels".to_string());
+        }
+        if label.starts_with('-') || label.ends_with('-') {
+            return Err("net_allowed hostname labels must not start or end with '-'".to_string());
+        }
+        if !label
+            .chars()
+            .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-')
+        {
+            return Err(
+                "net_allowed hostnames may contain only ASCII letters, digits, '-' and '.'"
+                    .to_string(),
+            );
+        }
+    }
+
+    Ok(())
 }
 
 fn normalize_project_pattern(raw: &str) -> Result<String, String> {
@@ -788,6 +902,7 @@ mod tests {
     fn execute_request_world_fs_mode_round_trip() {
         let snapshot = PolicySnapshotV3 {
             schema_version: 3,
+            net_allowed: vec!["Github.COM.".to_string()],
             world_fs: PolicySnapshotWorldFsV3 {
                 host_visible: true,
                 fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: false },
@@ -833,12 +948,17 @@ mod tests {
         let back: ExecuteRequest = serde_json::from_str(&json).expect("deserialize request");
         assert_eq!(back.world_fs_mode, Some(WorldFsMode::ReadOnly));
         assert_eq!(back.policy_snapshot.schema_version, 3);
+        assert_eq!(
+            back.policy_snapshot.net_allowed,
+            vec!["Github.COM.".to_string()]
+        );
     }
 
     #[test]
     fn execute_request_policy_snapshot_round_trip() {
         let snapshot = PolicySnapshotV3 {
             schema_version: 3,
+            net_allowed: vec!["github.com".to_string(), "crates.io".to_string()],
             world_fs: PolicySnapshotWorldFsV3 {
                 host_visible: false,
                 fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: false },
@@ -889,6 +1009,122 @@ mod tests {
             snapshot.world_fs.read.as_ref().expect("read").allow_list,
             vec!["src".to_string()]
         );
+        assert_eq!(
+            snapshot.net_allowed,
+            vec!["github.com".to_string(), "crates.io".to_string()]
+        );
+    }
+
+    #[test]
+    fn policy_snapshot_v3_missing_net_allowed_defaults_to_empty() {
+        let snapshot: PolicySnapshotV3 = serde_json::from_value(serde_json::json!({
+            "schema_version": 3,
+            "world_fs": {
+                "host_visible": true,
+                "fail_closed": { "routing": false },
+                "caged_required": false,
+                "discover": { "allow_list": ["."], "deny_list": [] },
+                "read": { "allow_list": ["."], "deny_list": [] },
+                "write": { "enabled": true, "allow_list": ["."], "deny_list": [] }
+            }
+        }))
+        .expect("deserialize snapshot");
+
+        assert!(snapshot.net_allowed.is_empty());
+    }
+
+    #[test]
+    fn policy_snapshot_v3_net_allowed_canonicalizes_trim_case_trailing_dot_and_dedupe() {
+        let canonical = canonicalize_net_allowed(&[
+            " GitHub.COM. ".to_string(),
+            "github.com".to_string(),
+            "CRATES.IO".to_string(),
+            "".to_string(),
+            "   ".to_string(),
+            "crates.io.".to_string(),
+        ]);
+
+        assert_eq!(
+            canonical,
+            vec!["github.com".to_string(), "crates.io".to_string()]
+        );
+    }
+
+    #[test]
+    fn policy_snapshot_v3_net_allowed_collapses_star_to_singleton() {
+        let canonical = canonicalize_net_allowed(&[
+            "github.com".to_string(),
+            " * ".to_string(),
+            "crates.io".to_string(),
+        ]);
+
+        assert_eq!(canonical, vec!["*".to_string()]);
+    }
+
+    #[test]
+    fn policy_snapshot_v3_net_allowed_canonicalizes_bracketed_ipv6() {
+        let canonical = canonicalize_net_allowed(&[" [2001:DB8::1] ".to_string()]);
+        assert_eq!(canonical, vec!["2001:db8::1".to_string()]);
+    }
+
+    #[test]
+    fn policy_snapshot_v3_validate_does_not_reject_enforcement_only_net_allowed_shapes() {
+        let snapshot = PolicySnapshotV3 {
+            schema_version: 3,
+            net_allowed: vec![
+                "*.example.com".to_string(),
+                "https://example.com".to_string(),
+            ],
+            world_fs: PolicySnapshotWorldFsV3 {
+                host_visible: true,
+                fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: false },
+                deny_enforcement: None,
+                caged_required: false,
+                discover: Some(PolicySnapshotWorldFsDimensionV3 {
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                }),
+                read: Some(PolicySnapshotWorldFsDimensionV3 {
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                }),
+                write: PolicySnapshotWorldFsWriteV3 {
+                    enabled: true,
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                },
+            },
+        };
+
+        snapshot.validate().expect("snapshot validates");
+    }
+
+    #[test]
+    fn policy_snapshot_v3_net_allowed_enforcement_validator_rejects_invalid_shapes() {
+        for entries in [
+            vec!["*.example.com".to_string()],
+            vec!["https://example.com".to_string()],
+            vec!["example.com:443".to_string()],
+            vec!["example.com/path".to_string()],
+            vec!["example.com?query".to_string()],
+            vec!["example.com#fragment".to_string()],
+            vec!["bücher.example".to_string()],
+        ] {
+            assert!(
+                validate_net_allowed_for_enforcement(&entries).is_err(),
+                "expected invalid net_allowed entries to fail: {entries:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn policy_snapshot_v3_net_allowed_enforcement_validator_accepts_punycode_and_ips() {
+        validate_net_allowed_for_enforcement(&[
+            "XN--BCHER-KVA.EXAMPLE.".to_string(),
+            "1.2.3.4".to_string(),
+            "[2001:db8::1]".to_string(),
+        ])
+        .expect("valid entries");
     }
 
     #[test]

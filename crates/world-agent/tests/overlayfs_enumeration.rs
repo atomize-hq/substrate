@@ -41,6 +41,7 @@ fn execute_non_pty(
     let write_enabled = matches!(world_fs_mode, WorldFsMode::Writable);
     let policy_snapshot = PolicySnapshotV3 {
         schema_version: 3,
+        net_allowed: Vec::new(),
         world_fs: PolicySnapshotWorldFsV3 {
             host_visible: false,
             fail_closed: PolicySnapshotWorldFsFailClosedV3 {

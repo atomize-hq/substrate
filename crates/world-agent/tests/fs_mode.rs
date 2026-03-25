@@ -39,6 +39,7 @@ fn policy_snapshot_for_mode(mode: WorldFsMode) -> PolicySnapshotV3 {
     let write_enabled = matches!(mode, WorldFsMode::Writable);
     PolicySnapshotV3 {
         schema_version: 3,
+        net_allowed: Vec::new(),
         world_fs: PolicySnapshotWorldFsV3 {
             host_visible: true,
             fail_closed: PolicySnapshotWorldFsFailClosedV3 {

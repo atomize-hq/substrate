@@ -1249,6 +1249,7 @@ mod wfgad2_tests {
 
         let snapshot = PolicySnapshotV3 {
             schema_version: 3,
+            net_allowed: Vec::new(),
             world_fs: PolicySnapshotWorldFsV3 {
                 host_visible: false,
                 fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: true },
