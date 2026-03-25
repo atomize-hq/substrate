@@ -68,6 +68,7 @@ required_fix: Land the active `SEAM-3` owner slices that publish operator-facing
 resolution_evidence:
   - "Operator docs landed: docs/reference/config/world.md + docs/CONFIGURATION.md"
   - "SEAM-3 review/seam disposition refreshed: threaded-seams/seam-3-host-config-opt-in-and-parity-env-plumbing/review.md + seam.md"
+  - "SEAM-3 closeout records the landed three-way gate publication: governance/seam-3-closeout.md"
 ```
 
 ```yaml
@@ -91,5 +92,6 @@ required_fix: Land the active `SEAM-3` owner slices that publish `C-04` / `THR-0
 resolution_evidence:
   - "Owner config/env surfaces were already landed in code/tests: crates/shell/src/execution/config_model.rs + crates/shell/src/execution/env_scripts.rs + related shell tests"
   - "Operator docs and three-way gate semantics landed: docs/reference/config/world.md + docs/CONFIGURATION.md"
-  - "SEAM-1 basis refreshed against the published host gate: threaded-seams/seam-1-snapshot-v3-net-allowlist-plumbing/slice-2-host-snapshot-and-worldspec-plumbing.md + review.md + seam.md"
+  - "SEAM-3 closeout now cites the landed host-gate evidence and publishes THR-03: governance/seam-3-closeout.md"
+  - "SEAM-1 basis refresh is downstream follow-on work, not an unresolved SEAM-3 owner gap: threaded-seams/seam-1-snapshot-v3-net-allowlist-plumbing/slice-2-host-snapshot-and-worldspec-plumbing.md + review.md + seam.md"
 ```

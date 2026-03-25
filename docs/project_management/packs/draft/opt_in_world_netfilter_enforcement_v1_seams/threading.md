@@ -100,7 +100,7 @@ Execution horizon summary:
   - **Consumer seam(s)**: `SEAM-1`, `SEAM-4`, `SEAM-5`
   - **Carried contract IDs**: `C-04`, `C-05`, `C-06`
   - **Purpose**: Keep enforcement opt-in and operator-controlled at the host boundary.
-  - **State**: identified
+  - **State**: published
   - **Revalidation trigger**: Any change to default config behavior or workspace detection semantics.
   - **Satisfied by**: `world.net.filter` gates whether isolate_network is requested; env overrides/exports provide parity tooling.
   - **Notes**: Default `false` is the back-compat anchor.

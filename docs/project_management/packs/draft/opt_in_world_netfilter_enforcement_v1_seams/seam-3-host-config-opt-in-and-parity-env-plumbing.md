@@ -2,7 +2,7 @@
 seam_id: SEAM-3
 seam_slug: host-config-opt-in-and-parity-env-plumbing
 type: capability
-status: decomposed
+status: landed
 execution_horizon: active
 plan_version: v2
 basis:
@@ -13,23 +13,21 @@ basis:
   required_threads:
     - THR-03
   stale_triggers:
-    - "Any change to config schema merge/patch behavior"
-    - "Any change to workspace detection for overrides"
+    - "Any change to config schema merge/patch behavior; revalidate SEAM-1 routing consumption and SEAM-5 conformance coverage"
+    - "Any change to workspace detection for overrides; revalidate SEAM-5 override coverage and operator docs"
 gates:
   pre_exec:
-    review: failed
+    review: passed
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S4
-  status: pending
-open_remediations:
-  - REM-003
-  - REM-004
+  status: passed
+open_remediations: []
 ---
 
 # SEAM-3 - Config opt-in `world.net.filter` + CLI patching + env parity
@@ -74,6 +72,7 @@ open_remediations:
 - **Verification**:
   - Config round-trip tests (`config current show`).
   - Override env tests when no workspace exists.
+  - User-facing docs/examples now publish the three-way gate alignment.
 - **Risks / unknowns**:
   - Risk: inconsistent merge/patch behavior could make the lever confusing across workspace/global config layers.
   - De-risk plan: model patches similar to existing `world.env.*`/`world.deps.*` patterns and include explain output.
@@ -87,8 +86,9 @@ open_remediations:
   - Contracts likely to publish:
     - `C-04`, `C-05`, `C-06`
   - Threads likely to advance:
-    - `THR-03` to `defined`
+    - `THR-03` to `published`
   - Review-surface areas likely to shift after landing:
     - config/export visibility in operator workflows
   - Downstream seams most likely to require revalidation:
+    - `SEAM-1` for routing adoption of the published host gate
     - `SEAM-5` for smoke expectations

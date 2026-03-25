@@ -6,7 +6,7 @@ status: decomposed
 execution_horizon: next
 plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
   upstream_closeouts: []
@@ -21,8 +21,8 @@ basis:
 gates:
   pre_exec:
     review: passed
-    contract: failed
-    revalidation: failed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
@@ -30,8 +30,7 @@ seam_exit_gate:
   required: true
   planned_location: S4
   status: pending
-open_remediations:
-  - REM-004
+open_remediations: []
 ---
 
 # SEAM-1 - Snapshot V3 `net_allowed` contract + host→world-agent plumbing
@@ -75,14 +74,16 @@ open_remediations:
   - Unit tests for canonicalization/validation in `agent-api-types`.
   - Tests asserting world-agent routes allowlists from snapshot (not broker).
 - **Current blocker posture**:
-  - `S2` still consumes `C-04` / `THR-03`, so this seam now sits in `next` with a provisional basis until the active `SEAM-3` publishes the config gate and parity surfaces.
+  - `SEAM-3` now publishes `C-04` / `THR-03` as landed upstream input, so this seam remains `next` because its own
+    execution work is still pending, not because the host gate is unpublished.
 - **Risks / unknowns**:
   - Risk: hostname normalization/IDNA behavior could introduce false denies or unexpected allows.
   - De-risk plan: keep the normalization posture explicit and test-locked (decision is recorded in `SEAM-1/S1.T1`).
 - **Rollout / safety**:
   - This seam must be back-compat additive; no behavior changes unless opt-in gate later requests isolation.
 - **Downstream decomposition context**:
-  - Why this seam is `next`: its consumer-side routing work is still real, but it should not be the active execution seam until the upstream opt-in gate (`SEAM-3`) is published.
+  - Why this seam is `next`: its consumer-side routing work is now unblocked by the upstream host gate, but the seam has
+    not yet entered execution.
   - Which threads matter most: `THR-01`, `THR-02`, `THR-03`.
   - What the next seam-local review should focus on: canonicalization rules, failure diagnostics, end-to-end data flow correctness across non-PTY and PTY execute paths, and whether the published `C-04` semantics from active `SEAM-3` are consumed consistently.
 - **Expected seam-exit concerns**:

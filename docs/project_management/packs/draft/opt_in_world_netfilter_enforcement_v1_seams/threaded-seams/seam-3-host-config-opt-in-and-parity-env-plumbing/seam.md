@@ -1,7 +1,7 @@
 ---
 seam_id: SEAM-3
 seam_slug: host-config-opt-in-and-parity-env-plumbing
-status: decomposed
+status: landed
 execution_horizon: active
 plan_version: v1
 basis:
@@ -12,21 +12,21 @@ basis:
   required_threads:
     - THR-03
   stale_triggers:
-    - "Any change to config schema merge/patch behavior"
-    - "Any change to workspace detection for overrides"
-    - "Any change to host routing semantics for when isolate_network is requested"
+    - "Any change to config schema merge/patch behavior; revalidate SEAM-1 routing consumption and SEAM-5 conformance coverage"
+    - "Any change to workspace detection for overrides; revalidate SEAM-5 override coverage and operator docs"
+    - "Any change to host routing semantics for when isolate_network is requested; revalidate SEAM-1 against the published C-04 handoff"
 gates:
   pre_exec:
     review: passed
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S4
-  status: pending
+  status: passed
 open_remediations: []
 ---
 # SEAM-3 - Config opt-in `world.net.filter` + CLI patching + env parity
@@ -92,6 +92,10 @@ open_remediations: []
   - Config model and CLI patch surfaces landed for `world.net.filter`
   - No-workspace override and export parity evidence landed
   - Operator docs/examples landed and aligned to the three-way gate semantics
+- **Actual closeout disposition**:
+  - `S1` and `S2` are treated as landed code/test evidence in the repo.
+  - `S3` is treated as landed publication evidence in the operator docs.
+  - `S4` records the published `THR-03` handoff and clears the seam-local remediations.
 
 ## Slice index
 

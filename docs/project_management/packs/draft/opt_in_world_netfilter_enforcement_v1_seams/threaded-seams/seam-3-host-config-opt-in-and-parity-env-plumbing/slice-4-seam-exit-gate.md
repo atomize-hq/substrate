@@ -3,7 +3,7 @@ slice_id: S4
 seam_id: SEAM-3
 slice_kind: seam_exit_gate
 execution_horizon: active
-status: decomposed
+status: landed
 plan_version: v1
 basis:
   currentness: current
@@ -15,8 +15,8 @@ gates:
     contract: inherited
     revalidation: inherited
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 threads:
   - THR-03
 contracts_produced:
@@ -48,3 +48,6 @@ candidate_subslices: []
 - **Review surface refs**:
   - `../../review_surfaces.md` (R1/R2)
   - `review.md` (planned mismatch hotspots and stale triggers)
+- **Implementation disposition**:
+  - Landed via the published operator docs plus the seam closeout/remediation updates that now cite the existing code and
+    test evidence for `C-04`, `C-05`, `C-06`, and `THR-03`.
