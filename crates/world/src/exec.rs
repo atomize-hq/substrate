@@ -293,12 +293,14 @@ else
   # Preserve the world-deps host root before mounting tmpfs on /var/lib. When the host root lives
   # under /var/lib (the default), mounting tmpfs would otherwise hide it and we would end up
   # bind-mounting an empty directory into the isolated /var/lib.
-  world_deps_hold="/run/substrate-world-deps-host"
+  world_deps_hold="${XDG_RUNTIME_DIR:-/tmp}/substrate-world-deps-host.$$"
   mkdir -p "$world_deps_hold"
   mount --rbind "$world_deps_host_root" "$world_deps_hold"
   mount -t tmpfs tmpfs /var/lib
   mkdir -p /var/lib/substrate/world-deps
   mount --rbind "$world_deps_hold" /var/lib/substrate/world-deps
+  umount -l "$world_deps_hold" 2>/dev/null || true
+  rmdir "$world_deps_hold" 2>/dev/null || true
   if [ "${SUBSTRATE_MOUNT_FS_MODE:-writable}" = "read_only" ]; then
     mount -o remount,bind,ro "$SUBSTRATE_MOUNT_PROJECT_DIR"
   fi
@@ -337,12 +339,14 @@ set -f
 mount --make-rprivate / 2>/dev/null || mount --make-private / 2>/dev/null || true
 
 mkdir -p "$SUBSTRATE_WORLD_DEPS_HOST_ROOT"
-world_deps_hold="/run/substrate-world-deps-host"
+world_deps_hold="${XDG_RUNTIME_DIR:-/tmp}/substrate-world-deps-host.$$"
 mkdir -p "$world_deps_hold"
 mount --rbind "$SUBSTRATE_WORLD_DEPS_HOST_ROOT" "$world_deps_hold"
 mount -t tmpfs tmpfs /var/lib
 mkdir -p /var/lib/substrate/world-deps
 mount --rbind "$world_deps_hold" /var/lib/substrate/world-deps
+umount -l "$world_deps_hold" 2>/dev/null || true
+rmdir "$world_deps_hold" 2>/dev/null || true
 
 # WDH0 contract uses HOME=/root. In hardened worlds, the base / can be remounted read-only,
 # so ensure /root is writable (tmpfs-backed) before executing the inner command.
@@ -770,16 +774,16 @@ mod tests {
     fn workspace_isolation_preserves_world_deps_root_before_tmpfs() {
         // Regression test: when workspace isolation mounts tmpfs on /var/lib, the default world-deps
         // host root lives under /var/lib and would be hidden unless we bind it somewhere stable
-        // (e.g. /run) first.
+        // (outside /var/lib) first.
         assert!(PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT
-            .contains("world_deps_hold=\"/run/substrate-world-deps-host\""));
+            .contains("world_deps_hold=\"${XDG_RUNTIME_DIR:-/tmp}/substrate-world-deps-host.$$\""));
         assert!(PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT
             .contains("mount --rbind \"$world_deps_host_root\" \"$world_deps_hold\""));
         assert!(PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT
             .contains("mount --rbind \"$world_deps_hold\" /var/lib/substrate/world-deps"));
 
         assert!(WORLD_DEPS_BIND_MOUNT_FALLBACK_SCRIPT
-            .contains("world_deps_hold=\"/run/substrate-world-deps-host\""));
+            .contains("world_deps_hold=\"${XDG_RUNTIME_DIR:-/tmp}/substrate-world-deps-host.$$\""));
         assert!(WORLD_DEPS_BIND_MOUNT_FALLBACK_SCRIPT
             .contains("mount --rbind \"$SUBSTRATE_WORLD_DEPS_HOST_ROOT\" \"$world_deps_hold\""));
         assert!(WORLD_DEPS_BIND_MOUNT_FALLBACK_SCRIPT
