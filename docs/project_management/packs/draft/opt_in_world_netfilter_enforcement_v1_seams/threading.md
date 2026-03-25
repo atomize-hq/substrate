@@ -16,6 +16,7 @@ Execution horizon summary:
   - **Derived consumers**: `SEAM-4`, `SEAM-5`
   - **Thread IDs**: `THR-01`
   - **Definition**: `agent-api-types::PolicySnapshotV3.net_allowed: Vec<String>` canonicalized allowlist (supports `"*"` allow-all; `[]` deny-all).
+  - **Normalization posture**: ASCII lowercasing + trailing-dot stripping; Unicode/IDNA input rejected (punycode required). See `SEAM-1/S1.T1`.
   - **Versioning / compat**: additive field with `#[serde(default)]`; canonicalization rules are enforced at snapshot build/validation time.
 
 - **Contract ID**: `C-02`
@@ -143,4 +144,3 @@ flowchart LR
 2. `SEAM-2`: make enforcement real + fail-closed under isolate_network, including cgroup attach invariants.
 3. `SEAM-3`: land opt-in config and CLI/docs, enabling safe roll-out without surprising existing workspaces.
 4. `SEAM-4` + `SEAM-5`: make enforcement status debuggable and lock it in with tests/smoke.
-

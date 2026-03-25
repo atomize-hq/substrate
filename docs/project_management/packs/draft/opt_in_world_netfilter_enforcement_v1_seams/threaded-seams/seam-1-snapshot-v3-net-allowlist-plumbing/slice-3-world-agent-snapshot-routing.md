@@ -6,7 +6,7 @@ execution_horizon: active
 status: decomposed
 plan_version: v1
 basis:
-  currentness: provisional
+  currentness: current
   basis_ref: seam.md#basis
   stale_triggers:
     - "Any change to world-agent execute request shape that carries snapshot/worldspec"
@@ -27,8 +27,7 @@ contracts_consumed:
   - C-01
   - C-02
   - C-03
-open_remediations:
-  - REM-001
+open_remediations: []
 candidate_subslices: []
 ---
 ### S3 - world-agent consumes Snapshot V3 `net_allowed` and `WorldSpec` (remove broker coupling)
@@ -45,7 +44,7 @@ candidate_subslices: []
   - Snapshot V3 `net_allowed` is the sole source of truth for allowlists inside the world-agent request pipeline.
   - Diagnostics make it clear when isolation is requested and why invalid allowlist entries fail.
 - **Dependencies**:
-  - `S1` publishes `C-01` and resolves normalization posture (`REM-001`).
+  - `S1` publishes `C-01` and records the normalization posture (see `S1.T1`).
   - `S2` constructs `WorldSpec` consistently on the host.
 - **Verification**:
   - Targeted tests for request parsing/handling (unit or integration, depending on existing harness) covering PTY and non-PTY surfaces.

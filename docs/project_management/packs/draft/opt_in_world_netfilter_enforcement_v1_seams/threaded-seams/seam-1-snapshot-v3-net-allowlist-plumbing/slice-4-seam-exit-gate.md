@@ -6,7 +6,7 @@ execution_horizon: active
 status: decomposed
 plan_version: v1
 basis:
-  currentness: provisional
+  currentness: current
   basis_ref: seam.md#basis
   stale_triggers: []
 gates:
@@ -25,8 +25,7 @@ contracts_produced:
   - C-02
   - C-03
 contracts_consumed: []
-open_remediations:
-  - REM-001
+open_remediations: []
 candidate_subslices: []
 ---
 ### S4 - seam-exit-gate
@@ -40,7 +39,7 @@ candidate_subslices: []
   - Contracts published or changed are explicit (`C-01`..`C-03`).
   - Outbound threads are advanced and explicitly recorded (`THR-01`, `THR-02`).
   - Downstream stale triggers are explicit (especially those that would force `SEAM-2`/`SEAM-4` revalidation).
-  - Promotion blockers are explicit, including whether `REM-001` was resolved or carried forward.
+  - Promotion blockers are explicit, including whether any pre-exec contract decisions were later reopened post-exec.
   - Promotion readiness can be stated as `ready` or `blocked`.
 - **Dependencies**:
   - Landed work from `S1`..`S3`
@@ -50,4 +49,3 @@ candidate_subslices: []
 - **Review surface refs**:
   - `../../review_surfaces.md` (R1/R2/R3)
   - `review.md` (planned mismatch hotspots and stale triggers)
-

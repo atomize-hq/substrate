@@ -6,7 +6,7 @@ status: decomposed
 execution_horizon: active
 plan_version: v1
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
   upstream_closeouts: []
@@ -19,7 +19,7 @@ basis:
 gates:
   pre_exec:
     review: passed
-    contract: failed
+    contract: passed
     revalidation: pending
   post_exec:
     landing: pending
@@ -28,8 +28,7 @@ seam_exit_gate:
   required: true
   planned_location: S4
   status: pending
-open_remediations:
-  - REM-001
+open_remediations: []
 ---
 
 # SEAM-1 - Snapshot V3 `net_allowed` contract + host→world-agent plumbing
@@ -74,7 +73,7 @@ open_remediations:
   - Tests asserting world-agent routes allowlists from snapshot (not broker).
 - **Risks / unknowns**:
   - Risk: hostname normalization/IDNA behavior could introduce false denies or unexpected allows.
-  - De-risk plan: explicitly define normalization rules (casefolding, punycode posture) during seam-local contract gate review.
+  - De-risk plan: keep the normalization posture explicit and test-locked (decision is recorded in `SEAM-1/S1.T1`).
 - **Rollout / safety**:
   - This seam must be back-compat additive; no behavior changes unless opt-in gate later requests isolation.
 - **Downstream decomposition context**:

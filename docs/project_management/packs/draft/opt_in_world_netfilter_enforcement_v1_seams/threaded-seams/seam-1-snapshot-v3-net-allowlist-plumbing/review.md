@@ -53,25 +53,24 @@ flowchart TB
 
 ## Likely mismatch hotspots
 
-- **Normalization drift**: hostname casefolding/IDNA posture implemented inconsistently across `agent-api-types`, the host snapshot builder, and the world-agent request path (`REM-001`).
+- **Normalization drift**: hostname casefolding/IDNA posture implemented inconsistently across `agent-api-types`, the host snapshot builder, and the world-agent request path (decision is recorded in `S1.T1`; all consumers must share one helper).
 - **PTY vs non-PTY divergence**: `service.rs` and `pty.rs` construct different `WorldSpec`/allowlist values or source them from different places.
 - **Wildcard semantics**: `["*"]` is not canonicalized to exactly `["*"]`, or other wildcard forms slip through when isolation is requested.
 - **Back-compat defaults**: missing `net_allowed` in older snapshots fails to `serde(default)` as intended or accidentally flips behavior.
 
 ## Pre-exec findings
 
-- `REM-001` is a blocking contract remediation: define canonical hostname normalization (casefolding and IDNA posture) and add tests to prevent drift.
+- Hostname normalization posture (casefolding + IDNA) for `net_allowed` is now explicitly specified in `S1.T1`.
 
 ## Pre-exec gate disposition
 
 - **Review gate**: passed
-- **Contract gate**: failed (blocked by `REM-001`)
+- **Contract gate**: passed
 - **Contract gate concerns**:
-  - Exact normalization rules for `net_allowed` (`REM-001`)
   - Tight semantics for `WorldSpec.isolate_network` and `WorldSpec.allowed_domains` under opt-in gating
-- **Revalidation**: pending (not attempted while contract gate is blocked)
+- **Revalidation**: pending
 - **Opened remediations**:
-  - None opened in this review bundle beyond existing `REM-001`.
+  - None opened in this review bundle.
 
 ## Planned seam-exit gate focus
 

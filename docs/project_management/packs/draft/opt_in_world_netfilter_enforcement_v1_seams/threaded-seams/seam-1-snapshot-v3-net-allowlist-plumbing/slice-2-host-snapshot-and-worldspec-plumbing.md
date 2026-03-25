@@ -6,7 +6,7 @@ execution_horizon: active
 status: decomposed
 plan_version: v1
 basis:
-  currentness: provisional
+  currentness: current
   basis_ref: seam.md#basis
   stale_triggers:
     - "Any change to host config gating semantics for requesting isolation (C-04)"
@@ -29,8 +29,7 @@ contracts_produced:
 contracts_consumed:
   - C-01
   - C-04
-open_remediations:
-  - REM-001
+open_remediations: []
 candidate_subslices: []
 ---
 ### S2 - Host snapshot builder populates `net_allowed` and constructs `WorldSpec` (C-02/C-03)

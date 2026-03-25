@@ -3,27 +3,6 @@
 ## Open remediations
 
 ```yaml
-remediation_id: REM-001
-origin_phase: pre_exec
-source_gate: contract
-related_seam: SEAM-1
-related_slice: null
-related_thread: THR-01
-related_contract: C-01
-related_artifact: crates/agent-api-types
-severity: blocking
-status: open
-owner_seam: SEAM-1
-blocked_targets:
-  - seam: SEAM-1
-    field: status
-    value: exec-ready
-summary: Define hostname normalization rules for net_allowed
-required_fix: Specify canonical hostname normalization (casefolding and IDNA posture) and add tests to prevent drift
-resolution_evidence: []
-```
-
-```yaml
 remediation_id: REM-002
 origin_phase: pre_exec
 source_gate: revalidation
@@ -65,3 +44,26 @@ resolution_evidence: []
 ## Resolved remediations
 
 - Move resolved items here using the same schema, set `status: resolved`, and populate `resolution_evidence`.
+
+```yaml
+remediation_id: REM-001
+origin_phase: pre_exec
+source_gate: contract
+related_seam: SEAM-1
+related_slice: S1
+related_thread: THR-01
+related_contract: C-01
+related_artifact: crates/agent-api-types
+severity: blocking
+status: resolved
+owner_seam: SEAM-1
+blocked_targets:
+  - seam: SEAM-1
+    field: status
+    value: exec-ready
+summary: Decide and record `net_allowed` hostname normalization rules (casefolding + IDNA posture)
+required_fix: Document the canonical normalization posture (ASCII casefolding, trailing-dot handling, IDNA posture) and the verification plan
+resolution_evidence:
+  - "Contract decision recorded: threaded-seams/seam-1-snapshot-v3-net-allowlist-plumbing/slice-1-publish-net-allowed-contract.md (S1.T1)"
+  - "Seam gate disposition updated: threaded-seams/seam-1-snapshot-v3-net-allowlist-plumbing/seam.md + review.md"
+```

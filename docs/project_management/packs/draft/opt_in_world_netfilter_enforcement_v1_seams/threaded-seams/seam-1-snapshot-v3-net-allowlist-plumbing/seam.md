@@ -5,7 +5,7 @@ status: decomposed
 execution_horizon: active
 plan_version: v1
 basis:
-  currentness: provisional
+  currentness: current
   source_seam_brief: ../../seam-1-snapshot-v3-net-allowlist-plumbing.md
   source_scope_ref: ../../scope_brief.md
   upstream_closeouts: []
@@ -20,7 +20,7 @@ basis:
 gates:
   pre_exec:
     review: passed
-    contract: failed
+    contract: passed
     revalidation: pending
   post_exec:
     landing: pending
@@ -29,8 +29,7 @@ seam_exit_gate:
   required: true
   planned_location: S4
   status: pending
-open_remediations:
-  - REM-001
+open_remediations: []
 ---
 # SEAM-1 - Snapshot V3 `net_allowed` contract + host→world-agent plumbing
 
@@ -55,7 +54,7 @@ open_remediations:
   - Unit tests for canonicalization/validation in `agent-api-types`.
   - Tests asserting world-agent routes allowlists from snapshot (not broker), across non-PTY and PTY execute paths.
 - **Basis posture**:
-  - Currentness: `provisional` until hostname normalization (casefolding + IDNA posture) is explicitly specified and test-locked (`REM-001`).
+  - Currentness: `current` once `net_allowed` hostname normalization posture is explicitly specified (see `S1.T1`).
   - Upstream closeouts assumed: none
   - Required threads: `THR-01`, `THR-02`
   - Stale triggers: see `basis.stale_triggers`

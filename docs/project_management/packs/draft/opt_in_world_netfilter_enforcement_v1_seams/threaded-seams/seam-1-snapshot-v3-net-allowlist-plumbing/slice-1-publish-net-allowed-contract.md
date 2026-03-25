@@ -6,7 +6,7 @@ execution_horizon: active
 status: decomposed
 plan_version: v1
 basis:
-  currentness: provisional
+  currentness: current
   basis_ref: seam.md#basis
   stale_triggers:
     - "Any change to net_allowed canonicalization/validation rules"
@@ -23,8 +23,7 @@ threads:
 contracts_produced:
   - C-01
 contracts_consumed: []
-open_remediations:
-  - REM-001
+open_remediations: []
 candidate_subslices: []
 ---
 ### S1 - Publish Snapshot V3 `net_allowed` contract (C-01)
@@ -58,12 +57,31 @@ candidate_subslices: []
   - In: `REM-001`, `scope_brief.md` assumptions, current broker semantics (evidence).
   - Out: a single normalization helper used by snapshot builder + world-agent plumbing.
 - **Thread/contract refs**: `THR-01`, `C-01`
-- **Implementation notes**:
-  - Record the exact posture (e.g., lowercasing ASCII, applying IDNA to Unicode hostnames, rejecting invalid labels) and ensure tests cover tricky cases.
-- **Acceptance criteria**:
-  - `REM-001` can be moved to `resolved` once merged evidence exists.
-  - Unit tests cover at least: uppercase hostnames, leading/trailing whitespace, Unicode labels, and `"*"` canonicalization.
-- **Test notes**: keep tests in `agent-api-types` so drift is caught early.
+- **Contract decision (C-01): `net_allowed` hostname normalization posture**
+  - **Trim/drop**: for each entry, `trim()` leading/trailing whitespace; drop entries that become empty.
+  - **Casefolding**: ASCII-only lowercasing (`A-Z` → `a-z`) is applied before validation/deduping.
+  - **Trailing dot**: strip all trailing `.` so `example.com.` canonicalizes to `example.com` (reject if this produces empty).
+  - **IDNA posture**:
+    - Do **not** apply IDNA mapping or Unicode normalization as part of canonicalization.
+    - Non-ASCII hostnames are **rejected**.
+    - Internationalized domains must be supplied in ASCII A-label / punycode form (e.g. `xn--...`).
+  - **Allowed forms**:
+    - Hostnames only: no schemes, ports, paths, queries, or fragments (examples to reject: `https://example.com`, `example.com:443`, `example.com/path`).
+    - IP literals are permitted as entries (IPv4 `1.2.3.4`, IPv6 `::1`; bracketed IPv6 `[::1]` canonicalizes to `::1`).
+  - **Label validation** (hostnames):
+    - Labels are `a-z`, `0-9`, `-` only.
+    - No empty labels, and labels must not start/end with `-`.
+    - Hostnames must not start/end with `.`.
+  - **Deduping**: de-dupe after canonicalization, preserving first-seen order.
+  - **Wildcard posture**: unchanged from S1 acceptance criteria (literal `"*"` means allow-all and collapses the list to exactly `["*"]`; other wildcard forms are rejected when enforcement is requested).
+- **Verification plan (unit tests, planning-only)**:
+  - Add unit tests in `crates/agent-api-types` that lock the above behavior:
+    - `policy_snapshot_v3_net_allowed_casefolds_and_strips_trailing_dot`
+    - `policy_snapshot_v3_net_allowed_rejects_unicode_idna_input`
+    - `policy_snapshot_v3_net_allowed_rejects_urls_ports_and_paths`
+    - `policy_snapshot_v3_net_allowed_collapses_star_to_singleton`
+    - `policy_snapshot_v3_net_allowed_allows_ip_literals`
+  - Edge cases that must be covered: uppercase hostnames, leading/trailing whitespace, Unicode labels, trailing dot, `"*"` canonicalization.
 - **Risk/rollback notes**: normalization changes are a downstream stale trigger and must be captured in seam closeout.
 
 Checklist:
