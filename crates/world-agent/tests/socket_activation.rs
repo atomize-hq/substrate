@@ -179,7 +179,7 @@ fn rlimit_nofile_cur() -> u64 {
             // Conservative fallback.
             return 256;
         }
-        lim.rlim_cur as u64
+        lim.rlim_cur
     }
 }
 
