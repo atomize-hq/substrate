@@ -41,6 +41,27 @@ required_fix: Document the three-way gate alignment (world.net.filter, WORLD_NET
 resolution_evidence: []
 ```
 
+```yaml
+remediation_id: REM-004
+origin_phase: pre_exec
+source_gate: contract
+related_seam: SEAM-1
+related_slice: S2
+related_thread: THR-03
+related_contract: C-04
+related_artifact: docs/project_management/packs/draft/opt_in_world_netfilter_enforcement_v1_seams/threaded-seams/seam-1-snapshot-v3-net-allowlist-plumbing/slice-2-host-snapshot-and-worldspec-plumbing.md
+severity: blocking
+status: open
+owner_seam: SEAM-3
+blocked_targets:
+  - seam: SEAM-1
+    field: status
+    value: exec-ready
+summary: SEAM-1 still consumes unpublished C-04 and THR-03 from future SEAM-3, so the active seam basis is only provisional
+required_fix: Publish C-04 and THR-03 from SEAM-3 or explicitly resequence/redistribute the config-gating work so SEAM-1 no longer depends on future-seam output before promotion
+resolution_evidence: []
+```
+
 ## Resolved remediations
 
 - Move resolved items here using the same schema, set `status: resolved`, and populate `resolution_evidence`.

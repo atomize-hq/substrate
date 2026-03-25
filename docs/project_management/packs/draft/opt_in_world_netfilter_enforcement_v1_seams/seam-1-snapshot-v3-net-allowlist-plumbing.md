@@ -4,23 +4,25 @@ seam_slug: snapshot-v3-net-allowlist-plumbing
 type: integration
 status: decomposed
 execution_horizon: active
-plan_version: v1
+plan_version: v2
 basis:
-  currentness: current
+  currentness: provisional
   source_scope_ref: scope_brief.md
   source_scope_version: v1
   upstream_closeouts: []
   required_threads:
     - THR-01
     - THR-02
+    - THR-03
   stale_triggers:
     - "Any change to policy schema for net egress (net_allowed semantics)"
     - "Any world-agent request/response contract changes"
+    - "Any change to host config gating semantics for world.net.filter (C-04)"
 gates:
   pre_exec:
     review: passed
-    contract: passed
-    revalidation: pending
+    contract: failed
+    revalidation: failed
   post_exec:
     landing: pending
     closeout: pending
@@ -28,7 +30,8 @@ seam_exit_gate:
   required: true
   planned_location: S4
   status: pending
-open_remediations: []
+open_remediations:
+  - REM-004
 ---
 
 # SEAM-1 - Snapshot V3 `net_allowed` contract + host→world-agent plumbing
@@ -71,6 +74,8 @@ open_remediations: []
 - **Verification**:
   - Unit tests for canonicalization/validation in `agent-api-types`.
   - Tests asserting world-agent routes allowlists from snapshot (not broker).
+- **Current blocker posture**:
+  - `S2` still consumes `C-04` / `THR-03` from future `SEAM-3`, so the active seam basis remains provisional and cannot promote to `exec-ready` until that dependency is published or the sequencing/ownership is rewritten.
 - **Risks / unknowns**:
   - Risk: hostname normalization/IDNA behavior could introduce false denies or unexpected allows.
   - De-risk plan: keep the normalization posture explicit and test-locked (decision is recorded in `SEAM-1/S1.T1`).
@@ -78,8 +83,8 @@ open_remediations: []
   - This seam must be back-compat additive; no behavior changes unless opt-in gate later requests isolation.
 - **Downstream decomposition context**:
   - Why this seam is `active`: it defines the cross-boundary contract that all other seams depend on and removes hidden coupling to in-guest broker state.
-  - Which threads matter most: `THR-01`, `THR-02`.
-  - What the first seam-local review should focus on: canonicalization rules, failure diagnostics, and end-to-end data flow correctness across non-PTY and PTY execute paths.
+  - Which threads matter most: `THR-01`, `THR-02`, `THR-03`.
+  - What the first seam-local review should focus on: canonicalization rules, failure diagnostics, end-to-end data flow correctness across non-PTY and PTY execute paths, and whether consuming `C-04` while `SEAM-3` remains future is still valid.
 - **Expected seam-exit concerns**:
   - Contracts likely to publish:
     - `C-01`, `C-02`, `C-03`

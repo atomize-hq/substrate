@@ -53,6 +53,7 @@ flowchart TB
 
 ## Likely mismatch hotspots
 
+- **Dependency inversion / unpublished config gate**: `S2` consumes `C-04` / `THR-03`, but `threading.md` still assigns that contract/thread to future `SEAM-3`; until the contract is published or the sequencing is rewritten, the active seam basis stays provisional.
 - **Normalization drift**: hostname casefolding/IDNA posture implemented inconsistently across `agent-api-types`, the host snapshot builder, and the world-agent request path (decision is recorded in `S1.T1`; all consumers must share one helper).
 - **PTY vs non-PTY divergence**: `service.rs` and `pty.rs` construct different `WorldSpec`/allowlist values or source them from different places.
 - **Wildcard semantics**: `["*"]` is not canonicalized to exactly `["*"]`, or other wildcard forms slip through when isolation is requested.
@@ -61,21 +62,26 @@ flowchart TB
 ## Pre-exec findings
 
 - Hostname normalization posture (casefolding + IDNA) for `net_allowed` is now explicitly specified in `S1.T1`.
+- Revalidation against the current repo and pack control plane shows `world.net.filter` / parity override/export surfaces are not yet landed, while the active seam plan still makes `S2` depend on `C-04` / `THR-03`; that keeps the seam basis provisional.
 
 ## Pre-exec gate disposition
 
 - **Review gate**: passed
-- **Contract gate**: passed
+- **Contract gate**: failed
 - **Contract gate concerns**:
-  - Tight semantics for `WorldSpec.isolate_network` and `WorldSpec.allowed_domains` under opt-in gating
-- **Revalidation**: pending
+  - `threading.md` makes `C-04` / `THR-03` authoritative to `SEAM-3`, but `S2` still consumes them while `SEAM-3` remains `future`.
+  - The pack critical path and current active/next window do not yet reconcile that ownership/dependency ordering.
+- **Revalidation**: failed
+- **Revalidation concerns**:
+  - No landed host-side `world.net.filter` config surface was found in the repo, so the gating input consumed by `S2` is still upstream future work.
 - **Opened remediations**:
-  - None opened in this review bundle.
+  - `REM-004` - publish `C-04` / `THR-03` from `SEAM-3` or resequence the pack so `SEAM-1` no longer depends on future work before promotion.
 
 ## Planned seam-exit gate focus
 
 - **What must be true before downstream promotion is legal**:
   - `C-01`..`C-03` are published with tests and documented semantics.
+  - `C-04` / `THR-03` are either landed upstream or removed from `SEAM-1`'s direct dependency set via an explicit pack rewrite.
   - `THR-01` and `THR-02` are advanced from `identified` to `published` in closeout.
   - world-agent no longer consults broker-derived allowlists for routing/enforcement.
 - **Which outbound contracts/threads matter most**: `C-01`, `C-02`, `C-03` and `THR-01`, `THR-02`.

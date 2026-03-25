@@ -4,9 +4,9 @@ seam_id: SEAM-1
 slice_kind: delivery
 execution_horizon: active
 status: decomposed
-plan_version: v1
+plan_version: v2
 basis:
-  currentness: current
+  currentness: provisional
   basis_ref: seam.md#basis
   stale_triggers:
     - "Any change to host config gating semantics for requesting isolation (C-04)"
@@ -29,7 +29,8 @@ contracts_produced:
 contracts_consumed:
   - C-01
   - C-04
-open_remediations: []
+open_remediations:
+  - REM-004
 candidate_subslices: []
 ---
 ### S2 - Host snapshot builder populates `net_allowed` and constructs `WorldSpec` (C-02/C-03)
@@ -50,6 +51,8 @@ candidate_subslices: []
 - **Dependencies**:
   - Upstream: `SEAM-3` publishes `C-04` (`world.net.filter`) so the gating source is stable.
   - Contracts/threads: `C-01`/`C-02`/`C-03` and `THR-01`/`THR-02`/`THR-03`
+- **Current blocker posture**:
+  - `REM-004`: this slice remains provisional because the required `C-04` / `THR-03` publication still belongs to future `SEAM-3`.
 - **Verification**:
   - Unit/integration tests at the shell layer asserting:
     - snapshot contains canonicalized `net_allowed`
