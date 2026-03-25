@@ -52,6 +52,10 @@ impl ConfigSetFixture {
             .join("workspace.yaml")
     }
 
+    fn global_config_path(&self) -> PathBuf {
+        self.substrate_home.join("config.yaml")
+    }
+
     fn init_workspace(&self) {
         let output = self
             .command()
@@ -75,6 +79,11 @@ impl ConfigSetFixture {
         serde_yaml::from_str(&raw).expect("workspace.yaml YAML parse")
     }
 
+    fn read_global_yaml(&self) -> YamlValue {
+        let raw = fs::read_to_string(self.global_config_path()).expect("read config.yaml");
+        serde_yaml::from_str(&raw).expect("config.yaml YAML parse")
+    }
+
     fn set_json(&self, cwd: &Path, updates: &[&str]) -> std::process::Output {
         let mut cmd = self.command();
         cmd.current_dir(cwd);
@@ -83,6 +92,37 @@ impl ConfigSetFixture {
             cmd.arg(update);
         }
         cmd.output().expect("failed to run config set --json")
+    }
+
+    fn workspace_reset(&self, cwd: &Path, keys: &[&str]) -> std::process::Output {
+        let mut cmd = self.command();
+        cmd.current_dir(cwd);
+        cmd.arg("config").arg("workspace").arg("reset");
+        for key in keys {
+            cmd.arg(key);
+        }
+        cmd.output().expect("failed to run config workspace reset")
+    }
+
+    fn global_set_json(&self, cwd: &Path, updates: &[&str]) -> std::process::Output {
+        let mut cmd = self.command();
+        cmd.current_dir(cwd);
+        cmd.arg("config").arg("global").arg("set").arg("--json");
+        for update in updates {
+            cmd.arg(update);
+        }
+        cmd.output()
+            .expect("failed to run config global set --json")
+    }
+
+    fn global_reset(&self, cwd: &Path, keys: &[&str]) -> std::process::Output {
+        let mut cmd = self.command();
+        cmd.current_dir(cwd);
+        cmd.arg("config").arg("global").arg("reset");
+        for key in keys {
+            cmd.arg(key);
+        }
+        cmd.output().expect("failed to run config global reset")
     }
 }
 
@@ -258,6 +298,149 @@ fn config_set_rejects_invalid_list_literal_without_mutation() {
 
     let after = fs::read_to_string(fixture.workspace_config_path()).expect("read workspace.yaml");
     assert_eq!(before, after, "workspace.yaml must not change on error");
+}
+
+#[test]
+fn config_set_updates_world_net_filter_and_supports_reset() {
+    let fixture = ConfigSetFixture::new();
+    fixture.init_workspace();
+
+    let output = fixture.set_json(&fixture.workspace_root, &["world.net.filter=true"]);
+    assert!(
+        output.status.success(),
+        "config set should succeed: {output:?}"
+    );
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout).expect("effective JSON parse");
+    assert_eq!(
+        json.pointer("/world/net/filter").and_then(|v| v.as_bool()),
+        Some(true)
+    );
+
+    let yaml = fixture.read_workspace_yaml();
+    let root = yaml.as_mapping().expect("workspace.yaml root mapping");
+    let world = root
+        .get(YamlValue::String("world".to_string()))
+        .and_then(|v| v.as_mapping())
+        .expect("world mapping");
+    let net = world
+        .get(YamlValue::String("net".to_string()))
+        .and_then(|v| v.as_mapping())
+        .expect("world.net mapping");
+    assert_eq!(
+        net.get(YamlValue::String("filter".to_string()))
+            .and_then(|v| v.as_bool()),
+        Some(true)
+    );
+
+    let reset = fixture.workspace_reset(&fixture.workspace_root, &["world.net.filter"]);
+    assert!(
+        reset.status.success(),
+        "workspace reset should succeed: {reset:?}"
+    );
+
+    let after = fixture.read_workspace_yaml();
+    let removed = match after
+        .as_mapping()
+        .expect("workspace.yaml root mapping")
+        .get(YamlValue::String("world".to_string()))
+    {
+        None => true,
+        Some(world) => match world
+            .as_mapping()
+            .and_then(|mapping| mapping.get(YamlValue::String("net".to_string())))
+        {
+            None => true,
+            Some(net) => net
+                .as_mapping()
+                .and_then(|mapping| mapping.get(YamlValue::String("filter".to_string())))
+                .is_none(),
+        },
+    };
+    assert!(
+        removed,
+        "expected world.net.filter removed from workspace patch, got: {after:?}"
+    );
+}
+
+#[test]
+fn config_set_rejects_invalid_world_net_filter_boolean_without_mutation() {
+    let fixture = ConfigSetFixture::new();
+    fixture.init_workspace();
+    let before = fs::read_to_string(fixture.workspace_config_path()).expect("read workspace.yaml");
+
+    let output = fixture.set_json(&fixture.workspace_root, &["world.net.filter=maybe"]);
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "invalid boolean should exit 2: {output:?}"
+    );
+
+    let after = fs::read_to_string(fixture.workspace_config_path()).expect("read workspace.yaml");
+    assert_eq!(before, after, "workspace.yaml must not change on error");
+}
+
+#[test]
+fn config_global_set_and_reset_support_world_net_filter() {
+    let fixture = ConfigSetFixture::new();
+    fixture.init_workspace();
+
+    let output = fixture.global_set_json(&fixture.workspace_root, &["world.net.filter=true"]);
+    assert!(
+        output.status.success(),
+        "config global set should succeed: {output:?}"
+    );
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout).expect("effective JSON parse");
+    assert_eq!(
+        json.pointer("/world/net/filter").and_then(|v| v.as_bool()),
+        Some(true)
+    );
+
+    let yaml = fixture.read_global_yaml();
+    let root = yaml.as_mapping().expect("config.yaml root mapping");
+    let world = root
+        .get(YamlValue::String("world".to_string()))
+        .and_then(|v| v.as_mapping())
+        .expect("world mapping");
+    let net = world
+        .get(YamlValue::String("net".to_string()))
+        .and_then(|v| v.as_mapping())
+        .expect("world.net mapping");
+    assert_eq!(
+        net.get(YamlValue::String("filter".to_string()))
+            .and_then(|v| v.as_bool()),
+        Some(true)
+    );
+
+    let reset = fixture.global_reset(&fixture.workspace_root, &["world.net.filter"]);
+    assert!(
+        reset.status.success(),
+        "config global reset should succeed: {reset:?}"
+    );
+
+    let after = fixture.read_global_yaml();
+    let removed = match after
+        .as_mapping()
+        .expect("config.yaml root mapping")
+        .get(YamlValue::String("world".to_string()))
+    {
+        None => true,
+        Some(world) => match world
+            .as_mapping()
+            .and_then(|mapping| mapping.get(YamlValue::String("net".to_string())))
+        {
+            None => true,
+            Some(net) => net
+                .as_mapping()
+                .and_then(|mapping| mapping.get(YamlValue::String("filter".to_string())))
+                .is_none(),
+        },
+    };
+    assert!(
+        removed,
+        "expected world.net.filter removed from global patch, got: {after:?}"
+    );
 }
 
 #[test]

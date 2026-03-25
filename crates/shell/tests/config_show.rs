@@ -103,6 +103,32 @@ impl ConfigShowFixture {
         cmd.arg("config").arg("show");
         cmd.output().expect("failed to run config show")
     }
+
+    fn current_show_json(&self, cwd: &Path, explain: bool) -> std::process::Output {
+        let mut cmd = self.command();
+        cmd.current_dir(cwd)
+            .arg("config")
+            .arg("current")
+            .arg("show")
+            .arg("--json");
+        if explain {
+            cmd.arg("--explain");
+        }
+        cmd.output()
+            .expect("failed to run config current show --json")
+    }
+
+    fn workspace_reset(&self, cwd: &Path, keys: &[&str]) -> std::process::Output {
+        let mut cmd = self.command();
+        cmd.current_dir(cwd)
+            .arg("config")
+            .arg("workspace")
+            .arg("reset");
+        for key in keys {
+            cmd.arg(key);
+        }
+        cmd.output().expect("failed to run config workspace reset")
+    }
 }
 
 fn assert_json_str(json: &JsonValue, pointer: &str, expected: &str) {
@@ -119,6 +145,32 @@ fn assert_json_bool(json: &JsonValue, pointer: &str, expected: bool) {
         Some(expected),
         "pointer {pointer} mismatch: {json}"
     );
+}
+
+fn parse_explain(stderr: &[u8]) -> JsonValue {
+    let text = String::from_utf8_lossy(stderr);
+    let start = text
+        .find('{')
+        .unwrap_or_else(|| panic!("failed to locate JSON object in --explain stderr: {text}"));
+    serde_json::from_str(&text[start..]).expect("explain JSON should parse")
+}
+
+fn explain_layers(explain: &JsonValue, key: &str) -> Vec<String> {
+    explain
+        .get("keys")
+        .and_then(|value| value.get(key))
+        .and_then(|value| value.get("sources"))
+        .and_then(|value| value.as_array())
+        .unwrap_or_else(|| panic!("missing explain sources for {key}: {explain}"))
+        .iter()
+        .map(|source| {
+            source
+                .get("layer")
+                .and_then(|value| value.as_str())
+                .unwrap_or_else(|| panic!("missing explain layer for {key}: {source}"))
+                .to_string()
+        })
+        .collect()
 }
 
 #[test]
@@ -161,6 +213,19 @@ fn config_show_emits_yaml_by_default() {
     assert!(root.contains_key(YamlValue::String("world".to_string())));
     assert!(root.contains_key(YamlValue::String("policy".to_string())));
     assert!(root.contains_key(YamlValue::String("sync".to_string())));
+    let world = root
+        .get(YamlValue::String("world".to_string()))
+        .and_then(|value| value.as_mapping())
+        .expect("world mapping");
+    let net = world
+        .get(YamlValue::String("net".to_string()))
+        .and_then(|value| value.as_mapping())
+        .expect("world.net mapping");
+    assert_eq!(
+        net.get(YamlValue::String("filter".to_string()))
+            .and_then(|value| value.as_bool()),
+        Some(false)
+    );
 }
 
 #[test]
@@ -299,5 +364,61 @@ fn config_show_strictly_rejects_type_mismatches() {
         output.status.code(),
         Some(2),
         "type mismatch should exit 2: {output:?}"
+    );
+}
+
+#[test]
+fn config_current_show_reports_world_net_filter_precedence_and_explain_sources() {
+    let fixture = ConfigShowFixture::new();
+    fixture.init_workspace();
+    fixture.write_global_config("world:\n  net:\n    filter: true\n");
+
+    let current = fixture.current_show_json(&fixture.workspace_root, true);
+    assert!(
+        current.status.success(),
+        "config current show should succeed: {current:?}"
+    );
+    let json: JsonValue = serde_json::from_slice(&current.stdout).expect("current JSON parse");
+    assert_json_bool(&json, "/world/net/filter", true);
+    let explain = parse_explain(&current.stderr);
+    assert_eq!(
+        explain_layers(&explain, "world.net.filter"),
+        vec!["global_patch".to_string()]
+    );
+
+    fixture.write_workspace_config("world:\n  net:\n    filter: false\n");
+    let nested = fixture.workspace_root.join("nested");
+    fs::create_dir_all(&nested).expect("create nested cwd");
+
+    let current = fixture.current_show_json(&nested, true);
+    assert!(
+        current.status.success(),
+        "config current show should succeed with workspace override: {current:?}"
+    );
+    let json: JsonValue = serde_json::from_slice(&current.stdout).expect("current JSON parse");
+    assert_json_bool(&json, "/world/net/filter", false);
+    let explain = parse_explain(&current.stderr);
+    assert_eq!(
+        explain_layers(&explain, "world.net.filter"),
+        vec!["workspace_patch".to_string()]
+    );
+
+    let reset = fixture.workspace_reset(&nested, &["world.net.filter"]);
+    assert!(
+        reset.status.success(),
+        "workspace reset should succeed: {reset:?}"
+    );
+
+    let current = fixture.current_show_json(&nested, true);
+    assert!(
+        current.status.success(),
+        "config current show should succeed after reset: {current:?}"
+    );
+    let json: JsonValue = serde_json::from_slice(&current.stdout).expect("current JSON parse");
+    assert_json_bool(&json, "/world/net/filter", true);
+    let explain = parse_explain(&current.stderr);
+    assert_eq!(
+        explain_layers(&explain, "world.net.filter"),
+        vec!["global_patch".to_string()]
     );
 }
