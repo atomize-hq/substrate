@@ -17,7 +17,7 @@ owner_seam: SEAM-1
 blocked_targets:
   - seam: SEAM-1
     field: status
-    value: decomposed
+    value: exec-ready
 summary: Define hostname normalization rules for net_allowed
 required_fix: Specify canonical hostname normalization (casefolding and IDNA posture) and add tests to prevent drift
 resolution_evidence: []
@@ -38,7 +38,7 @@ owner_seam: SEAM-2
 blocked_targets:
   - seam: SEAM-2
     field: status
-    value: decomposed
+    value: exec-ready
 summary: Enumerate and harden all process spawn paths for cgroup attach under isolate_network
 required_fix: Inventory all execution paths and ensure each attaches to the world cgroup or fails when isolate_network=true
 resolution_evidence: []
@@ -65,4 +65,3 @@ resolution_evidence: []
 ## Resolved remediations
 
 - Move resolved items here using the same schema, set `status: resolved`, and populate `resolution_evidence`.
-
