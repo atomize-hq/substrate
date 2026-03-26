@@ -875,59 +875,8 @@ async fn handle_persistent_session(
 
     loop {
         tokio::select! {
-            maybe_bytes = pty_bytes_rx.recv() => {
-                let Some(bytes) = maybe_bytes else { break };
-                let data_b64 = BASE64.encode(&bytes);
-                if ws_write_tx.send(PersistentServerMessage::Stdout { data_b64 }).is_err() {
-                    break;
-                }
+            biased;
 
-                if let ExecPhase::Draining(ref mut draining) = phase {
-                    if draining.drain_remaining > 0 {
-                        let drained_now = draining.drain_remaining.min(bytes.len());
-                        draining.drain_remaining -= drained_now;
-                    }
-                }
-
-                if matches!(&phase, ExecPhase::Draining(Draining { drain_remaining: 0, .. })) {
-                    // Flush any buffered PTY bytes already read (bounded channel).
-                    while let Ok(extra) = pty_bytes_rx.try_recv() {
-                        let data_b64 = BASE64.encode(&extra);
-                        if ws_write_tx
-                            .send(PersistentServerMessage::Stdout { data_b64 })
-                            .is_err()
-                        {
-                            break;
-                        }
-                    }
-
-                    let ExecPhase::Draining(draining) = std::mem::replace(&mut phase, ExecPhase::Idle) else {
-                        continue;
-                    };
-
-                    let mut persisted_env = draining.new_env;
-                    strip_persistent_internal_env(&mut persisted_env, &world.base_env);
-                    sanitize_session_env(&mut persisted_env);
-                    ensure_xdg_dirs(&mut persisted_env);
-
-                    session_env = persisted_env;
-                    session_cwd = draining.new_cwd.clone();
-
-                    service.note_pty_pending_diff(&world.world_id);
-
-                    if ws_write_tx
-                        .send(PersistentServerMessage::CommandComplete {
-                            seq: draining.seq,
-                            token_hex: draining.token_hex,
-                            exit: draining.exit,
-                            cwd: draining.new_cwd,
-                        })
-                        .is_err()
-                    {
-                        break;
-                    }
-                }
-            }
             msg = rx.next() => {
                 let Some(msg) = msg else { break };
                 match msg {
@@ -1091,6 +1040,59 @@ async fn handle_persistent_session(
                     Ok(_) => continue,
                     Err(e) => {
                         send_fatal(&ws_write_tx, "internal_error", format!("WebSocket error: {e}"), None);
+                        break;
+                    }
+                }
+            }
+            maybe_bytes = pty_bytes_rx.recv() => {
+                let Some(bytes) = maybe_bytes else { break };
+                let data_b64 = BASE64.encode(&bytes);
+                if ws_write_tx.send(PersistentServerMessage::Stdout { data_b64 }).is_err() {
+                    break;
+                }
+
+                if let ExecPhase::Draining(ref mut draining) = phase {
+                    if draining.drain_remaining > 0 {
+                        let drained_now = draining.drain_remaining.min(bytes.len());
+                        draining.drain_remaining -= drained_now;
+                    }
+                }
+
+                if matches!(&phase, ExecPhase::Draining(Draining { drain_remaining: 0, .. })) {
+                    // Flush any buffered PTY bytes already read (bounded channel).
+                    while let Ok(extra) = pty_bytes_rx.try_recv() {
+                        let data_b64 = BASE64.encode(&extra);
+                        if ws_write_tx
+                            .send(PersistentServerMessage::Stdout { data_b64 })
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+
+                    let ExecPhase::Draining(draining) = std::mem::replace(&mut phase, ExecPhase::Idle) else {
+                        continue;
+                    };
+
+                    let mut persisted_env = draining.new_env;
+                    strip_persistent_internal_env(&mut persisted_env, &world.base_env);
+                    sanitize_session_env(&mut persisted_env);
+                    ensure_xdg_dirs(&mut persisted_env);
+
+                    session_env = persisted_env;
+                    session_cwd = draining.new_cwd.clone();
+
+                    service.note_pty_pending_diff(&world.world_id);
+
+                    if ws_write_tx
+                        .send(PersistentServerMessage::CommandComplete {
+                            seq: draining.seq,
+                            token_hex: draining.token_hex,
+                            exit: draining.exit,
+                            cwd: draining.new_cwd,
+                        })
+                        .is_err()
+                    {
                         break;
                     }
                 }
