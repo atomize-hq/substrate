@@ -128,8 +128,6 @@ pub const PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT: &str = r#"set -eu
 set -f
 
 mount --make-rprivate / 2>/dev/null || mount --make-private / 2>/dev/null || true
-world_deps_host_root="${SUBSTRATE_WORLD_DEPS_HOST_ROOT:-/var/lib/substrate/world-deps}"
-mkdir -p "$world_deps_host_root"
 
 attach_to_cgroup_or_fail() {
   if [ "${SUBSTRATE_CGROUP_ATTACH_REQUIRED:-0}" != "1" ]; then
@@ -153,6 +151,9 @@ attach_to_cgroup_or_fail() {
 }
 
 attach_to_cgroup_or_fail
+
+world_deps_host_root="${SUBSTRATE_WORLD_DEPS_HOST_ROOT:-/var/lib/substrate/world-deps}"
+mkdir -p "$world_deps_host_root"
 
 if [ "${SUBSTRATE_WORLD_FS_ISOLATION:-workspace}" = "full" ]; then
   new_root="$(mktemp -d /tmp/substrate-full-isolation.XXXXXX)"
