@@ -847,7 +847,7 @@ pub struct WorldDoctorNetfilterStatusV1 {
     pub requested: bool,
     pub enabled: bool,
     pub world_netfilter_enable_present: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub last_failure_reason: Option<String>,
 }
 
@@ -1179,7 +1179,10 @@ mod tests {
                 requested: true,
                 enabled: true,
                 world_netfilter_enable_present: true,
-                last_failure_reason: None,
+                last_failure_reason: Some(
+                    "WORLD_NETFILTER_ENABLE must be set to 1/true/yes before requested network isolation can install nftables rules"
+                        .to_string(),
+                ),
             }),
             landlock: super::WorldDoctorLandlockV1 {
                 supported: true,
@@ -1240,6 +1243,44 @@ mod tests {
     }
 
     #[test]
+    fn world_doctor_report_v1_serializes_null_last_failure_reason_when_absent() {
+        let report = super::WorldDoctorReportV1 {
+            schema_version: 2,
+            ok: true,
+            collected_at_utc: "2026-01-08T00:00:00Z".to_string(),
+            policy_snapshot_v1_supported: true,
+            policy_resolution_mode: Some(super::PolicyResolutionModeV1::SnapshotV3),
+            netfilter_status: Some(super::WorldDoctorNetfilterStatusV1 {
+                requested: true,
+                enabled: false,
+                world_netfilter_enable_present: false,
+                last_failure_reason: None,
+            }),
+            landlock: super::WorldDoctorLandlockV1 {
+                supported: true,
+                abi: Some(3),
+                reason: None,
+            },
+            world_fs_strategy: super::WorldDoctorWorldFsStrategyV1 {
+                primary: super::WorldDoctorWorldFsStrategyKindV1::Overlay,
+                fallback: super::WorldDoctorWorldFsStrategyKindV1::Fuse,
+                probe: super::WorldDoctorWorldFsStrategyProbeV1 {
+                    id: "enumeration_v1".to_string(),
+                    probe_file: ".substrate_enum_probe".to_string(),
+                    result: super::WorldDoctorWorldFsStrategyProbeResultV1::Pass,
+                    failure_reason: None,
+                },
+            },
+        };
+
+        let value = serde_json::to_value(&report).expect("serialize report");
+        assert_eq!(
+            value["netfilter_status"]["last_failure_reason"],
+            serde_json::Value::Null
+        );
+    }
+
+    #[test]
     fn world_doctor_report_v1_defaults_snapshot_fields_when_missing() {
         // Legacy world-agents may omit snapshot fields; the client schema must default safely.
         let json = r#"{
@@ -1264,5 +1305,39 @@ mod tests {
         assert!(!report.policy_snapshot_v1_supported);
         assert!(report.policy_resolution_mode.is_none());
         assert!(report.netfilter_status.is_none());
+    }
+
+    #[test]
+    fn world_doctor_report_v1_defaults_last_failure_reason_when_missing() {
+        let json = r#"{
+            "schema_version": 2,
+            "ok": true,
+            "collected_at_utc": "2026-01-08T00:00:00Z",
+            "policy_snapshot_v1_supported": true,
+            "policy_resolution_mode": "snapshot_v3",
+            "netfilter_status": {
+                "requested": true,
+                "enabled": false,
+                "world_netfilter_enable_present": false
+            },
+            "landlock": { "supported": true, "abi": 3, "reason": null },
+            "world_fs_strategy": {
+                "primary": "overlay",
+                "fallback": "fuse",
+                "probe": {
+                    "id": "enumeration_v1",
+                    "probe_file": ".substrate_enum_probe",
+                    "result": "pass",
+                    "failure_reason": null
+                }
+            }
+        }"#;
+
+        let report: super::WorldDoctorReportV1 = serde_json::from_str(json).expect("deserialize");
+        let status = report.netfilter_status.expect("netfilter status");
+        assert!(status.requested);
+        assert!(!status.enabled);
+        assert!(!status.world_netfilter_enable_present);
+        assert!(status.last_failure_reason.is_none());
     }
 }

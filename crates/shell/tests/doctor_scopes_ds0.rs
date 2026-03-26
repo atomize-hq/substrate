@@ -94,6 +94,27 @@ fn assert_world_doctor_envelope_v1(payload: &Value) {
         .get("status")
         .and_then(Value::as_str)
         .expect("world doctor world.status missing");
+    if world.get("schema_version").is_some() {
+        let netfilter = world
+            .get("netfilter_status")
+            .expect("world doctor missing world.netfilter_status block");
+        netfilter
+            .get("requested")
+            .and_then(Value::as_bool)
+            .expect("world doctor netfilter_status.requested missing");
+        netfilter
+            .get("enabled")
+            .and_then(Value::as_bool)
+            .expect("world doctor netfilter_status.enabled missing");
+        netfilter
+            .get("world_netfilter_enable_present")
+            .and_then(Value::as_bool)
+            .expect("world doctor netfilter_status.world_netfilter_enable_present missing");
+        assert!(
+            netfilter.get("last_failure_reason").is_some(),
+            "world doctor netfilter_status.last_failure_reason missing"
+        );
+    }
 }
 
 #[test]

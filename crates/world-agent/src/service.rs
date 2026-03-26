@@ -70,6 +70,17 @@ pub(crate) const LANDLOCK_HELPER_SRC_ENV: &str = "SUBSTRATE_LANDLOCK_HELPER_SRC"
 const CARGO_BIN_EXE_WORLD_AGENT_ENV: &str = "CARGO_BIN_EXE_world-agent";
 const CARGO_BIN_EXE_WORLD_AGENT_ALT_ENV: &str = "CARGO_BIN_EXE_world_agent";
 
+const NETFILTER_ENABLE_REQUIRED_TEXT: &str =
+    "WORLD_NETFILTER_ENABLE must be set to 1/true/yes before requested network isolation can install nftables rules";
+const NETFILTER_NFT_FAILURE_TEXT: &str = "nft command failed";
+const NETFILTER_RESOLUTION_FAILURE_TEXT: &str = "failed to resolve allowed domain `";
+const NETFILTER_NO_ADDRESS_TEXT: &str = "resolved to no addresses";
+const NETFILTER_CGROUP_ATTACH_TEXT: &str = ": cgroup attach failed:";
+const NETFILTER_CGROUP_HELPER_REFUSAL_TEXT: &str =
+    "refused isolated execution before command start";
+const NETFILTER_CGROUP_FORCE_DIRECT_TEXT: &str =
+    "SUBSTRATE_WORLD_EXEC_FORCE_DIRECT is unsupported when isolate_network=true because cgroup attach is not guaranteed";
+
 fn resolve_landlock_helper_src_from_exe(exe: &std::path::Path) -> Option<std::path::PathBuf> {
     let is_world_agent_exe = exe.file_name().is_some_and(|name| {
         name == std::ffi::OsStr::new("world-agent")
@@ -161,6 +172,7 @@ pub struct WorldAgentService {
     budgets: Arc<RwLock<HashMap<String, AgentBudgetTracker>>>,
     last_policy_resolution_mode: Arc<AtomicU8>,
     last_netfilter_requested: Arc<AtomicU8>,
+    last_netfilter_failure_reason: Arc<RwLock<Option<String>>>,
 }
 
 #[cfg(target_os = "linux")]
@@ -227,6 +239,7 @@ impl WorldAgentService {
                 budgets: Arc::new(RwLock::new(HashMap::new())),
                 last_policy_resolution_mode: Arc::new(AtomicU8::new(0)),
                 last_netfilter_requested: Arc::new(AtomicU8::new(0)),
+                last_netfilter_failure_reason: Arc::new(RwLock::new(None)),
             })
         }
 
@@ -240,6 +253,7 @@ impl WorldAgentService {
                 budgets: Arc::new(RwLock::new(HashMap::new())),
                 last_policy_resolution_mode: Arc::new(AtomicU8::new(0)),
                 last_netfilter_requested: Arc::new(AtomicU8::new(0)),
+                last_netfilter_failure_reason: Arc::new(RwLock::new(None)),
             })
         }
     }
@@ -475,6 +489,7 @@ impl WorldAgentService {
         let world = match self.backend.ensure_session(&spec) {
             Ok(w) => w,
             Err(e) => {
+                self.record_last_netfilter_failure_for_error(isolate_network, &e);
                 tracing::error!(error = %e, error_debug = ?e, "ensure_session failed");
                 return Err(anyhow::anyhow!("Failed to ensure session world"));
             }
@@ -519,10 +534,13 @@ impl WorldAgentService {
         let result = match self.backend.exec(&world, exec_req) {
             Ok(r) => r,
             Err(e) => {
+                self.record_last_netfilter_failure_for_error(isolate_network, &e);
                 tracing::error!(error = %e, "exec failed");
                 return Err(anyhow::anyhow!("Command execution failed"));
             }
         };
+
+        self.clear_last_netfilter_failure_on_success(isolate_network);
 
         #[cfg(target_os = "linux")]
         {
@@ -1082,6 +1100,7 @@ impl WorldAgentService {
         let world = match self.backend.ensure_session(&spec) {
             Ok(w) => w,
             Err(e) => {
+                self.record_last_netfilter_failure_for_error(isolate_network, &e);
                 tracing::error!(error = %e, error_debug = ?e, "ensure_session failed");
                 anyhow::bail!("Failed to ensure session world");
             }
@@ -1142,6 +1161,7 @@ impl WorldAgentService {
 
             match result {
                 Ok(exec_result) => {
+                    service.clear_last_netfilter_failure_on_success(isolate_network);
                     #[cfg(target_os = "linux")]
                     if let Some(ref diff) = exec_result.fs_diff {
                         let snapshot = WorldAgentService::normalize_pending_diff_bucket(diff);
@@ -1180,6 +1200,7 @@ impl WorldAgentService {
                     let _ = tx.send(frame);
                 }
                 Err(e) => {
+                    service.record_last_netfilter_failure_for_error(isolate_network, &e);
                     tracing::error!(error = %e, agent = agent_id, "exec failed");
                     let _ = tx.send(ExecuteStreamFrame::Error {
                         message: e.to_string(),
@@ -1540,6 +1561,13 @@ impl WorldAgentService {
         false
     }
 
+    pub(crate) fn last_netfilter_failure_reason(&self) -> Option<String> {
+        self.last_netfilter_failure_reason
+            .read()
+            .expect("last netfilter failure reason lock poisoned")
+            .clone()
+    }
+
     pub(crate) fn last_netfilter_requested(&self) -> bool {
         self.last_netfilter_requested.load(Ordering::Relaxed) == 1
     }
@@ -1571,6 +1599,13 @@ impl WorldAgentService {
             .store(u8::from(requested), Ordering::Relaxed);
     }
 
+    pub(crate) fn set_last_netfilter_failure_reason(&self, reason: Option<String>) {
+        *self
+            .last_netfilter_failure_reason
+            .write()
+            .expect("last netfilter failure reason lock poisoned") = reason;
+    }
+
     pub(crate) fn record_doctor_request_context(
         &self,
         mode: agent_api_types::PolicyResolutionModeV1,
@@ -1578,6 +1613,42 @@ impl WorldAgentService {
     ) {
         self.set_last_policy_resolution_mode(mode);
         self.set_last_netfilter_requested(requested);
+    }
+
+    pub(crate) fn clear_last_netfilter_failure_on_success(&self, requested: bool) {
+        if requested {
+            self.set_last_netfilter_failure_reason(None);
+        }
+    }
+
+    pub(crate) fn record_last_netfilter_failure_for_error(
+        &self,
+        requested: bool,
+        error: &anyhow::Error,
+    ) {
+        if !requested {
+            return;
+        }
+        if let Some(reason) = classify_last_netfilter_failure_reason(error) {
+            self.set_last_netfilter_failure_reason(Some(reason));
+        }
+    }
+}
+
+fn classify_last_netfilter_failure_reason(error: &anyhow::Error) -> Option<String> {
+    let message = format!("{error:#}");
+    let is_known_failure = message.contains(NETFILTER_ENABLE_REQUIRED_TEXT)
+        || message.contains(NETFILTER_NFT_FAILURE_TEXT)
+        || message.contains(NETFILTER_RESOLUTION_FAILURE_TEXT)
+        || message.contains(NETFILTER_NO_ADDRESS_TEXT)
+        || message.contains(NETFILTER_CGROUP_ATTACH_TEXT)
+        || message.contains(NETFILTER_CGROUP_HELPER_REFUSAL_TEXT)
+        || message.contains(NETFILTER_CGROUP_FORCE_DIRECT_TEXT);
+
+    if is_known_failure {
+        Some(message)
+    } else {
+        None
     }
 }
 
@@ -1869,6 +1940,7 @@ mod tests {
         let service = WorldAgentService::new().unwrap();
         assert_eq!(service.worlds.read().unwrap().len(), 0);
         assert!(!service.last_netfilter_requested());
+        assert!(service.last_netfilter_failure_reason().is_none());
     }
 
     #[cfg(target_os = "linux")]
@@ -1897,6 +1969,63 @@ mod tests {
             Some(agent_api_types::PolicyResolutionModeV1::LegacyLocal)
         );
         assert!(!service.last_netfilter_requested());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn record_last_netfilter_failure_for_error_tracks_only_published_failure_classes() {
+        let service = WorldAgentService::new().expect("service");
+        let known_errors = [
+            anyhow::anyhow!(NETFILTER_ENABLE_REQUIRED_TEXT),
+            anyhow::anyhow!("nft command failed: permission denied"),
+            anyhow::anyhow!("failed to resolve allowed domain `example.com`: dns lookup failed"),
+            anyhow::anyhow!("allowed domain `example.com` resolved to no addresses"),
+            anyhow::anyhow!(
+                "project bind mount helper refused isolated execution before command start: substrate: error: project_bind_mount: cgroup attach failed: /sys/fs/cgroup/substrate/world/cgroup.procs"
+            ),
+        ];
+
+        for err in &known_errors {
+            service.set_last_netfilter_failure_reason(None);
+            service.record_last_netfilter_failure_for_error(true, err);
+            assert_eq!(
+                service.last_netfilter_failure_reason(),
+                Some(format!("{err:#}"))
+            );
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn record_last_netfilter_failure_for_error_ignores_unrelated_or_unrequested_errors() {
+        let service = WorldAgentService::new().expect("service");
+        service.record_last_netfilter_failure_for_error(
+            true,
+            &anyhow::anyhow!("plain command failed"),
+        );
+        assert!(service.last_netfilter_failure_reason().is_none());
+
+        service.record_last_netfilter_failure_for_error(
+            false,
+            &anyhow::anyhow!(NETFILTER_ENABLE_REQUIRED_TEXT),
+        );
+        assert!(service.last_netfilter_failure_reason().is_none());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn clear_last_netfilter_failure_on_success_only_resets_isolated_runs() {
+        let service = WorldAgentService::new().expect("service");
+        service.set_last_netfilter_failure_reason(Some("nft command failed: denied".to_string()));
+
+        service.clear_last_netfilter_failure_on_success(false);
+        assert_eq!(
+            service.last_netfilter_failure_reason(),
+            Some("nft command failed: denied".to_string())
+        );
+
+        service.clear_last_netfilter_failure_on_success(true);
+        assert!(service.last_netfilter_failure_reason().is_none());
     }
 
     #[test]

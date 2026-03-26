@@ -2032,8 +2032,6 @@ async fn handle_legacy_start(
     let (cmd, cwd, env_map, policy_snapshot, _world_network, _span_id, cols, rows) = start_msg;
     #[cfg(not(target_os = "linux"))]
     let _policy_snapshot = policy_snapshot;
-    #[cfg(not(target_os = "linux"))]
-    let _world_network = _world_network;
     #[cfg(target_os = "linux")]
     let mut env = env_map;
     #[cfg(not(target_os = "linux"))]

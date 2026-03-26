@@ -799,6 +799,12 @@ fn write_world_doctor_report(stream: &mut UnixStream) {
         "collected_at_utc": "2026-01-08T00:00:00Z",
         "policy_snapshot_v1_supported": true,
         "policy_resolution_mode": null,
+        "netfilter_status": {
+            "requested": false,
+            "enabled": false,
+            "world_netfilter_enable_present": false,
+            "last_failure_reason": null
+        },
         "landlock": {
             "supported": true,
             "abi": 3,

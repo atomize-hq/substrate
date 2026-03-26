@@ -155,6 +155,7 @@ pub async fn doctor_world(
         landlock.supported && matches!(probe.result, WorldDoctorWorldFsStrategyProbeResultV1::Pass);
     let requested = service.last_netfilter_requested();
     let world_netfilter_enable_present = doctor_world_netfilter_enable_present();
+    let last_failure_reason = service.last_netfilter_failure_reason();
     let report = WorldDoctorReportV1 {
         schema_version: 2,
         ok,
@@ -165,7 +166,7 @@ pub async fn doctor_world(
             requested,
             enabled: requested && world_netfilter_enable_present,
             world_netfilter_enable_present,
-            last_failure_reason: None,
+            last_failure_reason,
         }),
         landlock,
         world_fs_strategy: WorldDoctorWorldFsStrategyV1 {
@@ -452,5 +453,28 @@ mod tests {
         assert!(!status.enabled);
         assert!(!status.world_netfilter_enable_present);
         assert!(status.last_failure_reason.is_none());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn doctor_world_surfaces_last_netfilter_failure_reason() {
+        let _guard = EnvGuard::set(&[("WORLD_NETFILTER_ENABLE", None)]);
+        let service = WorldAgentService::new().expect("service");
+        service.set_last_netfilter_requested(true);
+        service.set_last_netfilter_failure_reason(Some(
+            "WORLD_NETFILTER_ENABLE must be set to 1/true/yes before requested network isolation can install nftables rules"
+                .to_string(),
+        ));
+
+        let result = doctor_world(State(service)).await.expect("doctor");
+        let report = result.0;
+        let status = report.netfilter_status.expect("netfilter status");
+
+        assert_eq!(
+            status.last_failure_reason.as_deref(),
+            Some(
+                "WORLD_NETFILTER_ENABLE must be set to 1/true/yes before requested network isolation can install nftables rules"
+            )
+        );
     }
 }

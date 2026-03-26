@@ -617,6 +617,12 @@ managers:
             "collected_at_utc": "2026-01-08T00:00:00Z",
             "policy_snapshot_v1_supported": true,
             "policy_resolution_mode": null,
+            "netfilter_status": {
+                "requested": false,
+                "enabled": false,
+                "world_netfilter_enable_present": false,
+                "last_failure_reason": null
+            },
             "landlock": {
                 "supported": true,
                 "abi": 3,
@@ -694,6 +700,12 @@ managers:
             "collected_at_utc": "2026-01-08T00:00:00Z",
             "policy_snapshot_v1_supported": true,
             "policy_resolution_mode": null,
+            "netfilter_status": {
+                "requested": false,
+                "enabled": false,
+                "world_netfilter_enable_present": false,
+                "last_failure_reason": null
+            },
             "landlock": {
                 "supported": true,
                 "abi": 1,
@@ -737,5 +749,79 @@ managers:
     assert_eq!(
         report["world"]["details"]["world"]["landlock"]["abi"],
         json!(1)
+    );
+}
+
+#[test]
+fn shim_doctor_json_preserves_world_netfilter_failure_reason_details() {
+    let manifest = r#"version: 2
+managers:
+  - name: DetectedManager
+    priority: 1
+    detect:
+      script: "exit 0"
+    init:
+      shell: |
+        export DETECTED_MARKER=1
+"#;
+    let fixture = DoctorFixture::new(manifest);
+    fixture.write_world_doctor_fixture(json!({
+        "schema_version": 1,
+        "platform": "linux",
+        "world_enabled": true,
+        "ok": false,
+        "host": {
+            "platform": "linux",
+            "ok": true,
+            "world_fs_mode": "read_only",
+            "world_fs_isolation": "workspace",
+            "world_fs_require_world": true
+        },
+        "world": {
+            "status": "missing_prereqs",
+            "schema_version": 2,
+            "ok": false,
+            "collected_at_utc": "2026-01-08T00:00:00Z",
+            "policy_snapshot_v1_supported": true,
+            "policy_resolution_mode": "snapshot_v3",
+            "netfilter_status": {
+                "requested": true,
+                "enabled": false,
+                "world_netfilter_enable_present": false,
+                "last_failure_reason": "WORLD_NETFILTER_ENABLE must be set to 1/true/yes before requested network isolation can install nftables rules"
+            },
+            "landlock": {
+                "supported": true,
+                "abi": 1,
+                "reason": null
+            },
+            "world_fs_strategy": {
+                "primary": "overlay",
+                "fallback": "fuse",
+                "probe": {
+                    "id": "enumeration_v1",
+                    "probe_file": ".substrate_enum_probe",
+                    "result": "pass",
+                    "failure_reason": null
+                }
+            }
+        }
+    }));
+
+    let output = fixture
+        .command()
+        .arg("shim")
+        .arg("doctor")
+        .arg("--json")
+        .output()
+        .expect("failed to run shim doctor --json");
+    assert!(output.status.success(), "shim doctor --json should succeed");
+
+    let report: Value = serde_json::from_slice(&output.stdout).expect("doctor output JSON");
+    assert_eq!(
+        report["world"]["details"]["world"]["netfilter_status"]["last_failure_reason"],
+        json!(
+            "WORLD_NETFILTER_ENABLE must be set to 1/true/yes before requested network isolation can install nftables rules"
+        )
     );
 }
