@@ -4,8 +4,8 @@ This document is the authoritative registry for cross-seam contracts and the thr
 
 Execution horizon summary:
 
-- `SEAM-4` is the active seam; it now consumes the landed `SEAM-2` runtime failure taxonomy and `THR-04` safety handoff.
-- `SEAM-5` is the next seam once `SEAM-4` publishes the doctor/observability surface and advances `THR-05`.
+- `SEAM-4` is the active seam; its seam-local plan is now refreshed against the landed `SEAM-1`, `SEAM-2`, and `SEAM-3` closeouts and it revalidates the inbound handoffs that drive doctor observability.
+- `SEAM-5` remains the next seam once `SEAM-4` lands the doctor/observability surface and publishes `THR-05`.
 
 ## Contract registry
 
@@ -80,10 +80,10 @@ Execution horizon summary:
   - **Consumer seam(s)**: `SEAM-2`, `SEAM-4`, `SEAM-5`
   - **Carried contract IDs**: `C-01`
   - **Purpose**: Make policy `net_allowed` available to world-agent via Snapshot V3 without relying on in-guest broker state.
-  - **State**: published
+  - **State**: revalidated
   - **Revalidation trigger**: Any change to `PolicySnapshotV3` schema or canonicalization/validation rules.
   - **Satisfied by**: Snapshot builder populates canonicalized `net_allowed`, and world-agent request routing consumes the snapshot plus `world_network` payload instead of broker-derived allowlist state.
-  - **Notes**: Canonicalization must collapse `"*"` to exactly `["*"]` and reject non-`"*"` wildcard forms when enforcement is requested.
+  - **Notes**: Canonicalization must collapse `"*"` to exactly `["*"]` and reject non-`"*"` wildcard forms when enforcement is requested. `SEAM-4` pre-exec review now revalidates this handoff as the basis for doctor `requested` semantics.
 
 - **Thread ID**: `THR-02`
   - **Producer seam**: `SEAM-1`
@@ -100,20 +100,20 @@ Execution horizon summary:
   - **Consumer seam(s)**: `SEAM-1`, `SEAM-4`, `SEAM-5`
   - **Carried contract IDs**: `C-04`, `C-05`, `C-06`
   - **Purpose**: Keep enforcement opt-in and operator-controlled at the host boundary.
-  - **State**: published
+  - **State**: revalidated
   - **Revalidation trigger**: Any change to default config behavior or workspace detection semantics.
   - **Satisfied by**: `world.net.filter` gates whether isolate_network is requested; env overrides/exports provide parity tooling.
-  - **Notes**: Default `false` is the back-compat anchor.
+  - **Notes**: Default `false` is the back-compat anchor. `SEAM-4` pre-exec review now revalidates this handoff as the basis for distinguishing host-request posture from runtime enablement.
 
 - **Thread ID**: `THR-04`
   - **Producer seam**: `SEAM-2`
   - **Consumer seam(s)**: `SEAM-4`, `SEAM-5`
   - **Carried contract IDs**: `C-02`
   - **Purpose**: Operational safety guard: enforcement must not accidentally “turn on” without `WORLD_NETFILTER_ENABLE=1`.
-  - **State**: published
+  - **State**: revalidated
   - **Revalidation trigger**: Installer changes or world-agent service configuration changes.
   - **Satisfied by**: If `isolate_network=true`, the world backend now errors when `WORLD_NETFILTER_ENABLE` is missing/unset, when nftables install fails, when allowed domains cannot resolve, or when helper-path cgroup attach cannot be guaranteed before command start.
-  - **Notes**: Published by the `SEAM-2` closeout; this protects against accidental nftables installs/configuration drift and gives `SEAM-4` / `SEAM-5` one concrete failure taxonomy to consume.
+  - **Notes**: Published by the `SEAM-2` closeout; this protects against accidental nftables installs/configuration drift and gives `SEAM-4` / `SEAM-5` one concrete failure taxonomy to consume. `SEAM-4` pre-exec review now revalidates this handoff as the basis for doctor failure-state observability.
 
 - **Thread ID**: `THR-05`
   - **Producer seam**: `SEAM-4`
@@ -123,7 +123,7 @@ Execution horizon summary:
   - **State**: identified
   - **Revalidation trigger**: Changes to doctor endpoints or JSON schema, or new enforcement failure modes.
   - **Satisfied by**: doctor output includes requested/enabled/guard status and last failure reason.
-  - **Notes**: Prevents “policy says deny-all but ping works” ambiguity.
+  - **Notes**: Prevents “policy says deny-all but ping works” ambiguity. `SEAM-4` now owns an active exec-ready plan to publish this handoff through its seam-local slices.
 
 ## Dependency graph (orientation)
 

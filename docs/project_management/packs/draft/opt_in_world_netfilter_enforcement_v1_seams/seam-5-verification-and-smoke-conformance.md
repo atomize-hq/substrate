@@ -3,7 +3,7 @@ seam_id: SEAM-5
 seam_slug: verification-and-smoke-conformance
 type: conformance
 status: proposed
-execution_horizon: future
+execution_horizon: next
 plan_version: v1
 basis:
   currentness: provisional
@@ -67,7 +67,7 @@ open_remediations: []
 - **Rollout / safety**:
   - Gate broad opt-in behind having the smoke and unit-level invariants in place.
 - **Downstream decomposition context**:
-  - Why this seam is `future`: it depends on the core contracts being stable enough to lock.
+  - Why this seam is `next`: core config/routing/runtime handoffs are now landed, but it still waits on `SEAM-4` to publish the doctor observability contract before active planning can fully revalidate against the final operator surface.
   - Which threads matter most: whichever threads remain `identified` after landing earlier seams.
   - What the first seam-local review should focus on: what is “must not regress” and how to make privileged tests reliable/optional.
 - **Expected seam-exit concerns**:
@@ -79,4 +79,3 @@ open_remediations: []
     - smoke playbook and doctor expectations
   - Downstream seams most likely to require revalidation:
     - none (terminal conformance seam)
-
