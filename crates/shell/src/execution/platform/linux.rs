@@ -790,6 +790,8 @@ async fn legacy_world_doctor_report_v1_via_execute(
     let cwd_path = std::path::PathBuf::from("/tmp");
     let network_policy =
         crate::execution::policy_snapshot::resolve_world_network_policy_for_cwd(&cwd_path)?;
+    let world_network =
+        crate::execution::policy_snapshot::request_world_network_routing(&network_policy);
     let policy_snapshot = network_policy.snapshot;
 
     let req = ExecuteRequest {
@@ -801,9 +803,7 @@ async fn legacy_world_doctor_report_v1_via_execute(
         agent_id: "doctor-world-probe".to_string(),
         budget: None,
         policy_snapshot,
-        world_network: Some(crate::execution::policy_snapshot::request_world_network_routing(
-            &network_policy,
-        )),
+        world_network: Some(world_network),
         world_fs_mode: Some(WorldFsMode::Writable),
     };
 
