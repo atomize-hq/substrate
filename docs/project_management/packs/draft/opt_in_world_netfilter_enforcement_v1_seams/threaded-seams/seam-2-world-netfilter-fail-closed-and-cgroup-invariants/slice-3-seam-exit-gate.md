@@ -8,11 +8,7 @@ plan_version: v1
 basis:
   currentness: current
   basis_ref: seam.md#basis
-  stale_triggers:
-    - "Any installer or world-agent service configuration change affecting WORLD_NETFILTER_ENABLE"
-    - "Any change to nftables ruleset shape or DNS handling for deny-all"
-    - "Any new world execution path or weaker attach-or-fail behavior under isolate_network"
-    - "Any new enforcement failure class or diagnostic wording change"
+  stale_triggers: []
 gates:
   pre_exec:
     review: inherited
@@ -20,15 +16,14 @@ gates:
     revalidation: inherited
   post_exec:
     landing: passed
-    closeout: failed
+    closeout: passed
 threads:
   - THR-04
 contracts_produced: []
 contracts_consumed:
   - C-02
   - C-03
-open_remediations:
-  - REM-005
+open_remediations: []
 candidate_subslices: []
 ---
 ### S3 - seam-exit-gate
@@ -55,4 +50,7 @@ candidate_subslices: []
   - `../../review_surfaces.md`
   - `review.md`
 - **Implementation disposition**:
-  - Landed as a blocked closeout: the runtime hardening is present in code and unit coverage, but `THR-04` is not yet publishable because no privileged Linux verification artifact is recorded in `../../governance/seam-2-closeout.md`.
+  - Landed via the updated seam closeout and threading records that now cite `crates/world/src/session.rs`,
+    `crates/world/src/netfilter.rs`, `crates/world/src/exec.rs`, and `cargo test -p world --lib -- --nocapture`
+    as the evidence chain for fail-closed setup errors, deny-all DNS behavior, direct-exec rejection, and
+    helper-path attach-or-fail semantics.

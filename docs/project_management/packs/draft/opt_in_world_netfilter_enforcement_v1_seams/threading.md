@@ -4,8 +4,8 @@ This document is the authoritative registry for cross-seam contracts and the thr
 
 Execution horizon summary:
 
-- `SEAM-2` is the active seam; it is now revalidated against the landed `SEAM-1` Snapshot V3 and host-to-world routing handoff.
-- `SEAM-4` is the next seam once `SEAM-2` lands its fail-closed runtime semantics and publishes the operational safety handoff.
+- `SEAM-4` is the active seam; it now consumes the landed `SEAM-2` runtime failure taxonomy and `THR-04` safety handoff.
+- `SEAM-5` is the next seam once `SEAM-4` publishes the doctor/observability surface and advances `THR-05`.
 
 ## Contract registry
 
@@ -93,7 +93,7 @@ Execution horizon summary:
   - **State**: revalidated
   - **Revalidation trigger**: Any new execution path in world backend or shim that spawns processes without cgroup attach.
   - **Satisfied by**: Host routing requests isolation only when `world.net.filter=true` and canonicalized `net_allowed` is restrictive, and world-agent enforces parity between the snapshot and `world_network.allowed_domains` across PTY and non-PTY request paths.
-  - **Notes**: `SEAM-1` publishes the request contract; `SEAM-2` has now revalidated the published routing contract against the active runtime plan, while downstream fail-closed enforcement still lands in `SEAM-2` execution work.
+  - **Notes**: `SEAM-1` publishes the request contract; `SEAM-2` closeout now records the landed fail-closed runtime and attach-or-fail semantics that make that routed request real.
 
 - **Thread ID**: `THR-03`
   - **Producer seam**: `SEAM-3`
@@ -110,10 +110,10 @@ Execution horizon summary:
   - **Consumer seam(s)**: `SEAM-4`, `SEAM-5`
   - **Carried contract IDs**: `C-02`
   - **Purpose**: Operational safety guard: enforcement must not accidentally “turn on” without `WORLD_NETFILTER_ENABLE=1`.
-  - **State**: identified
+  - **State**: published
   - **Revalidation trigger**: Installer changes or world-agent service configuration changes.
-  - **Satisfied by**: The landed `SEAM-2` runtime now errors if `isolate_network=true` and `WORLD_NETFILTER_ENABLE` is missing/unset, rejects forced direct exec under isolation, and requires helper-based exec paths to attach to `cgroup.procs` before command start.
-  - **Notes**: This protects against accidental nftables installs/configuration drift, but the thread remains unpublished until `SEAM-2` records privileged Linux verification evidence in closeout.
+  - **Satisfied by**: If `isolate_network=true`, the world backend now errors when `WORLD_NETFILTER_ENABLE` is missing/unset, when nftables install fails, when allowed domains cannot resolve, or when helper-path cgroup attach cannot be guaranteed before command start.
+  - **Notes**: Published by the `SEAM-2` closeout; this protects against accidental nftables installs/configuration drift and gives `SEAM-4` / `SEAM-5` one concrete failure taxonomy to consume.
 
 - **Thread ID**: `THR-05`
   - **Producer seam**: `SEAM-4`

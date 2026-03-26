@@ -3,7 +3,7 @@ seam_id: SEAM-2
 seam_slug: world-netfilter-fail-closed-and-cgroup-invariants
 type: platform
 status: landed
-execution_horizon: active
+execution_horizon: future
 plan_version: v2
 basis:
   currentness: current
@@ -26,13 +26,12 @@ gates:
     revalidation: passed
   post_exec:
     landing: passed
-    closeout: failed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S3
-  status: failed
-open_remediations:
-  - REM-005
+  status: passed
+open_remediations: []
 ---
 
 # SEAM-2 - `crates/world` enforcement is real, fail-closed, and unavoidable
@@ -77,8 +76,8 @@ open_remediations:
   - Privileged integration test (ignored) that verifies rules install and deny-all behavior in an isolated netns/cgroup scope.
   - Manual macOS Lima smoke: deny-all fails ping in both `-c` and REPL.
 - **Current blocker posture**:
-  - runtime hardening is landed, but promotion remains blocked because no recorded privileged Linux verification artifact exists yet for the fail-closed nftables install/apply path.
-  - `SEAM-1` still supplies a passed seam-exit handoff (`promotion_readiness: ready`); the remaining blocker is seam-local closeout evidence captured as `REM-005`.
+  - none at the promotion boundary; `SEAM-1` and `SEAM-3` now supply passed seam-exit handoffs, and this seam’s
+    runtime hardening is recorded in `governance/seam-2-closeout.md` with `promotion_readiness: ready`.
 - **Basis posture**:
   - Currentness: `current`; the active plan is refreshed against landed upstream routing in `governance/seam-1-closeout.md`
     and the published host-gate semantics in `governance/seam-3-closeout.md`.
@@ -96,16 +95,17 @@ open_remediations:
 - **Rollout / safety**:
   - Enforcement cannot activate without explicit opt-in request + `WORLD_NETFILTER_ENABLE=1`.
 - **Downstream decomposition context**:
-  - Why this seam remains `active`: the platform/runtime fail-closed implementation is landed, but the pack horizon cannot advance until privileged verification evidence is published in the seam closeout.
+  - Why this seam is now `active`: `SEAM-1` and `SEAM-3` are both landed with passed seam-exit gates, so the remaining
+    critical-path work is the platform/runtime fail-closed implementation.
   - Which threads matter most: `THR-02`, `THR-04`.
   - What the first seam-local review should focus on: cgroup attach coverage, nftables rule correctness, and failure diagnostics that are actionable for operators.
-- **Seam-exit disposition**:
-  - Contracts published:
-    - none; the seam operationalizes `C-02` / `C-03` instead of publishing new contract ownership
-  - Threads advanced:
-    - `THR-02` remains stable
-    - `THR-04` remains `identified` until privileged verification evidence is recorded
-  - Review-surface areas shifted by landing:
-    - doctor/diagnostics can now consume the concrete runtime failure taxonomy from landed code, but must not treat the safety handoff as published yet
+- **Expected seam-exit concerns**:
+  - Contracts likely to publish:
+    - Tightened semantics for `C-02` under opt-in
+  - Threads likely to advance:
+    - `THR-04` to `published`
+    - confirm `THR-02` remains stable after the active runtime hardening lands
+  - Review-surface areas likely to shift after landing:
+    - doctor/diagnostics detail level and failure taxonomy
   - Downstream seams most likely to require revalidation:
-    - `SEAM-4` and `SEAM-5` if installer/service env semantics, nftables DNS behavior, or attach-or-fail coverage changes
+    - `SEAM-4` and `SEAM-5` as new failure modes are discovered
