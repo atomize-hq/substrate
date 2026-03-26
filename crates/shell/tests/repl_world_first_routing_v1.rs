@@ -783,6 +783,45 @@ fn c3_startup_fail_closed_when_persistent_session_cannot_reach_ready() {
 
 #[test]
 #[serial]
+fn c3_startup_surfaces_fatal_persistent_session_error_before_ready() {
+    let temp = temp_dir("substrate-c3-startup-fatal-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    write_policy(&substrate_home, true);
+
+    let sock_temp = short_socket_dir("sub-c3ws-startup-fatal-");
+    let sock = sock_temp.path().join("world.sock");
+    let _server = ReplWorldAgentStub::start(&sock, StreamBehavior::FatalBeforeReady);
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+
+    let start = Instant::now();
+    while start.elapsed() < Duration::from_secs(3) {
+        if repl.try_wait().expect("try_wait") {
+            let (_code, out) = repl.shutdown();
+            assert!(
+                out.contains("simulated persistent start failure"),
+                "expected fatal startup message to be surfaced, got:\n{out}"
+            );
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+
+    let (_code, out) = repl.shutdown();
+    panic!(
+        "expected REPL to exit on fatal startup error before ready, but it kept running; output:\n{out}"
+    );
+}
+
+#[test]
+#[serial]
 fn c3_drift_restart_refreshes_anchor_env_for_new_cwd() {
     let temp = temp_dir("substrate-c3-anchor-drift-");
     let home = temp.path().join("home");

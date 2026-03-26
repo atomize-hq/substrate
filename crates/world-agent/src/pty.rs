@@ -1333,10 +1333,17 @@ fn prepare_persistent_world_context(
     let resolved = resolve_snapshot_routing(policy_snapshot, world_network)?;
     let canonical = resolved.snapshot;
     let fs_mode = resolved.fs_mode;
+    let isolate_network = resolved.world_network.isolate_network;
+
+    record_doctor_request_context_for_pty(
+        service,
+        PolicyResolutionModeV1::SnapshotV3,
+        isolate_network,
+    );
 
     let spec = WorldSpec {
         reuse_session: true,
-        isolate_network: resolved.world_network.isolate_network,
+        isolate_network,
         limits: ResourceLimits::default(),
         enable_preload: false,
         allowed_domains: resolved.world_network.allowed_domains.clone(),
@@ -1345,9 +1352,11 @@ fn prepare_persistent_world_context(
         fs_mode,
     };
 
-    let (world, merged_dir) = service
-        .ensure_session_overlay_root(&spec)
-        .map_err(|e| format!("Failed to prepare world overlay: {e}"))?;
+    let (world, merged_dir) = service.ensure_session_overlay_root(&spec).map_err(|e| {
+        service.record_last_netfilter_failure_for_error(isolate_network, &e);
+        format!("Failed to prepare world overlay: {e}")
+    })?;
+    service.clear_last_netfilter_failure_on_success(isolate_network);
 
     let ns_name = format!("substrate-{}", world.id);
     let ns_path = format!("/var/run/netns/{ns_name}");

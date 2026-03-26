@@ -57,6 +57,8 @@ pub struct ReplWorldAgentRecords {
 pub enum StreamBehavior {
     /// Accept websocket, but close immediately without sending `ready`.
     CloseBeforeReady,
+    /// Send a fatal protocol error before `ready`, then close.
+    FatalBeforeReady,
     /// Behave normally: respond to `start_session`, then accept `exec`.
     Normal,
 }
@@ -515,6 +517,18 @@ impl ReplWorldAgentStub {
                     }
 
                     if behavior == StreamBehavior::CloseBeforeReady {
+                        let _ = sink.send(Message::Close(None)).await;
+                        continue;
+                    }
+                    if behavior == StreamBehavior::FatalBeforeReady {
+                        let err = serde_json::json!({
+                            "type": "error",
+                            "code": "simulated_start_failure",
+                            "message": "simulated persistent start failure",
+                            "fatal": true,
+                        })
+                        .to_string();
+                        let _ = sink.send(Message::Text(err)).await;
                         let _ = sink.send(Message::Close(None)).await;
                         continue;
                     }

@@ -143,9 +143,13 @@ mod imp {
                 read_loop(stream, read_sink, read_state, on_stdout, fatal_tx).await
             });
 
-            let ready = ready_rx
-                .await
-                .map_err(|_| anyhow!("world session failed before ready"))?;
+            let ready = ready_rx.await.map_err(|_| {
+                fatal_rx
+                    .borrow()
+                    .clone()
+                    .map(anyhow::Error::msg)
+                    .unwrap_or_else(|| anyhow!("world session failed before ready"))
+            })?;
             if ready.protocol_version != 1 {
                 read_task.abort();
                 let _ = read_task.await;
