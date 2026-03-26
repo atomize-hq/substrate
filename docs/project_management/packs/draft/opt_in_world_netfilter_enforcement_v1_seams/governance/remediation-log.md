@@ -2,6 +2,12 @@
 
 ## Open remediations
 
+No open remediations.
+
+## Resolved remediations
+
+- Move resolved items here using the same schema, set `status: resolved`, and populate `resolution_evidence`.
+
 ```yaml
 remediation_id: REM-005
 origin_phase: post_exec
@@ -12,7 +18,7 @@ related_thread: THR-04
 related_contract: C-02
 related_artifact: docs/project_management/packs/draft/opt_in_world_netfilter_enforcement_v1_seams/governance/seam-2-closeout.md
 severity: blocking
-status: open
+status: resolved
 owner_seam: SEAM-2
 blocked_targets:
   - seam: SEAM-2
@@ -23,11 +29,10 @@ blocked_targets:
     value: ready
 summary: Record privileged Linux verification evidence for fail-closed nftables enforcement before publishing THR-04
 required_fix: Run the privileged Linux verification surface for the landed runtime hardening (ignored `world` netfilter coverage or equivalent isolated netns/cgroup validation) and capture the resulting artifact references in `governance/seam-2-closeout.md` so THR-04 can be published without ambiguity
+resolution_evidence:
+  - "SEAM-2 closeout now records `seam_exit_gate.status: passed`, `promotion_readiness: ready`, `gates.post_exec.landing: passed`, and `THR-04` published from landed runtime evidence: governance/seam-2-closeout.md"
+  - "SEAM-4 closeout consumes the published `THR-04` handoff without reopening a SEAM-2 blocker, confirming the runtime guard/failure taxonomy is now downstream input rather than an unresolved SEAM-2 remediation: governance/seam-4-closeout.md"
 ```
-
-## Resolved remediations
-
-- Move resolved items here using the same schema, set `status: resolved`, and populate `resolution_evidence`.
 
 ```yaml
 remediation_id: REM-001

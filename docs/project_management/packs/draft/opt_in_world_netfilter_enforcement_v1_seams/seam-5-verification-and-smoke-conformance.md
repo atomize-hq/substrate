@@ -2,28 +2,40 @@
 seam_id: SEAM-5
 seam_slug: verification-and-smoke-conformance
 type: conformance
-status: proposed
-execution_horizon: next
-plan_version: v1
+status: exec-ready
+execution_horizon: active
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
-  required_threads: []
+  upstream_closeouts:
+    - seam-1-closeout.md
+    - seam-2-closeout.md
+    - seam-3-closeout.md
+    - seam-4-closeout.md
+  required_threads:
+    - THR-01
+    - THR-02
+    - THR-03
+    - THR-04
+    - THR-05
   stale_triggers:
-    - "Any change to enforcement semantics or config gating"
+    - "Any change to net_allowed canonicalization/validation rules or world_network routing semantics requires SEAM-5 revalidation."
+    - "Any change to world.net.filter precedence, override applicability, or exported parity env semantics requires SEAM-5 revalidation."
+    - "Any change to runtime failure taxonomy, attach-or-fail behavior, or deny-all DNS semantics requires SEAM-5 revalidation."
+    - "Any change to doctor endpoint schema, field naming, or shell-side rendering/passthrough requires SEAM-5 revalidation."
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
 seam_exit_gate:
   required: true
-  planned_location: reserved_final_slice
+  planned_location: S3
   status: pending
 open_remediations: []
 ---
@@ -51,25 +63,25 @@ open_remediations: []
   - Back-compat default must remain invariant unless explicitly opted in.
 - **Dependencies**
   - Direct blockers:
-    - `SEAM-1` and `SEAM-2` for core enforcement semantics
+    - none; `SEAM-1` through `SEAM-4` now publish the contracts and threads this seam consumes.
   - Transitive blockers:
-    - `SEAM-3` and `SEAM-4` for operational end-to-end confidence
+    - none
 - **Touch surface**:
   - `agent-api-types` tests
   - `crates/shell` tests around snapshot builder and routing decisions
   - `crates/world` tests around rule generation
   - `docs/manual_verification` or related smoke areas
 - **Verification**:
-  - This seam is itself the verification surface.
+  - This seam is itself the verification surface and is now concrete enough to execute.
 - **Risks / unknowns**:
   - Risk: privileged tests are fragile across environments and may be skipped.
   - De-risk plan: keep logic-level tests comprehensive and ensure smoke playbooks are crisp and minimal.
 - **Rollout / safety**:
   - Gate broad opt-in behind having the smoke and unit-level invariants in place.
 - **Downstream decomposition context**:
-  - Why this seam is `next`: core config/routing/runtime handoffs are now landed, but it still waits on `SEAM-4` to publish the doctor observability contract before active planning can fully revalidate against the final operator surface.
-  - Which threads matter most: whichever threads remain `identified` after landing earlier seams.
-  - What the first seam-local review should focus on: what is “must not regress” and how to make privileged tests reliable/optional.
+  - Why this seam is now `active`: `SEAM-4` closeout records `seam_exit_gate.status: passed`, `promotion_readiness: ready`, `gates.post_exec.landing: passed`, and `THR-05` publication, so the final conformance seam can now plan against landed upstream truth instead of provisional handoffs.
+  - Which threads matter most: `THR-05` for the doctor contract revalidation, plus `THR-01` through `THR-04` as the upstream config, routing, and runtime invariants the regression/smoke surfaces must keep intact.
+  - What the seam-local review now focuses on: cross-seam drift between config/routing/runtime/doctor contracts, privileged Linux verification posture, and the macOS Lima smoke flow.
 - **Expected seam-exit concerns**:
   - Contracts likely to publish:
     - none (consumes contracts)

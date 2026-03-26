@@ -5,7 +5,8 @@ This document is the authoritative registry for cross-seam contracts and the thr
 Execution horizon summary:
 
 - `SEAM-4` is now landed; its seam-local closeout publishes `C-07` / `THR-05` from the recorded doctor observability evidence.
-- `SEAM-5` is now the next seam and must revalidate against the published doctor contract before final conformance and smoke closeout.
+- `SEAM-5` is now the active terminal seam. Its promotion revalidates the published doctor contract plus the landed config, routing, and runtime handoffs before final conformance and smoke closeout.
+- No queued `next` seam remains in this pack.
 
 ## Contract registry
 
@@ -120,10 +121,10 @@ Execution horizon summary:
   - **Consumer seam(s)**: `SEAM-5`
   - **Carried contract IDs**: `C-07`
   - **Purpose**: Make enforcement status observable and debuggable for operators.
-  - **State**: published
+  - **State**: revalidated
   - **Revalidation trigger**: Any change to doctor endpoint schema, shell-side JSON rendering/passthrough, runtime failure taxonomy, or requested-state derivation.
   - **Satisfied by**: `world doctor --json` now publishes the additive `netfilter_status` block with `requested`, `enabled`, `world_netfilter_enable_present`, and `last_failure_reason`, and shell/shim doctor surfaces preserve that block for downstream consumers.
-  - **Notes**: Prevents “policy says deny-all but ping works” ambiguity. `SEAM-4` closeout now records the published handoff and the stale triggers that force `SEAM-5` revalidation.
+  - **Notes**: Prevents “policy says deny-all but ping works” ambiguity. `SEAM-4` closeout now records the published handoff and the stale triggers that force `SEAM-5` revalidation; `SEAM-5` promotion has now consumed and revalidated that handoff for the active conformance seam.
 
 ## Dependency graph (orientation)
 
@@ -143,4 +144,5 @@ flowchart LR
 1. `SEAM-3`: land opt-in config and CLI/docs, establishing the back-compat gate before downstream routing or enforcement can become execution-safe.
 2. `SEAM-1`: publish Snapshot V3 `net_allowed` contract and host routing semantics against the now-published `world.net.filter` gate.
 3. `SEAM-2`: make enforcement real + fail-closed under isolate_network, including cgroup attach invariants.
-4. `SEAM-4` + `SEAM-5`: make enforcement status debuggable and lock it in with tests/smoke.
+4. `SEAM-4`: make enforcement status debuggable and publish the doctor contract.
+5. `SEAM-5`: land the terminal regression, privileged verification, and smoke guidance that keep the published contracts from drifting.

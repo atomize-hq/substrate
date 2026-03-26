@@ -12,12 +12,12 @@ This pack captures seam briefs, authoritative threading, pack-level review surfa
 
 Execution horizon:
 
-- Active seam: `SEAM-4`
-- Next seam: `SEAM-5`
+- Active seam: `SEAM-5`
+- Next seam: `null`
 
 Policy:
 
 - only the active seam is eligible for authoritative downstream sub-slices by default
-- the next seam may later receive seam-local review + slices, and only provisional candidate-subslice hints
+- there is no queued next seam because `SEAM-5` is the terminal conformance seam in this pack
 - active and next seams must eventually terminate in a dedicated final `seam-exit-gate` slice once seam-local planning begins
 - future seams remain seam briefs

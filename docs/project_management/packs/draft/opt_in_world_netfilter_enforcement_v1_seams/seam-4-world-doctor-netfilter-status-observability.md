@@ -2,9 +2,9 @@
 seam_id: SEAM-4
 seam_slug: world-doctor-netfilter-status-observability
 type: integration
-status: exec-ready
-execution_horizon: active
-plan_version: v1
+status: landed
+execution_horizon: future
+plan_version: v2
 basis:
   currentness: current
   source_scope_ref: scope_brief.md
@@ -28,12 +28,12 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S3
-  status: pending
+  status: passed
 open_remediations: []
 ---
 
@@ -70,14 +70,14 @@ open_remediations: []
   - `crates/shell` world doctor JSON rendering on Linux, macOS, and Windows
 - **Verification**:
   - doctor JSON shape tests and focused rendering coverage
-  - manual verification during downstream smoke work once the doctor block lands
+  - downstream conformance and smoke work in `SEAM-5` consumes the landed doctor contract rather than redefining it
 - **Risks / unknowns**:
   - Risk: the doctor surface collapses distinct request/gate/runtime states into one low-signal status.
   - De-risk plan: keep the schema explicitly split across requested/enabled/guard/failure fields and pin it with focused tests.
 - **Rollout / safety**:
-  - Diagnostics are additive and safe to ship ahead of broader opt-in, reducing operator ambiguity before conformance work locks behavior in.
+  - Diagnostics landed additively ahead of the terminal conformance seam, reducing operator ambiguity before `SEAM-5` locks the behavior in with regression and smoke coverage.
 - **Downstream decomposition context**:
-  - Why this seam is `active`: the prior runtime closeout is landed and promotion-ready, so the doctor contract can now plan against recorded upstream truth instead of provisional expectations.
+  - Why this seam is now `future`: the doctor contract is landed, `THR-05` is published, and active planning has moved to terminal conformance in `SEAM-5`.
   - Which threads matter most: inbound `THR-01`, `THR-02`, `THR-03`, `THR-04`; outbound `THR-05`.
   - What the first seam-local review should focus on: schema actionability, platform rendering parity, and preserving the upstream failure taxonomy without ambiguity.
 - **Expected seam-exit concerns**:

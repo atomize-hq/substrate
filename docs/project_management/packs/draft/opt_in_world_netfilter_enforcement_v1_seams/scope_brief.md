@@ -4,8 +4,8 @@ pack_version: v1
 pack_status: extracted
 source_ref: user_scope_writeup_2026-03-25
 execution_horizon:
-  active_seam: SEAM-4
-  next_seam: SEAM-5
+  active_seam: SEAM-5
+  next_seam: null
 ---
 
 # Scope Brief - Opt-in World Netfilter Enforcement (Config Gate + Snapshot V3 Plumbing)
