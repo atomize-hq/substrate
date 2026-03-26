@@ -9,14 +9,12 @@ use crate::execution::policy_snapshot::{
 };
 #[cfg(target_os = "macos")]
 use crate::execution::pw;
+#[cfg(unix)]
+use crate::execution::routing::{get_term_size, RawModeGuard};
 #[cfg(all(test, any(target_os = "linux", target_os = "windows")))]
 use crate::execution::world_env_guard;
 #[cfg(target_os = "linux")]
-use crate::execution::{
-    policy_snapshot::bootstrap_world_spec,
-    routing::{get_term_size, RawModeGuard},
-    socket_activation,
-};
+use crate::execution::{policy_snapshot::bootstrap_world_spec, socket_activation};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use agent_api_client::AgentClient;
 use agent_api_types::{ExecuteRequest, ExecuteStreamFrame, WorldFsMode};
@@ -28,7 +26,7 @@ use substrate_broker::world_fs_mode;
 use substrate_common::agent_events::AgentEvent;
 #[cfg(unix)]
 use tokio::net::UnixStream;
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 use tokio::signal::unix::{signal, SignalKind};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use tokio_tungstenite as tungs;
@@ -222,7 +220,7 @@ pub(super) fn execute_world_pty_over_ws(
             &mut env_map,
         )?;
         ensure_world_deps_bin_on_path(&mut env_map);
-        #[cfg(target_os = "linux")]
+        #[cfg(unix)]
         let (cols, rows) = get_term_size();
         #[cfg(not(target_os = "linux"))]
         let (cols, rows) = (80u16, 24u16);
@@ -243,7 +241,7 @@ pub(super) fn execute_world_pty_over_ws(
             .map_err(|e| anyhow::anyhow!("ws send start: {}", e))?;
 
         // Enter raw mode on the local terminal and ensure restoration
-        #[cfg(target_os = "linux")]
+        #[cfg(unix)]
         let _raw_guard = RawModeGuard::for_stdin_if_tty()?;
 
         // Spawn stdin forwarder (raw bytes)
@@ -274,7 +272,7 @@ pub(super) fn execute_world_pty_over_ws(
         });
 
         // Spawn resize watcher (SIGWINCH)
-        #[cfg(target_os = "linux")]
+        #[cfg(unix)]
         let resize_task = {
             let sink_resize = sink.clone();
             let mut sig = signal(SignalKind::window_change())
@@ -297,7 +295,7 @@ pub(super) fn execute_world_pty_over_ws(
         };
 
         // Spawn Unix signal forwarders (INT, TERM, HUP, QUIT) → WS Signal frames
-        #[cfg(target_os = "linux")]
+        #[cfg(unix)]
         let signal_tasks = {
             let mut tasks = Vec::new();
 
@@ -437,7 +435,7 @@ pub(super) fn execute_world_pty_over_ws(
 
         // Cleanup background tasks
         stdin_task.abort();
-        #[cfg(target_os = "linux")]
+        #[cfg(unix)]
         {
             resize_task.abort();
             for t in signal_tasks {

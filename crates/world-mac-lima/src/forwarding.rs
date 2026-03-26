@@ -1,7 +1,7 @@
 //! Forwarding management for host-VM communication.
 
 use anyhow::{Context, Result};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 use tracing::{debug, info, warn};
@@ -123,6 +123,29 @@ fn ssh_available() -> bool {
     which::which("ssh").is_ok()
 }
 
+fn probe_caps_uds(path: &Path) -> bool {
+    use std::io::{Read as _, Write as _};
+    use std::os::unix::net::UnixStream;
+
+    let Ok(mut stream) = UnixStream::connect(path) else {
+        return false;
+    };
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
+    let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
+    let request = b"GET /v1/capabilities HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
+    if stream.write_all(request).is_err() {
+        return false;
+    }
+
+    let mut buf = [0u8; 512];
+    match stream.read(&mut buf) {
+        Ok(n) if n > 0 => std::str::from_utf8(&buf[..n])
+            .unwrap_or("")
+            .contains(" 200 "),
+        _ => false,
+    }
+}
+
 fn create_vsock_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
     // Find available port
     let port = 17788u16;
@@ -228,22 +251,33 @@ fn create_ssh_uds_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
     debug!("Running SSH command: ssh {:?}", ssh_args);
 
     // Start SSH forwarding
-    let mut child = Command::new("ssh")
-        .args(&ssh_args)
+    let mut cmd = Command::new("ssh");
+    cmd.args(&ssh_args)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .context("Failed to start SSH UDS forwarding")?;
+        .stderr(Stdio::piped());
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt as _;
+
+        // Keep the forwarding tunnel out of the shell foreground process group so Ctrl-C meant
+        // for the in-world workload does not also kill the SSH transport underneath it.
+        cmd.process_group(0);
+    }
+    let mut child = cmd.spawn().context("Failed to start SSH UDS forwarding")?;
 
     debug!("SSH process spawned with PID: {:?}", child.id());
 
-    // Wait for socket to appear (up to ~10s)
+    // Wait for the local socket and a successful capabilities probe (up to ~10s).
+    let mut saw_socket = false;
     let mut stderr_buf = String::new();
     for i in 0..20 {
         if socket_path.exists() {
+            saw_socket = true;
+        }
+        if saw_socket && probe_caps_uds(&socket_path) {
             info!(
-                "SSH UDS forwarding established at {}",
+                "SSH UDS forwarding established at {} and passed capabilities health check",
                 socket_path.display()
             );
             return Ok(ForwardingHandle {
@@ -272,7 +306,10 @@ fn create_ssh_uds_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
             }
         }
 
-        debug!("Waiting for socket to appear... attempt {}/20", i + 1);
+        debug!(
+            "Waiting for SSH UDS forwarding health check... attempt {}/20",
+            i + 1
+        );
         std::thread::sleep(Duration::from_millis(500));
     }
 
@@ -283,8 +320,9 @@ fn create_ssh_uds_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
     }
 
     anyhow::bail!(
-        "SSH UDS forwarding failed to establish - socket never appeared at {}\nSSH command: ssh {args}\nSSH stderr:\n{stderr}",
+        "SSH UDS forwarding failed to establish - capabilities probe never succeeded at {} (socket_seen={})\nSSH command: ssh {args}\nSSH stderr:\n{stderr}",
         socket_path.display(),
+        saw_socket,
         args = ssh_args.join(" "),
         stderr = stderr_buf.trim()
     )
@@ -360,6 +398,8 @@ mod tests {
     use super::*;
     use std::env;
     use std::fs;
+    use std::io::{Read as _, Write as _};
+    use std::os::unix::net::UnixListener;
     use tempfile::tempdir;
 
     #[test]
@@ -391,7 +431,53 @@ mod tests {
     }
 
     #[test]
-    fn ssh_uds_forwarding_waits_for_socket_after_spawning() {
+    fn probe_caps_uds_returns_true_for_http_200_response() {
+        let dir = tempdir().expect("tempdir");
+        let socket_path = dir.path().join("agent.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind listener");
+
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let mut buf = [0u8; 256];
+            let _ = stream.read(&mut buf);
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}")
+                .expect("write response");
+        });
+
+        assert!(probe_caps_uds(&socket_path));
+        server.join().expect("join server");
+    }
+
+    #[test]
+    fn probe_caps_uds_returns_false_for_http_error_response() {
+        let dir = tempdir().expect("tempdir");
+        let socket_path = dir.path().join("agent.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind listener");
+
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let mut buf = [0u8; 256];
+            let _ = stream.read(&mut buf);
+            stream
+                .write_all(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n")
+                .expect("write response");
+        });
+
+        assert!(!probe_caps_uds(&socket_path));
+        server.join().expect("join server");
+    }
+
+    #[test]
+    fn probe_caps_uds_returns_false_when_socket_missing() {
+        let dir = tempdir().expect("tempdir");
+        let socket_path = dir.path().join("missing.sock");
+        assert!(!probe_caps_uds(&socket_path));
+        assert!(!fs::exists(&socket_path).expect("exists check"));
+    }
+
+    #[test]
+    fn ssh_uds_forwarding_requires_capabilities_probe() {
         let temp = tempdir().expect("tempdir");
         let home = temp.path().join("home");
         let bin = temp.path().join("bin");
@@ -436,16 +522,12 @@ exit 0
         };
         env::set_var("PATH", &new_path);
 
-        let handle = create_ssh_uds_forwarding("substrate")
-            .expect("ssh uds forwarding should succeed once stub creates socket");
-        match handle.kind() {
-            ForwardingKind::SshUds { path } => {
-                assert!(
-                    path.ends_with("agent.sock"),
-                    "expected forwarded socket to be agent.sock, got {path:?}"
-                );
-            }
-            other => panic!("expected SSH UDS forwarding, got {other:?}"),
+        match create_ssh_uds_forwarding("substrate") {
+            Ok(_) => panic!("ssh uds forwarding should fail without a healthy capabilities probe"),
+            Err(err) => assert!(
+                err.to_string().contains("SSH UDS forwarding failed"),
+                "unexpected error: {err:#}"
+            ),
         }
 
         match prev_home {
