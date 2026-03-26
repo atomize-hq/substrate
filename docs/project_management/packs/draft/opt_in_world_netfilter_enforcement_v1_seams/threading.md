@@ -112,8 +112,8 @@ Execution horizon summary:
   - **Purpose**: Operational safety guard: enforcement must not accidentally “turn on” without `WORLD_NETFILTER_ENABLE=1`.
   - **State**: identified
   - **Revalidation trigger**: Installer changes or world-agent service configuration changes.
-  - **Satisfied by**: If `isolate_network=true` and `WORLD_NETFILTER_ENABLE` is missing/unset, world backend errors with a diagnostic pointing to service/env configuration.
-  - **Notes**: This protects against accidental nftables installs/configuration drift.
+  - **Satisfied by**: The landed `SEAM-2` runtime now errors if `isolate_network=true` and `WORLD_NETFILTER_ENABLE` is missing/unset, rejects forced direct exec under isolation, and requires helper-based exec paths to attach to `cgroup.procs` before command start.
+  - **Notes**: This protects against accidental nftables installs/configuration drift, but the thread remains unpublished until `SEAM-2` records privileged Linux verification evidence in closeout.
 
 - **Thread ID**: `THR-05`
   - **Producer seam**: `SEAM-4`

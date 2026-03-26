@@ -3,27 +3,32 @@ slice_id: S3
 seam_id: SEAM-2
 slice_kind: seam_exit_gate
 execution_horizon: active
-status: exec-ready
+status: landed
 plan_version: v1
 basis:
   currentness: current
   basis_ref: seam.md#basis
-  stale_triggers: []
+  stale_triggers:
+    - "Any installer or world-agent service configuration change affecting WORLD_NETFILTER_ENABLE"
+    - "Any change to nftables ruleset shape or DNS handling for deny-all"
+    - "Any new world execution path or weaker attach-or-fail behavior under isolate_network"
+    - "Any new enforcement failure class or diagnostic wording change"
 gates:
   pre_exec:
     review: inherited
     contract: inherited
     revalidation: inherited
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: failed
 threads:
   - THR-04
 contracts_produced: []
 contracts_consumed:
   - C-02
   - C-03
-open_remediations: []
+open_remediations:
+  - REM-005
 candidate_subslices: []
 ---
 ### S3 - seam-exit-gate
@@ -49,3 +54,5 @@ candidate_subslices: []
 - **Review surface refs**:
   - `../../review_surfaces.md`
   - `review.md`
+- **Implementation disposition**:
+  - Landed as a blocked closeout: the runtime hardening is present in code and unit coverage, but `THR-04` is not yet publishable because no privileged Linux verification artifact is recorded in `../../governance/seam-2-closeout.md`.

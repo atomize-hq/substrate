@@ -2,7 +2,28 @@
 
 ## Open remediations
 
-None.
+```yaml
+remediation_id: REM-005
+origin_phase: post_exec
+source_gate: closeout
+related_seam: SEAM-2
+related_slice: S3
+related_thread: THR-04
+related_contract: C-02
+related_artifact: docs/project_management/packs/draft/opt_in_world_netfilter_enforcement_v1_seams/governance/seam-2-closeout.md
+severity: blocking
+status: open
+owner_seam: SEAM-2
+blocked_targets:
+  - seam: SEAM-2
+    field: seam_exit_gate.status
+    value: passed
+  - seam: SEAM-2
+    field: promotion_readiness
+    value: ready
+summary: Record privileged Linux verification evidence for fail-closed nftables enforcement before publishing THR-04
+required_fix: Run the privileged Linux verification surface for the landed runtime hardening (ignored `world` netfilter coverage or equivalent isolated netns/cgroup validation) and capture the resulting artifact references in `governance/seam-2-closeout.md` so THR-04 can be published without ambiguity
+```
 
 ## Resolved remediations
 

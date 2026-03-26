@@ -1,7 +1,7 @@
 ---
 seam_id: SEAM-2
 seam_slug: world-netfilter-fail-closed-and-cgroup-invariants
-status: exec-ready
+status: landed
 execution_horizon: active
 plan_version: v1
 basis:
@@ -24,13 +24,14 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: failed
 seam_exit_gate:
   required: true
   planned_location: S3
-  status: pending
-open_remediations: []
+  status: failed
+open_remediations:
+  - REM-005
 ---
 # SEAM-2 - `crates/world` enforcement is real, fail-closed, and unavoidable
 
@@ -71,10 +72,10 @@ open_remediations: []
   - Upstream blockers:
     - none; `SEAM-1` now publishes `C-02` and `C-03` with `promotion_readiness: ready`.
   - Downstream blocked seams:
-    - `SEAM-4` needs the runtime failure taxonomy and enablement semantics this seam settles.
-    - `SEAM-5` needs the landed fail-closed behavior before privileged/smoke coverage can lock it in.
+    - `SEAM-4` still needs the runtime failure taxonomy and enablement semantics this seam settled, but it must treat `THR-04` as unpublished until privileged verification is recorded.
+    - `SEAM-5` still needs the landed fail-closed behavior plus the missing privileged/smoke evidence before conformance can close the loop.
   - Contracts produced (per `../../threading.md`):
-    - none; this seam operationalizes the published `SEAM-1` contracts and emits the `THR-04` safety handoff.
+    - none; this seam operationalizes the published `SEAM-1` contracts and lands the runtime semantics behind the `THR-04` safety handoff.
   - Contracts consumed (per `../../threading.md`):
     - `C-02`
     - `C-03`
@@ -86,24 +87,25 @@ open_remediations: []
 - `review.md` is the authoritative artifact for `gates.pre_exec.review`.
 - `../../review_surfaces.md` is pack-level orientation only.
 
-## Seam-exit gate plan
+## Seam-exit gate disposition
 
 - **Planned location**: `S3` (`slice-3-seam-exit-gate.md`)
 - **Why this seam needs an explicit exit gate**: downstream diagnostics and conformance work must consume one explicit record of what fail-closed behavior actually landed, which cgroup attach paths were hardened, and which stale triggers should force revalidation.
-- **Expected contracts to publish**:
-  - no new contract owner transfer; this seam realizes the operational meaning of `C-02` / `C-03`
-- **Expected threads to publish / advance**:
-  - `THR-04`: `identified` -> `published`
-  - `THR-02`: downstream consumption already revalidated during promotion and must remain stable through landing
-- **Likely downstream stale triggers**:
+- **Observed contracts to publish**:
+  - none; this seam realizes the operational meaning of `C-02` / `C-03` and does not transfer contract ownership
+- **Observed thread disposition**:
+  - `THR-02`: remains stable from the upstream handoff through landed runtime hardening
+  - `THR-04`: remains `identified` because the env-guard and attach-or-fail behavior are landed in code/tests but not yet backed by a recorded privileged Linux verification artifact
+- **Downstream stale triggers**:
   - any new world execution path that can spawn outside cgroup attach
   - any change to nftables ruleset shape, especially DNS handling for deny-all
   - any change to `WORLD_NETFILTER_ENABLE` failure semantics or error taxonomy
-- **Expected closeout evidence**:
+- **Recorded closeout evidence**:
   - landed errors replacing warn-and-continue behavior in `session.rs`
   - landed deny-all/no-DNS rule behavior in `netfilter.rs`
   - landed attach-or-fail behavior across bind-mount, fallback, and direct-exec paths
-  - focused tests proving those invariants
+  - focused `world` crate tests proving those invariants
+  - no recorded privileged Linux verification artifact yet; this is the remaining closeout blocker tracked as `REM-005`
 
 ## Slice index
 
