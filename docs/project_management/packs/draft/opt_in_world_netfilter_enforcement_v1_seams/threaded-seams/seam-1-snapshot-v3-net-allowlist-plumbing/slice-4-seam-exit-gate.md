@@ -3,7 +3,7 @@ slice_id: S4
 seam_id: SEAM-1
 slice_kind: seam_exit_gate
 execution_horizon: next
-status: decomposed
+status: landed
 plan_version: v1
 basis:
   currentness: current
@@ -15,8 +15,8 @@ gates:
     contract: inherited
     revalidation: inherited
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 threads:
   - THR-01
   - THR-02
@@ -49,3 +49,5 @@ candidate_subslices: []
 - **Review surface refs**:
   - `../../review_surfaces.md` (R1/R2/R3)
   - `review.md` (planned mismatch hotspots and stale triggers)
+- **Implementation disposition**:
+  - Landed via the Snapshot V3/schema helpers, host routing helpers, and world-agent request-routing surfaces already present in the repo, with closeout evidence now published in `../../governance/seam-1-closeout.md`.

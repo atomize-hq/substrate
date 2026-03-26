@@ -1,7 +1,7 @@
 ---
 seam_id: SEAM-1
 seam_slug: snapshot-v3-net-allowlist-plumbing
-status: decomposed
+status: landed
 execution_horizon: next
 plan_version: v3
 basis:
@@ -24,12 +24,12 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S4
-  status: pending
+  status: passed
 open_remediations: []
 ---
 # SEAM-1 - Snapshot V3 `net_allowed` contract + host→world-agent plumbing
@@ -97,6 +97,11 @@ open_remediations: []
 - **Expected closeout evidence**:
   - Pointers to the schema + tests landing for `C-01`
   - Evidence that world-agent consumes Snapshot V3 `net_allowed` and does not consult in-world broker state for allowlists
+- **Actual closeout disposition**:
+  - `S1` landed in the Snapshot V3 schema plus canonicalization/validation helpers and tests in `crates/agent-api-types`.
+  - `S2` landed in the host snapshot/world-network routing helpers that consume the published `world.net.filter` gate.
+  - `S3` landed in the shared world-agent request-routing path used by both service and PTY execution flows.
+  - `S4` now records the published `C-01` to `C-03` and `THR-01` to `THR-02` handoff in `../../governance/seam-1-closeout.md`.
 
 ## Slice index
 

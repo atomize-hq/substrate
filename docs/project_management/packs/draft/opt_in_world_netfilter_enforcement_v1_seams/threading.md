@@ -4,8 +4,8 @@ This document is the authoritative registry for cross-seam contracts and the thr
 
 Execution horizon summary:
 
-- Active seam: `SEAM-3` (Config opt-in + CLI/docs)
-- Next seam: `SEAM-1` (Snapshot V3 `net_allowed` contract + plumbing)
+- `SEAM-3` is landed as the published host-gate handoff.
+- `SEAM-1` is landed as the published Snapshot V3 and host-to-world routing handoff consumed by downstream seams.
 
 ## Contract registry
 
@@ -80,9 +80,9 @@ Execution horizon summary:
   - **Consumer seam(s)**: `SEAM-2`, `SEAM-4`, `SEAM-5`
   - **Carried contract IDs**: `C-01`
   - **Purpose**: Make policy `net_allowed` available to world-agent via Snapshot V3 without relying on in-guest broker state.
-  - **State**: identified
+  - **State**: published
   - **Revalidation trigger**: Any change to `PolicySnapshotV3` schema or canonicalization/validation rules.
-  - **Satisfied by**: Snapshot builder populates canonicalized `net_allowed`; world-agent uses it for allowed domain routing.
+  - **Satisfied by**: Snapshot builder populates canonicalized `net_allowed`, and world-agent request routing consumes the snapshot plus `world_network` payload instead of broker-derived allowlist state.
   - **Notes**: Canonicalization must collapse `"*"` to exactly `["*"]` and reject non-`"*"` wildcard forms when enforcement is requested.
 
 - **Thread ID**: `THR-02`
@@ -90,10 +90,10 @@ Execution horizon summary:
   - **Consumer seam(s)**: `SEAM-2`, `SEAM-4`, `SEAM-5`
   - **Carried contract IDs**: `C-02`, `C-03`
   - **Purpose**: Ensure the enforcement request to the world backend is unambiguous: when isolate is requested, enforce or fail.
-  - **State**: identified
+  - **State**: published
   - **Revalidation trigger**: Any new execution path in world backend or shim that spawns processes without cgroup attach.
-  - **Satisfied by**: WorldSpec drives netfilter installation; any non-attached spawn path fails when isolation is requested.
-  - **Notes**: This thread is where “fail-closed” is enforced.
+  - **Satisfied by**: Host routing requests isolation only when `world.net.filter=true` and canonicalized `net_allowed` is restrictive, and world-agent enforces parity between the snapshot and `world_network.allowed_domains` across PTY and non-PTY request paths.
+  - **Notes**: `SEAM-1` publishes the request contract; `SEAM-2` still owns the downstream fail-closed runtime enforcement.
 
 - **Thread ID**: `THR-03`
   - **Producer seam**: `SEAM-3`

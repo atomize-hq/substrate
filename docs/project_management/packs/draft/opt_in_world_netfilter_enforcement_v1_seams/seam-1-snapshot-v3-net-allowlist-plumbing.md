@@ -2,7 +2,7 @@
 seam_id: SEAM-1
 seam_slug: snapshot-v3-net-allowlist-plumbing
 type: integration
-status: decomposed
+status: landed
 execution_horizon: next
 plan_version: v2
 basis:
@@ -24,12 +24,12 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S4
-  status: pending
+  status: passed
 open_remediations: []
 ---
 
@@ -74,8 +74,8 @@ open_remediations: []
   - Unit tests for canonicalization/validation in `agent-api-types`.
   - Tests asserting world-agent routes allowlists from snapshot (not broker).
 - **Current blocker posture**:
-  - `SEAM-3` now publishes `C-04` / `THR-03` as landed upstream input, so this seam remains `next` because its own
-    execution work is still pending, not because the host gate is unpublished.
+  - `SEAM-3` now publishes `C-04` / `THR-03` as landed upstream input, and this seam now consumes that handoff in the
+    landed host routing implementation. Remaining work sits downstream in `SEAM-2`, `SEAM-4`, and `SEAM-5`.
 - **Risks / unknowns**:
   - Risk: hostname normalization/IDNA behavior could introduce false denies or unexpected allows.
   - De-risk plan: keep the normalization posture explicit and test-locked (decision is recorded in `SEAM-1/S1.T1`).
