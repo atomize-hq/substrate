@@ -4,8 +4,8 @@ This document is the authoritative registry for cross-seam contracts and the thr
 
 Execution horizon summary:
 
-- `SEAM-4` is the active seam; its seam-local plan is now refreshed against the landed `SEAM-1`, `SEAM-2`, and `SEAM-3` closeouts and it revalidates the inbound handoffs that drive doctor observability.
-- `SEAM-5` remains the next seam once `SEAM-4` lands the doctor/observability surface and publishes `THR-05`.
+- `SEAM-4` is now landed; its seam-local closeout publishes `C-07` / `THR-05` from the recorded doctor observability evidence.
+- `SEAM-5` is now the next seam and must revalidate against the published doctor contract before final conformance and smoke closeout.
 
 ## Contract registry
 
@@ -120,10 +120,10 @@ Execution horizon summary:
   - **Consumer seam(s)**: `SEAM-5`
   - **Carried contract IDs**: `C-07`
   - **Purpose**: Make enforcement status observable and debuggable for operators.
-  - **State**: identified
-  - **Revalidation trigger**: Changes to doctor endpoints or JSON schema, or new enforcement failure modes.
-  - **Satisfied by**: doctor output includes requested/enabled/guard status and last failure reason.
-  - **Notes**: Prevents “policy says deny-all but ping works” ambiguity. `SEAM-4` now owns an active exec-ready plan to publish this handoff through its seam-local slices.
+  - **State**: published
+  - **Revalidation trigger**: Any change to doctor endpoint schema, shell-side JSON rendering/passthrough, runtime failure taxonomy, or requested-state derivation.
+  - **Satisfied by**: `world doctor --json` now publishes the additive `netfilter_status` block with `requested`, `enabled`, `world_netfilter_enable_present`, and `last_failure_reason`, and shell/shim doctor surfaces preserve that block for downstream consumers.
+  - **Notes**: Prevents “policy says deny-all but ping works” ambiguity. `SEAM-4` closeout now records the published handoff and the stale triggers that force `SEAM-5` revalidation.
 
 ## Dependency graph (orientation)
 

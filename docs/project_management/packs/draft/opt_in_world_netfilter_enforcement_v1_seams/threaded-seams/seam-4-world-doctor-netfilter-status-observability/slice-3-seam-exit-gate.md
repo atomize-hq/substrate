@@ -3,7 +3,7 @@ slice_id: S3
 seam_id: SEAM-4
 slice_kind: seam_exit_gate
 execution_horizon: active
-status: exec-ready
+status: landed
 plan_version: v1
 basis:
   currentness: current
@@ -15,8 +15,8 @@ gates:
     contract: inherited
     revalidation: inherited
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 threads:
   - THR-05
 contracts_produced:
@@ -49,3 +49,5 @@ candidate_subslices: []
 - **Review surface refs**:
   - `../../review_surfaces.md`
   - `review.md`
+- **Implementation disposition**:
+  - Landed via the updated seam closeout and thread publication that now cite the additive `C-07` schema in `crates/agent-api-types`, world-agent doctor population in `crates/world-agent`, and focused shell/shim doctor tests as the evidence chain for publishing `THR-05`.

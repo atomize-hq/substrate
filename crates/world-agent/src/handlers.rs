@@ -358,6 +358,11 @@ mod tests {
     use super::*;
     #[cfg(target_os = "linux")]
     use crate::service::WorldAgentService;
+    #[cfg(target_os = "linux")]
+    use std::sync::Mutex;
+
+    #[cfg(target_os = "linux")]
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[cfg(target_os = "linux")]
     struct EnvGuard {
@@ -408,6 +413,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[tokio::test]
     async fn doctor_world_defaults_netfilter_status_when_no_request_seen() {
+        let _lock = ENV_LOCK.lock().unwrap();
         let _guard = EnvGuard::set(&[("WORLD_NETFILTER_ENABLE", None)]);
         let service = WorldAgentService::new().expect("service");
 
@@ -424,6 +430,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[tokio::test]
     async fn doctor_world_reports_requested_and_guard_presence() {
+        let _lock = ENV_LOCK.lock().unwrap();
         let _guard = EnvGuard::set(&[("WORLD_NETFILTER_ENABLE", Some("true"))]);
         let service = WorldAgentService::new().expect("service");
         service.set_last_netfilter_requested(true);
@@ -441,6 +448,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[tokio::test]
     async fn doctor_world_reports_requested_without_guard_as_disabled() {
+        let _lock = ENV_LOCK.lock().unwrap();
         let _guard = EnvGuard::set(&[("WORLD_NETFILTER_ENABLE", None)]);
         let service = WorldAgentService::new().expect("service");
         service.set_last_netfilter_requested(true);
@@ -458,6 +466,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[tokio::test]
     async fn doctor_world_surfaces_last_netfilter_failure_reason() {
+        let _lock = ENV_LOCK.lock().unwrap();
         let _guard = EnvGuard::set(&[("WORLD_NETFILTER_ENABLE", None)]);
         let service = WorldAgentService::new().expect("service");
         service.set_last_netfilter_requested(true);

@@ -1,8 +1,8 @@
 ---
 seam_id: SEAM-4
 seam_slug: world-doctor-netfilter-status-observability
-status: exec-ready
-execution_horizon: active
+status: landed
+execution_horizon: future
 plan_version: v1
 basis:
   currentness: current
@@ -27,12 +27,12 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S3
-  status: pending
+  status: passed
 open_remediations: []
 ---
 # SEAM-4 - Observability: doctor output makes enforcement status obvious
@@ -96,6 +96,13 @@ open_remediations: []
 - `review.md` is the authoritative artifact for `gates.pre_exec.review`.
 - `../../review_surfaces.md` is pack-level orientation only.
 
+## Post-exec outcome
+
+- `S1` and `S2` landed the additive doctor netfilter block in `crates/agent-api-types`, `crates/world-agent`, and the shell-side doctor surfaces.
+- `C-07` is now published with the final landed field names `requested`, `enabled`, `world_netfilter_enable_present`, and `last_failure_reason`.
+- `THR-05` is now published as the downstream handoff `SEAM-5` consumes for conformance and smoke revalidation.
+- No seam-local remediations remain open; downstream work continues in `SEAM-5`.
+
 ## Seam-exit gate plan
 
 - **Planned location**: `S3` (`slice-3-seam-exit-gate.md`)
@@ -112,6 +119,10 @@ open_remediations: []
   - landed world-agent doctor fields and schema updates
   - landed shell-side world doctor JSON passthrough/rendering updates
   - focused tests pinning additive field shape and actionable failure-reason output
+- **Actual closeout disposition**:
+  - `S1` landed the additive `C-07` schema in `crates/agent-api-types` and world-agent doctor population in `crates/world-agent`.
+  - `S2` landed shell/shim doctor preservation of the netfilter block plus actionable failure-reason coverage in focused shell tests.
+  - `S3` now records the published `C-07` / `THR-05` handoff in `../../governance/seam-4-closeout.md`.
 
 ## Slice index
 
