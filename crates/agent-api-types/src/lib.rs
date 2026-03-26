@@ -836,8 +836,19 @@ pub struct WorldDoctorReportV1 {
     /// The policy resolution mode most recently used by the world-agent (when known).
     #[serde(default)]
     pub policy_resolution_mode: Option<PolicyResolutionModeV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub netfilter_status: Option<WorldDoctorNetfilterStatusV1>,
     pub landlock: WorldDoctorLandlockV1,
     pub world_fs_strategy: WorldDoctorWorldFsStrategyV1,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WorldDoctorNetfilterStatusV1 {
+    pub requested: bool,
+    pub enabled: bool,
+    pub world_netfilter_enable_present: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_failure_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -1164,6 +1175,12 @@ mod tests {
             collected_at_utc: "2026-01-08T00:00:00Z".to_string(),
             policy_snapshot_v1_supported: true,
             policy_resolution_mode: Some(super::PolicyResolutionModeV1::SnapshotV3),
+            netfilter_status: Some(super::WorldDoctorNetfilterStatusV1 {
+                requested: true,
+                enabled: true,
+                world_netfilter_enable_present: true,
+                last_failure_reason: None,
+            }),
             landlock: super::WorldDoctorLandlockV1 {
                 supported: true,
                 abi: Some(3),
@@ -1192,6 +1209,7 @@ mod tests {
             report.policy_snapshot_v1_supported
         );
         assert_eq!(back.policy_resolution_mode, report.policy_resolution_mode);
+        assert_eq!(back.netfilter_status, report.netfilter_status);
         assert_eq!(back.landlock.supported, report.landlock.supported);
         assert_eq!(back.landlock.abi, report.landlock.abi);
         assert_eq!(back.landlock.reason, report.landlock.reason);
@@ -1245,5 +1263,6 @@ mod tests {
         assert!(report.ok);
         assert!(!report.policy_snapshot_v1_supported);
         assert!(report.policy_resolution_mode.is_none());
+        assert!(report.netfilter_status.is_none());
     }
 }

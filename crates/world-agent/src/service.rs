@@ -160,6 +160,7 @@ pub struct WorldAgentService {
     worlds: Arc<RwLock<HashMap<String, WorldHandle>>>,
     budgets: Arc<RwLock<HashMap<String, AgentBudgetTracker>>>,
     last_policy_resolution_mode: Arc<AtomicU8>,
+    last_netfilter_requested: Arc<AtomicU8>,
 }
 
 #[cfg(target_os = "linux")]
@@ -225,6 +226,7 @@ impl WorldAgentService {
                 worlds: Arc::new(RwLock::new(HashMap::new())),
                 budgets: Arc::new(RwLock::new(HashMap::new())),
                 last_policy_resolution_mode: Arc::new(AtomicU8::new(0)),
+                last_netfilter_requested: Arc::new(AtomicU8::new(0)),
             })
         }
 
@@ -237,6 +239,7 @@ impl WorldAgentService {
                 worlds: Arc::new(RwLock::new(HashMap::new())),
                 budgets: Arc::new(RwLock::new(HashMap::new())),
                 last_policy_resolution_mode: Arc::new(AtomicU8::new(0)),
+                last_netfilter_requested: Arc::new(AtomicU8::new(0)),
             })
         }
     }
@@ -427,7 +430,6 @@ impl WorldAgentService {
             &cwd,
             &project_dir,
         )?;
-        self.set_last_policy_resolution_mode(policy_resolution_mode);
 
         let PolicyInputs {
             fs_mode,
@@ -440,6 +442,7 @@ impl WorldAgentService {
             landlock_write_paths,
             enforcement_plan_b64,
         } = policy_inputs;
+        self.record_doctor_request_context(policy_resolution_mode, isolate_network);
 
         let host_visible = !isolation_full;
         let empty_env: HashMap<String, String> = HashMap::new();
@@ -1015,7 +1018,6 @@ impl WorldAgentService {
             &cwd,
             &project_dir,
         )?;
-        self.set_last_policy_resolution_mode(policy_resolution_mode);
 
         let PolicyInputs {
             fs_mode,
@@ -1028,6 +1030,7 @@ impl WorldAgentService {
             landlock_write_paths,
             enforcement_plan_b64,
         } = policy_inputs;
+        self.record_doctor_request_context(policy_resolution_mode, isolate_network);
         let always_isolate = should_always_isolate(&req);
 
         let host_visible = !isolation_full;
@@ -1537,6 +1540,10 @@ impl WorldAgentService {
         false
     }
 
+    pub(crate) fn last_netfilter_requested(&self) -> bool {
+        self.last_netfilter_requested.load(Ordering::Relaxed) == 1
+    }
+
     pub(crate) fn last_policy_resolution_mode(
         &self,
     ) -> Option<agent_api_types::PolicyResolutionModeV1> {
@@ -1557,6 +1564,20 @@ impl WorldAgentService {
         };
         self.last_policy_resolution_mode
             .store(encoded, Ordering::Relaxed);
+    }
+
+    pub(crate) fn set_last_netfilter_requested(&self, requested: bool) {
+        self.last_netfilter_requested
+            .store(u8::from(requested), Ordering::Relaxed);
+    }
+
+    pub(crate) fn record_doctor_request_context(
+        &self,
+        mode: agent_api_types::PolicyResolutionModeV1,
+        requested: bool,
+    ) {
+        self.set_last_policy_resolution_mode(mode);
+        self.set_last_netfilter_requested(requested);
     }
 }
 
@@ -1847,6 +1868,35 @@ mod tests {
     async fn test_service_creation() {
         let service = WorldAgentService::new().unwrap();
         assert_eq!(service.worlds.read().unwrap().len(), 0);
+        assert!(!service.last_netfilter_requested());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn record_doctor_request_context_updates_requested_state_for_non_pty_requests() {
+        let service = WorldAgentService::new().expect("service");
+
+        service.record_doctor_request_context(
+            agent_api_types::PolicyResolutionModeV1::SnapshotV3,
+            true,
+        );
+
+        assert_eq!(
+            service.last_policy_resolution_mode(),
+            Some(agent_api_types::PolicyResolutionModeV1::SnapshotV3)
+        );
+        assert!(service.last_netfilter_requested());
+
+        service.record_doctor_request_context(
+            agent_api_types::PolicyResolutionModeV1::LegacyLocal,
+            false,
+        );
+
+        assert_eq!(
+            service.last_policy_resolution_mode(),
+            Some(agent_api_types::PolicyResolutionModeV1::LegacyLocal)
+        );
+        assert!(!service.last_netfilter_requested());
     }
 
     #[test]

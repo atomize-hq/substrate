@@ -4,8 +4,8 @@ use crate::service::WorldAgentService;
 use agent_api_types::{
     ApiError, ExecuteRequest, ExecuteResponse, PendingDiffClearRequestV1,
     PendingDiffClearResponseV1, PendingDiffReconcileRequestV1, PendingDiffReconcileResponseV1,
-    PendingDiffRecordV1, PendingDiffRequestV1, WorldDoctorLandlockV1, WorldDoctorReportV1,
-    WorldDoctorWorldFsStrategyKindV1, WorldDoctorWorldFsStrategyProbeResultV1,
+    PendingDiffRecordV1, PendingDiffRequestV1, WorldDoctorLandlockV1, WorldDoctorNetfilterStatusV1,
+    WorldDoctorReportV1, WorldDoctorWorldFsStrategyKindV1, WorldDoctorWorldFsStrategyProbeResultV1,
     WorldDoctorWorldFsStrategyProbeV1, WorldDoctorWorldFsStrategyV1, WorldFsReadRequestV1,
     WorldFsReadResponseV1,
 };
@@ -19,6 +19,16 @@ use chrono::SecondsFormat;
 use serde_json::{json, Value};
 #[cfg(target_os = "linux")]
 use substrate_common::{WorldFsMode, WorldFsStrategyProbeResult};
+
+#[cfg(target_os = "linux")]
+fn doctor_world_netfilter_enable_present() -> bool {
+    world::netfilter::world_netfilter_enable_present()
+}
+
+#[cfg(not(target_os = "linux"))]
+fn doctor_world_netfilter_enable_present() -> bool {
+    false
+}
 
 /// Wrapper type to implement IntoResponse for ApiError
 #[derive(Debug)]
@@ -143,12 +153,20 @@ pub async fn doctor_world(
 
     let ok =
         landlock.supported && matches!(probe.result, WorldDoctorWorldFsStrategyProbeResultV1::Pass);
+    let requested = service.last_netfilter_requested();
+    let world_netfilter_enable_present = doctor_world_netfilter_enable_present();
     let report = WorldDoctorReportV1 {
         schema_version: 2,
         ok,
         collected_at_utc,
         policy_snapshot_v1_supported: service.policy_snapshot_v1_supported(),
         policy_resolution_mode: service.last_policy_resolution_mode(),
+        netfilter_status: Some(WorldDoctorNetfilterStatusV1 {
+            requested,
+            enabled: requested && world_netfilter_enable_present,
+            world_netfilter_enable_present,
+            last_failure_reason: None,
+        }),
         landlock,
         world_fs_strategy: WorldDoctorWorldFsStrategyV1 {
             primary: WorldDoctorWorldFsStrategyKindV1::Overlay,
@@ -337,6 +355,44 @@ pub async fn gc(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "linux")]
+    use crate::service::WorldAgentService;
+
+    #[cfg(target_os = "linux")]
+    struct EnvGuard {
+        entries: Vec<(String, Option<String>)>,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl EnvGuard {
+        fn set(entries: &[(&str, Option<&str>)]) -> Self {
+            let previous = entries
+                .iter()
+                .map(|(key, value)| {
+                    let previous = std::env::var(key).ok();
+                    match value {
+                        Some(value) => unsafe { std::env::set_var(key, value) },
+                        None => unsafe { std::env::remove_var(key) },
+                    }
+                    ((*key).to_string(), previous)
+                })
+                .collect();
+
+            Self { entries: previous }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            for (key, value) in self.entries.iter().rev() {
+                match value {
+                    Some(value) => unsafe { std::env::set_var(key, value) },
+                    None => unsafe { std::env::remove_var(key) },
+                }
+            }
+        }
+    }
 
     #[tokio::test]
     async fn test_capabilities_handler() {
@@ -346,5 +402,55 @@ mod tests {
         assert_eq!(value["version"], "v1");
         assert!(value["features"].is_array());
         assert_eq!(value["backend"], "world-agent");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn doctor_world_defaults_netfilter_status_when_no_request_seen() {
+        let _guard = EnvGuard::set(&[("WORLD_NETFILTER_ENABLE", None)]);
+        let service = WorldAgentService::new().expect("service");
+
+        let result = doctor_world(State(service)).await.expect("doctor");
+        let report = result.0;
+        let status = report.netfilter_status.expect("netfilter status");
+
+        assert!(!status.requested);
+        assert!(!status.enabled);
+        assert!(!status.world_netfilter_enable_present);
+        assert!(status.last_failure_reason.is_none());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn doctor_world_reports_requested_and_guard_presence() {
+        let _guard = EnvGuard::set(&[("WORLD_NETFILTER_ENABLE", Some("true"))]);
+        let service = WorldAgentService::new().expect("service");
+        service.set_last_netfilter_requested(true);
+
+        let result = doctor_world(State(service)).await.expect("doctor");
+        let report = result.0;
+        let status = report.netfilter_status.expect("netfilter status");
+
+        assert!(status.requested);
+        assert!(status.enabled);
+        assert!(status.world_netfilter_enable_present);
+        assert!(status.last_failure_reason.is_none());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn doctor_world_reports_requested_without_guard_as_disabled() {
+        let _guard = EnvGuard::set(&[("WORLD_NETFILTER_ENABLE", None)]);
+        let service = WorldAgentService::new().expect("service");
+        service.set_last_netfilter_requested(true);
+
+        let result = doctor_world(State(service)).await.expect("doctor");
+        let report = result.0;
+        let status = report.netfilter_status.expect("netfilter status");
+
+        assert!(status.requested);
+        assert!(!status.enabled);
+        assert!(!status.world_netfilter_enable_present);
+        assert!(status.last_failure_reason.is_none());
     }
 }

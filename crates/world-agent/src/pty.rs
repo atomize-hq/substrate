@@ -49,6 +49,15 @@ use world::guard::{should_guard_anchor, wrap_with_anchor_guard};
 #[cfg(target_os = "linux")]
 use world_api::WorldFsMode;
 
+#[cfg(target_os = "linux")]
+fn record_doctor_request_context_for_pty(
+    service: &WorldAgentService,
+    policy_resolution_mode: PolicyResolutionModeV1,
+    isolate_network: bool,
+) {
+    service.record_doctor_request_context(policy_resolution_mode, isolate_network);
+}
+
 fn ensure_xdg_dirs(env: &mut HashMap<String, String>) {
     // Some minimal images don't ship with pre-created XDG dirs (e.g. /root/.local/share),
     // and TUIs like `nano` expect them to exist.
@@ -2129,7 +2138,7 @@ async fn handle_legacy_start(
             };
 
         let host_visible = !isolation_full;
-        service.set_last_policy_resolution_mode(policy_resolution_mode);
+        record_doctor_request_context_for_pty(&service, policy_resolution_mode, isolate_network);
 
         if isolation_full {
             if let Some(snapshot) = policy_snapshot.as_ref() {
@@ -2606,5 +2615,27 @@ mod tests {
         let js = serde_json::to_string(&msg).unwrap();
         assert!(js.contains("\"stdout\""));
         assert!(js.contains("aGVsbG8"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn record_doctor_request_context_for_pty_updates_requested_state() {
+        let service = WorldAgentService::new().expect("service");
+
+        record_doctor_request_context_for_pty(&service, PolicyResolutionModeV1::SnapshotV3, true);
+
+        assert_eq!(
+            service.last_policy_resolution_mode(),
+            Some(PolicyResolutionModeV1::SnapshotV3)
+        );
+        assert!(service.last_netfilter_requested());
+
+        record_doctor_request_context_for_pty(&service, PolicyResolutionModeV1::LegacyLocal, false);
+
+        assert_eq!(
+            service.last_policy_resolution_mode(),
+            Some(PolicyResolutionModeV1::LegacyLocal)
+        );
+        assert!(!service.last_netfilter_requested());
     }
 }

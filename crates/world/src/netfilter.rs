@@ -68,6 +68,12 @@ fn output_with_timeout(mut cmd: Command, timeout: Duration) -> Result<std::proce
     }
 }
 
+pub fn world_netfilter_enable_present() -> bool {
+    std::env::var("WORLD_NETFILTER_ENABLE")
+        .ok()
+        .is_some_and(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+}
+
 /// Network scope tracking for command execution.
 #[derive(Debug, Clone)]
 pub struct NetworkScope {
@@ -109,9 +115,7 @@ struct CgroupMatch {
 impl NetFilter {
     #[cfg(target_os = "linux")]
     fn netfilter_enabled() -> bool {
-        std::env::var("WORLD_NETFILTER_ENABLE")
-            .ok()
-            .is_some_and(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+        world_netfilter_enable_present()
     }
 
     /// Create a new network filter for the given world.

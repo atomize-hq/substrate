@@ -860,6 +860,7 @@ async fn legacy_world_doctor_report_v1_via_execute(
         collected_at_utc: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
         policy_snapshot_v1_supported: false,
         policy_resolution_mode: None,
+        netfilter_status: None,
         landlock,
         world_fs_strategy: WorldDoctorWorldFsStrategyV1 {
             primary: WorldDoctorWorldFsStrategyKindV1::Overlay,
