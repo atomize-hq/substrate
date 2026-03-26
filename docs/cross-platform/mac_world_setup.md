@@ -158,6 +158,30 @@ PATH="$(pwd)/target/debug:$PATH" scripts/mac/smoke.sh
 
 The script performs non-PTY, PTY, and replay runs, then validates that the replayed fs diff includes `world-mac-smoke/file.txt`.
 
+### Netfilter conformance smoke
+
+When you need the opt-in netfilter posture checks, warm the Lima guest with the backend guard enabled:
+
+```sh
+SUBSTRATE_WORLD_NETFILTER_ENABLE=1 scripts/mac/lima-warm.sh
+```
+
+Then run the posture-aware smoke:
+
+```sh
+PATH="$(pwd)/target/debug:$PATH" scripts/mac/smoke.sh --netfilter-conformance
+```
+
+This conformance mode creates a temporary no-workspace fixture, sets
+`SUBSTRATE_OVERRIDE_WORLD_NET_FILTER=1`, and verifies two postures:
+
+- allow-all (`net_allowed=["*"]`): the probe succeeds and doctor reports `requested=false`, `enabled=false`
+- deny-all (`net_allowed=[]`): the probe fails and doctor reports `requested=true`, `enabled=true`, `world_netfilter_enable_present=true`
+
+Use `--log-dir <dir>` if you want the doctor JSON and command transcripts written to a specific
+artifact directory. For the full operator playbook, including Linux privileged verification and the
+optional named-allowlist walkthrough, see `docs/manual_verification/netfilter_enforcement.md`.
+
 ### Using `substrate host doctor` and `substrate world doctor`
 
 Once the VM is provisioned, prefer the CLI doctors for day-to-day checks:
@@ -224,6 +248,18 @@ The shell manages transport detection automatically. The only knobs you should n
 
 - `SUBSTRATE_WORLD=disabled`: Temporarily bypass the world (defaults to `enabled`).
 - `SUBSTRATE_WORLD_ID`: Set by the shell; useful for correlating spans while debugging.
+- `SUBSTRATE_WORLD_NETFILTER_ENABLE=1`: Host-side input for `scripts/mac/lima-warm.sh`; writes
+  `WORLD_NETFILTER_ENABLE=1` into the guest `substrate-world-agent.service` unit so requested
+  netfilter enforcement can be honored.
+
+For a quick guest-env check without reprovisioning, run:
+
+```sh
+scripts/mac/lima-warm.sh --check-only
+```
+
+The output should say whether the guest systemd service currently includes
+`WORLD_NETFILTER_ENABLE=1`.
 
 ## Next Steps
 

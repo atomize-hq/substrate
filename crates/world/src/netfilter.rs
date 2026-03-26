@@ -784,13 +784,16 @@ mod tests {
 
     #[test]
     #[cfg(target_os = "linux")]
-    #[ignore = "requires root + iproute2 + nftables; run with `cargo test -p world -- --ignored`"]
+    #[ignore = "requires root + iproute2 + nftables; run with `cargo test -p world -- --ignored --nocapture`"]
     fn test_nftables_rules() {
         // This test requires root privileges.
         if !nix::unistd::Uid::current().is_root() {
             println!("Skipping nftables test (requires root)");
             return;
         }
+
+        let _lock = ENV_LOCK.lock().unwrap();
+        let _guard = EnvGuard::set(&[("WORLD_NETFILTER_ENABLE", Some("1"))]);
 
         let mut filter = NetFilter::new("test_nft", vec!["github.com".to_string()]).unwrap();
 

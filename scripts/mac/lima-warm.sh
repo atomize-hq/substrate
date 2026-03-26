@@ -109,6 +109,15 @@ check_only_status() {
             else
                 echo "[check-only] Agent socket missing inside guest."
             fi
+            if limactl shell "${VM_NAME}" sudo -n test -f /etc/systemd/system/substrate-world-agent.service >/dev/null 2>&1; then
+                if limactl shell "${VM_NAME}" sudo -n grep -q '^Environment=WORLD_NETFILTER_ENABLE=1$' /etc/systemd/system/substrate-world-agent.service >/dev/null 2>&1; then
+                    echo "[check-only] Guest systemd env includes WORLD_NETFILTER_ENABLE=1."
+                else
+                    echo "[check-only] Guest systemd env does not include WORLD_NETFILTER_ENABLE=1."
+                fi
+            else
+                echo "[check-only] Guest systemd service file for substrate-world-agent is missing."
+            fi
         fi
     else
         echo "[check-only] Lima VM '${VM_NAME}' not found."
@@ -541,6 +550,14 @@ install_guest_binaries() {
 
 write_systemd_units() {
     local enable_netfilter="${SUBSTRATE_WORLD_NETFILTER_ENABLE:-0}"
+    case "${enable_netfilter}" in
+        1|true|yes|TRUE|YES)
+            log "Writing guest systemd unit with WORLD_NETFILTER_ENABLE=1"
+            ;;
+        *)
+            log "Writing guest systemd unit without WORLD_NETFILTER_ENABLE=1"
+            ;;
+    esac
     limactl shell "${VM_NAME}" env SUBSTRATE_WORLD_NETFILTER_ENABLE="${enable_netfilter}" bash <<'EOF'
 set -euo pipefail
 
