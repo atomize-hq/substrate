@@ -5,7 +5,7 @@ use anyhow::{anyhow, Context, Result};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::thread;
 use tracing::warn;
@@ -73,12 +73,86 @@ pub struct ProjectBindMount<'a> {
     pub fs_mode: WorldFsMode,
 }
 
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+#[derive(Clone)]
+pub(crate) struct CgroupAttachPolicy<'a> {
+    required: bool,
+    cgroup_procs_path: Option<PathBuf>,
+    helper_label: &'static str,
+    _marker: std::marker::PhantomData<&'a Path>,
+}
+
+impl<'a> CgroupAttachPolicy<'a> {
+    pub(crate) fn optional(helper_label: &'static str) -> Self {
+        Self {
+            required: false,
+            cgroup_procs_path: None,
+            helper_label,
+            _marker: std::marker::PhantomData,
+        }
+    }
+
+    pub(crate) fn required(helper_label: &'static str, cgroup_path: &'a Path) -> Self {
+        Self {
+            required: true,
+            cgroup_procs_path: Some(cgroup_path.join("cgroup.procs")),
+            helper_label,
+            _marker: std::marker::PhantomData,
+        }
+    }
+
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    fn apply_env(self, env_map: &mut HashMap<String, String>) {
+        if !self.required {
+            return;
+        }
+
+        env_map.insert(
+            "SUBSTRATE_CGROUP_ATTACH_REQUIRED".to_string(),
+            "1".to_string(),
+        );
+        env_map.insert(
+            "SUBSTRATE_CGROUP_ATTACH_HELPER_LABEL".to_string(),
+            self.helper_label.to_string(),
+        );
+        if let Some(path) = self.cgroup_procs_path {
+            env_map.insert(
+                "SUBSTRATE_CGROUP_PROCS_PATH".to_string(),
+                path.display().to_string(),
+            );
+        }
+    }
+}
+
 pub const PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT: &str = r#"set -eu
 set -f
 
 mount --make-rprivate / 2>/dev/null || mount --make-private / 2>/dev/null || true
 world_deps_host_root="${SUBSTRATE_WORLD_DEPS_HOST_ROOT:-/var/lib/substrate/world-deps}"
 mkdir -p "$world_deps_host_root"
+
+attach_to_cgroup_or_fail() {
+  if [ "${SUBSTRATE_CGROUP_ATTACH_REQUIRED:-0}" != "1" ]; then
+    return 0
+  fi
+
+  helper_label="${SUBSTRATE_CGROUP_ATTACH_HELPER_LABEL:-project_bind_mount}"
+  cgroup_procs_path="${SUBSTRATE_CGROUP_PROCS_PATH:-}"
+  if [ -z "$cgroup_procs_path" ]; then
+    echo "substrate: error: ${helper_label}: cgroup attach target missing" >&2
+    exit 4
+  fi
+  if [ ! -e "$cgroup_procs_path" ]; then
+    echo "substrate: error: ${helper_label}: cgroup attach target does not exist: $cgroup_procs_path" >&2
+    exit 4
+  fi
+  if ! printf '%s\n' "$$" > "$cgroup_procs_path"; then
+    echo "substrate: error: ${helper_label}: cgroup attach failed: $cgroup_procs_path" >&2
+    exit 4
+  fi
+}
+
+attach_to_cgroup_or_fail
 
 if [ "${SUBSTRATE_WORLD_FS_ISOLATION:-workspace}" = "full" ]; then
   new_root="$(mktemp -d /tmp/substrate-full-isolation.XXXXXX)"
@@ -338,6 +412,29 @@ set -f
 
 mount --make-rprivate / 2>/dev/null || mount --make-private / 2>/dev/null || true
 
+attach_to_cgroup_or_fail() {
+  if [ "${SUBSTRATE_CGROUP_ATTACH_REQUIRED:-0}" != "1" ]; then
+    return 0
+  fi
+
+  helper_label="${SUBSTRATE_CGROUP_ATTACH_HELPER_LABEL:-world_deps_fallback}"
+  cgroup_procs_path="${SUBSTRATE_CGROUP_PROCS_PATH:-}"
+  if [ -z "$cgroup_procs_path" ]; then
+    echo "substrate: error: ${helper_label}: cgroup attach target missing" >&2
+    exit 4
+  fi
+  if [ ! -e "$cgroup_procs_path" ]; then
+    echo "substrate: error: ${helper_label}: cgroup attach target does not exist: $cgroup_procs_path" >&2
+    exit 4
+  fi
+  if ! printf '%s\n' "$$" > "$cgroup_procs_path"; then
+    echo "substrate: error: ${helper_label}: cgroup attach failed: $cgroup_procs_path" >&2
+    exit 4
+  fi
+}
+
+attach_to_cgroup_or_fail
+
 mkdir -p "$SUBSTRATE_WORLD_DEPS_HOST_ROOT"
 world_deps_hold="${XDG_RUNTIME_DIR:-/tmp}/substrate-world-deps-host.$$"
 mkdir -p "$world_deps_hold"
@@ -370,12 +467,12 @@ else
 fi
 "#;
 
-pub fn execute_shell_command_with_project_bind_mount(
+pub(crate) fn execute_shell_command_with_project_bind_mount(
     cmd: &str,
     mount: ProjectBindMount<'_>,
     env: &HashMap<String, String>,
     login_shell: bool,
-    #[allow(unused_variables)] cgroup_path: Option<&Path>,
+    _attach_policy: CgroupAttachPolicy<'_>,
 ) -> Result<Output> {
     #[cfg(not(target_os = "linux"))]
     {
@@ -404,7 +501,7 @@ pub fn execute_shell_command_with_project_bind_mount(
         // reference into the host project dir would bypass the bind mount (absolute-path escape).
         let script = PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT;
 
-        let env_map = project_bind_mount_env_map(cmd, &mount, env, login_shell);
+        let env_map = project_bind_mount_env_map(cmd, &mount, env, login_shell, _attach_policy);
         let isolation = env_map
             .get("SUBSTRATE_WORLD_FS_ISOLATION")
             .map(|raw| raw.trim().to_ascii_lowercase())
@@ -449,20 +546,6 @@ pub fn execute_shell_command_with_project_bind_mount(
                 return Err(err).with_context(|| format!("Failed to spawn command: {cmd}"));
             }
         };
-
-        if let Some(cgroup_path) = cgroup_path {
-            let procs = cgroup_path.join("cgroup.procs");
-            if let Err(err) = std::fs::create_dir_all(cgroup_path)
-                .and_then(|_| std::fs::write(&procs, format!("{}\n", child.id())))
-            {
-                warn!(
-                    error = %err,
-                    path = %procs.display(),
-                    pid = child.id(),
-                    "world: failed to attach command to cgroup"
-                );
-            }
-        }
 
         let stdout = child
             .stdout
@@ -515,6 +598,7 @@ fn project_bind_mount_env_map(
     mount: &ProjectBindMount<'_>,
     env: &HashMap<String, String>,
     login_shell: bool,
+    attach_policy: CgroupAttachPolicy<'_>,
 ) -> HashMap<String, String> {
     let mut env_map = env.clone();
     env_map.insert(
@@ -563,6 +647,8 @@ fn project_bind_mount_env_map(
             .or_insert_with(|| "/tmp/substrate-xdg/data".to_string());
     }
 
+    attach_policy.apply_env(&mut env_map);
+
     env_map
 }
 
@@ -577,13 +663,13 @@ fn mount_namespace_setup_failure(stderr: &[u8]) -> Option<&str> {
     }
 }
 
-pub fn execute_shell_command_with_world_deps_bind_mount(
+pub(crate) fn execute_shell_command_with_world_deps_bind_mount(
     cmd: &str,
     cwd: &Path,
     env: &HashMap<String, String>,
     login_shell: bool,
     world_deps_root: &Path,
-    #[allow(unused_variables)] cgroup_path: Option<&Path>,
+    _attach_policy: CgroupAttachPolicy<'_>,
 ) -> Result<Output> {
     #[cfg(not(target_os = "linux"))]
     {
@@ -608,36 +694,14 @@ pub fn execute_shell_command_with_world_deps_bind_mount(
             )
         })?;
 
-        let mut env_map = env.clone();
-        env_map.insert(
-            "SUBSTRATE_WORLD_DEPS_HOST_ROOT".to_string(),
-            world_deps_root.display().to_string(),
+        let env_map = world_deps_bind_mount_env_map(
+            cmd,
+            cwd,
+            env,
+            login_shell,
+            world_deps_root,
+            _attach_policy,
         );
-        env_map.insert(
-            "SUBSTRATE_FALLBACK_CWD".to_string(),
-            cwd.display().to_string(),
-        );
-        env_map.insert("SUBSTRATE_INNER_CMD".to_string(), cmd.to_string());
-        env_map.insert(
-            "SUBSTRATE_INNER_LOGIN_SHELL".to_string(),
-            if login_shell {
-                "1".to_string()
-            } else {
-                "0".to_string()
-            },
-        );
-        env_map
-            .entry("HOME".to_string())
-            .or_insert_with(|| "/tmp/substrate-home".to_string());
-        env_map
-            .entry("XDG_CACHE_HOME".to_string())
-            .or_insert_with(|| "/tmp/substrate-xdg/cache".to_string());
-        env_map
-            .entry("XDG_CONFIG_HOME".to_string())
-            .or_insert_with(|| "/tmp/substrate-xdg/config".to_string());
-        env_map
-            .entry("XDG_DATA_HOME".to_string())
-            .or_insert_with(|| "/tmp/substrate-xdg/data".to_string());
 
         let mut command = Command::new("unshare");
         command.arg("--mount");
@@ -659,20 +723,6 @@ pub fn execute_shell_command_with_world_deps_bind_mount(
         let mut child = command
             .spawn()
             .with_context(|| format!("Failed to spawn command: {cmd}"))?;
-
-        if let Some(cgroup_path) = cgroup_path {
-            let procs = cgroup_path.join("cgroup.procs");
-            if let Err(err) = std::fs::create_dir_all(cgroup_path)
-                .and_then(|_| std::fs::write(&procs, format!("{}\n", child.id())))
-            {
-                warn!(
-                    error = %err,
-                    path = %procs.display(),
-                    pid = child.id(),
-                    "world: failed to attach fallback command to cgroup"
-                );
-            }
-        }
 
         let stdout = child
             .stdout
@@ -705,6 +755,56 @@ pub fn execute_shell_command_with_world_deps_bind_mount(
             stderr: stderr_buf,
         })
     }
+}
+
+#[cfg(target_os = "linux")]
+fn world_deps_bind_mount_env_map(
+    cmd: &str,
+    cwd: &Path,
+    env: &HashMap<String, String>,
+    login_shell: bool,
+    world_deps_root: &Path,
+    attach_policy: CgroupAttachPolicy<'_>,
+) -> HashMap<String, String> {
+    let mut env_map = env.clone();
+    env_map.insert(
+        "SUBSTRATE_WORLD_DEPS_HOST_ROOT".to_string(),
+        world_deps_root.display().to_string(),
+    );
+    env_map.insert(
+        "SUBSTRATE_FALLBACK_CWD".to_string(),
+        cwd.display().to_string(),
+    );
+    env_map.insert("SUBSTRATE_INNER_CMD".to_string(), cmd.to_string());
+    env_map.insert(
+        "SUBSTRATE_INNER_LOGIN_SHELL".to_string(),
+        if login_shell {
+            "1".to_string()
+        } else {
+            "0".to_string()
+        },
+    );
+    env_map
+        .entry("HOME".to_string())
+        .or_insert_with(|| "/tmp/substrate-home".to_string());
+    env_map
+        .entry("XDG_CACHE_HOME".to_string())
+        .or_insert_with(|| "/tmp/substrate-xdg/cache".to_string());
+    env_map
+        .entry("XDG_CONFIG_HOME".to_string())
+        .or_insert_with(|| "/tmp/substrate-xdg/config".to_string());
+    env_map
+        .entry("XDG_DATA_HOME".to_string())
+        .or_insert_with(|| "/tmp/substrate-xdg/data".to_string());
+    attach_policy.apply_env(&mut env_map);
+    env_map
+}
+
+pub(crate) fn is_cgroup_attach_wrapper_failure(stderr: &[u8]) -> bool {
+    let Ok(stderr_str) = std::str::from_utf8(stderr) else {
+        return false;
+    };
+    stderr_str.contains(": cgroup attach ")
 }
 
 pub fn stable_world_deps_fallback_root(project_dir: &Path) -> std::path::PathBuf {
@@ -794,6 +894,31 @@ mod tests {
         assert!(WORLD_DEPS_BIND_MOUNT_FALLBACK_SCRIPT.contains("mount -t tmpfs tmpfs /root"));
     }
 
+    #[test]
+    fn helper_scripts_attach_before_execing_inner_command() {
+        let project_attach = PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT
+            .find("attach_to_cgroup_or_fail")
+            .expect("project helper should define attach preamble");
+        let project_exec = PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT
+            .rfind("exec sh -c \"$SUBSTRATE_INNER_CMD\"")
+            .expect("project helper should exec inner command");
+        assert!(
+            project_attach < project_exec,
+            "project helper must attach to the cgroup before execing the inner command"
+        );
+
+        let fallback_attach = WORLD_DEPS_BIND_MOUNT_FALLBACK_SCRIPT
+            .find("attach_to_cgroup_or_fail")
+            .expect("fallback helper should define attach preamble");
+        let fallback_exec = WORLD_DEPS_BIND_MOUNT_FALLBACK_SCRIPT
+            .rfind("exec sh -c \"$SUBSTRATE_INNER_CMD\"")
+            .expect("fallback helper should exec inner command");
+        assert!(
+            fallback_attach < fallback_exec,
+            "fallback helper must attach to the cgroup before execing the inner command"
+        );
+    }
+
     #[cfg(target_os = "linux")]
     mod linux {
         use super::super::*;
@@ -815,21 +940,26 @@ mod tests {
             let env: HashMap<String, String> = HashMap::new();
             let cmd = r#"touch "$SUBSTRATE_MOUNT_PROJECT_DIR/abs_escape.txt""#;
 
-            let output =
-                match execute_shell_command_with_project_bind_mount(cmd, mount, &env, true, None) {
-                    Ok(output) => output,
-                    Err(err) => {
-                        let message = err.to_string();
-                        if message.contains("Operation not permitted")
-                            || message.contains("EPERM")
-                            || message.contains("unshare")
-                        {
-                            println!("Skipping bind-mount caging test: {}", message);
-                            return;
-                        }
-                        panic!("unexpected error running bind-mount wrapper: {:#}", err);
+            let output = match execute_shell_command_with_project_bind_mount(
+                cmd,
+                mount,
+                &env,
+                true,
+                CgroupAttachPolicy::optional("project_bind_mount"),
+            ) {
+                Ok(output) => output,
+                Err(err) => {
+                    let message = err.to_string();
+                    if message.contains("Operation not permitted")
+                        || message.contains("EPERM")
+                        || message.contains("unshare")
+                    {
+                        println!("Skipping bind-mount caging test: {}", message);
+                        return;
                     }
-                };
+                    panic!("unexpected error running bind-mount wrapper: {:#}", err);
+                }
+            };
 
             assert!(
                 !output.status.success(),
@@ -859,7 +989,13 @@ mod tests {
                 "SUBSTRATE_WORLD_DEPS_HOST_ROOT".to_string(),
                 shared_world_deps_root.path().display().to_string(),
             );
-            let env_map = project_bind_mount_env_map("true", &mount, &env, false);
+            let env_map = project_bind_mount_env_map(
+                "true",
+                &mount,
+                &env,
+                false,
+                CgroupAttachPolicy::optional("project_bind_mount"),
+            );
 
             assert_eq!(
                 env_map.get("SUBSTRATE_WORLD_DEPS_HOST_ROOT"),
@@ -869,9 +1005,10 @@ mod tests {
         }
 
         #[test]
-        fn project_bind_mount_env_map_uses_script_default_world_deps_root_when_unset() {
+        fn project_bind_mount_env_map_only_injects_cgroup_target_when_required() {
             let merged = tempdir().expect("merged tempdir");
             let project = tempdir().expect("project tempdir");
+            let cgroup = tempdir().expect("cgroup tempdir");
 
             let mount = ProjectBindMount {
                 merged_dir: merged.path(),
@@ -880,11 +1017,41 @@ mod tests {
                 fs_mode: WorldFsMode::Writable,
             };
 
-            let env_map = project_bind_mount_env_map("true", &mount, &HashMap::new(), false);
+            let optional_env_map = project_bind_mount_env_map(
+                "true",
+                &mount,
+                &HashMap::new(),
+                false,
+                CgroupAttachPolicy::optional("project_bind_mount"),
+            );
+            let required_env_map = project_bind_mount_env_map(
+                "true",
+                &mount,
+                &HashMap::new(),
+                false,
+                CgroupAttachPolicy::required("project_bind_mount", cgroup.path()),
+            );
 
             assert!(
-                !env_map.contains_key("SUBSTRATE_WORLD_DEPS_HOST_ROOT"),
-                "expected primary bind mount env setup to rely on the shared script default world-deps root"
+                !optional_env_map.contains_key("SUBSTRATE_CGROUP_PROCS_PATH"),
+                "expected primary bind mount env setup to omit cgroup attach config when attach is optional"
+            );
+            assert!(
+                !optional_env_map.contains_key("SUBSTRATE_CGROUP_ATTACH_REQUIRED"),
+                "expected primary bind mount env setup to omit attach-required marker when attach is optional"
+            );
+            assert_eq!(
+                required_env_map.get("SUBSTRATE_CGROUP_ATTACH_REQUIRED"),
+                Some(&"1".to_string())
+            );
+            assert_eq!(
+                required_env_map.get("SUBSTRATE_CGROUP_PROCS_PATH"),
+                Some(&cgroup.path().join("cgroup.procs").display().to_string()),
+                "expected primary bind mount env setup to inject the cgroup.procs target when attach is required"
+            );
+            assert!(
+                !required_env_map.contains_key("SUBSTRATE_WORLD_DEPS_HOST_ROOT"),
+                "expected primary bind mount env setup to keep relying on the shared script default world-deps root"
             );
         }
 
@@ -929,7 +1096,7 @@ mod tests {
                 &env,
                 false,
                 world_deps_root.path(),
-                None,
+                CgroupAttachPolicy::optional("world_deps_fallback"),
             ) {
                 Ok(output) => output,
                 Err(err) => {
@@ -1005,7 +1172,7 @@ mod tests {
                 &env,
                 false,
                 &world_deps_root,
-                None,
+                CgroupAttachPolicy::optional("world_deps_fallback"),
             ) {
                 Ok(output) => output,
                 Err(err) => {
@@ -1044,7 +1211,7 @@ mod tests {
                 &env,
                 false,
                 &world_deps_root,
-                None,
+                CgroupAttachPolicy::optional("world_deps_fallback"),
             )
             .expect("probe command should run");
 
@@ -1055,6 +1222,131 @@ mod tests {
                 String::from_utf8_lossy(&probe.stderr)
             );
             assert_eq!(String::from_utf8_lossy(&probe.stdout).trim(), "smoke-hello");
+        }
+
+        #[test]
+        fn world_deps_bind_mount_env_map_only_injects_cgroup_target_when_required() {
+            let cwd = tempdir().expect("cwd tempdir");
+            let world_deps_root = tempdir().expect("world-deps root");
+            let cgroup = tempdir().expect("cgroup tempdir");
+
+            let optional_env_map = world_deps_bind_mount_env_map(
+                "true",
+                cwd.path(),
+                &HashMap::new(),
+                false,
+                world_deps_root.path(),
+                CgroupAttachPolicy::optional("world_deps_fallback"),
+            );
+            let required_env_map = world_deps_bind_mount_env_map(
+                "true",
+                cwd.path(),
+                &HashMap::new(),
+                false,
+                world_deps_root.path(),
+                CgroupAttachPolicy::required("world_deps_fallback", cgroup.path()),
+            );
+
+            assert!(
+                !optional_env_map.contains_key("SUBSTRATE_CGROUP_PROCS_PATH"),
+                "expected fallback env setup to omit cgroup attach config when attach is optional"
+            );
+            assert_eq!(
+                required_env_map.get("SUBSTRATE_CGROUP_ATTACH_REQUIRED"),
+                Some(&"1".to_string())
+            );
+            assert_eq!(
+                required_env_map.get("SUBSTRATE_CGROUP_PROCS_PATH"),
+                Some(&cgroup.path().join("cgroup.procs").display().to_string()),
+                "expected fallback env setup to inject the cgroup.procs target when attach is required"
+            );
+        }
+
+        #[test]
+        fn project_bind_mount_fails_closed_when_cgroup_attach_target_is_missing() {
+            let merged = tempdir().expect("merged tempdir");
+            let project = tempdir().expect("project tempdir");
+            let cgroup = tempdir().expect("cgroup tempdir");
+            let mount = ProjectBindMount {
+                merged_dir: merged.path(),
+                project_dir: project.path(),
+                desired_cwd: project.path(),
+                fs_mode: WorldFsMode::Writable,
+            };
+
+            let output = match execute_shell_command_with_project_bind_mount(
+                "true",
+                mount,
+                &HashMap::new(),
+                false,
+                CgroupAttachPolicy::required("project_bind_mount", cgroup.path()),
+            ) {
+                Ok(output) => output,
+                Err(err) => {
+                    let message = err.to_string();
+                    if message.contains("Operation not permitted")
+                        || message.contains("EPERM")
+                        || message.contains("unshare")
+                    {
+                        println!("Skipping cgroup attach project helper test: {}", message);
+                        return;
+                    }
+                    panic!("unexpected error running project helper: {:#}", err);
+                }
+            };
+
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(
+                !output.status.success(),
+                "expected missing cgroup target to fail before command execution"
+            );
+            assert!(
+                stderr.contains(
+                    "substrate: error: project_bind_mount: cgroup attach target does not exist"
+                ),
+                "expected deterministic project helper attach failure, got stderr={stderr}"
+            );
+        }
+
+        #[test]
+        fn world_deps_bind_mount_fails_closed_when_cgroup_attach_target_is_missing() {
+            let cwd = tempdir().expect("cwd tempdir");
+            let world_deps_root = tempdir().expect("world-deps root");
+            let cgroup = tempdir().expect("cgroup tempdir");
+
+            let output = match execute_shell_command_with_world_deps_bind_mount(
+                "true",
+                cwd.path(),
+                &HashMap::new(),
+                false,
+                world_deps_root.path(),
+                CgroupAttachPolicy::required("world_deps_fallback", cgroup.path()),
+            ) {
+                Ok(output) => output,
+                Err(err) => {
+                    let message = err.to_string();
+                    if message.contains("Operation not permitted")
+                        || message.contains("EPERM")
+                        || message.contains("unshare")
+                    {
+                        println!("Skipping cgroup attach fallback helper test: {}", message);
+                        return;
+                    }
+                    panic!("unexpected error running fallback helper: {:#}", err);
+                }
+            };
+
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(
+                !output.status.success(),
+                "expected missing cgroup target to fail before command execution"
+            );
+            assert!(
+                stderr.contains(
+                    "substrate: error: world_deps_fallback: cgroup attach target does not exist"
+                ),
+                "expected deterministic fallback helper attach failure, got stderr={stderr}"
+            );
         }
     }
 }

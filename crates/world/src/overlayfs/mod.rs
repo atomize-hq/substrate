@@ -600,7 +600,7 @@ pub fn execute_with_overlay(
         },
         env,
         false,
-        None,
+        crate::exec::CgroupAttachPolicy::optional("project_bind_mount"),
     ) {
         Ok(output) => output,
         Err(err) => {
@@ -623,7 +623,7 @@ pub fn execute_with_overlay(
                 env,
                 false,
                 &fallback_world_deps_root,
-                None,
+                crate::exec::CgroupAttachPolicy::optional("world_deps_fallback"),
             ) {
                 Ok(output) => output,
                 Err(world_deps_err) => crate::exec::execute_shell_command(
@@ -679,7 +679,7 @@ pub fn execute_read_only(
         },
         env,
         false,
-        None,
+        crate::exec::CgroupAttachPolicy::optional("project_bind_mount"),
     ) {
         Ok(output) => output,
         Err(err) => {
