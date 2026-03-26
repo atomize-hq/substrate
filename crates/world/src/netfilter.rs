@@ -102,7 +102,7 @@ pub struct NetFilter {
     /// Optional network namespace name to scope nft commands
     ns_name: Option<String>,
     #[cfg(target_os = "linux")]
-    cgroup_match: Option<Vec<CgroupMatch>>,
+    cgroup_match: Option<CgroupMatch>,
 }
 
 #[cfg(target_os = "linux")]
@@ -153,23 +153,22 @@ impl NetFilter {
     pub fn set_cgroup_path(&mut self, path: &Path) {
         self.ns_name = None;
         let base = Path::new("/sys/fs/cgroup");
-        let rel = path.strip_prefix(base).unwrap_or(path);
-        let mut entries = Vec::new();
-        for (idx, component) in rel
+        let Ok(rel) = path.strip_prefix(base) else {
+            self.cgroup_match = None;
+            return;
+        };
+        let components = rel
             .iter()
             .filter_map(|c| c.to_str())
             .filter(|c| !c.is_empty())
-            .enumerate()
-        {
-            entries.push(CgroupMatch {
-                level: (idx as u32) + 1,
-                value: component.to_string(),
-            });
-        }
-        if entries.is_empty() {
+            .collect::<Vec<_>>();
+        if components.is_empty() {
             self.cgroup_match = None;
         } else {
-            self.cgroup_match = Some(entries);
+            self.cgroup_match = Some(CgroupMatch {
+                level: components.len() as u32,
+                value: components.join("/"),
+            });
         }
     }
 
@@ -322,13 +321,9 @@ impl NetFilter {
 
     #[cfg(target_os = "linux")]
     fn cgroup_clause(&self) -> Option<String> {
-        self.cgroup_match.as_ref().map(|entries| {
-            entries
-                .iter()
-                .map(|entry| format!("socket cgroupv2 level {} \"{}\"", entry.level, entry.value))
-                .collect::<Vec<_>>()
-                .join(" ")
-        })
+        self.cgroup_match
+            .as_ref()
+            .map(|entry| format!("socket cgroupv2 level {} \"{}\"", entry.level, entry.value))
     }
 
     #[cfg(target_os = "linux")]
@@ -780,6 +775,27 @@ mod tests {
         let message = format!("{err:#}");
         assert!(message.contains("nft command failed"));
         assert!(!filter.is_active);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_cgroup_clause_uses_full_relative_path_at_deepest_level() {
+        let mut filter = NetFilter::new("test_world", vec![]).unwrap();
+        filter.set_cgroup_path(Path::new("/sys/fs/cgroup/substrate/test_world"));
+
+        assert_eq!(
+            filter.cgroup_clause().as_deref(),
+            Some("socket cgroupv2 level 2 \"substrate/test_world\"")
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_cgroup_clause_is_disabled_for_non_cgroup_paths() {
+        let mut filter = NetFilter::new("test_world", vec![]).unwrap();
+        filter.set_cgroup_path(Path::new("/run/user/1000/substrate/cgroup/test_world"));
+
+        assert!(filter.cgroup_clause().is_none());
     }
 
     #[test]
