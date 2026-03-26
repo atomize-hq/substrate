@@ -791,6 +791,20 @@ mod imp {
         s.chars().all(|c| matches!(c, '0'..='9' | 'a'..='f'))
     }
 
+    async fn fail_closed(state: &Arc<Mutex<SessionState>>) {
+        let mut guard = state.lock().await;
+        let old = std::mem::replace(&mut *guard, SessionState::Closed);
+        match old {
+            SessionState::Starting { ready_tx } => {
+                drop(ready_tx);
+            }
+            SessionState::InFlight { complete_tx, .. } => {
+                drop(complete_tx);
+            }
+            _ => {}
+        }
+    }
+
     #[cfg(test)]
     mod tests {
         use super::*;
@@ -839,20 +853,6 @@ mod imp {
                 value["world_network"]["allowed_domains"],
                 serde_json::json!(["example.com"])
             );
-        }
-    }
-
-    async fn fail_closed(state: &Arc<Mutex<SessionState>>) {
-        let mut guard = state.lock().await;
-        let old = std::mem::replace(&mut *guard, SessionState::Closed);
-        match old {
-            SessionState::Starting { ready_tx } => {
-                drop(ready_tx);
-            }
-            SessionState::InFlight { complete_tx, .. } => {
-                drop(complete_tx);
-            }
-            _ => {}
         }
     }
 }
