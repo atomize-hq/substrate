@@ -1281,6 +1281,48 @@ mod tests {
     }
 
     #[test]
+    fn world_doctor_report_v1_serializes_exact_netfilter_status_field_names() {
+        let report = super::WorldDoctorReportV1 {
+            schema_version: 2,
+            ok: true,
+            collected_at_utc: "2026-01-08T00:00:00Z".to_string(),
+            policy_snapshot_v1_supported: true,
+            policy_resolution_mode: Some(super::PolicyResolutionModeV1::SnapshotV3),
+            netfilter_status: Some(super::WorldDoctorNetfilterStatusV1 {
+                requested: true,
+                enabled: false,
+                world_netfilter_enable_present: false,
+                last_failure_reason: None,
+            }),
+            landlock: super::WorldDoctorLandlockV1 {
+                supported: true,
+                abi: Some(3),
+                reason: None,
+            },
+            world_fs_strategy: super::WorldDoctorWorldFsStrategyV1 {
+                primary: super::WorldDoctorWorldFsStrategyKindV1::Overlay,
+                fallback: super::WorldDoctorWorldFsStrategyKindV1::Fuse,
+                probe: super::WorldDoctorWorldFsStrategyProbeV1 {
+                    id: "enumeration_v1".to_string(),
+                    probe_file: ".substrate_enum_probe".to_string(),
+                    result: super::WorldDoctorWorldFsStrategyProbeResultV1::Pass,
+                    failure_reason: None,
+                },
+            },
+        };
+
+        let value = serde_json::to_value(&report).expect("serialize report");
+        let netfilter_status = value["netfilter_status"]
+            .as_object()
+            .expect("netfilter_status should serialize as object");
+        assert_eq!(netfilter_status.len(), 4);
+        assert!(netfilter_status.contains_key("requested"));
+        assert!(netfilter_status.contains_key("enabled"));
+        assert!(netfilter_status.contains_key("world_netfilter_enable_present"));
+        assert!(netfilter_status.contains_key("last_failure_reason"));
+    }
+
+    #[test]
     fn world_doctor_report_v1_defaults_snapshot_fields_when_missing() {
         // Legacy world-agents may omit snapshot fields; the client schema must default safely.
         let json = r#"{

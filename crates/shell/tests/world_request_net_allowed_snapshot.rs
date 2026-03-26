@@ -3,6 +3,7 @@
 #[path = "support/mod.rs"]
 mod support;
 
+use serde_json::Value;
 use serial_test::serial;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -96,17 +97,22 @@ metadata: {{}}
     fs::write(home_substrate.join("policy.yaml"), policy).expect("write policy.yaml");
 }
 
-fn write_config(home_substrate: &Path) {
+fn write_config(home_substrate: &Path, world_net_filter: bool) {
     fs::create_dir_all(home_substrate).expect("create SUBSTRATE_HOME");
-    let config = r#"world:
+    let config = format!(
+        r#"world:
   enabled: true
   anchor_mode: workspace
   anchor_path: ""
   caged: false
+  net:
+    filter: {}
 
 policy:
   mode: observe
-"#;
+"#,
+        if world_net_filter { "true" } else { "false" }
+    );
     fs::write(home_substrate.join("config.yaml"), config).expect("write config.yaml");
 }
 
@@ -117,11 +123,17 @@ fn short_socket_dir(prefix: &str) -> TempDir {
         .expect("create short socket tempdir in /tmp")
 }
 
-#[test]
-#[serial]
-fn nonpty_world_request_carries_canonical_net_allowed_snapshot() {
-    ensure_substrate_built();
+#[derive(Debug)]
+struct RoutingCase<'a> {
+    name: &'a str,
+    net_allowed_yaml: &'a str,
+    world_net_filter: bool,
+    expected_net_allowed: &'a [&'a str],
+    expected_isolate_network: bool,
+    expected_allowed_domains: &'a [&'a str],
+}
 
+fn run_routing_case(case: &RoutingCase<'_>) {
     let temp = temp_dir("substrate-net-allowed-nonpty-");
     let home = temp.path().join("home");
     let project = temp.path().join("project");
@@ -131,15 +143,12 @@ fn nonpty_world_request_carries_canonical_net_allowed_snapshot() {
     fs::create_dir_all(&substrate_home).expect("create substrate home");
     fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
     write_profile(&project);
-    write_policy_with_net_allowed(
-        &substrate_home,
-        "[\" Example.COM. \", \"example.com\", \"Api.Example.com.\"]",
-    );
-    write_config(&substrate_home);
+    write_policy_with_net_allowed(&substrate_home, case.net_allowed_yaml);
+    write_config(&substrate_home, case.world_net_filter);
 
     let sock_temp = short_socket_dir("sub-net-allowed-sock-");
     let sock = sock_temp.path().join("world.sock");
-    let records: Arc<Mutex<Vec<serde_json::Value>>> = Arc::new(Mutex::new(Vec::new()));
+    let records: Arc<Mutex<Vec<Value>>> = Arc::new(Mutex::new(Vec::new()));
     let _sock = AgentSocket::start(
         &sock,
         SocketResponse::CapabilitiesAndExecuteRecord {
@@ -158,7 +167,8 @@ fn nonpty_world_request_carries_canonical_net_allowed_snapshot() {
         .expect("run substrate -c");
     assert!(
         out.status.success(),
-        "substrate -c failed: stdout={} stderr={}",
+        "{}: substrate -c failed: stdout={} stderr={}",
+        case.name,
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
     );
@@ -173,23 +183,78 @@ fn nonpty_world_request_carries_canonical_net_allowed_snapshot() {
         .iter()
         .map(|value| value.as_str().expect("net_allowed string"))
         .collect();
-    assert_eq!(net_allowed, vec!["example.com", "api.example.com"]);
+    assert_eq!(
+        net_allowed, case.expected_net_allowed,
+        "{}: unexpected canonical policy_snapshot.net_allowed",
+        case.name
+    );
 
     let isolate_network = request
         .pointer("/world_network/isolate_network")
         .and_then(|value| value.as_bool())
         .expect("world_network.isolate_network bool");
     assert!(
-        !isolate_network,
-        "world.net.filter defaults should keep isolate_network=false"
+        isolate_network == case.expected_isolate_network,
+        "{}: unexpected world_network.isolate_network",
+        case.name
     );
 
     let allowed_domains = request
         .pointer("/world_network/allowed_domains")
         .and_then(|value| value.as_array())
         .expect("world_network.allowed_domains array");
-    assert!(
-        allowed_domains.is_empty(),
-        "allowed_domains should be empty when isolate_network=false"
+    let allowed_domains: Vec<&str> = allowed_domains
+        .iter()
+        .map(|value| value.as_str().expect("allowed_domains string"))
+        .collect();
+    assert_eq!(
+        allowed_domains, case.expected_allowed_domains,
+        "{}: unexpected world_network.allowed_domains",
+        case.name
     );
+}
+
+#[test]
+#[serial]
+fn nonpty_world_request_obeys_net_allowed_routing_matrix() {
+    ensure_substrate_built();
+
+    let cases = [
+        RoutingCase {
+            name: "gate off plus restrictive policy stays allow-all at routing layer",
+            net_allowed_yaml: "[\" Example.COM. \", \"example.com\", \"Api.Example.com.\"]",
+            world_net_filter: false,
+            expected_net_allowed: &["example.com", "api.example.com"],
+            expected_isolate_network: false,
+            expected_allowed_domains: &[],
+        },
+        RoutingCase {
+            name: "gate on plus allow-all singleton does not request isolation",
+            net_allowed_yaml: "[\" * \"]",
+            world_net_filter: true,
+            expected_net_allowed: &["*"],
+            expected_isolate_network: false,
+            expected_allowed_domains: &[],
+        },
+        RoutingCase {
+            name: "gate on plus deny-all requests isolation with empty allowlist",
+            net_allowed_yaml: "[]",
+            world_net_filter: true,
+            expected_net_allowed: &[],
+            expected_isolate_network: true,
+            expected_allowed_domains: &[],
+        },
+        RoutingCase {
+            name: "gate on plus restrictive allowlist requests isolation with canonical domains",
+            net_allowed_yaml: "[\" Example.COM. \", \"example.com\", \"Api.Example.com.\"]",
+            world_net_filter: true,
+            expected_net_allowed: &["example.com", "api.example.com"],
+            expected_isolate_network: true,
+            expected_allowed_domains: &["example.com", "api.example.com"],
+        },
+    ];
+
+    for case in &cases {
+        run_routing_case(case);
+    }
 }

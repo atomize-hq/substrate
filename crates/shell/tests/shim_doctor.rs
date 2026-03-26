@@ -7,6 +7,87 @@ use common::doctor_fixture::DoctorFixture;
 use serde_json::{json, Value};
 use std::fs;
 
+const GUARD_MISSING_REASON: &str =
+    "WORLD_NETFILTER_ENABLE must be set to 1/true/yes before requested network isolation can install nftables rules";
+
+fn detected_manager_manifest() -> &'static str {
+    r#"version: 2
+managers:
+  - name: DetectedManager
+    priority: 1
+    detect:
+      script: "exit 0"
+    init:
+      shell: |
+        export DETECTED_MARKER=1
+"#
+}
+
+fn write_world_doctor_netfilter_fixture(
+    fixture: &DoctorFixture,
+    requested: bool,
+    enabled: bool,
+    world_netfilter_enable_present: bool,
+    last_failure_reason: Option<&str>,
+    ok: bool,
+    status: &str,
+) {
+    fixture.write_world_doctor_fixture(json!({
+        "schema_version": 1,
+        "platform": "linux",
+        "world_enabled": true,
+        "ok": ok,
+        "host": {
+            "platform": "linux",
+            "ok": true,
+            "world_fs_mode": "read_only",
+            "world_fs_isolation": "workspace",
+            "world_fs_require_world": true
+        },
+        "world": {
+            "status": status,
+            "schema_version": 2,
+            "ok": ok,
+            "collected_at_utc": "2026-01-08T00:00:00Z",
+            "policy_snapshot_v1_supported": true,
+            "policy_resolution_mode": "snapshot_v3",
+            "netfilter_status": {
+                "requested": requested,
+                "enabled": enabled,
+                "world_netfilter_enable_present": world_netfilter_enable_present,
+                "last_failure_reason": last_failure_reason
+            },
+            "landlock": {
+                "supported": true,
+                "abi": 1,
+                "reason": null
+            },
+            "world_fs_strategy": {
+                "primary": "overlay",
+                "fallback": "fuse",
+                "probe": {
+                    "id": "enumeration_v1",
+                    "probe_file": ".substrate_enum_probe",
+                    "result": "pass",
+                    "failure_reason": null
+                }
+            }
+        }
+    }));
+}
+
+fn read_shim_doctor_json(fixture: &DoctorFixture) -> Value {
+    let output = fixture
+        .command()
+        .arg("shim")
+        .arg("doctor")
+        .arg("--json")
+        .output()
+        .expect("failed to run shim doctor --json");
+    assert!(output.status.success(), "shim doctor --json should succeed");
+    serde_json::from_slice(&output.stdout).expect("doctor output JSON")
+}
+
 #[test]
 fn shim_doctor_human_mode_reports_status_and_path_diagnostics() {
     let manifest = r#"version: 2
@@ -753,75 +834,60 @@ managers:
 }
 
 #[test]
-fn shim_doctor_json_preserves_world_netfilter_failure_reason_details() {
-    let manifest = r#"version: 2
-managers:
-  - name: DetectedManager
-    priority: 1
-    detect:
-      script: "exit 0"
-    init:
-      shell: |
-        export DETECTED_MARKER=1
-"#;
-    let fixture = DoctorFixture::new(manifest);
-    fixture.write_world_doctor_fixture(json!({
-        "schema_version": 1,
-        "platform": "linux",
-        "world_enabled": true,
-        "ok": false,
-        "host": {
-            "platform": "linux",
-            "ok": true,
-            "world_fs_mode": "read_only",
-            "world_fs_isolation": "workspace",
-            "world_fs_require_world": true
-        },
-        "world": {
-            "status": "missing_prereqs",
-            "schema_version": 2,
-            "ok": false,
-            "collected_at_utc": "2026-01-08T00:00:00Z",
-            "policy_snapshot_v1_supported": true,
-            "policy_resolution_mode": "snapshot_v3",
-            "netfilter_status": {
-                "requested": true,
-                "enabled": false,
-                "world_netfilter_enable_present": false,
-                "last_failure_reason": "WORLD_NETFILTER_ENABLE must be set to 1/true/yes before requested network isolation can install nftables rules"
-            },
-            "landlock": {
-                "supported": true,
-                "abi": 1,
-                "reason": null
-            },
-            "world_fs_strategy": {
-                "primary": "overlay",
-                "fallback": "fuse",
-                "probe": {
-                    "id": "enumeration_v1",
-                    "probe_file": ".substrate_enum_probe",
-                    "result": "pass",
-                    "failure_reason": null
-                }
-            }
-        }
-    }));
+fn shim_doctor_json_preserves_world_netfilter_default_details() {
+    let fixture = DoctorFixture::new(detected_manager_manifest());
+    write_world_doctor_netfilter_fixture(&fixture, false, false, false, None, true, "ok");
 
-    let output = fixture
-        .command()
-        .arg("shim")
-        .arg("doctor")
-        .arg("--json")
-        .output()
-        .expect("failed to run shim doctor --json");
-    assert!(output.status.success(), "shim doctor --json should succeed");
-
-    let report: Value = serde_json::from_slice(&output.stdout).expect("doctor output JSON");
+    let report = read_shim_doctor_json(&fixture);
     assert_eq!(
-        report["world"]["details"]["world"]["netfilter_status"]["last_failure_reason"],
-        json!(
-            "WORLD_NETFILTER_ENABLE must be set to 1/true/yes before requested network isolation can install nftables rules"
-        )
+        report["world"]["details"]["world"]["netfilter_status"],
+        json!({
+            "requested": false,
+            "enabled": false,
+            "world_netfilter_enable_present": false,
+            "last_failure_reason": null
+        })
+    );
+}
+
+#[test]
+fn shim_doctor_json_preserves_world_netfilter_enabled_details() {
+    let fixture = DoctorFixture::new(detected_manager_manifest());
+    write_world_doctor_netfilter_fixture(&fixture, true, true, true, None, true, "ok");
+
+    let report = read_shim_doctor_json(&fixture);
+    assert_eq!(
+        report["world"]["details"]["world"]["netfilter_status"],
+        json!({
+            "requested": true,
+            "enabled": true,
+            "world_netfilter_enable_present": true,
+            "last_failure_reason": null
+        })
+    );
+}
+
+#[test]
+fn shim_doctor_json_preserves_world_netfilter_failure_reason_details() {
+    let fixture = DoctorFixture::new(detected_manager_manifest());
+    write_world_doctor_netfilter_fixture(
+        &fixture,
+        true,
+        false,
+        false,
+        Some(GUARD_MISSING_REASON),
+        false,
+        "missing_prereqs",
+    );
+
+    let report = read_shim_doctor_json(&fixture);
+    assert_eq!(
+        report["world"]["details"]["world"]["netfilter_status"],
+        json!({
+            "requested": true,
+            "enabled": false,
+            "world_netfilter_enable_present": false,
+            "last_failure_reason": GUARD_MISSING_REASON
+        })
     );
 }
