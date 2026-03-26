@@ -620,6 +620,13 @@ pub struct Budget {
     pub max_egress_bytes: Option<u64>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WorldNetworkRoutingV1 {
+    pub isolate_network: bool,
+    #[serde(default)]
+    pub allowed_domains: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecuteRequest {
     pub profile: Option<String>,
@@ -630,6 +637,8 @@ pub struct ExecuteRequest {
     pub agent_id: String,
     pub budget: Option<Budget>,
     pub policy_snapshot: PolicySnapshotV3,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_network: Option<WorldNetworkRoutingV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub world_fs_mode: Option<WorldFsMode>,
 }
@@ -652,6 +661,8 @@ pub struct PendingDiffRequestV1 {
     pub env: Option<HashMap<String, String>>,
     pub agent_id: String,
     pub policy_snapshot: PolicySnapshotV3,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_network: Option<WorldNetworkRoutingV1>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -683,6 +694,8 @@ pub struct PendingDiffClearRequestV1 {
     pub env: Option<HashMap<String, String>>,
     pub agent_id: String,
     pub policy_snapshot: PolicySnapshotV3,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_network: Option<WorldNetworkRoutingV1>,
     pub diff_id: String,
 }
 
@@ -693,6 +706,8 @@ pub struct PendingDiffReconcileRequestV1 {
     pub env: Option<HashMap<String, String>>,
     pub agent_id: String,
     pub policy_snapshot: PolicySnapshotV3,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_network: Option<WorldNetworkRoutingV1>,
     pub diff_id: String,
     pub discard_paths: Vec<String>,
 }
@@ -740,6 +755,8 @@ pub struct WorldFsReadRequestV1 {
     pub env: Option<HashMap<String, String>>,
     pub agent_id: String,
     pub policy_snapshot: PolicySnapshotV3,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_network: Option<WorldNetworkRoutingV1>,
     pub path: String,
     #[serde(default)]
     pub include_contents: bool,
@@ -933,6 +950,10 @@ mod tests {
             agent_id: "tester".into(),
             budget: None,
             policy_snapshot: snapshot,
+            world_network: Some(WorldNetworkRoutingV1 {
+                isolate_network: true,
+                allowed_domains: vec!["github.com".to_string()],
+            }),
             world_fs_mode: Some(WorldFsMode::ReadOnly),
         };
 
@@ -951,6 +972,13 @@ mod tests {
         assert_eq!(
             back.policy_snapshot.net_allowed,
             vec!["Github.COM.".to_string()]
+        );
+        assert_eq!(
+            back.world_network,
+            Some(WorldNetworkRoutingV1 {
+                isolate_network: true,
+                allowed_domains: vec!["github.com".to_string()],
+            })
         );
     }
 
@@ -989,6 +1017,7 @@ mod tests {
             agent_id: "tester".into(),
             budget: None,
             policy_snapshot: snapshot,
+            world_network: None,
             world_fs_mode: None,
         };
 

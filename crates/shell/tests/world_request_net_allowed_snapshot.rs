@@ -174,4 +174,22 @@ fn nonpty_world_request_carries_canonical_net_allowed_snapshot() {
         .map(|value| value.as_str().expect("net_allowed string"))
         .collect();
     assert_eq!(net_allowed, vec!["example.com", "api.example.com"]);
+
+    let isolate_network = request
+        .pointer("/world_network/isolate_network")
+        .and_then(|value| value.as_bool())
+        .expect("world_network.isolate_network bool");
+    assert!(
+        !isolate_network,
+        "world.net.filter defaults should keep isolate_network=false"
+    );
+
+    let allowed_domains = request
+        .pointer("/world_network/allowed_domains")
+        .and_then(|value| value.as_array())
+        .expect("world_network.allowed_domains array");
+    assert!(
+        allowed_domains.is_empty(),
+        "allowed_domains should be empty when isolate_network=false"
+    );
 }

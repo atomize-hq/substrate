@@ -5,6 +5,7 @@ pub mod gc;
 pub mod handlers;
 pub mod internal_exec;
 pub mod pty;
+mod request_routing;
 pub mod service;
 #[cfg(unix)]
 mod socket_activation;

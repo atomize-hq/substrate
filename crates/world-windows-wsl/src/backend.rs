@@ -336,6 +336,7 @@ impl WindowsWslBackend {
             agent_id: self.agent_id.clone(),
             budget: None,
             policy_snapshot,
+            world_network: None,
             world_fs_mode: Some(fs_mode),
         })
     }

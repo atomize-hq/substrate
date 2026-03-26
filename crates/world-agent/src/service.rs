@@ -9,7 +9,7 @@ use agent_api_types::WorldFsEntryTypeV1;
 use agent_api_types::{
     Budget, ExecuteRequest, ExecuteResponse, PendingDiffClearRequestV1, PendingDiffClearResponseV1,
     PendingDiffReconcileRequestV1, PendingDiffReconcileResponseV1, PendingDiffRecordV1,
-    PendingDiffRequestV1, WorldFsReadRequestV1, WorldFsReadResponseV1,
+    PendingDiffRequestV1, WorldFsReadRequestV1, WorldFsReadResponseV1, WorldNetworkRoutingV1,
 };
 #[cfg(target_os = "linux")]
 use anyhow::Context;
@@ -50,6 +50,7 @@ use world::stream::{install_stream_sink, StreamKind, StreamSink};
 use world_api::{WorldBackend, WorldHandle, WorldSpec};
 
 use crate::enforcement_plan;
+use crate::request_routing::resolve_snapshot_routing;
 
 pub(crate) const ANCHOR_MODE_ENV: &str = "SUBSTRATE_ANCHOR_MODE";
 pub(crate) const ANCHOR_PATH_ENV: &str = "SUBSTRATE_ANCHOR_PATH";
@@ -420,13 +421,18 @@ impl WorldAgentService {
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
         let env_ref = req.env.as_ref();
         let project_dir = resolve_project_dir(env_ref, Some(&cwd))?;
-        let (policy_resolution_mode, policy_inputs) =
-            resolve_policy_inputs(&req, &cwd, &project_dir)?;
+        let (policy_resolution_mode, policy_inputs) = resolve_policy_inputs(
+            &req.policy_snapshot,
+            req.world_network.as_ref(),
+            &cwd,
+            &project_dir,
+        )?;
         self.set_last_policy_resolution_mode(policy_resolution_mode);
 
         let PolicyInputs {
             fs_mode,
             isolation_full,
+            isolate_network,
             allowed_domains,
             write_allowlist_prefixes,
             landlock_discover_paths,
@@ -454,18 +460,13 @@ impl WorldAgentService {
         }
 
         // Create world spec from request
-        let spec = WorldSpec {
-            reuse_session: true,
-            isolate_network: true,
-            limits: world_api::ResourceLimits::default(),
-            enable_preload: false,
-            allowed_domains,
+        let spec = build_world_spec(
             project_dir,
-            // For agent non-PTY path, prefer consistent fs_diff collection
-            // to enable immediate span enrichment in the shell.
             always_isolate,
             fs_mode,
-        };
+            isolate_network,
+            allowed_domains,
+        );
 
         // Ensure world exists
         let world = match self.backend.ensure_session(&spec) {
@@ -561,28 +562,22 @@ impl WorldAgentService {
             let env_ref = req.env.as_ref();
             let project_dir = resolve_project_dir(env_ref, Some(&cwd))?;
 
-            let snapshot = req
-                .policy_snapshot
-                .canonicalize()
-                .map_err(BadRequestError::new)?;
-            let fs_mode = if snapshot.world_fs.write.enabled {
-                WorldFsMode::Writable
-            } else {
-                WorldFsMode::ReadOnly
-            };
+            let snapshot = req.policy_snapshot.clone();
+            let (_, policy_inputs) =
+                resolve_policy_inputs(&snapshot, req.world_network.as_ref(), &cwd, &project_dir)?;
+            let fs_mode = policy_inputs.fs_mode;
+            let isolate_network = policy_inputs.isolate_network;
+            let allowed_domains = policy_inputs.allowed_domains.clone();
 
             let always_isolate = should_always_isolate_for_profile(req.profile.as_deref());
 
-            let spec = WorldSpec {
-                reuse_session: true,
-                isolate_network: true,
-                limits: world_api::ResourceLimits::default(),
-                enable_preload: false,
-                allowed_domains: substrate_broker::allowed_domains(),
+            let spec = build_world_spec(
                 project_dir,
                 always_isolate,
                 fs_mode,
-            };
+                isolate_network,
+                allowed_domains,
+            );
 
             let world = match self.backend.ensure_session(&spec) {
                 Ok(w) => w,
@@ -674,28 +669,22 @@ impl WorldAgentService {
             let env_ref = req.env.as_ref();
             let project_dir = resolve_project_dir(env_ref, Some(&cwd))?;
 
-            let snapshot = req
-                .policy_snapshot
-                .canonicalize()
-                .map_err(BadRequestError::new)?;
-            let fs_mode = if snapshot.world_fs.write.enabled {
-                WorldFsMode::Writable
-            } else {
-                WorldFsMode::ReadOnly
-            };
+            let snapshot = req.policy_snapshot.clone();
+            let (_, policy_inputs) =
+                resolve_policy_inputs(&snapshot, req.world_network.as_ref(), &cwd, &project_dir)?;
+            let fs_mode = policy_inputs.fs_mode;
+            let isolate_network = policy_inputs.isolate_network;
+            let allowed_domains = policy_inputs.allowed_domains.clone();
 
             let always_isolate = should_always_isolate_for_profile(req.profile.as_deref());
 
-            let spec = WorldSpec {
-                reuse_session: true,
-                isolate_network: true,
-                limits: world_api::ResourceLimits::default(),
-                enable_preload: false,
-                allowed_domains: substrate_broker::allowed_domains(),
+            let spec = build_world_spec(
                 project_dir,
                 always_isolate,
                 fs_mode,
-            };
+                isolate_network,
+                allowed_domains,
+            );
 
             let world = match self.backend.ensure_session(&spec) {
                 Ok(w) => w,
@@ -758,28 +747,22 @@ impl WorldAgentService {
             let env_ref = req.env.as_ref();
             let project_dir = resolve_project_dir(env_ref, Some(&cwd))?;
 
-            let snapshot = req
-                .policy_snapshot
-                .canonicalize()
-                .map_err(BadRequestError::new)?;
-            let fs_mode = if snapshot.world_fs.write.enabled {
-                WorldFsMode::Writable
-            } else {
-                WorldFsMode::ReadOnly
-            };
+            let snapshot = req.policy_snapshot.clone();
+            let (_, policy_inputs) =
+                resolve_policy_inputs(&snapshot, req.world_network.as_ref(), &cwd, &project_dir)?;
+            let fs_mode = policy_inputs.fs_mode;
+            let isolate_network = policy_inputs.isolate_network;
+            let allowed_domains = policy_inputs.allowed_domains.clone();
 
             let always_isolate = should_always_isolate_for_profile(req.profile.as_deref());
 
-            let spec = WorldSpec {
-                reuse_session: true,
-                isolate_network: true,
-                limits: world_api::ResourceLimits::default(),
-                enable_preload: false,
-                allowed_domains: substrate_broker::allowed_domains(),
+            let spec = build_world_spec(
                 project_dir,
                 always_isolate,
                 fs_mode,
-            };
+                isolate_network,
+                allowed_domains,
+            );
 
             let world = match self.backend.ensure_session(&spec) {
                 Ok(w) => w,
@@ -904,28 +887,22 @@ impl WorldAgentService {
             let env_ref = req.env.as_ref();
             let project_dir = resolve_project_dir(env_ref, Some(&cwd))?;
 
-            let snapshot = req
-                .policy_snapshot
-                .canonicalize()
-                .map_err(BadRequestError::new)?;
-            let fs_mode = if snapshot.world_fs.write.enabled {
-                WorldFsMode::Writable
-            } else {
-                WorldFsMode::ReadOnly
-            };
+            let snapshot = req.policy_snapshot.clone();
+            let (_, policy_inputs) =
+                resolve_policy_inputs(&snapshot, req.world_network.as_ref(), &cwd, &project_dir)?;
+            let fs_mode = policy_inputs.fs_mode;
+            let isolate_network = policy_inputs.isolate_network;
+            let allowed_domains = policy_inputs.allowed_domains.clone();
 
             let always_isolate = should_always_isolate_for_profile(req.profile.as_deref());
 
-            let spec = WorldSpec {
-                reuse_session: true,
-                isolate_network: true,
-                limits: world_api::ResourceLimits::default(),
-                enable_preload: false,
-                allowed_domains: substrate_broker::allowed_domains(),
+            let spec = build_world_spec(
                 project_dir,
                 always_isolate,
                 fs_mode,
-            };
+                isolate_network,
+                allowed_domains,
+            );
 
             let world = match self.backend.ensure_session(&spec) {
                 Ok(w) => w,
@@ -1032,13 +1009,18 @@ impl WorldAgentService {
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
         let env_ref = req.env.as_ref();
         let project_dir = resolve_project_dir(env_ref, Some(&cwd))?;
-        let (policy_resolution_mode, policy_inputs) =
-            resolve_policy_inputs(&req, &cwd, &project_dir)?;
+        let (policy_resolution_mode, policy_inputs) = resolve_policy_inputs(
+            &req.policy_snapshot,
+            req.world_network.as_ref(),
+            &cwd,
+            &project_dir,
+        )?;
         self.set_last_policy_resolution_mode(policy_resolution_mode);
 
         let PolicyInputs {
             fs_mode,
             isolation_full,
+            isolate_network,
             allowed_domains,
             write_allowlist_prefixes,
             landlock_discover_paths,
@@ -1086,16 +1068,13 @@ impl WorldAgentService {
             return Ok(response);
         }
 
-        let spec = WorldSpec {
-            reuse_session: true,
-            isolate_network: true,
-            limits: world_api::ResourceLimits::default(),
-            enable_preload: false,
-            allowed_domains,
+        let spec = build_world_spec(
             project_dir,
             always_isolate,
             fs_mode,
-        };
+            isolate_network,
+            allowed_domains,
+        );
 
         let world = match self.backend.ensure_session(&spec) {
             Ok(w) => w,
@@ -1411,6 +1390,7 @@ impl BadRequestError {
 struct PolicyInputs {
     fs_mode: WorldFsMode,
     isolation_full: bool,
+    isolate_network: bool,
     allowed_domains: Vec<String>,
     write_allowlist_prefixes: Vec<String>,
     landlock_discover_paths: Vec<String>,
@@ -1420,23 +1400,19 @@ struct PolicyInputs {
 }
 
 fn resolve_policy_inputs(
-    req: &ExecuteRequest,
+    policy_snapshot: &agent_api_types::PolicySnapshotV3,
+    world_network: Option<&WorldNetworkRoutingV1>,
     _cwd: &Path,
     project_dir: &Path,
 ) -> Result<(agent_api_types::PolicyResolutionModeV1, PolicyInputs)> {
     use agent_api_types::PolicyResolutionModeV1;
 
-    let snapshot = req
-        .policy_snapshot
-        .canonicalize()
-        .map_err(BadRequestError::new)?;
+    let resolved =
+        resolve_snapshot_routing(policy_snapshot, world_network).map_err(BadRequestError::new)?;
+    let snapshot = resolved.snapshot;
 
-    let isolation_full = !snapshot.world_fs.host_visible;
-    let fs_mode = if snapshot.world_fs.write.enabled {
-        WorldFsMode::Writable
-    } else {
-        WorldFsMode::ReadOnly
-    };
+    let isolation_full = resolved.isolation_full;
+    let fs_mode = resolved.fs_mode;
 
     let enforcement_plan_b64 = enforcement_plan::maybe_encode_from_snapshot(&snapshot)
         .map_err(|err| BadRequestError::new(err.to_string()))?;
@@ -1476,7 +1452,8 @@ fn resolve_policy_inputs(
         PolicyInputs {
             fs_mode,
             isolation_full,
-            allowed_domains: substrate_broker::allowed_domains(),
+            isolate_network: resolved.world_network.isolate_network,
+            allowed_domains: resolved.world_network.allowed_domains,
             write_allowlist_prefixes,
             landlock_discover_paths,
             landlock_read_paths,
@@ -1484,6 +1461,25 @@ fn resolve_policy_inputs(
             enforcement_plan_b64,
         },
     ))
+}
+
+fn build_world_spec(
+    project_dir: PathBuf,
+    always_isolate: bool,
+    fs_mode: WorldFsMode,
+    isolate_network: bool,
+    allowed_domains: Vec<String>,
+) -> WorldSpec {
+    WorldSpec {
+        reuse_session: true,
+        isolate_network,
+        limits: world_api::ResourceLimits::default(),
+        enable_preload: false,
+        allowed_domains,
+        project_dir,
+        always_isolate,
+        fs_mode,
+    }
 }
 
 pub(crate) fn apply_full_isolation_helper_env(

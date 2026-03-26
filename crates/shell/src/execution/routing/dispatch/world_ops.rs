@@ -2,9 +2,11 @@
 
 use super::shim_ops::build_world_env_map_for_cwd;
 use crate::execution::agent_events::publish_agent_event;
-use crate::execution::policy_snapshot::resolve_world_network_policy_for_cwd;
 #[cfg(target_os = "windows")]
 use crate::execution::policy_snapshot::world_spec_for_network_policy;
+use crate::execution::policy_snapshot::{
+    request_world_network_routing, resolve_world_network_policy_for_cwd,
+};
 #[cfg(target_os = "macos")]
 use crate::execution::pw;
 #[cfg(all(test, any(target_os = "linux", target_os = "windows")))]
@@ -914,7 +916,9 @@ fn build_agent_client_and_request_impl(
     let cwd_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     let cwd = cwd_path.display().to_string();
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
-    let policy_snapshot = resolve_world_network_policy_for_cwd(&cwd_path)?.snapshot;
+    let network_policy = resolve_world_network_policy_for_cwd(&cwd_path)?;
+    let world_network = request_world_network_routing(&network_policy);
+    let policy_snapshot = network_policy.snapshot;
     let (mut env_map, inherit_from_host) = build_world_env_map_for_cwd(&cwd_path)?;
     if inherit_from_host {
         eprintln!("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
@@ -935,6 +939,7 @@ fn build_agent_client_and_request_impl(
         agent_id: agent_id.clone(),
         budget: None,
         policy_snapshot,
+        world_network: Some(world_network),
         world_fs_mode: Some(current_world_fs_mode()),
     };
 
@@ -966,7 +971,9 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
     let cwd_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     let cwd = cwd_path.display().to_string();
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
-    let policy_snapshot = resolve_world_network_policy_for_cwd(&cwd_path)?.snapshot;
+    let network_policy = resolve_world_network_policy_for_cwd(&cwd_path)?;
+    let world_network = request_world_network_routing(&network_policy);
+    let policy_snapshot = network_policy.snapshot;
     let (mut env_map, _inherit_from_host) = build_world_env_map_for_cwd(&cwd_path)?;
     crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
         &policy_snapshot,
@@ -980,6 +987,7 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
         env: Some(env_map),
         agent_id: agent_id.clone(),
         policy_snapshot,
+        world_network: Some(world_network),
     };
 
     Ok((client, request, agent_id))
@@ -1007,7 +1015,9 @@ fn build_agent_client_and_request_impl(
         normalize_env_for_linux_guest(&mut env_map);
         ensure_world_deps_bin_on_path(&mut env_map);
         let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
-        let policy_snapshot = resolve_world_network_policy_for_cwd(&cwd_path)?.snapshot;
+        let network_policy = resolve_world_network_policy_for_cwd(&cwd_path)?;
+        let world_network = request_world_network_routing(&network_policy);
+        let policy_snapshot = network_policy.snapshot;
         crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
             &policy_snapshot,
             &mut env_map,
@@ -1022,6 +1032,7 @@ fn build_agent_client_and_request_impl(
             agent_id: agent_id.clone(),
             budget: None,
             policy_snapshot,
+            world_network: Some(world_network),
             world_fs_mode: Some(current_world_fs_mode()),
         };
 
@@ -1056,7 +1067,9 @@ fn build_agent_client_and_request_impl(
     normalize_env_for_linux_guest(&mut env_map);
     ensure_world_deps_bin_on_path(&mut env_map);
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
-    let policy_snapshot = resolve_world_network_policy_for_cwd(&cwd_path)?.snapshot;
+    let network_policy = resolve_world_network_policy_for_cwd(&cwd_path)?;
+    let world_network = request_world_network_routing(&network_policy);
+    let policy_snapshot = network_policy.snapshot;
     crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
         &policy_snapshot,
         &mut env_map,
@@ -1071,6 +1084,7 @@ fn build_agent_client_and_request_impl(
         agent_id: agent_id.clone(),
         budget: None,
         policy_snapshot,
+        world_network: Some(world_network),
         world_fs_mode: Some(current_world_fs_mode()),
     };
 
@@ -1094,7 +1108,9 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
         normalize_env_for_linux_guest(&mut env_map);
         ensure_world_deps_bin_on_path(&mut env_map);
         let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
-        let policy_snapshot = resolve_world_network_policy_for_cwd(&cwd_path)?.snapshot;
+        let network_policy = resolve_world_network_policy_for_cwd(&cwd_path)?;
+        let world_network = request_world_network_routing(&network_policy);
+        let policy_snapshot = network_policy.snapshot;
         crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
             &policy_snapshot,
             &mut env_map,
@@ -1106,6 +1122,7 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
             env: Some(env_map),
             agent_id: agent_id.clone(),
             policy_snapshot,
+            world_network: Some(world_network),
         };
 
         return Ok((client, request, agent_id));
@@ -1134,7 +1151,9 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
     normalize_env_for_linux_guest(&mut env_map);
     ensure_world_deps_bin_on_path(&mut env_map);
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
-    let policy_snapshot = resolve_world_network_policy_for_cwd(&cwd_path)?.snapshot;
+    let network_policy = resolve_world_network_policy_for_cwd(&cwd_path)?;
+    let world_network = request_world_network_routing(&network_policy);
+    let policy_snapshot = network_policy.snapshot;
     crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
         &policy_snapshot,
         &mut env_map,
@@ -1146,6 +1165,7 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
         env: Some(env_map),
         agent_id: agent_id.clone(),
         policy_snapshot,
+        world_network: Some(world_network),
     };
 
     Ok((client, request, agent_id))
@@ -1195,6 +1215,7 @@ fn build_agent_client_and_request_impl(
     }
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
     let policy_snapshot = network_policy.snapshot;
+    let world_network = request_world_network_routing(&network_policy);
     crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
         &policy_snapshot,
         &mut env_map,
@@ -1209,6 +1230,7 @@ fn build_agent_client_and_request_impl(
         agent_id: agent_id.clone(),
         budget: None,
         policy_snapshot,
+        world_network: Some(world_network),
         world_fs_mode: Some(current_world_fs_mode()),
     };
 
@@ -1238,7 +1260,9 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
     let (mut env_map, _inherit_from_host) = build_world_env_map_for_cwd(&host_cwd)?;
     normalize_env_for_linux_guest(&mut env_map);
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
-    let policy_snapshot = resolve_world_network_policy_for_cwd(&host_cwd)?.snapshot;
+    let network_policy = resolve_world_network_policy_for_cwd(&host_cwd)?;
+    let world_network = request_world_network_routing(&network_policy);
+    let policy_snapshot = network_policy.snapshot;
     crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
         &policy_snapshot,
         &mut env_map,
@@ -1250,6 +1274,7 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
         env: Some(env_map),
         agent_id: agent_id.clone(),
         policy_snapshot,
+        world_network: Some(world_network),
     };
 
     Ok((client, request, agent_id))

@@ -74,6 +74,7 @@ fn execute_non_pty(
         agent_id: "wfgad5-test".to_string(),
         budget: None,
         policy_snapshot,
+        world_network: None,
         world_fs_mode: None,
     };
 

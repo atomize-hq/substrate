@@ -74,6 +74,7 @@ fn execute_non_pty(
         agent_id: "overlayfs-enumeration-test".to_string(),
         budget: None,
         policy_snapshot,
+        world_network: None,
         world_fs_mode: Some(world_fs_mode),
     };
 

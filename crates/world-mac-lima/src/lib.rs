@@ -305,6 +305,7 @@ impl MacLimaBackend {
             agent_id: "world-mac-lima".to_string(),
             budget: None,
             policy_snapshot,
+            world_network: None,
             world_fs_mode: Some(fs_mode),
         }
     }

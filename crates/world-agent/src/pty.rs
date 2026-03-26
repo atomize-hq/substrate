@@ -2,6 +2,8 @@
 
 #[cfg(target_os = "linux")]
 use crate::enforcement_plan;
+#[cfg(target_os = "linux")]
+use crate::request_routing::resolve_snapshot_routing;
 use crate::service::WorldAgentService;
 #[cfg(target_os = "linux")]
 use crate::service::{
@@ -11,7 +13,7 @@ use crate::service::{
 };
 #[cfg(target_os = "linux")]
 use agent_api_types::PolicyResolutionModeV1;
-use agent_api_types::PolicySnapshotV3;
+use agent_api_types::{PolicySnapshotV3, WorldNetworkRoutingV1};
 use axum::extract::ws::{Message, WebSocket};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use futures_util::stream::SplitSink;
@@ -104,6 +106,8 @@ pub enum ClientMessage {
         env: HashMap<String, String>,
         #[serde(default)]
         policy_snapshot: Box<Option<PolicySnapshotV3>>,
+        #[serde(default)]
+        world_network: Option<WorldNetworkRoutingV1>,
         span_id: Option<String>,
         cols: u16,
         rows: u16,
@@ -154,6 +158,8 @@ enum PersistentClientMessage {
         cwd: PathBuf,
         env: HashMap<String, String>,
         policy_snapshot: Box<PolicySnapshotV3>,
+        #[serde(default)]
+        world_network: Option<WorldNetworkRoutingV1>,
         cols: u16,
         rows: u16,
     },
@@ -610,6 +616,7 @@ async fn handle_persistent_session(
             cwd,
             env,
             policy_snapshot,
+            world_network,
             cols,
             rows,
         }) => (
@@ -617,6 +624,7 @@ async fn handle_persistent_session(
             cwd,
             env,
             policy_snapshot,
+            world_network,
             cols,
             rows,
         ),
@@ -650,8 +658,15 @@ async fn handle_persistent_session(
         }
     };
 
-    let (requested_protocol_version, requested_cwd, mut session_env, policy_snapshot, cols, rows) =
-        start;
+    let (
+        requested_protocol_version,
+        requested_cwd,
+        mut session_env,
+        policy_snapshot,
+        world_network,
+        cols,
+        rows,
+    ) = start;
 
     if requested_protocol_version != 1 {
         let _ = send_persistent_ws_message(
@@ -758,6 +773,7 @@ async fn handle_persistent_session(
         &session_env,
         &ready_cwd,
         &policy_snapshot,
+        world_network.as_ref(),
     ) {
         Ok(world) => world,
         Err(message) => {
@@ -1296,27 +1312,23 @@ fn prepare_persistent_world_context(
     session_env: &HashMap<String, String>,
     ready_cwd: &std::path::Path,
     policy_snapshot: &PolicySnapshotV3,
+    world_network: Option<&WorldNetworkRoutingV1>,
 ) -> Result<PersistentWorldContext, String> {
     use world_api::{ResourceLimits, WorldSpec};
 
     let project_dir =
         resolve_project_dir(Some(session_env), Some(ready_cwd)).map_err(|e| e.to_string())?;
 
-    let canonical = policy_snapshot.canonicalize()?;
-
-    let allowed_domains = substrate_broker::allowed_domains();
-    let fs_mode = if canonical.world_fs.write.enabled {
-        WorldFsMode::Writable
-    } else {
-        WorldFsMode::ReadOnly
-    };
+    let resolved = resolve_snapshot_routing(policy_snapshot, world_network)?;
+    let canonical = resolved.snapshot;
+    let fs_mode = resolved.fs_mode;
 
     let spec = WorldSpec {
         reuse_session: true,
-        isolate_network: true,
+        isolate_network: resolved.world_network.isolate_network,
         limits: ResourceLimits::default(),
         enable_preload: false,
-        allowed_domains,
+        allowed_domains: resolved.world_network.allowed_domains.clone(),
         project_dir: project_dir.clone(),
         always_isolate: true,
         fs_mode,
@@ -1959,6 +1971,7 @@ async fn handle_legacy_start(
             cwd,
             env,
             policy_snapshot,
+            world_network,
             span_id,
             cols,
             rows,
@@ -1974,7 +1987,16 @@ async fn handle_legacy_start(
                 rows = rows,
                 "ws_pty: start"
             );
-            (cmd, cwd, env, policy_snapshot, span_id, cols, rows)
+            (
+                cmd,
+                cwd,
+                env,
+                policy_snapshot,
+                world_network,
+                span_id,
+                cols,
+                rows,
+            )
         }
         Ok(_) => {
             let _ = send_ws_message(
@@ -1998,15 +2020,19 @@ async fn handle_legacy_start(
         }
     };
 
-    let (cmd, cwd, env_map, policy_snapshot, _span_id, cols, rows) = start_msg;
+    let (cmd, cwd, env_map, policy_snapshot, _world_network, _span_id, cols, rows) = start_msg;
     #[cfg(not(target_os = "linux"))]
     let _policy_snapshot = policy_snapshot;
+    #[cfg(not(target_os = "linux"))]
+    let _world_network = _world_network;
     #[cfg(target_os = "linux")]
     let mut env = env_map;
     #[cfg(not(target_os = "linux"))]
     let env = env_map;
     #[cfg(target_os = "linux")]
     let mut inner_cmd = cmd.clone();
+    #[cfg(target_os = "linux")]
+    let world_network = _world_network;
     #[cfg(target_os = "linux")]
     let command_to_run: String;
     #[cfg(not(target_os = "linux"))]
@@ -2056,15 +2082,15 @@ async fn handle_legacy_start(
                 return;
             }
         };
-        let (policy_resolution_mode, isolation_full, fs_mode, allowed_domains) =
+        let (policy_resolution_mode, isolation_full, fs_mode, isolate_network, allowed_domains) =
             if let Some(snapshot) = policy_snapshot.as_ref() {
-                let canonical = match snapshot.canonicalize() {
+                let resolved = match resolve_snapshot_routing(snapshot, world_network.as_ref()) {
                     Ok(v) => v,
                     Err(err) => {
                         let _ = send_ws_message(
                             &tx,
                             &ServerMessage::Error {
-                                message: format!("Invalid policy_snapshot: {err}"),
+                                message: format!("Invalid policy_snapshot/world_network: {err}"),
                             },
                         )
                         .await;
@@ -2072,16 +2098,13 @@ async fn handle_legacy_start(
                     }
                 };
 
-                let isolation_full = !canonical.world_fs.host_visible;
+                let isolation_full = resolved.isolation_full;
                 (
                     PolicyResolutionModeV1::SnapshotV3,
                     isolation_full,
-                    if canonical.world_fs.write.enabled {
-                        WorldFsMode::Writable
-                    } else {
-                        WorldFsMode::ReadOnly
-                    },
-                    substrate_broker::allowed_domains(),
+                    resolved.fs_mode,
+                    resolved.world_network.isolate_network,
+                    resolved.world_network.allowed_domains,
                 )
             } else {
                 let isolation_full = is_full_isolation(Some(&env));
@@ -2100,7 +2123,8 @@ async fn handle_legacy_start(
                     PolicyResolutionModeV1::LegacyLocal,
                     isolation_full,
                     fs_mode,
-                    substrate_broker::allowed_domains(),
+                    false,
+                    Vec::new(),
                 )
             };
 
@@ -2152,7 +2176,7 @@ async fn handle_legacy_start(
 
         let spec = WorldSpec {
             reuse_session: true,
-            isolate_network: true,
+            isolate_network,
             limits: ResourceLimits::default(),
             enable_preload: false,
             allowed_domains,
@@ -2564,6 +2588,7 @@ mod tests {
             cwd: std::env::current_dir().unwrap(),
             env: HashMap::new(),
             policy_snapshot: Box::new(None),
+            world_network: None,
             span_id: Some("spn_test".into()),
             cols: 80,
             rows: 24,

@@ -174,6 +174,15 @@ pub(crate) fn bootstrap_world_spec(project_dir: PathBuf, fs_mode: WorldFsMode) -
     }
 }
 
+pub(crate) fn request_world_network_routing(
+    network_policy: &ResolvedWorldNetworkPolicy,
+) -> agent_api_types::WorldNetworkRoutingV1 {
+    agent_api_types::WorldNetworkRoutingV1 {
+        isolate_network: network_policy.isolate_network,
+        allowed_domains: network_policy.allowed_domains.clone(),
+    }
+}
+
 #[cfg(target_os = "windows")]
 pub(crate) fn world_spec_for_network_policy(
     project_dir: PathBuf,

@@ -888,6 +888,7 @@ async fn try_agent_backend(
         agent_id: std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "replay".to_string()),
         budget: None,
         policy_snapshot: resolve_policy_snapshot_v3_for_cwd(&state.cwd)?,
+        world_network: None,
         world_fs_mode: Some(substrate_broker::world_fs_mode()),
     };
 
