@@ -84,12 +84,9 @@ impl SessionWorld {
             // Set up network filtering if enabled (scoped to netns when available)
             if self.spec.isolate_network {
                 tracing::info!("world.setup: installing nftables rules");
-                if let Err(e) = self.setup_network_filter() {
-                    tracing::warn!(
-                        "[agent] netfilter setup failed; continuing without network scoping: {}",
-                        e
-                    );
-                }
+                self.setup_network_filter().context(
+                    "requested network isolation could not be enforced during world setup",
+                )?;
             }
         }
 
@@ -109,13 +106,7 @@ impl SessionWorld {
         #[cfg(target_os = "linux")]
         filter.set_cgroup_path(&self.cgroup_path);
         filter.resolve_domains()?;
-        let installed = filter.install_rules()?;
-        if !installed {
-            tracing::warn!(
-                target: "world::netfilter",
-                "network filtering requested but nftables rules were not installed (set WORLD_NETFILTER_ENABLE=1 to enable)"
-            );
-        }
+        filter.install_rules()?;
         self.network_filter = Some(filter);
         Ok(())
     }
@@ -475,6 +466,47 @@ impl Drop for SessionWorld {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "linux")]
+    use std::sync::Mutex;
+    #[cfg(target_os = "linux")]
+    use tempfile::tempdir;
+
+    #[cfg(target_os = "linux")]
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[cfg(target_os = "linux")]
+    struct EnvGuard {
+        previous: Vec<(String, Option<std::ffi::OsString>)>,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl EnvGuard {
+        fn set(vars: &[(&str, Option<&str>)]) -> Self {
+            let previous = vars
+                .iter()
+                .map(|(key, _)| (key.to_string(), std::env::var_os(key)))
+                .collect::<Vec<_>>();
+            for (key, value) in vars {
+                match value {
+                    Some(v) => std::env::set_var(key, v),
+                    None => std::env::remove_var(key),
+                }
+            }
+            Self { previous }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            for (key, value) in self.previous.drain(..) {
+                match value {
+                    Some(v) => std::env::set_var(&key, v),
+                    None => std::env::remove_var(&key),
+                }
+            }
+        }
+    }
 
     #[test]
     fn test_session_world_creation() {
@@ -544,5 +576,41 @@ mod tests {
             world.compatible_with(&changed),
             "fs_mode differences should not force a new world; overlay remount handles mode changes"
         );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn setup_fails_when_requested_isolation_cannot_install_netfilter() {
+        let temp = tempdir().unwrap();
+        let root_dir = temp.path().join("world-root");
+        let cgroup_path = temp.path().join("cgroup").join("wld_test");
+
+        let _lock = ENV_LOCK.lock().unwrap();
+        let _guard = EnvGuard::set(&[("WORLD_NETFILTER_ENABLE", None)]);
+
+        let mut world = SessionWorld {
+            id: "wld_test".into(),
+            root_dir,
+            project_dir: temp.path().join("project"),
+            cgroup_path,
+            net_namespace: None,
+            spec: WorldSpec {
+                isolate_network: true,
+                ..WorldSpec::default()
+            },
+            started_at: std::time::SystemTime::UNIX_EPOCH,
+            network_filter: None,
+            fs_by_span: HashMap::new(),
+            overlay: None,
+            overlay_mode: None,
+        };
+
+        let err = world.setup().unwrap_err();
+        let message = format!("{err:#}");
+        assert!(
+            message.contains("requested network isolation could not be enforced"),
+            "unexpected error: {message}"
+        );
+        assert!(world.network_filter.is_none());
     }
 }

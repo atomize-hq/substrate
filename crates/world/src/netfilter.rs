@@ -13,6 +13,8 @@ use std::collections::HashSet;
 use std::io::Read;
 use std::net::IpAddr;
 #[cfg(target_os = "linux")]
+use std::net::ToSocketAddrs;
+#[cfg(target_os = "linux")]
 use std::path::Path;
 #[cfg(target_os = "linux")]
 use std::process::Command;
@@ -170,37 +172,45 @@ impl NetFilter {
     /// Resolve allowed domains to IP addresses.
     pub fn resolve_domains(&mut self) -> Result<()> {
         for domain in &self.allowed_domains {
-            // Use dns-lookup to resolve domain to IPs
-            if let Ok(ips) = dns_lookup::lookup_host(domain) {
-                for ip in ips {
-                    self.allowed_ips.insert(ip);
-                }
+            #[cfg(target_os = "linux")]
+            let resolved = (domain.as_str(), 0)
+                .to_socket_addrs()
+                .with_context(|| format!("failed to resolve allowed domain `{domain}`"))?
+                .map(|addr| addr.ip())
+                .collect::<HashSet<_>>();
+
+            #[cfg(not(target_os = "linux"))]
+            let resolved = dns_lookup::lookup_host(domain)
+                .map(|ips| ips.into_iter().collect::<HashSet<_>>())?;
+
+            if resolved.is_empty() {
+                anyhow::bail!("allowed domain `{domain}` resolved to no addresses");
+            }
+
+            for ip in resolved {
+                self.allowed_ips.insert(ip);
             }
         }
         Ok(())
     }
 
     /// Install nftables rules for network filtering.
-    pub fn install_rules(&mut self) -> Result<bool> {
+    pub fn install_rules(&mut self) -> Result<()> {
         if self.is_active {
-            return Ok(true);
+            return Ok(());
         }
 
         #[cfg(target_os = "linux")]
         {
-            let installed = if !Self::netfilter_enabled() {
-                tracing::debug!(
-                    target: "world::netfilter",
-                    "WORLD_NETFILTER_ENABLE is not set; skipping nftables rule installation"
+            if !Self::netfilter_enabled() {
+                anyhow::bail!(
+                    "WORLD_NETFILTER_ENABLE must be set to 1/true/yes before requested network isolation can install nftables rules"
                 );
-                false
-            } else {
-                self.install_rules_linux()?;
-                self.is_active = true;
-                true
-            };
+            }
 
-            Ok(installed)
+            self.install_rules_linux()?;
+            self.is_active = true;
+            Ok(())
         }
 
         #[cfg(not(target_os = "linux"))]
@@ -208,8 +218,23 @@ impl NetFilter {
             // Network filtering only works on Linux.
             eprintln!("⚠️  Network filtering not available on this platform");
             self.is_active = true;
-            Ok(true)
+            Ok(())
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn allow_rule_bodies(&self) -> Vec<String> {
+        vec![
+            "oif lo accept".to_string(),
+            "ct state established,related accept".to_string(),
+            "ip daddr @allowed4 accept".to_string(),
+            "ip6 daddr @allowed6 accept".to_string(),
+            format!(
+                "limit rate 10/second log prefix \"substrate-dropped-{}:\"",
+                self.world_id
+            ),
+            "counter drop".to_string(),
+        ]
     }
 
     #[cfg(target_os = "linux")]
@@ -257,18 +282,6 @@ impl NetFilter {
             );
             let _ = self.run_nft(&["add", &set_v6]);
 
-            // Allow loopback traffic
-            let allow_loopback = self.format_rule("oif lo accept");
-            self.run_nft(&["add", &allow_loopback])?;
-
-            // Allow established connections
-            let allow_established = self.format_rule("ct state established,related accept");
-            self.run_nft(&["add", &allow_established])?;
-
-            // Allow DNS queries
-            let allow_dns = self.format_rule("udp dport 53 accept");
-            self.run_nft(&["add", &allow_dns])?;
-
             // Populate sets with allowed IPs
             for ip in &self.allowed_ips {
                 match ip {
@@ -285,21 +298,10 @@ impl NetFilter {
                 }
             }
 
-            // Allow traffic to addresses in sets
-            let allow_v4 = self.format_rule("ip daddr @allowed4 accept");
-            let allow_v6 = self.format_rule("ip6 daddr @allowed6 accept");
-            self.run_nft(&["add", &allow_v4])?;
-            self.run_nft(&["add", &allow_v6])?;
-
-            // Rate-limited LOG + drop for everything else.
-            // (Safe even with `policy accept` because this is an explicit final drop rule.)
-            let log_dropped = self.format_rule(&format!(
-                "limit rate 10/second log prefix \"substrate-dropped-{}:\"",
-                self.world_id
-            ));
-            let drop_rule = self.format_rule("counter drop");
-            self.run_nft(&["add", &log_dropped])?;
-            self.run_nft(&["add", &drop_rule])?;
+            for body in self.allow_rule_bodies() {
+                let rule = self.format_rule(&body);
+                self.run_nft(&["add", &rule])?;
+            }
 
             Ok(())
         })();
@@ -596,7 +598,7 @@ pub fn apply_network_filter(world_id: &str, allowed_domains: Vec<String>) -> Res
     filter.resolve_domains()?;
 
     // Install filtering rules
-    let _ = filter.install_rules()?;
+    filter.install_rules()?;
 
     Ok(filter)
 }
@@ -620,6 +622,49 @@ pub fn monitor_network_scopes(filter: &mut NetFilter) -> Result<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "linux")]
+    use std::os::unix::fs::PermissionsExt;
+    #[cfg(target_os = "linux")]
+    use std::sync::Mutex;
+    #[cfg(target_os = "linux")]
+    use tempfile::tempdir;
+
+    #[cfg(target_os = "linux")]
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[cfg(target_os = "linux")]
+    struct EnvGuard {
+        previous: Vec<(String, Option<std::ffi::OsString>)>,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl EnvGuard {
+        fn set(vars: &[(&str, Option<&str>)]) -> Self {
+            let previous = vars
+                .iter()
+                .map(|(key, _)| (key.to_string(), std::env::var_os(key)))
+                .collect::<Vec<_>>();
+            for (key, value) in vars {
+                match value {
+                    Some(v) => std::env::set_var(key, v),
+                    None => std::env::remove_var(key),
+                }
+            }
+            Self { previous }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            for (key, value) in self.previous.drain(..) {
+                match value {
+                    Some(v) => std::env::set_var(&key, v),
+                    None => std::env::remove_var(&key),
+                }
+            }
+        }
+    }
 
     #[test]
     fn test_netfilter_creation() {
@@ -641,6 +686,33 @@ mod tests {
     }
 
     #[test]
+    fn test_empty_allowlist_skips_resolution() {
+        let mut filter = NetFilter::new("test_world", vec![]).unwrap();
+
+        filter.resolve_domains().unwrap();
+
+        assert!(filter.allowed_ips.is_empty());
+    }
+
+    #[test]
+    fn test_domain_resolution_fails_for_unresolvable_host() {
+        let mut filter = NetFilter::new(
+            "test_world",
+            vec!["definitely-not-a-real-substrate-test-host.invalid".to_string()],
+        )
+        .unwrap();
+
+        let err = filter.resolve_domains().unwrap_err();
+        let message = format!("{err:#}");
+        assert!(
+            message.contains("failed to resolve allowed domain")
+                || message.contains("failed to lookup address information")
+                || message.contains("resolved to no addresses"),
+            "unexpected error: {message}"
+        );
+    }
+
+    #[test]
     fn test_scope_tracking() {
         let mut filter = NetFilter::new("test_world", vec![]).unwrap();
 
@@ -651,6 +723,59 @@ mod tests {
         assert_eq!(scopes.len(), 2);
         assert!(scopes.contains(&"tcp:github.com:443".to_string()));
         assert!(scopes.contains(&"tcp:npmjs.org:443".to_string()));
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_deny_all_rule_bodies_do_not_allow_dns() {
+        let filter = NetFilter::new("test_world", vec![]).unwrap();
+
+        let rules = filter.allow_rule_bodies();
+        assert!(
+            !rules.iter().any(|rule| rule.contains("dport 53")),
+            "deny-all rules must not include a DNS allow rule: {rules:?}"
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_install_rules_requires_world_netfilter_enable() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let _guard = EnvGuard::set(&[("WORLD_NETFILTER_ENABLE", None)]);
+        let mut filter = NetFilter::new("test_world", vec![]).unwrap();
+
+        let err = filter.install_rules().unwrap_err();
+        let message = format!("{err:#}");
+        assert!(message.contains("WORLD_NETFILTER_ENABLE"));
+        assert!(!filter.is_active);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_install_rules_errors_when_nft_fails() {
+        let temp = tempdir().unwrap();
+        let fake_nft = temp.path().join("nft");
+        std::fs::write(&fake_nft, "#!/bin/sh\nexit 17\n").unwrap();
+        let mut perms = std::fs::metadata(&fake_nft).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&fake_nft, perms).unwrap();
+
+        let original_path = std::env::var("PATH").unwrap_or_default();
+        let stubbed_path = format!("{}:{original_path}", temp.path().display());
+
+        let _lock = ENV_LOCK.lock().unwrap();
+        let _guard = EnvGuard::set(&[
+            ("WORLD_NETFILTER_ENABLE", Some("1")),
+            ("PATH", Some(&stubbed_path)),
+        ]);
+
+        let mut filter = NetFilter::new("test_world", vec![]).unwrap();
+        filter.set_cgroup_path(Path::new("/sys/fs/cgroup/substrate/test_world"));
+
+        let err = filter.install_rules().unwrap_err();
+        let message = format!("{err:#}");
+        assert!(message.contains("nft command failed"));
+        assert!(!filter.is_active);
     }
 
     #[test]
