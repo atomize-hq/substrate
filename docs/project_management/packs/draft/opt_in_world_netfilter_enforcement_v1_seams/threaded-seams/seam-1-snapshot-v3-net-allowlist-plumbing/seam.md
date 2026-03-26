@@ -2,7 +2,7 @@
 seam_id: SEAM-1
 seam_slug: snapshot-v3-net-allowlist-plumbing
 status: landed
-execution_horizon: next
+execution_horizon: future
 plan_version: v3
 basis:
   currentness: current

@@ -2,31 +2,34 @@
 seam_id: SEAM-2
 seam_slug: world-netfilter-fail-closed-and-cgroup-invariants
 type: platform
-status: proposed
-execution_horizon: future
-plan_version: v1
+status: exec-ready
+execution_horizon: active
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+    - governance/seam-1-closeout.md
+    - governance/seam-3-closeout.md
   required_threads:
     - THR-02
     - THR-04
   stale_triggers:
-    - "Any new process-spawn path that bypasses cgroup attach"
-    - "Any change to netfilter backend implementation (nftables ruleset shape)"
+    - "Any change to WorldSpec.isolate_network/allowed_domains routing semantics or world-agent request parity"
+    - "Any new process-spawn path that bypasses cgroup attach or weakens attach-or-fail behavior under isolate_network"
+    - "Any change to WORLD_NETFILTER_ENABLE guard semantics or nftables ruleset shape"
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
 seam_exit_gate:
   required: true
-  planned_location: reserved_final_slice
+  planned_location: S3
   status: pending
 open_remediations: []
 ---
@@ -57,7 +60,7 @@ open_remediations: []
   - `WORLD_NETFILTER_ENABLE` is mandatory to proceed when isolation is requested.
 - **Dependencies**
   - Direct blockers:
-    - `SEAM-1` must define/route the isolate_network + allowed_domains inputs.
+    - none; `SEAM-1` now publishes the isolate-network + allowed-domains handoff in closeout.
   - Transitive blockers:
     - installer/service configuration work to actually set `WORLD_NETFILTER_ENABLE=1` in deployed environments
   - Direct consumers:
@@ -72,21 +75,36 @@ open_remediations: []
   - Logic-level tests: deny-all produces no DNS allow rules.
   - Privileged integration test (ignored) that verifies rules install and deny-all behavior in an isolated netns/cgroup scope.
   - Manual macOS Lima smoke: deny-all fails ping in both `-c` and REPL.
+- **Current blocker posture**:
+  - none at the promotion boundary; `SEAM-1` now supplies a passed seam-exit handoff (`promotion_readiness: ready`), and
+    this seam’s execution work is now bounded in active slices instead of a provisional future brief.
+- **Basis posture**:
+  - Currentness: `current`; the active plan is refreshed against landed upstream routing in `governance/seam-1-closeout.md`
+    and the published host-gate semantics in `governance/seam-3-closeout.md`.
+  - Upstream closeouts assumed:
+    - `governance/seam-1-closeout.md`
+    - `governance/seam-3-closeout.md`
+  - Required threads:
+    - `THR-02`
+    - `THR-04`
+  - Stale triggers:
+    - see `basis.stale_triggers`
 - **Risks / unknowns**:
   - Risk: cgroup attach invariants may require re-architecting spawn pathways or introducing an exec helper.
   - De-risk plan: enumerate spawn paths in seam-local review; add a hard “attach or fail” guard under isolate_network to catch stragglers early.
 - **Rollout / safety**:
   - Enforcement cannot activate without explicit opt-in request + `WORLD_NETFILTER_ENABLE=1`.
 - **Downstream decomposition context**:
-  - Why this seam is `future`: it remains downstream of both the active config gate seam (`SEAM-3`) and the next routing seam (`SEAM-1`); promoting it earlier would force platform work ahead of unfinished control-plane contracts.
+  - Why this seam is now `active`: `SEAM-1` and `SEAM-3` are both landed with passed seam-exit gates, so the remaining
+    critical-path work is the platform/runtime fail-closed implementation.
   - Which threads matter most: `THR-02`, `THR-04`.
   - What the first seam-local review should focus on: cgroup attach coverage, nftables rule correctness, and failure diagnostics that are actionable for operators.
 - **Expected seam-exit concerns**:
   - Contracts likely to publish:
     - Tightened semantics for `C-02` under opt-in
   - Threads likely to advance:
-    - `THR-02` to `published`
-    - `THR-04` to `defined`
+    - `THR-04` to `published`
+    - confirm `THR-02` remains stable after the active runtime hardening lands
   - Review-surface areas likely to shift after landing:
     - doctor/diagnostics detail level and failure taxonomy
   - Downstream seams most likely to require revalidation:

@@ -1,7 +1,7 @@
 ---
 seam_id: SEAM-3
 review_phase: pre_exec
-execution_horizon: active
+execution_horizon: future
 basis_ref: seam.md#basis
 ---
 # Review Bundle - SEAM-3 Config opt-in `world.net.filter` + CLI patching + env parity

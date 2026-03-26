@@ -3,7 +3,7 @@ seam_id: SEAM-3
 seam_slug: host-config-opt-in-and-parity-env-plumbing
 type: capability
 status: landed
-execution_horizon: active
+execution_horizon: future
 plan_version: v2
 basis:
   currentness: current

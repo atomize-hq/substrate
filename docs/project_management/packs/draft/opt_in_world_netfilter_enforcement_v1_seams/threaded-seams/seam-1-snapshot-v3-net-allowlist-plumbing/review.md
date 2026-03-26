@@ -1,7 +1,7 @@
 ---
 seam_id: SEAM-1
 review_phase: pre_exec
-execution_horizon: next
+execution_horizon: future
 basis_ref: seam.md#basis
 ---
 # Review Bundle - SEAM-1 Snapshot V3 `net_allowed` contract + host→world-agent plumbing

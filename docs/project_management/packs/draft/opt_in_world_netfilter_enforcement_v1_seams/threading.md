@@ -4,8 +4,8 @@ This document is the authoritative registry for cross-seam contracts and the thr
 
 Execution horizon summary:
 
-- `SEAM-3` is landed as the published host-gate handoff.
-- `SEAM-1` is landed as the published Snapshot V3 and host-to-world routing handoff consumed by downstream seams.
+- `SEAM-2` is the active seam; it is now revalidated against the landed `SEAM-1` Snapshot V3 and host-to-world routing handoff.
+- `SEAM-4` is the next seam once `SEAM-2` lands its fail-closed runtime semantics and publishes the operational safety handoff.
 
 ## Contract registry
 
@@ -90,10 +90,10 @@ Execution horizon summary:
   - **Consumer seam(s)**: `SEAM-2`, `SEAM-4`, `SEAM-5`
   - **Carried contract IDs**: `C-02`, `C-03`
   - **Purpose**: Ensure the enforcement request to the world backend is unambiguous: when isolate is requested, enforce or fail.
-  - **State**: published
+  - **State**: revalidated
   - **Revalidation trigger**: Any new execution path in world backend or shim that spawns processes without cgroup attach.
   - **Satisfied by**: Host routing requests isolation only when `world.net.filter=true` and canonicalized `net_allowed` is restrictive, and world-agent enforces parity between the snapshot and `world_network.allowed_domains` across PTY and non-PTY request paths.
-  - **Notes**: `SEAM-1` publishes the request contract; `SEAM-2` still owns the downstream fail-closed runtime enforcement.
+  - **Notes**: `SEAM-1` publishes the request contract; `SEAM-2` has now revalidated the published routing contract against the active runtime plan, while downstream fail-closed enforcement still lands in `SEAM-2` execution work.
 
 - **Thread ID**: `THR-03`
   - **Producer seam**: `SEAM-3`

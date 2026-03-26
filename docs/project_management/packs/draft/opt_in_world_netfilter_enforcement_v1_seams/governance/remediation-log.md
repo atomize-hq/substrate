@@ -2,26 +2,7 @@
 
 ## Open remediations
 
-```yaml
-remediation_id: REM-002
-origin_phase: pre_exec
-source_gate: revalidation
-related_seam: SEAM-2
-related_slice: null
-related_thread: THR-02
-related_contract: C-02
-related_artifact: crates/world
-severity: blocking
-status: open
-owner_seam: SEAM-2
-blocked_targets:
-  - seam: SEAM-2
-    field: status
-    value: exec-ready
-summary: Enumerate and harden all process spawn paths for cgroup attach under isolate_network
-required_fix: Inventory all execution paths and ensure each attaches to the world cgroup or fails when isolate_network=true
-resolution_evidence: []
-```
+None.
 
 ## Resolved remediations
 
@@ -94,4 +75,28 @@ resolution_evidence:
   - "Operator docs and three-way gate semantics landed: docs/reference/config/world.md + docs/CONFIGURATION.md"
   - "SEAM-3 closeout now cites the landed host-gate evidence and publishes THR-03: governance/seam-3-closeout.md"
   - "SEAM-1 basis refresh is downstream follow-on work, not an unresolved SEAM-3 owner gap: threaded-seams/seam-1-snapshot-v3-net-allowlist-plumbing/slice-2-host-snapshot-and-worldspec-plumbing.md + review.md + seam.md"
+```
+
+```yaml
+remediation_id: REM-002
+origin_phase: pre_exec
+source_gate: revalidation
+related_seam: SEAM-2
+related_slice: null
+related_thread: THR-02
+related_contract: C-02
+related_artifact: crates/world
+severity: blocking
+status: resolved
+owner_seam: SEAM-2
+blocked_targets:
+  - seam: SEAM-2
+    field: status
+    value: exec-ready
+summary: Enumerate and harden all process spawn paths for cgroup attach under isolate_network
+required_fix: Inventory all execution paths and ensure each attaches to the world cgroup or fails when isolate_network=true
+resolution_evidence:
+  - "Spawn-path inventory and mismatch hotspots are now explicit in threaded-seams/seam-2-world-netfilter-fail-closed-and-cgroup-invariants/review.md"
+  - "Attach-or-fail execution work is now bounded in threaded-seams/seam-2-world-netfilter-fail-closed-and-cgroup-invariants/slice-1-fail-closed-netfilter-runtime.md and slice-2-cgroup-attach-invariants-across-exec-paths.md"
+  - "SEAM-2 seam-local basis and gates were refreshed against the landed SEAM-1 and SEAM-3 closeouts in threaded-seams/seam-2-world-netfilter-fail-closed-and-cgroup-invariants/seam.md"
 ```
