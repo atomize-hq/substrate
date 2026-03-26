@@ -727,17 +727,12 @@ mod tests {
     fn execute_rejects_forced_direct_exec_when_isolation_is_requested() {
         let temp = tempdir().unwrap();
         let mut world = test_world(&temp, true);
+        let project_dir = world.project_dir.clone();
         let mut env = HashMap::new();
         env.insert("SUBSTRATE_WORLD_EXEC_FORCE_DIRECT".into(), "1".into());
 
         let err = world
-            .execute(
-                "printf should-not-run",
-                &world.project_dir,
-                env,
-                false,
-                None,
-            )
+            .execute("printf should-not-run", &project_dir, env, false, None)
             .unwrap_err();
         let message = format!("{err:#}");
         assert!(
@@ -753,11 +748,12 @@ mod tests {
     fn execute_allows_forced_direct_exec_without_isolation() {
         let temp = tempdir().unwrap();
         let mut world = test_world(&temp, false);
+        let project_dir = world.project_dir.clone();
         let mut env = HashMap::new();
         env.insert("SUBSTRATE_WORLD_EXEC_FORCE_DIRECT".into(), "1".into());
 
         let result = world
-            .execute("printf direct-ok", &world.project_dir, env, false, None)
+            .execute("printf direct-ok", &project_dir, env, false, None)
             .expect("non-isolated direct exec should remain available");
 
         assert_eq!(result.exit, 0);
