@@ -194,7 +194,7 @@ mod imp {
                 eprintln!("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
             }
             let policy_snapshot =
-                policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
+                policy_snapshot::resolve_world_network_policy_for_cwd(&cwd_path)?.snapshot;
             let (cols, rows) = terminal_size_or_default();
 
             Self::start_with(

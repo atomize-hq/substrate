@@ -70,8 +70,13 @@ metadata: {}
 }
 
 fn write_policy(home_substrate: &Path) {
+    write_policy_with_net_allowed(home_substrate, "[]");
+}
+
+fn write_policy_with_net_allowed(home_substrate: &Path, net_allowed_yaml: &str) {
     fs::create_dir_all(home_substrate).expect("create SUBSTRATE_HOME");
-    let policy = r#"id: test-global-policy
+    let policy = format!(
+        r#"id: test-global-policy
 name: Test Global Policy
 world_fs:
   host_visible: true
@@ -79,7 +84,7 @@ world_fs:
     routing: true
   write:
     enabled: true
-net_allowed: []
+net_allowed: {net_allowed_yaml}
 cmd_allowed: []
 cmd_denied: []
 cmd_isolated: []
@@ -91,7 +96,8 @@ limits:
   max_runtime_ms: null
   max_egress_bytes: null
 metadata: {}
-"#;
+"#
+    );
     fs::write(home_substrate.join("policy.yaml"), policy).expect("write policy.yaml");
 }
 
@@ -231,6 +237,65 @@ fn command_mode_world_consistency_v1_routes_both_c_and_pipe_via_world_socket() {
         "expected both -c and pipe mode to issue world-agent execute requests; recorded={}",
         recorded.len()
     );
+}
+
+#[test]
+#[serial]
+fn command_mode_world_consistency_v1_nonpty_request_carries_canonical_net_allowed() {
+    ensure_substrate_built();
+
+    let temp = temp_dir("substrate-c5-net-allowed-nonpty-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    write_policy_with_net_allowed(
+        &substrate_home,
+        "[\" Example.COM. \", \"example.com\", \"Api.Example.com.\"]",
+    );
+    write_config(&substrate_home);
+
+    let sock_temp = short_socket_dir("sub-c5-net-allowed-sock-");
+    let sock = sock_temp.path().join("world.sock");
+    let records: Arc<Mutex<Vec<serde_json::Value>>> = Arc::new(Mutex::new(Vec::new()));
+    let _sock = AgentSocket::start(
+        &sock,
+        SocketResponse::CapabilitiesAndExecuteRecord {
+            stdout: "__C5_NET_ALLOWED_NONPTY__\n".to_string(),
+            stderr: "".to_string(),
+            exit: 0,
+            scopes: vec![],
+            records: records.clone(),
+        },
+    );
+
+    let out = substrate_base_command(&project, &home, &substrate_home, &sock)
+        .arg("-c")
+        .arg("echo __C5_NET_ALLOWED_NONPTY__")
+        .output()
+        .expect("run substrate -c");
+    assert!(
+        out.status.success(),
+        "substrate -c failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let recorded = records.lock().expect("lock records");
+    let request = recorded.last().expect("recorded execute request");
+    let net_allowed = request
+        .pointer("/policy_snapshot/net_allowed")
+        .and_then(|value| value.as_array())
+        .expect("policy_snapshot.net_allowed array");
+    let net_allowed: Vec<&str> = net_allowed
+        .iter()
+        .map(|value| value.as_str().expect("net_allowed string"))
+        .collect();
+    assert_eq!(net_allowed, vec!["example.com", "api.example.com"]);
 }
 
 #[test]

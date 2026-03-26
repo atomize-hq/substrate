@@ -56,6 +56,14 @@ metadata: {}
 }
 
 fn write_policy(home_substrate: &Path, require_world: bool) {
+    write_policy_with_net_allowed(home_substrate, require_world, "[]");
+}
+
+fn write_policy_with_net_allowed(
+    home_substrate: &Path,
+    require_world: bool,
+    net_allowed_yaml: &str,
+) {
     fs::create_dir_all(home_substrate).expect("create SUBSTRATE_HOME");
     let require_world = if require_world { "true" } else { "false" };
     let policy = format!(
@@ -67,7 +75,7 @@ world_fs:
     routing: {require_world}
   write:
     enabled: true
-net_allowed: []
+net_allowed: {net_allowed_yaml}
 cmd_allowed: []
 cmd_denied: []
 cmd_isolated: []
@@ -446,6 +454,57 @@ fn c3_pty_directive_routes_to_persistent_session_when_world_enabled() {
             .any(|rec| rec.stdin_mode == "passthrough" && rec.program_utf8.trim() == "echo hello"),
         "expected :pty to use persistent-session exec passthrough with stripped prefix; records: {guard:#?}"
     );
+}
+
+#[test]
+#[serial]
+fn c3_persistent_session_start_carries_canonical_net_allowed_snapshot() {
+    let temp = temp_dir("substrate-c3-net-allowed-pty-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    write_policy_with_net_allowed(
+        &substrate_home,
+        true,
+        "[\" Example.COM. \", \"example.com\", \"Api.Example.com.\"]",
+    );
+
+    let sock_temp = short_socket_dir("sub-c3ws-net-allowed-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start(&sock, StreamBehavior::Normal);
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("banner");
+    repl.send_line("echo hello");
+    repl.wait_for_output("hello", Duration::from_secs(3))
+        .expect("command output");
+    repl.send_line("exit");
+
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(2));
+
+    let guard = records.lock().expect("lock records");
+    let start = guard
+        .persistent_start_sessions
+        .first()
+        .expect("persistent start session");
+    let net_allowed = start
+        .policy_snapshot
+        .get("net_allowed")
+        .and_then(|value| value.as_array())
+        .expect("policy_snapshot.net_allowed array");
+    let net_allowed: Vec<&str> = net_allowed
+        .iter()
+        .map(|value| value.as_str().expect("net_allowed string"))
+        .collect();
+    assert_eq!(net_allowed, vec!["example.com", "api.example.com"]);
 }
 
 #[test]
