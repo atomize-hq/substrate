@@ -92,11 +92,148 @@ metadata: {{}}
     fs::write(home_substrate.join("policy.yaml"), policy).expect("write policy.yaml");
 }
 
+fn write_config(home_substrate: &Path, world_net_filter: bool) {
+    fs::create_dir_all(home_substrate).expect("create SUBSTRATE_HOME");
+    let config = format!(
+        r#"world:
+  enabled: true
+  anchor_mode: workspace
+  anchor_path: ''
+  caged: false
+  net:
+    filter: {}
+policy:
+  mode: observe
+sync:
+  auto_sync: false
+  direction: from_world
+  conflict_policy: prefer_host
+  exclude: []
+"#,
+        if world_net_filter { "true" } else { "false" }
+    );
+    fs::write(home_substrate.join("config.yaml"), config).expect("write config.yaml");
+}
+
 fn short_socket_dir(prefix: &str) -> TempDir {
     tempfile::Builder::new()
         .prefix(prefix)
         .tempdir_in("/tmp")
         .expect("create short socket tempdir in /tmp")
+}
+
+#[derive(Debug)]
+struct ReplRoutingCase<'a> {
+    name: &'a str,
+    net_allowed_yaml: &'a str,
+    world_net_filter: bool,
+    expected_net_allowed: &'a [&'a str],
+    expected_isolate_network: bool,
+    expected_allowed_domains: &'a [&'a str],
+}
+
+fn wait_for_min_start_sessions(
+    records: &Arc<Mutex<support::ReplWorldAgentRecords>>,
+    min_starts: usize,
+    timeout: Duration,
+) {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        let guard = records.lock().expect("lock records");
+        if guard.persistent_start_sessions.len() >= min_starts {
+            return;
+        }
+        drop(guard);
+        std::thread::sleep(Duration::from_millis(25));
+    }
+
+    let guard = records.lock().expect("lock records");
+    panic!(
+        "timed out waiting for persistent start sessions >= {min_starts}; got {}; records: {guard:#?}",
+        guard.persistent_start_sessions.len(),
+    );
+}
+
+fn assert_world_network_payload(
+    start: &support::PersistentStartSessionRecord,
+    expected_isolate_network: bool,
+    expected_allowed_domains: &[&str],
+) {
+    let isolate_network = start
+        .world_network
+        .get("isolate_network")
+        .and_then(|value| value.as_bool())
+        .expect("world_network.isolate_network bool");
+    assert_eq!(
+        isolate_network, expected_isolate_network,
+        "unexpected world_network.isolate_network"
+    );
+
+    let allowed_domains = start
+        .world_network
+        .get("allowed_domains")
+        .and_then(|value| value.as_array())
+        .expect("world_network.allowed_domains array");
+    let allowed_domains: Vec<&str> = allowed_domains
+        .iter()
+        .map(|value| value.as_str().expect("allowed_domains string"))
+        .collect();
+    assert_eq!(
+        allowed_domains, expected_allowed_domains,
+        "unexpected world_network.allowed_domains"
+    );
+}
+
+fn run_repl_routing_case(case: &ReplRoutingCase<'_>) {
+    let temp = temp_dir("substrate-repl-net-allowed-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    write_policy_with_net_allowed(&substrate_home, true, case.net_allowed_yaml);
+    write_config(&substrate_home, case.world_net_filter);
+
+    let sock_temp = short_socket_dir("sub-c3ws-routing-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start(&sock, StreamBehavior::Normal);
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("banner");
+    wait_for_min_start_sessions(&records, 1, Duration::from_secs(3));
+    repl.send_line("exit");
+
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(2));
+
+    let guard = records.lock().expect("lock records");
+    let start = guard
+        .persistent_start_sessions
+        .first()
+        .expect("persistent start session");
+    let net_allowed = start
+        .policy_snapshot
+        .get("net_allowed")
+        .and_then(|value| value.as_array())
+        .expect("policy_snapshot.net_allowed array");
+    let net_allowed: Vec<&str> = net_allowed
+        .iter()
+        .map(|value| value.as_str().expect("net_allowed string"))
+        .collect();
+    assert_eq!(
+        net_allowed, case.expected_net_allowed,
+        "{}: unexpected canonical policy_snapshot.net_allowed",
+        case.name
+    );
+    assert_world_network_payload(
+        start,
+        case.expected_isolate_network,
+        case.expected_allowed_domains,
+    );
 }
 
 fn write_workspace_marker(workspace_root: &Path) {
@@ -473,6 +610,7 @@ fn c3_persistent_session_start_carries_canonical_net_allowed_snapshot() {
         true,
         "[\" Example.COM. \", \"example.com\", \"Api.Example.com.\"]",
     );
+    write_config(&substrate_home, true);
 
     let sock_temp = short_socket_dir("sub-c3ws-net-allowed-");
     let sock = sock_temp.path().join("world.sock");
@@ -505,6 +643,50 @@ fn c3_persistent_session_start_carries_canonical_net_allowed_snapshot() {
         .map(|value| value.as_str().expect("net_allowed string"))
         .collect();
     assert_eq!(net_allowed, vec!["example.com", "api.example.com"]);
+    assert_world_network_payload(&start, true, &["example.com", "api.example.com"]);
+}
+
+#[test]
+#[serial]
+fn c3_persistent_session_start_obeys_net_allowed_routing_matrix() {
+    let cases = [
+        ReplRoutingCase {
+            name: "gate off plus restrictive policy stays allow-all at routing layer",
+            net_allowed_yaml: "[\" Example.COM. \", \"example.com\", \"Api.Example.com.\"]",
+            world_net_filter: false,
+            expected_net_allowed: &["example.com", "api.example.com"],
+            expected_isolate_network: false,
+            expected_allowed_domains: &[],
+        },
+        ReplRoutingCase {
+            name: "gate on plus allow-all singleton does not request isolation",
+            net_allowed_yaml: "[\" * \"]",
+            world_net_filter: true,
+            expected_net_allowed: &["*"],
+            expected_isolate_network: false,
+            expected_allowed_domains: &[],
+        },
+        ReplRoutingCase {
+            name: "gate on plus deny-all requests isolation with empty allowlist",
+            net_allowed_yaml: "[]",
+            world_net_filter: true,
+            expected_net_allowed: &[],
+            expected_isolate_network: true,
+            expected_allowed_domains: &[],
+        },
+        ReplRoutingCase {
+            name: "gate on plus restrictive allowlist requests isolation with canonical domains",
+            net_allowed_yaml: "[\" Example.COM. \", \"example.com\", \"Api.Example.com.\"]",
+            world_net_filter: true,
+            expected_net_allowed: &["example.com", "api.example.com"],
+            expected_isolate_network: true,
+            expected_allowed_domains: &["example.com", "api.example.com"],
+        },
+    ];
+
+    for case in &cases {
+        run_repl_routing_case(case);
+    }
 }
 
 #[test]
@@ -697,4 +879,93 @@ fn c3_drift_restart_refreshes_anchor_env_for_new_cwd() {
         Some(parent_str.as_str()),
         "expected drift restart to refresh anchor path for new cwd"
     );
+}
+
+#[test]
+#[serial]
+fn c3_drift_restart_refreshes_world_network_routing() {
+    let temp = temp_dir("substrate-c3-net-drift-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+
+    write_profile(&project);
+    write_policy_with_net_allowed(&substrate_home, true, "[\"*\"]");
+    write_config(&substrate_home, true);
+
+    let sock_temp = short_socket_dir("sub-c3ws-net-drift-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start(&sock, StreamBehavior::Normal);
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("banner");
+
+    let wait_for_min_records = |min_execs: usize, min_starts: usize, timeout: Duration| {
+        let deadline = Instant::now() + timeout;
+        while Instant::now() < deadline {
+            let guard = records.lock().expect("lock records");
+            if guard.persistent_execs.len() >= min_execs
+                && guard.persistent_start_sessions.len() >= min_starts
+            {
+                return;
+            }
+            drop(guard);
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        let guard = records.lock().expect("lock records");
+        panic!(
+            "timed out waiting for records execs>={min_execs} starts>={min_starts}; got execs={} starts={}; records: {guard:#?}",
+            guard.persistent_execs.len(),
+            guard.persistent_start_sessions.len(),
+        );
+    };
+
+    repl.send_line("echo first");
+    wait_for_min_records(1, 1, Duration::from_secs(3));
+    repl.wait_for_output("first", Duration::from_secs(3))
+        .expect("first command output");
+
+    write_policy_with_net_allowed(
+        &substrate_home,
+        true,
+        "[\" Example.COM. \", \"example.com\", \"Api.Example.com.\"]",
+    );
+
+    repl.send_line("echo second");
+    wait_for_min_records(2, 2, Duration::from_secs(5));
+    repl.wait_for_output("second", Duration::from_secs(3))
+        .expect("second command output");
+    repl.send_line("exit");
+
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+
+    let guard = records.lock().expect("lock records");
+    assert!(
+        guard.persistent_start_sessions.len() >= 2,
+        "expected a session restart after policy drift; records: {guard:#?}"
+    );
+
+    let first = &guard.persistent_start_sessions[0];
+    let second = &guard.persistent_start_sessions[1];
+
+    assert_world_network_payload(first, false, &[]);
+    assert_world_network_payload(second, true, &["example.com", "api.example.com"]);
+
+    let second_net_allowed = second
+        .policy_snapshot
+        .get("net_allowed")
+        .and_then(|value| value.as_array())
+        .expect("policy_snapshot.net_allowed array");
+    let second_net_allowed: Vec<&str> = second_net_allowed
+        .iter()
+        .map(|value| value.as_str().expect("net_allowed string"))
+        .collect();
+    assert_eq!(second_net_allowed, vec!["example.com", "api.example.com"]);
 }

@@ -777,11 +777,18 @@ async fn start_world_session(
         .context("policy snapshot (start)")?;
     let start_hash = resolved_start.snapshot_hash.clone();
     let start_workspace_root = find_workspace_root(requested_path);
+    let start_network_policy = policy_snapshot::resolve_world_network_policy_for_snapshot(
+        resolved_start.snapshot,
+        requested_path,
+    )
+    .context("world network policy (start)")?;
+    let start_world_network = policy_snapshot::request_world_network_routing(&start_network_policy);
 
     let (mut start_params, inherit_from_host) = ReplSessionStartParams::for_cwd_and_snapshot(
         requested_cwd.clone(),
         requested_path,
-        resolved_start.snapshot,
+        start_network_policy.snapshot,
+        start_world_network,
     )?;
     if inherit_from_host {
         let _ = agent_printer.print(
@@ -812,10 +819,18 @@ async fn start_world_session(
         );
         client.close().await?;
 
+        let restart_network_policy = policy_snapshot::resolve_world_network_policy_for_snapshot(
+            resolved_ready.snapshot,
+            Path::new(&ready.cwd),
+        )
+        .context("world network policy (ready.cwd)")?;
+        let restart_world_network =
+            policy_snapshot::request_world_network_routing(&restart_network_policy);
         let (mut restart_params, inherit_from_host) = ReplSessionStartParams::for_cwd_and_snapshot(
             ready.cwd.clone(),
             Path::new(&ready.cwd),
-            resolved_ready.snapshot,
+            restart_network_policy.snapshot,
+            restart_world_network,
         )?;
         if inherit_from_host {
             let _ = agent_printer.print(

@@ -153,6 +153,13 @@ pub(crate) fn resolve_world_network_policy_for_cwd(
     cwd: &Path,
 ) -> Result<ResolvedWorldNetworkPolicy> {
     let snapshot = resolve_policy_snapshot_for_cwd(cwd)?.snapshot;
+    resolve_world_network_policy_for_snapshot(snapshot, cwd)
+}
+
+pub(crate) fn resolve_world_network_policy_for_snapshot(
+    snapshot: PolicySnapshotV3,
+    cwd: &Path,
+) -> Result<ResolvedWorldNetworkPolicy> {
     let config = crate::execution::config_model::resolve_effective_config(
         cwd,
         &crate::execution::config_model::CliConfigOverrides::default(),

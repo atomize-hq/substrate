@@ -97,6 +97,7 @@ mod imp {
             cwd: String,
             cwd_path: &Path,
             policy_snapshot: agent_api_types::PolicySnapshotV3,
+            world_network: agent_api_types::WorldNetworkRoutingV1,
         ) -> Result<(Self, bool)> {
             let (env, inherit_from_host) = build_world_env_map_for_cwd(cwd_path)?;
             let (cols, rows) = terminal_size_or_default();
@@ -105,10 +106,7 @@ mod imp {
                     cwd,
                     env,
                     policy_snapshot,
-                    world_network: agent_api_types::WorldNetworkRoutingV1 {
-                        isolate_network: false,
-                        allowed_domains: Vec::new(),
-                    },
+                    world_network,
                     cols,
                     rows,
                 },
@@ -891,6 +889,7 @@ mod imp {
         pub(crate) cwd: String,
         pub(crate) env: HashMap<String, String>,
         pub(crate) policy_snapshot: agent_api_types::PolicySnapshotV3,
+        pub(crate) world_network: agent_api_types::WorldNetworkRoutingV1,
         pub(crate) cols: u16,
         pub(crate) rows: u16,
     }
@@ -900,12 +899,14 @@ mod imp {
             cwd: String,
             _cwd_path: &Path,
             policy_snapshot: agent_api_types::PolicySnapshotV3,
+            world_network: agent_api_types::WorldNetworkRoutingV1,
         ) -> Result<(Self, bool)> {
             Ok((
                 Self {
                     cwd,
                     env: HashMap::new(),
                     policy_snapshot,
+                    world_network,
                     cols: 80,
                     rows: 24,
                 },

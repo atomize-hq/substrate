@@ -20,6 +20,7 @@ pub struct PersistentStartSessionRecord {
     pub cwd: String,
     pub env: HashMap<String, String>,
     pub policy_snapshot: JsonValue,
+    pub world_network: JsonValue,
     pub cols: u16,
     pub rows: u16,
 }
@@ -562,6 +563,10 @@ impl ReplWorldAgentStub {
                         .get("policy_snapshot")
                         .cloned()
                         .unwrap_or(JsonValue::Null);
+                    let world_network = first_json
+                        .get("world_network")
+                        .cloned()
+                        .unwrap_or(JsonValue::Null);
                     let cols = first_json.get("cols").and_then(|v| v.as_u64()).unwrap_or(80) as u16;
                     let rows = first_json.get("rows").and_then(|v| v.as_u64()).unwrap_or(24) as u16;
 
@@ -570,6 +575,7 @@ impl ReplWorldAgentStub {
                             cwd: cwd.clone(),
                             env,
                             policy_snapshot,
+                            world_network,
                             cols,
                             rows,
                         });
