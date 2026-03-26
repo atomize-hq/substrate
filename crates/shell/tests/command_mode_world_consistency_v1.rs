@@ -95,7 +95,7 @@ limits:
   max_cpu_percent: null
   max_runtime_ms: null
   max_egress_bytes: null
-metadata: {}
+metadata: {{}}
 "#
     );
     fs::write(home_substrate.join("policy.yaml"), policy).expect("write policy.yaml");

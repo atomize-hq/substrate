@@ -1,5 +1,6 @@
 //! World initialization flows for routing, including platform-gated defaults and agent bridging.
 
+#[cfg(target_os = "macos")]
 use crate::execution::policy_snapshot::bootstrap_world_spec;
 #[cfg(all(test, any(target_os = "windows", target_os = "macos")))]
 use crate::execution::world_env_guard;
