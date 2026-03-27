@@ -84,11 +84,20 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                 .unwrap_or_else(|_| PathBuf::from("."))
                 .display()
                 .to_string();
-            Some(
-                start_world_session(requested, stdout_cb.clone(), &agent_printer)
-                    .await
-                    .context("failed to start persistent world session")?,
-            )
+            match start_world_session(requested, stdout_cb.clone(), &agent_printer).await {
+                Ok(session) => Some(session),
+                Err(err) => {
+                    let message = format!(
+                        "substrate: error: failed to start persistent world session: {err:#}"
+                    );
+                    let _ = agent_printer.print(message.clone());
+                    eprintln!("{message}");
+                    let _ = io::stdout().flush();
+                    let _ = io::stderr().flush();
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    return Ok(1);
+                }
+            }
         } else {
             None
         };
