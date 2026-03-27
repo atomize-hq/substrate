@@ -241,6 +241,14 @@ impl NetFilter {
     }
 
     #[cfg(target_os = "linux")]
+    fn allowed_ip_element_spec(&self, ip: &IpAddr) -> String {
+        match ip {
+            IpAddr::V4(v4) => format!("element inet {} allowed4 {{ {} }}", self.table_name, v4),
+            IpAddr::V6(v6) => format!("element inet {} allowed6 {{ {} }}", self.table_name, v6),
+        }
+    }
+
+    #[cfg(target_os = "linux")]
     fn install_rules_linux(&self) -> Result<()> {
         // Safety guard: never attach an output-hook chain without scoping.
         //
@@ -278,27 +286,17 @@ impl NetFilter {
                 "set inet {} allowed4 {{ type ipv4_addr; flags interval; }}",
                 self.table_name
             );
-            let _ = self.run_nft(&["add", &set_v4]);
+            self.run_nft(&["add", &set_v4])?;
             let set_v6 = format!(
                 "set inet {} allowed6 {{ type ipv6_addr; flags interval; }}",
                 self.table_name
             );
-            let _ = self.run_nft(&["add", &set_v6]);
+            self.run_nft(&["add", &set_v6])?;
 
             // Populate sets with allowed IPs
             for ip in &self.allowed_ips {
-                match ip {
-                    IpAddr::V4(v4) => {
-                        let add_elem =
-                            format!("add element inet {} allowed4 {{ {} }}", self.table_name, v4);
-                        let _ = self.run_nft(&["add", &add_elem]);
-                    }
-                    IpAddr::V6(v6) => {
-                        let add_elem =
-                            format!("add element inet {} allowed6 {{ {} }}", self.table_name, v6);
-                        let _ = self.run_nft(&["add", &add_elem]);
-                    }
-                }
+                let add_elem = self.allowed_ip_element_spec(ip);
+                self.run_nft(&["add", &add_elem])?;
             }
 
             for body in self.allow_rule_bodies() {
@@ -774,6 +772,87 @@ mod tests {
         let err = filter.install_rules().unwrap_err();
         let message = format!("{err:#}");
         assert!(message.contains("nft command failed"));
+        assert!(!filter.is_active);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_install_rules_adds_allowed_ip_elements_without_duplicate_add_keyword() {
+        let temp = tempdir().unwrap();
+        let fake_nft = temp.path().join("nft");
+        let log_path = temp.path().join("nft.log");
+        std::fs::write(
+            &fake_nft,
+            format!(
+                "#!/bin/sh\nprintf '%s|' \"$@\" >> \"{}\"\nprintf '\\n' >> \"{}\"\nexit 0\n",
+                log_path.display(),
+                log_path.display()
+            ),
+        )
+        .unwrap();
+        let mut perms = std::fs::metadata(&fake_nft).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&fake_nft, perms).unwrap();
+
+        let original_path = std::env::var("PATH").unwrap_or_default();
+        let stubbed_path = format!("{}:{original_path}", temp.path().display());
+
+        let _lock = ENV_LOCK.lock().unwrap();
+        let _guard = EnvGuard::set(&[
+            ("WORLD_NETFILTER_ENABLE", Some("1")),
+            ("PATH", Some(&stubbed_path)),
+        ]);
+
+        let mut filter = NetFilter::new("test_world", vec![]).unwrap();
+        filter.allowed_ips.insert("203.0.113.10".parse().unwrap());
+        filter.set_cgroup_path(Path::new("/sys/fs/cgroup/substrate/test_world"));
+
+        filter.install_rules().expect("install rules");
+
+        let log = std::fs::read_to_string(&log_path).expect("read nft log");
+        assert!(
+            log.contains("add|element inet substrate_test_world allowed4 { 203.0.113.10 }|"),
+            "expected add element command without duplicated keyword, got log: {log}"
+        );
+        assert!(
+            !log.contains("add|add element"),
+            "unexpected duplicated add keyword in nft command log: {log}"
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_install_rules_fail_closed_when_allowed_ip_population_fails() {
+        let temp = tempdir().unwrap();
+        let fake_nft = temp.path().join("nft");
+        std::fs::write(
+            &fake_nft,
+            "#!/bin/sh\ncase \"$2\" in\n  element\\ *)\n    echo 'simulated add element failure' >&2\n    exit 23\n    ;;\nesac\nexit 0\n",
+        )
+        .unwrap();
+        let mut perms = std::fs::metadata(&fake_nft).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&fake_nft, perms).unwrap();
+
+        let original_path = std::env::var("PATH").unwrap_or_default();
+        let stubbed_path = format!("{}:{original_path}", temp.path().display());
+
+        let _lock = ENV_LOCK.lock().unwrap();
+        let _guard = EnvGuard::set(&[
+            ("WORLD_NETFILTER_ENABLE", Some("1")),
+            ("PATH", Some(&stubbed_path)),
+        ]);
+
+        let mut filter = NetFilter::new("test_world", vec![]).unwrap();
+        filter.allowed_ips.insert("203.0.113.10".parse().unwrap());
+        filter.set_cgroup_path(Path::new("/sys/fs/cgroup/substrate/test_world"));
+
+        let err = filter.install_rules().unwrap_err();
+        let message = format!("{err:#}");
+        assert!(
+            message.contains("simulated add element failure"),
+            "unexpected error: {message}"
+        );
         assert!(!filter.is_active);
     }
 
