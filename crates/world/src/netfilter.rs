@@ -209,6 +209,7 @@ impl NetFilter {
 
     /// Resolve allowed domains to IP addresses.
     pub fn resolve_domains(&mut self) -> Result<()> {
+        self.allowed_ips.clear();
         #[cfg(target_os = "linux")]
         {
             self.allowed_dns_servers = HashSet::new();
@@ -249,6 +250,19 @@ impl NetFilter {
                     );
                 }
             }
+        }
+
+        Ok(())
+    }
+
+    /// Re-resolve the allowlist and rebuild active nftables state.
+    pub fn refresh_rules(&mut self) -> Result<()> {
+        self.resolve_domains()?;
+
+        #[cfg(target_os = "linux")]
+        if self.is_active {
+            self.remove_rules()?;
+            self.install_rules()?;
         }
 
         Ok(())

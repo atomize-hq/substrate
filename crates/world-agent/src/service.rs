@@ -272,6 +272,16 @@ impl WorldAgentService {
         Ok((world, merged))
     }
 
+    #[cfg(target_os = "linux")]
+    pub fn refresh_session_network_filter(&self, world: &WorldHandle) -> Result<()> {
+        self.linux_backend.refresh_network_filter(world)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub fn session_cgroup_path(&self, world: &WorldHandle) -> Result<PathBuf> {
+        self.linux_backend.cgroup_path(world)
+    }
+
     #[cfg(any(target_os = "linux", test))]
     fn normalize_pending_diff_bucket(diff: &substrate_common::FsDiff) -> PendingDiffBucketV1 {
         fn normalize(path: &std::path::Path) -> String {

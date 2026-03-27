@@ -111,6 +111,22 @@ impl SessionWorld {
         Ok(())
     }
 
+    pub fn refresh_network_filter(&mut self) -> Result<()> {
+        if !self.spec.isolate_network {
+            return Ok(());
+        }
+
+        let filter = self
+            .network_filter
+            .as_mut()
+            .ok_or_else(|| anyhow!("network filter missing for isolated session"))?;
+        filter.refresh_rules()
+    }
+
+    pub fn cgroup_path(&self) -> PathBuf {
+        self.cgroup_path.clone()
+    }
+
     fn fallback_cgroup_path(&self) -> PathBuf {
         let uid = current_uid();
         if let Ok(xdg) = std::env::var("XDG_RUNTIME_DIR") {
@@ -200,6 +216,10 @@ impl SessionWorld {
             return Err(anyhow!(
                 "SUBSTRATE_WORLD_EXEC_FORCE_DIRECT is unsupported when isolate_network=true because cgroup attach is not guaranteed"
             ));
+        }
+
+        if require_cgroup_attach {
+            self.refresh_network_filter()?;
         }
 
         // When fs_mode is enforced or heuristics request isolation, run against a persistent overlay

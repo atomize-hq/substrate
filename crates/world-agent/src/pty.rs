@@ -1006,6 +1006,28 @@ async fn handle_persistent_session(
                                     continue;
                                 }
 
+                                let world_handle = world_api::WorldHandle {
+                                    id: world.world_id.clone(),
+                                };
+                                if let Err(e) =
+                                    service.refresh_session_network_filter(&world_handle)
+                                {
+                                    service.record_last_netfilter_failure_for_error(
+                                        world.isolate_network,
+                                        &e,
+                                    );
+                                    send_fatal(
+                                        &ws_write_tx,
+                                        "internal_error",
+                                        format!("Failed to refresh session network filter: {e}"),
+                                        Some(seq),
+                                    );
+                                    break;
+                                }
+                                service.clear_last_netfilter_failure_on_success(
+                                    world.isolate_network,
+                                );
+
                                 let (child_events, pgid) = match spawn_persistent_exec(
                                     &world,
                                     &pty,
@@ -1208,6 +1230,7 @@ struct PersistentWorldContext {
     merged_dir: PathBuf,
     project_dir: PathBuf,
     fs_mode: WorldFsMode,
+    isolate_network: bool,
     netns_name: Option<String>,
     cgroup_path: Option<PathBuf>,
     base_env: HashMap<String, String>,
@@ -1366,7 +1389,11 @@ fn prepare_persistent_world_context(
         None
     };
 
-    let cgroup_path = Some(std::path::PathBuf::from("/sys/fs/cgroup/substrate").join(&world.id));
+    let cgroup_path = Some(
+        service
+            .session_cgroup_path(&world)
+            .map_err(|e| format!("Failed to resolve session cgroup path: {e}"))?,
+    );
 
     let mut base_env: HashMap<String, String> = HashMap::new();
     let isolation_full = !canonical.world_fs.host_visible;
@@ -1388,6 +1415,7 @@ fn prepare_persistent_world_context(
         merged_dir,
         project_dir,
         fs_mode,
+        isolate_network,
         netns_name,
         cgroup_path,
         base_env,
