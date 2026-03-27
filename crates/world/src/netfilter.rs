@@ -99,6 +99,50 @@ fn configured_dns_servers() -> Result<HashSet<IpAddr>> {
         .collect())
 }
 
+#[cfg(target_os = "linux")]
+fn resolve_allowed_domain_ips(domain: &str) -> Result<HashSet<IpAddr>> {
+    let mut resolved = HashSet::new();
+    let mut socket_err: Option<String> = None;
+    let mut lookup_err: Option<String> = None;
+
+    // Some domains (notably large CDN/front-door hosts) rotate answer subsets across
+    // successive queries. Union a few back-to-back lookups so the nft allow set tracks
+    // the same broader answer pool the command is likely to receive moments later.
+    for attempt in 0..4 {
+        match (domain, 0).to_socket_addrs() {
+            Ok(addrs) => resolved.extend(addrs.map(|addr| addr.ip())),
+            Err(err) => {
+                if socket_err.is_none() {
+                    socket_err = Some(err.to_string());
+                }
+            }
+        }
+
+        match dns_lookup::lookup_host(domain) {
+            Ok(ips) => resolved.extend(ips),
+            Err(err) => {
+                if lookup_err.is_none() {
+                    lookup_err = Some(err.to_string());
+                }
+            }
+        }
+
+        if attempt < 3 {
+            std::thread::sleep(Duration::from_millis(15));
+        }
+    }
+
+    if !resolved.is_empty() {
+        return Ok(resolved);
+    }
+
+    if let Some(err) = socket_err.or(lookup_err) {
+        anyhow::bail!("failed to resolve allowed domain `{domain}`: {err}");
+    }
+
+    anyhow::bail!("allowed domain `{domain}` resolved to no addresses");
+}
+
 pub fn world_netfilter_enable_present() -> bool {
     std::env::var("WORLD_NETFILTER_ENABLE")
         .ok()
@@ -217,11 +261,7 @@ impl NetFilter {
 
         for domain in &self.allowed_domains {
             #[cfg(target_os = "linux")]
-            let resolved = (domain.as_str(), 0)
-                .to_socket_addrs()
-                .with_context(|| format!("failed to resolve allowed domain `{domain}`"))?
-                .map(|addr| addr.ip())
-                .collect::<HashSet<_>>();
+            let resolved = resolve_allowed_domain_ips(domain)?;
 
             #[cfg(not(target_os = "linux"))]
             let resolved = dns_lookup::lookup_host(domain)
