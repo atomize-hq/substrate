@@ -643,7 +643,7 @@ fn c3_persistent_session_start_carries_canonical_net_allowed_snapshot() {
         .map(|value| value.as_str().expect("net_allowed string"))
         .collect();
     assert_eq!(net_allowed, vec!["example.com", "api.example.com"]);
-    assert_world_network_payload(&start, true, &["example.com", "api.example.com"]);
+    assert_world_network_payload(start, true, &["example.com", "api.example.com"]);
 }
 
 #[test]
