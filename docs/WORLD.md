@@ -150,7 +150,7 @@ Per session world (identified by `WORLD_ID`, e.g., `wld_01994…`):
   - Netfilter rules installed in this netns when available
 - Netfilter rules (nftables)
   - Table: `substrate_<WORLD_ID>` (inet)
-  - Allows DNS and allowed domains (from policy), logs drops with prefix `substrate-dropped-<WORLD_ID>:`
+  - Deny-all installs no DNS allow rule; restrictive allowlists permit DNS only to the configured resolvers from `/etc/resolv.conf`, plus the resolved destination IPs for allowed domains, and log drops with prefix `substrate-dropped-<WORLD_ID>:`
 - Cgroup v2 path: `/sys/fs/cgroup/substrate/<WORLD_ID>`
   - Resource limits applied best‑effort; PTY children are attached to this cgroup
 - Filesystem isolation

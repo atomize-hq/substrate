@@ -10,6 +10,8 @@ use anyhow::Context;
 use anyhow::Result;
 use std::collections::HashSet;
 #[cfg(target_os = "linux")]
+use std::fs;
+#[cfg(target_os = "linux")]
 use std::io::Read;
 use std::net::IpAddr;
 #[cfg(target_os = "linux")]
@@ -68,6 +70,35 @@ fn output_with_timeout(mut cmd: Command, timeout: Duration) -> Result<std::proce
     }
 }
 
+#[cfg(target_os = "linux")]
+fn parse_resolv_conf_nameservers(contents: &str) -> HashSet<IpAddr> {
+    contents
+        .lines()
+        .filter_map(|line| {
+            let trimmed = line.split(['#', ';']).next().unwrap_or_default().trim();
+            if trimmed.is_empty() {
+                return None;
+            }
+
+            let mut parts = trimmed.split_whitespace();
+            match (parts.next(), parts.next()) {
+                (Some("nameserver"), Some(addr)) => addr.parse::<IpAddr>().ok(),
+                _ => None,
+            }
+        })
+        .collect()
+}
+
+#[cfg(target_os = "linux")]
+fn configured_dns_servers() -> Result<HashSet<IpAddr>> {
+    let contents = fs::read_to_string("/etc/resolv.conf")
+        .context("failed to read /etc/resolv.conf for restrictive DNS allow rules")?;
+    Ok(parse_resolv_conf_nameservers(&contents)
+        .into_iter()
+        .filter(|ip| !ip.is_loopback())
+        .collect())
+}
+
 pub fn world_netfilter_enable_present() -> bool {
     std::env::var("WORLD_NETFILTER_ENABLE")
         .ok()
@@ -97,6 +128,8 @@ pub struct NetFilter {
     chain_name: String,
     allowed_domains: Vec<String>,
     allowed_ips: HashSet<IpAddr>,
+    #[cfg(target_os = "linux")]
+    allowed_dns_servers: HashSet<IpAddr>,
     scopes_used: Vec<NetworkScope>,
     is_active: bool,
     /// Optional network namespace name to scope nft commands
@@ -129,6 +162,8 @@ impl NetFilter {
             chain_name,
             allowed_domains,
             allowed_ips: HashSet::new(),
+            #[cfg(target_os = "linux")]
+            allowed_dns_servers: HashSet::new(),
             scopes_used: Vec::new(),
             is_active: false,
             ns_name: None,
@@ -174,6 +209,11 @@ impl NetFilter {
 
     /// Resolve allowed domains to IP addresses.
     pub fn resolve_domains(&mut self) -> Result<()> {
+        #[cfg(target_os = "linux")]
+        {
+            self.allowed_dns_servers = HashSet::new();
+        }
+
         for domain in &self.allowed_domains {
             #[cfg(target_os = "linux")]
             let resolved = (domain.as_str(), 0)
@@ -194,6 +234,23 @@ impl NetFilter {
                 self.allowed_ips.insert(ip);
             }
         }
+
+        #[cfg(target_os = "linux")]
+        if !self.allowed_domains.is_empty() {
+            match configured_dns_servers() {
+                Ok(servers) => {
+                    self.allowed_dns_servers = servers;
+                }
+                Err(err) => {
+                    tracing::debug!(
+                        target: "world::netfilter",
+                        error = %err,
+                        "failed to inspect /etc/resolv.conf for restrictive DNS allow rules"
+                    );
+                }
+            }
+        }
+
         Ok(())
     }
 
@@ -227,9 +284,12 @@ impl NetFilter {
 
     #[cfg(target_os = "linux")]
     fn allow_rule_bodies(&self) -> Vec<String> {
-        vec![
+        let mut rules = vec![
             "oif lo accept".to_string(),
             "ct state established,related accept".to_string(),
+        ];
+        rules.extend(self.dns_rule_bodies());
+        rules.extend([
             "ip daddr @allowed4 accept".to_string(),
             "ip6 daddr @allowed6 accept".to_string(),
             format!(
@@ -237,7 +297,25 @@ impl NetFilter {
                 self.world_id
             ),
             "counter drop".to_string(),
-        ]
+        ]);
+        rules
+    }
+
+    #[cfg(target_os = "linux")]
+    fn dns_rule_bodies(&self) -> Vec<String> {
+        let mut servers = self.allowed_dns_servers.iter().copied().collect::<Vec<_>>();
+        servers.sort();
+
+        let mut rules = Vec::with_capacity(servers.len() * 2);
+        for server in servers {
+            let (prefix, dest) = match server {
+                IpAddr::V4(ip) => ("ip", ip.to_string()),
+                IpAddr::V6(ip) => ("ip6", ip.to_string()),
+            };
+            rules.push(format!("{prefix} daddr {dest} udp dport 53 accept"));
+            rules.push(format!("{prefix} daddr {dest} tcp dport 53 accept"));
+        }
+        rules
     }
 
     #[cfg(target_os = "linux")]
@@ -731,6 +809,52 @@ mod tests {
         assert!(
             !rules.iter().any(|rule| rule.contains("dport 53")),
             "deny-all rules must not include a DNS allow rule: {rules:?}"
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_parse_resolv_conf_nameservers_ignores_comments_and_invalid_lines() {
+        let nameservers = parse_resolv_conf_nameservers(
+            r#"
+            # comment
+            search example.com
+            nameserver 127.0.0.53
+            nameserver 1.1.1.1 ; trailing comment
+            nameserver 2606:4700:4700::1111
+            nameserver not-an-ip
+            "#,
+        );
+
+        assert!(nameservers.contains(&"127.0.0.53".parse().unwrap()));
+        assert!(nameservers.contains(&"1.1.1.1".parse().unwrap()));
+        assert!(nameservers.contains(&"2606:4700:4700::1111".parse().unwrap()));
+        assert_eq!(nameservers.len(), 3);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_restrictive_rule_bodies_allow_dns_only_to_configured_resolvers() {
+        let mut filter = NetFilter::new("test_world", vec!["example.com".to_string()]).unwrap();
+        filter
+            .allowed_dns_servers
+            .insert("1.1.1.1".parse().unwrap());
+        filter
+            .allowed_dns_servers
+            .insert("2606:4700:4700::1111".parse().unwrap());
+
+        let rules = filter.allow_rule_bodies();
+        assert!(rules.contains(&"ip daddr 1.1.1.1 udp dport 53 accept".to_string()));
+        assert!(rules.contains(&"ip daddr 1.1.1.1 tcp dport 53 accept".to_string()));
+        assert!(rules.contains(&"ip6 daddr 2606:4700:4700::1111 udp dport 53 accept".to_string()));
+        assert!(rules.contains(&"ip6 daddr 2606:4700:4700::1111 tcp dport 53 accept".to_string()));
+        assert_eq!(
+            rules
+                .iter()
+                .filter(|rule| rule.contains("dport 53"))
+                .count(),
+            4,
+            "expected resolver-scoped DNS allow rules only: {rules:?}"
         );
     }
 
