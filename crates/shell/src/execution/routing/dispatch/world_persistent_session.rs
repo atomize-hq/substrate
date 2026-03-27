@@ -314,7 +314,7 @@ mod imp {
 
         pub(crate) async fn send_signal(&self, signal: &str) -> Result<()> {
             let frame = ClientFrame::Signal {
-                signal: signal.to_string(),
+                sig: signal.to_string(),
             };
             let payload = serde_json::to_string(&frame).context("serialize signal frame")?;
             self.sink
@@ -379,7 +379,7 @@ mod imp {
             rows: u16,
         },
         Signal {
-            signal: String,
+            sig: String,
         },
         Close,
     }
@@ -810,6 +810,18 @@ mod imp {
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        #[test]
+        fn signal_frame_serializes_sig_field() {
+            let frame = ClientFrame::Signal {
+                sig: "INT".to_string(),
+            };
+
+            let value = serde_json::to_value(&frame).expect("serialize signal frame");
+            assert_eq!(value["type"], "signal");
+            assert_eq!(value["sig"], "INT");
+            assert!(value.get("signal").is_none());
+        }
 
         #[test]
         fn start_session_serializes_world_network_routing() {

@@ -794,7 +794,7 @@ impl ReplWorldAgentStub {
                             }
                             "signal" => {
                                 let signal = frame
-                                    .get("signal")
+                                    .get("sig")
                                     .and_then(|v| v.as_str())
                                     .unwrap_or("")
                                     .to_string();
