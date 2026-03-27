@@ -41,14 +41,14 @@ pub(crate) use dispatch::{
     build_agent_client_and_pending_diff_request, build_agent_client_and_request, execute_command,
     needs_pty,
 };
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 use nix::sys::termios::{
     self, ControlFlags, InputFlags, LocalFlags, OutputFlags, SetArg, SpecialCharacterIndices,
     Termios,
 };
 pub(crate) use path_env::{canonicalize_or, enforce_caged_destination};
 pub(crate) use replay::{handle_replay_command, handle_trace_command};
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 use std::os::unix::io::AsRawFd;
 #[allow(unused_imports)]
 pub(crate) use telemetry::{
@@ -56,7 +56,7 @@ pub(crate) use telemetry::{
 };
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub(crate) use world_env::world_transport_to_meta;
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn get_term_size() -> (u16, u16) {
     // Try to read the current terminal size; fall back to 80x24
     let fd = std::io::stdout().as_raw_fd();
@@ -76,13 +76,13 @@ fn get_term_size() -> (u16, u16) {
     (80, 24)
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 struct RawModeGuard {
     file: std::fs::File,
     orig: Termios,
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 impl RawModeGuard {
     fn new_for_tty() -> anyhow::Result<Self> {
         // Open controlling terminal
@@ -125,7 +125,7 @@ impl RawModeGuard {
     }
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 impl Drop for RawModeGuard {
     fn drop(&mut self) {
         let _ = termios::tcsetattr(&self.file, SetArg::TCSANOW, &self.orig);
