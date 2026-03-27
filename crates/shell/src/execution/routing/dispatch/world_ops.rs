@@ -9,6 +9,8 @@ use crate::execution::policy_snapshot::{
 };
 #[cfg(target_os = "macos")]
 use crate::execution::pw;
+#[cfg(target_os = "linux")]
+use crate::execution::routing::{get_term_size, RawModeGuard};
 #[cfg(all(test, any(target_os = "linux", target_os = "windows")))]
 use crate::execution::world_env_guard;
 #[cfg(target_os = "linux")]
@@ -24,6 +26,8 @@ use substrate_broker::world_fs_mode;
 use substrate_common::agent_events::AgentEvent;
 #[cfg(unix)]
 use tokio::net::UnixStream;
+#[cfg(target_os = "linux")]
+use tokio::signal::unix::{signal, SignalKind};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use tokio_tungstenite as tungs;
 #[cfg(target_os = "linux")]
