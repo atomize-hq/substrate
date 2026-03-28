@@ -24,6 +24,16 @@ pub struct SessionWorld {
     overlay_mode: Option<WorldFsMode>,
 }
 
+struct OverlayExecutionContext<'a> {
+    command_to_run: &'a str,
+    cwd: &'a Path,
+    env: &'a HashMap<String, String>,
+    merged_dir: &'a Path,
+    desired_cwd: &'a Path,
+    require_cgroup_attach: bool,
+    span_id: Option<&'a str>,
+}
+
 impl SessionWorld {
     /// Ensure a session world is started and return it.
     pub fn ensure_started(spec: WorldSpec) -> Result<Self> {
@@ -238,15 +248,16 @@ impl SessionWorld {
             } else {
                 self.project_dir.clone()
             };
-            output = self.execute_with_overlay_helpers(
-                &command_to_run,
+            let exec_ctx = OverlayExecutionContext {
+                command_to_run: &command_to_run,
                 cwd,
-                &env,
-                &merged_dir,
-                &desired_cwd,
+                env: &env,
+                merged_dir: &merged_dir,
+                desired_cwd: &desired_cwd,
                 require_cgroup_attach,
-                span_id.as_deref(),
-            )?;
+                span_id: span_id.as_deref(),
+            };
+            output = self.execute_with_overlay_helpers(&exec_ctx)?;
 
             if self.spec.fs_mode == WorldFsMode::ReadOnly {
                 diff_opt = Some(FsDiff::default());
@@ -289,15 +300,9 @@ impl SessionWorld {
 
     fn execute_with_overlay_helpers(
         &self,
-        command_to_run: &str,
-        cwd: &Path,
-        env: &HashMap<String, String>,
-        merged_dir: &Path,
-        desired_cwd: &Path,
-        require_cgroup_attach: bool,
-        span_id: Option<&str>,
+        exec_ctx: &OverlayExecutionContext<'_>,
     ) -> Result<std::process::Output> {
-        let project_attach_policy = if require_cgroup_attach {
+        let project_attach_policy = if exec_ctx.require_cgroup_attach {
             crate::exec::CgroupAttachPolicy::required(
                 "project_bind_mount",
                 self.cgroup_path.as_path(),
@@ -307,57 +312,39 @@ impl SessionWorld {
         };
 
         match crate::exec::execute_shell_command_with_project_bind_mount(
-            command_to_run,
+            exec_ctx.command_to_run,
             crate::exec::ProjectBindMount {
-                merged_dir,
+                merged_dir: exec_ctx.merged_dir,
                 project_dir: &self.project_dir,
-                desired_cwd,
+                desired_cwd: exec_ctx.desired_cwd,
                 fs_mode: self.spec.fs_mode,
             },
-            env,
+            exec_ctx.env,
             false,
             project_attach_policy,
-            span_id,
+            exec_ctx.span_id,
         ) {
             Ok(output)
-                if !require_cgroup_attach
+                if !exec_ctx.require_cgroup_attach
                     || !crate::exec::is_cgroup_attach_wrapper_failure(&output.stderr) =>
             {
                 Ok(output)
             }
             Ok(output) => self.execute_world_deps_fallback(
-                command_to_run,
-                cwd,
-                env,
-                merged_dir,
+                exec_ctx,
                 anyhow!(
                     "project bind mount helper refused isolated execution before command start: {}",
                     String::from_utf8_lossy(&output.stderr).trim()
                 ),
-                require_cgroup_attach,
-                span_id,
             ),
-            Err(err) => self.execute_world_deps_fallback(
-                command_to_run,
-                cwd,
-                env,
-                merged_dir,
-                err,
-                require_cgroup_attach,
-                span_id,
-            ),
+            Err(err) => self.execute_world_deps_fallback(exec_ctx, err),
         }
     }
 
     fn execute_world_deps_fallback(
         &self,
-        command_to_run: &str,
-        cwd: &Path,
-        env: &HashMap<String, String>,
-        merged_dir: &Path,
+        exec_ctx: &OverlayExecutionContext<'_>,
         primary_err: anyhow::Error,
-        require_cgroup_attach: bool,
-        span_id: Option<&str>,
     ) -> Result<std::process::Output> {
         if self.spec.fs_mode == WorldFsMode::ReadOnly {
             return Err(primary_err).context(
@@ -365,8 +352,10 @@ impl SessionWorld {
             );
         }
 
-        let mut rel = if cwd.starts_with(&self.project_dir) {
-            cwd.strip_prefix(&self.project_dir)
+        let mut rel = if exec_ctx.cwd.starts_with(&self.project_dir) {
+            exec_ctx
+                .cwd
+                .strip_prefix(&self.project_dir)
                 .unwrap_or_else(|_| Path::new("."))
                 .to_path_buf()
         } else {
@@ -375,10 +364,10 @@ impl SessionWorld {
         if rel.as_os_str().is_empty() {
             rel = PathBuf::from(".");
         }
-        let target_dir = merged_dir.join(&rel);
+        let target_dir = exec_ctx.merged_dir.join(&rel);
         let fallback_world_deps_root =
             crate::exec::stable_world_deps_fallback_root(&self.project_dir);
-        let fallback_attach_policy = if require_cgroup_attach {
+        let fallback_attach_policy = if exec_ctx.require_cgroup_attach {
             crate::exec::CgroupAttachPolicy::required(
                 "world_deps_fallback",
                 self.cgroup_path.as_path(),
@@ -388,16 +377,16 @@ impl SessionWorld {
         };
 
         match crate::exec::execute_shell_command_with_world_deps_bind_mount(
-            command_to_run,
+            exec_ctx.command_to_run,
             &target_dir,
-            env,
+            exec_ctx.env,
             false,
             &fallback_world_deps_root,
             fallback_attach_policy,
-            span_id,
+            exec_ctx.span_id,
         ) {
             Ok(output)
-                if !require_cgroup_attach
+                if !exec_ctx.require_cgroup_attach
                     || !crate::exec::is_cgroup_attach_wrapper_failure(&output.stderr) =>
             {
                 Ok(output)
@@ -407,17 +396,17 @@ impl SessionWorld {
                 String::from_utf8_lossy(&output.stderr).trim()
             )),
             Err(world_deps_err) => {
-                if require_cgroup_attach {
+                if exec_ctx.require_cgroup_attach {
                     Err(primary_err).context(format!(
                         "world-deps fallback helper also failed: {world_deps_err:#}"
                     ))
                 } else {
                     crate::exec::execute_shell_command(
-                        command_to_run,
+                        exec_ctx.command_to_run,
                         &target_dir,
-                        env,
+                        exec_ctx.env,
                         false,
-                        span_id,
+                        exec_ctx.span_id,
                     )
                         .with_context(|| {
                             format!(
@@ -843,16 +832,18 @@ mod tests {
         let world = test_world(&temp, true);
         let merged_dir = temp.path().join("merged");
         std::fs::create_dir_all(&merged_dir).expect("merged dir");
+        let env = HashMap::new();
+        let exec_ctx = OverlayExecutionContext {
+            command_to_run: "printf should-not-run",
+            cwd: &world.project_dir,
+            env: &env,
+            merged_dir: &merged_dir,
+            desired_cwd: &world.project_dir,
+            require_cgroup_attach: true,
+            span_id: None,
+        };
 
-        let err = match world.execute_with_overlay_helpers(
-            "printf should-not-run",
-            &world.project_dir,
-            &HashMap::new(),
-            &merged_dir,
-            &world.project_dir,
-            true,
-            None,
-        ) {
+        let err = match world.execute_with_overlay_helpers(&exec_ctx) {
             Ok(output) => {
                 if output.status.success() {
                     panic!(
