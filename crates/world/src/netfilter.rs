@@ -837,7 +837,8 @@ mod tests {
         assert!(
             message.contains("failed to resolve allowed domain")
                 || message.contains("failed to lookup address information")
-                || message.contains("resolved to no addresses"),
+                || message.contains("resolved to no addresses")
+                || message.contains("No such host is known"),
             "unexpected error: {message}"
         );
     }
