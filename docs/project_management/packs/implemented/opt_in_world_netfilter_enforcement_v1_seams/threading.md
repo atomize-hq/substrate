@@ -5,8 +5,8 @@ This document is the authoritative registry for cross-seam contracts and the thr
 Execution horizon summary:
 
 - `SEAM-4` is now landed; its seam-local closeout publishes `C-07` / `THR-05` from the recorded doctor observability evidence.
-- `SEAM-5` is now the active terminal seam. Its promotion revalidates the published doctor contract plus the landed config, routing, and runtime handoffs before final conformance and smoke closeout.
-- No queued `next` seam remains in this pack.
+- `SEAM-5` is now landed; its closeout revalidated the published doctor contract plus the landed config, routing, and runtime handoffs before terminal conformance and smoke closeout.
+- No queued `next` seam remains in this pack, and no active seam remains open.
 
 ## Contract registry
 

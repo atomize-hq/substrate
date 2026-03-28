@@ -1,10 +1,10 @@
 ---
 pack_id: opt_in_world_netfilter_enforcement
 pack_version: v1
-pack_status: extracted
+pack_status: landed
 source_ref: user_scope_writeup_2026-03-25
 execution_horizon:
-  active_seam: SEAM-5
+  active_seam: null
   next_seam: null
 ---
 
