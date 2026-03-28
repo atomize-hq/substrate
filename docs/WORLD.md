@@ -200,6 +200,8 @@ Notes
 - Provisioning-time APT and runtime fail-early details live in:
   `docs/reference/world/deps/README.md`
   and `docs/project_management/packs/implemented/world-deps-apt-provisioning/contract.md`
+  (historical draft-pack path:
+  `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`)
 
 ---
 

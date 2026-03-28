@@ -158,6 +158,8 @@ Those internal world-deps profiles are reserved for Substrate’s built-in world
 Contract source:
 - `docs/reference/world/deps/README.md`
 - `docs/project_management/packs/implemented/world-deps-apt-provisioning/contract.md`
+- Historical draft-pack path:
+  `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`
 
 Implementation lives in:
 - runtime preflight/probe: `crates/shell/src/builtins/world_deps/surfaces.rs`
