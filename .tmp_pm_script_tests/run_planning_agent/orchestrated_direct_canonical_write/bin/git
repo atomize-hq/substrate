@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${1:-}" == "ls-files" && "${2:-}" == "--others" ]]; then
+  if [[ -n "${TEST_GIT_LS_FILES:-}" ]]; then
+    printf '%s
+' "${TEST_GIT_LS_FILES}"
+  fi
+  exit 0
+fi
+if [[ "${1:-}" == "diff" && "${2:-}" == "--name-only" ]]; then
+  exit 0
+fi
+exec "${REAL_GIT}" "$@"

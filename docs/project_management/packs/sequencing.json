@@ -468,6 +468,37 @@
       ]
     },
     {
+      "order": 30.31,
+      "id": "best_effort_distro_package_manager",
+      "title": "Best-effort distro package manager",
+      "branch": "feat/best-effort-distro-package-manager",
+      "directory": "docs/project_management/packs/draft/best-effort-distro-package-manager",
+      "plan": "docs/project_management/packs/draft/best-effort-distro-package-manager/plan.md",
+      "status": "not_started",
+      "sequence": [
+        {
+          "id": "BEDPM0",
+          "spec": "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md"
+        },
+        {
+          "id": "BEDPM1",
+          "spec": "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM1/BEDPM1-spec.md"
+        },
+        {
+          "id": "BEDPM2",
+          "spec": "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md"
+        },
+        {
+          "id": "BEDPM3",
+          "spec": "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM3/BEDPM3-spec.md"
+        }
+      ],
+      "notes": [
+        "Implements ADR-0031: Linux-only package-manager selection via explicit override, os-release mapping, and fixed PATH fallback with stable operator-facing reporting.",
+        "Sequence this pack before persist-detected-linux-distro-pkg-manager so the detection contract, pkg_manager.source vocabulary, and <unknown> sentinel are canonical before downstream persistence planning lands."
+      ]
+    },
+    {
       "order": 30.35,
       "id": "world_deps_host_visible_hardening",
       "title": "World deps host-visible hardening",
