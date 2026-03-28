@@ -17,7 +17,9 @@ use crate::execution::world_env_guard;
 use crate::execution::{policy_snapshot::bootstrap_world_spec, socket_activation};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use agent_api_client::AgentClient;
-use agent_api_types::{ExecuteCancelRequestV1, ExecuteRequest, ExecuteStreamFrame, WorldFsMode};
+#[cfg(not(target_os = "windows"))]
+use agent_api_types::ExecuteCancelRequestV1;
+use agent_api_types::{ExecuteRequest, ExecuteStreamFrame, WorldFsMode};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use std::env;
@@ -1212,8 +1214,8 @@ fn build_agent_client_and_request_impl(
         });
     }
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
-    let policy_snapshot = network_policy.snapshot;
     let world_network = request_world_network_routing(&network_policy);
+    let policy_snapshot = network_policy.snapshot;
     crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
         &policy_snapshot,
         &mut env_map,
