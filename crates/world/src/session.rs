@@ -869,9 +869,7 @@ mod tests {
                 "project bind mount helper refused isolated execution before command start"
             ) || message.contains(
                 "world-deps fallback helper refused isolated execution before command start"
-            ) || message.contains(
-                "world-deps fallback helper also failed"
-            ),
+            ) || message.contains("world-deps fallback helper also failed"),
             "unexpected error: {message}"
         );
         assert!(
