@@ -215,6 +215,19 @@ Keep concise, actionable, and security-focused.
     - `world deps` and related subcommands should surface that the world is disabled by install/config/env before implying a broken agent.
   - Goal: make host-only installs quiet and explicit, avoiding misleading “agent unavailable” warnings when the world was intentionally skipped.
 
+- **P2 – macOS REPL can occasionally miss prompt return after a correctly blocked curl**
+  - Symptom: On March 28, 2026, manual macOS/Lima validation of restrictive `world.net.filter=true` mostly behaved correctly: allow-all allowed traffic, restrictive allowlists fast-failed blocked `curl` requests, and `substrate -c` stayed healthy. In one unreproduced REPL run with `net_allowed=["google.com"]`, `curl spensermcconnell.com` printed the expected fast-fail `curl: (7) Failed to connect ...` error, but the `substrate>` prompt did not return afterward. Repeated `^C` / arrow-key input was echoed as raw control characters until the session was abandoned. Fresh terminals immediately afterward did not reproduce the issue.
+  - Notes:
+    - This does not look like a netfilter enforcement bug; the blocked connect was already rejected correctly.
+    - The symptom was only seen in the interactive REPL/PTTY path, not in non-PTY `substrate -c`.
+    - Most likely surface is macOS PTY-over-SSH/WebSocket session lifecycle or prompt-redraw state after a fast stderr-only failure.
+  - Work:
+    - Capture the relevant session trace and PTY lifecycle events the next time it reproduces.
+    - Inspect whether the REPL misses a command-complete / idle transition after a rapid blocked-command exit.
+    - Add stress coverage for repeated blocked `curl` failures in macOS/Lima persistent sessions.
+    - Verify local terminal raw-mode cleanup and prompt reentry after blocked-command failure.
+  - Acceptance: repeated macOS REPL runs under restrictive allowlists always return to `substrate>` after blocked `curl` failures, and no raw control characters are echoed into the terminal after command exit.
+
 - **P3 – Interactive configuration commands**
   - Add shell built-ins/commands (`:config`, `:profile load`, `:world status`,
     `:shims status`, etc.) to view and adjust settings without restarting.
