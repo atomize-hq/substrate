@@ -926,7 +926,7 @@
         "Verify all feature tasks are completed",
         "Run the feature cleanup command in dry-run mode first"
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "ops",
       "worktree": null
     }

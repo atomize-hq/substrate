@@ -380,7 +380,7 @@
       "branch": "feat/world-deps-packages-bundles-contract",
       "directory": "docs/project_management/packs/active/world-deps-packages-bundles-contract",
       "plan": "docs/project_management/packs/active/world-deps-packages-bundles-contract/plan.md",
-      "status": "not_started",
+      "status": "completed",
       "sequence": [
         {
           "id": "WDP0",
@@ -432,7 +432,8 @@
       ],
       "notes": [
         "Implements ADR-0030: provisioning-time APT system-package installation plus runtime fail-early remediation for APT-backed world deps.",
-        "Sequence after the world-deps packages/bundles contract so install.method=apt semantics are already canonical, and before manager-aware non-APT provisioning packs that extend the shared --provision-deps UX."
+        "Sequence after the world-deps packages/bundles contract so install.method=apt semantics are already canonical, and before manager-aware non-APT provisioning packs that extend the shared --provision-deps UX.",
+        "Execution, manual validation, and feature cleanup were completed on 2026-03-28."
       ]
     },
     {

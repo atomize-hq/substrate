@@ -271,3 +271,27 @@
     - `PRUNED_REMOTE_BRANCHES=0`
 - Remaining blocker:
   - The real cleanup run is still pending because `feature_cleanup.sh` correctly refuses non-dry-run execution while the orchestration checkout has uncommitted WDAP follow-up changes.
+
+## END — 2026-03-28T19:45:00Z — maintenance — FZ-feature-cleanup
+- Feature: `docs/project_management/packs/draft/world-deps-apt-provisioning`
+- Branch: `feat/world-deps-apt-provisioning`
+- Commands run (verbatim) + exit codes:
+  - `make triad-feature-cleanup FEATURE_DIR="docs/project_management/packs/draft/world-deps-apt-provisioning" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1 FORCE=1` (exit `0`)
+  - `make triad-feature-cleanup FEATURE_DIR="docs/project_management/packs/draft/world-deps-apt-provisioning" REMOVE_WORKTREES=1 PRUNE_LOCAL=1 FORCE=1` (initial exit `2`; stale prunable worktree registrations still pointed at missing paths)
+  - `git worktree prune --verbose` (exit `0`)
+  - `make triad-feature-cleanup FEATURE_DIR="docs/project_management/packs/draft/world-deps-apt-provisioning" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1 FORCE=1` (exit `0`)
+  - `make triad-feature-cleanup FEATURE_DIR="docs/project_management/packs/draft/world-deps-apt-provisioning" REMOVE_WORKTREES=1 PRUNE_LOCAL=1 FORCE=1` (exit `0`)
+- Stdout summary block from the successful cleanup run:
+  ```
+  REMOVED_WORKTREES=0
+  PRUNED_LOCAL_BRANCHES=6
+  PRUNED_REMOTE_BRANCHES=0
+  ```
+- Post-cleanup state:
+  - `git worktree list` shows only the orchestration checkout.
+  - `git branch --list 'world-deps-apt-provisioning*'` returns no remaining slice branches.
+- Manual validation closeout:
+  - Re-ran the macOS-applicable manual smoke matrix from `docs/project_management/packs/draft/world-deps-apt-provisioning/manual_testing_playbook.md` against the installed dev binary `~/.substrate/bin/substrate` on `2026-03-28`.
+  - Preconditions plus Cases `2.2`, `2.3`, `2.5`, `3.1`, `3.2`, `3.3`, and `3.4` matched the pack contract.
+  - Case `2.4` showed the expected installed-binary helper lookup behavior before override; the underlying guest provisioning path succeeded when `SUBSTRATE_WORLD_ENABLE_SCRIPT="$HOME/.substrate/scripts/substrate/world-enable.sh"` was supplied, which matches the landed implementation posture for this pack.
+  - Conclusion: no open WDAP pack work remains; pack execution, validation, and cleanup are complete.

@@ -130,5 +130,5 @@ Not rerun during this remediation pass. Existing pack-derived lift evidence rema
 ## Decision: ACCEPT or FLAG
 
 ### If ACCEPT
-- Summary: the pack remains mechanically valid, internally converged, sequencing-aligned, and consistent with the current planning standards after the WDAP0 follow-up delta.
-- Next step: `Commit the follow-up delta, then run the non-dry-run FZ cleanup task from a clean orchestration checkout.`
+- Summary: the pack remains mechanically valid, internally converged, sequencing-aligned, and consistent with the current planning standards after the WDAP0 follow-up delta. Execution, manual validation, and feature cleanup were completed on `2026-03-28`.
+- Next step: none; treat this pack as fully landed and complete.
