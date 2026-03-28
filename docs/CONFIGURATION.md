@@ -69,6 +69,7 @@ Substrate distinguishes between:
 | `SUBSTRATE_OVERRIDE_ANCHOR_MODE` | Override `world.anchor_mode` (`workspace`, `follow-cwd`, `custom`) | *unset* | `workspace` |
 | `SUBSTRATE_OVERRIDE_ANCHOR_PATH` | Override `world.anchor_path` (paired with `custom`) | *unset* | `/workspaces/substrate` |
 | `SUBSTRATE_OVERRIDE_CAGED` | Override `world.caged` (boolean) | *unset* | `0` |
+| `SUBSTRATE_OVERRIDE_WORLD_NET_FILTER` | Override `world.net.filter` (`true`, `false`, `1`, `0`, `yes`, `no`, `on`, `off`) | *unset* | `on` |
 | `SUBSTRATE_OVERRIDE_POLICY_MODE` | Override `policy.mode` (`disabled`, `observe`, `enforce`) | *unset* | `enforce` |
 | `SUBSTRATE_OVERRIDE_SYNC_AUTO_SYNC` | Override `sync.auto_sync` (boolean) | *unset* | `1` |
 | `SUBSTRATE_OVERRIDE_SYNC_DIRECTION` | Override `sync.direction` (`from_world`, `from_host`, `both`) | *unset* | `from_host` |
@@ -78,6 +79,8 @@ Substrate distinguishes between:
 Notes:
 - When `<workspace_root>/.substrate/workspace.yaml` exists, `SUBSTRATE_OVERRIDE_*` is ignored for effective config.
 - CLI flags override both config files and env overrides when a flag exists for the setting.
+- `SUBSTRATE_OVERRIDE_WORLD_NET_FILTER` follows the same rule: it only affects no-workspace runs. The derived
+  `SUBSTRATE_WORLD_NET_FILTER` export below is output-only and is never read as an override input.
 
 ### Exported state (`SUBSTRATE_*`, output-only)
 
@@ -88,14 +91,31 @@ Notes:
 | `SUBSTRATE_ANCHOR_MODE` | Effective `world.anchor_mode` exported | (derived) | `workspace` |
 | `SUBSTRATE_ANCHOR_PATH` | Effective `world.anchor_path` exported | (derived) | `/workspaces/substrate` |
 | `SUBSTRATE_CAGED` | Effective `world.caged` exported as `1|0` | (derived) | `1` |
+| `SUBSTRATE_WORLD_NET_FILTER` | Effective `world.net.filter` exported as `1|0` | (derived) | `0` |
 | `SUBSTRATE_POLICY_MODE` | Effective `policy.mode` exported | (derived) | `observe` |
 | `SUBSTRATE_WORLD_FS_MODE` | Active world filesystem mode (policy-controlled: `writable` or `read_only`) | (derived) | `read_only` |
+
+`SUBSTRATE_WORLD_NET_FILTER` always reports the resolved effective value after config precedence and any eligible
+no-workspace override have been applied. It does not mean filtering is active by itself; it only reports whether the host
+may request enforcement.
+
+### Netfilter request examples
+
+- Allow-all posture: `world.net.filter=true` and canonicalized `net_allowed=["*"]` export `SUBSTRATE_WORLD_NET_FILTER=1`,
+  but the host still does not request `isolate_network`. `WORLD_NETFILTER_ENABLE=1` does not change that allow-all
+  outcome.
+- Deny-all posture: `world.net.filter=true` and canonicalized `net_allowed=[]` cause the host to request deny-all
+  isolation. In a no-workspace run, `SUBSTRATE_OVERRIDE_WORLD_NET_FILTER=on` can enable that gate temporarily; in a
+  workspace run, the override is ignored and the workspace config remains authoritative.
+- Restrictive allowlist posture: `world.net.filter=true` and canonicalized
+  `net_allowed=["github.com","crates.io"]` cause the host to request isolation with that allowlist. The same restrictive
+  policy does not request enforcement when `world.net.filter=false`.
 
 Other world-adjacent variables:
 
 | Variable | Purpose | Default | Example |
 |----------|---------|---------|---------|
-| `SUBSTRATE_WORLD_REQUEST_PROFILE` | Sets the Agent API request `profile` for world-agent executions (advanced/internal only; not the operator-facing APT provisioning workflow, which is `substrate world enable --provision-deps`; see `docs/reference/world/deps/README.md` and `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`) | *unset* | `world-deps-provision` |
+| `SUBSTRATE_WORLD_REQUEST_PROFILE` | Sets the Agent API request `profile` for world-agent executions (advanced/internal only). Built-in world-deps profiles such as `world-deps-provision` and `world-deps-probe` are reserved for Substrate’s own world-deps flows and are ignored when supplied through this env var; the operator-facing APT provisioning workflow remains `substrate world enable --provision-deps`. See `docs/reference/world/deps/README.md`, `docs/project_management/packs/implemented/world-deps-apt-provisioning/contract.md`, and the historical draft-pack path `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`. | *unset* | `wdap-smoke-profile` |
 | `SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE` | Force socket activation mode reporting (`socket_activation`, `manual`, or `unknown`) for diagnostics/tests | auto-detect via systemd | `socket_activation` |
 | `SUBSTRATE_SYSTEMCTL_TIMEOUT_MS` | Timeout (ms) for `systemctl show …` probes used by Linux socket-activation detection; prevents hangs when systemd/dbus is unhealthy | `2000` | `250` |
 

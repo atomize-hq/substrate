@@ -5,6 +5,7 @@ pub mod gc;
 pub mod handlers;
 pub mod internal_exec;
 pub mod pty;
+mod request_routing;
 pub mod service;
 #[cfg(unix)]
 mod socket_activation;
@@ -251,6 +252,7 @@ fn build_router(service: WorldAgentService) -> Router {
         .route("/v1/capabilities", get(handlers::capabilities))
         .route("/v1/doctor/world", get(handlers::doctor_world))
         .route("/v1/execute", post(handlers::execute))
+        .route("/v1/execute/cancel", post(handlers::execute_cancel))
         .route("/v1/pending_diff", post(handlers::pending_diff))
         .route("/v1/pending_diff/clear", post(handlers::pending_diff_clear))
         .route(

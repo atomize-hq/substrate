@@ -1,4 +1,5 @@
 use super::{PlatformWorldContext, WorldTransport};
+use crate::execution::policy_snapshot::bootstrap_world_spec as build_bootstrap_world_spec;
 use crate::execution::settings;
 #[cfg(test)]
 use crate::execution::world_env_guard;
@@ -7,7 +8,7 @@ use anyhow::Result;
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 use substrate_broker::world_fs_mode;
-use world_api::{ResourceLimits, WorldBackend, WorldSpec};
+use world_api::{WorldBackend, WorldSpec};
 use world_windows_wsl::WindowsWslBackend;
 
 struct WindowsContext {
@@ -68,7 +69,7 @@ where
     let _env_guard = world_env_guard();
 
     let backend = backend_provider()?;
-    let spec = world_spec();
+    let spec = bootstrap_world_spec();
     match backend.ensure_session(&spec) {
         Ok(handle) => {
             std::env::set_var("SUBSTRATE_WORLD", "enabled");
@@ -83,17 +84,8 @@ pub fn get_backend() -> Result<Arc<dyn WorldBackend>> {
     Ok(context()?.backend_trait.clone())
 }
 
-pub fn world_spec() -> WorldSpec {
-    WorldSpec {
-        reuse_session: true,
-        isolate_network: true,
-        limits: ResourceLimits::default(),
-        enable_preload: false,
-        allowed_domains: substrate_broker::allowed_domains(),
-        project_dir: settings::world_root_from_env().path,
-        always_isolate: false,
-        fs_mode: world_fs_mode(),
-    }
+pub fn bootstrap_world_spec() -> WorldSpec {
+    build_bootstrap_world_spec(settings::world_root_from_env().path, world_fs_mode())
 }
 
 pub fn detect() -> Result<PlatformWorldContext> {
@@ -104,7 +96,7 @@ pub fn detect() -> Result<PlatformWorldContext> {
     let socket_path = socket_path_from_transport(&transport_config);
     let ensure_backend = ctx.backend_trait.clone();
     let ensure_ready = Box::new(move || {
-        let spec = world_spec();
+        let spec = bootstrap_world_spec();
         ensure_backend.ensure_session(&spec).map(|_| ())
     });
 

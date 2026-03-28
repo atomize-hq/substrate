@@ -150,7 +150,7 @@ Per session world (identified by `WORLD_ID`, e.g., `wld_01994…`):
   - Netfilter rules installed in this netns when available
 - Netfilter rules (nftables)
   - Table: `substrate_<WORLD_ID>` (inet)
-  - Allows DNS and allowed domains (from policy), logs drops with prefix `substrate-dropped-<WORLD_ID>:`
+  - Deny-all installs no DNS allow rule; restrictive allowlists permit DNS only to the configured resolvers from `/etc/resolv.conf`, plus the resolved destination IPs for allowed domains, and log drops with prefix `substrate-dropped-<WORLD_ID>:`
 - Cgroup v2 path: `/sys/fs/cgroup/substrate/<WORLD_ID>`
   - Resource limits applied best‑effort; PTY children are attached to this cgroup
 - Filesystem isolation
@@ -192,11 +192,16 @@ Notes
 - Protocol is stable; no TLS by design (UDS only).
 - `profile` is an advanced request field used for backend-specific execution posture. For example,
   `substrate world enable --provision-deps` sets `profile=world-deps-provision` so provisioning can
-  run with the expected world-agent behavior. Runtime `substrate world deps current ...` commands do
-  not use that provisioning profile and never perform runtime APT mutation.
+  run with the expected world-agent behavior. On guest Linux agents, that profile is executed via a
+  transient `systemd-run` unit so the normal `substrate-world-agent.service` sandbox can stay
+  hardened. Internal world-deps profiles are reserved for Substrate’s built-in flows and are not
+  selected through `SUBSTRATE_WORLD_REQUEST_PROFILE`. Runtime `substrate world deps current ...`
+  commands do not use the provisioning profile and never perform runtime APT mutation.
 - Provisioning-time APT and runtime fail-early details live in:
   `docs/reference/world/deps/README.md`
-  and `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`
+  and `docs/project_management/packs/implemented/world-deps-apt-provisioning/contract.md`
+  (historical draft-pack path:
+  `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`)
 
 ---
 

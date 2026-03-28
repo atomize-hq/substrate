@@ -31,7 +31,9 @@ mod workspace_cmd;
 pub(crate) use auto_sync::run_auto_sync_if_enabled;
 pub use cli::*;
 pub(crate) use config_cmd::handle_config_command;
-pub(crate) use env_scripts::{env_sh_path, write_env_sh, write_env_sh_at};
+pub(crate) use env_scripts::{
+    env_sh_path, export_runtime_config_env, write_env_sh, write_env_sh_at,
+};
 pub use invocation::{needs_shell, ShellConfig, ShellMode};
 pub(crate) use policy_cmd::handle_policy_command;
 #[cfg(unix)]

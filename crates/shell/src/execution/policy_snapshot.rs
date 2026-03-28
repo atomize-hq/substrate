@@ -1,6 +1,7 @@
 use agent_api_types::{
-    PolicySnapshotV3, PolicySnapshotWorldFsDimensionV3, PolicySnapshotWorldFsFailClosedV3,
-    PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3, WorldFsDenyEnforcementV3,
+    validate_net_allowed_for_enforcement, PolicySnapshotV3, PolicySnapshotWorldFsDimensionV3,
+    PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
+    WorldFsDenyEnforcementV3,
 };
 use anyhow::{anyhow, Context, Result};
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -12,6 +13,8 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::time::SystemTime;
+use substrate_common::WorldFsMode;
+use world_api::{ResourceLimits, WorldSpec};
 
 const WORLD_FS_ENFORCEMENT_PLAN_B64_ENV: &str = "SUBSTRATE_WORLD_FS_ENFORCEMENT_PLAN_B64";
 
@@ -19,6 +22,14 @@ const WORLD_FS_ENFORCEMENT_PLAN_B64_ENV: &str = "SUBSTRATE_WORLD_FS_ENFORCEMENT_
 pub(crate) struct ResolvedPolicySnapshot {
     pub(crate) snapshot: PolicySnapshotV3,
     pub(crate) snapshot_hash: String,
+}
+
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+#[derive(Debug, Clone)]
+pub(crate) struct ResolvedWorldNetworkPolicy {
+    pub(crate) snapshot: PolicySnapshotV3,
+    pub(crate) isolate_network: bool,
+    pub(crate) allowed_domains: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -135,6 +146,97 @@ pub(crate) fn resolve_policy_snapshot_for_cwd(cwd: &Path) -> Result<ResolvedPoli
     Ok(ResolvedPolicySnapshot {
         snapshot,
         snapshot_hash,
+    })
+}
+
+pub(crate) fn resolve_world_network_policy_for_cwd(
+    cwd: &Path,
+) -> Result<ResolvedWorldNetworkPolicy> {
+    let snapshot = resolve_policy_snapshot_for_cwd(cwd)?.snapshot;
+    resolve_world_network_policy_for_snapshot(snapshot, cwd)
+}
+
+pub(crate) fn resolve_world_network_policy_for_snapshot(
+    snapshot: PolicySnapshotV3,
+    cwd: &Path,
+) -> Result<ResolvedWorldNetworkPolicy> {
+    let config = crate::execution::config_model::resolve_effective_config(
+        cwd,
+        &crate::execution::config_model::CliConfigOverrides::default(),
+    )?;
+
+    resolve_world_network_policy(snapshot, config.world.net.filter)
+}
+
+pub(crate) fn bootstrap_world_spec(project_dir: PathBuf, fs_mode: WorldFsMode) -> WorldSpec {
+    WorldSpec {
+        reuse_session: true,
+        isolate_network: false,
+        limits: ResourceLimits::default(),
+        enable_preload: false,
+        allowed_domains: Vec::new(),
+        project_dir,
+        always_isolate: false,
+        fs_mode,
+    }
+}
+
+pub(crate) fn request_world_network_routing(
+    network_policy: &ResolvedWorldNetworkPolicy,
+) -> agent_api_types::WorldNetworkRoutingV1 {
+    agent_api_types::WorldNetworkRoutingV1 {
+        isolate_network: network_policy.isolate_network,
+        allowed_domains: network_policy.allowed_domains.clone(),
+    }
+}
+
+#[cfg(target_os = "windows")]
+pub(crate) fn world_spec_for_network_policy(
+    project_dir: PathBuf,
+    fs_mode: WorldFsMode,
+    network_policy: &ResolvedWorldNetworkPolicy,
+) -> WorldSpec {
+    WorldSpec {
+        reuse_session: true,
+        isolate_network: network_policy.isolate_network,
+        limits: ResourceLimits::default(),
+        enable_preload: false,
+        allowed_domains: network_policy.allowed_domains.clone(),
+        project_dir,
+        always_isolate: false,
+        fs_mode,
+    }
+}
+
+fn resolve_world_network_policy(
+    snapshot: PolicySnapshotV3,
+    world_net_filter: bool,
+) -> Result<ResolvedWorldNetworkPolicy> {
+    let snapshot = snapshot
+        .canonicalize()
+        .map_err(|err| anyhow!("invalid PolicySnapshotV3: {err}"))?;
+
+    let restrictive = snapshot.net_allowed.as_slice() != ["*"];
+    let isolate_network = world_net_filter && restrictive;
+
+    if isolate_network {
+        validate_net_allowed_for_enforcement(&snapshot.net_allowed).map_err(|err| {
+            crate::execution::config_model::user_error(format!(
+                "invalid policy net_allowed for world netfilter enforcement: {err}"
+            ))
+        })?;
+    }
+
+    let allowed_domains = if isolate_network {
+        snapshot.net_allowed.clone()
+    } else {
+        Vec::new()
+    };
+
+    Ok(ResolvedWorldNetworkPolicy {
+        snapshot,
+        isolate_network,
+        allowed_domains,
     })
 }
 
@@ -262,6 +364,7 @@ fn snapshot_from_policy(policy: &substrate_broker::Policy) -> Result<PolicySnaps
 
     let snapshot = PolicySnapshotV3 {
         schema_version: 3,
+        net_allowed: policy.net_allowed.clone(),
         world_fs: PolicySnapshotWorldFsV3 {
             host_visible: policy.world_fs_host_visible,
             fail_closed: PolicySnapshotWorldFsFailClosedV3 {
@@ -291,4 +394,110 @@ fn compute_snapshot_hash(snapshot: &PolicySnapshotV3) -> Result<String> {
     let mut hasher = Sha256::new();
     hasher.update(&bytes);
     Ok(format!("{:x}", hasher.finalize()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn snapshot_with_net_allowed(net_allowed: &[&str]) -> PolicySnapshotV3 {
+        PolicySnapshotV3 {
+            schema_version: 3,
+            net_allowed: net_allowed
+                .iter()
+                .map(|entry| (*entry).to_string())
+                .collect(),
+            world_fs: PolicySnapshotWorldFsV3 {
+                host_visible: true,
+                fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: false },
+                deny_enforcement: None,
+                caged_required: false,
+                discover: Some(PolicySnapshotWorldFsDimensionV3 {
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                }),
+                read: Some(PolicySnapshotWorldFsDimensionV3 {
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                }),
+                write: PolicySnapshotWorldFsWriteV3 {
+                    enabled: true,
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                },
+            },
+        }
+    }
+
+    #[test]
+    fn world_network_policy_canonicalizes_snapshot_net_allowed() {
+        let resolved = resolve_world_network_policy(
+            snapshot_with_net_allowed(&[" Example.COM. ", "example.com", ""]),
+            false,
+        )
+        .expect("resolve network policy");
+
+        assert_eq!(
+            resolved.snapshot.net_allowed,
+            vec!["example.com".to_string()]
+        );
+        assert!(!resolved.isolate_network);
+        assert!(resolved.allowed_domains.is_empty());
+    }
+
+    #[test]
+    fn world_network_policy_keeps_allow_all_unisolated_when_gate_disabled() {
+        let resolved = resolve_world_network_policy(snapshot_with_net_allowed(&["*"]), false)
+            .expect("resolve");
+
+        assert_eq!(resolved.snapshot.net_allowed, vec!["*".to_string()]);
+        assert!(!resolved.isolate_network);
+        assert!(resolved.allowed_domains.is_empty());
+    }
+
+    #[test]
+    fn world_network_policy_keeps_allow_all_unisolated_when_gate_enabled() {
+        let resolved =
+            resolve_world_network_policy(snapshot_with_net_allowed(&["*"]), true).expect("resolve");
+
+        assert_eq!(resolved.snapshot.net_allowed, vec!["*".to_string()]);
+        assert!(!resolved.isolate_network);
+        assert!(resolved.allowed_domains.is_empty());
+    }
+
+    #[test]
+    fn world_network_policy_requests_isolation_for_restrictive_allowlist() {
+        let resolved = resolve_world_network_policy(
+            snapshot_with_net_allowed(&[" Example.COM. ", "api.example.com"]),
+            true,
+        )
+        .expect("resolve");
+
+        assert!(resolved.isolate_network);
+        assert_eq!(
+            resolved.allowed_domains,
+            vec!["example.com".to_string(), "api.example.com".to_string()]
+        );
+    }
+
+    #[test]
+    fn world_network_policy_requests_deny_all_for_empty_allowlist() {
+        let resolved =
+            resolve_world_network_policy(snapshot_with_net_allowed(&[]), true).expect("resolve");
+
+        assert!(resolved.isolate_network);
+        assert!(resolved.allowed_domains.is_empty());
+    }
+
+    #[test]
+    fn world_network_policy_rejects_invalid_wildcards_when_enforcement_requested() {
+        let err = resolve_world_network_policy(snapshot_with_net_allowed(&["*.example.com"]), true)
+            .expect_err("wildcard enforcement should fail");
+
+        assert!(
+            err.to_string()
+                .contains("wildcard forms other than '*' are not supported"),
+            "unexpected error: {err}"
+        );
+    }
 }

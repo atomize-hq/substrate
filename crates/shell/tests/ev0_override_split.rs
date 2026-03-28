@@ -44,9 +44,27 @@ impl OverrideSplitFixture {
         anchor_path: &str,
         caged: bool,
     ) {
+        self.write_global_config_with_net_filter(
+            policy_mode,
+            anchor_mode,
+            anchor_path,
+            caged,
+            false,
+        );
+    }
+
+    fn write_global_config_with_net_filter(
+        &self,
+        policy_mode: &str,
+        anchor_mode: &str,
+        anchor_path: &str,
+        caged: bool,
+        net_filter: bool,
+    ) {
         let caged = if caged { "true" } else { "false" };
+        let net_filter = if net_filter { "true" } else { "false" };
         let contents = format!(
-            "world:\n  enabled: false\n  anchor_mode: {anchor_mode}\n  anchor_path: \"{anchor_path}\"\n  caged: {caged}\n\npolicy:\n  mode: {policy_mode}\n\nsync:\n  auto_sync: false\n  direction: from_world\n  conflict_policy: prefer_host\n  exclude: []\n"
+            "world:\n  enabled: false\n  anchor_mode: {anchor_mode}\n  anchor_path: \"{anchor_path}\"\n  caged: {caged}\n  net:\n    filter: {net_filter}\n\npolicy:\n  mode: {policy_mode}\n\nsync:\n  auto_sync: false\n  direction: from_world\n  conflict_policy: prefer_host\n  exclude: []\n"
         );
         fs::write(self.substrate_home.join("config.yaml"), contents).expect("write config.yaml");
     }
@@ -103,9 +121,29 @@ metadata: {{}}
         anchor_path: &str,
         caged: bool,
     ) {
+        self.write_workspace_config_with_net_filter(
+            workspace_root,
+            policy_mode,
+            anchor_mode,
+            anchor_path,
+            caged,
+            false,
+        );
+    }
+
+    fn write_workspace_config_with_net_filter(
+        &self,
+        workspace_root: &Path,
+        policy_mode: &str,
+        anchor_mode: &str,
+        anchor_path: &str,
+        caged: bool,
+        net_filter: bool,
+    ) {
         let caged = if caged { "true" } else { "false" };
+        let net_filter = if net_filter { "true" } else { "false" };
         let contents = format!(
-            "world:\n  enabled: false\n  anchor_mode: {anchor_mode}\n  anchor_path: \"{anchor_path}\"\n  caged: {caged}\n\npolicy:\n  mode: {policy_mode}\n\nsync:\n  auto_sync: false\n  direction: from_world\n  conflict_policy: prefer_host\n  exclude: []\n"
+            "world:\n  enabled: false\n  anchor_mode: {anchor_mode}\n  anchor_path: \"{anchor_path}\"\n  caged: {caged}\n  net:\n    filter: {net_filter}\n\npolicy:\n  mode: {policy_mode}\n\nsync:\n  auto_sync: false\n  direction: from_world\n  conflict_policy: prefer_host\n  exclude: []\n"
         );
         let marker = workspace_root.join(".substrate").join("workspace.yaml");
         fs::create_dir_all(marker.parent().expect("workspace .substrate parent"))
@@ -135,6 +173,7 @@ metadata: {{}}
             "SUBSTRATE_OVERRIDE_ANCHOR_MODE",
             "SUBSTRATE_OVERRIDE_ANCHOR_PATH",
             "SUBSTRATE_OVERRIDE_CAGED",
+            "SUBSTRATE_OVERRIDE_WORLD_NET_FILTER",
             "SUBSTRATE_OVERRIDE_SYNC_AUTO_SYNC",
             "SUBSTRATE_OVERRIDE_SYNC_DIRECTION",
             "SUBSTRATE_OVERRIDE_SYNC_CONFLICT_POLICY",
@@ -322,5 +361,92 @@ fn ev0_workspace_config_wins_over_override_env() {
     assert!(
         policy_decisions_for_marker(&events, marker).is_empty(),
         "expected workspace policy.mode=disabled to omit policy decisions"
+    );
+}
+
+#[test]
+fn world_net_filter_override_applies_only_without_workspace() {
+    let fixture = OverrideSplitFixture::new("ev0-world-net-filter-");
+    fixture.write_global_config_with_net_filter("disabled", "follow-cwd", "", false, false);
+    fixture.write_global_policy_deny_echo();
+
+    let marker = "__ev0_world_net_filter_override__";
+    let output = fixture
+        .command(&fixture.project)
+        .env("SUBSTRATE_OVERRIDE_WORLD_NET_FILTER", "yes")
+        .arg("-c")
+        .arg(format!(
+            "echo {marker} filter=${{SUBSTRATE_WORLD_NET_FILTER:-missing}}; :"
+        ))
+        .output()
+        .expect("run substrate command");
+
+    assert!(
+        output.status.success(),
+        "expected command to succeed with no workspace override: {output:?}"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("filter=1"),
+        "expected parity export to reflect truthy override: {stdout}"
+    );
+
+    fixture.write_workspace_config_with_net_filter(
+        &fixture.project,
+        "disabled",
+        "follow-cwd",
+        "",
+        false,
+        false,
+    );
+
+    let nested = fixture.project.join("nested");
+    fs::create_dir_all(&nested).expect("create nested cwd");
+    let output = fixture
+        .command(&nested)
+        .env("SUBSTRATE_OVERRIDE_WORLD_NET_FILTER", "yes")
+        .arg("-c")
+        .arg(format!(
+            "echo {marker} filter=${{SUBSTRATE_WORLD_NET_FILTER:-missing}}; :"
+        ))
+        .output()
+        .expect("run substrate command in workspace");
+
+    assert!(
+        output.status.success(),
+        "expected workspace command to succeed: {output:?}"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("filter=0"),
+        "expected workspace config to ignore override env: {stdout}"
+    );
+}
+
+#[test]
+fn world_net_filter_override_supports_falsy_values() {
+    let fixture = OverrideSplitFixture::new("ev0-world-net-filter-falsy-");
+    fixture.write_global_config_with_net_filter("disabled", "follow-cwd", "", false, true);
+    fixture.write_global_policy_deny_echo();
+
+    let marker = "__ev0_world_net_filter_falsy__";
+    let output = fixture
+        .command(&fixture.project)
+        .env("SUBSTRATE_OVERRIDE_WORLD_NET_FILTER", "off")
+        .arg("-c")
+        .arg(format!(
+            "echo {marker} filter=${{SUBSTRATE_WORLD_NET_FILTER:-missing}}; :"
+        ))
+        .output()
+        .expect("run substrate command");
+
+    assert!(
+        output.status.success(),
+        "expected command to succeed with falsy override: {output:?}"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("filter=0"),
+        "expected parity export to reflect falsy override: {stdout}"
     );
 }

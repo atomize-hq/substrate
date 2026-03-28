@@ -1,5 +1,7 @@
 //! World initialization flows for routing, including platform-gated defaults and agent bridging.
 
+#[cfg(target_os = "macos")]
+use crate::execution::policy_snapshot::bootstrap_world_spec;
 #[cfg(all(test, any(target_os = "windows", target_os = "macos")))]
 use crate::execution::world_env_guard;
 use crate::execution::ShellConfig;
@@ -46,7 +48,10 @@ fn init_windows_world(config: &ShellConfig) {
         Ok(ctx) => {
             if (ctx.ensure_ready)().is_ok() {
                 std::env::set_var("SUBSTRATE_WORLD", "enabled");
-                if let Ok(handle) = ctx.backend.ensure_session(&pw::windows::world_spec()) {
+                if let Ok(handle) = ctx
+                    .backend
+                    .ensure_session(&pw::windows::bootstrap_world_spec())
+                {
                     std::env::set_var("SUBSTRATE_WORLD_ID", handle.id);
                 }
             }
@@ -58,8 +63,7 @@ fn init_windows_world(config: &ShellConfig) {
 
 #[cfg(target_os = "macos")]
 fn init_macos_world(config: &ShellConfig) {
-    use substrate_broker::{allowed_domains, world_fs_mode};
-    use world_api::{ResourceLimits, WorldSpec};
+    use substrate_broker::world_fs_mode;
 
     if world_disabled(config) {
         return;
@@ -83,16 +87,8 @@ fn init_macos_world(config: &ShellConfig) {
                 std::env::set_var("SUBSTRATE_WORLD", "enabled");
 
                 // Attempt to retrieve world id
-                let spec = WorldSpec {
-                    reuse_session: true,
-                    isolate_network: true,
-                    limits: ResourceLimits::default(),
-                    enable_preload: false,
-                    allowed_domains: allowed_domains(),
-                    project_dir: config.world_root.effective_root(),
-                    always_isolate: false,
-                    fs_mode: world_fs_mode(),
-                };
+                let spec =
+                    bootstrap_world_spec(config.world_root.effective_root(), world_fs_mode());
                 if let Ok(handle) = ctx.backend.ensure_session(&spec) {
                     std::env::set_var("SUBSTRATE_WORLD_ID", handle.id);
                 }

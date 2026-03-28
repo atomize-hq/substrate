@@ -2,6 +2,8 @@
 
 #[cfg(target_os = "linux")]
 use crate::enforcement_plan;
+#[cfg(target_os = "linux")]
+use crate::request_routing::resolve_snapshot_routing;
 use crate::service::WorldAgentService;
 #[cfg(target_os = "linux")]
 use crate::service::{
@@ -11,7 +13,7 @@ use crate::service::{
 };
 #[cfg(target_os = "linux")]
 use agent_api_types::PolicyResolutionModeV1;
-use agent_api_types::PolicySnapshotV3;
+use agent_api_types::{PolicySnapshotV3, WorldNetworkRoutingV1};
 use axum::extract::ws::{Message, WebSocket};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use futures_util::stream::SplitSink;
@@ -46,6 +48,15 @@ use world::exec::PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT;
 use world::guard::{should_guard_anchor, wrap_with_anchor_guard};
 #[cfg(target_os = "linux")]
 use world_api::WorldFsMode;
+
+#[cfg(target_os = "linux")]
+fn record_doctor_request_context_for_pty(
+    service: &WorldAgentService,
+    policy_resolution_mode: PolicyResolutionModeV1,
+    isolate_network: bool,
+) {
+    service.record_doctor_request_context(policy_resolution_mode, isolate_network);
+}
 
 fn ensure_xdg_dirs(env: &mut HashMap<String, String>) {
     // Some minimal images don't ship with pre-created XDG dirs (e.g. /root/.local/share),
@@ -104,6 +115,8 @@ pub enum ClientMessage {
         env: HashMap<String, String>,
         #[serde(default)]
         policy_snapshot: Box<Option<PolicySnapshotV3>>,
+        #[serde(default)]
+        world_network: Option<WorldNetworkRoutingV1>,
         span_id: Option<String>,
         cols: u16,
         rows: u16,
@@ -154,6 +167,8 @@ enum PersistentClientMessage {
         cwd: PathBuf,
         env: HashMap<String, String>,
         policy_snapshot: Box<PolicySnapshotV3>,
+        #[serde(default)]
+        world_network: Option<WorldNetworkRoutingV1>,
         cols: u16,
         rows: u16,
     },
@@ -610,6 +625,7 @@ async fn handle_persistent_session(
             cwd,
             env,
             policy_snapshot,
+            world_network,
             cols,
             rows,
         }) => (
@@ -617,6 +633,7 @@ async fn handle_persistent_session(
             cwd,
             env,
             policy_snapshot,
+            world_network,
             cols,
             rows,
         ),
@@ -650,8 +667,15 @@ async fn handle_persistent_session(
         }
     };
 
-    let (requested_protocol_version, requested_cwd, mut session_env, policy_snapshot, cols, rows) =
-        start;
+    let (
+        requested_protocol_version,
+        requested_cwd,
+        mut session_env,
+        policy_snapshot,
+        world_network,
+        cols,
+        rows,
+    ) = start;
 
     if requested_protocol_version != 1 {
         let _ = send_persistent_ws_message(
@@ -758,6 +782,7 @@ async fn handle_persistent_session(
         &session_env,
         &ready_cwd,
         &policy_snapshot,
+        world_network.as_ref(),
     ) {
         Ok(world) => world,
         Err(message) => {
@@ -850,59 +875,8 @@ async fn handle_persistent_session(
 
     loop {
         tokio::select! {
-            maybe_bytes = pty_bytes_rx.recv() => {
-                let Some(bytes) = maybe_bytes else { break };
-                let data_b64 = BASE64.encode(&bytes);
-                if ws_write_tx.send(PersistentServerMessage::Stdout { data_b64 }).is_err() {
-                    break;
-                }
+            biased;
 
-                if let ExecPhase::Draining(ref mut draining) = phase {
-                    if draining.drain_remaining > 0 {
-                        let drained_now = draining.drain_remaining.min(bytes.len());
-                        draining.drain_remaining -= drained_now;
-                    }
-                }
-
-                if matches!(&phase, ExecPhase::Draining(Draining { drain_remaining: 0, .. })) {
-                    // Flush any buffered PTY bytes already read (bounded channel).
-                    while let Ok(extra) = pty_bytes_rx.try_recv() {
-                        let data_b64 = BASE64.encode(&extra);
-                        if ws_write_tx
-                            .send(PersistentServerMessage::Stdout { data_b64 })
-                            .is_err()
-                        {
-                            break;
-                        }
-                    }
-
-                    let ExecPhase::Draining(draining) = std::mem::replace(&mut phase, ExecPhase::Idle) else {
-                        continue;
-                    };
-
-                    let mut persisted_env = draining.new_env;
-                    strip_persistent_internal_env(&mut persisted_env, &world.base_env);
-                    sanitize_session_env(&mut persisted_env);
-                    ensure_xdg_dirs(&mut persisted_env);
-
-                    session_env = persisted_env;
-                    session_cwd = draining.new_cwd.clone();
-
-                    service.note_pty_pending_diff(&world.world_id);
-
-                    if ws_write_tx
-                        .send(PersistentServerMessage::CommandComplete {
-                            seq: draining.seq,
-                            token_hex: draining.token_hex,
-                            exit: draining.exit,
-                            cwd: draining.new_cwd,
-                        })
-                        .is_err()
-                    {
-                        break;
-                    }
-                }
-            }
             msg = rx.next() => {
                 let Some(msg) = msg else { break };
                 match msg {
@@ -1032,6 +1006,28 @@ async fn handle_persistent_session(
                                     continue;
                                 }
 
+                                let world_handle = world_api::WorldHandle {
+                                    id: world.world_id.clone(),
+                                };
+                                if let Err(e) =
+                                    service.refresh_session_network_filter(&world_handle)
+                                {
+                                    service.record_last_netfilter_failure_for_error(
+                                        world.isolate_network,
+                                        &e,
+                                    );
+                                    send_fatal(
+                                        &ws_write_tx,
+                                        "internal_error",
+                                        format!("Failed to refresh session network filter: {e}"),
+                                        Some(seq),
+                                    );
+                                    break;
+                                }
+                                service.clear_last_netfilter_failure_on_success(
+                                    world.isolate_network,
+                                );
+
                                 let (child_events, pgid) = match spawn_persistent_exec(
                                     &world,
                                     &pty,
@@ -1066,6 +1062,59 @@ async fn handle_persistent_session(
                     Ok(_) => continue,
                     Err(e) => {
                         send_fatal(&ws_write_tx, "internal_error", format!("WebSocket error: {e}"), None);
+                        break;
+                    }
+                }
+            }
+            maybe_bytes = pty_bytes_rx.recv() => {
+                let Some(bytes) = maybe_bytes else { break };
+                let data_b64 = BASE64.encode(&bytes);
+                if ws_write_tx.send(PersistentServerMessage::Stdout { data_b64 }).is_err() {
+                    break;
+                }
+
+                if let ExecPhase::Draining(ref mut draining) = phase {
+                    if draining.drain_remaining > 0 {
+                        let drained_now = draining.drain_remaining.min(bytes.len());
+                        draining.drain_remaining -= drained_now;
+                    }
+                }
+
+                if matches!(&phase, ExecPhase::Draining(Draining { drain_remaining: 0, .. })) {
+                    // Flush any buffered PTY bytes already read (bounded channel).
+                    while let Ok(extra) = pty_bytes_rx.try_recv() {
+                        let data_b64 = BASE64.encode(&extra);
+                        if ws_write_tx
+                            .send(PersistentServerMessage::Stdout { data_b64 })
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+
+                    let ExecPhase::Draining(draining) = std::mem::replace(&mut phase, ExecPhase::Idle) else {
+                        continue;
+                    };
+
+                    let mut persisted_env = draining.new_env;
+                    strip_persistent_internal_env(&mut persisted_env, &world.base_env);
+                    sanitize_session_env(&mut persisted_env);
+                    ensure_xdg_dirs(&mut persisted_env);
+
+                    session_env = persisted_env;
+                    session_cwd = draining.new_cwd.clone();
+
+                    service.note_pty_pending_diff(&world.world_id);
+
+                    if ws_write_tx
+                        .send(PersistentServerMessage::CommandComplete {
+                            seq: draining.seq,
+                            token_hex: draining.token_hex,
+                            exit: draining.exit,
+                            cwd: draining.new_cwd,
+                        })
+                        .is_err()
+                    {
                         break;
                     }
                 }
@@ -1181,6 +1230,7 @@ struct PersistentWorldContext {
     merged_dir: PathBuf,
     project_dir: PathBuf,
     fs_mode: WorldFsMode,
+    isolate_network: bool,
     netns_name: Option<String>,
     cgroup_path: Option<PathBuf>,
     base_env: HashMap<String, String>,
@@ -1249,6 +1299,7 @@ mod wfgad2_tests {
 
         let snapshot = PolicySnapshotV3 {
             schema_version: 3,
+            net_allowed: Vec::new(),
             world_fs: PolicySnapshotWorldFsV3 {
                 host_visible: false,
                 fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: true },
@@ -1295,35 +1346,40 @@ fn prepare_persistent_world_context(
     session_env: &HashMap<String, String>,
     ready_cwd: &std::path::Path,
     policy_snapshot: &PolicySnapshotV3,
+    world_network: Option<&WorldNetworkRoutingV1>,
 ) -> Result<PersistentWorldContext, String> {
     use world_api::{ResourceLimits, WorldSpec};
 
     let project_dir =
         resolve_project_dir(Some(session_env), Some(ready_cwd)).map_err(|e| e.to_string())?;
 
-    let canonical = policy_snapshot.canonicalize()?;
+    let resolved = resolve_snapshot_routing(policy_snapshot, world_network)?;
+    let canonical = resolved.snapshot;
+    let fs_mode = resolved.fs_mode;
+    let isolate_network = resolved.world_network.isolate_network;
 
-    let allowed_domains = substrate_broker::allowed_domains();
-    let fs_mode = if canonical.world_fs.write.enabled {
-        WorldFsMode::Writable
-    } else {
-        WorldFsMode::ReadOnly
-    };
+    record_doctor_request_context_for_pty(
+        service,
+        PolicyResolutionModeV1::SnapshotV3,
+        isolate_network,
+    );
 
     let spec = WorldSpec {
         reuse_session: true,
-        isolate_network: true,
+        isolate_network,
         limits: ResourceLimits::default(),
         enable_preload: false,
-        allowed_domains,
+        allowed_domains: resolved.world_network.allowed_domains.clone(),
         project_dir: project_dir.clone(),
         always_isolate: true,
         fs_mode,
     };
 
-    let (world, merged_dir) = service
-        .ensure_session_overlay_root(&spec)
-        .map_err(|e| format!("Failed to prepare world overlay: {e}"))?;
+    let (world, merged_dir) = service.ensure_session_overlay_root(&spec).map_err(|e| {
+        service.record_last_netfilter_failure_for_error(isolate_network, &e);
+        format!("Failed to prepare world overlay: {e}")
+    })?;
+    service.clear_last_netfilter_failure_on_success(isolate_network);
 
     let ns_name = format!("substrate-{}", world.id);
     let ns_path = format!("/var/run/netns/{ns_name}");
@@ -1333,7 +1389,11 @@ fn prepare_persistent_world_context(
         None
     };
 
-    let cgroup_path = Some(std::path::PathBuf::from("/sys/fs/cgroup/substrate").join(&world.id));
+    let cgroup_path = Some(
+        service
+            .session_cgroup_path(&world)
+            .map_err(|e| format!("Failed to resolve session cgroup path: {e}"))?,
+    );
 
     let mut base_env: HashMap<String, String> = HashMap::new();
     let isolation_full = !canonical.world_fs.host_visible;
@@ -1355,6 +1415,7 @@ fn prepare_persistent_world_context(
         merged_dir,
         project_dir,
         fs_mode,
+        isolate_network,
         netns_name,
         cgroup_path,
         base_env,
@@ -1958,6 +2019,7 @@ async fn handle_legacy_start(
             cwd,
             env,
             policy_snapshot,
+            world_network,
             span_id,
             cols,
             rows,
@@ -1973,7 +2035,16 @@ async fn handle_legacy_start(
                 rows = rows,
                 "ws_pty: start"
             );
-            (cmd, cwd, env, policy_snapshot, span_id, cols, rows)
+            (
+                cmd,
+                cwd,
+                env,
+                policy_snapshot,
+                world_network,
+                span_id,
+                cols,
+                rows,
+            )
         }
         Ok(_) => {
             let _ = send_ws_message(
@@ -1997,7 +2068,7 @@ async fn handle_legacy_start(
         }
     };
 
-    let (cmd, cwd, env_map, policy_snapshot, _span_id, cols, rows) = start_msg;
+    let (cmd, cwd, env_map, policy_snapshot, _world_network, _span_id, cols, rows) = start_msg;
     #[cfg(not(target_os = "linux"))]
     let _policy_snapshot = policy_snapshot;
     #[cfg(target_os = "linux")]
@@ -2006,6 +2077,8 @@ async fn handle_legacy_start(
     let env = env_map;
     #[cfg(target_os = "linux")]
     let mut inner_cmd = cmd.clone();
+    #[cfg(target_os = "linux")]
+    let world_network = _world_network;
     #[cfg(target_os = "linux")]
     let command_to_run: String;
     #[cfg(not(target_os = "linux"))]
@@ -2055,15 +2128,15 @@ async fn handle_legacy_start(
                 return;
             }
         };
-        let (policy_resolution_mode, isolation_full, fs_mode, allowed_domains) =
+        let (policy_resolution_mode, isolation_full, fs_mode, isolate_network, allowed_domains) =
             if let Some(snapshot) = policy_snapshot.as_ref() {
-                let canonical = match snapshot.canonicalize() {
+                let resolved = match resolve_snapshot_routing(snapshot, world_network.as_ref()) {
                     Ok(v) => v,
                     Err(err) => {
                         let _ = send_ws_message(
                             &tx,
                             &ServerMessage::Error {
-                                message: format!("Invalid policy_snapshot: {err}"),
+                                message: format!("Invalid policy_snapshot/world_network: {err}"),
                             },
                         )
                         .await;
@@ -2071,16 +2144,13 @@ async fn handle_legacy_start(
                     }
                 };
 
-                let isolation_full = !canonical.world_fs.host_visible;
+                let isolation_full = resolved.isolation_full;
                 (
                     PolicyResolutionModeV1::SnapshotV3,
                     isolation_full,
-                    if canonical.world_fs.write.enabled {
-                        WorldFsMode::Writable
-                    } else {
-                        WorldFsMode::ReadOnly
-                    },
-                    substrate_broker::allowed_domains(),
+                    resolved.fs_mode,
+                    resolved.world_network.isolate_network,
+                    resolved.world_network.allowed_domains,
                 )
             } else {
                 let isolation_full = is_full_isolation(Some(&env));
@@ -2099,12 +2169,13 @@ async fn handle_legacy_start(
                     PolicyResolutionModeV1::LegacyLocal,
                     isolation_full,
                     fs_mode,
-                    substrate_broker::allowed_domains(),
+                    false,
+                    Vec::new(),
                 )
             };
 
         let host_visible = !isolation_full;
-        service.set_last_policy_resolution_mode(policy_resolution_mode);
+        record_doctor_request_context_for_pty(&service, policy_resolution_mode, isolate_network);
 
         if isolation_full {
             if let Some(snapshot) = policy_snapshot.as_ref() {
@@ -2151,7 +2222,7 @@ async fn handle_legacy_start(
 
         let spec = WorldSpec {
             reuse_session: true,
-            isolate_network: true,
+            isolate_network,
             limits: ResourceLimits::default(),
             enable_preload: false,
             allowed_domains,
@@ -2563,6 +2634,7 @@ mod tests {
             cwd: std::env::current_dir().unwrap(),
             env: HashMap::new(),
             policy_snapshot: Box::new(None),
+            world_network: None,
             span_id: Some("spn_test".into()),
             cols: 80,
             rows: 24,
@@ -2580,5 +2652,27 @@ mod tests {
         let js = serde_json::to_string(&msg).unwrap();
         assert!(js.contains("\"stdout\""));
         assert!(js.contains("aGVsbG8"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn record_doctor_request_context_for_pty_updates_requested_state() {
+        let service = WorldAgentService::new().expect("service");
+
+        record_doctor_request_context_for_pty(&service, PolicyResolutionModeV1::SnapshotV3, true);
+
+        assert_eq!(
+            service.last_policy_resolution_mode(),
+            Some(PolicyResolutionModeV1::SnapshotV3)
+        );
+        assert!(service.last_netfilter_requested());
+
+        record_doctor_request_context_for_pty(&service, PolicyResolutionModeV1::LegacyLocal, false);
+
+        assert_eq!(
+            service.last_policy_resolution_mode(),
+            Some(PolicyResolutionModeV1::LegacyLocal)
+        );
+        assert!(!service.last_netfilter_requested());
     }
 }

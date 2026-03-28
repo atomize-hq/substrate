@@ -219,3 +219,79 @@
 - Validation: `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, WDAP1-focused tests, `make integ-checks`
 - Merge result: merged `world-deps-apt-provisioning-wdap1-integ` back to `feat/world-deps-apt-provisioning`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/world-deps-apt-provisioning/logs/WDAP1/integ/last_message.md`
+
+## START — 2026-03-13T15:27:11Z — integration — WDAP0-integ-core (post-landing follow-up)
+- Goal: land the reserved internal-profile guard, transient provisioning posture, and validator-clean WDAP0 pack updates on `feat/world-deps-apt-provisioning` without introducing a new slice/task id.
+
+## END — 2026-03-13T15:37:46Z — integration — WDAP0-integ-core (post-landing follow-up)
+- Base HEAD: `eed1863c6c2827893ced4177cc01690bfcd53874`
+- Summary of changes (exhaustive):
+  - Kept the shell-side `SUBSTRATE_WORLD_REQUEST_PROFILE` guard that rejects reserved internal WDAP profiles in `crates/shell/src/execution/routing/dispatch/world_ops.rs`.
+  - Kept the `world-agent` transient `systemd-run` wrapper for `profile=world-deps-provision` in `crates/world-agent/src/service.rs`.
+  - Updated `docs/CONFIGURATION.md`, `docs/WORLD.md`, and `docs/internals/world/deps.md` so the internal WDAP profiles are explicitly reserved and not selectable through the generic env override.
+  - Folded the real supported-guest non-dry-run validation requirement into `AC-WDAP0-07` in `slices/WDAP0/WDAP0-spec.md` and refreshed `manual_testing_playbook.md` / `pre-planning/ci_checkpoint_plan.md` to match the validator-clean contract.
+  - Fixed `docs/project_management/system/scripts/triad/feature_cleanup.sh` so the documented cleanup target runs on macOS bash (no `mapfile` dependency) and normalizes relative-vs-absolute worktree paths during dry-run cleanup accounting.
+- Local gates run (with results):
+  - `cargo test -p shell current_world_request_profile --lib` → `PASS`
+  - `cargo test -p shell --test world_enable_provision_deps_wdap0` → `PASS`
+  - `cargo test -p shell --test world_deps_apt_fail_early_wdap1` → `PASS`
+  - `cargo test -p world-agent --lib` → `PASS`
+  - `cargo fmt --all -- --check` → `PASS`
+  - `cargo clippy --workspace --all-targets -- -D warnings` → `PASS`
+  - `make integ-checks` → `PASS`
+
+## START — 2026-03-13T15:37:46Z — checkpoint — CP1-ci-checkpoint (WDAP0 evidence refresh)
+- Goal: refresh WDAP0 checkpoint evidence for the post-landing follow-up on `feat/world-deps-apt-provisioning` using the existing `CP1-ci-checkpoint` task id.
+
+## END — 2026-03-13T15:38:24Z — checkpoint — CP1-ci-checkpoint (WDAP0 evidence refresh)
+- Base HEAD: `eed1863c6c2827893ced4177cc01690bfcd53874`
+- Planning validators:
+  - `python3 docs/project_management/system/scripts/planning/validate_tasks_json.py --feature-dir "docs/project_management/packs/draft/world-deps-apt-provisioning"` → `PASS`
+  - `python3 docs/project_management/system/scripts/planning/validate_slice_specs.py --feature-dir "docs/project_management/packs/draft/world-deps-apt-provisioning"` → `PASS`
+  - `python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "docs/project_management/packs/draft/world-deps-apt-provisioning"` → `PASS`
+- Supported guest non-dry-run evidence (macOS Lima, WDAP0 Case 2.4):
+  - Package selected: `cowsay` (absent before run, installed after run)
+  - Evidence directory: `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/draft/world-deps-apt-provisioning/logs/WDAP0/manual-20260313T152711Z`
+  - Before guest query: `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/draft/world-deps-apt-provisioning/logs/WDAP0/manual-20260313T152711Z/real-apt-before.txt` → empty / no `install ok installed`
+  - Provisioning stdout/stderr: `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/draft/world-deps-apt-provisioning/logs/WDAP0/manual-20260313T152711Z/stdout-real.txt`, `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/draft/world-deps-apt-provisioning/logs/WDAP0/manual-20260313T152711Z/stderr-real.txt`
+  - Exit code: `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/draft/world-deps-apt-provisioning/logs/WDAP0/manual-20260313T152711Z/exit-code.txt` → `0`
+  - After guest query: `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/draft/world-deps-apt-provisioning/logs/WDAP0/manual-20260313T152711Z/real-apt-after.txt` → `install ok installed`
+  - Dry-run follow-up: `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/draft/world-deps-apt-provisioning/logs/WDAP0/manual-20260313T152711Z/sync-dry-run-stdout.txt`, `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/draft/world-deps-apt-provisioning/logs/WDAP0/manual-20260313T152711Z/sync-dry-run-stderr.txt`
+- Validation note:
+  - The authoritative before/after package checks now use `limactl shell substrate dpkg-query ...` because a normal workspace-isolated `substrate --world` shell masks `/var/lib/dpkg`; see `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/draft/world-deps-apt-provisioning/logs/WDAP0/manual-20260313T152711Z/world-dpkg-query.txt` (empty) and `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/draft/world-deps-apt-provisioning/logs/WDAP0/manual-20260313T152711Z/world-dpkg-query.stderr.txt`.
+- WDAP1 regression check:
+  - `cargo test -p shell --test world_deps_apt_fail_early_wdap1` remains `PASS`; no CP2 artifact change required for this follow-up.
+
+## UPDATE — 2026-03-13T15:38:24Z — ops — FZ-feature-cleanup
+- Dry-run preflight:
+  - `make triad-feature-cleanup FEATURE_DIR="docs/project_management/packs/draft/world-deps-apt-provisioning" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1` initially failed on macOS because `docs/project_management/system/scripts/triad/feature_cleanup.sh` used `mapfile`, which is unavailable in the repo's default bash on this host.
+  - After the portability fix, `make triad-feature-cleanup FEATURE_DIR="docs/project_management/packs/draft/world-deps-apt-provisioning" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1 FORCE=1` → `PASS` with summary:
+    - `REMOVED_WORKTREES=6`
+    - `PRUNED_LOCAL_BRANCHES=6`
+    - `PRUNED_REMOTE_BRANCHES=0`
+- Remaining blocker:
+  - The real cleanup run is still pending because `feature_cleanup.sh` correctly refuses non-dry-run execution while the orchestration checkout has uncommitted WDAP follow-up changes.
+
+## END — 2026-03-28T19:45:00Z — maintenance — FZ-feature-cleanup
+- Feature: `docs/project_management/packs/draft/world-deps-apt-provisioning`
+- Branch: `feat/world-deps-apt-provisioning`
+- Commands run (verbatim) + exit codes:
+  - `make triad-feature-cleanup FEATURE_DIR="docs/project_management/packs/draft/world-deps-apt-provisioning" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1 FORCE=1` (exit `0`)
+  - `make triad-feature-cleanup FEATURE_DIR="docs/project_management/packs/draft/world-deps-apt-provisioning" REMOVE_WORKTREES=1 PRUNE_LOCAL=1 FORCE=1` (initial exit `2`; stale prunable worktree registrations still pointed at missing paths)
+  - `git worktree prune --verbose` (exit `0`)
+  - `make triad-feature-cleanup FEATURE_DIR="docs/project_management/packs/draft/world-deps-apt-provisioning" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1 FORCE=1` (exit `0`)
+  - `make triad-feature-cleanup FEATURE_DIR="docs/project_management/packs/draft/world-deps-apt-provisioning" REMOVE_WORKTREES=1 PRUNE_LOCAL=1 FORCE=1` (exit `0`)
+- Stdout summary block from the successful cleanup run:
+  ```
+  REMOVED_WORKTREES=0
+  PRUNED_LOCAL_BRANCHES=6
+  PRUNED_REMOTE_BRANCHES=0
+  ```
+- Post-cleanup state:
+  - `git worktree list` shows only the orchestration checkout.
+  - `git branch --list 'world-deps-apt-provisioning*'` returns no remaining slice branches.
+- Manual validation closeout:
+  - Re-ran the macOS-applicable manual smoke matrix from `docs/project_management/packs/draft/world-deps-apt-provisioning/manual_testing_playbook.md` against the installed dev binary `~/.substrate/bin/substrate` on `2026-03-28`.
+  - Preconditions plus Cases `2.2`, `2.3`, `2.5`, `3.1`, `3.2`, `3.3`, and `3.4` matched the pack contract.
+  - Case `2.4` showed the expected installed-binary helper lookup behavior before override; the underlying guest provisioning path succeeded when `SUBSTRATE_WORLD_ENABLE_SCRIPT="$HOME/.substrate/scripts/substrate/world-enable.sh"` was supplied, which matches the landed implementation posture for this pack.
+  - Conclusion: no open WDAP pack work remains; pack execution, validation, and cleanup are complete.

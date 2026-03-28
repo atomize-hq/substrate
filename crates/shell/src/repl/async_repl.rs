@@ -84,11 +84,20 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                 .unwrap_or_else(|_| PathBuf::from("."))
                 .display()
                 .to_string();
-            Some(
-                start_world_session(requested, stdout_cb.clone(), &agent_printer)
-                    .await
-                    .context("failed to start persistent world session")?,
-            )
+            match start_world_session(requested, stdout_cb.clone(), &agent_printer).await {
+                Ok(session) => Some(session),
+                Err(err) => {
+                    let message = format!(
+                        "substrate: error: failed to start persistent world session: {err:#}"
+                    );
+                    let _ = agent_printer.print(message.clone());
+                    eprintln!("{message}");
+                    let _ = io::stdout().flush();
+                    let _ = io::stderr().flush();
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    return Ok(1);
+                }
+            }
         } else {
             None
         };
@@ -679,6 +688,7 @@ fn preflight_caging_required(config: &ShellConfig) -> Result<ReplPreflight> {
 
     let policy_mode = effective_config.policy.mode;
     std::env::set_var("SUBSTRATE_POLICY_MODE", policy_mode.as_str());
+    crate::execution::export_runtime_config_env(&effective_config);
     substrate_broker::set_policy_mode(match policy_mode {
         crate::execution::config_model::PolicyMode::Disabled => {
             substrate_broker::PolicyMode::Disabled
@@ -776,11 +786,18 @@ async fn start_world_session(
         .context("policy snapshot (start)")?;
     let start_hash = resolved_start.snapshot_hash.clone();
     let start_workspace_root = find_workspace_root(requested_path);
+    let start_network_policy = policy_snapshot::resolve_world_network_policy_for_snapshot(
+        resolved_start.snapshot,
+        requested_path,
+    )
+    .context("world network policy (start)")?;
+    let start_world_network = policy_snapshot::request_world_network_routing(&start_network_policy);
 
     let (mut start_params, inherit_from_host) = ReplSessionStartParams::for_cwd_and_snapshot(
         requested_cwd.clone(),
         requested_path,
-        resolved_start.snapshot,
+        start_network_policy.snapshot,
+        start_world_network,
     )?;
     if inherit_from_host {
         let _ = agent_printer.print(
@@ -811,10 +828,18 @@ async fn start_world_session(
         );
         client.close().await?;
 
+        let restart_network_policy = policy_snapshot::resolve_world_network_policy_for_snapshot(
+            resolved_ready.snapshot,
+            Path::new(&ready.cwd),
+        )
+        .context("world network policy (ready.cwd)")?;
+        let restart_world_network =
+            policy_snapshot::request_world_network_routing(&restart_network_policy);
         let (mut restart_params, inherit_from_host) = ReplSessionStartParams::for_cwd_and_snapshot(
             ready.cwd.clone(),
             Path::new(&ready.cwd),
-            resolved_ready.snapshot,
+            restart_network_policy.snapshot,
+            restart_world_network,
         )?;
         if inherit_from_host {
             let _ = agent_printer.print(

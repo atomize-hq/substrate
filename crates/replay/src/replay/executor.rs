@@ -83,6 +83,7 @@ fn resolve_policy_snapshot_v3_for_cwd(cwd: &Path) -> Result<PolicySnapshotV3> {
 
     let snapshot = PolicySnapshotV3 {
         schema_version: 3,
+        net_allowed: Vec::new(),
         world_fs: PolicySnapshotWorldFsV3 {
             host_visible: policy.world_fs_host_visible,
             fail_closed: PolicySnapshotWorldFsFailClosedV3 {
@@ -887,6 +888,7 @@ async fn try_agent_backend(
         agent_id: std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "replay".to_string()),
         budget: None,
         policy_snapshot: resolve_policy_snapshot_v3_for_cwd(&state.cwd)?,
+        world_network: None,
         world_fs_mode: Some(substrate_broker::world_fs_mode()),
     };
 

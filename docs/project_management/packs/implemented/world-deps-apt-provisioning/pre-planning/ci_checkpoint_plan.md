@@ -14,7 +14,7 @@ Standard:
   - `docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP0/WDAP0-spec.md`
   - `docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP1/WDAP1-spec.md`
 - Required platforms (authoritative; from `tasks.json`):
-  - Behavior smoke platforms: `linux`, `macos`, `windows`
+  - Behavior smoke platforms: `linux`, `macos`
   - CI parity platforms: `linux`, `macos`, `windows`
 
 ## Operator rules

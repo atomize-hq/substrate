@@ -48,6 +48,26 @@ impl LinuxLocalBackend {
         session_world.ensure_overlay_root()
     }
 
+    pub fn refresh_network_filter(&self, world: &WorldHandle) -> Result<()> {
+        let mut cache = self
+            .session_cache
+            .write()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire session cache write lock: {}", e))?;
+        let session_world = cache
+            .get_mut(&world.id)
+            .context("World not found in cache")?;
+        session_world.refresh_network_filter()
+    }
+
+    pub fn cgroup_path(&self, world: &WorldHandle) -> Result<std::path::PathBuf> {
+        let cache = self
+            .session_cache
+            .read()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire session cache read lock: {}", e))?;
+        let session_world = cache.get(&world.id).context("World not found in cache")?;
+        Ok(session_world.cgroup_path())
+    }
+
     /// Retrieve the current session's pending diff and session start time.
     pub fn pending_diff(&self, world: &WorldHandle) -> Result<(std::time::SystemTime, FsDiff)> {
         let cache = self

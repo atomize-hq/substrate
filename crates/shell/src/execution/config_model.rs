@@ -151,6 +151,7 @@ pub(crate) struct WorldConfig {
     pub anchor_mode: WorldRootMode,
     pub anchor_path: String,
     pub caged: bool,
+    pub net: WorldNetConfig,
     pub env: WorldEnvConfig,
     pub deps: WorldDepsConfig,
 }
@@ -162,10 +163,17 @@ impl Default for WorldConfig {
             anchor_mode: WorldRootMode::Project,
             anchor_path: String::new(),
             caged: true,
+            net: WorldNetConfig::default(),
             env: WorldEnvConfig::default(),
             deps: WorldDepsConfig::default(),
         }
     }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct WorldNetConfig {
+    pub filter: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -367,6 +375,8 @@ pub(crate) struct WorldConfigPatch {
     pub anchor_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub caged: Option<bool>,
+    #[serde(skip_serializing_if = "WorldNetConfigPatch::is_empty")]
+    pub net: WorldNetConfigPatch,
     #[serde(skip_serializing_if = "WorldEnvConfigPatch::is_empty")]
     pub env: WorldEnvConfigPatch,
     #[serde(skip_serializing_if = "WorldDepsConfigPatch::is_empty")]
@@ -379,8 +389,22 @@ impl WorldConfigPatch {
             && self.anchor_mode.is_none()
             && self.anchor_path.is_none()
             && self.caged.is_none()
+            && self.net.is_empty()
             && self.env.is_empty()
             && self.deps.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct WorldNetConfigPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filter: Option<bool>,
+}
+
+impl WorldNetConfigPatch {
+    fn is_empty(&self) -> bool {
+        self.filter.is_none()
     }
 }
 
@@ -907,6 +931,28 @@ fn resolve_effective_from_layers(
         );
     }
 
+    // world.net.filter
+    let (net_filter, net_filter_src) = resolve_replace(
+        effective.world.net.filter,
+        global_patch.world.net.filter,
+        workspace_patch
+            .map(|(p, _)| p.world.net.filter)
+            .unwrap_or(None),
+        env_overrides.world_net_filter,
+        None,
+        workspace_enabled,
+    );
+    effective.world.net.filter = net_filter;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "world.net.filter".to_string(),
+            ConfigExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(net_filter_src, global_path, workspace_path)],
+            },
+        );
+    }
+
     // world.env.inherit_from_host
     let (inherit_from_host, inherit_from_host_src) = resolve_replace(
         effective.world.env.inherit_from_host,
@@ -1189,6 +1235,7 @@ struct EnvOverrides {
     anchor_mode: Option<WorldRootMode>,
     anchor_path: Option<String>,
     caged: Option<bool>,
+    world_net_filter: Option<bool>,
     policy_mode: Option<PolicyMode>,
     sync_auto_sync: Option<bool>,
     sync_direction: Option<SyncDirection>,
@@ -1237,6 +1284,18 @@ fn parse_env_overrides() -> Result<EnvOverrides> {
             overrides.caged = Some(parse_bool_flag(trimmed).ok_or_else(|| {
                 user_error(format!(
                     "SUBSTRATE_OVERRIDE_CAGED must be a boolean (true|false|1|0|yes|no|on|off) (found '{}')",
+                    raw
+                ))
+            })?);
+        }
+    }
+
+    if let Ok(raw) = env::var("SUBSTRATE_OVERRIDE_WORLD_NET_FILTER") {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            overrides.world_net_filter = Some(parse_bool_flag(trimmed).ok_or_else(|| {
+                user_error(format!(
+                    "SUBSTRATE_OVERRIDE_WORLD_NET_FILTER must be a boolean (true|false|1|0|yes|no|on|off) (found '{}')",
                     raw
                 ))
             })?);
@@ -1380,6 +1439,9 @@ fn apply_update_to_patch(patch: &mut SubstrateConfigPatch, update: &ConfigUpdate
             apply_string_opt(&mut patch.world.anchor_path, &update.op, &update.value)
         }
         "world.caged" => apply_bool_opt(&mut patch.world.caged, &update.op, &update.value),
+        "world.net.filter" => {
+            apply_bool_opt(&mut patch.world.net.filter, &update.op, &update.value)
+        }
         "world.env.inherit_from_host" => apply_bool_opt(
             &mut patch.world.env.inherit_from_host,
             &update.op,
@@ -1428,6 +1490,7 @@ fn reset_patch_key(patch: &mut SubstrateConfigPatch, key: &str) -> Result<bool> 
         "world.anchor_mode" => reset_opt(&mut patch.world.anchor_mode),
         "world.anchor_path" => reset_opt(&mut patch.world.anchor_path),
         "world.caged" => reset_opt(&mut patch.world.caged),
+        "world.net.filter" => reset_opt(&mut patch.world.net.filter),
         "world.env.inherit_from_host" => reset_opt(&mut patch.world.env.inherit_from_host),
 
         "world.deps.enabled" => reset_opt(&mut patch.world.deps.enabled),

@@ -87,6 +87,7 @@ mod imp {
         pub(crate) cwd: String,
         pub(crate) env: HashMap<String, String>,
         pub(crate) policy_snapshot: agent_api_types::PolicySnapshotV3,
+        pub(crate) world_network: agent_api_types::WorldNetworkRoutingV1,
         pub(crate) cols: u16,
         pub(crate) rows: u16,
     }
@@ -96,6 +97,7 @@ mod imp {
             cwd: String,
             cwd_path: &Path,
             policy_snapshot: agent_api_types::PolicySnapshotV3,
+            world_network: agent_api_types::WorldNetworkRoutingV1,
         ) -> Result<(Self, bool)> {
             let (env, inherit_from_host) = build_world_env_map_for_cwd(cwd_path)?;
             let (cols, rows) = terminal_size_or_default();
@@ -104,6 +106,7 @@ mod imp {
                     cwd,
                     env,
                     policy_snapshot,
+                    world_network,
                     cols,
                     rows,
                 },
@@ -140,9 +143,13 @@ mod imp {
                 read_loop(stream, read_sink, read_state, on_stdout, fatal_tx).await
             });
 
-            let ready = ready_rx
-                .await
-                .map_err(|_| anyhow!("world session failed before ready"))?;
+            let ready = ready_rx.await.map_err(|_| {
+                fatal_rx
+                    .borrow()
+                    .clone()
+                    .map(anyhow::Error::msg)
+                    .unwrap_or_else(|| anyhow!("world session failed before ready"))
+            })?;
             if ready.protocol_version != 1 {
                 read_task.abort();
                 let _ = read_task.await;
@@ -193,15 +200,16 @@ mod imp {
             if inherit_from_host {
                 eprintln!("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
             }
-            let policy_snapshot =
-                policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
+            let network_policy = policy_snapshot::resolve_world_network_policy_for_cwd(&cwd_path)?;
+            let world_network = policy_snapshot::request_world_network_routing(&network_policy);
             let (cols, rows) = terminal_size_or_default();
 
             Self::start_with(
                 ReplSessionStartParams {
                     cwd,
                     env: env_map,
-                    policy_snapshot,
+                    policy_snapshot: network_policy.snapshot,
+                    world_network,
                     cols,
                     rows,
                 },
@@ -306,7 +314,7 @@ mod imp {
 
         pub(crate) async fn send_signal(&self, signal: &str) -> Result<()> {
             let frame = ClientFrame::Signal {
-                signal: signal.to_string(),
+                sig: signal.to_string(),
             };
             let payload = serde_json::to_string(&frame).context("serialize signal frame")?;
             self.sink
@@ -352,6 +360,7 @@ mod imp {
             cwd: String,
             env: HashMap<String, String>,
             policy_snapshot: Box<agent_api_types::PolicySnapshotV3>,
+            world_network: agent_api_types::WorldNetworkRoutingV1,
             cols: u16,
             rows: u16,
         },
@@ -370,7 +379,7 @@ mod imp {
             rows: u16,
         },
         Signal {
-            signal: String,
+            sig: String,
         },
         Close,
     }
@@ -643,6 +652,7 @@ mod imp {
             cwd,
             env,
             policy_snapshot,
+            world_network,
             cols,
             rows,
         } = start;
@@ -650,6 +660,7 @@ mod imp {
             cwd,
             env,
             policy_snapshot: Box::new(policy_snapshot),
+            world_network,
             cols,
             rows,
         };
@@ -665,6 +676,7 @@ mod imp {
             cwd,
             mut env,
             policy_snapshot,
+            world_network,
             cols,
             rows,
         } = start;
@@ -685,6 +697,7 @@ mod imp {
                 cwd,
                 env,
                 policy_snapshot: Box::new(policy_snapshot),
+                world_network: world_network.clone(),
                 cols,
                 rows,
             };
@@ -739,6 +752,7 @@ mod imp {
             cwd,
             env,
             policy_snapshot: Box::new(policy_snapshot),
+            world_network,
             cols,
             rows,
         };
@@ -792,6 +806,69 @@ mod imp {
             _ => {}
         }
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn signal_frame_serializes_sig_field() {
+            let frame = ClientFrame::Signal {
+                sig: "INT".to_string(),
+            };
+
+            let value = serde_json::to_value(&frame).expect("serialize signal frame");
+            assert_eq!(value["type"], "signal");
+            assert_eq!(value["sig"], "INT");
+            assert!(value.get("signal").is_none());
+        }
+
+        #[test]
+        fn start_session_serializes_world_network_routing() {
+            let frame = ClientFrame::StartSession {
+                cwd: "/tmp/project".to_string(),
+                env: HashMap::new(),
+                policy_snapshot: Box::new(agent_api_types::PolicySnapshotV3 {
+                    schema_version: 3,
+                    net_allowed: vec!["example.com".to_string()],
+                    world_fs: agent_api_types::PolicySnapshotWorldFsV3 {
+                        host_visible: true,
+                        fail_closed: agent_api_types::PolicySnapshotWorldFsFailClosedV3 {
+                            routing: false,
+                        },
+                        deny_enforcement: None,
+                        caged_required: false,
+                        discover: Some(agent_api_types::PolicySnapshotWorldFsDimensionV3 {
+                            allow_list: vec![".".to_string()],
+                            deny_list: Vec::new(),
+                        }),
+                        read: Some(agent_api_types::PolicySnapshotWorldFsDimensionV3 {
+                            allow_list: vec![".".to_string()],
+                            deny_list: Vec::new(),
+                        }),
+                        write: agent_api_types::PolicySnapshotWorldFsWriteV3 {
+                            enabled: true,
+                            allow_list: vec![".".to_string()],
+                            deny_list: Vec::new(),
+                        },
+                    },
+                }),
+                world_network: agent_api_types::WorldNetworkRoutingV1 {
+                    isolate_network: true,
+                    allowed_domains: vec!["example.com".to_string()],
+                },
+                cols: 80,
+                rows: 24,
+            };
+
+            let value = serde_json::to_value(&frame).expect("serialize start session frame");
+            assert_eq!(value["world_network"]["isolate_network"], true);
+            assert_eq!(
+                value["world_network"]["allowed_domains"],
+                serde_json::json!(["example.com"])
+            );
+        }
+    }
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
@@ -828,6 +905,7 @@ mod imp {
         pub(crate) cwd: String,
         pub(crate) env: HashMap<String, String>,
         pub(crate) policy_snapshot: agent_api_types::PolicySnapshotV3,
+        pub(crate) world_network: agent_api_types::WorldNetworkRoutingV1,
         pub(crate) cols: u16,
         pub(crate) rows: u16,
     }
@@ -837,12 +915,14 @@ mod imp {
             cwd: String,
             _cwd_path: &Path,
             policy_snapshot: agent_api_types::PolicySnapshotV3,
+            world_network: agent_api_types::WorldNetworkRoutingV1,
         ) -> Result<(Self, bool)> {
             Ok((
                 Self {
                     cwd,
                     env: HashMap::new(),
                     policy_snapshot,
+                    world_network,
                     cols: 80,
                     rows: 24,
                 },

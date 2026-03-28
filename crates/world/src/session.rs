@@ -1,9 +1,10 @@
 //! Session world implementation for Linux.
 
 use crate::overlayfs::OverlayFs;
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::process::ExitStatus;
 use std::time::SystemTime;
 use world_api::{ExecResult, FsDiff, WorldFsMode, WorldSpec};
 
@@ -21,6 +22,16 @@ pub struct SessionWorld {
     /// Persistent overlay mount for this session (writable or read-only).
     overlay: Option<OverlayFs>,
     overlay_mode: Option<WorldFsMode>,
+}
+
+struct OverlayExecutionContext<'a> {
+    command_to_run: &'a str,
+    cwd: &'a Path,
+    env: &'a HashMap<String, String>,
+    merged_dir: &'a Path,
+    desired_cwd: &'a Path,
+    require_cgroup_attach: bool,
+    span_id: Option<&'a str>,
 }
 
 impl SessionWorld {
@@ -84,12 +95,9 @@ impl SessionWorld {
             // Set up network filtering if enabled (scoped to netns when available)
             if self.spec.isolate_network {
                 tracing::info!("world.setup: installing nftables rules");
-                if let Err(e) = self.setup_network_filter() {
-                    tracing::warn!(
-                        "[agent] netfilter setup failed; continuing without network scoping: {}",
-                        e
-                    );
-                }
+                self.setup_network_filter().context(
+                    "requested network isolation could not be enforced during world setup",
+                )?;
             }
         }
 
@@ -109,15 +117,25 @@ impl SessionWorld {
         #[cfg(target_os = "linux")]
         filter.set_cgroup_path(&self.cgroup_path);
         filter.resolve_domains()?;
-        let installed = filter.install_rules()?;
-        if !installed {
-            tracing::warn!(
-                target: "world::netfilter",
-                "network filtering requested but nftables rules were not installed (set WORLD_NETFILTER_ENABLE=1 to enable)"
-            );
-        }
+        filter.install_rules()?;
         self.network_filter = Some(filter);
         Ok(())
+    }
+
+    pub fn refresh_network_filter(&mut self) -> Result<()> {
+        if !self.spec.isolate_network {
+            return Ok(());
+        }
+
+        let filter = self
+            .network_filter
+            .as_mut()
+            .ok_or_else(|| anyhow!("network filter missing for isolated session"))?;
+        filter.refresh_rules()
+    }
+
+    pub fn cgroup_path(&self) -> PathBuf {
+        self.cgroup_path.clone()
     }
 
     fn fallback_cgroup_path(&self) -> PathBuf {
@@ -203,13 +221,25 @@ impl SessionWorld {
         let force_direct_exec = env
             .get("SUBSTRATE_WORLD_EXEC_FORCE_DIRECT")
             .is_some_and(|value| is_truthy(value));
+        let require_cgroup_attach = self.spec.isolate_network;
+
+        if require_cgroup_attach && force_direct_exec {
+            return Err(anyhow!(
+                "SUBSTRATE_WORLD_EXEC_FORCE_DIRECT is unsupported when isolate_network=true because cgroup attach is not guaranteed"
+            ));
+        }
+
+        if require_cgroup_attach {
+            self.refresh_network_filter()?;
+        }
 
         // When fs_mode is enforced or heuristics request isolation, run against a persistent overlay
         // so state is consistent across commands within this session.
-        if !force_direct_exec
-            && (self.spec.fs_mode == WorldFsMode::ReadOnly
-                || self.spec.fs_mode != WorldFsMode::Writable
-                || self.should_isolate_command(cmd))
+        if require_cgroup_attach
+            || (!force_direct_exec
+                && (self.spec.fs_mode == WorldFsMode::ReadOnly
+                    || self.spec.fs_mode != WorldFsMode::Writable
+                    || self.should_isolate_command(cmd)))
         {
             let merged_dir = self.ensure_overlay_mounted()?;
             fs_strategy_meta = crate::overlayfs::world_fs_strategy_meta(&self.id);
@@ -218,68 +248,16 @@ impl SessionWorld {
             } else {
                 self.project_dir.clone()
             };
-            output = match crate::exec::execute_shell_command_with_project_bind_mount(
-                &command_to_run,
-                crate::exec::ProjectBindMount {
-                    merged_dir: &merged_dir,
-                    project_dir: &self.project_dir,
-                    desired_cwd: &desired_cwd,
-                    fs_mode: self.spec.fs_mode,
-                },
-                &env,
-                false,
-                Some(self.cgroup_path.as_path()),
-            ) {
-                Ok(output) => output,
-                Err(err) => {
-                    // If mount namespaces are unavailable (e.g., user namespaces disabled),
-                    // enforce safety for read-only mode by failing closed (otherwise the
-                    // caller could bypass read-only by using absolute paths).
-                    if self.spec.fs_mode == WorldFsMode::ReadOnly {
-                        return Err(err).context(
-                            "failed to enforce read-only world via mount-namespace bind; refusing to run with possible absolute-path escape",
-                        );
-                    }
-
-                    // Otherwise, fall back to the older behavior (cwd inside the overlay root).
-                    // This preserves functionality but may allow absolute-path escapes into the
-                    // host project directory.
-                    let mut rel = if cwd.starts_with(&self.project_dir) {
-                        cwd.strip_prefix(&self.project_dir)
-                            .unwrap_or_else(|_| Path::new("."))
-                            .to_path_buf()
-                    } else {
-                        PathBuf::from(".")
-                    };
-                    if rel.as_os_str().is_empty() {
-                        rel = PathBuf::from(".");
-                    }
-                    let target_dir = merged_dir.join(&rel);
-                    let fallback_world_deps_root =
-                        crate::exec::stable_world_deps_fallback_root(&self.project_dir);
-                    match crate::exec::execute_shell_command_with_world_deps_bind_mount(
-                        &command_to_run,
-                        &target_dir,
-                        &env,
-                        false,
-                        &fallback_world_deps_root,
-                        Some(self.cgroup_path.as_path()),
-                    ) {
-                        Ok(output) => output,
-                        Err(world_deps_err) => crate::exec::execute_shell_command(
-                            &command_to_run,
-                            &target_dir,
-                            &env,
-                            false,
-                        )
-                        .with_context(|| {
-                            format!(
-                                "Failed to execute command in overlay after mount-namespace bind failed: {err:#}; world-deps fallback also failed: {world_deps_err:#}"
-                            )
-                        })?,
-                    }
-                }
+            let exec_ctx = OverlayExecutionContext {
+                command_to_run: &command_to_run,
+                cwd,
+                env: &env,
+                merged_dir: &merged_dir,
+                desired_cwd: &desired_cwd,
+                require_cgroup_attach,
+                span_id: span_id.as_deref(),
             };
+            output = self.execute_with_overlay_helpers(&exec_ctx)?;
 
             if self.spec.fs_mode == WorldFsMode::ReadOnly {
                 diff_opt = Some(FsDiff::default());
@@ -291,8 +269,14 @@ impl SessionWorld {
                 }
             }
         } else {
-            output = crate::exec::execute_shell_command(&command_to_run, cwd, &env, false)
-                .context("Failed to execute command")?;
+            output = crate::exec::execute_shell_command(
+                &command_to_run,
+                cwd,
+                &env,
+                false,
+                span_id.as_deref(),
+            )
+            .context("Failed to execute command")?;
         }
 
         // Track network scopes if filter is active
@@ -303,7 +287,7 @@ impl SessionWorld {
         }
 
         Ok(ExecResult {
-            exit: output.status.code().unwrap_or(-1),
+            exit: exit_code_from_status(output.status),
             stdout: output.stdout,
             stderr: output.stderr,
             scopes_used,
@@ -312,6 +296,126 @@ impl SessionWorld {
             world_fs_strategy_final: fs_strategy_meta.as_ref().map(|m| m.final_strategy),
             world_fs_strategy_fallback_reason: fs_strategy_meta.as_ref().map(|m| m.fallback_reason),
         })
+    }
+
+    fn execute_with_overlay_helpers(
+        &self,
+        exec_ctx: &OverlayExecutionContext<'_>,
+    ) -> Result<std::process::Output> {
+        let project_attach_policy = if exec_ctx.require_cgroup_attach {
+            crate::exec::CgroupAttachPolicy::required(
+                "project_bind_mount",
+                self.cgroup_path.as_path(),
+            )
+        } else {
+            crate::exec::CgroupAttachPolicy::optional("project_bind_mount")
+        };
+
+        match crate::exec::execute_shell_command_with_project_bind_mount(
+            exec_ctx.command_to_run,
+            crate::exec::ProjectBindMount {
+                merged_dir: exec_ctx.merged_dir,
+                project_dir: &self.project_dir,
+                desired_cwd: exec_ctx.desired_cwd,
+                fs_mode: self.spec.fs_mode,
+            },
+            exec_ctx.env,
+            false,
+            project_attach_policy,
+            exec_ctx.span_id,
+        ) {
+            Ok(output)
+                if !exec_ctx.require_cgroup_attach
+                    || !crate::exec::is_cgroup_attach_wrapper_failure(&output.stderr) =>
+            {
+                Ok(output)
+            }
+            Ok(output) => self.execute_world_deps_fallback(
+                exec_ctx,
+                anyhow!(
+                    "project bind mount helper refused isolated execution before command start: {}",
+                    String::from_utf8_lossy(&output.stderr).trim()
+                ),
+            ),
+            Err(err) => self.execute_world_deps_fallback(exec_ctx, err),
+        }
+    }
+
+    fn execute_world_deps_fallback(
+        &self,
+        exec_ctx: &OverlayExecutionContext<'_>,
+        primary_err: anyhow::Error,
+    ) -> Result<std::process::Output> {
+        if self.spec.fs_mode == WorldFsMode::ReadOnly {
+            return Err(primary_err).context(
+                "failed to enforce read-only world via mount-namespace bind; refusing to run with possible absolute-path escape",
+            );
+        }
+
+        let mut rel = if exec_ctx.cwd.starts_with(&self.project_dir) {
+            exec_ctx
+                .cwd
+                .strip_prefix(&self.project_dir)
+                .unwrap_or_else(|_| Path::new("."))
+                .to_path_buf()
+        } else {
+            PathBuf::from(".")
+        };
+        if rel.as_os_str().is_empty() {
+            rel = PathBuf::from(".");
+        }
+        let target_dir = exec_ctx.merged_dir.join(&rel);
+        let fallback_world_deps_root =
+            crate::exec::stable_world_deps_fallback_root(&self.project_dir);
+        let fallback_attach_policy = if exec_ctx.require_cgroup_attach {
+            crate::exec::CgroupAttachPolicy::required(
+                "world_deps_fallback",
+                self.cgroup_path.as_path(),
+            )
+        } else {
+            crate::exec::CgroupAttachPolicy::optional("world_deps_fallback")
+        };
+
+        match crate::exec::execute_shell_command_with_world_deps_bind_mount(
+            exec_ctx.command_to_run,
+            &target_dir,
+            exec_ctx.env,
+            false,
+            &fallback_world_deps_root,
+            fallback_attach_policy,
+            exec_ctx.span_id,
+        ) {
+            Ok(output)
+                if !exec_ctx.require_cgroup_attach
+                    || !crate::exec::is_cgroup_attach_wrapper_failure(&output.stderr) =>
+            {
+                Ok(output)
+            }
+            Ok(output) => Err(primary_err).context(format!(
+                "world-deps fallback helper refused isolated execution before command start: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            )),
+            Err(world_deps_err) => {
+                if exec_ctx.require_cgroup_attach {
+                    Err(primary_err).context(format!(
+                        "world-deps fallback helper also failed: {world_deps_err:#}"
+                    ))
+                } else {
+                    crate::exec::execute_shell_command(
+                        exec_ctx.command_to_run,
+                        &target_dir,
+                        exec_ctx.env,
+                        false,
+                        exec_ctx.span_id,
+                    )
+                        .with_context(|| {
+                            format!(
+                                "Failed to execute command in overlay after mount-namespace bind failed: {primary_err:#}; world-deps fallback also failed: {world_deps_err:#}"
+                            )
+                        })
+                }
+            }
+        }
     }
 
     /// Compute filesystem diff for a span.
@@ -463,6 +567,23 @@ fn is_truthy(value: &str) -> bool {
     )
 }
 
+fn exit_code_from_status(status: ExitStatus) -> i32 {
+    if let Some(code) = status.code() {
+        return code;
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+
+        if let Some(signal) = status.signal() {
+            return 128 + signal;
+        }
+    }
+
+    -1
+}
+
 impl Drop for SessionWorld {
     fn drop(&mut self) {
         if let Some(ref mut overlay) = self.overlay {
@@ -475,6 +596,71 @@ impl Drop for SessionWorld {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "linux")]
+    use std::sync::Mutex;
+    #[cfg(target_os = "linux")]
+    use tempfile::{tempdir, TempDir};
+
+    #[cfg(target_os = "linux")]
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[cfg(target_os = "linux")]
+    struct EnvGuard {
+        previous: Vec<(String, Option<std::ffi::OsString>)>,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl EnvGuard {
+        fn set(vars: &[(&str, Option<&str>)]) -> Self {
+            let previous = vars
+                .iter()
+                .map(|(key, _)| (key.to_string(), std::env::var_os(key)))
+                .collect::<Vec<_>>();
+            for (key, value) in vars {
+                match value {
+                    Some(v) => std::env::set_var(key, v),
+                    None => std::env::remove_var(key),
+                }
+            }
+            Self { previous }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            for (key, value) in self.previous.drain(..) {
+                match value {
+                    Some(v) => std::env::set_var(&key, v),
+                    None => std::env::remove_var(&key),
+                }
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn test_world(temp: &TempDir, isolate_network: bool) -> SessionWorld {
+        let project_dir = temp.path().join("project");
+        std::fs::create_dir_all(&project_dir).expect("project dir");
+        SessionWorld {
+            id: "wld_test".into(),
+            root_dir: temp.path().join("world-root"),
+            project_dir,
+            cgroup_path: temp.path().join("cgroup").join("wld_test"),
+            net_namespace: None,
+            spec: WorldSpec {
+                isolate_network,
+                project_dir: temp.path().join("project"),
+                fs_mode: WorldFsMode::Writable,
+                ..WorldSpec::default()
+            },
+            started_at: std::time::SystemTime::UNIX_EPOCH,
+            network_filter: None,
+            fs_by_span: HashMap::new(),
+            overlay: None,
+            overlay_mode: None,
+        }
+    }
 
     #[test]
     fn test_session_world_creation() {
@@ -543,6 +729,152 @@ mod tests {
         assert!(
             world.compatible_with(&changed),
             "fs_mode differences should not force a new world; overlay remount handles mode changes"
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn setup_fails_when_requested_isolation_cannot_install_netfilter() {
+        let temp = tempdir().unwrap();
+        let root_dir = temp.path().join("world-root");
+        let cgroup_path = temp.path().join("cgroup").join("wld_test");
+
+        let _lock = ENV_LOCK.lock().unwrap();
+        let _guard = EnvGuard::set(&[("WORLD_NETFILTER_ENABLE", None)]);
+
+        let mut world = SessionWorld {
+            id: "wld_test".into(),
+            root_dir,
+            project_dir: temp.path().join("project"),
+            cgroup_path,
+            net_namespace: None,
+            spec: WorldSpec {
+                isolate_network: true,
+                ..WorldSpec::default()
+            },
+            started_at: std::time::SystemTime::UNIX_EPOCH,
+            network_filter: None,
+            fs_by_span: HashMap::new(),
+            overlay: None,
+            overlay_mode: None,
+        };
+
+        let err = world.setup().unwrap_err();
+        let message = format!("{err:#}");
+        assert!(
+            message.contains("requested network isolation could not be enforced"),
+            "unexpected error: {message}"
+        );
+        assert!(world.network_filter.is_none());
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn execute_rejects_forced_direct_exec_when_isolation_is_requested() {
+        let temp = tempdir().unwrap();
+        let mut world = test_world(&temp, true);
+        let project_dir = world.project_dir.clone();
+        let mut env = HashMap::new();
+        env.insert("SUBSTRATE_WORLD_EXEC_FORCE_DIRECT".into(), "1".into());
+
+        let err = world
+            .execute("printf should-not-run", &project_dir, env, false, None)
+            .unwrap_err();
+        let message = format!("{err:#}");
+        assert!(
+            message.contains(
+                "SUBSTRATE_WORLD_EXEC_FORCE_DIRECT is unsupported when isolate_network=true"
+            ),
+            "unexpected error: {message}"
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn execute_allows_forced_direct_exec_without_isolation() {
+        let temp = tempdir().unwrap();
+        let mut world = test_world(&temp, false);
+        let project_dir = world.project_dir.clone();
+        let mut env = HashMap::new();
+        env.insert("SUBSTRATE_WORLD_EXEC_FORCE_DIRECT".into(), "1".into());
+
+        let result = world
+            .execute("printf direct-ok", &project_dir, env, false, None)
+            .expect("non-isolated direct exec should remain available");
+
+        assert_eq!(result.exit, 0);
+        assert_eq!(String::from_utf8_lossy(&result.stdout), "direct-ok");
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn direct_exec_reports_sigint_with_shell_convention_exit_code() {
+        let mut child = std::process::Command::new("sh")
+            .arg("-c")
+            .arg("sleep 10")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("sleep process should spawn");
+
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        let rc = unsafe { libc::kill(child.id() as libc::pid_t, libc::SIGINT) };
+        assert_eq!(rc, 0, "failed to send SIGINT to child");
+
+        let status = child.wait().expect("child wait should succeed");
+        assert_eq!(exit_code_from_status(status), 130);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn isolated_helper_flow_does_not_fall_back_to_plain_exec_when_attach_fails() {
+        let temp = tempdir().unwrap();
+        let world = test_world(&temp, true);
+        let merged_dir = temp.path().join("merged");
+        std::fs::create_dir_all(&merged_dir).expect("merged dir");
+        let env = HashMap::new();
+        let exec_ctx = OverlayExecutionContext {
+            command_to_run: "printf should-not-run",
+            cwd: &world.project_dir,
+            env: &env,
+            merged_dir: &merged_dir,
+            desired_cwd: &world.project_dir,
+            require_cgroup_attach: true,
+            span_id: None,
+        };
+
+        let err = match world.execute_with_overlay_helpers(&exec_ctx) {
+            Ok(output) => {
+                if output.status.success() {
+                    panic!(
+                        "isolated helper flow should not succeed when cgroup attach cannot start"
+                    );
+                }
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                if stderr.contains("Operation not permitted")
+                    || stderr.contains("EPERM")
+                    || stderr.contains("unshare")
+                {
+                    println!("Skipping isolated attach helper test: {stderr}");
+                    return;
+                }
+                panic!("expected isolated helper flow to return an error, got stderr={stderr}");
+            }
+            Err(err) => err,
+        };
+
+        let message = format!("{err:#}");
+        assert!(
+            message.contains(
+                "project bind mount helper refused isolated execution before command start"
+            ) || message.contains(
+                "world-deps fallback helper refused isolated execution before command start"
+            ) || message.contains("world-deps fallback helper also failed"),
+            "unexpected error: {message}"
+        );
+        assert!(
+            !message.contains("should-not-run"),
+            "isolated attach failure should stop before plain command execution: {message}"
         );
     }
 }

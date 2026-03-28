@@ -327,13 +327,25 @@ fn test_current_sync_creates_apt_entrypoint_wrappers_wdh1() {
         "expected a read-only APT probe before wrapper creation; cmds={cmds:?}"
     );
     assert!(
-        cmds.iter()
-            .any(|cmd| cmd.contains("exec /usr/bin/npm \"$@\"") && cmd.contains("#!/bin/sh")),
-        "expected an apt wrapper script that installs an /usr/bin/npm wrapper under world-deps bin; cmds={cmds:?}"
+        cmds.iter().any(|cmd| {
+            cmd.contains("#!/bin/sh")
+                && cmd.contains(
+                    "PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games'",
+                )
+                && cmd.contains("command -v npm")
+                && cmd.contains("exec \"$resolved\" \"$@\"")
+        }),
+        "expected an apt wrapper script that resolves npm via command -v; cmds={cmds:?}"
     );
     assert!(
-        cmds.iter()
-            .any(|cmd| cmd.contains("exec /usr/bin/npx \"$@\"") && cmd.contains("#!/bin/sh")),
-        "expected an apt wrapper script that installs an /usr/bin/npx wrapper under world-deps bin; cmds={cmds:?}"
+        cmds.iter().any(|cmd| {
+            cmd.contains("#!/bin/sh")
+                && cmd.contains(
+                    "PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games'",
+                )
+                && cmd.contains("command -v npx")
+                && cmd.contains("exec \"$resolved\" \"$@\"")
+        }),
+        "expected an apt wrapper script that resolves npx via command -v; cmds={cmds:?}"
     );
 }

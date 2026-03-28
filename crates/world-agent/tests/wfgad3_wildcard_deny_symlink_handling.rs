@@ -41,6 +41,7 @@ fn overlay_available() -> bool {
 fn snapshot_read_only_with_read_deny(deny_list: Vec<String>) -> PolicySnapshotV3 {
     PolicySnapshotV3 {
         schema_version: 3,
+        net_allowed: Vec::new(),
         world_fs: PolicySnapshotWorldFsV3 {
             host_visible: false,
             fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: true },
@@ -63,6 +64,7 @@ fn snapshot_read_only_with_read_deny(deny_list: Vec<String>) -> PolicySnapshotV3
 fn snapshot_writable_with_write_deny(deny_list: Vec<String>) -> PolicySnapshotV3 {
     PolicySnapshotV3 {
         schema_version: 3,
+        net_allowed: Vec::new(),
         world_fs: PolicySnapshotWorldFsV3 {
             host_visible: false,
             fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: false },
@@ -98,6 +100,7 @@ fn execute_non_pty(
         agent_id: "wfgad3-test".to_string(),
         budget: None,
         policy_snapshot,
+        world_network: None,
         world_fs_mode: None,
     };
 

@@ -274,6 +274,7 @@ impl MacLimaBackend {
         let write_enabled = matches!(fs_mode, WorldFsMode::Writable);
         let policy_snapshot = PolicySnapshotV3 {
             schema_version: 3,
+            net_allowed: Vec::new(),
             world_fs: PolicySnapshotWorldFsV3 {
                 host_visible: true,
                 fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: false },
@@ -304,6 +305,7 @@ impl MacLimaBackend {
             agent_id: "world-mac-lima".to_string(),
             budget: None,
             policy_snapshot,
+            world_network: None,
             world_fs_mode: Some(fs_mode),
         }
     }

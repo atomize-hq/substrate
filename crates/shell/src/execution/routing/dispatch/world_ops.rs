@@ -2,24 +2,28 @@
 
 use super::shim_ops::build_world_env_map_for_cwd;
 use crate::execution::agent_events::publish_agent_event;
+#[cfg(target_os = "windows")]
+use crate::execution::policy_snapshot::world_spec_for_network_policy;
+use crate::execution::policy_snapshot::{
+    request_world_network_routing, resolve_world_network_policy_for_cwd,
+};
 #[cfg(target_os = "macos")]
 use crate::execution::pw;
+#[cfg(target_os = "linux")]
+use crate::execution::routing::{get_term_size, RawModeGuard};
 #[cfg(all(test, any(target_os = "linux", target_os = "windows")))]
 use crate::execution::world_env_guard;
 #[cfg(target_os = "linux")]
-use crate::execution::{
-    routing::{get_term_size, RawModeGuard},
-    socket_activation,
-};
+use crate::execution::{policy_snapshot::bootstrap_world_spec, socket_activation};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use agent_api_client::AgentClient;
+#[cfg(not(target_os = "windows"))]
+use agent_api_types::ExecuteCancelRequestV1;
 use agent_api_types::{ExecuteRequest, ExecuteStreamFrame, WorldFsMode};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use std::env;
 use std::io;
-#[cfg(target_os = "linux")]
-use substrate_broker::allowed_domains;
 use substrate_broker::world_fs_mode;
 use substrate_common::agent_events::AgentEvent;
 #[cfg(unix)]
@@ -31,10 +35,11 @@ use tokio_tungstenite as tungs;
 #[cfg(target_os = "linux")]
 use world::LinuxLocalBackend;
 #[cfg(target_os = "linux")]
-use world_api::{ResourceLimits, WorldBackend, WorldSpec};
+use world_api::WorldBackend;
 
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 const WORLD_PROJECT_DIR_OVERRIDE_ENV: &str = "SUBSTRATE_WORLD_PROJECT_DIR";
+const RESERVED_WORLD_REQUEST_PROFILES: &[&str] = &["world-deps-provision", "world-deps-probe"];
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub(super) fn normalize_env_for_linux_guest(
@@ -43,7 +48,8 @@ pub(super) fn normalize_env_for_linux_guest(
     // macOS host PATH often contains directories that are mounted into the guest (e.g. /Users/...),
     // which can lead to confusing behavior where `which node` points at a macOS binary that cannot
     // run inside the Linux VM. Prefer a stable Linux guest PATH.
-    const GUEST_BASE_PATH: &str = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+    const GUEST_BASE_PATH: &str =
+        "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games";
     const WORLD_DEPS_BIN: &str = "/var/lib/substrate/world-deps/bin";
     let world_deps_bin = env_map
         .get("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR")
@@ -206,8 +212,7 @@ pub(super) fn execute_world_pty_over_ws(
             cmd
         };
         let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-        let policy_snapshot =
-            crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd)?.snapshot;
+        let policy_snapshot = resolve_world_network_policy_for_cwd(&cwd)?.snapshot;
         let (mut env_map, inherit_from_host) = build_world_env_map_for_cwd(&cwd)?;
         if inherit_from_host {
             eprintln!("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
@@ -217,7 +222,7 @@ pub(super) fn execute_world_pty_over_ws(
             &mut env_map,
         )?;
         ensure_world_deps_bin_on_path(&mut env_map);
-        #[cfg(target_os = "linux")]
+        #[cfg(unix)]
         let (cols, rows) = get_term_size();
         #[cfg(not(target_os = "linux"))]
         let (cols, rows) = (80u16, 24u16);
@@ -238,7 +243,7 @@ pub(super) fn execute_world_pty_over_ws(
             .map_err(|e| anyhow::anyhow!("ws send start: {}", e))?;
 
         // Enter raw mode on the local terminal and ensure restoration
-        #[cfg(target_os = "linux")]
+        #[cfg(unix)]
         let _raw_guard = RawModeGuard::for_stdin_if_tty()?;
 
         // Spawn stdin forwarder (raw bytes)
@@ -269,7 +274,7 @@ pub(super) fn execute_world_pty_over_ws(
         });
 
         // Spawn resize watcher (SIGWINCH)
-        #[cfg(target_os = "linux")]
+        #[cfg(unix)]
         let resize_task = {
             let sink_resize = sink.clone();
             let mut sig = signal(SignalKind::window_change())
@@ -292,7 +297,7 @@ pub(super) fn execute_world_pty_over_ws(
         };
 
         // Spawn Unix signal forwarders (INT, TERM, HUP, QUIT) → WS Signal frames
-        #[cfg(target_os = "linux")]
+        #[cfg(unix)]
         let signal_tasks = {
             let mut tasks = Vec::new();
 
@@ -432,7 +437,7 @@ pub(super) fn execute_world_pty_over_ws(
 
         // Cleanup background tasks
         stdin_task.abort();
-        #[cfg(target_os = "linux")]
+        #[cfg(unix)]
         {
             resize_task.abort();
             for t in signal_tasks {
@@ -600,16 +605,10 @@ where
                 return LinuxWorldInit::LocalBackend;
             }
 
-            let spec = WorldSpec {
-                reuse_session: true,
-                isolate_network: true,
-                limits: ResourceLimits::default(),
-                enable_preload: false,
-                allowed_domains: allowed_domains(),
-                project_dir: crate::execution::settings::world_root_from_env().path,
-                always_isolate: false,
-                fs_mode: world_fs_mode(),
-            };
+            let spec = bootstrap_world_spec(
+                crate::execution::settings::world_root_from_env().path,
+                world_fs_mode(),
+            );
             let backend = LinuxLocalBackend::new();
             match backend.ensure_session(&spec) {
                 Ok(handle) => {
@@ -658,8 +657,7 @@ pub(super) fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyho
                 cmd
             };
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-            let policy_snapshot =
-                crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd)?.snapshot;
+            let policy_snapshot = resolve_world_network_policy_for_cwd(&cwd)?.snapshot;
             let (mut env_map, inherit_from_host) = build_world_env_map_for_cwd(&cwd)?;
             if inherit_from_host {
                 eprintln!("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
@@ -897,6 +895,7 @@ fn current_world_request_profile() -> Option<String> {
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
+        .filter(|value| !RESERVED_WORLD_REQUEST_PROFILES.contains(&value.as_str()))
 }
 
 #[cfg(target_os = "linux")]
@@ -917,8 +916,9 @@ fn build_agent_client_and_request_impl(
     let cwd_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     let cwd = cwd_path.display().to_string();
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
-    let policy_snapshot =
-        crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
+    let network_policy = resolve_world_network_policy_for_cwd(&cwd_path)?;
+    let world_network = request_world_network_routing(&network_policy);
+    let policy_snapshot = network_policy.snapshot;
     let (mut env_map, inherit_from_host) = build_world_env_map_for_cwd(&cwd_path)?;
     if inherit_from_host {
         eprintln!("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
@@ -939,6 +939,7 @@ fn build_agent_client_and_request_impl(
         agent_id: agent_id.clone(),
         budget: None,
         policy_snapshot,
+        world_network: Some(world_network),
         world_fs_mode: Some(current_world_fs_mode()),
     };
 
@@ -970,8 +971,9 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
     let cwd_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     let cwd = cwd_path.display().to_string();
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
-    let policy_snapshot =
-        crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
+    let network_policy = resolve_world_network_policy_for_cwd(&cwd_path)?;
+    let world_network = request_world_network_routing(&network_policy);
+    let policy_snapshot = network_policy.snapshot;
     let (mut env_map, _inherit_from_host) = build_world_env_map_for_cwd(&cwd_path)?;
     crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
         &policy_snapshot,
@@ -985,6 +987,7 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
         env: Some(env_map),
         agent_id: agent_id.clone(),
         policy_snapshot,
+        world_network: Some(world_network),
     };
 
     Ok((client, request, agent_id))
@@ -1012,8 +1015,9 @@ fn build_agent_client_and_request_impl(
         normalize_env_for_linux_guest(&mut env_map);
         ensure_world_deps_bin_on_path(&mut env_map);
         let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
-        let policy_snapshot =
-            crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
+        let network_policy = resolve_world_network_policy_for_cwd(&cwd_path)?;
+        let world_network = request_world_network_routing(&network_policy);
+        let policy_snapshot = network_policy.snapshot;
         crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
             &policy_snapshot,
             &mut env_map,
@@ -1028,6 +1032,7 @@ fn build_agent_client_and_request_impl(
             agent_id: agent_id.clone(),
             budget: None,
             policy_snapshot,
+            world_network: Some(world_network),
             world_fs_mode: Some(current_world_fs_mode()),
         };
 
@@ -1062,8 +1067,9 @@ fn build_agent_client_and_request_impl(
     normalize_env_for_linux_guest(&mut env_map);
     ensure_world_deps_bin_on_path(&mut env_map);
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
-    let policy_snapshot =
-        crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
+    let network_policy = resolve_world_network_policy_for_cwd(&cwd_path)?;
+    let world_network = request_world_network_routing(&network_policy);
+    let policy_snapshot = network_policy.snapshot;
     crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
         &policy_snapshot,
         &mut env_map,
@@ -1078,6 +1084,7 @@ fn build_agent_client_and_request_impl(
         agent_id: agent_id.clone(),
         budget: None,
         policy_snapshot,
+        world_network: Some(world_network),
         world_fs_mode: Some(current_world_fs_mode()),
     };
 
@@ -1101,8 +1108,9 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
         normalize_env_for_linux_guest(&mut env_map);
         ensure_world_deps_bin_on_path(&mut env_map);
         let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
-        let policy_snapshot =
-            crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
+        let network_policy = resolve_world_network_policy_for_cwd(&cwd_path)?;
+        let world_network = request_world_network_routing(&network_policy);
+        let policy_snapshot = network_policy.snapshot;
         crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
             &policy_snapshot,
             &mut env_map,
@@ -1114,6 +1122,7 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
             env: Some(env_map),
             agent_id: agent_id.clone(),
             policy_snapshot,
+            world_network: Some(world_network),
         };
 
         return Ok((client, request, agent_id));
@@ -1142,8 +1151,9 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
     normalize_env_for_linux_guest(&mut env_map);
     ensure_world_deps_bin_on_path(&mut env_map);
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
-    let policy_snapshot =
-        crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
+    let network_policy = resolve_world_network_policy_for_cwd(&cwd_path)?;
+    let world_network = request_world_network_routing(&network_policy);
+    let policy_snapshot = network_policy.snapshot;
     crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
         &policy_snapshot,
         &mut env_map,
@@ -1155,6 +1165,7 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
         env: Some(env_map),
         agent_id: agent_id.clone(),
         policy_snapshot,
+        world_network: Some(world_network),
     };
 
     Ok((client, request, agent_id))
@@ -1170,17 +1181,23 @@ fn build_agent_client_and_request_impl(
 )> {
     use crate::execution::platform_world::windows;
     let backend = windows::get_backend()?;
-    let handle = backend.ensure_session(&windows::world_spec())?;
-
     #[cfg(test)]
     let _env_guard = world_env_guard();
-
-    std::env::set_var("SUBSTRATE_WORLD", "enabled");
-    std::env::set_var("SUBSTRATE_WORLD_ID", &handle.id);
 
     let client = windows::build_agent_client()?;
     let cwd = windows::current_dir_wsl()?;
     let host_cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let network_policy = resolve_world_network_policy_for_cwd(&host_cwd)?;
+    let spec = world_spec_for_network_policy(
+        crate::execution::settings::world_root_from_env().path,
+        world_fs_mode(),
+        &network_policy,
+    );
+    let handle = backend.ensure_session(&spec)?;
+
+    std::env::set_var("SUBSTRATE_WORLD", "enabled");
+    std::env::set_var("SUBSTRATE_WORLD_ID", &handle.id);
+
     let profile = current_world_request_profile();
     let (mut env_map, inherit_from_host) = build_world_env_map_for_cwd(&host_cwd)?;
     if inherit_from_host {
@@ -1197,8 +1214,8 @@ fn build_agent_client_and_request_impl(
         });
     }
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
-    let policy_snapshot =
-        crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&host_cwd)?.snapshot;
+    let world_network = request_world_network_routing(&network_policy);
+    let policy_snapshot = network_policy.snapshot;
     crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
         &policy_snapshot,
         &mut env_map,
@@ -1213,6 +1230,7 @@ fn build_agent_client_and_request_impl(
         agent_id: agent_id.clone(),
         budget: None,
         policy_snapshot,
+        world_network: Some(world_network),
         world_fs_mode: Some(current_world_fs_mode()),
     };
 
@@ -1227,7 +1245,7 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
 )> {
     use crate::execution::platform_world::windows;
     let backend = windows::get_backend()?;
-    let handle = backend.ensure_session(&windows::world_spec())?;
+    let handle = backend.ensure_session(&windows::bootstrap_world_spec())?;
 
     #[cfg(test)]
     let _env_guard = world_env_guard();
@@ -1242,8 +1260,9 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
     let (mut env_map, _inherit_from_host) = build_world_env_map_for_cwd(&host_cwd)?;
     normalize_env_for_linux_guest(&mut env_map);
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
-    let policy_snapshot =
-        crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&host_cwd)?.snapshot;
+    let network_policy = resolve_world_network_policy_for_cwd(&host_cwd)?;
+    let world_network = request_world_network_routing(&network_policy);
+    let policy_snapshot = network_policy.snapshot;
     crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
         &policy_snapshot,
         &mut env_map,
@@ -1255,6 +1274,7 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
         env: Some(env_map),
         agent_id: agent_id.clone(),
         policy_snapshot,
+        world_network: Some(world_network),
     };
 
     Ok((client, request, agent_id))
@@ -1352,31 +1372,101 @@ pub(crate) fn stream_non_pty_via_agent(command: &str) -> anyhow::Result<AgentStr
                 anyhow::bail!("HTTP {} error: {}", status, text);
             }
 
-            process_agent_stream(response.into_body(), agent_id).await
+            let (sigint_tx, mut sigint_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
+            let sigint_task = tokio::spawn(async move {
+                loop {
+                    if tokio::signal::ctrl_c().await.is_err() {
+                        break;
+                    }
+                    if sigint_tx.send(()).is_err() {
+                        break;
+                    }
+                }
+            });
+
+            let result = process_agent_stream(
+                response.into_body(),
+                agent_id,
+                &mut sigint_rx,
+                |span_id, sig| async {
+                    client
+                        .cancel_execute(ExecuteCancelRequestV1 { span_id, sig })
+                        .await
+                        .map(|_| ())
+                },
+            )
+            .await;
+            sigint_task.abort();
+            result
         }
     })
 }
 
 #[cfg(not(target_os = "windows"))]
-async fn process_agent_stream(
-    mut body: hyper::body::Incoming,
+async fn process_agent_stream<Fut>(
+    body: hyper::body::Incoming,
     agent_label: String,
-) -> anyhow::Result<AgentStreamOutcome> {
+    sigint_rx: &mut tokio::sync::mpsc::UnboundedReceiver<()>,
+    cancel: impl FnMut(String, String) -> Fut,
+) -> anyhow::Result<AgentStreamOutcome>
+where
+    Fut: std::future::Future<Output = anyhow::Result<()>>,
+{
+    process_agent_stream_body(body, agent_label, sigint_rx, cancel).await
+}
+
+#[cfg(not(target_os = "windows"))]
+async fn process_agent_stream_body<B, Fut>(
+    body: B,
+    agent_label: String,
+    sigint_rx: &mut tokio::sync::mpsc::UnboundedReceiver<()>,
+    mut cancel: impl FnMut(String, String) -> Fut,
+) -> anyhow::Result<AgentStreamOutcome>
+where
+    B: hyper::body::Body<Data = hyper::body::Bytes>,
+    B::Error: std::fmt::Display,
+    Fut: std::future::Future<Output = anyhow::Result<()>>,
+{
     use http_body_util::BodyExt;
+    let mut body = std::pin::pin!(body);
 
     let mut buffer = Vec::new();
     let mut exit_code = None;
     let mut scopes_used = Vec::new();
     let mut fs_diff = None;
     let mut fs_strategy = None;
+    let mut active_span_id: Option<String> = None;
 
-    while let Some(frame) = body.frame().await {
+    loop {
+        while sigint_rx.try_recv().is_ok() {
+            if let Some(span_id) = active_span_id.as_deref() {
+                let cancel_span_id: String = span_id.to_owned();
+                if let Err(err) = cancel(cancel_span_id, "INT".to_string()).await {
+                    eprintln!("substrate: warn: failed to interrupt world command: {err:#}");
+                }
+            }
+        }
+
+        let frame = match tokio::time::timeout(
+            std::time::Duration::from_millis(100),
+            body.as_mut().frame(),
+        )
+        .await
+        {
+            Ok(frame) => frame,
+            Err(_) => continue,
+        };
+
+        let Some(frame) = frame else {
+            break;
+        };
         let frame = frame.map_err(|e| anyhow::anyhow!("stream frame error: {}", e))?;
         if let Some(data) = frame.data_ref() {
             buffer.extend_from_slice(data);
             consume_agent_stream_buffer_with_meta(
                 &agent_label,
                 &mut buffer,
+                &mut active_span_id,
                 &mut exit_code,
                 &mut scopes_used,
                 &mut fs_diff,
@@ -1392,6 +1482,7 @@ async fn process_agent_stream(
         consume_agent_stream_buffer_with_meta(
             &agent_label,
             &mut buffer,
+            &mut active_span_id,
             &mut exit_code,
             &mut scopes_used,
             &mut fs_diff,
@@ -1422,6 +1513,7 @@ pub(crate) fn consume_agent_stream_buffer(
     consume_agent_stream_buffer_with_meta(
         agent_label,
         buffer,
+        &mut None,
         exit_code,
         scopes_used,
         fs_diff,
@@ -1432,6 +1524,7 @@ pub(crate) fn consume_agent_stream_buffer(
 fn consume_agent_stream_buffer_with_meta(
     agent_label: &str,
     buffer: &mut Vec<u8>,
+    active_span_id: &mut Option<String>,
     exit_code: &mut Option<i32>,
     scopes_used: &mut Vec<String>,
     fs_diff: &mut Option<substrate_common::FsDiff>,
@@ -1457,7 +1550,9 @@ fn consume_agent_stream_buffer_with_meta(
         })?;
 
         match frame {
-            ExecuteStreamFrame::Start { .. } => {}
+            ExecuteStreamFrame::Start { span_id } => {
+                *active_span_id = Some(span_id);
+            }
             ExecuteStreamFrame::Stdout { chunk_b64 } => {
                 let bytes = BASE64
                     .decode(chunk_b64.as_bytes())
@@ -1546,9 +1641,39 @@ pub(super) fn emit_stream_chunk(agent_label: &str, data: &[u8], is_stderr: bool)
 #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
 mod tests {
     use super::{
-        ensure_world_deps_bin_on_path, preserve_world_project_dir_override,
+        current_world_request_profile, ensure_world_deps_bin_on_path,
+        preserve_world_project_dir_override, process_agent_stream_body,
         WORLD_PROJECT_DIR_OVERRIDE_ENV,
     };
+    use agent_api_types::ExecuteStreamFrame;
+    use futures::stream;
+    use http_body_util::StreamBody;
+    use std::convert::Infallible;
+    use std::sync::{Arc, Mutex, OnceLock};
+    use std::time::Duration;
+
+    fn with_env_var<T>(key: &str, value: &str, f: impl FnOnce() -> T) -> T {
+        let _guard = test_env_lock().lock().expect("test env mutex poisoned");
+        let previous = std::env::var(key).ok();
+        std::env::set_var(key, value);
+        let result = f();
+        match previous {
+            Some(previous) => std::env::set_var(key, previous),
+            None => std::env::remove_var(key),
+        }
+        result
+    }
+
+    fn test_env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    fn encode_stream_frame(frame: ExecuteStreamFrame) -> hyper::body::Bytes {
+        let mut payload = serde_json::to_vec(&frame).expect("serialize frame");
+        payload.push(b'\n');
+        hyper::body::Bytes::from(payload)
+    }
 
     #[test]
     fn ensure_world_deps_bin_sets_default_and_prepends_path() {
@@ -1627,5 +1752,98 @@ mod tests {
             Some(value) => std::env::set_var("SUBSTRATE_CAGED", value),
             None => std::env::remove_var("SUBSTRATE_CAGED"),
         }
+    }
+
+    #[test]
+    fn current_world_request_profile_accepts_non_reserved_values() {
+        with_env_var(
+            "SUBSTRATE_WORLD_REQUEST_PROFILE",
+            "wdap-smoke-profile",
+            || {
+                assert_eq!(
+                    current_world_request_profile().as_deref(),
+                    Some("wdap-smoke-profile")
+                );
+            },
+        );
+    }
+
+    #[test]
+    fn current_world_request_profile_rejects_reserved_world_deps_profiles() {
+        for reserved in ["world-deps-provision", "world-deps-probe"] {
+            with_env_var("SUBSTRATE_WORLD_REQUEST_PROFILE", reserved, || {
+                assert_eq!(
+                    current_world_request_profile(),
+                    None,
+                    "reserved internal profile should not be forwarded from env: {reserved}"
+                );
+            });
+        }
+    }
+
+    #[test]
+    fn process_agent_stream_requests_cancel_after_start_frame() {
+        let rt = tokio::runtime::Runtime::new().expect("runtime");
+        rt.block_on(async {
+            let frames = vec![
+                encode_stream_frame(ExecuteStreamFrame::Start {
+                    span_id: "spn_interrupt".to_string(),
+                }),
+                encode_stream_frame(ExecuteStreamFrame::Exit {
+                    exit: 130,
+                    span_id: "spn_interrupt".to_string(),
+                    scopes_used: Vec::new(),
+                    fs_diff: None,
+                }),
+            ];
+
+            let stream = stream::unfold((0usize, frames), |(idx, frames)| async move {
+                match idx {
+                    0 => Some((
+                        Ok::<_, Infallible>(hyper::body::Frame::data(frames[0].clone())),
+                        (1, frames),
+                    )),
+                    1 => {
+                        tokio::time::sleep(Duration::from_millis(250)).await;
+                        Some((
+                            Ok::<_, Infallible>(hyper::body::Frame::data(frames[1].clone())),
+                            (2, frames),
+                        ))
+                    }
+                    _ => None,
+                }
+            });
+            let body = StreamBody::new(stream);
+
+            let (sigint_tx, mut sigint_rx) = tokio::sync::mpsc::unbounded_channel();
+            let cancels = Arc::new(Mutex::new(Vec::<(String, String)>::new()));
+            let cancels_for_cancel = Arc::clone(&cancels);
+
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(30)).await;
+                let _ = sigint_tx.send(());
+            });
+
+            let outcome = process_agent_stream_body(
+                body,
+                "agent".to_string(),
+                &mut sigint_rx,
+                move |span_id, sig| {
+                    let cancels = Arc::clone(&cancels_for_cancel);
+                    async move {
+                        cancels.lock().expect("cancel lock").push((span_id, sig));
+                        Ok(())
+                    }
+                },
+            )
+            .await
+            .expect("process stream");
+
+            assert_eq!(outcome.exit_code, 130);
+            assert_eq!(
+                cancels.lock().expect("cancel lock").as_slice(),
+                &[("spn_interrupt".to_string(), "INT".to_string())]
+            );
+        });
     }
 }

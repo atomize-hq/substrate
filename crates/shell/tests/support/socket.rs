@@ -22,6 +22,9 @@ pub enum SocketResponse {
     /// Responds to `/v1/capabilities` requests with a JSON payload that
     /// advertises socket activation mode.
     Capabilities,
+    /// Responds to `/v1/capabilities` and `/v1/doctor/world` using a
+    /// caller-supplied world doctor payload.
+    CapabilitiesAndDoctorWorld { report: JsonValue },
     /// Responds to `/v1/capabilities`, `/v1/doctor/world`, and `/v1/pending_diff`
     /// with a JSON payload describing the session's pending diff record.
     ///
@@ -187,6 +190,15 @@ impl AgentSocket {
                                     write_capabilities(&mut stream);
                                 } else if first_line.starts_with("GET /v1/doctor/world") {
                                     write_world_doctor_report(&mut stream);
+                                } else {
+                                    let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\n\r\n");
+                                }
+                            }
+                            SocketResponse::CapabilitiesAndDoctorWorld { report } => {
+                                if first_line.starts_with("GET /v1/capabilities") {
+                                    write_capabilities(&mut stream);
+                                } else if first_line.starts_with("GET /v1/doctor/world") {
+                                    write_world_doctor_report_with_body(&mut stream, report);
                                 } else {
                                     let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\n\r\n");
                                 }
@@ -799,6 +811,12 @@ fn write_world_doctor_report(stream: &mut UnixStream) {
         "collected_at_utc": "2026-01-08T00:00:00Z",
         "policy_snapshot_v1_supported": true,
         "policy_resolution_mode": null,
+        "netfilter_status": {
+            "requested": false,
+            "enabled": false,
+            "world_netfilter_enable_present": false,
+            "last_failure_reason": null
+        },
         "landlock": {
             "supported": true,
             "abi": 3,
@@ -814,9 +832,12 @@ fn write_world_doctor_report(stream: &mut UnixStream) {
                 "failure_reason": null
             }
         }
-    })
-    .to_string();
-    write_response(stream, &body);
+    });
+    write_world_doctor_report_with_body(stream, &body);
+}
+
+fn write_world_doctor_report_with_body(stream: &mut UnixStream, body: &JsonValue) {
+    write_response(stream, &body.to_string());
 }
 
 fn write_response(stream: &mut UnixStream, body: &str) {

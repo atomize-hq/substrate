@@ -7,9 +7,10 @@ use agent_api_types::PendingDiffBucketV1;
 #[cfg(target_os = "linux")]
 use agent_api_types::WorldFsEntryTypeV1;
 use agent_api_types::{
-    Budget, ExecuteRequest, ExecuteResponse, PendingDiffClearRequestV1, PendingDiffClearResponseV1,
-    PendingDiffReconcileRequestV1, PendingDiffReconcileResponseV1, PendingDiffRecordV1,
-    PendingDiffRequestV1, WorldFsReadRequestV1, WorldFsReadResponseV1,
+    Budget, ExecuteCancelRequestV1, ExecuteCancelResponseV1, ExecuteRequest, ExecuteResponse,
+    PendingDiffClearRequestV1, PendingDiffClearResponseV1, PendingDiffReconcileRequestV1,
+    PendingDiffReconcileResponseV1, PendingDiffRecordV1, PendingDiffRequestV1,
+    WorldFsReadRequestV1, WorldFsReadResponseV1, WorldNetworkRoutingV1,
 };
 #[cfg(target_os = "linux")]
 use anyhow::Context;
@@ -50,6 +51,7 @@ use world::stream::{install_stream_sink, StreamKind, StreamSink};
 use world_api::{WorldBackend, WorldHandle, WorldSpec};
 
 use crate::enforcement_plan;
+use crate::request_routing::resolve_snapshot_routing;
 
 pub(crate) const ANCHOR_MODE_ENV: &str = "SUBSTRATE_ANCHOR_MODE";
 pub(crate) const ANCHOR_PATH_ENV: &str = "SUBSTRATE_ANCHOR_PATH";
@@ -68,6 +70,17 @@ pub(crate) const LANDLOCK_HELPER_SRC_ENV: &str = "SUBSTRATE_LANDLOCK_HELPER_SRC"
 
 const CARGO_BIN_EXE_WORLD_AGENT_ENV: &str = "CARGO_BIN_EXE_world-agent";
 const CARGO_BIN_EXE_WORLD_AGENT_ALT_ENV: &str = "CARGO_BIN_EXE_world_agent";
+
+const NETFILTER_ENABLE_REQUIRED_TEXT: &str =
+    "WORLD_NETFILTER_ENABLE must be set to 1/true/yes before requested network isolation can install nftables rules";
+const NETFILTER_NFT_FAILURE_TEXT: &str = "nft command failed";
+const NETFILTER_RESOLUTION_FAILURE_TEXT: &str = "failed to resolve allowed domain `";
+const NETFILTER_NO_ADDRESS_TEXT: &str = "resolved to no addresses";
+const NETFILTER_CGROUP_ATTACH_TEXT: &str = ": cgroup attach failed:";
+const NETFILTER_CGROUP_HELPER_REFUSAL_TEXT: &str =
+    "refused isolated execution before command start";
+const NETFILTER_CGROUP_FORCE_DIRECT_TEXT: &str =
+    "SUBSTRATE_WORLD_EXEC_FORCE_DIRECT is unsupported when isolate_network=true because cgroup attach is not guaranteed";
 
 fn resolve_landlock_helper_src_from_exe(exe: &std::path::Path) -> Option<std::path::PathBuf> {
     let is_world_agent_exe = exe.file_name().is_some_and(|name| {
@@ -159,6 +172,8 @@ pub struct WorldAgentService {
     worlds: Arc<RwLock<HashMap<String, WorldHandle>>>,
     budgets: Arc<RwLock<HashMap<String, AgentBudgetTracker>>>,
     last_policy_resolution_mode: Arc<AtomicU8>,
+    last_netfilter_requested: Arc<AtomicU8>,
+    last_netfilter_failure_reason: Arc<RwLock<Option<String>>>,
 }
 
 #[cfg(target_os = "linux")]
@@ -224,6 +239,8 @@ impl WorldAgentService {
                 worlds: Arc::new(RwLock::new(HashMap::new())),
                 budgets: Arc::new(RwLock::new(HashMap::new())),
                 last_policy_resolution_mode: Arc::new(AtomicU8::new(0)),
+                last_netfilter_requested: Arc::new(AtomicU8::new(0)),
+                last_netfilter_failure_reason: Arc::new(RwLock::new(None)),
             })
         }
 
@@ -236,6 +253,8 @@ impl WorldAgentService {
                 worlds: Arc::new(RwLock::new(HashMap::new())),
                 budgets: Arc::new(RwLock::new(HashMap::new())),
                 last_policy_resolution_mode: Arc::new(AtomicU8::new(0)),
+                last_netfilter_requested: Arc::new(AtomicU8::new(0)),
+                last_netfilter_failure_reason: Arc::new(RwLock::new(None)),
             })
         }
     }
@@ -252,6 +271,16 @@ impl WorldAgentService {
         let world = self.linux_backend.ensure_session(spec)?;
         let merged = self.linux_backend.ensure_overlay_root(&world)?;
         Ok((world, merged))
+    }
+
+    #[cfg(target_os = "linux")]
+    pub fn refresh_session_network_filter(&self, world: &WorldHandle) -> Result<()> {
+        self.linux_backend.refresh_network_filter(world)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub fn session_cgroup_path(&self, world: &WorldHandle) -> Result<PathBuf> {
+        self.linux_backend.cgroup_path(world)
     }
 
     #[cfg(any(target_os = "linux", test))]
@@ -420,13 +449,17 @@ impl WorldAgentService {
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
         let env_ref = req.env.as_ref();
         let project_dir = resolve_project_dir(env_ref, Some(&cwd))?;
-        let (policy_resolution_mode, policy_inputs) =
-            resolve_policy_inputs(&req, &cwd, &project_dir)?;
-        self.set_last_policy_resolution_mode(policy_resolution_mode);
+        let (policy_resolution_mode, policy_inputs) = resolve_policy_inputs(
+            &req.policy_snapshot,
+            req.world_network.as_ref(),
+            &cwd,
+            &project_dir,
+        )?;
 
         let PolicyInputs {
             fs_mode,
             isolation_full,
+            isolate_network,
             allowed_domains,
             write_allowlist_prefixes,
             landlock_discover_paths,
@@ -434,6 +467,7 @@ impl WorldAgentService {
             landlock_write_paths,
             enforcement_plan_b64,
         } = policy_inputs;
+        self.record_doctor_request_context(policy_resolution_mode, isolate_network);
 
         let host_visible = !isolation_full;
         let empty_env: HashMap<String, String> = HashMap::new();
@@ -454,23 +488,19 @@ impl WorldAgentService {
         }
 
         // Create world spec from request
-        let spec = WorldSpec {
-            reuse_session: true,
-            isolate_network: true,
-            limits: world_api::ResourceLimits::default(),
-            enable_preload: false,
-            allowed_domains,
+        let spec = build_world_spec(
             project_dir,
-            // For agent non-PTY path, prefer consistent fs_diff collection
-            // to enable immediate span enrichment in the shell.
             always_isolate,
             fs_mode,
-        };
+            isolate_network,
+            allowed_domains,
+        );
 
         // Ensure world exists
         let world = match self.backend.ensure_session(&spec) {
             Ok(w) => w,
             Err(e) => {
+                self.record_last_netfilter_failure_for_error(isolate_network, &e);
                 tracing::error!(error = %e, error_debug = ?e, "ensure_session failed");
                 return Err(anyhow::anyhow!("Failed to ensure session world"));
             }
@@ -504,7 +534,7 @@ impl WorldAgentService {
             );
         }
         let exec_req = world_api::ExecRequest {
-            cmd: req.cmd,
+            cmd: wrap_command_for_profile(req.profile.as_deref(), &cwd, &req.cmd),
             cwd,
             env: env_map,
             pty: req.pty,
@@ -515,10 +545,13 @@ impl WorldAgentService {
         let result = match self.backend.exec(&world, exec_req) {
             Ok(r) => r,
             Err(e) => {
+                self.record_last_netfilter_failure_for_error(isolate_network, &e);
                 tracing::error!(error = %e, "exec failed");
                 return Err(anyhow::anyhow!("Command execution failed"));
             }
         };
+
+        self.clear_last_netfilter_failure_on_success(isolate_network);
 
         #[cfg(target_os = "linux")]
         {
@@ -561,28 +594,22 @@ impl WorldAgentService {
             let env_ref = req.env.as_ref();
             let project_dir = resolve_project_dir(env_ref, Some(&cwd))?;
 
-            let snapshot = req
-                .policy_snapshot
-                .canonicalize()
-                .map_err(BadRequestError::new)?;
-            let fs_mode = if snapshot.world_fs.write.enabled {
-                WorldFsMode::Writable
-            } else {
-                WorldFsMode::ReadOnly
-            };
+            let snapshot = req.policy_snapshot.clone();
+            let (_, policy_inputs) =
+                resolve_policy_inputs(&snapshot, req.world_network.as_ref(), &cwd, &project_dir)?;
+            let fs_mode = policy_inputs.fs_mode;
+            let isolate_network = policy_inputs.isolate_network;
+            let allowed_domains = policy_inputs.allowed_domains.clone();
 
             let always_isolate = should_always_isolate_for_profile(req.profile.as_deref());
 
-            let spec = WorldSpec {
-                reuse_session: true,
-                isolate_network: true,
-                limits: world_api::ResourceLimits::default(),
-                enable_preload: false,
-                allowed_domains: substrate_broker::allowed_domains(),
+            let spec = build_world_spec(
                 project_dir,
                 always_isolate,
                 fs_mode,
-            };
+                isolate_network,
+                allowed_domains,
+            );
 
             let world = match self.backend.ensure_session(&spec) {
                 Ok(w) => w,
@@ -674,28 +701,22 @@ impl WorldAgentService {
             let env_ref = req.env.as_ref();
             let project_dir = resolve_project_dir(env_ref, Some(&cwd))?;
 
-            let snapshot = req
-                .policy_snapshot
-                .canonicalize()
-                .map_err(BadRequestError::new)?;
-            let fs_mode = if snapshot.world_fs.write.enabled {
-                WorldFsMode::Writable
-            } else {
-                WorldFsMode::ReadOnly
-            };
+            let snapshot = req.policy_snapshot.clone();
+            let (_, policy_inputs) =
+                resolve_policy_inputs(&snapshot, req.world_network.as_ref(), &cwd, &project_dir)?;
+            let fs_mode = policy_inputs.fs_mode;
+            let isolate_network = policy_inputs.isolate_network;
+            let allowed_domains = policy_inputs.allowed_domains.clone();
 
             let always_isolate = should_always_isolate_for_profile(req.profile.as_deref());
 
-            let spec = WorldSpec {
-                reuse_session: true,
-                isolate_network: true,
-                limits: world_api::ResourceLimits::default(),
-                enable_preload: false,
-                allowed_domains: substrate_broker::allowed_domains(),
+            let spec = build_world_spec(
                 project_dir,
                 always_isolate,
                 fs_mode,
-            };
+                isolate_network,
+                allowed_domains,
+            );
 
             let world = match self.backend.ensure_session(&spec) {
                 Ok(w) => w,
@@ -758,28 +779,22 @@ impl WorldAgentService {
             let env_ref = req.env.as_ref();
             let project_dir = resolve_project_dir(env_ref, Some(&cwd))?;
 
-            let snapshot = req
-                .policy_snapshot
-                .canonicalize()
-                .map_err(BadRequestError::new)?;
-            let fs_mode = if snapshot.world_fs.write.enabled {
-                WorldFsMode::Writable
-            } else {
-                WorldFsMode::ReadOnly
-            };
+            let snapshot = req.policy_snapshot.clone();
+            let (_, policy_inputs) =
+                resolve_policy_inputs(&snapshot, req.world_network.as_ref(), &cwd, &project_dir)?;
+            let fs_mode = policy_inputs.fs_mode;
+            let isolate_network = policy_inputs.isolate_network;
+            let allowed_domains = policy_inputs.allowed_domains.clone();
 
             let always_isolate = should_always_isolate_for_profile(req.profile.as_deref());
 
-            let spec = WorldSpec {
-                reuse_session: true,
-                isolate_network: true,
-                limits: world_api::ResourceLimits::default(),
-                enable_preload: false,
-                allowed_domains: substrate_broker::allowed_domains(),
+            let spec = build_world_spec(
                 project_dir,
                 always_isolate,
                 fs_mode,
-            };
+                isolate_network,
+                allowed_domains,
+            );
 
             let world = match self.backend.ensure_session(&spec) {
                 Ok(w) => w,
@@ -904,28 +919,22 @@ impl WorldAgentService {
             let env_ref = req.env.as_ref();
             let project_dir = resolve_project_dir(env_ref, Some(&cwd))?;
 
-            let snapshot = req
-                .policy_snapshot
-                .canonicalize()
-                .map_err(BadRequestError::new)?;
-            let fs_mode = if snapshot.world_fs.write.enabled {
-                WorldFsMode::Writable
-            } else {
-                WorldFsMode::ReadOnly
-            };
+            let snapshot = req.policy_snapshot.clone();
+            let (_, policy_inputs) =
+                resolve_policy_inputs(&snapshot, req.world_network.as_ref(), &cwd, &project_dir)?;
+            let fs_mode = policy_inputs.fs_mode;
+            let isolate_network = policy_inputs.isolate_network;
+            let allowed_domains = policy_inputs.allowed_domains.clone();
 
             let always_isolate = should_always_isolate_for_profile(req.profile.as_deref());
 
-            let spec = WorldSpec {
-                reuse_session: true,
-                isolate_network: true,
-                limits: world_api::ResourceLimits::default(),
-                enable_preload: false,
-                allowed_domains: substrate_broker::allowed_domains(),
+            let spec = build_world_spec(
                 project_dir,
                 always_isolate,
                 fs_mode,
-            };
+                isolate_network,
+                allowed_domains,
+            );
 
             let world = match self.backend.ensure_session(&spec) {
                 Ok(w) => w,
@@ -1032,13 +1041,17 @@ impl WorldAgentService {
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
         let env_ref = req.env.as_ref();
         let project_dir = resolve_project_dir(env_ref, Some(&cwd))?;
-        let (policy_resolution_mode, policy_inputs) =
-            resolve_policy_inputs(&req, &cwd, &project_dir)?;
-        self.set_last_policy_resolution_mode(policy_resolution_mode);
+        let (policy_resolution_mode, policy_inputs) = resolve_policy_inputs(
+            &req.policy_snapshot,
+            req.world_network.as_ref(),
+            &cwd,
+            &project_dir,
+        )?;
 
         let PolicyInputs {
             fs_mode,
             isolation_full,
+            isolate_network,
             allowed_domains,
             write_allowlist_prefixes,
             landlock_discover_paths,
@@ -1046,6 +1059,7 @@ impl WorldAgentService {
             landlock_write_paths,
             enforcement_plan_b64,
         } = policy_inputs;
+        self.record_doctor_request_context(policy_resolution_mode, isolate_network);
         let always_isolate = should_always_isolate(&req);
 
         let host_visible = !isolation_full;
@@ -1086,20 +1100,18 @@ impl WorldAgentService {
             return Ok(response);
         }
 
-        let spec = WorldSpec {
-            reuse_session: true,
-            isolate_network: true,
-            limits: world_api::ResourceLimits::default(),
-            enable_preload: false,
-            allowed_domains,
+        let spec = build_world_spec(
             project_dir,
             always_isolate,
             fs_mode,
-        };
+            isolate_network,
+            allowed_domains,
+        );
 
         let world = match self.backend.ensure_session(&spec) {
             Ok(w) => w,
             Err(e) => {
+                self.record_last_netfilter_failure_for_error(isolate_network, &e);
                 tracing::error!(error = %e, error_debug = ?e, "ensure_session failed");
                 anyhow::bail!("Failed to ensure session world");
             }
@@ -1142,6 +1154,7 @@ impl WorldAgentService {
 
         let span_id = format!("spn_{}", uuid::Uuid::now_v7());
         exec_req.span_id = Some(span_id.clone());
+        world::exec::note_pending_exec(&span_id);
 
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<ExecuteStreamFrame>();
         let _ = tx.send(ExecuteStreamFrame::Start {
@@ -1152,6 +1165,7 @@ impl WorldAgentService {
         #[cfg(target_os = "linux")]
         let service = self.clone();
         let agent_id = req.agent_id.clone();
+        let span_id_for_cleanup = span_id.clone();
         task::spawn_blocking(move || {
             let sink = Arc::new(StreamingSink::new(tx.clone()));
             let guard = install_stream_sink(sink);
@@ -1160,6 +1174,7 @@ impl WorldAgentService {
 
             match result {
                 Ok(exec_result) => {
+                    service.clear_last_netfilter_failure_on_success(isolate_network);
                     #[cfg(target_os = "linux")]
                     if let Some(ref diff) = exec_result.fs_diff {
                         let snapshot = WorldAgentService::normalize_pending_diff_bucket(diff);
@@ -1198,12 +1213,14 @@ impl WorldAgentService {
                     let _ = tx.send(frame);
                 }
                 Err(e) => {
+                    service.record_last_netfilter_failure_for_error(isolate_network, &e);
                     tracing::error!(error = %e, agent = agent_id, "exec failed");
                     let _ = tx.send(ExecuteStreamFrame::Error {
                         message: e.to_string(),
                     });
                 }
             }
+            world::exec::clear_registered_exec(&span_id_for_cleanup);
         });
 
         let stream = UnboundedReceiverStream::new(rx).map(|frame| {
@@ -1225,6 +1242,41 @@ impl WorldAgentService {
     #[cfg(not(target_os = "linux"))]
     pub async fn execute_stream(&self, _req: ExecuteRequest) -> Result<Response> {
         anyhow::bail!("World agent streaming is only supported on Linux");
+    }
+
+    #[cfg(target_os = "linux")]
+    pub async fn execute_cancel(
+        &self,
+        req: ExecuteCancelRequestV1,
+    ) -> Result<ExecuteCancelResponseV1> {
+        if req.span_id.trim().is_empty() {
+            return Err(BadRequestError::new("span_id is required".to_string()).into());
+        }
+
+        let mut delivered = false;
+        for _ in 0..80 {
+            delivered =
+                world::exec::signal_registered_exec(&req.span_id, &req.sig).with_context(|| {
+                    format!("failed to cancel streamed execute span {}", req.span_id)
+                })?;
+            if delivered {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        }
+
+        Ok(ExecuteCancelResponseV1 {
+            schema_version: 1,
+            delivered,
+        })
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    pub async fn execute_cancel(
+        &self,
+        _req: ExecuteCancelRequestV1,
+    ) -> Result<ExecuteCancelResponseV1> {
+        anyhow::bail!("World agent execute cancellation is only supported on Linux");
     }
 
     /// Get trace information for a span.
@@ -1357,6 +1409,38 @@ fn should_always_isolate_for_profile(profile: Option<&str>) -> bool {
     !matches!(profile, Some("world-deps-provision" | "world-deps-probe"))
 }
 
+fn wrap_command_for_profile(profile: Option<&str>, cwd: &Path, cmd: &str) -> String {
+    match profile {
+        Some("world-deps-provision") => build_systemd_provision_wrapper(cwd, cmd),
+        _ => cmd.to_string(),
+    }
+}
+
+fn build_systemd_provision_wrapper(cwd: &Path, cmd: &str) -> String {
+    let working_directory = cwd.display().to_string();
+    [
+        "systemd-run".to_string(),
+        "--quiet".to_string(),
+        "--wait".to_string(),
+        "--pipe".to_string(),
+        "--collect".to_string(),
+        "--service-type=exec".to_string(),
+        format!("--working-directory={}", sh_quote(&working_directory)),
+        format!(
+            "--description={}",
+            sh_quote("Substrate world-deps provisioning")
+        ),
+        "/bin/sh".to_string(),
+        "-lc".to_string(),
+        sh_quote(cmd),
+    ]
+    .join(" ")
+}
+
+fn sh_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\"'\"'"))
+}
+
 #[derive(Debug, thiserror::Error)]
 #[error("{message}")]
 pub(crate) struct BadRequestError {
@@ -1379,6 +1463,7 @@ impl BadRequestError {
 struct PolicyInputs {
     fs_mode: WorldFsMode,
     isolation_full: bool,
+    isolate_network: bool,
     allowed_domains: Vec<String>,
     write_allowlist_prefixes: Vec<String>,
     landlock_discover_paths: Vec<String>,
@@ -1388,23 +1473,19 @@ struct PolicyInputs {
 }
 
 fn resolve_policy_inputs(
-    req: &ExecuteRequest,
+    policy_snapshot: &agent_api_types::PolicySnapshotV3,
+    world_network: Option<&WorldNetworkRoutingV1>,
     _cwd: &Path,
     project_dir: &Path,
 ) -> Result<(agent_api_types::PolicyResolutionModeV1, PolicyInputs)> {
     use agent_api_types::PolicyResolutionModeV1;
 
-    let snapshot = req
-        .policy_snapshot
-        .canonicalize()
-        .map_err(BadRequestError::new)?;
+    let resolved =
+        resolve_snapshot_routing(policy_snapshot, world_network).map_err(BadRequestError::new)?;
+    let snapshot = resolved.snapshot;
 
-    let isolation_full = !snapshot.world_fs.host_visible;
-    let fs_mode = if snapshot.world_fs.write.enabled {
-        WorldFsMode::Writable
-    } else {
-        WorldFsMode::ReadOnly
-    };
+    let isolation_full = resolved.isolation_full;
+    let fs_mode = resolved.fs_mode;
 
     let enforcement_plan_b64 = enforcement_plan::maybe_encode_from_snapshot(&snapshot)
         .map_err(|err| BadRequestError::new(err.to_string()))?;
@@ -1444,7 +1525,8 @@ fn resolve_policy_inputs(
         PolicyInputs {
             fs_mode,
             isolation_full,
-            allowed_domains: substrate_broker::allowed_domains(),
+            isolate_network: resolved.world_network.isolate_network,
+            allowed_domains: resolved.world_network.allowed_domains,
             write_allowlist_prefixes,
             landlock_discover_paths,
             landlock_read_paths,
@@ -1452,6 +1534,25 @@ fn resolve_policy_inputs(
             enforcement_plan_b64,
         },
     ))
+}
+
+fn build_world_spec(
+    project_dir: PathBuf,
+    always_isolate: bool,
+    fs_mode: WorldFsMode,
+    isolate_network: bool,
+    allowed_domains: Vec<String>,
+) -> WorldSpec {
+    WorldSpec {
+        reuse_session: true,
+        isolate_network,
+        limits: world_api::ResourceLimits::default(),
+        enable_preload: false,
+        allowed_domains,
+        project_dir,
+        always_isolate,
+        fs_mode,
+    }
 }
 
 pub(crate) fn apply_full_isolation_helper_env(
@@ -1509,6 +1610,17 @@ impl WorldAgentService {
         false
     }
 
+    pub(crate) fn last_netfilter_failure_reason(&self) -> Option<String> {
+        self.last_netfilter_failure_reason
+            .read()
+            .expect("last netfilter failure reason lock poisoned")
+            .clone()
+    }
+
+    pub(crate) fn last_netfilter_requested(&self) -> bool {
+        self.last_netfilter_requested.load(Ordering::Relaxed) == 1
+    }
+
     pub(crate) fn last_policy_resolution_mode(
         &self,
     ) -> Option<agent_api_types::PolicyResolutionModeV1> {
@@ -1529,6 +1641,63 @@ impl WorldAgentService {
         };
         self.last_policy_resolution_mode
             .store(encoded, Ordering::Relaxed);
+    }
+
+    pub(crate) fn set_last_netfilter_requested(&self, requested: bool) {
+        self.last_netfilter_requested
+            .store(u8::from(requested), Ordering::Relaxed);
+    }
+
+    pub(crate) fn set_last_netfilter_failure_reason(&self, reason: Option<String>) {
+        *self
+            .last_netfilter_failure_reason
+            .write()
+            .expect("last netfilter failure reason lock poisoned") = reason;
+    }
+
+    pub(crate) fn record_doctor_request_context(
+        &self,
+        mode: agent_api_types::PolicyResolutionModeV1,
+        requested: bool,
+    ) {
+        self.set_last_policy_resolution_mode(mode);
+        self.set_last_netfilter_requested(requested);
+    }
+
+    pub(crate) fn clear_last_netfilter_failure_on_success(&self, requested: bool) {
+        if requested {
+            self.set_last_netfilter_failure_reason(None);
+        }
+    }
+
+    pub(crate) fn record_last_netfilter_failure_for_error(
+        &self,
+        requested: bool,
+        error: &anyhow::Error,
+    ) {
+        if !requested {
+            return;
+        }
+        if let Some(reason) = classify_last_netfilter_failure_reason(error) {
+            self.set_last_netfilter_failure_reason(Some(reason));
+        }
+    }
+}
+
+fn classify_last_netfilter_failure_reason(error: &anyhow::Error) -> Option<String> {
+    let message = format!("{error:#}");
+    let is_known_failure = message.contains(NETFILTER_ENABLE_REQUIRED_TEXT)
+        || message.contains(NETFILTER_NFT_FAILURE_TEXT)
+        || message.contains(NETFILTER_RESOLUTION_FAILURE_TEXT)
+        || message.contains(NETFILTER_NO_ADDRESS_TEXT)
+        || message.contains(NETFILTER_CGROUP_ATTACH_TEXT)
+        || message.contains(NETFILTER_CGROUP_HELPER_REFUSAL_TEXT)
+        || message.contains(NETFILTER_CGROUP_FORCE_DIRECT_TEXT);
+
+    if is_known_failure {
+        Some(message)
+    } else {
+        None
     }
 }
 
@@ -1767,6 +1936,35 @@ mod tests {
         assert!(fd.deletes.is_empty());
     }
 
+    #[test]
+    fn world_deps_provision_profile_wraps_command_in_transient_systemd_unit() {
+        let cmd = wrap_command_for_profile(
+            Some("world-deps-provision"),
+            Path::new("/tmp/substrate world"),
+            "echo 'hello'",
+        );
+
+        assert!(cmd.starts_with("systemd-run "));
+        assert!(cmd.contains("--wait"));
+        assert!(cmd.contains("--pipe"));
+        assert!(cmd.contains("--collect"));
+        assert!(cmd.contains("--working-directory='/tmp/substrate world'"));
+        assert!(cmd.contains("/bin/sh -lc 'echo '\"'\"'hello'\"'\"''"));
+    }
+
+    #[test]
+    fn non_provision_profiles_do_not_wrap_command() {
+        let cmd = wrap_command_for_profile(
+            Some("world-deps-probe"),
+            Path::new("/tmp/substrate world"),
+            "dpkg-query -W",
+        );
+        assert_eq!(cmd, "dpkg-query -W");
+
+        let cmd = wrap_command_for_profile(None, Path::new("/tmp"), "echo ok");
+        assert_eq!(cmd, "echo ok");
+    }
+
     #[cfg(target_os = "linux")]
     #[test]
     fn test_resolve_helper_src_prefers_sibling_world_agent_over_test_harness() {
@@ -1790,6 +1988,93 @@ mod tests {
     async fn test_service_creation() {
         let service = WorldAgentService::new().unwrap();
         assert_eq!(service.worlds.read().unwrap().len(), 0);
+        assert!(!service.last_netfilter_requested());
+        assert!(service.last_netfilter_failure_reason().is_none());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn record_doctor_request_context_updates_requested_state_for_non_pty_requests() {
+        let service = WorldAgentService::new().expect("service");
+
+        service.record_doctor_request_context(
+            agent_api_types::PolicyResolutionModeV1::SnapshotV3,
+            true,
+        );
+
+        assert_eq!(
+            service.last_policy_resolution_mode(),
+            Some(agent_api_types::PolicyResolutionModeV1::SnapshotV3)
+        );
+        assert!(service.last_netfilter_requested());
+
+        service.record_doctor_request_context(
+            agent_api_types::PolicyResolutionModeV1::LegacyLocal,
+            false,
+        );
+
+        assert_eq!(
+            service.last_policy_resolution_mode(),
+            Some(agent_api_types::PolicyResolutionModeV1::LegacyLocal)
+        );
+        assert!(!service.last_netfilter_requested());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn record_last_netfilter_failure_for_error_tracks_only_published_failure_classes() {
+        let service = WorldAgentService::new().expect("service");
+        let known_errors = [
+            anyhow::anyhow!(NETFILTER_ENABLE_REQUIRED_TEXT),
+            anyhow::anyhow!("nft command failed: permission denied"),
+            anyhow::anyhow!("failed to resolve allowed domain `example.com`: dns lookup failed"),
+            anyhow::anyhow!("allowed domain `example.com` resolved to no addresses"),
+            anyhow::anyhow!(
+                "project bind mount helper refused isolated execution before command start: substrate: error: project_bind_mount: cgroup attach failed: /sys/fs/cgroup/substrate/world/cgroup.procs"
+            ),
+        ];
+
+        for err in &known_errors {
+            service.set_last_netfilter_failure_reason(None);
+            service.record_last_netfilter_failure_for_error(true, err);
+            assert_eq!(
+                service.last_netfilter_failure_reason(),
+                Some(format!("{err:#}"))
+            );
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn record_last_netfilter_failure_for_error_ignores_unrelated_or_unrequested_errors() {
+        let service = WorldAgentService::new().expect("service");
+        service.record_last_netfilter_failure_for_error(
+            true,
+            &anyhow::anyhow!("plain command failed"),
+        );
+        assert!(service.last_netfilter_failure_reason().is_none());
+
+        service.record_last_netfilter_failure_for_error(
+            false,
+            &anyhow::anyhow!(NETFILTER_ENABLE_REQUIRED_TEXT),
+        );
+        assert!(service.last_netfilter_failure_reason().is_none());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn clear_last_netfilter_failure_on_success_only_resets_isolated_runs() {
+        let service = WorldAgentService::new().expect("service");
+        service.set_last_netfilter_failure_reason(Some("nft command failed: denied".to_string()));
+
+        service.clear_last_netfilter_failure_on_success(false);
+        assert_eq!(
+            service.last_netfilter_failure_reason(),
+            Some("nft command failed: denied".to_string())
+        );
+
+        service.clear_last_netfilter_failure_on_success(true);
+        assert!(service.last_netfilter_failure_reason().is_none());
     }
 
     #[test]

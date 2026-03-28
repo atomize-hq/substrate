@@ -20,6 +20,7 @@ pub struct PersistentStartSessionRecord {
     pub cwd: String,
     pub env: HashMap<String, String>,
     pub policy_snapshot: JsonValue,
+    pub world_network: JsonValue,
     pub cols: u16,
     pub rows: u16,
 }
@@ -56,6 +57,8 @@ pub struct ReplWorldAgentRecords {
 pub enum StreamBehavior {
     /// Accept websocket, but close immediately without sending `ready`.
     CloseBeforeReady,
+    /// Send a fatal protocol error before `ready`, then close.
+    FatalBeforeReady,
     /// Behave normally: respond to `start_session`, then accept `exec`.
     Normal,
 }
@@ -517,6 +520,18 @@ impl ReplWorldAgentStub {
                         let _ = sink.send(Message::Close(None)).await;
                         continue;
                     }
+                    if behavior == StreamBehavior::FatalBeforeReady {
+                        let err = serde_json::json!({
+                            "type": "error",
+                            "code": "simulated_start_failure",
+                            "message": "simulated persistent start failure",
+                            "fatal": true,
+                        })
+                        .to_string();
+                        let _ = sink.send(Message::Text(err)).await;
+                        let _ = sink.send(Message::Close(None)).await;
+                        continue;
+                    }
 
                     // Persistent session protocol v1.
                     let cwd = first_json
@@ -562,6 +577,10 @@ impl ReplWorldAgentStub {
                         .get("policy_snapshot")
                         .cloned()
                         .unwrap_or(JsonValue::Null);
+                    let world_network = first_json
+                        .get("world_network")
+                        .cloned()
+                        .unwrap_or(JsonValue::Null);
                     let cols = first_json.get("cols").and_then(|v| v.as_u64()).unwrap_or(80) as u16;
                     let rows = first_json.get("rows").and_then(|v| v.as_u64()).unwrap_or(24) as u16;
 
@@ -570,6 +589,7 @@ impl ReplWorldAgentStub {
                             cwd: cwd.clone(),
                             env,
                             policy_snapshot,
+                            world_network,
                             cols,
                             rows,
                         });
@@ -774,7 +794,7 @@ impl ReplWorldAgentStub {
                             }
                             "signal" => {
                                 let signal = frame
-                                    .get("signal")
+                                    .get("sig")
                                     .and_then(|v| v.as_str())
                                     .unwrap_or("")
                                     .to_string();

@@ -2,9 +2,9 @@
 
 ## Metadata
 - Feature directory: `docs/project_management/packs/draft/world-deps-apt-provisioning/`
-- Reviewed commit: `db921d01d2587fc3270b7a7c4c6b2ed7c51c9077`
+- Reviewed commit: `eed1863c6c2827893ced4177cc01690bfcd53874` (orchestration HEAD before the local WDAP0 follow-up delta)
 - Reviewer: `Codex`
-- Date (UTC): `2026-03-08`
+- Date (UTC): `2026-03-13`
 - Recommendation: `ACCEPT`
 
 ## Evidence: Commands Run (verbatim)
@@ -37,12 +37,11 @@ Not rerun during this remediation pass. Existing pack-derived lift evidence rema
 
 ### Additional review commands (if any)
 
-- `python3 docs/project_management/system/scripts/planning/validate_pws_index.py --feature-dir docs/project_management/packs/draft/world-deps-apt-provisioning` → `0` → PM_PWS_INDEX v2 is valid.
-- `python3 docs/project_management/system/scripts/planning/pre_full_planning_convergence.py --feature-dir docs/project_management/packs/draft/world-deps-apt-provisioning` → `0` → returns `status=pass`.
-- `python3 docs/project_management/system/scripts/planning/validate_spec_manifest.py --feature-dir docs/project_management/packs/draft/world-deps-apt-provisioning` → `0` → required-doc paths resolve.
-- `python3 docs/project_management/system/scripts/planning/validate_slice_specs.py --feature-dir docs/project_management/packs/draft/world-deps-apt-provisioning` → `0` → WDAP0/WDAP1 slice specs satisfy v2 rules.
-- `python3 docs/project_management/system/scripts/planning/validate_slice_inventory_coherence.py --feature-dir docs/project_management/packs/draft/world-deps-apt-provisioning --phase execution_ready` → `0` → accepted slice order matches triage, plan, tasks, slice specs, and checkpoint plan.
-- `python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir docs/project_management/packs/draft/world-deps-apt-provisioning` → `0` → checkpoint plan matches tasks.json.
+- `python3 docs/project_management/system/scripts/planning/validate_tasks_json.py --feature-dir docs/project_management/packs/draft/world-deps-apt-provisioning` → `0` → `tasks.json` remains validator-clean after the WDAP0 follow-up delta.
+- `python3 docs/project_management/system/scripts/planning/validate_slice_specs.py --feature-dir docs/project_management/packs/draft/world-deps-apt-provisioning` → `0` → WDAP0/WDAP1 slice specs satisfy v2 rules after folding the real-guest validation requirement into `AC-WDAP0-07`.
+- `python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir docs/project_management/packs/draft/world-deps-apt-provisioning` → `0` → checkpoint plan still matches `tasks.json`.
+- `cargo clippy --workspace --all-targets -- -D warnings` → `0` → code follow-up remains standards-clean.
+- `make integ-checks` → `0` → full local integration gate remains green after the follow-up delta.
 
 ## Required Inputs Read End-to-End (checklist)
 
@@ -92,12 +91,12 @@ Not rerun during this remediation pass. Existing pack-derived lift evidence rema
   - Manual playbook sections: `manual_testing_playbook.md`
   - Smoke scripts: `smoke/linux-smoke.sh`, `smoke/macos-smoke.sh`, `smoke/windows-smoke.ps1`
   - `tasks.json` integration end_checklist includes smoke: checkpoint and integration tasks reference the required validation artifacts
-- Notes: manual and automated validation artifacts align to the contract and required behavior platforms.
+- Notes: manual and automated validation artifacts align to the contract and required behavior platforms; `manual_testing_playbook.md` now makes the WDAP0 real-APT macOS Lima case concrete by pinning the branch-local binary path and guest-side `dpkg-query` verification flow.
 
 ### 5.1) Cross-platform parity task structure (schema v2/v3/v4)
 - Result: `PASS`
 - Evidence:
-  - `tasks.json` meta: `schema_version=4`, `behavior_platforms_required=["linux","macos","windows"]`, `ci_parity_platforms_required=["linux","macos","windows"]`, `checkpoint_boundaries=["WDAP0","WDAP1"]`
+  - `tasks.json` meta: `schema_version=4`, `behavior_platforms_required=["linux","macos"]`, `ci_parity_platforms_required=["linux","macos","windows"]`, `checkpoint_boundaries=["WDAP0","WDAP1"]`
   - Boundary slices `WDAP0` and `WDAP1` use the required `-integ-core`, `-integ-<platform>`, and final `-integ` model
 - Notes: the task graph matches the schema-v4 checkpoint-boundary integration model.
 
@@ -119,7 +118,7 @@ Not rerun during this remediation pass. Existing pack-derived lift evidence rema
 ### Finding 002 — Slice inventory and checkpoint wiring are converged
 - Status: `VERIFIED`
 - Evidence: `pre-planning/spec_manifest.md`, `pre-planning/ci_checkpoint_plan.md`, `tasks.json`, `slices/WDAP0/WDAP0-spec.md`, `slices/WDAP1/WDAP1-spec.md`
-- Impact: the pack no longer carries orphan slices, placeholder paths, or AC-count violations that would block execution.
+- Impact: the pack no longer carries orphan slices, placeholder paths, or AC-count violations that would block execution, and WDAP0 now requires supported-guest non-dry-run evidence without violating the v2 1..8 AC limit.
 - Fix required (exact): none
 
 ### Finding 003 — Sequencing and referenced ADR drift no longer block the gate
@@ -131,5 +130,5 @@ Not rerun during this remediation pass. Existing pack-derived lift evidence rema
 ## Decision: ACCEPT or FLAG
 
 ### If ACCEPT
-- Summary: the pack is mechanically valid, internally converged, sequencing-aligned, and carries an execution-ready two-slice model consistent with the current planning standards.
-- Next step: `Execution triads may begin.`
+- Summary: the pack remains mechanically valid, internally converged, sequencing-aligned, and consistent with the current planning standards after the WDAP0 follow-up delta. Execution, manual validation, and feature cleanup were completed on `2026-03-28`.
+- Next step: none; treat this pack as fully landed and complete.

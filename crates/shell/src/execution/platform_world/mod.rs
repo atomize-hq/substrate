@@ -8,6 +8,8 @@ pub fn detect() -> Result<PlatformWorldContext> {
 }
 
 #[cfg(not(target_os = "windows"))]
+use crate::execution::policy_snapshot::bootstrap_world_spec;
+#[cfg(not(target_os = "windows"))]
 use crate::execution::settings;
 use anyhow::Result;
 use std::fmt;
@@ -89,17 +91,11 @@ pub fn detect() -> Result<PlatformWorldContext> {
     let backend = Arc::new(MacLimaBackend::new()?);
     let ensure_ready_backend = backend.clone();
     let ensure_ready = Box::new(move || {
-        use world_api::{ResourceLimits, WorldBackend as _, WorldSpec};
-        let spec = WorldSpec {
-            reuse_session: true,
-            isolate_network: true,
-            limits: ResourceLimits::default(),
-            enable_preload: false,
-            allowed_domains: substrate_broker::allowed_domains(),
-            project_dir: settings::world_root_from_env().path,
-            always_isolate: false,
-            fs_mode: substrate_broker::world_fs_mode(),
-        };
+        use world_api::WorldBackend as _;
+        let spec = bootstrap_world_spec(
+            settings::world_root_from_env().path,
+            substrate_broker::world_fs_mode(),
+        );
         ensure_ready_backend.ensure_session(&spec).map(|_| ())
     });
 
@@ -115,21 +111,15 @@ pub fn detect() -> Result<PlatformWorldContext> {
 pub fn detect() -> Result<PlatformWorldContext> {
     // Preserve Linux behavior: local world backend
     use world::LinuxLocalBackend;
-    use world_api::{ResourceLimits, WorldBackend as _, WorldSpec};
+    use world_api::WorldBackend as _;
 
     let backend = Arc::new(LinuxLocalBackend::new());
     let ensure_ready_backend = backend.clone();
     let ensure_ready = Box::new(move || {
-        let spec = WorldSpec {
-            reuse_session: true,
-            isolate_network: true,
-            limits: ResourceLimits::default(),
-            enable_preload: false,
-            allowed_domains: substrate_broker::allowed_domains(),
-            project_dir: settings::world_root_from_env().path,
-            always_isolate: false,
-            fs_mode: substrate_broker::world_fs_mode(),
-        };
+        let spec = bootstrap_world_spec(
+            settings::world_root_from_env().path,
+            substrate_broker::world_fs_mode(),
+        );
         ensure_ready_backend.ensure_session(&spec).map(|_| ())
     });
 

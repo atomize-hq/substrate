@@ -1,9 +1,9 @@
 use crate::execution::socket_activation;
 use agent_api_client::AgentClient;
 use agent_api_types::{
-    ExecuteRequest, WorldDoctorLandlockV1, WorldDoctorReportV1, WorldDoctorWorldFsStrategyKindV1,
-    WorldDoctorWorldFsStrategyProbeResultV1, WorldDoctorWorldFsStrategyProbeV1,
-    WorldDoctorWorldFsStrategyV1, WorldFsMode,
+    ExecuteRequest, WorldDoctorLandlockV1, WorldDoctorNetfilterStatusV1, WorldDoctorReportV1,
+    WorldDoctorWorldFsStrategyKindV1, WorldDoctorWorldFsStrategyProbeResultV1,
+    WorldDoctorWorldFsStrategyProbeV1, WorldDoctorWorldFsStrategyV1, WorldFsMode,
 };
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
@@ -788,8 +788,13 @@ async fn legacy_world_doctor_report_v1_via_execute(
 ) -> anyhow::Result<WorldDoctorReportV1> {
     let landlock = world::landlock::detect_support();
     let cwd_path = std::path::PathBuf::from("/tmp");
-    let policy_snapshot =
-        crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
+    let network_policy =
+        crate::execution::policy_snapshot::resolve_world_network_policy_for_cwd(&cwd_path)?;
+    let world_network =
+        crate::execution::policy_snapshot::request_world_network_routing(&network_policy);
+    let requested = world_network.isolate_network;
+    let world_netfilter_enable_present = world::netfilter::world_netfilter_enable_present();
+    let policy_snapshot = network_policy.snapshot;
 
     let req = ExecuteRequest {
         profile: None,
@@ -800,6 +805,7 @@ async fn legacy_world_doctor_report_v1_via_execute(
         agent_id: "doctor-world-probe".to_string(),
         budget: None,
         policy_snapshot,
+        world_network: Some(world_network),
         world_fs_mode: Some(WorldFsMode::Writable),
     };
 
@@ -856,6 +862,12 @@ async fn legacy_world_doctor_report_v1_via_execute(
         collected_at_utc: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
         policy_snapshot_v1_supported: false,
         policy_resolution_mode: None,
+        netfilter_status: Some(WorldDoctorNetfilterStatusV1 {
+            requested,
+            enabled: requested && world_netfilter_enable_present,
+            world_netfilter_enable_present,
+            last_failure_reason: None,
+        }),
         landlock,
         world_fs_strategy: WorldDoctorWorldFsStrategyV1 {
             primary: WorldDoctorWorldFsStrategyKindV1::Overlay,

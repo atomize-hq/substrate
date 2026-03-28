@@ -57,7 +57,7 @@ pub(crate) use telemetry::{
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub(crate) use world_env::world_transport_to_meta;
 #[cfg(target_os = "linux")]
-fn get_term_size() -> (u16, u16) {
+pub(crate) fn get_term_size() -> (u16, u16) {
     // Try to read the current terminal size; fall back to 80x24
     let fd = std::io::stdout().as_raw_fd();
     let mut ws: libc::winsize = libc::winsize {
@@ -77,7 +77,7 @@ fn get_term_size() -> (u16, u16) {
 }
 
 #[cfg(target_os = "linux")]
-struct RawModeGuard {
+pub(crate) struct RawModeGuard {
     file: std::fs::File,
     orig: Termios,
 }
@@ -114,7 +114,7 @@ impl RawModeGuard {
         Ok(Self { file, orig })
     }
 
-    fn for_stdin_if_tty() -> anyhow::Result<Option<Self>> {
+    pub(crate) fn for_stdin_if_tty() -> anyhow::Result<Option<Self>> {
         if !io::stdin().is_terminal() {
             return Ok(None);
         }

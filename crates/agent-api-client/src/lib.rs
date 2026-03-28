@@ -7,10 +7,10 @@ use std::path::Path;
 use std::sync::Arc;
 
 use agent_api_types::{
-    ApiError, ExecuteRequest, ExecuteResponse, PendingDiffClearRequestV1,
-    PendingDiffClearResponseV1, PendingDiffReconcileRequestV1, PendingDiffReconcileResponseV1,
-    PendingDiffRecordV1, PendingDiffRequestV1, WorldDoctorReportV1, WorldFsReadRequestV1,
-    WorldFsReadResponseV1,
+    ApiError, ExecuteCancelRequestV1, ExecuteCancelResponseV1, ExecuteRequest, ExecuteResponse,
+    PendingDiffClearRequestV1, PendingDiffClearResponseV1, PendingDiffReconcileRequestV1,
+    PendingDiffReconcileResponseV1, PendingDiffRecordV1, PendingDiffRequestV1, WorldDoctorReportV1,
+    WorldFsReadRequestV1, WorldFsReadResponseV1,
 };
 use anyhow::{anyhow, Context, Result};
 use http_body_util::{BodyExt, Full};
@@ -127,6 +127,19 @@ impl AgentClient {
             .to_bytes();
 
         Err(Self::map_http_error(status, &body_bytes))
+    }
+
+    /// Send a signal to a live streamed execute request.
+    pub async fn cancel_execute(
+        &self,
+        request: ExecuteCancelRequestV1,
+    ) -> Result<ExecuteCancelResponseV1> {
+        let response = self
+            .post("/v1/execute/cancel", &request)
+            .await
+            .context("Failed to request streamed execute cancellation")?;
+
+        self.parse_response(response).await
     }
 
     /// Get agent capabilities.

@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::net::IpAddr;
 use substrate_common::agent_events::AgentEvent;
 pub use substrate_common::{FsDiff, WorldFsMode};
 
@@ -149,6 +150,8 @@ pub struct PolicySnapshotWorldFsV3 {
 #[serde(deny_unknown_fields)]
 pub struct PolicySnapshotV3 {
     pub schema_version: u32,
+    #[serde(default)]
+    pub net_allowed: Vec<String>,
     pub world_fs: PolicySnapshotWorldFsV3,
 }
 
@@ -162,6 +165,7 @@ impl PolicySnapshotV3 {
         }
 
         let mut snapshot = self.clone();
+        snapshot.net_allowed = canonicalize_net_allowed(&snapshot.net_allowed);
 
         if snapshot.world_fs.read.is_none() {
             snapshot.world_fs.read = Some(PolicySnapshotWorldFsDimensionV3 {
@@ -196,6 +200,116 @@ impl PolicySnapshotV3 {
         let _ = self.canonicalize()?;
         Ok(())
     }
+}
+
+pub fn canonicalize_net_allowed(entries: &[String]) -> Vec<String> {
+    let mut canonical = Vec::with_capacity(entries.len());
+
+    for raw in entries {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        let mut normalized = trimmed.to_ascii_lowercase();
+        normalized.truncate(normalized.trim_end_matches('.').len());
+        if normalized.is_empty() {
+            continue;
+        }
+
+        if normalized.starts_with('[') && normalized.ends_with(']') {
+            let inner = &normalized[1..normalized.len() - 1];
+            if matches!(inner.parse::<IpAddr>(), Ok(IpAddr::V6(_))) {
+                normalized = inner.to_string();
+            }
+        }
+
+        if normalized == "*" {
+            return vec!["*".to_string()];
+        }
+
+        if !canonical.contains(&normalized) {
+            canonical.push(normalized);
+        }
+    }
+
+    canonical
+}
+
+pub fn validate_net_allowed_for_enforcement(entries: &[String]) -> Result<(), String> {
+    let canonical = canonicalize_net_allowed(entries);
+
+    for entry in &canonical {
+        validate_net_allowed_entry_for_enforcement(entry)?;
+    }
+
+    Ok(())
+}
+
+fn validate_net_allowed_entry_for_enforcement(entry: &str) -> Result<(), String> {
+    if entry == "*" {
+        return Ok(());
+    }
+
+    if !entry.is_ascii() {
+        return Err(
+            "net_allowed entries must be ASCII; use punycode A-labels for IDNs".to_string(),
+        );
+    }
+
+    if entry.contains("://") {
+        return Err("net_allowed entries must not include URL schemes".to_string());
+    }
+    if entry.contains('/') {
+        return Err("net_allowed entries must not include paths".to_string());
+    }
+    if entry.contains('?') {
+        return Err("net_allowed entries must not include query strings".to_string());
+    }
+    if entry.contains('#') {
+        return Err("net_allowed entries must not include URL fragments".to_string());
+    }
+    if entry.contains(['*', '[', ']']) {
+        return Err("net_allowed wildcard forms other than '*' are not supported".to_string());
+    }
+
+    if entry.parse::<IpAddr>().is_ok() {
+        return Ok(());
+    }
+
+    if entry.contains(':') {
+        return Err(
+            "net_allowed entries must be hostnames or IP literals without ports".to_string(),
+        );
+    }
+
+    validate_hostname(entry)
+}
+
+fn validate_hostname(entry: &str) -> Result<(), String> {
+    if entry.starts_with('.') || entry.ends_with('.') {
+        return Err("net_allowed hostnames must not start or end with '.'".to_string());
+    }
+
+    for label in entry.split('.') {
+        if label.is_empty() {
+            return Err("net_allowed hostnames must not contain empty labels".to_string());
+        }
+        if label.starts_with('-') || label.ends_with('-') {
+            return Err("net_allowed hostname labels must not start or end with '-'".to_string());
+        }
+        if !label
+            .chars()
+            .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-')
+        {
+            return Err(
+                "net_allowed hostnames may contain only ASCII letters, digits, '-' and '.'"
+                    .to_string(),
+            );
+        }
+    }
+
+    Ok(())
 }
 
 fn normalize_project_pattern(raw: &str) -> Result<String, String> {
@@ -506,6 +620,13 @@ pub struct Budget {
     pub max_egress_bytes: Option<u64>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WorldNetworkRoutingV1 {
+    pub isolate_network: bool,
+    #[serde(default)]
+    pub allowed_domains: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecuteRequest {
     pub profile: Option<String>,
@@ -516,6 +637,8 @@ pub struct ExecuteRequest {
     pub agent_id: String,
     pub budget: Option<Budget>,
     pub policy_snapshot: PolicySnapshotV3,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_network: Option<WorldNetworkRoutingV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub world_fs_mode: Option<WorldFsMode>,
 }
@@ -531,6 +654,23 @@ pub struct ExecuteResponse {
     pub fs_diff: Option<FsDiff>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ExecuteCancelRequestV1 {
+    pub span_id: String,
+    pub sig: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ExecuteCancelResponseV1 {
+    #[serde(default = "execute_cancel_response_v1_default_schema_version")]
+    pub schema_version: u32,
+    pub delivered: bool,
+}
+
+fn execute_cancel_response_v1_default_schema_version() -> u32 {
+    1
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PendingDiffRequestV1 {
     pub profile: Option<String>,
@@ -538,6 +678,8 @@ pub struct PendingDiffRequestV1 {
     pub env: Option<HashMap<String, String>>,
     pub agent_id: String,
     pub policy_snapshot: PolicySnapshotV3,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_network: Option<WorldNetworkRoutingV1>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -569,6 +711,8 @@ pub struct PendingDiffClearRequestV1 {
     pub env: Option<HashMap<String, String>>,
     pub agent_id: String,
     pub policy_snapshot: PolicySnapshotV3,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_network: Option<WorldNetworkRoutingV1>,
     pub diff_id: String,
 }
 
@@ -579,6 +723,8 @@ pub struct PendingDiffReconcileRequestV1 {
     pub env: Option<HashMap<String, String>>,
     pub agent_id: String,
     pub policy_snapshot: PolicySnapshotV3,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_network: Option<WorldNetworkRoutingV1>,
     pub diff_id: String,
     pub discard_paths: Vec<String>,
 }
@@ -626,6 +772,8 @@ pub struct WorldFsReadRequestV1 {
     pub env: Option<HashMap<String, String>>,
     pub agent_id: String,
     pub policy_snapshot: PolicySnapshotV3,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_network: Option<WorldNetworkRoutingV1>,
     pub path: String,
     #[serde(default)]
     pub include_contents: bool,
@@ -705,8 +853,19 @@ pub struct WorldDoctorReportV1 {
     /// The policy resolution mode most recently used by the world-agent (when known).
     #[serde(default)]
     pub policy_resolution_mode: Option<PolicyResolutionModeV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub netfilter_status: Option<WorldDoctorNetfilterStatusV1>,
     pub landlock: WorldDoctorLandlockV1,
     pub world_fs_strategy: WorldDoctorWorldFsStrategyV1,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WorldDoctorNetfilterStatusV1 {
+    pub requested: bool,
+    pub enabled: bool,
+    pub world_netfilter_enable_present: bool,
+    #[serde(default)]
+    pub last_failure_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -788,6 +947,7 @@ mod tests {
     fn execute_request_world_fs_mode_round_trip() {
         let snapshot = PolicySnapshotV3 {
             schema_version: 3,
+            net_allowed: vec!["Github.COM.".to_string()],
             world_fs: PolicySnapshotWorldFsV3 {
                 host_visible: true,
                 fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: false },
@@ -818,6 +978,10 @@ mod tests {
             agent_id: "tester".into(),
             budget: None,
             policy_snapshot: snapshot,
+            world_network: Some(WorldNetworkRoutingV1 {
+                isolate_network: true,
+                allowed_domains: vec!["github.com".to_string()],
+            }),
             world_fs_mode: Some(WorldFsMode::ReadOnly),
         };
 
@@ -833,12 +997,24 @@ mod tests {
         let back: ExecuteRequest = serde_json::from_str(&json).expect("deserialize request");
         assert_eq!(back.world_fs_mode, Some(WorldFsMode::ReadOnly));
         assert_eq!(back.policy_snapshot.schema_version, 3);
+        assert_eq!(
+            back.policy_snapshot.net_allowed,
+            vec!["Github.COM.".to_string()]
+        );
+        assert_eq!(
+            back.world_network,
+            Some(WorldNetworkRoutingV1 {
+                isolate_network: true,
+                allowed_domains: vec!["github.com".to_string()],
+            })
+        );
     }
 
     #[test]
     fn execute_request_policy_snapshot_round_trip() {
         let snapshot = PolicySnapshotV3 {
             schema_version: 3,
+            net_allowed: vec!["github.com".to_string(), "crates.io".to_string()],
             world_fs: PolicySnapshotWorldFsV3 {
                 host_visible: false,
                 fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: false },
@@ -869,6 +1045,7 @@ mod tests {
             agent_id: "tester".into(),
             budget: None,
             policy_snapshot: snapshot,
+            world_network: None,
             world_fs_mode: None,
         };
 
@@ -889,6 +1066,146 @@ mod tests {
             snapshot.world_fs.read.as_ref().expect("read").allow_list,
             vec!["src".to_string()]
         );
+        assert_eq!(
+            snapshot.net_allowed,
+            vec!["github.com".to_string(), "crates.io".to_string()]
+        );
+    }
+
+    #[test]
+    fn execute_cancel_request_round_trip() {
+        let req = ExecuteCancelRequestV1 {
+            span_id: "spn_cancel".to_string(),
+            sig: "INT".to_string(),
+        };
+
+        let json = serde_json::to_string(&req).expect("serialize cancel request");
+        let back: ExecuteCancelRequestV1 =
+            serde_json::from_str(&json).expect("deserialize cancel request");
+        assert_eq!(back, req);
+    }
+
+    #[test]
+    fn execute_cancel_response_defaults_schema_version() {
+        let response: ExecuteCancelResponseV1 = serde_json::from_value(serde_json::json!({
+            "delivered": true
+        }))
+        .expect("deserialize cancel response");
+
+        assert_eq!(response.schema_version, 1);
+        assert!(response.delivered);
+    }
+
+    #[test]
+    fn policy_snapshot_v3_missing_net_allowed_defaults_to_empty() {
+        let snapshot: PolicySnapshotV3 = serde_json::from_value(serde_json::json!({
+            "schema_version": 3,
+            "world_fs": {
+                "host_visible": true,
+                "fail_closed": { "routing": false },
+                "caged_required": false,
+                "discover": { "allow_list": ["."], "deny_list": [] },
+                "read": { "allow_list": ["."], "deny_list": [] },
+                "write": { "enabled": true, "allow_list": ["."], "deny_list": [] }
+            }
+        }))
+        .expect("deserialize snapshot");
+
+        assert!(snapshot.net_allowed.is_empty());
+    }
+
+    #[test]
+    fn policy_snapshot_v3_net_allowed_canonicalizes_trim_case_trailing_dot_and_dedupe() {
+        let canonical = canonicalize_net_allowed(&[
+            " GitHub.COM. ".to_string(),
+            "github.com".to_string(),
+            "CRATES.IO".to_string(),
+            "".to_string(),
+            "   ".to_string(),
+            "crates.io.".to_string(),
+        ]);
+
+        assert_eq!(
+            canonical,
+            vec!["github.com".to_string(), "crates.io".to_string()]
+        );
+    }
+
+    #[test]
+    fn policy_snapshot_v3_net_allowed_collapses_star_to_singleton() {
+        let canonical = canonicalize_net_allowed(&[
+            "github.com".to_string(),
+            " * ".to_string(),
+            "crates.io".to_string(),
+        ]);
+
+        assert_eq!(canonical, vec!["*".to_string()]);
+    }
+
+    #[test]
+    fn policy_snapshot_v3_net_allowed_canonicalizes_bracketed_ipv6() {
+        let canonical = canonicalize_net_allowed(&[" [2001:DB8::1] ".to_string()]);
+        assert_eq!(canonical, vec!["2001:db8::1".to_string()]);
+    }
+
+    #[test]
+    fn policy_snapshot_v3_validate_does_not_reject_enforcement_only_net_allowed_shapes() {
+        let snapshot = PolicySnapshotV3 {
+            schema_version: 3,
+            net_allowed: vec![
+                "*.example.com".to_string(),
+                "https://example.com".to_string(),
+            ],
+            world_fs: PolicySnapshotWorldFsV3 {
+                host_visible: true,
+                fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: false },
+                deny_enforcement: None,
+                caged_required: false,
+                discover: Some(PolicySnapshotWorldFsDimensionV3 {
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                }),
+                read: Some(PolicySnapshotWorldFsDimensionV3 {
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                }),
+                write: PolicySnapshotWorldFsWriteV3 {
+                    enabled: true,
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                },
+            },
+        };
+
+        snapshot.validate().expect("snapshot validates");
+    }
+
+    #[test]
+    fn policy_snapshot_v3_net_allowed_enforcement_validator_rejects_invalid_shapes() {
+        for entries in [
+            vec!["*.example.com".to_string()],
+            vec!["https://example.com".to_string()],
+            vec!["example.com:443".to_string()],
+            vec!["example.com/path".to_string()],
+            vec!["example.com?query".to_string()],
+            vec!["example.com#fragment".to_string()],
+            vec!["bücher.example".to_string()],
+        ] {
+            assert!(
+                validate_net_allowed_for_enforcement(&entries).is_err(),
+                "expected invalid net_allowed entries to fail: {entries:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn policy_snapshot_v3_net_allowed_enforcement_validator_accepts_punycode_and_ips() {
+        validate_net_allowed_for_enforcement(&[
+            "XN--BCHER-KVA.EXAMPLE.".to_string(),
+            "1.2.3.4".to_string(),
+            "[2001:db8::1]".to_string(),
+        ])
+        .expect("valid entries");
     }
 
     #[test]
@@ -899,6 +1216,15 @@ mod tests {
             collected_at_utc: "2026-01-08T00:00:00Z".to_string(),
             policy_snapshot_v1_supported: true,
             policy_resolution_mode: Some(super::PolicyResolutionModeV1::SnapshotV3),
+            netfilter_status: Some(super::WorldDoctorNetfilterStatusV1 {
+                requested: true,
+                enabled: true,
+                world_netfilter_enable_present: true,
+                last_failure_reason: Some(
+                    "WORLD_NETFILTER_ENABLE must be set to 1/true/yes before requested network isolation can install nftables rules"
+                        .to_string(),
+                ),
+            }),
             landlock: super::WorldDoctorLandlockV1 {
                 supported: true,
                 abi: Some(3),
@@ -927,6 +1253,7 @@ mod tests {
             report.policy_snapshot_v1_supported
         );
         assert_eq!(back.policy_resolution_mode, report.policy_resolution_mode);
+        assert_eq!(back.netfilter_status, report.netfilter_status);
         assert_eq!(back.landlock.supported, report.landlock.supported);
         assert_eq!(back.landlock.abi, report.landlock.abi);
         assert_eq!(back.landlock.reason, report.landlock.reason);
@@ -957,6 +1284,86 @@ mod tests {
     }
 
     #[test]
+    fn world_doctor_report_v1_serializes_null_last_failure_reason_when_absent() {
+        let report = super::WorldDoctorReportV1 {
+            schema_version: 2,
+            ok: true,
+            collected_at_utc: "2026-01-08T00:00:00Z".to_string(),
+            policy_snapshot_v1_supported: true,
+            policy_resolution_mode: Some(super::PolicyResolutionModeV1::SnapshotV3),
+            netfilter_status: Some(super::WorldDoctorNetfilterStatusV1 {
+                requested: true,
+                enabled: false,
+                world_netfilter_enable_present: false,
+                last_failure_reason: None,
+            }),
+            landlock: super::WorldDoctorLandlockV1 {
+                supported: true,
+                abi: Some(3),
+                reason: None,
+            },
+            world_fs_strategy: super::WorldDoctorWorldFsStrategyV1 {
+                primary: super::WorldDoctorWorldFsStrategyKindV1::Overlay,
+                fallback: super::WorldDoctorWorldFsStrategyKindV1::Fuse,
+                probe: super::WorldDoctorWorldFsStrategyProbeV1 {
+                    id: "enumeration_v1".to_string(),
+                    probe_file: ".substrate_enum_probe".to_string(),
+                    result: super::WorldDoctorWorldFsStrategyProbeResultV1::Pass,
+                    failure_reason: None,
+                },
+            },
+        };
+
+        let value = serde_json::to_value(&report).expect("serialize report");
+        assert_eq!(
+            value["netfilter_status"]["last_failure_reason"],
+            serde_json::Value::Null
+        );
+    }
+
+    #[test]
+    fn world_doctor_report_v1_serializes_exact_netfilter_status_field_names() {
+        let report = super::WorldDoctorReportV1 {
+            schema_version: 2,
+            ok: true,
+            collected_at_utc: "2026-01-08T00:00:00Z".to_string(),
+            policy_snapshot_v1_supported: true,
+            policy_resolution_mode: Some(super::PolicyResolutionModeV1::SnapshotV3),
+            netfilter_status: Some(super::WorldDoctorNetfilterStatusV1 {
+                requested: true,
+                enabled: false,
+                world_netfilter_enable_present: false,
+                last_failure_reason: None,
+            }),
+            landlock: super::WorldDoctorLandlockV1 {
+                supported: true,
+                abi: Some(3),
+                reason: None,
+            },
+            world_fs_strategy: super::WorldDoctorWorldFsStrategyV1 {
+                primary: super::WorldDoctorWorldFsStrategyKindV1::Overlay,
+                fallback: super::WorldDoctorWorldFsStrategyKindV1::Fuse,
+                probe: super::WorldDoctorWorldFsStrategyProbeV1 {
+                    id: "enumeration_v1".to_string(),
+                    probe_file: ".substrate_enum_probe".to_string(),
+                    result: super::WorldDoctorWorldFsStrategyProbeResultV1::Pass,
+                    failure_reason: None,
+                },
+            },
+        };
+
+        let value = serde_json::to_value(&report).expect("serialize report");
+        let netfilter_status = value["netfilter_status"]
+            .as_object()
+            .expect("netfilter_status should serialize as object");
+        assert_eq!(netfilter_status.len(), 4);
+        assert!(netfilter_status.contains_key("requested"));
+        assert!(netfilter_status.contains_key("enabled"));
+        assert!(netfilter_status.contains_key("world_netfilter_enable_present"));
+        assert!(netfilter_status.contains_key("last_failure_reason"));
+    }
+
+    #[test]
     fn world_doctor_report_v1_defaults_snapshot_fields_when_missing() {
         // Legacy world-agents may omit snapshot fields; the client schema must default safely.
         let json = r#"{
@@ -980,5 +1387,40 @@ mod tests {
         assert!(report.ok);
         assert!(!report.policy_snapshot_v1_supported);
         assert!(report.policy_resolution_mode.is_none());
+        assert!(report.netfilter_status.is_none());
+    }
+
+    #[test]
+    fn world_doctor_report_v1_defaults_last_failure_reason_when_missing() {
+        let json = r#"{
+            "schema_version": 2,
+            "ok": true,
+            "collected_at_utc": "2026-01-08T00:00:00Z",
+            "policy_snapshot_v1_supported": true,
+            "policy_resolution_mode": "snapshot_v3",
+            "netfilter_status": {
+                "requested": true,
+                "enabled": false,
+                "world_netfilter_enable_present": false
+            },
+            "landlock": { "supported": true, "abi": 3, "reason": null },
+            "world_fs_strategy": {
+                "primary": "overlay",
+                "fallback": "fuse",
+                "probe": {
+                    "id": "enumeration_v1",
+                    "probe_file": ".substrate_enum_probe",
+                    "result": "pass",
+                    "failure_reason": null
+                }
+            }
+        }"#;
+
+        let report: super::WorldDoctorReportV1 = serde_json::from_str(json).expect("deserialize");
+        let status = report.netfilter_status.expect("netfilter status");
+        assert!(status.requested);
+        assert!(!status.enabled);
+        assert!(!status.world_netfilter_enable_present);
+        assert!(status.last_failure_reason.is_none());
     }
 }

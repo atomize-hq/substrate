@@ -391,3 +391,40 @@ fn world_enable_provision_deps_empty_requirement_set_skips_apt_execution() {
     );
     assert_no_apt_like_requests(&records);
 }
+
+#[test]
+fn world_enable_provision_deps_installs_with_dns_preflight_and_remediation() {
+    let fixture = WorldEnableProvisionFixture::new();
+    fixture.write_global_config(&["sl"]);
+    fixture.write_workspace_config(&[]);
+    fixture.write_apt_package("sl", &[("sl", None)]);
+
+    let (_sock_tmp, socket_path, _socket, records) =
+        start_world_socket_execute_record("substrate-wdap0-dns-", "", "", 0);
+
+    fixture
+        .command()
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+        .env("SUBSTRATE_TEST_HELPER_PRESERVE_SOCKET", "1")
+        .args(["--provision-deps"])
+        .assert()
+        .success();
+
+    let cmds = recorded_cmds(&records);
+    let install_cmd = cmds
+        .iter()
+        .find(|cmd| cmd.contains("apt-get install"))
+        .unwrap_or_else(|| panic!("expected apt-get install request; cmds={cmds:?}"));
+    assert!(
+        install_cmd.contains("ports.ubuntu.com"),
+        "expected DNS preflight to probe ports.ubuntu.com: {install_cmd}"
+    );
+    assert!(
+        install_cmd.contains("systemd-resolved"),
+        "expected DNS remediation to try enabling systemd-resolved: {install_cmd}"
+    );
+    assert!(
+        install_cmd.contains("/run/systemd/resolve/resolv.conf"),
+        "expected DNS remediation to link /etc/resolv.conf to /run/systemd/resolve/resolv.conf: {install_cmd}"
+    );
+}

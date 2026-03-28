@@ -967,6 +967,7 @@ fn run_workspace_sync_impl(
                 env: request.env.clone(),
                 agent_id: request.agent_id.clone(),
                 policy_snapshot: request.policy_snapshot.clone(),
+                world_network: request.world_network.clone(),
                 diff_id: record.diff_id.clone(),
                 discard_paths: from_host_conflicts.clone(),
             };
@@ -1041,6 +1042,7 @@ fn run_workspace_sync_impl(
         env: request.env.clone(),
         agent_id: request.agent_id.clone(),
         policy_snapshot: request.policy_snapshot.clone(),
+        world_network: request.world_network.clone(),
         path: String::new(),
         include_contents: false,
     };
@@ -1313,6 +1315,7 @@ fn run_workspace_sync_impl(
         env: request.env.clone(),
         agent_id: request.agent_id.clone(),
         policy_snapshot: request.policy_snapshot.clone(),
+        world_network: request.world_network.clone(),
         diff_id: record.diff_id.clone(),
     };
 
