@@ -654,6 +654,23 @@ pub struct ExecuteResponse {
     pub fs_diff: Option<FsDiff>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ExecuteCancelRequestV1 {
+    pub span_id: String,
+    pub sig: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ExecuteCancelResponseV1 {
+    #[serde(default = "execute_cancel_response_v1_default_schema_version")]
+    pub schema_version: u32,
+    pub delivered: bool,
+}
+
+fn execute_cancel_response_v1_default_schema_version() -> u32 {
+    1
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PendingDiffRequestV1 {
     pub profile: Option<String>,
@@ -1053,6 +1070,30 @@ mod tests {
             snapshot.net_allowed,
             vec!["github.com".to_string(), "crates.io".to_string()]
         );
+    }
+
+    #[test]
+    fn execute_cancel_request_round_trip() {
+        let req = ExecuteCancelRequestV1 {
+            span_id: "spn_cancel".to_string(),
+            sig: "INT".to_string(),
+        };
+
+        let json = serde_json::to_string(&req).expect("serialize cancel request");
+        let back: ExecuteCancelRequestV1 =
+            serde_json::from_str(&json).expect("deserialize cancel request");
+        assert_eq!(back, req);
+    }
+
+    #[test]
+    fn execute_cancel_response_defaults_schema_version() {
+        let response: ExecuteCancelResponseV1 = serde_json::from_value(serde_json::json!({
+            "delivered": true
+        }))
+        .expect("deserialize cancel response");
+
+        assert_eq!(response.schema_version, 1);
+        assert!(response.delivered);
     }
 
     #[test]

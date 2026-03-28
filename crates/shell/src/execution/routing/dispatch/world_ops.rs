@@ -17,7 +17,9 @@ use crate::execution::world_env_guard;
 use crate::execution::{policy_snapshot::bootstrap_world_spec, socket_activation};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use agent_api_client::AgentClient;
-use agent_api_types::{ExecuteRequest, ExecuteStreamFrame, WorldFsMode};
+use agent_api_types::{
+    ExecuteCancelRequestV1, ExecuteRequest, ExecuteStreamFrame, WorldFsMode,
+};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use std::env;
@@ -1370,31 +1372,101 @@ pub(crate) fn stream_non_pty_via_agent(command: &str) -> anyhow::Result<AgentStr
                 anyhow::bail!("HTTP {} error: {}", status, text);
             }
 
-            process_agent_stream(response.into_body(), agent_id).await
+            let (sigint_tx, mut sigint_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
+            let sigint_task = tokio::spawn(async move {
+                loop {
+                    if tokio::signal::ctrl_c().await.is_err() {
+                        break;
+                    }
+                    if sigint_tx.send(()).is_err() {
+                        break;
+                    }
+                }
+            });
+
+            let result = process_agent_stream(
+                response.into_body(),
+                agent_id,
+                &mut sigint_rx,
+                |span_id, sig| async {
+                    client
+                        .cancel_execute(ExecuteCancelRequestV1 { span_id, sig })
+                        .await
+                        .map(|_| ())
+                },
+            )
+            .await;
+            sigint_task.abort();
+            result
         }
     })
 }
 
 #[cfg(not(target_os = "windows"))]
-async fn process_agent_stream(
-    mut body: hyper::body::Incoming,
+async fn process_agent_stream<Fut>(
+    body: hyper::body::Incoming,
     agent_label: String,
-) -> anyhow::Result<AgentStreamOutcome> {
+    sigint_rx: &mut tokio::sync::mpsc::UnboundedReceiver<()>,
+    cancel: impl FnMut(String, String) -> Fut,
+) -> anyhow::Result<AgentStreamOutcome>
+where
+    Fut: std::future::Future<Output = anyhow::Result<()>>,
+{
+    process_agent_stream_body(body, agent_label, sigint_rx, cancel).await
+}
+
+#[cfg(not(target_os = "windows"))]
+async fn process_agent_stream_body<B, Fut>(
+    body: B,
+    agent_label: String,
+    sigint_rx: &mut tokio::sync::mpsc::UnboundedReceiver<()>,
+    mut cancel: impl FnMut(String, String) -> Fut,
+) -> anyhow::Result<AgentStreamOutcome>
+where
+    B: hyper::body::Body<Data = hyper::body::Bytes>,
+    B::Error: std::fmt::Display,
+    Fut: std::future::Future<Output = anyhow::Result<()>>,
+{
     use http_body_util::BodyExt;
+    let mut body = std::pin::pin!(body);
 
     let mut buffer = Vec::new();
     let mut exit_code = None;
     let mut scopes_used = Vec::new();
     let mut fs_diff = None;
     let mut fs_strategy = None;
+    let mut active_span_id: Option<String> = None;
 
-    while let Some(frame) = body.frame().await {
+    loop {
+        while sigint_rx.try_recv().is_ok() {
+            if let Some(span_id) = active_span_id.as_deref() {
+                let cancel_span_id: String = span_id.to_owned();
+                if let Err(err) = cancel(cancel_span_id, "INT".to_string()).await {
+                    eprintln!("substrate: warn: failed to interrupt world command: {err:#}");
+                }
+            }
+        }
+
+        let frame = match tokio::time::timeout(
+            std::time::Duration::from_millis(100),
+            body.as_mut().frame(),
+        )
+        .await
+        {
+            Ok(frame) => frame,
+            Err(_) => continue,
+        };
+
+        let Some(frame) = frame else {
+            break;
+        };
         let frame = frame.map_err(|e| anyhow::anyhow!("stream frame error: {}", e))?;
         if let Some(data) = frame.data_ref() {
             buffer.extend_from_slice(data);
             consume_agent_stream_buffer_with_meta(
                 &agent_label,
                 &mut buffer,
+                &mut active_span_id,
                 &mut exit_code,
                 &mut scopes_used,
                 &mut fs_diff,
@@ -1410,6 +1482,7 @@ async fn process_agent_stream(
         consume_agent_stream_buffer_with_meta(
             &agent_label,
             &mut buffer,
+            &mut active_span_id,
             &mut exit_code,
             &mut scopes_used,
             &mut fs_diff,
@@ -1440,6 +1513,7 @@ pub(crate) fn consume_agent_stream_buffer(
     consume_agent_stream_buffer_with_meta(
         agent_label,
         buffer,
+        &mut None,
         exit_code,
         scopes_used,
         fs_diff,
@@ -1450,6 +1524,7 @@ pub(crate) fn consume_agent_stream_buffer(
 fn consume_agent_stream_buffer_with_meta(
     agent_label: &str,
     buffer: &mut Vec<u8>,
+    active_span_id: &mut Option<String>,
     exit_code: &mut Option<i32>,
     scopes_used: &mut Vec<String>,
     fs_diff: &mut Option<substrate_common::FsDiff>,
@@ -1475,7 +1550,9 @@ fn consume_agent_stream_buffer_with_meta(
         })?;
 
         match frame {
-            ExecuteStreamFrame::Start { .. } => {}
+            ExecuteStreamFrame::Start { span_id } => {
+                *active_span_id = Some(span_id);
+            }
             ExecuteStreamFrame::Stdout { chunk_b64 } => {
                 let bytes = BASE64
                     .decode(chunk_b64.as_bytes())
@@ -1565,9 +1642,15 @@ pub(super) fn emit_stream_chunk(agent_label: &str, data: &[u8], is_stderr: bool)
 mod tests {
     use super::{
         current_world_request_profile, ensure_world_deps_bin_on_path,
-        preserve_world_project_dir_override, WORLD_PROJECT_DIR_OVERRIDE_ENV,
+        preserve_world_project_dir_override, process_agent_stream_body,
+        WORLD_PROJECT_DIR_OVERRIDE_ENV,
     };
-    use std::sync::{Mutex, OnceLock};
+    use agent_api_types::ExecuteStreamFrame;
+    use futures::stream;
+    use http_body_util::StreamBody;
+    use std::convert::Infallible;
+    use std::sync::{Arc, Mutex, OnceLock};
+    use std::time::Duration;
 
     fn with_env_var<T>(key: &str, value: &str, f: impl FnOnce() -> T) -> T {
         let _guard = test_env_lock().lock().expect("test env mutex poisoned");
@@ -1584,6 +1667,12 @@ mod tests {
     fn test_env_lock() -> &'static Mutex<()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
         LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    fn encode_stream_frame(frame: ExecuteStreamFrame) -> hyper::body::Bytes {
+        let mut payload = serde_json::to_vec(&frame).expect("serialize frame");
+        payload.push(b'\n');
+        hyper::body::Bytes::from(payload)
     }
 
     #[test]
@@ -1690,5 +1779,71 @@ mod tests {
                 );
             });
         }
+    }
+
+    #[test]
+    fn process_agent_stream_requests_cancel_after_start_frame() {
+        let rt = tokio::runtime::Runtime::new().expect("runtime");
+        rt.block_on(async {
+            let frames = vec![
+                encode_stream_frame(ExecuteStreamFrame::Start {
+                    span_id: "spn_interrupt".to_string(),
+                }),
+                encode_stream_frame(ExecuteStreamFrame::Exit {
+                    exit: 130,
+                    span_id: "spn_interrupt".to_string(),
+                    scopes_used: Vec::new(),
+                    fs_diff: None,
+                }),
+            ];
+
+            let stream = stream::unfold((0usize, frames), |(idx, frames)| async move {
+                match idx {
+                    0 => Some((
+                        Ok::<_, Infallible>(hyper::body::Frame::data(frames[0].clone())),
+                        (1, frames),
+                    )),
+                    1 => {
+                        tokio::time::sleep(Duration::from_millis(250)).await;
+                        Some((
+                            Ok::<_, Infallible>(hyper::body::Frame::data(frames[1].clone())),
+                            (2, frames),
+                        ))
+                    }
+                    _ => None,
+                }
+            });
+            let body = StreamBody::new(stream);
+
+            let (sigint_tx, mut sigint_rx) = tokio::sync::mpsc::unbounded_channel();
+            let cancels = Arc::new(Mutex::new(Vec::<(String, String)>::new()));
+            let cancels_for_cancel = Arc::clone(&cancels);
+
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(30)).await;
+                let _ = sigint_tx.send(());
+            });
+
+            let outcome = process_agent_stream_body(
+                body,
+                "agent".to_string(),
+                &mut sigint_rx,
+                move |span_id, sig| {
+                    let cancels = Arc::clone(&cancels_for_cancel);
+                    async move {
+                        cancels.lock().expect("cancel lock").push((span_id, sig));
+                        Ok(())
+                    }
+                },
+            )
+            .await
+            .expect("process stream");
+
+            assert_eq!(outcome.exit_code, 130);
+            assert_eq!(
+                cancels.lock().expect("cancel lock").as_slice(),
+                &[("spn_interrupt".to_string(), "INT".to_string())]
+            );
+        });
     }
 }

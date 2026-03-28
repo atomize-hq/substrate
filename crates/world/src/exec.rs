@@ -11,6 +11,114 @@ use std::thread;
 use tracing::warn;
 use world_api::WorldFsMode;
 
+#[cfg(target_os = "linux")]
+use std::sync::{Mutex, OnceLock};
+
+#[cfg(target_os = "linux")]
+fn active_exec_registry() -> &'static Mutex<HashMap<String, i32>> {
+    static ACTIVE_EXEC_REGISTRY: OnceLock<Mutex<HashMap<String, i32>>> = OnceLock::new();
+    ACTIVE_EXEC_REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+#[cfg(target_os = "linux")]
+fn parse_signal_name(sig: &str) -> Option<libc::c_int> {
+    match sig.trim().to_ascii_uppercase().as_str() {
+        "INT" | "SIGINT" => Some(libc::SIGINT),
+        "TERM" | "SIGTERM" => Some(libc::SIGTERM),
+        "HUP" | "SIGHUP" => Some(libc::SIGHUP),
+        "QUIT" | "SIGQUIT" => Some(libc::SIGQUIT),
+        _ => None,
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub fn note_pending_exec(span_id: &str) {
+    let mut registry = active_exec_registry()
+        .lock()
+        .expect("active exec registry lock poisoned");
+    registry.entry(span_id.to_string()).or_insert(0);
+}
+
+#[cfg(target_os = "linux")]
+pub fn clear_registered_exec(span_id: &str) {
+    if let Ok(mut registry) = active_exec_registry().lock() {
+        registry.remove(span_id);
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn register_active_exec(span_id: Option<&str>, pgid: i32) -> Option<ActiveExecRegistration> {
+    let span_id = span_id?;
+    let mut registry = active_exec_registry()
+        .lock()
+        .expect("active exec registry lock poisoned");
+    registry.insert(span_id.to_string(), pgid);
+    Some(ActiveExecRegistration {
+        span_id: span_id.to_string(),
+    })
+}
+
+#[cfg(target_os = "linux")]
+struct ActiveExecRegistration {
+    span_id: String,
+}
+
+#[cfg(target_os = "linux")]
+impl Drop for ActiveExecRegistration {
+    fn drop(&mut self) {
+        if let Ok(mut registry) = active_exec_registry().lock() {
+            registry.remove(&self.span_id);
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub fn signal_registered_exec(span_id: &str, sig: &str) -> Result<bool> {
+    let signo = parse_signal_name(sig)
+        .ok_or_else(|| anyhow!("unsupported execute cancellation signal: {sig}"))?;
+    let pgid = {
+        let registry = active_exec_registry()
+            .lock()
+            .expect("active exec registry lock poisoned");
+        registry.get(span_id).copied()
+    };
+
+    let Some(pgid) = pgid else {
+        return Ok(false);
+    };
+
+    if pgid <= 0 {
+        return Ok(false);
+    };
+
+    let rc = unsafe { libc::kill(-(pgid as libc::pid_t), signo) };
+    if rc != 0 {
+        return Err(anyhow!(std::io::Error::last_os_error()))
+            .context(format!("failed to signal active execute span {span_id}"));
+    }
+
+    Ok(true)
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn signal_registered_exec(_span_id: &str, _sig: &str) -> Result<bool> {
+    Ok(false)
+}
+
+#[cfg(unix)]
+fn configure_child_process_group(command: &mut Command) {
+    use std::os::unix::process::CommandExt;
+
+    unsafe {
+        command.pre_exec(|| {
+            if libc::setpgid(0, 0) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+}
+
 /// Execute `cmd` via `sh -lc` in the provided directory/environment, pushing
 /// stdout/stderr chunks through the global stream sink while accumulating the
 /// full output for the caller.
@@ -19,6 +127,7 @@ pub fn execute_shell_command(
     cwd: &Path,
     env: &HashMap<String, String>,
     login_shell: bool,
+    _span_id: Option<&str>,
 ) -> Result<Output> {
     let mut command = Command::new("sh");
     if login_shell {
@@ -35,10 +144,14 @@ pub fn execute_shell_command(
     command.envs(env);
     command.stdout(Stdio::piped());
     command.stderr(Stdio::piped());
+    #[cfg(unix)]
+    configure_child_process_group(&mut command);
 
     let mut child = command
         .spawn()
         .with_context(|| format!("Failed to spawn command: {cmd}"))?;
+    #[cfg(target_os = "linux")]
+    let _active_exec = register_active_exec(_span_id, child.id() as i32);
 
     let stdout = child
         .stdout
@@ -474,6 +587,7 @@ pub(crate) fn execute_shell_command_with_project_bind_mount(
     env: &HashMap<String, String>,
     login_shell: bool,
     _attach_policy: CgroupAttachPolicy<'_>,
+    _span_id: Option<&str>,
 ) -> Result<Output> {
     #[cfg(not(target_os = "linux"))]
     {
@@ -530,6 +644,8 @@ pub(crate) fn execute_shell_command_with_project_bind_mount(
         command.envs(env_map);
         command.stdout(Stdio::piped());
         command.stderr(Stdio::piped());
+        #[cfg(unix)]
+        configure_child_process_group(&mut command);
 
         let mut child = match command.spawn() {
             Ok(child) => child,
@@ -547,6 +663,8 @@ pub(crate) fn execute_shell_command_with_project_bind_mount(
                 return Err(err).with_context(|| format!("Failed to spawn command: {cmd}"));
             }
         };
+        #[cfg(target_os = "linux")]
+        let _active_exec = register_active_exec(_span_id, child.id() as i32);
 
         let stdout = child
             .stdout
@@ -671,6 +789,7 @@ pub(crate) fn execute_shell_command_with_world_deps_bind_mount(
     login_shell: bool,
     world_deps_root: &Path,
     _attach_policy: CgroupAttachPolicy<'_>,
+    _span_id: Option<&str>,
 ) -> Result<Output> {
     #[cfg(not(target_os = "linux"))]
     {
@@ -720,10 +839,14 @@ pub(crate) fn execute_shell_command_with_world_deps_bind_mount(
         command.envs(env_map);
         command.stdout(Stdio::piped());
         command.stderr(Stdio::piped());
+        #[cfg(unix)]
+        configure_child_process_group(&mut command);
 
         let mut child = command
             .spawn()
             .with_context(|| format!("Failed to spawn command: {cmd}"))?;
+        #[cfg(target_os = "linux")]
+        let _active_exec = register_active_exec(_span_id, child.id() as i32);
 
         let stdout = child
             .stdout
@@ -947,6 +1070,7 @@ mod tests {
                 &env,
                 true,
                 CgroupAttachPolicy::optional("project_bind_mount"),
+                None,
             ) {
                 Ok(output) => output,
                 Err(err) => {
@@ -1098,6 +1222,7 @@ mod tests {
                 false,
                 world_deps_root.path(),
                 CgroupAttachPolicy::optional("world_deps_fallback"),
+                None,
             ) {
                 Ok(output) => output,
                 Err(err) => {
@@ -1174,6 +1299,7 @@ mod tests {
                 false,
                 &world_deps_root,
                 CgroupAttachPolicy::optional("world_deps_fallback"),
+                None,
             ) {
                 Ok(output) => output,
                 Err(err) => {
@@ -1213,6 +1339,7 @@ mod tests {
                 false,
                 &world_deps_root,
                 CgroupAttachPolicy::optional("world_deps_fallback"),
+                None,
             )
             .expect("probe command should run");
 
@@ -1281,6 +1408,7 @@ mod tests {
                 &HashMap::new(),
                 false,
                 CgroupAttachPolicy::required("project_bind_mount", cgroup.path()),
+                None,
             ) {
                 Ok(output) => output,
                 Err(err) => {
@@ -1322,6 +1450,7 @@ mod tests {
                 false,
                 world_deps_root.path(),
                 CgroupAttachPolicy::required("world_deps_fallback", cgroup.path()),
+                None,
             ) {
                 Ok(output) => output,
                 Err(err) => {

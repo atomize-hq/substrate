@@ -2,10 +2,11 @@
 
 use crate::service::WorldAgentService;
 use agent_api_types::{
-    ApiError, ExecuteRequest, ExecuteResponse, PendingDiffClearRequestV1,
-    PendingDiffClearResponseV1, PendingDiffReconcileRequestV1, PendingDiffReconcileResponseV1,
-    PendingDiffRecordV1, PendingDiffRequestV1, WorldDoctorLandlockV1, WorldDoctorNetfilterStatusV1,
-    WorldDoctorReportV1, WorldDoctorWorldFsStrategyKindV1, WorldDoctorWorldFsStrategyProbeResultV1,
+    ApiError, ExecuteCancelRequestV1, ExecuteCancelResponseV1, ExecuteRequest, ExecuteResponse,
+    PendingDiffClearRequestV1, PendingDiffClearResponseV1, PendingDiffReconcileRequestV1,
+    PendingDiffReconcileResponseV1, PendingDiffRecordV1, PendingDiffRequestV1,
+    WorldDoctorLandlockV1, WorldDoctorNetfilterStatusV1, WorldDoctorReportV1,
+    WorldDoctorWorldFsStrategyKindV1, WorldDoctorWorldFsStrategyProbeResultV1,
     WorldDoctorWorldFsStrategyProbeV1, WorldDoctorWorldFsStrategyV1, WorldFsReadRequestV1,
     WorldFsReadResponseV1,
 };
@@ -295,6 +296,26 @@ pub async fn execute_stream(
             ApiErrorResponse(ApiError::Internal(e.to_string()))
         }
     })
+}
+
+/// Send a signal to an active streamed execution.
+pub async fn execute_cancel(
+    State(service): State<WorldAgentService>,
+    body: Bytes,
+) -> Result<ResponseJson<ExecuteCancelResponseV1>, ApiErrorResponse> {
+    let payload: Value = serde_json::from_slice(&body)
+        .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
+    let req: ExecuteCancelRequestV1 = serde_json::from_value(payload)
+        .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
+    let response = service.execute_cancel(req).await.map_err(|e| {
+        if let Some(bad) = e.downcast_ref::<crate::service::BadRequestError>() {
+            ApiErrorResponse(ApiError::BadRequest(bad.message().to_string()))
+        } else {
+            ApiErrorResponse(ApiError::Internal(e.to_string()))
+        }
+    })?;
+
+    Ok(ResponseJson(response))
 }
 
 /// Handle WebSocket upgrade for PTY streaming.

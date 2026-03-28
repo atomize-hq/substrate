@@ -7,9 +7,10 @@ use agent_api_types::PendingDiffBucketV1;
 #[cfg(target_os = "linux")]
 use agent_api_types::WorldFsEntryTypeV1;
 use agent_api_types::{
-    Budget, ExecuteRequest, ExecuteResponse, PendingDiffClearRequestV1, PendingDiffClearResponseV1,
-    PendingDiffReconcileRequestV1, PendingDiffReconcileResponseV1, PendingDiffRecordV1,
-    PendingDiffRequestV1, WorldFsReadRequestV1, WorldFsReadResponseV1, WorldNetworkRoutingV1,
+    Budget, ExecuteCancelRequestV1, ExecuteCancelResponseV1, ExecuteRequest, ExecuteResponse,
+    PendingDiffClearRequestV1, PendingDiffClearResponseV1, PendingDiffReconcileRequestV1,
+    PendingDiffReconcileResponseV1, PendingDiffRecordV1, PendingDiffRequestV1,
+    WorldFsReadRequestV1, WorldFsReadResponseV1, WorldNetworkRoutingV1,
 };
 #[cfg(target_os = "linux")]
 use anyhow::Context;
@@ -1153,6 +1154,7 @@ impl WorldAgentService {
 
         let span_id = format!("spn_{}", uuid::Uuid::now_v7());
         exec_req.span_id = Some(span_id.clone());
+        world::exec::note_pending_exec(&span_id);
 
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<ExecuteStreamFrame>();
         let _ = tx.send(ExecuteStreamFrame::Start {
@@ -1163,6 +1165,7 @@ impl WorldAgentService {
         #[cfg(target_os = "linux")]
         let service = self.clone();
         let agent_id = req.agent_id.clone();
+        let span_id_for_cleanup = span_id.clone();
         task::spawn_blocking(move || {
             let sink = Arc::new(StreamingSink::new(tx.clone()));
             let guard = install_stream_sink(sink);
@@ -1217,6 +1220,7 @@ impl WorldAgentService {
                     });
                 }
             }
+            world::exec::clear_registered_exec(&span_id_for_cleanup);
         });
 
         let stream = UnboundedReceiverStream::new(rx).map(|frame| {
@@ -1238,6 +1242,41 @@ impl WorldAgentService {
     #[cfg(not(target_os = "linux"))]
     pub async fn execute_stream(&self, _req: ExecuteRequest) -> Result<Response> {
         anyhow::bail!("World agent streaming is only supported on Linux");
+    }
+
+    #[cfg(target_os = "linux")]
+    pub async fn execute_cancel(
+        &self,
+        req: ExecuteCancelRequestV1,
+    ) -> Result<ExecuteCancelResponseV1> {
+        if req.span_id.trim().is_empty() {
+            return Err(BadRequestError::new("span_id is required".to_string()).into());
+        }
+
+        let mut delivered = false;
+        for _ in 0..80 {
+            delivered = world::exec::signal_registered_exec(&req.span_id, &req.sig)
+                .with_context(|| {
+                    format!("failed to cancel streamed execute span {}", req.span_id)
+                })?;
+            if delivered {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        }
+
+        Ok(ExecuteCancelResponseV1 {
+            schema_version: 1,
+            delivered,
+        })
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    pub async fn execute_cancel(
+        &self,
+        _req: ExecuteCancelRequestV1,
+    ) -> Result<ExecuteCancelResponseV1> {
+        anyhow::bail!("World agent execute cancellation is only supported on Linux");
     }
 
     /// Get trace information for a span.

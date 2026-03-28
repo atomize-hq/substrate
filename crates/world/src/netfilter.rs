@@ -350,7 +350,8 @@ impl NetFilter {
                 "limit rate 10/second log prefix \"substrate-dropped-{}:\"",
                 self.world_id
             ),
-            "counter drop".to_string(),
+            "tcp flags & (fin | syn | rst | ack) == syn counter reject with tcp reset".to_string(),
+            "counter reject with icmpx type admin-prohibited".to_string(),
         ]);
         rules
     }
@@ -403,7 +404,7 @@ impl NetFilter {
 
         // Create base chain for filtering.
         //
-        // Use `policy accept` and enforce via an explicit final `drop` rule. This makes partial setup
+        // Use `policy accept` and enforce via explicit terminal reject rules. This makes partial setup
         // fail-open (safe) rather than fail-closed (can brick host networking if later rule-adds fail).
         let create_chain = format!(
             "chain inet {} {} {{ type filter hook output priority 0; policy accept; }}",
@@ -864,6 +865,17 @@ mod tests {
             !rules.iter().any(|rule| rule.contains("dport 53")),
             "deny-all rules must not include a DNS allow rule: {rules:?}"
         );
+        assert!(
+            rules.contains(
+                &"tcp flags & (fin | syn | rst | ack) == syn counter reject with tcp reset"
+                    .to_string()
+            ),
+            "deny-all rules must reject blocked TCP connects immediately: {rules:?}"
+        );
+        assert!(
+            rules.contains(&"counter reject with icmpx type admin-prohibited".to_string()),
+            "deny-all rules must reject non-TCP traffic immediately: {rules:?}"
+        );
     }
 
     #[test]
@@ -909,6 +921,17 @@ mod tests {
                 .count(),
             4,
             "expected resolver-scoped DNS allow rules only: {rules:?}"
+        );
+        assert!(
+            rules.contains(
+                &"tcp flags & (fin | syn | rst | ack) == syn counter reject with tcp reset"
+                    .to_string()
+            ),
+            "restrictive rules must fast-fail blocked TCP connects: {rules:?}"
+        );
+        assert!(
+            rules.contains(&"counter reject with icmpx type admin-prohibited".to_string()),
+            "restrictive rules must fast-fail blocked non-TCP traffic: {rules:?}"
         );
     }
 

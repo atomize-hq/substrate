@@ -4,6 +4,7 @@ use crate::overlayfs::OverlayFs;
 use anyhow::{anyhow, Context, Result};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::process::ExitStatus;
 use std::time::SystemTime;
 use world_api::{ExecResult, FsDiff, WorldFsMode, WorldSpec};
 
@@ -244,6 +245,7 @@ impl SessionWorld {
                 &merged_dir,
                 &desired_cwd,
                 require_cgroup_attach,
+                span_id.as_deref(),
             )?;
 
             if self.spec.fs_mode == WorldFsMode::ReadOnly {
@@ -256,7 +258,13 @@ impl SessionWorld {
                 }
             }
         } else {
-            output = crate::exec::execute_shell_command(&command_to_run, cwd, &env, false)
+            output = crate::exec::execute_shell_command(
+                &command_to_run,
+                cwd,
+                &env,
+                false,
+                span_id.as_deref(),
+            )
                 .context("Failed to execute command")?;
         }
 
@@ -268,7 +276,7 @@ impl SessionWorld {
         }
 
         Ok(ExecResult {
-            exit: output.status.code().unwrap_or(-1),
+            exit: exit_code_from_status(output.status),
             stdout: output.stdout,
             stderr: output.stderr,
             scopes_used,
@@ -287,6 +295,7 @@ impl SessionWorld {
         merged_dir: &Path,
         desired_cwd: &Path,
         require_cgroup_attach: bool,
+        span_id: Option<&str>,
     ) -> Result<std::process::Output> {
         let project_attach_policy = if require_cgroup_attach {
             crate::exec::CgroupAttachPolicy::required(
@@ -308,6 +317,7 @@ impl SessionWorld {
             env,
             false,
             project_attach_policy,
+            span_id,
         ) {
             Ok(output)
                 if !require_cgroup_attach
@@ -325,6 +335,7 @@ impl SessionWorld {
                     String::from_utf8_lossy(&output.stderr).trim()
                 ),
                 require_cgroup_attach,
+                span_id,
             ),
             Err(err) => self.execute_world_deps_fallback(
                 command_to_run,
@@ -333,6 +344,7 @@ impl SessionWorld {
                 merged_dir,
                 err,
                 require_cgroup_attach,
+                span_id,
             ),
         }
     }
@@ -345,6 +357,7 @@ impl SessionWorld {
         merged_dir: &Path,
         primary_err: anyhow::Error,
         require_cgroup_attach: bool,
+        span_id: Option<&str>,
     ) -> Result<std::process::Output> {
         if self.spec.fs_mode == WorldFsMode::ReadOnly {
             return Err(primary_err).context(
@@ -381,6 +394,7 @@ impl SessionWorld {
             false,
             &fallback_world_deps_root,
             fallback_attach_policy,
+            span_id,
         ) {
             Ok(output)
                 if !require_cgroup_attach
@@ -398,7 +412,13 @@ impl SessionWorld {
                         "world-deps fallback helper also failed: {world_deps_err:#}"
                     ))
                 } else {
-                    crate::exec::execute_shell_command(command_to_run, &target_dir, env, false)
+                    crate::exec::execute_shell_command(
+                        command_to_run,
+                        &target_dir,
+                        env,
+                        false,
+                        span_id,
+                    )
                         .with_context(|| {
                             format!(
                                 "Failed to execute command in overlay after mount-namespace bind failed: {primary_err:#}; world-deps fallback also failed: {world_deps_err:#}"
@@ -556,6 +576,23 @@ fn is_truthy(value: &str) -> bool {
         value.trim().to_ascii_lowercase().as_str(),
         "1" | "true" | "yes"
     )
+}
+
+fn exit_code_from_status(status: ExitStatus) -> i32 {
+    if let Some(code) = status.code() {
+        return code;
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+
+        if let Some(signal) = status.signal() {
+            return 128 + signal;
+        }
+    }
+
+    -1
 }
 
 impl Drop for SessionWorld {
@@ -782,6 +819,25 @@ mod tests {
 
     #[test]
     #[cfg(target_os = "linux")]
+    fn direct_exec_reports_sigint_with_shell_convention_exit_code() {
+        let mut child = std::process::Command::new("sh")
+            .arg("-c")
+            .arg("sleep 10")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("sleep process should spawn");
+
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        let rc = unsafe { libc::kill(child.id() as libc::pid_t, libc::SIGINT) };
+        assert_eq!(rc, 0, "failed to send SIGINT to child");
+
+        let status = child.wait().expect("child wait should succeed");
+        assert_eq!(exit_code_from_status(status), 130);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
     fn isolated_helper_flow_does_not_fall_back_to_plain_exec_when_attach_fails() {
         let temp = tempdir().unwrap();
         let world = test_world(&temp, true);
@@ -795,6 +851,7 @@ mod tests {
             &merged_dir,
             &world.project_dir,
             true,
+            None,
         ) {
             Ok(output) => {
                 if output.status.success() {
