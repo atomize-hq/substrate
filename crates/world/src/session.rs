@@ -265,7 +265,7 @@ impl SessionWorld {
                 false,
                 span_id.as_deref(),
             )
-                .context("Failed to execute command")?;
+            .context("Failed to execute command")?;
         }
 
         // Track network scopes if filter is active

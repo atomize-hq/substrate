@@ -118,7 +118,11 @@ async fn execute_stream_cancel_interrupts_live_non_pty_command() {
             ExecuteStreamFrame::Stdout { .. }
             | ExecuteStreamFrame::Stderr { .. }
             | ExecuteStreamFrame::Event { .. } => continue,
-            ExecuteStreamFrame::Exit { exit, span_id: exit_span, .. } => {
+            ExecuteStreamFrame::Exit {
+                exit,
+                span_id: exit_span,
+                ..
+            } => {
                 assert_eq!(exit_span, span_id);
                 assert_eq!(exit, 130, "SIGINT exit should follow shell convention");
                 break;

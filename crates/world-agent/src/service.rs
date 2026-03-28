@@ -1255,8 +1255,8 @@ impl WorldAgentService {
 
         let mut delivered = false;
         for _ in 0..80 {
-            delivered = world::exec::signal_registered_exec(&req.span_id, &req.sig)
-                .with_context(|| {
+            delivered =
+                world::exec::signal_registered_exec(&req.span_id, &req.sig).with_context(|| {
                     format!("failed to cancel streamed execute span {}", req.span_id)
                 })?;
             if delivered {

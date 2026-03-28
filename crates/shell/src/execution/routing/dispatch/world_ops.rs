@@ -17,9 +17,7 @@ use crate::execution::world_env_guard;
 use crate::execution::{policy_snapshot::bootstrap_world_spec, socket_activation};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use agent_api_client::AgentClient;
-use agent_api_types::{
-    ExecuteCancelRequestV1, ExecuteRequest, ExecuteStreamFrame, WorldFsMode,
-};
+use agent_api_types::{ExecuteCancelRequestV1, ExecuteRequest, ExecuteStreamFrame, WorldFsMode};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use std::env;

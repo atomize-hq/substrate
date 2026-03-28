@@ -9,8 +9,8 @@ use std::sync::Arc;
 use agent_api_types::{
     ApiError, ExecuteCancelRequestV1, ExecuteCancelResponseV1, ExecuteRequest, ExecuteResponse,
     PendingDiffClearRequestV1, PendingDiffClearResponseV1, PendingDiffReconcileRequestV1,
-    PendingDiffReconcileResponseV1, PendingDiffRecordV1, PendingDiffRequestV1,
-    WorldDoctorReportV1, WorldFsReadRequestV1, WorldFsReadResponseV1,
+    PendingDiffReconcileResponseV1, PendingDiffRecordV1, PendingDiffRequestV1, WorldDoctorReportV1,
+    WorldFsReadRequestV1, WorldFsReadResponseV1,
 };
 use anyhow::{anyhow, Context, Result};
 use http_body_util::{BodyExt, Full};
