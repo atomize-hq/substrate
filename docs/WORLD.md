@@ -141,6 +141,7 @@ Hosted installer behavior coverage on macOS flows through this Lima-backed Linux
 
 - Validation
   - `scripts/mac/smoke.sh` exercises non‑PTY, PTY, and replay flows on macOS and asserts that the replay `fs_diff` contains project paths.
+  - `scripts/mac/smoke.sh --bedpm-installer-conformance` runs the BEDPM Linux smoke wrapper through the same Lima-backed guest path so hosted installer verification reuses the authoritative Linux harness instead of implying native macOS package-manager selection.
   - `scripts/linux/agent-hub-isolation-verify.sh` verifies `world_fs.mode=read_only` and `world_fs.isolation=full` enforcement (on macOS it drives the Lima-backed world; on Windows, use WSL-specific tooling instead).
 
 ## 4) Isolation Details (Linux)

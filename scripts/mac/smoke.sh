@@ -15,10 +15,12 @@ LOG_DIR=""
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/mac/smoke.sh [--netfilter-conformance] [--log-dir DIR]
+Usage: scripts/mac/smoke.sh [--netfilter-conformance | --bedpm-installer-conformance] [--log-dir DIR]
 
 Options:
   --netfilter-conformance  Run the posture-aware Lima netfilter smoke instead of the generic smoke
+  --bedpm-installer-conformance
+                           Run the BEDPM Linux installer smoke through the Lima-backed guest path
   --log-dir DIR            Directory for doctor JSON and command transcripts (default: artifacts/mac/netfilter-smoke-<timestamp> in netfilter mode)
   -h, --help               Show this help text
 USAGE
@@ -28,6 +30,10 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --netfilter-conformance)
       MODE="netfilter-conformance"
+      shift
+      ;;
+    --bedpm-installer-conformance)
+      MODE="bedpm-installer-conformance"
       shift
       ;;
     --log-dir)
@@ -303,6 +309,16 @@ run_generic_smoke() {
   jq '.fs_diff | ((.writes // []) + (.mods // []))' /tmp/world-mac-replay.json | grep 'world-mac-smoke/file.txt'
 }
 
+run_bedpm_installer_conformance() {
+  local smoke_cmd
+
+  smoke_cmd="(cd /src 2>/dev/null || cd \"${REPO_ROOT}\") && bash docs/project_management/packs/draft/best-effort-distro-package-manager/smoke/linux-smoke.sh"
+
+  log "Running BEDPM Linux smoke through the Lima-backed guest path"
+  "${SCRIPTS_ROOT}/lima-warm.sh"
+  "${SUBSTRATE_BIN}" -c "${smoke_cmd}"
+}
+
 run_netfilter_conformance() {
   local log_dir="$1"
   local fixture_home="${log_dir}/home"
@@ -338,6 +354,8 @@ if [[ "${MODE}" == "netfilter-conformance" ]]; then
     LOG_DIR="$(default_netfilter_log_dir)"
   fi
   run_netfilter_conformance "${LOG_DIR}"
+elif [[ "${MODE}" == "bedpm-installer-conformance" ]]; then
+  run_bedpm_installer_conformance
 else
   run_generic_smoke
 fi
