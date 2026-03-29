@@ -194,6 +194,17 @@ fail_missing_explicit_pkg_manager() {
   exit 3
 }
 
+fail_no_supported_pkg_manager() {
+  local missing_cmds=("$@")
+
+  printf '[%s][ERROR] No supported package manager was detected. Missing prerequisite commands for this installer branch: %s. Install them manually and rerun. You may also rerun with --pkg-manager <%s> or PKG_MANAGER=<%s>.\n' \
+    "${INSTALLER_NAME}" \
+    "${missing_cmds[*]}" \
+    'apt-get|dnf|yum|pacman|zypper' \
+    'apt-get|dnf|yum|pacman|zypper' >&2
+  exit 4
+}
+
 detect_primary_user() {
   if [[ -n "${SUBSTRATE_INSTALL_PRIMARY_USER:-}" ]]; then
     printf '%s\n' "${SUBSTRATE_INSTALL_PRIMARY_USER}"
@@ -1000,7 +1011,7 @@ ensure_linux_packages_for_commands() {
   fi
 
   if ! detect_package_manager; then
-    fatal "Unable to detect supported package manager. Install required commands (${missing_cmds[*]}) manually and re-run."
+    fail_no_supported_pkg_manager "${missing_cmds[@]}"
   fi
 
   maybe_emit_package_manager_decision_line

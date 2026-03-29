@@ -190,6 +190,20 @@ run_missing_env_manager_case() {
   ensure_linux_packages_for_commands curl
 }
 
+run_no_manager_case() {
+  local case_bin="${tmpdir}/no-manager-bin"
+
+  rm -rf "${case_bin}"
+  mkdir -p "${case_bin}"
+  cp "${manager_bin}/sudo" "${case_bin}/sudo"
+
+  PATH="${case_bin}"
+  reset_installer_state
+  DRY_RUN=1
+  SUBSTRATE_INSTALL_OS_RELEASE_PATH="${arch_fixture}"
+  ensure_linux_packages_for_commands curl tar
+}
+
 tmpdir="$(mktemp -d -t substrate-pkg-manager-detection.XXXXXX)"
 trap 'rm -rf "${tmpdir}"' EXIT
 
@@ -432,6 +446,15 @@ assert_contains "${missing_env_output}" "was not found in PATH" "missing env pat
 assert_contains "${missing_env_output}" "Install that manager or rerun with another allowed manager (apt-get, dnf, yum, pacman, zypper)." "missing env remediation"
 assert_contains_once "${missing_env_output}" "${missing_env_decision_line}" "missing env decision line"
 assert_in_order "${missing_env_output}" "${missing_env_decision_line}" "was not found in PATH" "missing env decision-line ordering"
+
+no_manager_output="$(capture_failure_output 4 "no supported manager" run_no_manager_case)"
+assert_contains "${no_manager_output}" "No supported package manager was detected." "no manager posture"
+assert_contains "${no_manager_output}" "Missing prerequisite commands for this installer branch: curl tar." "no manager missing commands"
+assert_contains "${no_manager_output}" "Install them manually and rerun." "no manager remediation"
+assert_contains "${no_manager_output}" "--pkg-manager <apt-get|dnf|yum|pacman|zypper>" "no manager flag override"
+assert_contains "${no_manager_output}" "PKG_MANAGER=<apt-get|dnf|yum|pacman|zypper>" "no manager env override"
+assert_not_contains "${no_manager_output}" "Detected distro:" "no manager no decision line"
+assert_not_contains "${no_manager_output}" "Installing packages:" "no manager no install attempt"
 
 decision_line='Detected distro: ubuntu (like: debian), using package manager: apt-get (source: os_release)'
 PATH="${manager_bin}"
