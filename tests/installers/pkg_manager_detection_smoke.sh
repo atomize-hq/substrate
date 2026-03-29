@@ -128,6 +128,30 @@ capture_failure_output() {
   printf '%s' "${output}"
 }
 
+run_wrapper_fixture_case() {
+  local expected_status="$1"
+  local output=""
+  local actual_status=0
+
+  set +e
+  output="$(
+    HOME="${wrapper_fixture_home}" \
+    SHELL="/bin/bash" \
+    SUBSTRATE_TEST_UPSTREAM_STATUS="${expected_status}" \
+    "${wrapper_fixture_root}/install.sh" --prefix "${wrapper_fixture_prefix}" 2>&1
+  )"
+  actual_status=$?
+  set -e
+
+  assert_eq "${actual_status}" "${expected_status}" "wrapper exit status ${expected_status}"
+  if [[ "${expected_status}" -eq 0 ]]; then
+    assert_contains "${output}" "Substrate install successful!" "wrapper success output"
+  else
+    assert_contains "${output}" "[substrate-install] Failed." "wrapper failure prefix ${expected_status}"
+    assert_contains "${output}" "upstream-status=${expected_status}" "wrapper upstream stderr ${expected_status}"
+  fi
+}
+
 reset_detected_manager() {
   PKG_MANAGER=""
   PKG_MANAGER_SOURCE=""
@@ -249,6 +273,9 @@ unreadable_alt="${tmpdir}/unreadable-os-release"
 non_regular_alt="${tmpdir}/os-release-dir"
 missing_alt="${tmpdir}/missing-os-release"
 manager_bin="${tmpdir}/bin"
+wrapper_fixture_root="${tmpdir}/wrapper-fixture"
+wrapper_fixture_prefix="${tmpdir}/wrapper-prefix"
+wrapper_fixture_home="${tmpdir}/wrapper-home"
 
 cat > "${valid_alt}" <<'EOF'
 ID=ubuntu
@@ -314,6 +341,26 @@ make_stub_command "${manager_bin}/yum"
 make_stub_command "${manager_bin}/pacman"
 make_stub_command "${manager_bin}/zypper"
 make_stub_command "${manager_bin}/sudo"
+
+mkdir -p "${wrapper_fixture_root}/loader" "${wrapper_fixture_prefix}" "${wrapper_fixture_home}"
+cp "${repo_root}/scripts/substrate/install.sh" "${wrapper_fixture_root}/install.sh"
+chmod +x "${wrapper_fixture_root}/install.sh"
+
+cat > "${wrapper_fixture_root}/install-substrate.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+status="${SUBSTRATE_TEST_UPSTREAM_STATUS:-0}"
+printf 'upstream-status=%s\n' "${status}" >&2
+exit "${status}"
+EOF
+chmod +x "${wrapper_fixture_root}/install-substrate.sh"
+
+cat > "${wrapper_fixture_root}/loader/bash_loading_animations.sh" <<'EOF'
+#!/usr/bin/env bash
+BLA_braille_fill_bar=()
+BLA::start_loading_animation() { :; }
+BLA::stop_loading_animation() { :; }
+EOF
 
 assert_smoke_wrapper_topology
 
@@ -541,6 +588,10 @@ assert_in_order "${multi_path_probe_output}" "${multi_path_probe_warning}" "${pa
 assert_in_order "${multi_path_probe_output}" "${path_probe_decision_line}" "[substrate-install] Installing packages: curl" "multi path_probe decision-line ordering"
 PATH="${original_path}"
 make_stub_command "${manager_bin}/pacman"
+
+for wrapper_status in 0 2 3 4; do
+  run_wrapper_fixture_case "${wrapper_status}"
+done
 
 SUBSTRATE_INSTALL_OS_RELEASE_PATH="${empty_value_fixture}"
 resolve_selected_os_release_input
