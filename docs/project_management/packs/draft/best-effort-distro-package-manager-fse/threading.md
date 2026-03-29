@@ -170,9 +170,9 @@
   - **Consumer seam(s)**: `SEAM-07`
   - **Carried contract IDs**: `C-10`
   - **Purpose**: carry one authoritative validation topology, manual evidence model, and macOS-hosted verification posture into checkpoint sealing
-  - **State**: defined
+  - **State**: published
   - **Revalidation trigger**: repo harness path, smoke-wrapper topology, manual evidence expectations, or macOS Lima-backed verification path change
-  - **Satisfied by**: `SEAM-06` closeout with validation evidence recorded
+  - **Satisfied by**: `SEAM-06` closeout with recorded validation evidence, published `C-10`, and `seam_exit_gate.status: passed`
   - **Notes**: keeps repo harness authoritative, smoke wrapper thin, and macOS-hosted verification explicit
 
 - **Thread ID**: `THR-07`
