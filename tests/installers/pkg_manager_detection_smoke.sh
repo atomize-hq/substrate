@@ -116,12 +116,13 @@ parse_selected_os_release_fields
 assert_parsed_fields "${DISTRO_UNKNOWN_SENTINEL}" "debian"
 
 original_path="${PATH}"
-PATH="${manager_bin}"
+PATH="${manager_bin}:${original_path}"
 PKG_MANAGER=""
 SUBSTRATE_INSTALL_OS_RELEASE_PATH="${valid_alt}"
 detect_package_manager
 assert_eq "${PKG_MANAGER}" "apt-get" "PKG_MANAGER"
-assert_selected "${valid_alt}"
+assert_eq "${OS_RELEASE_INPUT_STATE}" "selected" "OS_RELEASE_INPUT_STATE"
+assert_eq "${OS_RELEASE_SELECTED_PATH}" "${valid_alt}" "OS_RELEASE_SELECTED_PATH"
 assert_parsed_fields "ubuntu" "debian"
 PATH="${original_path}"
 
