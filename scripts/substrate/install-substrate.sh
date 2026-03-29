@@ -141,8 +141,41 @@ is_supported_pkg_manager() {
 }
 
 supported_pkg_manager_list() {
-  local IFS=', '
-  printf '%s' "${SUPPORTED_PKG_MANAGERS[*]}"
+  local manager=""
+  local first=1
+
+  for manager in "${SUPPORTED_PKG_MANAGERS[@]}"; do
+    if [[ "${first}" -eq 1 ]]; then
+      printf '%s' "${manager}"
+      first=0
+    else
+      printf ', %s' "${manager}"
+    fi
+  done
+}
+
+fail_invalid_explicit_pkg_manager() {
+  local source_name="$1"
+  local invalid_value="$2"
+
+  printf '[%s][ERROR] Invalid %s value %q. Allowed values: %s. Re-run with one of the allowed values or remove the invalid override.\n' \
+    "${INSTALLER_NAME}" \
+    "${source_name}" \
+    "${invalid_value}" \
+    "$(supported_pkg_manager_list)" >&2
+  exit 2
+}
+
+fail_missing_explicit_pkg_manager() {
+  local source_name="$1"
+  local selected_manager="$2"
+
+  printf '[%s][ERROR] Selected package manager %q from %s was not found in PATH. Install that manager or rerun with another allowed manager (%s).\n' \
+    "${INSTALLER_NAME}" \
+    "${selected_manager}" \
+    "${source_name}" \
+    "$(supported_pkg_manager_list)" >&2
+  exit 3
 }
 
 detect_primary_user() {
@@ -697,15 +730,17 @@ select_package_manager_from_flag() {
   fi
 
   if ! is_supported_pkg_manager "${PKG_MANAGER_FLAG_OVERRIDE}"; then
-    fatal "Unsupported --pkg-manager value '${PKG_MANAGER_FLAG_OVERRIDE}'. Supported values: $(supported_pkg_manager_list)."
-  fi
-
-  if ! command -v "${PKG_MANAGER_FLAG_OVERRIDE}" >/dev/null 2>&1; then
-    fatal "Requested --pkg-manager '${PKG_MANAGER_FLAG_OVERRIDE}' was not found in PATH."
+    fail_invalid_explicit_pkg_manager "--pkg-manager" "${PKG_MANAGER_FLAG_OVERRIDE}"
   fi
 
   PKG_MANAGER="${PKG_MANAGER_FLAG_OVERRIDE}"
   PKG_MANAGER_SOURCE="flag"
+
+  if ! command -v "${PKG_MANAGER_FLAG_OVERRIDE}" >/dev/null 2>&1; then
+    maybe_emit_package_manager_decision_line
+    fail_missing_explicit_pkg_manager "--pkg-manager" "${PKG_MANAGER_FLAG_OVERRIDE}"
+  fi
+
   return 0
 }
 
@@ -715,15 +750,17 @@ select_package_manager_from_env() {
   fi
 
   if ! is_supported_pkg_manager "${PKG_MANAGER_ENV_OVERRIDE}"; then
-    fatal "Unsupported PKG_MANAGER value '${PKG_MANAGER_ENV_OVERRIDE}'. Supported values: $(supported_pkg_manager_list)."
-  fi
-
-  if ! command -v "${PKG_MANAGER_ENV_OVERRIDE}" >/dev/null 2>&1; then
-    fatal "Requested PKG_MANAGER '${PKG_MANAGER_ENV_OVERRIDE}' was not found in PATH."
+    fail_invalid_explicit_pkg_manager "PKG_MANAGER" "${PKG_MANAGER_ENV_OVERRIDE}"
   fi
 
   PKG_MANAGER="${PKG_MANAGER_ENV_OVERRIDE}"
   PKG_MANAGER_SOURCE="env"
+
+  if ! command -v "${PKG_MANAGER_ENV_OVERRIDE}" >/dev/null 2>&1; then
+    maybe_emit_package_manager_decision_line
+    fail_missing_explicit_pkg_manager "PKG_MANAGER" "${PKG_MANAGER_ENV_OVERRIDE}"
+  fi
+
   return 0
 }
 

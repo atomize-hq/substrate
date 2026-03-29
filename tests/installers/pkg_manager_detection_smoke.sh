@@ -96,6 +96,27 @@ assert_in_order() {
   fi
 }
 
+capture_failure_output() {
+  local expected_status="$1"
+  local label="$2"
+  shift 2
+
+  local output=""
+  local status=0
+
+  set +e
+  output="$(
+    (
+      "$@"
+    ) 2>&1
+  )"
+  status=$?
+  set -e
+
+  assert_eq "${status}" "${expected_status}" "${label} status"
+  printf '%s' "${output}"
+}
+
 reset_detected_manager() {
   PKG_MANAGER=""
   PKG_MANAGER_SOURCE=""
@@ -119,6 +140,52 @@ make_stub_command() {
 exit 0
 EOF
   chmod +x "${path}"
+}
+
+run_invalid_flag_case() {
+  PATH="${manager_bin}"
+  reset_installer_state
+  parse_args --pkg-manager apk
+  SUBSTRATE_INSTALL_OS_RELEASE_PATH="${valid_alt}"
+  ensure_linux_packages_for_commands curl
+}
+
+run_invalid_env_case() {
+  PATH="${manager_bin}"
+  reset_installer_state
+  PKG_MANAGER_ENV_OVERRIDE="apk"
+  SUBSTRATE_INSTALL_OS_RELEASE_PATH="${valid_alt}"
+  ensure_linux_packages_for_commands curl
+}
+
+run_missing_flag_manager_case() {
+  local case_bin="${tmpdir}/missing-flag-bin"
+
+  rm -rf "${case_bin}"
+  mkdir -p "${case_bin}"
+  cp -R "${manager_bin}"/. "${case_bin}"/
+  rm -f "${case_bin}/pacman"
+
+  PATH="${case_bin}"
+  reset_installer_state
+  parse_args --pkg-manager pacman
+  SUBSTRATE_INSTALL_OS_RELEASE_PATH="${valid_alt}"
+  ensure_linux_packages_for_commands curl
+}
+
+run_missing_env_manager_case() {
+  local case_bin="${tmpdir}/missing-env-bin"
+
+  rm -rf "${case_bin}"
+  mkdir -p "${case_bin}"
+  cp -R "${manager_bin}"/. "${case_bin}"/
+  rm -f "${case_bin}/dnf"
+
+  PATH="${case_bin}"
+  reset_installer_state
+  PKG_MANAGER_ENV_OVERRIDE="dnf"
+  SUBSTRATE_INSTALL_OS_RELEASE_PATH="${valid_alt}"
+  ensure_linux_packages_for_commands curl
 }
 
 tmpdir="$(mktemp -d -t substrate-pkg-manager-detection.XXXXXX)"
@@ -324,6 +391,38 @@ assert_contains_once "${env_output}" "${env_decision_line}" "env decision line"
 assert_in_order "${env_output}" "${env_decision_line}" "[substrate-install] Installing packages: curl" "env decision-line ordering"
 assert_not_contains "${env_output}" "apt-get update" "env no os_release install command"
 PATH="${original_path}"
+
+invalid_flag_output="$(capture_failure_output 2 "invalid flag" run_invalid_flag_case)"
+assert_contains "${invalid_flag_output}" "--pkg-manager" "invalid flag source"
+assert_contains "${invalid_flag_output}" "apk" "invalid flag value"
+assert_contains "${invalid_flag_output}" "Allowed values: apt-get, dnf, yum, pacman, zypper." "invalid flag allowed values"
+assert_contains "${invalid_flag_output}" "Re-run with one of the allowed values or remove the invalid override." "invalid flag remediation"
+assert_not_contains "${invalid_flag_output}" "Detected distro:" "invalid flag no decision line"
+
+invalid_env_output="$(capture_failure_output 2 "invalid env" run_invalid_env_case)"
+assert_contains "${invalid_env_output}" "PKG_MANAGER" "invalid env source"
+assert_contains "${invalid_env_output}" "apk" "invalid env value"
+assert_contains "${invalid_env_output}" "Allowed values: apt-get, dnf, yum, pacman, zypper." "invalid env allowed values"
+assert_contains "${invalid_env_output}" "Re-run with one of the allowed values or remove the invalid override." "invalid env remediation"
+assert_not_contains "${invalid_env_output}" "Detected distro:" "invalid env no decision line"
+
+missing_flag_output="$(capture_failure_output 3 "missing flag manager" run_missing_flag_manager_case)"
+missing_flag_decision_line='Detected distro: ubuntu (like: debian), using package manager: pacman (source: flag)'
+assert_contains "${missing_flag_output}" "--pkg-manager" "missing flag source"
+assert_contains "${missing_flag_output}" "pacman" "missing flag value"
+assert_contains "${missing_flag_output}" "was not found in PATH" "missing flag path text"
+assert_contains "${missing_flag_output}" "Install that manager or rerun with another allowed manager (apt-get, dnf, yum, pacman, zypper)." "missing flag remediation"
+assert_contains_once "${missing_flag_output}" "${missing_flag_decision_line}" "missing flag decision line"
+assert_in_order "${missing_flag_output}" "${missing_flag_decision_line}" "was not found in PATH" "missing flag decision-line ordering"
+
+missing_env_output="$(capture_failure_output 3 "missing env manager" run_missing_env_manager_case)"
+missing_env_decision_line='Detected distro: ubuntu (like: debian), using package manager: dnf (source: env)'
+assert_contains "${missing_env_output}" "PKG_MANAGER" "missing env source"
+assert_contains "${missing_env_output}" "dnf" "missing env value"
+assert_contains "${missing_env_output}" "was not found in PATH" "missing env path text"
+assert_contains "${missing_env_output}" "Install that manager or rerun with another allowed manager (apt-get, dnf, yum, pacman, zypper)." "missing env remediation"
+assert_contains_once "${missing_env_output}" "${missing_env_decision_line}" "missing env decision line"
+assert_in_order "${missing_env_output}" "${missing_env_decision_line}" "was not found in PATH" "missing env decision-line ordering"
 
 decision_line='Detected distro: ubuntu (like: debian), using package manager: apt-get (source: os_release)'
 PATH="${manager_bin}"
