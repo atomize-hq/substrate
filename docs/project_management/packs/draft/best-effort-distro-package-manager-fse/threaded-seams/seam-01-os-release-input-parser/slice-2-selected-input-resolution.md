@@ -3,7 +3,7 @@ slice_id: S2
 seam_id: SEAM-01
 slice_kind: delivery
 execution_horizon: active
-status: decomposed
+status: landed
 plan_version: v2
 basis:
   currentness: current
@@ -17,8 +17,8 @@ gates:
     contract: inherited
     revalidation: inherited
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 threads:
   - THR-01
   - THR-07
@@ -46,6 +46,7 @@ candidate_subslices: []
   - source contract `SUBSTRATE_INSTALL_OS_RELEASE_PATH` rules
 - **Verification**:
   - targeted shell fixtures cover unset or empty env, valid alternate file, relative path, unreadable file, and directory path
+  - landed slice coverage lives in `tests/installers/pkg_manager_detection_smoke.sh`
   - pass condition: all invalid alternate-input cases degrade without a second file read and without branching into manager selection logic
 - **Rollout/safety**:
   - isolates the risky boundary where an invalid test hook could otherwise pull host state back into the run

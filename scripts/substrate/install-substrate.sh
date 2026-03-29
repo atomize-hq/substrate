@@ -39,6 +39,11 @@ HOST_STATE_GROUP_EXISTED=""
 HOST_STATE_GROUP_CREATED=0
 HOST_STATE_ADDED_USERS=()
 HOST_STATE_LINGER_ENTRIES=()
+readonly DISTRO_UNKNOWN_SENTINEL="<unknown>"
+OS_RELEASE_SELECTED_PATH=""
+OS_RELEASE_INPUT_STATE="unavailable"
+DETECTED_DISTRO_ID="${DISTRO_UNKNOWN_SENTINEL}"
+DETECTED_DISTRO_ID_LIKE="${DISTRO_UNKNOWN_SENTINEL}"
 
 log() {
   printf '[%s] %s\n' "${INSTALLER_NAME}" "$*" >&2
@@ -441,6 +446,41 @@ initialize_sudo() {
       fatal "This installer requires 'sudo' when run as a non-root user. Install sudo or re-run the installer as root."
     fi
   fi
+}
+
+reset_os_release_input_state() {
+  OS_RELEASE_SELECTED_PATH=""
+  OS_RELEASE_INPUT_STATE="unavailable"
+  DETECTED_DISTRO_ID="${DISTRO_UNKNOWN_SENTINEL}"
+  DETECTED_DISTRO_ID_LIKE="${DISTRO_UNKNOWN_SENTINEL}"
+}
+
+resolve_selected_os_release_input() {
+  local selected_path="${SUBSTRATE_INSTALL_OS_RELEASE_PATH:-}"
+  local os_release_fd
+
+  reset_os_release_input_state
+
+  if [[ -z "${selected_path}" ]]; then
+    selected_path="/etc/os-release"
+  fi
+
+  if [[ "${selected_path}" != /* ]]; then
+    return 1
+  fi
+
+  if [[ ! -f "${selected_path}" || ! -r "${selected_path}" ]]; then
+    return 1
+  fi
+
+  if ! exec {os_release_fd}<"${selected_path}"; then
+    return 1
+  fi
+  exec {os_release_fd}<&-
+
+  OS_RELEASE_SELECTED_PATH="${selected_path}"
+  OS_RELEASE_INPUT_STATE="selected"
+  return 0
 }
 
 detect_package_manager() {
