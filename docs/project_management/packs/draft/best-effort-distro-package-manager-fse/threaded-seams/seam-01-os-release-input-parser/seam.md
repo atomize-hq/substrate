@@ -18,7 +18,7 @@ basis:
 gates:
   pre_exec:
     review: pending
-    contract: pending
+    contract: passed
     revalidation: pending
   post_exec:
     landing: pending
