@@ -99,6 +99,7 @@ assert_in_order() {
 reset_detected_manager() {
   PKG_MANAGER=""
   PKG_MANAGER_SOURCE=""
+  PKG_MANAGER_FLAG_OVERRIDE=""
 }
 
 reset_installer_state() {
@@ -231,6 +232,17 @@ assert_parsed_fields "ubuntu" "debian"
 PATH="${original_path}"
 
 PATH="${manager_bin}"
+reset_installer_state
+parse_args --pkg-manager pacman
+PKG_MANAGER="apt-get"
+PKG_MANAGER_SOURCE="env"
+SUBSTRATE_INSTALL_OS_RELEASE_PATH="${valid_alt}"
+detect_package_manager
+assert_detected_manager "pacman" "flag"
+assert_parsed_fields "ubuntu" "debian"
+PATH="${original_path}"
+
+PATH="${manager_bin}"
 reset_detected_manager
 SUBSTRATE_INSTALL_OS_RELEASE_PATH="${debian_like_fixture}"
 detect_package_manager
@@ -278,6 +290,17 @@ make_stub_command "${manager_bin}/dnf"
 make_stub_command "${manager_bin}/yum"
 make_stub_command "${manager_bin}/pacman"
 make_stub_command "${manager_bin}/zypper"
+
+flag_decision_line='Detected distro: ubuntu (like: debian), using package manager: pacman (source: flag)'
+PATH="${manager_bin}"
+reset_installer_state
+DRY_RUN=1
+parse_args --pkg-manager pacman
+SUBSTRATE_INSTALL_OS_RELEASE_PATH="${valid_alt}"
+flag_output="$(ensure_linux_packages_for_commands curl 2>&1)"
+assert_contains_once "${flag_output}" "${flag_decision_line}" "flag decision line"
+assert_in_order "${flag_output}" "${flag_decision_line}" "[substrate-install] Installing packages: curl" "flag decision-line ordering"
+PATH="${original_path}"
 
 decision_line='Detected distro: ubuntu (like: debian), using package manager: apt-get (source: os_release)'
 PATH="${manager_bin}"

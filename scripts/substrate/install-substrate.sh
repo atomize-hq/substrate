@@ -30,6 +30,7 @@ IS_WSL=0
 ORIGINAL_PATH="${PATH}"
 PKG_MANAGER=""
 PKG_MANAGER_SOURCE=""
+PKG_MANAGER_FLAG_OVERRIDE=""
 PKG_MANAGER_DECISION_LINE_EMITTED=0
 APT_UPDATED=0
 SUDO_CMD=()
@@ -46,6 +47,7 @@ OS_RELEASE_SELECTED_PATH=""
 OS_RELEASE_INPUT_STATE="unavailable"
 DETECTED_DISTRO_ID="${DISTRO_UNKNOWN_SENTINEL}"
 DETECTED_DISTRO_ID_LIKE="${DISTRO_UNKNOWN_SENTINEL}"
+readonly SUPPORTED_PKG_MANAGERS=(apt-get dnf yum pacman zypper)
 
 log() {
   printf '[%s] %s\n' "${INSTALLER_NAME}" "$*" >&2
@@ -70,6 +72,7 @@ Usage:
 Options:
   --version <semver>   Install a specific release (default: latest GitHub release)
   --prefix <path>      Installation prefix (default: ~/.substrate)
+  --pkg-manager <mgr>  Force Linux package manager: apt-get|dnf|yum|pacman|zypper
   --no-world           Skip world backend provisioning
   --no-shims           Skip shim deployment
   --sync-deps          Run 'substrate world deps current sync' after provisioning completes
@@ -121,6 +124,24 @@ command_exists() {
 require_cmd() {
   local cmd="$1"
   command_exists "${cmd}" || fatal "Required command '${cmd}' not found. Please install it and re-run."
+}
+
+is_supported_pkg_manager() {
+  local candidate="$1"
+  local manager=""
+
+  for manager in "${SUPPORTED_PKG_MANAGERS[@]}"; do
+    if [[ "${candidate}" == "${manager}" ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+supported_pkg_manager_list() {
+  local IFS=', '
+  printf '%s' "${SUPPORTED_PKG_MANAGERS[*]}"
 }
 
 detect_primary_user() {
@@ -669,13 +690,35 @@ select_package_manager_from_os_release() {
   return 1
 }
 
+select_package_manager_from_flag() {
+  if [[ -z "${PKG_MANAGER_FLAG_OVERRIDE}" ]]; then
+    return 1
+  fi
+
+  if ! is_supported_pkg_manager "${PKG_MANAGER_FLAG_OVERRIDE}"; then
+    fatal "Unsupported --pkg-manager value '${PKG_MANAGER_FLAG_OVERRIDE}'. Supported values: $(supported_pkg_manager_list)."
+  fi
+
+  if ! command -v "${PKG_MANAGER_FLAG_OVERRIDE}" >/dev/null 2>&1; then
+    fatal "Requested --pkg-manager '${PKG_MANAGER_FLAG_OVERRIDE}' was not found in PATH."
+  fi
+
+  PKG_MANAGER="${PKG_MANAGER_FLAG_OVERRIDE}"
+  PKG_MANAGER_SOURCE="flag"
+  return 0
+}
+
 detect_package_manager() {
-  if [[ -n "${PKG_MANAGER}" ]]; then
+  if [[ -n "${PKG_MANAGER}" && -z "${PKG_MANAGER_FLAG_OVERRIDE}" ]]; then
     return 0
   fi
 
   resolve_selected_os_release_input || true
   parse_selected_os_release_fields || true
+
+  if select_package_manager_from_flag; then
+    return 0
+  fi
 
   if select_package_manager_from_os_release; then
     return 0
@@ -706,9 +749,17 @@ detect_package_manager() {
 }
 
 maybe_emit_package_manager_decision_line() {
-  if [[ -z "${PKG_MANAGER}" || "${PKG_MANAGER_SOURCE}" != "os_release" ]]; then
+  if [[ -z "${PKG_MANAGER}" ]]; then
     return
   fi
+
+  case "${PKG_MANAGER_SOURCE}" in
+    flag|os_release)
+      ;;
+    *)
+      return
+      ;;
+  esac
 
   if [[ "${PKG_MANAGER_DECISION_LINE_EMITTED}" -eq 1 ]]; then
     return
@@ -956,6 +1007,11 @@ parse_args() {
       --prefix)
         [[ $# -lt 2 ]] && fatal "Missing value for --prefix"
         PREFIX="$2"
+        shift 2
+        ;;
+      --pkg-manager)
+        [[ $# -lt 2 ]] && fatal "Missing value for --pkg-manager"
+        PKG_MANAGER_FLAG_OVERRIDE="$2"
         shift 2
         ;;
       --no-world)
