@@ -48,9 +48,65 @@ assert_detected_manager() {
   assert_eq "${PKG_MANAGER_SOURCE}" "${expected_source}" "PKG_MANAGER_SOURCE"
 }
 
+assert_contains() {
+  local haystack="$1"
+  local needle="$2"
+  local label="$3"
+
+  if [[ "${haystack}" != *"${needle}"* ]]; then
+    printf '[pkg-manager-detection-smoke] expected %s to contain %q\n' "${label}" "${needle}" >&2
+    exit 1
+  fi
+}
+
+assert_not_contains() {
+  local haystack="$1"
+  local needle="$2"
+  local label="$3"
+
+  if [[ "${haystack}" == *"${needle}"* ]]; then
+    printf '[pkg-manager-detection-smoke] expected %s to omit %q\n' "${label}" "${needle}" >&2
+    exit 1
+  fi
+}
+
+assert_contains_once() {
+  local haystack="$1"
+  local needle="$2"
+  local label="$3"
+  local remainder=""
+
+  assert_contains "${haystack}" "${needle}" "${label}"
+  remainder="${haystack#*"${needle}"}"
+  if [[ "${remainder}" == *"${needle}"* ]]; then
+    printf '[pkg-manager-detection-smoke] expected %s to contain %q exactly once\n' "${label}" "${needle}" >&2
+    exit 1
+  fi
+}
+
+assert_in_order() {
+  local haystack="$1"
+  local first="$2"
+  local second="$3"
+  local label="$4"
+
+  if [[ "${haystack}" != *"${first}"*"${second}"* ]]; then
+    printf '[pkg-manager-detection-smoke] expected %s to place %q before %q\n' "${label}" "${first}" "${second}" >&2
+    exit 1
+  fi
+}
+
 reset_detected_manager() {
   PKG_MANAGER=""
   PKG_MANAGER_SOURCE=""
+}
+
+reset_installer_state() {
+  reset_detected_manager
+  PKG_MANAGER_DECISION_LINE_EMITTED=0
+  APT_UPDATED=0
+  SUDO_CMD=()
+  DRY_RUN=0
 }
 
 make_stub_command() {
@@ -135,6 +191,7 @@ make_stub_command "${manager_bin}/dnf"
 make_stub_command "${manager_bin}/yum"
 make_stub_command "${manager_bin}/pacman"
 make_stub_command "${manager_bin}/zypper"
+make_stub_command "${manager_bin}/sudo"
 
 unset SUBSTRATE_INSTALL_OS_RELEASE_PATH
 resolve_selected_os_release_input
@@ -216,6 +273,34 @@ reset_detected_manager
 SUBSTRATE_INSTALL_OS_RELEASE_PATH="${arch_fixture}"
 detect_package_manager
 assert_detected_manager "apt-get" ""
+PATH="${original_path}"
+make_stub_command "${manager_bin}/dnf"
+make_stub_command "${manager_bin}/yum"
+make_stub_command "${manager_bin}/pacman"
+make_stub_command "${manager_bin}/zypper"
+
+decision_line='Detected distro: ubuntu (like: debian), using package manager: apt-get (source: os_release)'
+PATH="${manager_bin}"
+reset_installer_state
+DRY_RUN=1
+SUBSTRATE_INSTALL_OS_RELEASE_PATH="${valid_alt}"
+decision_output="$(
+  {
+    ensure_linux_packages_for_commands curl
+    ensure_linux_packages_for_commands tar
+  } 2>&1
+)"
+assert_contains_once "${decision_output}" "${decision_line}" "os_release decision line"
+assert_in_order "${decision_output}" "${decision_line}" "[substrate-install][dry-run] sudo apt-get update" "os_release decision-line ordering"
+PATH="${original_path}"
+
+rm -f "${manager_bin}/pacman" "${manager_bin}/dnf" "${manager_bin}/yum" "${manager_bin}/zypper"
+PATH="${manager_bin}"
+reset_installer_state
+DRY_RUN=1
+SUBSTRATE_INSTALL_OS_RELEASE_PATH="${arch_fixture}"
+fallback_output="$(ensure_linux_packages_for_commands curl 2>&1)"
+assert_not_contains "${fallback_output}" "Detected distro:" "path_probe decision-line suppression"
 PATH="${original_path}"
 make_stub_command "${manager_bin}/dnf"
 make_stub_command "${manager_bin}/yum"
