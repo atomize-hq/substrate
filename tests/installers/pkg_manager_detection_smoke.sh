@@ -40,6 +40,29 @@ assert_parsed_fields() {
   assert_eq "${DETECTED_DISTRO_ID_LIKE}" "${expected_id_like}" "DETECTED_DISTRO_ID_LIKE"
 }
 
+assert_detected_manager() {
+  local expected_manager="$1"
+  local expected_source="$2"
+
+  assert_eq "${PKG_MANAGER}" "${expected_manager}" "PKG_MANAGER"
+  assert_eq "${PKG_MANAGER_SOURCE}" "${expected_source}" "PKG_MANAGER_SOURCE"
+}
+
+reset_detected_manager() {
+  PKG_MANAGER=""
+  PKG_MANAGER_SOURCE=""
+}
+
+make_stub_command() {
+  local path="$1"
+
+  cat > "${path}" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+  chmod +x "${path}"
+}
+
 tmpdir="$(mktemp -d -t substrate-pkg-manager-detection.XXXXXX)"
 trap 'rm -rf "${tmpdir}"' EXIT
 
@@ -57,6 +80,10 @@ EOF
 parser_fixture="${tmpdir}/parser-os-release"
 missing_id_fixture="${tmpdir}/missing-id-os-release"
 empty_value_fixture="${tmpdir}/empty-value-os-release"
+debian_like_fixture="${tmpdir}/debian-like-os-release"
+fedora_fixture="${tmpdir}/fedora-os-release"
+arch_fixture="${tmpdir}/arch-os-release"
+suse_fixture="${tmpdir}/suse-os-release"
 
 cat > "${parser_fixture}" <<'EOF'
   # comment line
@@ -77,17 +104,37 @@ ID=""
 ID_LIKE='`APT-GET`'
 EOF
 
+cat > "${debian_like_fixture}" <<'EOF'
+ID=custom
+ID_LIKE="ubuntu debian"
+EOF
+
+cat > "${fedora_fixture}" <<'EOF'
+ID=rocky
+ID_LIKE="rhel fedora"
+EOF
+
+cat > "${arch_fixture}" <<'EOF'
+ID=endeavouros
+ID_LIKE=arch
+EOF
+
+cat > "${suse_fixture}" <<'EOF'
+ID=opensuse-tumbleweed
+ID_LIKE="suse opensuse"
+EOF
+
 cat > "${unreadable_alt}" <<'EOF'
 ID=fedora
 EOF
 chmod 000 "${unreadable_alt}"
 mkdir -p "${non_regular_alt}"
 mkdir -p "${manager_bin}"
-cat > "${manager_bin}/apt-get" <<'EOF'
-#!/usr/bin/env bash
-exit 0
-EOF
-chmod +x "${manager_bin}/apt-get"
+make_stub_command "${manager_bin}/apt-get"
+make_stub_command "${manager_bin}/dnf"
+make_stub_command "${manager_bin}/yum"
+make_stub_command "${manager_bin}/pacman"
+make_stub_command "${manager_bin}/zypper"
 
 unset SUBSTRATE_INSTALL_OS_RELEASE_PATH
 resolve_selected_os_release_input
@@ -116,15 +163,64 @@ parse_selected_os_release_fields
 assert_parsed_fields "${DISTRO_UNKNOWN_SENTINEL}" "debian"
 
 original_path="${PATH}"
-PATH="${manager_bin}:${original_path}"
-PKG_MANAGER=""
+PATH="${manager_bin}"
+reset_detected_manager
 SUBSTRATE_INSTALL_OS_RELEASE_PATH="${valid_alt}"
 detect_package_manager
-assert_eq "${PKG_MANAGER}" "apt-get" "PKG_MANAGER"
+assert_detected_manager "apt-get" "os_release"
 assert_eq "${OS_RELEASE_INPUT_STATE}" "selected" "OS_RELEASE_INPUT_STATE"
 assert_eq "${OS_RELEASE_SELECTED_PATH}" "${valid_alt}" "OS_RELEASE_SELECTED_PATH"
 assert_parsed_fields "ubuntu" "debian"
 PATH="${original_path}"
+
+PATH="${manager_bin}"
+reset_detected_manager
+SUBSTRATE_INSTALL_OS_RELEASE_PATH="${debian_like_fixture}"
+detect_package_manager
+assert_detected_manager "apt-get" "os_release"
+PATH="${original_path}"
+
+PATH="${manager_bin}"
+reset_detected_manager
+SUBSTRATE_INSTALL_OS_RELEASE_PATH="${fedora_fixture}"
+detect_package_manager
+assert_detected_manager "dnf" "os_release"
+PATH="${original_path}"
+
+rm -f "${manager_bin}/dnf"
+PATH="${manager_bin}"
+reset_detected_manager
+SUBSTRATE_INSTALL_OS_RELEASE_PATH="${fedora_fixture}"
+detect_package_manager
+assert_detected_manager "yum" "os_release"
+PATH="${original_path}"
+make_stub_command "${manager_bin}/dnf"
+
+PATH="${manager_bin}"
+reset_detected_manager
+SUBSTRATE_INSTALL_OS_RELEASE_PATH="${arch_fixture}"
+detect_package_manager
+assert_detected_manager "pacman" "os_release"
+PATH="${original_path}"
+
+PATH="${manager_bin}"
+reset_detected_manager
+SUBSTRATE_INSTALL_OS_RELEASE_PATH="${suse_fixture}"
+detect_package_manager
+assert_detected_manager "zypper" "os_release"
+PATH="${original_path}"
+
+rm -f "${manager_bin}/pacman" "${manager_bin}/dnf" "${manager_bin}/yum" "${manager_bin}/zypper"
+PATH="${manager_bin}"
+reset_detected_manager
+SUBSTRATE_INSTALL_OS_RELEASE_PATH="${arch_fixture}"
+detect_package_manager
+assert_detected_manager "apt-get" ""
+PATH="${original_path}"
+make_stub_command "${manager_bin}/dnf"
+make_stub_command "${manager_bin}/yum"
+make_stub_command "${manager_bin}/pacman"
+make_stub_command "${manager_bin}/zypper"
 
 SUBSTRATE_INSTALL_OS_RELEASE_PATH="${empty_value_fixture}"
 resolve_selected_os_release_input

@@ -29,6 +29,7 @@ ARCH=""
 IS_WSL=0
 ORIGINAL_PATH="${PATH}"
 PKG_MANAGER=""
+PKG_MANAGER_SOURCE=""
 APT_UPDATED=0
 SUDO_CMD=()
 MANAGER_ENV_PATH=""
@@ -549,6 +550,124 @@ parse_selected_os_release_fields() {
   return 0
 }
 
+os_release_id_like_has_token() {
+  local needle="$1"
+  local token=""
+
+  if [[ -z "${needle}" || "${DETECTED_DISTRO_ID_LIKE}" == "${DISTRO_UNKNOWN_SENTINEL}" ]]; then
+    return 1
+  fi
+
+  for token in ${DETECTED_DISTRO_ID_LIKE}; do
+    if [[ "${token}" == "${needle}" ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+os_release_matches_debian_family() {
+  case "${DETECTED_DISTRO_ID}" in
+    debian|ubuntu|linuxmint|pop)
+      return 0
+      ;;
+  esac
+
+  os_release_id_like_has_token "debian" || os_release_id_like_has_token "ubuntu"
+}
+
+os_release_matches_fedora_rhel_family() {
+  case "${DETECTED_DISTRO_ID}" in
+    fedora|rhel|centos|rocky|almalinux|ol|amzn)
+      return 0
+      ;;
+  esac
+
+  os_release_id_like_has_token "fedora" || os_release_id_like_has_token "rhel"
+}
+
+os_release_matches_arch_family() {
+  case "${DETECTED_DISTRO_ID}" in
+    arch|manjaro|endeavouros|arcolinux|artix|garuda)
+      return 0
+      ;;
+  esac
+
+  os_release_id_like_has_token "arch"
+}
+
+os_release_matches_suse_family() {
+  local token=""
+
+  case "${DETECTED_DISTRO_ID}" in
+    *suse*|*opensuse*)
+      return 0
+      ;;
+  esac
+
+  if [[ "${DETECTED_DISTRO_ID_LIKE}" == "${DISTRO_UNKNOWN_SENTINEL}" ]]; then
+    return 1
+  fi
+
+  for token in ${DETECTED_DISTRO_ID_LIKE}; do
+    case "${token}" in
+      *suse*|*opensuse*)
+        return 0
+        ;;
+    esac
+  done
+
+  return 1
+}
+
+select_package_manager_from_os_release() {
+  PKG_MANAGER_SOURCE=""
+
+  if os_release_matches_debian_family; then
+    if command -v apt-get >/dev/null 2>&1; then
+      PKG_MANAGER="apt-get"
+      PKG_MANAGER_SOURCE="os_release"
+      return 0
+    fi
+    return 1
+  fi
+
+  if os_release_matches_fedora_rhel_family; then
+    if command -v dnf >/dev/null 2>&1; then
+      PKG_MANAGER="dnf"
+      PKG_MANAGER_SOURCE="os_release"
+      return 0
+    fi
+    if command -v yum >/dev/null 2>&1; then
+      PKG_MANAGER="yum"
+      PKG_MANAGER_SOURCE="os_release"
+      return 0
+    fi
+    return 1
+  fi
+
+  if os_release_matches_arch_family; then
+    if command -v pacman >/dev/null 2>&1; then
+      PKG_MANAGER="pacman"
+      PKG_MANAGER_SOURCE="os_release"
+      return 0
+    fi
+    return 1
+  fi
+
+  if os_release_matches_suse_family; then
+    if command -v zypper >/dev/null 2>&1; then
+      PKG_MANAGER="zypper"
+      PKG_MANAGER_SOURCE="os_release"
+      return 0
+    fi
+    return 1
+  fi
+
+  return 1
+}
+
 detect_package_manager() {
   if [[ -n "${PKG_MANAGER}" ]]; then
     return 0
@@ -556,6 +675,10 @@ detect_package_manager() {
 
   resolve_selected_os_release_input || true
   parse_selected_os_release_fields || true
+
+  if select_package_manager_from_os_release; then
+    return 0
+  fi
 
   if command -v apt-get >/dev/null 2>&1; then
     PKG_MANAGER="apt-get"
