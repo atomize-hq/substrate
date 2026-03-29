@@ -25,3 +25,4 @@ __pycache__/
 docs/project_management/next/**/logs/
 docs/project_management/packs/**/logs/
 .mcp.json
+.DS_Store
