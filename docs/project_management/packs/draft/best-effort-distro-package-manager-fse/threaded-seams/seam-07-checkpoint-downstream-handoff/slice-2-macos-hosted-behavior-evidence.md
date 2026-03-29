@@ -3,7 +3,7 @@ slice_id: S2
 seam_id: SEAM-07
 slice_kind: delivery
 execution_horizon: active
-status: exec-ready
+status: landed
 plan_version: v1
 basis:
   currentness: current
@@ -17,8 +17,8 @@ gates:
     contract: passed
     revalidation: inherited
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 threads:
   - THR-06
 contracts_produced:
@@ -44,12 +44,16 @@ candidate_subslices: []
 - **Verification**:
   - review proves hosted evidence is behavior coverage, not compile-only parity
 
-## Realized macOS-hosted evidence
+## Realized macOS-hosted checkpoint evidence
 
-- `SEAM-06` already published the authoritative hosted-behavior path for this feature: `scripts/mac/smoke.sh --bedpm-installer-conformance` runs `docs/project_management/packs/draft/best-effort-distro-package-manager/smoke/linux-smoke.sh` through the Lima-backed Linux guest path rather than asserting native macOS package-manager-selection behavior.
-- The published operator evidence still points at that same behavior path:
-  - `docs/project_management/packs/draft/best-effort-distro-package-manager/manual_testing_playbook.md` records the macOS-hosted Lima verification command and states that its output must match the authoritative Linux smoke behavior.
-  - `docs/WORLD.md` states that hosted installer behavior coverage on macOS flows through the Lima-backed Linux guest/world-agent path and explicitly avoids claiming native macOS package-manager selection.
-- The current CP1 compile-parity run `23711447102` (`https://github.com/atomize-hq/substrate/actions/runs/23711447102`) includes a successful `macos-14` lane, but this slice treats that result as parity evidence only, not as the hosted behavior proof required by `C-11`.
-- The current CP1 checkpoint record therefore ties macOS-hosted behavior evidence to the already-published `SEAM-06` conformance surface, while using the new CP1 runs only to show that the checkpoint still includes macOS parity coverage and has not widened the feature into native macOS behavior scope.
-- Quick CI failure in run `23711510594` does not change this boundary: it blocks a clean checkpoint outcome, but it does not convert compile parity into hosted behavior evidence or weaken the Lima-backed Linux path requirement.
+- Hosted behavior evidence for `SEAM-07` remains inherited from `../../governance/seam-06-closeout.md`, which already published the authoritative `scripts/mac/smoke.sh --bedpm-installer-conformance` path as the Lima-backed Linux guest verification entrypoint for the BEDPM installer contract.
+- The current checkpoint does not reinterpret compile parity as hosted behavior evidence. Instead, it ties the existing hosted-evidence path into the realized `CP1` record alongside the live checkpoint runs captured in `S1`.
+- Repository evidence remains explicit and unchanged:
+  - `scripts/mac/smoke.sh --bedpm-installer-conformance` is defined as "Run the BEDPM Linux installer smoke through the Lima-backed guest path"
+  - `docs/project_management/packs/draft/best-effort-distro-package-manager/manual_testing_playbook.md` records the macOS-hosted Lima verification flow and states that it runs `smoke/linux-smoke.sh` through the Lima-backed Linux guest path
+  - `docs/WORLD.md` states that hosted installer behavior coverage on macOS flows through the Lima-backed Linux guest/world-agent path and does not define native macOS package-manager selection
+- Current checkpoint references that bind the inherited hosted evidence into `CP1`:
+  - compile parity run `23711447102` (`https://github.com/atomize-hq/substrate/actions/runs/23711447102`) passed on `macos-14`, so the checkpoint record includes current macOS parity coverage without claiming native behavior coverage
+  - quick CI run `23711510594` (`https://github.com/atomize-hq/substrate/actions/runs/23711510594`) failed on Linux shell lint, not on the hosted-evidence posture, so the blocker is checkpoint cleanliness rather than macOS-hosted ambiguity
+  - Linux feature-smoke run `23711646303` (`https://github.com/atomize-hq/substrate/actions/runs/23711646303`) passed for `BEDPM3`, preserving the authoritative Linux harness that the macOS-hosted path is defined to reuse
+- This slice therefore lands by making the hosted evidence explicit, inherited, and checkpoint-scoped: `SEAM-07` consumes the published `SEAM-06` hosted-verification truth and ties it to the realized `CP1` record without inventing a second macOS behavior authority.
