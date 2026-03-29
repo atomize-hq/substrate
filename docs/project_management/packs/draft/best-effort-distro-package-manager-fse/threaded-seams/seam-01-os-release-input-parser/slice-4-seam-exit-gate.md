@@ -3,7 +3,7 @@ slice_id: S4
 seam_id: SEAM-01
 slice_kind: seam_exit_gate
 execution_horizon: active
-status: decomposed
+status: landed
 plan_version: v2
 basis:
   currentness: current
@@ -17,8 +17,8 @@ gates:
     contract: inherited
     revalidation: inherited
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 threads:
   - THR-01
   - THR-07

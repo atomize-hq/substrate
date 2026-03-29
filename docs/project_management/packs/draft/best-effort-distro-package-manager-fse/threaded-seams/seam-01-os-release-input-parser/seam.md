@@ -1,7 +1,7 @@
 ---
 seam_id: SEAM-01
 seam_slug: os-release-input-parser
-status: decomposed
+status: landed
 execution_horizon: active
 plan_version: v2
 basis:
@@ -17,16 +17,16 @@ basis:
     - downstream persistence pack diverges from inherited input truth
 gates:
   pre_exec:
-    review: pending
+    review: passed
     contract: passed
-    revalidation: pending
+    revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S4
-  status: pending
+  status: passed
 open_remediations: []
 ---
 # SEAM-01 - os-release Input And Parser Contract
