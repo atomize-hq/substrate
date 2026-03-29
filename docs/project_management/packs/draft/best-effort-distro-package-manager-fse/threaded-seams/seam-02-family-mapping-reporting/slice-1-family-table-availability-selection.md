@@ -3,7 +3,7 @@ slice_id: S1
 seam_id: SEAM-02
 slice_kind: delivery
 execution_horizon: active
-status: exec-ready
+status: landed
 plan_version: v2
 basis:
   currentness: current
@@ -17,8 +17,8 @@ gates:
     contract: passed
     revalidation: inherited
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 threads:
   - THR-01
   - THR-02
@@ -51,6 +51,7 @@ candidate_subslices: []
   - `../../../best-effort-distro-package-manager/decision_register.md`
 - **Verification**:
   - fixture coverage proves each family branch consumes only `DETECTED_DISTRO_ID` and `DETECTED_DISTRO_ID_LIKE`
+  - landed slice coverage lives in `tests/installers/pkg_manager_detection_smoke.sh`
   - pass condition: mapped selection never re-reads raw os-release input and never reports success when the mapped manager is unavailable
 - **Rollout/safety**:
   - preserves SEAM-01 ownership for parser/input truth
