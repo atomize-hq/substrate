@@ -3,7 +3,7 @@ slice_id: S3
 seam_id: SEAM-07
 slice_kind: delivery
 execution_horizon: active
-status: exec-ready
+status: landed
 plan_version: v1
 basis:
   currentness: current
@@ -17,8 +17,8 @@ gates:
     contract: passed
     revalidation: inherited
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 threads:
   - THR-06
   - THR-09
