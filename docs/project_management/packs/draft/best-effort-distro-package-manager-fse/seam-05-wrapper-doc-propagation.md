@@ -2,11 +2,11 @@
 seam_id: SEAM-05
 seam_slug: wrapper-doc-propagation
 type: integration
-status: proposed
+status: landed
 execution_horizon: future
 plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v2
   upstream_closeouts:
@@ -18,22 +18,22 @@ basis:
     - THR-03
     - THR-04
   stale_triggers:
-    - decision-line wording changes
-    - exit taxonomy changes
+    - wrapper exit handling changes
+    - decision-line wording or placement changes
     - warning or remediation wording changes
     - env-hook semantics change
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
-  planned_location: reserved_final_slice
-  status: pending
+  planned_location: S4
+  status: passed
 open_remediations: []
 ---
 
@@ -130,9 +130,9 @@ Make the final operator-facing entrypoints and docs faithfully reuse the install
 
 ## Downstream decomposition context
 
-### Why this seam is `future`
+### Why this seam is `active`
 
-It must consume stable upstream decision semantics first. Extraction keeps it future so later review can validate parity rather than rediscover contract meaning.
+`SEAM-04` closeout now publishes `C-07` and `THR-04`, so wrapper/doc propagation can move into active implementation planning without rediscovering fallback behavior from installer diffs.
 
 ### Which threads matter most
 

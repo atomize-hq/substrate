@@ -139,8 +139,9 @@ if "${UPSTREAM_INSTALL}" "$@" >"${TMP_LOG}" 2>&1; then
   printf "Added %s to PATH via %s.\n" "${BIN_DIR}" "${RC_TARGET}"
   printf "Open a new shell or run 'source %s' so PATH changes take effect.\n" "${RC_TARGET}"
 else
+  upstream_status=$?
   stop_loader
   echo "[substrate-install] Failed. See ${TMP_LOG} for details." >&2
   cat "${TMP_LOG}" >&2
-  exit 1
+  exit "${upstream_status}"
 fi

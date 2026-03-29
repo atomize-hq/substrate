@@ -783,6 +783,30 @@ Each entry below is a stability promise: the variable name, parsing rules, and s
 | Examples | `SUBSTRATE_INSTALL_WRAPPER_BASE_URL=https://example.invalid/substrate/scripts/substrate ./scripts/substrate/install.sh` |
 | Security notes | Not sensitive. |
 
+#### `PKG_MANAGER`
+| Field | Value |
+| --- | --- |
+| Bucket | Config override input |
+| Type / allowed values | Case-sensitive string enum: `apt-get`, `dnf`, `yum`, `pacman`, `zypper`; empty is treated as unset |
+| Default if unset | Unset; the installer continues to os-release mapping and `PATH` probing |
+| Precedence | `--pkg-manager` overrides; otherwise this env var overrides os-release mapping and `PATH` probing |
+| Scope | Linux hosted installer only |
+| Examples | `PKG_MANAGER=dnf ./scripts/substrate/install-substrate.sh` |
+| Security notes | Not sensitive. |
+| Failure posture | Invalid value exits with code `2`; valid value missing from `PATH` exits with code `3`; once this env var selects a manager it never falls back to os-release mapping or `PATH` probing |
+
+#### `SUBSTRATE_INSTALL_OS_RELEASE_PATH`
+| Field | Value |
+| --- | --- |
+| Bucket | Config override input |
+| Type / allowed values | String path. Unset or empty uses `/etc/os-release`. Non-empty must be an absolute path to a readable regular file; otherwise os-release input is treated as unavailable |
+| Default if unset | `/etc/os-release` |
+| Precedence | Affects only the os-release input path; does not override `--pkg-manager` or `PKG_MANAGER`; when set, the installer does not read `/etc/os-release` |
+| Scope | Linux hosted installer only; ignored by macOS and Windows behavior |
+| Examples | `SUBSTRATE_INSTALL_OS_RELEASE_PATH=/tmp/os-release ./scripts/substrate/install-substrate.sh` |
+| Security notes | Not sensitive. |
+| Invalid / unreadable posture | Invalid or unreadable alternate paths render distro fields as `<unknown>` and continue to the remaining selection stages without falling back to `/etc/os-release` |
+
 #### `SUBSTRATE_INSTALL_LATEST_API`
 | Field | Value |
 | --- | --- |

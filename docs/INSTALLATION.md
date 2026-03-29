@@ -32,6 +32,31 @@ pins those helper downloads to the **latest GitHub release tag** (not `main`)
 to avoid drift while still defaulting to the latest release. Use
 `SUBSTRATE_INSTALL_REF` only for development overrides.
 
+For Linux hosted installs, `scripts/substrate/install.sh` and
+`scripts/substrate/install-substrate.sh` share one operator-facing contract:
+
+- Exact selection precedence:
+  1. `--pkg-manager`
+  2. `PKG_MANAGER`
+  3. os-release mapping
+  4. `PATH` probe in fixed order `apt-get -> dnf -> yum -> pacman -> zypper`
+- Stable decision-line template:
+  - `Detected distro: <id> (like: <id_like>), using package manager: <pkg_manager> (source: <flag|env|os_release|path_probe>)`
+- Fixed multi-manager warning posture:
+  - `Multiple supported package managers found in PATH: <manager_list>; selecting <selected> by fixed probe order (apt-get -> dnf -> yum -> pacman -> zypper). Override with --pkg-manager <apt-get|dnf|yum|pacman|zypper> or PKG_MANAGER=<apt-get|dnf|yum|pacman|zypper>.`
+  - When the multi-manager `PATH` warning is required, the warning line appears before the decision line.
+- Feature-specific exit and remediation posture:
+  - Exit `2`: invalid `--pkg-manager` value or invalid `PKG_MANAGER` value; rerun with one of `apt-get`, `dnf`, `yum`, `pacman`, `zypper` or remove the invalid override.
+  - Exit `3`: a manager selected by `--pkg-manager` or `PKG_MANAGER` was not found in `PATH`; install that manager or rerun with another allowed manager from the fixed vocabulary.
+  - Exit `4`: no supported manager was selected after os-release mapping and `PATH` probing; install the missing prerequisites manually and rerun, or rerun with `--pkg-manager <apt-get|dnf|yum|pacman|zypper>` or `PKG_MANAGER=<apt-get|dnf|yum|pacman|zypper>`.
+- Wrapper parity:
+  - For this feature's explicit contract branches, `scripts/substrate/install.sh` preserves direct installer exits `0`, `2`, `3`, and `4`.
+  - `scripts/substrate/install.sh` does not collapse those feature-specific non-zero exits to `1`.
+- Platform scope:
+  - Linux: this contract applies.
+  - macOS: no behavior change under ADR-0031.
+  - Windows: no behavior change under ADR-0031.
+
 The installer will:
 
 1. Download `substrate-v<version>-linux_<arch>.tar.gz` from the release bucket
@@ -118,7 +143,11 @@ During installation the script:
 Use the copy of `scripts/substrate/install.sh` (wrapper around
 `install-substrate.sh`) shipped inside the bundle. The script
 accepts the same flags as the hosted version (`--version`, `--prefix`,
-`--no-world`, `--no-shims`, `--sync-deps`, `--dry-run`, `--archive/--artifact-dir`).
+`--pkg-manager <apt-get|dnf|yum|pacman|zypper>`, `--no-world`, `--no-shims`,
+`--sync-deps`, `--dry-run`, `--archive/--artifact-dir`). The same Linux hosted
+installer contract for precedence, decision-line output, fixed `PATH`-probe
+warning posture, feature-specific remediation, and wrapper exit preservation
+applies to the offline wrapper path.
 
 ### macOS (arm64)
 
@@ -207,6 +236,7 @@ snippet (plus a `.bak` backup) to `~/.substrate_bashenv`.
 | ---- | ------- |
 | `--version <semver>` | Install a specific published release (default: `0.2.0-beta`) |
 | `--prefix <path>` | Override the installation prefix (default: `~/.substrate`) |
+| `--pkg-manager <apt-get\|dnf\|yum\|pacman\|zypper>` | Highest-precedence Linux hosted-installer package-manager selector; invalid values exit with code `2`, and a selected manager missing from `PATH` exits with code `3` |
 | `--no-world` | Skip provisioning the world backend (use `substrate world enable` later) |
 | `--no-shims` | Skip shim deployment (useful for CI images) |
 | `--sync-deps` | Run `substrate world deps current sync` after provisioning completes (best-effort; applies the enabled deps list into the world and may remediate APT-backed misses to `substrate world enable --provision-deps`) |

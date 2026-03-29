@@ -120,6 +120,7 @@ Windows (WSL backend) is functional but experimental. When the world backend is 
 ## 3) macOS Architecture (Lima)
 
 Substrate on macOS uses a Lima VM (“substrate”) to host the world-agent. The shell guarantees the VM, agent, and forwarding layer are ready before routing commands.
+Hosted installer behavior coverage on macOS flows through this Lima-backed Linux guest/world-agent path; package-manager selection itself remains Linux-only and does not define native macOS package-manager selection.
 
 - Provisioning & lifecycle
 - `scripts/mac/lima-warm.sh` starts or creates the VM from `scripts/mac/lima/substrate.yaml`, installs required packages, and ensures the systemd unit writes to `/run/substrate.sock` with `/tmp` included in `ReadWritePaths`.
@@ -140,6 +141,7 @@ Substrate on macOS uses a Lima VM (“substrate”) to host the world-agent. The
 
 - Validation
   - `scripts/mac/smoke.sh` exercises non‑PTY, PTY, and replay flows on macOS and asserts that the replay `fs_diff` contains project paths.
+  - `scripts/mac/smoke.sh --bedpm-installer-conformance` runs the BEDPM Linux smoke wrapper through the same Lima-backed guest path so hosted installer verification reuses the authoritative Linux harness instead of implying native macOS package-manager selection.
   - `scripts/linux/agent-hub-isolation-verify.sh` verifies `world_fs.mode=read_only` and `world_fs.isolation=full` enforcement (on macOS it drives the Lima-backed world; on Windows, use WSL-specific tooling instead).
 
 ## 4) Isolation Details (Linux)

@@ -3,7 +3,7 @@ slice_id: S3
 seam_id: SEAM-01
 slice_kind: delivery
 execution_horizon: active
-status: decomposed
+status: landed
 plan_version: v2
 basis:
   currentness: current
@@ -18,8 +18,8 @@ gates:
     contract: inherited
     revalidation: inherited
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 threads:
   - THR-01
   - THR-07
@@ -48,6 +48,7 @@ candidate_subslices: []
   - `scripts/substrate/install-substrate.sh`
 - **Verification**:
   - fixture matrix covers comments, duplicate assignments, mixed case, quoted values, and partial-key presence
+  - landed slice coverage lives in `tests/installers/pkg_manager_detection_smoke.sh`
   - pass condition: repeated runs over the same selected input yield identical normalized fields and no shell execution path exists
 - **Rollout/safety**:
   - this is the core security boundary for the feature

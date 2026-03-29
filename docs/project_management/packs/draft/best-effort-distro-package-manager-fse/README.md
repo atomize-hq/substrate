@@ -12,8 +12,8 @@ This pack captures seam briefs, authoritative threading, pack-level review surfa
 
 Execution horizon:
 
-- Active seam: `SEAM-01` - os-release input and parser contract
-- Next seam: `SEAM-02` - family mapping and decision-line reporting
+- Active seam: none
+- Next seam: none
 
 Policy:
 

@@ -35,13 +35,12 @@ use std::path::PathBuf;
 #[cfg(target_os = "linux")]
 use std::process::{Command, Stdio};
 #[cfg(target_os = "linux")]
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 #[cfg(target_os = "linux")]
 use tracing::warn;
 use tracing::{error, info};
-// no atomic imports needed here
 #[cfg(target_os = "linux")]
 use world::exec::PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT;
 #[cfg(target_os = "linux")]
@@ -827,11 +826,15 @@ async fn handle_persistent_session(
     }
 
     let stop_flag = Arc::new(AtomicBool::new(false));
+    let pty_bytes_read = Arc::new(AtomicUsize::new(0));
     let (pty_bytes_tx, mut pty_bytes_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(1);
     let pty_master_fd = pty.master.as_raw_fd();
     {
         let stop_flag = stop_flag.clone();
-        std::thread::spawn(move || read_pty_to_channel(pty_master_fd, stop_flag, pty_bytes_tx));
+        let pty_bytes_read = pty_bytes_read.clone();
+        std::thread::spawn(move || {
+            read_pty_to_channel(pty_master_fd, stop_flag, pty_bytes_tx, pty_bytes_read)
+        });
     }
 
     let mut session_cwd = ready_cwd;
@@ -841,6 +844,8 @@ async fn handle_persistent_session(
         token_hex: String,
         stdin_mode: PersistentStdinMode,
         pgid: libc::pid_t,
+        read_baseline: usize,
+        forwarded_bytes: usize,
     }
 
     struct Draining {
@@ -849,7 +854,8 @@ async fn handle_persistent_session(
         exit: i32,
         new_cwd: PathBuf,
         new_env: HashMap<String, String>,
-        drain_remaining: usize,
+        forwarded_bytes: usize,
+        target_forwarded_bytes: usize,
     }
 
     enum ExecPhase {
@@ -1028,14 +1034,18 @@ async fn handle_persistent_session(
                                     world.isolate_network,
                                 );
 
+                                let exec_spec = PersistentExecSpec {
+                                    session_env: &session_env,
+                                    session_cwd: &session_cwd,
+                                    cmd_id: &cmd_id,
+                                    stdin_mode,
+                                    program: &program,
+                                };
                                 let (child_events, pgid) = match spawn_persistent_exec(
                                     &world,
                                     &pty,
-                                    &session_env,
-                                    &session_cwd,
-                                    &cmd_id,
-                                    stdin_mode,
-                                    &program,
+                                    pty_bytes_read.clone(),
+                                    exec_spec,
                                 ) {
                                     Ok(v) => v,
                                     Err(message) => {
@@ -1049,6 +1059,8 @@ async fn handle_persistent_session(
                                     token_hex,
                                     stdin_mode,
                                     pgid,
+                                    read_baseline: pty_bytes_read.load(Ordering::Relaxed),
+                                    forwarded_bytes: 0,
                                 });
                                 child_events_rx = Some(child_events);
                             }
@@ -1073,14 +1085,26 @@ async fn handle_persistent_session(
                     break;
                 }
 
-                if let ExecPhase::Draining(ref mut draining) = phase {
-                    if draining.drain_remaining > 0 {
-                        let drained_now = draining.drain_remaining.min(bytes.len());
-                        draining.drain_remaining -= drained_now;
+                match &mut phase {
+                    ExecPhase::Running(running) => {
+                        running.forwarded_bytes =
+                            running.forwarded_bytes.saturating_add(bytes.len());
                     }
+                    ExecPhase::Draining(draining) => {
+                        draining.forwarded_bytes =
+                            draining.forwarded_bytes.saturating_add(bytes.len());
+                    }
+                    ExecPhase::Idle => {}
                 }
 
-                if matches!(&phase, ExecPhase::Draining(Draining { drain_remaining: 0, .. })) {
+                if matches!(
+                    &phase,
+                    ExecPhase::Draining(Draining {
+                        forwarded_bytes,
+                        target_forwarded_bytes,
+                        ..
+                    }) if *forwarded_bytes >= *target_forwarded_bytes
+                ) {
                     // Flush any buffered PTY bytes already read (bounded channel).
                     while let Ok(extra) = pty_bytes_rx.try_recv() {
                         let data_b64 = BASE64.encode(&extra);
@@ -1135,18 +1159,32 @@ async fn handle_persistent_session(
                         send_fatal(&ws_write_tx, &code, message, seq);
                         break;
                     }
-                    (PersistentChildEvent::Finished { exit, cwd, env, watermark_bytes }, ExecPhase::Running(running)) => {
-                        // Snapshot a drain requirement based on the exit watermark.
+                    (PersistentChildEvent::Finished { exit, cwd, env, watermark_bytes, bytes_read_at_exit }, ExecPhase::Running(running)) => {
+                        // The exit-stop watermark only covers bytes still in the PTY buffer.
+                        // Reader-task output may already have been forwarded while we were still
+                        // in `Running`, so we complete the command after the total bytes
+                        // forwarded for this command reaches the exit-stop byte target.
+                        let target_forwarded_bytes = bytes_read_at_exit
+                            .saturating_sub(running.read_baseline)
+                            .saturating_add(watermark_bytes);
                         phase = ExecPhase::Draining(Draining {
                             seq: running.seq,
                             token_hex: running.token_hex,
                             exit,
                             new_cwd: cwd,
                             new_env: env,
-                            drain_remaining: watermark_bytes,
+                            forwarded_bytes: running.forwarded_bytes,
+                            target_forwarded_bytes,
                         });
 
-                        if matches!(&phase, ExecPhase::Draining(Draining { drain_remaining: 0, .. })) {
+                        if matches!(
+                            &phase,
+                            ExecPhase::Draining(Draining {
+                                forwarded_bytes,
+                                target_forwarded_bytes,
+                                ..
+                            }) if *forwarded_bytes >= *target_forwarded_bytes
+                        ) {
                             while let Ok(extra) = pty_bytes_rx.try_recv() {
                                 let data_b64 = BASE64.encode(&extra);
                                 if ws_write_tx.send(PersistentServerMessage::Stdout { data_b64 }).is_err() {
@@ -1459,6 +1497,7 @@ enum PersistentChildEvent {
         cwd: PathBuf,
         env: HashMap<String, String>,
         watermark_bytes: usize,
+        bytes_read_at_exit: usize,
     },
     Fatal {
         code: String,
@@ -1472,6 +1511,7 @@ fn read_pty_to_channel(
     master_fd: libc::c_int,
     stop: Arc<AtomicBool>,
     tx: tokio::sync::mpsc::Sender<Vec<u8>>,
+    bytes_read: Arc<AtomicUsize>,
 ) {
     let mut buf = [0u8; 8192];
     loop {
@@ -1523,6 +1563,7 @@ fn read_pty_to_channel(
             if n == 0 {
                 return;
             }
+            bytes_read.fetch_add(n as usize, Ordering::Relaxed);
             let bytes = buf[..(n as usize)].to_vec();
             if tx.blocking_send(bytes).is_err() {
                 return;
@@ -1586,14 +1627,20 @@ fn parse_proc_environ(bytes: Vec<u8>) -> Result<HashMap<String, String>, String>
 }
 
 #[cfg(target_os = "linux")]
+struct PersistentExecSpec<'a> {
+    session_env: &'a HashMap<String, String>,
+    session_cwd: &'a std::path::Path,
+    cmd_id: &'a str,
+    stdin_mode: PersistentStdinMode,
+    program: &'a str,
+}
+
+#[cfg(target_os = "linux")]
 fn spawn_persistent_exec(
     world: &PersistentWorldContext,
     pty: &RawPty,
-    session_env: &HashMap<String, String>,
-    session_cwd: &std::path::Path,
-    cmd_id: &str,
-    stdin_mode: PersistentStdinMode,
-    program: &str,
+    pty_bytes_read: Arc<AtomicUsize>,
+    spec: PersistentExecSpec<'_>,
 ) -> Result<
     (
         tokio::sync::mpsc::Receiver<PersistentChildEvent>,
@@ -1604,24 +1651,24 @@ fn spawn_persistent_exec(
     use std::os::unix::process::CommandExt;
     use std::time::Duration;
 
-    let mut env = session_env.clone();
+    let mut env = spec.session_env.clone();
     for (k, v) in world.base_env.iter() {
         env.insert(k.clone(), v.clone());
     }
 
     let should_guard = should_guard_anchor(&env);
-    let desired_cwd = if session_cwd.is_absolute()
-        && (!should_guard || session_cwd.starts_with(&world.project_dir))
+    let desired_cwd = if spec.session_cwd.is_absolute()
+        && (!should_guard || spec.session_cwd.starts_with(&world.project_dir))
     {
-        session_cwd.to_path_buf()
+        spec.session_cwd.to_path_buf()
     } else {
         world.project_dir.clone()
     };
 
     let program = if should_guard {
-        wrap_with_anchor_guard(program, &world.project_dir)
+        wrap_with_anchor_guard(spec.program, &world.project_dir)
     } else {
-        program.to_string()
+        spec.program.to_string()
     };
 
     env.insert(
@@ -1642,9 +1689,9 @@ fn spawn_persistent_exec(
     );
 
     env.insert("SUBSTRATE_PROGRAM".to_string(), program);
-    env.insert("SHIM_PARENT_CMD_ID".to_string(), cmd_id.to_string());
+    env.insert("SHIM_PARENT_CMD_ID".to_string(), spec.cmd_id.to_string());
 
-    let inner_cmd = match stdin_mode {
+    let inner_cmd = match spec.stdin_mode {
         PersistentStdinMode::Eof => {
             r#"exec </dev/null /bin/bash --noprofile --norc -c "$SUBSTRATE_PROGRAM""#.to_string()
         }
@@ -1794,7 +1841,7 @@ fn spawn_persistent_exec(
         }
 
         let _ = pid_tx.send(Ok(pid));
-        traced_wait_loop(pid, master_fd, tx);
+        traced_wait_loop(pid, master_fd, tx, pty_bytes_read);
     });
 
     let pid = match pid_rx.recv_timeout(Duration::from_secs(5)) {
@@ -1811,6 +1858,7 @@ fn traced_wait_loop(
     pid: libc::pid_t,
     master_fd: libc::c_int,
     tx: tokio::sync::mpsc::Sender<PersistentChildEvent>,
+    pty_bytes_read: Arc<AtomicUsize>,
 ) {
     let send_fatal = |code: &str, message: String| {
         let _ = tx.blocking_send(PersistentChildEvent::Fatal {
@@ -1888,6 +1936,7 @@ fn traced_wait_loop(
     let mut captured_env: Option<HashMap<String, String>> = None;
     let mut captured_cwd: Option<PathBuf> = None;
     let mut watermark: Option<usize> = None;
+    let mut bytes_read_at_exit: Option<usize> = None;
 
     loop {
         status = 0;
@@ -1940,7 +1989,10 @@ fn traced_wait_loop(
                 }
 
                 match pty_fionread(master_fd) {
-                    Ok(b) => watermark = Some(b),
+                    Ok(b) => {
+                        watermark = Some(b);
+                        bytes_read_at_exit = Some(pty_bytes_read.load(Ordering::Relaxed));
+                    }
                     Err(e) => {
                         send_fatal(
                             "internal_error",
@@ -1998,12 +2050,20 @@ fn traced_wait_loop(
         );
         return;
     };
+    let Some(bytes_read_at_exit) = bytes_read_at_exit else {
+        send_fatal(
+            "internal_error",
+            "missing PTY byte-count capture at exit stop".to_string(),
+        );
+        return;
+    };
 
     let _ = tx.blocking_send(PersistentChildEvent::Finished {
         exit: exit_code,
         cwd,
         env,
         watermark_bytes,
+        bytes_read_at_exit,
     });
 }
 

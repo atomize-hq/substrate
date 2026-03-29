@@ -2,11 +2,11 @@
 seam_id: SEAM-07
 seam_slug: checkpoint-downstream-handoff
 type: conformance
-status: proposed
+status: closed
 execution_horizon: future
 plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v2
   upstream_closeouts:
@@ -22,16 +22,16 @@ basis:
     - downstream persistence handoff assumptions change
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
-  planned_location: reserved_final_slice
-  status: pending
+  planned_location: S5
+  status: passed
 open_remediations: []
 ---
 
@@ -129,9 +129,9 @@ Seal the feature with the single approved checkpoint boundary, record evidence-b
 
 ## Downstream decomposition context
 
-### Why this seam is `future`
+### Why this seam is `active`
 
-It is terminal conformance work and should not be deeply planned until `SEAM-06` publishes the evidence topology and upstream closeouts exist.
+`SEAM-06` closeout now publishes `C-10` and `THR-06`, so this seam can move into active checkpoint and downstream-handoff planning without reconstructing upstream validation truth from prior implementation diffs.
 
 ### Which threads matter most
 

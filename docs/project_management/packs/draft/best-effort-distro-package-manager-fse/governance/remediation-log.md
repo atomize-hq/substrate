@@ -2,7 +2,7 @@
 
 ## Open remediations
 
-None at extraction time.
+None.
 
 Canonical entry shape for future additions:
 
@@ -35,4 +35,25 @@ Rules:
 
 ## Resolved remediations
 
-None yet.
+```yaml
+remediation_id: REM-001
+origin_phase: post_exec
+source_gate: closeout
+related_seam: SEAM-07
+related_slice: S5
+related_thread: THR-09
+related_contract: C-11
+related_artifact: docs/project_management/packs/draft/best-effort-distro-package-manager-fse/governance/seam-07-closeout.md
+severity: blocking
+status: resolved
+owner_seam: SEAM-07
+blocked_targets:
+  - seam: SEAM-07
+    field: status
+    value: closed
+summary: SEAM-07 checkpoint evidence initially failed quick CI on Linux shell lint before downstream readiness could be published as a clean checkpoint-backed handoff
+required_fix: resolve the ShellCheck SC2221/SC2222 overlap in scripts/substrate/install-substrate.sh and rerun the SEAM-07 quick CI checkpoint
+resolution_evidence:
+  - commit 4faa819b fixed the redundant SUSE-family shell patterns in scripts/substrate/install-substrate.sh
+  - quick CI rerun 23712506882 passed on ubuntu-24.04, macos-14, and windows-2022
+```

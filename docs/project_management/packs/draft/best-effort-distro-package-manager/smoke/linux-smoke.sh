@@ -15,4 +15,5 @@ if [[ ! -f "${HARNESS_PATH}" ]]; then
   exit 2
 fi
 
-exec bash "${HARNESS_PATH}"
+# Keep the repo harness as the only assertion authority for BEDPM smoke.
+exec bash "${HARNESS_PATH}" "$@"

@@ -28,7 +28,11 @@ PLATFORM=""
 ARCH=""
 IS_WSL=0
 ORIGINAL_PATH="${PATH}"
+PKG_MANAGER_ENV_OVERRIDE="${PKG_MANAGER:-}"
 PKG_MANAGER=""
+PKG_MANAGER_SOURCE=""
+PKG_MANAGER_FLAG_OVERRIDE=""
+PKG_MANAGER_DECISION_LINE_EMITTED=0
 APT_UPDATED=0
 SUDO_CMD=()
 MANAGER_ENV_PATH=""
@@ -39,6 +43,14 @@ HOST_STATE_GROUP_EXISTED=""
 HOST_STATE_GROUP_CREATED=0
 HOST_STATE_ADDED_USERS=()
 HOST_STATE_LINGER_ENTRIES=()
+readonly DISTRO_UNKNOWN_SENTINEL="<unknown>"
+OS_RELEASE_SELECTED_PATH=""
+OS_RELEASE_INPUT_STATE="unavailable"
+DETECTED_DISTRO_ID="${DISTRO_UNKNOWN_SENTINEL}"
+DETECTED_DISTRO_ID_LIKE="${DISTRO_UNKNOWN_SENTINEL}"
+readonly SUPPORTED_PKG_MANAGERS=(apt-get dnf yum pacman zypper)
+PATH_PROBE_DETECTED_MANAGERS=()
+PKG_MANAGER_PATH_PROBE_WARNING_EMITTED=0
 
 log() {
   printf '[%s] %s\n' "${INSTALLER_NAME}" "$*" >&2
@@ -63,6 +75,7 @@ Usage:
 Options:
   --version <semver>   Install a specific release (default: latest GitHub release)
   --prefix <path>      Installation prefix (default: ~/.substrate)
+  --pkg-manager <mgr>  Force Linux package manager: apt-get|dnf|yum|pacman|zypper
   --no-world           Skip world backend provisioning
   --no-shims           Skip shim deployment
   --sync-deps          Run 'substrate world deps current sync' after provisioning completes
@@ -114,6 +127,82 @@ command_exists() {
 require_cmd() {
   local cmd="$1"
   command_exists "${cmd}" || fatal "Required command '${cmd}' not found. Please install it and re-run."
+}
+
+is_supported_pkg_manager() {
+  local candidate="$1"
+  local manager=""
+
+  for manager in "${SUPPORTED_PKG_MANAGERS[@]}"; do
+    if [[ "${candidate}" == "${manager}" ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+supported_pkg_manager_list() {
+  local manager=""
+  local first=1
+
+  for manager in "${SUPPORTED_PKG_MANAGERS[@]}"; do
+    if [[ "${first}" -eq 1 ]]; then
+      printf '%s' "${manager}"
+      first=0
+    else
+      printf ', %s' "${manager}"
+    fi
+  done
+}
+
+path_probe_detected_manager_list() {
+  local manager=""
+  local first=1
+
+  for manager in "${PATH_PROBE_DETECTED_MANAGERS[@]}"; do
+    if [[ "${first}" -eq 1 ]]; then
+      printf '%s' "${manager}"
+      first=0
+    else
+      printf ', %s' "${manager}"
+    fi
+  done
+}
+
+fail_invalid_explicit_pkg_manager() {
+  local source_name="$1"
+  local invalid_value="$2"
+
+  printf '[%s][ERROR] Invalid %s value %q. Allowed values: %s. Re-run with one of the allowed values or remove the invalid override.\n' \
+    "${INSTALLER_NAME}" \
+    "${source_name}" \
+    "${invalid_value}" \
+    "$(supported_pkg_manager_list)" >&2
+  exit 2
+}
+
+fail_missing_explicit_pkg_manager() {
+  local source_name="$1"
+  local selected_manager="$2"
+
+  printf '[%s][ERROR] Selected package manager %q from %s was not found in PATH. Install that manager or rerun with another allowed manager (%s).\n' \
+    "${INSTALLER_NAME}" \
+    "${selected_manager}" \
+    "${source_name}" \
+    "$(supported_pkg_manager_list)" >&2
+  exit 3
+}
+
+fail_no_supported_pkg_manager() {
+  local missing_cmds=("$@")
+
+  printf '[%s][ERROR] No supported package manager was detected. Missing prerequisite commands for this installer branch: %s. Install them manually and rerun. You may also rerun with --pkg-manager <%s> or PKG_MANAGER=<%s>.\n' \
+    "${INSTALLER_NAME}" \
+    "${missing_cmds[*]}" \
+    'apt-get|dnf|yum|pacman|zypper' \
+    'apt-get|dnf|yum|pacman|zypper' >&2
+  exit 4
 }
 
 detect_primary_user() {
@@ -443,33 +532,363 @@ initialize_sudo() {
   fi
 }
 
+reset_os_release_input_state() {
+  OS_RELEASE_SELECTED_PATH=""
+  OS_RELEASE_INPUT_STATE="unavailable"
+  DETECTED_DISTRO_ID="${DISTRO_UNKNOWN_SENTINEL}"
+  DETECTED_DISTRO_ID_LIKE="${DISTRO_UNKNOWN_SENTINEL}"
+}
+
+resolve_selected_os_release_input() {
+  local selected_path="${SUBSTRATE_INSTALL_OS_RELEASE_PATH:-}"
+  local os_release_fd
+
+  reset_os_release_input_state
+
+  if [[ -z "${selected_path}" ]]; then
+    selected_path="/etc/os-release"
+  fi
+
+  if [[ "${selected_path}" != /* ]]; then
+    return 1
+  fi
+
+  if [[ ! -f "${selected_path}" || ! -r "${selected_path}" ]]; then
+    return 1
+  fi
+
+  if ! exec {os_release_fd}<"${selected_path}"; then
+    return 1
+  fi
+  exec {os_release_fd}<&-
+
+  OS_RELEASE_SELECTED_PATH="${selected_path}"
+  OS_RELEASE_INPUT_STATE="selected"
+  return 0
+}
+
+trim_ascii_whitespace() {
+  local value="$1"
+  value="${value#"${value%%[!$' \t\r']*}"}"
+  value="${value%"${value##*[!$' \t\r']}"}"
+  printf '%s' "${value}"
+}
+
+strip_matching_quotes() {
+  local value="$1"
+  if [[ ${#value} -ge 2 ]]; then
+    case "${value:0:1}${value: -1}" in
+      "''"|'""')
+        value="${value:1:${#value}-2}"
+        ;;
+    esac
+  fi
+  printf '%s' "${value}"
+}
+
+parse_selected_os_release_fields() {
+  local line=""
+  local key=""
+  local raw_value=""
+  local normalized_value=""
+
+  DETECTED_DISTRO_ID="${DISTRO_UNKNOWN_SENTINEL}"
+  DETECTED_DISTRO_ID_LIKE="${DISTRO_UNKNOWN_SENTINEL}"
+
+  if [[ "${OS_RELEASE_INPUT_STATE}" != "selected" || -z "${OS_RELEASE_SELECTED_PATH}" ]]; then
+    return 1
+  fi
+
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    if [[ "${line}" =~ ^[[:space:]]*$ ]]; then
+      continue
+    fi
+    if [[ "${line}" =~ ^[[:space:]]*# ]]; then
+      continue
+    fi
+
+    key="${line%%=*}"
+    if [[ "${key}" == "${line}" ]]; then
+      continue
+    fi
+
+    raw_value="${line#*=}"
+    raw_value="$(trim_ascii_whitespace "${raw_value}")"
+    normalized_value="$(strip_matching_quotes "${raw_value}")"
+    normalized_value="${normalized_value,,}"
+    if [[ -z "${normalized_value}" ]]; then
+      normalized_value="${DISTRO_UNKNOWN_SENTINEL}"
+    fi
+
+    case "${key}" in
+      ID)
+        DETECTED_DISTRO_ID="${normalized_value}"
+        ;;
+      ID_LIKE)
+        DETECTED_DISTRO_ID_LIKE="${normalized_value}"
+        ;;
+    esac
+  done < "${OS_RELEASE_SELECTED_PATH}"
+
+  return 0
+}
+
+os_release_id_like_has_token() {
+  local needle="$1"
+  local token=""
+
+  if [[ -z "${needle}" || "${DETECTED_DISTRO_ID_LIKE}" == "${DISTRO_UNKNOWN_SENTINEL}" ]]; then
+    return 1
+  fi
+
+  for token in ${DETECTED_DISTRO_ID_LIKE}; do
+    if [[ "${token}" == "${needle}" ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+os_release_matches_debian_family() {
+  case "${DETECTED_DISTRO_ID}" in
+    debian|ubuntu|linuxmint|pop)
+      return 0
+      ;;
+  esac
+
+  os_release_id_like_has_token "debian" || os_release_id_like_has_token "ubuntu"
+}
+
+os_release_matches_fedora_rhel_family() {
+  case "${DETECTED_DISTRO_ID}" in
+    fedora|rhel|centos|rocky|almalinux|ol|amzn)
+      return 0
+      ;;
+  esac
+
+  os_release_id_like_has_token "fedora" || os_release_id_like_has_token "rhel"
+}
+
+os_release_matches_arch_family() {
+  case "${DETECTED_DISTRO_ID}" in
+    arch|manjaro|endeavouros|arcolinux|artix|garuda)
+      return 0
+      ;;
+  esac
+
+  os_release_id_like_has_token "arch"
+}
+
+os_release_matches_suse_family() {
+  local token=""
+
+  case "${DETECTED_DISTRO_ID}" in
+    *suse*)
+      return 0
+      ;;
+  esac
+
+  if [[ "${DETECTED_DISTRO_ID_LIKE}" == "${DISTRO_UNKNOWN_SENTINEL}" ]]; then
+    return 1
+  fi
+
+  for token in ${DETECTED_DISTRO_ID_LIKE}; do
+    case "${token}" in
+      *suse*)
+        return 0
+        ;;
+    esac
+  done
+
+  return 1
+}
+
+select_package_manager_from_os_release() {
+  PKG_MANAGER_SOURCE=""
+
+  if os_release_matches_debian_family; then
+    if command -v apt-get >/dev/null 2>&1; then
+      PKG_MANAGER="apt-get"
+      PKG_MANAGER_SOURCE="os_release"
+      return 0
+    fi
+    return 1
+  fi
+
+  if os_release_matches_fedora_rhel_family; then
+    if command -v dnf >/dev/null 2>&1; then
+      PKG_MANAGER="dnf"
+      PKG_MANAGER_SOURCE="os_release"
+      return 0
+    fi
+    if command -v yum >/dev/null 2>&1; then
+      PKG_MANAGER="yum"
+      PKG_MANAGER_SOURCE="os_release"
+      return 0
+    fi
+    return 1
+  fi
+
+  if os_release_matches_arch_family; then
+    if command -v pacman >/dev/null 2>&1; then
+      PKG_MANAGER="pacman"
+      PKG_MANAGER_SOURCE="os_release"
+      return 0
+    fi
+    return 1
+  fi
+
+  if os_release_matches_suse_family; then
+    if command -v zypper >/dev/null 2>&1; then
+      PKG_MANAGER="zypper"
+      PKG_MANAGER_SOURCE="os_release"
+      return 0
+    fi
+    return 1
+  fi
+
+  return 1
+}
+
+select_package_manager_from_path_probe() {
+  local manager=""
+  local selected_manager=""
+
+  PATH_PROBE_DETECTED_MANAGERS=()
+  PKG_MANAGER_PATH_PROBE_WARNING_EMITTED=0
+
+  for manager in "${SUPPORTED_PKG_MANAGERS[@]}"; do
+    if command -v "${manager}" >/dev/null 2>&1; then
+      PATH_PROBE_DETECTED_MANAGERS+=("${manager}")
+      if [[ -z "${selected_manager}" ]]; then
+        selected_manager="${manager}"
+      fi
+    fi
+  done
+
+  if [[ -z "${selected_manager}" ]]; then
+    return 1
+  fi
+
+  PKG_MANAGER="${selected_manager}"
+  PKG_MANAGER_SOURCE="path_probe"
+  maybe_emit_path_probe_multi_manager_warning
+  return 0
+}
+
+select_package_manager_from_flag() {
+  if [[ -z "${PKG_MANAGER_FLAG_OVERRIDE}" ]]; then
+    return 1
+  fi
+
+  if ! is_supported_pkg_manager "${PKG_MANAGER_FLAG_OVERRIDE}"; then
+    fail_invalid_explicit_pkg_manager "--pkg-manager" "${PKG_MANAGER_FLAG_OVERRIDE}"
+  fi
+
+  PKG_MANAGER="${PKG_MANAGER_FLAG_OVERRIDE}"
+  PKG_MANAGER_SOURCE="flag"
+
+  if ! command -v "${PKG_MANAGER_FLAG_OVERRIDE}" >/dev/null 2>&1; then
+    maybe_emit_package_manager_decision_line
+    fail_missing_explicit_pkg_manager "--pkg-manager" "${PKG_MANAGER_FLAG_OVERRIDE}"
+  fi
+
+  return 0
+}
+
+select_package_manager_from_env() {
+  if [[ -z "${PKG_MANAGER_ENV_OVERRIDE}" ]]; then
+    return 1
+  fi
+
+  if ! is_supported_pkg_manager "${PKG_MANAGER_ENV_OVERRIDE}"; then
+    fail_invalid_explicit_pkg_manager "PKG_MANAGER" "${PKG_MANAGER_ENV_OVERRIDE}"
+  fi
+
+  PKG_MANAGER="${PKG_MANAGER_ENV_OVERRIDE}"
+  PKG_MANAGER_SOURCE="env"
+
+  if ! command -v "${PKG_MANAGER_ENV_OVERRIDE}" >/dev/null 2>&1; then
+    maybe_emit_package_manager_decision_line
+    fail_missing_explicit_pkg_manager "PKG_MANAGER" "${PKG_MANAGER_ENV_OVERRIDE}"
+  fi
+
+  return 0
+}
+
 detect_package_manager() {
-  if [[ -n "${PKG_MANAGER}" ]]; then
+  if [[ -n "${PKG_MANAGER}" && -n "${PKG_MANAGER_SOURCE}" ]]; then
     return 0
   fi
 
-  if command -v apt-get >/dev/null 2>&1; then
-    PKG_MANAGER="apt-get"
+  resolve_selected_os_release_input || true
+  parse_selected_os_release_fields || true
+
+  if select_package_manager_from_flag; then
     return 0
   fi
-  if command -v dnf >/dev/null 2>&1; then
-    PKG_MANAGER="dnf"
+
+  if select_package_manager_from_env; then
     return 0
   fi
-  if command -v yum >/dev/null 2>&1; then
-    PKG_MANAGER="yum"
+
+  if select_package_manager_from_os_release; then
     return 0
   fi
-  if command -v pacman >/dev/null 2>&1; then
-    PKG_MANAGER="pacman"
-    return 0
-  fi
-  if command -v zypper >/dev/null 2>&1; then
-    PKG_MANAGER="zypper"
+
+  if select_package_manager_from_path_probe; then
     return 0
   fi
 
   return 1
+}
+
+maybe_emit_package_manager_decision_line() {
+  if [[ -z "${PKG_MANAGER}" ]]; then
+    return
+  fi
+
+  case "${PKG_MANAGER_SOURCE}" in
+    flag|env|os_release|path_probe)
+      ;;
+    *)
+      return
+      ;;
+  esac
+
+  if [[ "${PKG_MANAGER_DECISION_LINE_EMITTED}" -eq 1 ]]; then
+    return
+  fi
+
+  printf 'Detected distro: %s (like: %s), using package manager: %s (source: %s)\n' \
+    "${DETECTED_DISTRO_ID}" \
+    "${DETECTED_DISTRO_ID_LIKE}" \
+    "${PKG_MANAGER}" \
+    "${PKG_MANAGER_SOURCE}" >&2
+  PKG_MANAGER_DECISION_LINE_EMITTED=1
+}
+
+maybe_emit_path_probe_multi_manager_warning() {
+  local manager_list=""
+
+  if [[ "${PKG_MANAGER_SOURCE}" != "path_probe" ]]; then
+    return
+  fi
+
+  if [[ "${PKG_MANAGER_PATH_PROBE_WARNING_EMITTED}" -eq 1 ]]; then
+    return
+  fi
+
+  if [[ ${#PATH_PROBE_DETECTED_MANAGERS[@]} -le 1 ]]; then
+    return
+  fi
+
+  manager_list="$(path_probe_detected_manager_list)"
+  printf 'Multiple supported package managers found in PATH: %s; selecting %s by fixed probe order (apt-get -> dnf -> yum -> pacman -> zypper). Override with --pkg-manager <apt-get|dnf|yum|pacman|zypper> or PKG_MANAGER=<apt-get|dnf|yum|pacman|zypper>.\n' \
+    "${manager_list}" \
+    "${PKG_MANAGER}" >&2
+  PKG_MANAGER_PATH_PROBE_WARNING_EMITTED=1
 }
 
 resolve_package_for_command() {
@@ -578,7 +997,6 @@ install_packages() {
 }
 
 ensure_linux_packages_for_commands() {
-  initialize_sudo
   local commands=("$@")
   local missing_cmds=()
   for cmd in "${commands[@]}"; do
@@ -592,8 +1010,11 @@ ensure_linux_packages_for_commands() {
   fi
 
   if ! detect_package_manager; then
-    fatal "Unable to detect supported package manager. Install required commands (${missing_cmds[*]}) manually and re-run."
+    fail_no_supported_pkg_manager "${missing_cmds[@]}"
   fi
+
+  initialize_sudo
+  maybe_emit_package_manager_decision_line
 
   declare -A pkg_set=()
   local cmd pkg_list
@@ -704,6 +1125,11 @@ parse_args() {
       --prefix)
         [[ $# -lt 2 ]] && fatal "Missing value for --prefix"
         PREFIX="$2"
+        shift 2
+        ;;
+      --pkg-manager)
+        [[ $# -lt 2 ]] && fatal "Missing value for --pkg-manager"
+        PKG_MANAGER_FLAG_OVERRIDE="$2"
         shift 2
         ;;
       --no-world)

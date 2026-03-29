@@ -4,8 +4,8 @@
 
 | Seam | Horizon | Role | Key output |
 |------|---------|------|------------|
-| SEAM-01 | active | parser/input contract owner | normalized distro facts, `<unknown>`, alternate input hook |
-| SEAM-02 | next | mapping/reporting owner | family-table selection and stable decision line |
+| SEAM-01 | future | parser/input contract owner | normalized distro facts, `<unknown>`, alternate input hook |
+| SEAM-02 | future | mapping/reporting owner | family-table selection and stable decision line |
 | SEAM-03 | future | explicit selector owner | flag/env precedence and exit `2` / `3` contract |
 | SEAM-04 | future | fallback owner | path probe, warning line, exit `4`, no-manager posture |
 | SEAM-05 | future | operator integration owner | wrapper parity, no-drift docs, and macOS-hosted path wording |
@@ -120,9 +120,9 @@
   - **Consumer seam(s)**: `SEAM-02`, `SEAM-03`, `SEAM-04`, `SEAM-06`
   - **Carried contract IDs**: `C-01`, `C-02`
   - **Purpose**: move trusted Linux input and parser truth into all later selection and validation work
-  - **State**: defined
+  - **State**: revalidated
   - **Revalidation trigger**: parser rules, hook semantics, or `<unknown>` behavior change
-  - **Satisfied by**: `SEAM-01` closeout with landed parser and alternate-input evidence
+  - **Satisfied by**: `SEAM-01` closeout with landed parser and alternate-input evidence; `SEAM-02` pre-exec revalidation in seam-local planning
   - **Notes**: foundation thread for every later selection-stage seam
 
 - **Thread ID**: `THR-02`
@@ -130,9 +130,9 @@
   - **Consumer seam(s)**: `SEAM-03`, `SEAM-04`, `SEAM-05`, `SEAM-06`
   - **Carried contract IDs**: `C-03`, `C-04`
   - **Purpose**: carry mapping-table and decision-line truth into explicit selectors, fallback behavior, docs, and tests
-  - **State**: defined
+  - **State**: revalidated
   - **Revalidation trigger**: family-table changes, decision-line template changes, or timing changes
-  - **Satisfied by**: `SEAM-02` closeout with landed mapping/reporting evidence
+  - **Satisfied by**: `SEAM-02` closeout with landed mapping/reporting evidence and `SEAM-03` pre-exec revalidation against that handoff
   - **Notes**: downstream seams must not restate or fork the decision line
 
 - **Thread ID**: `THR-03`
@@ -140,9 +140,9 @@
   - **Consumer seam(s)**: `SEAM-04`, `SEAM-05`, `SEAM-06`
   - **Carried contract IDs**: `C-05`, `C-06`
   - **Purpose**: carry explicit selector semantics and the exit `2` / `3` failure posture
-  - **State**: defined
+  - **State**: revalidated
   - **Revalidation trigger**: precedence changes, supported-value changes, or remediation wording changes
-  - **Satisfied by**: `SEAM-03` closeout with landed explicit-selector evidence
+  - **Satisfied by**: `SEAM-03` closeout with landed explicit-selector evidence and `SEAM-04` pre-exec revalidation against that handoff
   - **Notes**: this thread fixes what the operator can force, not final fallback
 
 - **Thread ID**: `THR-04`
@@ -150,9 +150,9 @@
   - **Consumer seam(s)**: `SEAM-05`, `SEAM-06`
   - **Carried contract IDs**: `C-07`
   - **Purpose**: carry deterministic fallback, warning, and no-manager semantics into docs and validation
-  - **State**: defined
+  - **State**: revalidated
   - **Revalidation trigger**: fixed probe order changes, warning-template changes, or exit `4` remediation changes
-  - **Satisfied by**: `SEAM-04` closeout with landed fallback evidence
+  - **Satisfied by**: `SEAM-04` closeout with landed fallback evidence and `SEAM-05` pre-exec revalidation against that handoff
   - **Notes**: this is the final decision-stage thread before propagation
 
 - **Thread ID**: `THR-05`
@@ -160,9 +160,9 @@
   - **Consumer seam(s)**: `SEAM-06`, `SEAM-07`
   - **Carried contract IDs**: `C-08`, `C-09`
   - **Purpose**: carry the final operator-facing contract into evidence-producing work
-  - **State**: defined
+  - **State**: revalidated
   - **Revalidation trigger**: wrapper handling changes or doc wording drift
-  - **Satisfied by**: `SEAM-05` closeout with wrapper/doc parity evidence
+  - **Satisfied by**: `SEAM-05` closeout with wrapper/doc parity evidence and `SEAM-06` pre-exec revalidation against that handoff
   - **Notes**: docs are integration outputs, not a second authority
 
 - **Thread ID**: `THR-06`
@@ -170,9 +170,9 @@
   - **Consumer seam(s)**: `SEAM-07`
   - **Carried contract IDs**: `C-10`
   - **Purpose**: carry one authoritative validation topology, manual evidence model, and macOS-hosted verification posture into checkpoint sealing
-  - **State**: defined
+  - **State**: revalidated
   - **Revalidation trigger**: repo harness path, smoke-wrapper topology, manual evidence expectations, or macOS Lima-backed verification path change
-  - **Satisfied by**: `SEAM-06` closeout with validation evidence recorded
+  - **Satisfied by**: `SEAM-06` closeout with recorded validation evidence, published `C-10`, and `SEAM-07` pre-exec revalidation against that handoff
   - **Notes**: keeps repo harness authoritative, smoke wrapper thin, and macOS-hosted verification explicit
 
 - **Thread ID**: `THR-07`
@@ -180,7 +180,7 @@
   - **Consumer seam(s)**: downstream pack (`persist-detected-linux-distro-pkg-manager`)
   - **Carried contract IDs**: `C-01`, `C-02`
   - **Purpose**: export parser/input truth that downstream persistence must inherit rather than redefine
-  - **State**: defined
+  - **State**: published
   - **Revalidation trigger**: alternate-input hook or `<unknown>` semantics change
   - **Satisfied by**: `SEAM-01` closeout and published downstream stale triggers when needed
   - **Notes**: cross-pack boundary thread
@@ -190,7 +190,7 @@
   - **Consumer seam(s)**: downstream pack (`persist-detected-linux-distro-pkg-manager`)
   - **Carried contract IDs**: `C-03`, `C-04`
   - **Purpose**: export selected-manager and source/reporting truth into persistence work
-  - **State**: defined
+  - **State**: published
   - **Revalidation trigger**: mapping-table or decision-line/source-vocabulary change
   - **Satisfied by**: `SEAM-02` closeout with published selection/reporting evidence
   - **Notes**: downstream persistence owns storage, not selection semantics
@@ -200,10 +200,10 @@
   - **Consumer seam(s)**: downstream pack (`persist-detected-linux-distro-pkg-manager`)
   - **Carried contract IDs**: `C-11`
   - **Purpose**: publish the final checkpoint-backed readiness signal, including macOS-hosted behavior evidence and any downstream stale triggers
-  - **State**: identified
+  - **State**: published
   - **Revalidation trigger**: checkpoint gate set, macOS-hosted evidence expectations, or handoff evidence requirements change
-  - **Satisfied by**: `SEAM-07` closeout with `seam_exit_gate.status: passed`
-  - **Notes**: downstream promotion may consume only realized closeout truth
+  - **Satisfied by**: `SEAM-07` closeout with `seam_exit_gate.status: passed`, `promotion_readiness: ready`, and published `C-11`
+  - **Notes**: downstream promotion may consume only the realized closeout truth recorded after quick CI rerun `23712506882`
 
 ## Dependency Graph
 

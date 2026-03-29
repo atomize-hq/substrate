@@ -1,11 +1,11 @@
 ---
 seam_id: SEAM-04
 status: landed
-closeout_version: v0
+closeout_version: v1
 seam_exit_gate:
-  source_ref:
-  status: pending
-  promotion_readiness: blocked
+  source_ref: ../threaded-seams/seam-04-fallback-probe-failure-taxonomy/slice-4-seam-exit-gate.md
+  status: passed
+  promotion_readiness: ready
 basis:
   currentness: current
   upstream_closeouts:
@@ -16,11 +16,15 @@ basis:
     - THR-01
     - THR-02
     - THR-03
-  stale_triggers: []
+  stale_triggers:
+    - fixed probe order changes
+    - warning template or placement changes
+    - `pkg_manager.source=path_probe` semantics changes
+    - exit `4` remediation wording changes
 gates:
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 open_remediations: []
 ---
 
@@ -28,20 +32,27 @@ open_remediations: []
 
 ## Seam-exit gate record
 
-- **Source artifact**:
+- **Source artifact**: `../threaded-seams/seam-04-fallback-probe-failure-taxonomy/slice-4-seam-exit-gate.md`
 - **Landed evidence**:
+  - Commit `0fb1a328` landed the fixed-order `PATH` probe selection in `scripts/substrate/install-substrate.sh`, probing the supported manager vocabulary in contract order, selecting the earliest detected manager, and recording `PKG_MANAGER_SOURCE=path_probe`; `tests/installers/pkg_manager_detection_smoke.sh` now covers single-manager and ordered multi-manager path-probe selection behavior.
+  - Commit `61b7f631` landed the exact multi-manager warning behavior in `scripts/substrate/install-substrate.sh`, emitting the contract warning line exactly once to stderr before the inherited decision line when more than one supported manager is detected in `PATH`; `tests/installers/pkg_manager_detection_smoke.sh` now asserts warning text, one-time emission, and warning-before-decision-line ordering.
+  - Commit `b72c1c52` landed the no-manager exit `4` remediation posture in `scripts/substrate/install-substrate.sh`, and the final seam correction moved that exit-`4` branch ahead of `sudo` initialization so hosts without both a supported package manager and `sudo` still fail with the contract-owned remediation instead of a generic installer error; `tests/installers/pkg_manager_detection_smoke.sh` now asserts exit `4`, required remediation text, decision-line suppression, no install attempt, and the no-manager-without-`sudo` regression case.
 - **Contracts published or changed**: `C-07`
-- **Threads published / advanced**: `THR-04`
-- **Review-surface delta**:
-- **Planned-vs-landed delta**:
+- **Threads published / advanced**: `THR-04` published
+- **Review-surface delta**: `review.md` concerns about raw-PATH drift, warning-text or placement drift, and no-manager fallback collapse are resolved by landed installer behavior plus smoke-harness coverage; no delta widened `SEAM-04` into wrapper/docs propagation, validation topology, or other non-fallback delivery work.
+- **Planned-vs-landed delta**: no contract-scope expansion landed. The final repo evidence stayed within `SEAM-04` fallback ownership: fixed-order path-probe selection, exact multi-manager warning behavior, and exit `4` remediation posture in the installer plus targeted smoke coverage.
 - **Downstream stale triggers raised**:
-- **Remediation disposition**:
-- **Promotion blockers**:
-- **Promotion readiness**: ready | blocked
+  - fixed probe order changes
+  - warning template or placement changes
+  - `pkg_manager.source=path_probe` semantics changes
+  - exit `4` remediation wording changes
+- **Remediation disposition**: no post-exec remediations opened
+- **Promotion blockers**: none
+- **Promotion readiness**: ready
 
 ## Post-exec gate disposition
 
-- **Landing gate**: pending | passed | failed
-- **Closeout gate**: pending | passed | failed
-- **Unresolved remediations**:
-- **Carried-forward remediations**:
+- **Landing gate**: passed
+- **Closeout gate**: passed
+- **Unresolved remediations**: none
+- **Carried-forward remediations**: none
