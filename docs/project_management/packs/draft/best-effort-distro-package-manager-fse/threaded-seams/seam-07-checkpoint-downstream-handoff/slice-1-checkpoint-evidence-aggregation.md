@@ -3,7 +3,7 @@ slice_id: S1
 seam_id: SEAM-07
 slice_kind: delivery
 execution_horizon: active
-status: exec-ready
+status: landed
 plan_version: v1
 basis:
   currentness: current
@@ -17,8 +17,8 @@ gates:
     contract: passed
     revalidation: inherited
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 threads:
   - THR-06
 contracts_produced:
@@ -53,6 +53,6 @@ candidate_subslices: []
   - `scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch feature/best-effort-distro-package-manager-fse`
   - `scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch feature/best-effort-distro-package-manager-fse --feature-dir docs/project_management/packs/draft/best-effort-distro-package-manager`
 - Compile parity is now an explicit CP1 input through run `23711447102` (`https://github.com/atomize-hq/substrate/actions/runs/23711447102`), which passed on `ubuntu-24.04`, `macos-14`, and `windows-2022`.
-- Quick CI testing is now an explicit CP1 input through run `23711510594` (`https://github.com/atomize-hq/substrate/actions/runs/23711510594`), which failed on `ubuntu-24.04` during shell lint with ShellCheck `SC2221` / `SC2222` warnings in `scripts/substrate/install-substrate.sh`; `macos-14` passed and `windows-2022` was cancelled after the Linux failure.
+- Quick CI testing is now an explicit CP1 input through run `23711510594` (`https://github.com/atomize-hq/substrate/actions/runs/23711510594`), which failed on `ubuntu-24.04` during shell lint with ShellCheck `SC2221` / `SC2222` warnings in `scripts/substrate/install-substrate.sh` (`https://github.com/atomize-hq/substrate/actions/runs/23711510594/job/69071916678`); `macos-14` passed and `windows-2022` was cancelled after the Linux failure.
 - Linux behavior smoke is now an explicit CP1 input through run `23711646303` (`https://github.com/atomize-hq/substrate/actions/runs/23711646303`), which passed for `SMOKE_SLICE_ID=BEDPM3`.
 - This slice therefore lands as evidence capture, not as a clean checkpoint pass. It establishes the realized CP1 record that later slices must consume, while leaving seam-exit readiness and any resulting remediation or downstream publication decisions to later `SEAM-07` slices.
