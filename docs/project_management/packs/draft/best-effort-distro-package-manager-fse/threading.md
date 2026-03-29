@@ -10,7 +10,7 @@
 | SEAM-04 | future | fallback owner | path probe, warning line, exit `4`, no-manager posture |
 | SEAM-05 | future | operator integration owner | wrapper parity, no-drift docs, and macOS-hosted path wording |
 | SEAM-06 | future | evidence topology owner | repo harness, smoke wrapper, manual evidence, and macOS-hosted verification |
-| SEAM-07 | active | checkpoint and handoff owner | CP1 evidence seal, macOS-hosted behavior evidence, and downstream readiness |
+| SEAM-07 | future | checkpoint and handoff owner | CP1 evidence seal, macOS-hosted behavior evidence, and downstream readiness |
 
 ## Contract Registry
 
@@ -200,10 +200,10 @@
   - **Consumer seam(s)**: downstream pack (`persist-detected-linux-distro-pkg-manager`)
   - **Carried contract IDs**: `C-11`
   - **Purpose**: publish the final checkpoint-backed readiness signal, including macOS-hosted behavior evidence and any downstream stale triggers
-  - **State**: identified
+  - **State**: published
   - **Revalidation trigger**: checkpoint gate set, macOS-hosted evidence expectations, or handoff evidence requirements change
-  - **Satisfied by**: `SEAM-07` closeout with `seam_exit_gate.status: passed`
-  - **Notes**: downstream promotion may consume only realized closeout truth
+  - **Satisfied by**: `SEAM-07` closeout with `seam_exit_gate.status: passed`, `promotion_readiness: ready`, and published `C-11`
+  - **Notes**: downstream promotion may consume only the realized closeout truth recorded after quick CI rerun `23712506882`
 
 ## Dependency Graph
 

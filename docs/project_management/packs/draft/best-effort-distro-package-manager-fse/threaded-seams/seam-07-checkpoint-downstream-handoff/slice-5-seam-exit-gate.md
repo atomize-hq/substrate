@@ -18,14 +18,13 @@ gates:
     revalidation: inherited
   post_exec:
     landing: passed
-    closeout: failed
+    closeout: passed
 threads:
   - THR-09
 contracts_produced: []
 contracts_consumed:
   - C-11
-open_remediations:
-  - REM-001
+open_remediations: []
 candidate_subslices: []
 ---
 ### S5 - Seam exit gate
@@ -43,5 +42,5 @@ candidate_subslices: []
 
 - `SEAM-07` now has a realized checkpoint record at tested SHA `09e3f1fe922bb283ff315844bb3750461d867741`: local harness verification passed, compile parity run `23711447102` passed, quick CI run `23711510594` failed, and Linux feature-smoke run `23711646303` passed.
 - `SEAM-06` remains the authoritative source for the hosted macOS behavior path, so this exit gate reuses the published Lima-backed verification surface instead of widening the checkpoint into native macOS package-manager behavior claims.
-- Because quick CI failed on Linux shell lint before the checkpoint closed cleanly, this exit gate records `C-11` and `THR-09` as prepared but unpublished and opens `REM-001` to block downstream readiness and promotion.
-- The seam therefore lands as a realized but failed checkpoint closeout: landing evidence is complete, closeout remains blocked, and promotion readiness stays `blocked` until the quick-CI failure is resolved or explicitly dispositioned and the checkpoint decision is rerun.
+- Quick CI was rerun after commit `4faa819b` removed the redundant SUSE-family shell patterns in `scripts/substrate/install-substrate.sh`, and rerun `23712506882` passed on `ubuntu-24.04`, `macos-14`, and `windows-2022`.
+- With the rerun green, this exit gate publishes `C-11`, advances `THR-09` to `published`, resolves `REM-001`, and closes the checkpoint-backed downstream handoff without widening the seam into unrelated upstream implementation work.
