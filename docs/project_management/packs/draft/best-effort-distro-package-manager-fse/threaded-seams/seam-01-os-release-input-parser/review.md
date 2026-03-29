@@ -53,13 +53,13 @@ flowchart LR
 
 ## Pre-exec gate disposition
 
-- **Review gate**: pending
+- **Review gate**: passed
 - **Contract gate concerns**:
-  - `C-01` and `C-02` must stay limited to selected-input and parser semantics, with no drift into manager-family mapping, warning text, or decision-line wording.
-  - the contract-definition slice must record a concrete verification checklist for unreadable alternate input, duplicate assignments, comments, and quoted values.
+  - `C-01` and `C-02` remained limited to selected-input and parser semantics; no mapping, warning, decision-line, or override behavior landed in `SEAM-01`.
+  - the contract-definition slice now records the concrete verification checklist for unreadable alternate input, duplicate assignments, comments, quoted values, and `<unknown>` normalization.
 - **Revalidation prerequisites**:
-  - the source pack contract and `DR-0001` / `DR-0003` remain the authoritative basis for parser and alternate-input semantics
-  - any change to parser normalization, hook validation, or `<unknown>` behavior requires revalidation before `SEAM-01` can become `exec-ready`
+  - the source pack contract and `DR-0001` / `DR-0003` remained the authoritative basis for parser and alternate-input semantics throughout `S1` to `S3`, so revalidation passed for the landed scope.
+  - any future change to parser normalization, hook validation, or `<unknown>` behavior still requires downstream revalidation.
 - **Opened remediations**: none
 
 ## Planned seam-exit gate focus
