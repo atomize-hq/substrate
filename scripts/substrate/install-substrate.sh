@@ -28,6 +28,7 @@ PLATFORM=""
 ARCH=""
 IS_WSL=0
 ORIGINAL_PATH="${PATH}"
+PKG_MANAGER_ENV_OVERRIDE="${PKG_MANAGER:-}"
 PKG_MANAGER=""
 PKG_MANAGER_SOURCE=""
 PKG_MANAGER_FLAG_OVERRIDE=""
@@ -708,8 +709,26 @@ select_package_manager_from_flag() {
   return 0
 }
 
+select_package_manager_from_env() {
+  if [[ -z "${PKG_MANAGER_ENV_OVERRIDE}" ]]; then
+    return 1
+  fi
+
+  if ! is_supported_pkg_manager "${PKG_MANAGER_ENV_OVERRIDE}"; then
+    fatal "Unsupported PKG_MANAGER value '${PKG_MANAGER_ENV_OVERRIDE}'. Supported values: $(supported_pkg_manager_list)."
+  fi
+
+  if ! command -v "${PKG_MANAGER_ENV_OVERRIDE}" >/dev/null 2>&1; then
+    fatal "Requested PKG_MANAGER '${PKG_MANAGER_ENV_OVERRIDE}' was not found in PATH."
+  fi
+
+  PKG_MANAGER="${PKG_MANAGER_ENV_OVERRIDE}"
+  PKG_MANAGER_SOURCE="env"
+  return 0
+}
+
 detect_package_manager() {
-  if [[ -n "${PKG_MANAGER}" && -z "${PKG_MANAGER_FLAG_OVERRIDE}" ]]; then
+  if [[ -n "${PKG_MANAGER}" && -n "${PKG_MANAGER_SOURCE}" ]]; then
     return 0
   fi
 
@@ -717,6 +736,10 @@ detect_package_manager() {
   parse_selected_os_release_fields || true
 
   if select_package_manager_from_flag; then
+    return 0
+  fi
+
+  if select_package_manager_from_env; then
     return 0
   fi
 
@@ -754,7 +777,7 @@ maybe_emit_package_manager_decision_line() {
   fi
 
   case "${PKG_MANAGER_SOURCE}" in
-    flag|os_release)
+    flag|env|os_release)
       ;;
     *)
       return

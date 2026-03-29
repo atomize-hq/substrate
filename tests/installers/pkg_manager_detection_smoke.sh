@@ -99,6 +99,7 @@ assert_in_order() {
 reset_detected_manager() {
   PKG_MANAGER=""
   PKG_MANAGER_SOURCE=""
+  PKG_MANAGER_ENV_OVERRIDE=""
   PKG_MANAGER_FLAG_OVERRIDE=""
 }
 
@@ -234,11 +235,21 @@ PATH="${original_path}"
 PATH="${manager_bin}"
 reset_installer_state
 parse_args --pkg-manager pacman
-PKG_MANAGER="apt-get"
-PKG_MANAGER_SOURCE="env"
+PKG_MANAGER_ENV_OVERRIDE="apt-get"
 SUBSTRATE_INSTALL_OS_RELEASE_PATH="${valid_alt}"
 detect_package_manager
 assert_detected_manager "pacman" "flag"
+assert_parsed_fields "ubuntu" "debian"
+PATH="${original_path}"
+
+PATH="${manager_bin}"
+reset_detected_manager
+PKG_MANAGER_ENV_OVERRIDE="dnf"
+SUBSTRATE_INSTALL_OS_RELEASE_PATH="${valid_alt}"
+detect_package_manager
+assert_detected_manager "dnf" "env"
+assert_eq "${OS_RELEASE_INPUT_STATE}" "selected" "OS_RELEASE_INPUT_STATE"
+assert_eq "${OS_RELEASE_SELECTED_PATH}" "${valid_alt}" "OS_RELEASE_SELECTED_PATH"
 assert_parsed_fields "ubuntu" "debian"
 PATH="${original_path}"
 
@@ -300,6 +311,18 @@ SUBSTRATE_INSTALL_OS_RELEASE_PATH="${valid_alt}"
 flag_output="$(ensure_linux_packages_for_commands curl 2>&1)"
 assert_contains_once "${flag_output}" "${flag_decision_line}" "flag decision line"
 assert_in_order "${flag_output}" "${flag_decision_line}" "[substrate-install] Installing packages: curl" "flag decision-line ordering"
+PATH="${original_path}"
+
+env_decision_line='Detected distro: ubuntu (like: debian), using package manager: dnf (source: env)'
+PATH="${manager_bin}"
+reset_installer_state
+DRY_RUN=1
+PKG_MANAGER_ENV_OVERRIDE="dnf"
+SUBSTRATE_INSTALL_OS_RELEASE_PATH="${valid_alt}"
+env_output="$(ensure_linux_packages_for_commands curl 2>&1)"
+assert_contains_once "${env_output}" "${env_decision_line}" "env decision line"
+assert_in_order "${env_output}" "${env_decision_line}" "[substrate-install] Installing packages: curl" "env decision-line ordering"
+assert_not_contains "${env_output}" "apt-get update" "env no os_release install command"
 PATH="${original_path}"
 
 decision_line='Detected distro: ubuntu (like: debian), using package manager: apt-get (source: os_release)'
