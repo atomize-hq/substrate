@@ -12,8 +12,8 @@ This pack captures seam briefs, authoritative threading, pack-level review surfa
 
 Execution horizon:
 
-- Active seam: `SEAM-02` - family mapping and decision-line reporting
-- Next seam: `SEAM-03` - explicit override selection
+- Active seam: `SEAM-03` - explicit override selection
+- Next seam: `SEAM-04` - fallback probe failure taxonomy
 
 Policy:
 

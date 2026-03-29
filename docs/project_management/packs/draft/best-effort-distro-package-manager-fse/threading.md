@@ -5,9 +5,9 @@
 | Seam | Horizon | Role | Key output |
 |------|---------|------|------------|
 | SEAM-01 | future | parser/input contract owner | normalized distro facts, `<unknown>`, alternate input hook |
-| SEAM-02 | active | mapping/reporting owner | family-table selection and stable decision line |
-| SEAM-03 | next | explicit selector owner | flag/env precedence and exit `2` / `3` contract |
-| SEAM-04 | future | fallback owner | path probe, warning line, exit `4`, no-manager posture |
+| SEAM-02 | future | mapping/reporting owner | family-table selection and stable decision line |
+| SEAM-03 | active | explicit selector owner | flag/env precedence and exit `2` / `3` contract |
+| SEAM-04 | next | fallback owner | path probe, warning line, exit `4`, no-manager posture |
 | SEAM-05 | future | operator integration owner | wrapper parity, no-drift docs, and macOS-hosted path wording |
 | SEAM-06 | future | evidence topology owner | repo harness, smoke wrapper, manual evidence, and macOS-hosted verification |
 | SEAM-07 | future | checkpoint and handoff owner | CP1 evidence seal, macOS-hosted behavior evidence, and downstream readiness |
@@ -130,9 +130,9 @@
   - **Consumer seam(s)**: `SEAM-03`, `SEAM-04`, `SEAM-05`, `SEAM-06`
   - **Carried contract IDs**: `C-03`, `C-04`
   - **Purpose**: carry mapping-table and decision-line truth into explicit selectors, fallback behavior, docs, and tests
-  - **State**: defined
+  - **State**: revalidated
   - **Revalidation trigger**: family-table changes, decision-line template changes, or timing changes
-  - **Satisfied by**: `SEAM-02` closeout with landed mapping/reporting evidence
+  - **Satisfied by**: `SEAM-02` closeout with landed mapping/reporting evidence and `SEAM-03` pre-exec revalidation against that handoff
   - **Notes**: downstream seams must not restate or fork the decision line
 
 - **Thread ID**: `THR-03`
@@ -190,7 +190,7 @@
   - **Consumer seam(s)**: downstream pack (`persist-detected-linux-distro-pkg-manager`)
   - **Carried contract IDs**: `C-03`, `C-04`
   - **Purpose**: export selected-manager and source/reporting truth into persistence work
-  - **State**: defined
+  - **State**: published
   - **Revalidation trigger**: mapping-table or decision-line/source-vocabulary change
   - **Satisfied by**: `SEAM-02` closeout with published selection/reporting evidence
   - **Notes**: downstream persistence owns storage, not selection semantics

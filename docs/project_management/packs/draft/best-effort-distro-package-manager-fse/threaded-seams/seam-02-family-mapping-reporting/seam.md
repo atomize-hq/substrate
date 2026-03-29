@@ -1,8 +1,8 @@
 ---
 seam_id: SEAM-02
 seam_slug: family-mapping-reporting
-status: landed
-execution_horizon: active
+status: closed
+execution_horizon: future
 plan_version: v2
 basis:
   currentness: current

@@ -2,11 +2,11 @@
 seam_id: SEAM-03
 seam_slug: explicit-override-selection
 type: capability
-status: proposed
-execution_horizon: next
+status: exec-ready
+execution_horizon: active
 plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v2
   upstream_closeouts:
@@ -22,15 +22,15 @@ basis:
     - exit `2` / `3` remediation requirements change
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
 seam_exit_gate:
   required: true
-  planned_location: reserved_final_slice
+  planned_location: S4
   status: pending
 open_remediations: []
 ---
@@ -129,9 +129,9 @@ Own the operator-controlled selector stages so forced manager selection is expli
 
 ## Downstream decomposition context
 
-### Why this seam is `future`
+### Why this seam is `active`
 
-It depends on both parser/input and mapping/reporting truth being landed first. Extraction keeps it at seam-brief depth because later review must validate the shared decision pipeline with `SEAM-04`.
+`SEAM-01` and `SEAM-02` are now landed and closed out, so parser/input truth plus mapping/reporting truth are current enough for this seam to own explicit-selector precedence and fail-closed behavior without reopening upstream contracts.
 
 ### Which threads matter most
 
