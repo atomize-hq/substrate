@@ -2,7 +2,26 @@
 
 ## Open remediations
 
-None at extraction time.
+```yaml
+remediation_id: REM-001
+origin_phase: post_exec
+source_gate: closeout
+related_seam: SEAM-07
+related_slice: S5
+related_thread: THR-09
+related_contract: C-11
+related_artifact: docs/project_management/packs/draft/best-effort-distro-package-manager-fse/governance/seam-07-closeout.md
+severity: blocking
+status: open
+owner_seam: SEAM-07
+blocked_targets:
+  - seam: SEAM-07
+    field: status
+    value: closed
+summary: SEAM-07 checkpoint evidence is recorded, but quick CI run 23711510594 failed on Linux shell lint before downstream readiness could be published as a clean checkpoint-backed handoff
+required_fix: resolve or explicitly disposition the ShellCheck SC2221/SC2222 failure in scripts/substrate/install-substrate.sh, then rerun the SEAM-07 checkpoint decision without widening this seam into unrelated upstream implementation work
+resolution_evidence: []
+```
 
 Canonical entry shape for future additions:
 
