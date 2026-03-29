@@ -95,14 +95,14 @@ jobs:
     steps:
       - name: Checkout repository (override ref)
         if: inputs.checkout_ref != ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.checkout_ref }}
           submodules: recursive
 
       - name: Checkout repository
         if: inputs.checkout_ref == ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
 
@@ -167,14 +167,14 @@ jobs:
     steps:
       - name: Checkout repository (override ref)
         if: inputs.checkout_ref != ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.checkout_ref }}
           submodules: recursive
 
       - name: Checkout repository
         if: inputs.checkout_ref == ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
 
@@ -274,13 +274,13 @@ jobs:
     runs-on: [self-hosted, Linux, linux-host]
     steps:
       - name: Checkout repository (workflow ref)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
 
       - name: Checkout repository (candidate ref)
         if: inputs.checkout_ref != ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.checkout_ref }}
           submodules: recursive
@@ -457,14 +457,14 @@ jobs:
     steps:
       - name: Checkout repository (override ref)
         if: inputs.checkout_ref != ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.checkout_ref }}
           submodules: recursive
 
       - name: Checkout repository
         if: inputs.checkout_ref == ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
 
@@ -517,13 +517,13 @@ jobs:
       RUST_TEST_THREADS: 1
     steps:
       - name: Checkout repository (workflow ref)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
 
       - name: Checkout repository (candidate ref)
         if: inputs.checkout_ref != ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.checkout_ref }}
           submodules: recursive
@@ -592,14 +592,14 @@ jobs:
     steps:
       - name: Checkout repository (override ref)
         if: inputs.checkout_ref != ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.checkout_ref }}
           submodules: recursive
 
       - name: Checkout repository
         if: inputs.checkout_ref == ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
 
@@ -637,13 +637,13 @@ jobs:
     runs-on: [self-hosted, Windows]
     steps:
       - name: Checkout repository (workflow ref)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
 
       - name: Checkout repository (candidate ref)
         if: inputs.checkout_ref != ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.checkout_ref }}
           submodules: recursive
@@ -740,13 +740,13 @@ jobs:
     runs-on: [self-hosted, Linux, wsl]
     steps:
       - name: Checkout repository (workflow ref)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
 
       - name: Checkout repository (candidate ref)
         if: inputs.checkout_ref != ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.checkout_ref }}
           submodules: recursive

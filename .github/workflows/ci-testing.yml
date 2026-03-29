@@ -64,14 +64,14 @@ jobs:
     steps:
       - name: Checkout repository (override ref)
         if: inputs.checkout_ref != ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.checkout_ref }}
           submodules: recursive
 
       - name: Checkout repository
         if: inputs.checkout_ref == ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
 
@@ -146,7 +146,7 @@ jobs:
           cargo --version
 
       - name: Cache cargo artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
@@ -208,14 +208,14 @@ jobs:
     steps:
       - name: Checkout repository (override ref)
         if: inputs.checkout_ref != ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.checkout_ref }}
           submodules: recursive
 
       - name: Checkout repository
         if: inputs.checkout_ref == ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
 
@@ -231,7 +231,7 @@ jobs:
           components: rustfmt
 
       - name: Cache cargo artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
@@ -261,14 +261,14 @@ jobs:
     steps:
       - name: Checkout repository (override ref)
         if: inputs.checkout_ref != ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.checkout_ref }}
           submodules: recursive
 
       - name: Checkout repository
         if: inputs.checkout_ref == ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
 
@@ -281,7 +281,7 @@ jobs:
         run: cargo install cross --version 0.2.4 --locked
 
       - name: Cache cargo artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
