@@ -12,8 +12,8 @@ This pack captures seam briefs, authoritative threading, pack-level review surfa
 
 Execution horizon:
 
-- Active seam: `SEAM-04` - fallback probe failure taxonomy
-- Next seam: `SEAM-05` - wrapper doc propagation
+- Active seam: `SEAM-05` - wrapper doc propagation
+- Next seam: `SEAM-06` - validation evidence topology
 
 Policy:
 

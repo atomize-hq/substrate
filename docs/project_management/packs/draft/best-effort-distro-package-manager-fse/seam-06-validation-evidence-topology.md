@@ -3,7 +3,7 @@ seam_id: SEAM-06
 seam_slug: validation-evidence-topology
 type: conformance
 status: proposed
-execution_horizon: future
+execution_horizon: next
 plan_version: v2
 basis:
   currentness: provisional

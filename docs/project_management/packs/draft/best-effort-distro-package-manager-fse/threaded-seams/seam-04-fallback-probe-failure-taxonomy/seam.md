@@ -1,8 +1,8 @@
 ---
 seam_id: SEAM-04
 seam_slug: fallback-probe-failure-taxonomy
-status: exec-ready
-execution_horizon: active
+status: landed
+execution_horizon: future
 plan_version: v2
 basis:
   currentness: current
@@ -27,12 +27,12 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S4
-  status: pending
+  status: passed
 open_remediations: []
 ---
 # SEAM-04 - Fallback Probe And Failure Taxonomy
