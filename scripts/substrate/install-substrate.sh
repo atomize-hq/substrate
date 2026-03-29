@@ -997,7 +997,6 @@ install_packages() {
 }
 
 ensure_linux_packages_for_commands() {
-  initialize_sudo
   local commands=("$@")
   local missing_cmds=()
   for cmd in "${commands[@]}"; do
@@ -1014,6 +1013,7 @@ ensure_linux_packages_for_commands() {
     fail_no_supported_pkg_manager "${missing_cmds[@]}"
   fi
 
+  initialize_sudo
   maybe_emit_package_manager_decision_line
 
   declare -A pkg_set=()

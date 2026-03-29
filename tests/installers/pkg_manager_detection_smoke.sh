@@ -204,6 +204,19 @@ run_no_manager_case() {
   ensure_linux_packages_for_commands curl tar
 }
 
+run_no_manager_without_sudo_case() {
+  local case_bin="${tmpdir}/no-manager-no-sudo-bin"
+
+  rm -rf "${case_bin}"
+  mkdir -p "${case_bin}"
+
+  PATH="${case_bin}"
+  reset_installer_state
+  DRY_RUN=1
+  SUBSTRATE_INSTALL_OS_RELEASE_PATH="${arch_fixture}"
+  ensure_linux_packages_for_commands curl tar
+}
+
 tmpdir="$(mktemp -d -t substrate-pkg-manager-detection.XXXXXX)"
 trap 'rm -rf "${tmpdir}"' EXIT
 
@@ -455,6 +468,10 @@ assert_contains "${no_manager_output}" "--pkg-manager <apt-get|dnf|yum|pacman|zy
 assert_contains "${no_manager_output}" "PKG_MANAGER=<apt-get|dnf|yum|pacman|zypper>" "no manager env override"
 assert_not_contains "${no_manager_output}" "Detected distro:" "no manager no decision line"
 assert_not_contains "${no_manager_output}" "Installing packages:" "no manager no install attempt"
+
+no_manager_without_sudo_output="$(capture_failure_output 4 "no supported manager without sudo" run_no_manager_without_sudo_case)"
+assert_contains "${no_manager_without_sudo_output}" "No supported package manager was detected." "no manager without sudo posture"
+assert_not_contains "${no_manager_without_sudo_output}" "requires 'sudo'" "no manager without sudo bypasses sudo setup"
 
 decision_line='Detected distro: ubuntu (like: debian), using package manager: apt-get (source: os_release)'
 PATH="${manager_bin}"
