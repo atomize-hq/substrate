@@ -1034,15 +1034,18 @@ async fn handle_persistent_session(
                                     world.isolate_network,
                                 );
 
+                                let exec_spec = PersistentExecSpec {
+                                    session_env: &session_env,
+                                    session_cwd: &session_cwd,
+                                    cmd_id: &cmd_id,
+                                    stdin_mode,
+                                    program: &program,
+                                };
                                 let (child_events, pgid) = match spawn_persistent_exec(
                                     &world,
                                     &pty,
                                     pty_bytes_read.clone(),
-                                    &session_env,
-                                    &session_cwd,
-                                    &cmd_id,
-                                    stdin_mode,
-                                    &program,
+                                    exec_spec,
                                 ) {
                                     Ok(v) => v,
                                     Err(message) => {
@@ -1624,15 +1627,20 @@ fn parse_proc_environ(bytes: Vec<u8>) -> Result<HashMap<String, String>, String>
 }
 
 #[cfg(target_os = "linux")]
+struct PersistentExecSpec<'a> {
+    session_env: &'a HashMap<String, String>,
+    session_cwd: &'a std::path::Path,
+    cmd_id: &'a str,
+    stdin_mode: PersistentStdinMode,
+    program: &'a str,
+}
+
+#[cfg(target_os = "linux")]
 fn spawn_persistent_exec(
     world: &PersistentWorldContext,
     pty: &RawPty,
     pty_bytes_read: Arc<AtomicUsize>,
-    session_env: &HashMap<String, String>,
-    session_cwd: &std::path::Path,
-    cmd_id: &str,
-    stdin_mode: PersistentStdinMode,
-    program: &str,
+    spec: PersistentExecSpec<'_>,
 ) -> Result<
     (
         tokio::sync::mpsc::Receiver<PersistentChildEvent>,
@@ -1643,24 +1651,24 @@ fn spawn_persistent_exec(
     use std::os::unix::process::CommandExt;
     use std::time::Duration;
 
-    let mut env = session_env.clone();
+    let mut env = spec.session_env.clone();
     for (k, v) in world.base_env.iter() {
         env.insert(k.clone(), v.clone());
     }
 
     let should_guard = should_guard_anchor(&env);
-    let desired_cwd = if session_cwd.is_absolute()
-        && (!should_guard || session_cwd.starts_with(&world.project_dir))
+    let desired_cwd = if spec.session_cwd.is_absolute()
+        && (!should_guard || spec.session_cwd.starts_with(&world.project_dir))
     {
-        session_cwd.to_path_buf()
+        spec.session_cwd.to_path_buf()
     } else {
         world.project_dir.clone()
     };
 
     let program = if should_guard {
-        wrap_with_anchor_guard(program, &world.project_dir)
+        wrap_with_anchor_guard(spec.program, &world.project_dir)
     } else {
-        program.to_string()
+        spec.program.to_string()
     };
 
     env.insert(
@@ -1681,9 +1689,9 @@ fn spawn_persistent_exec(
     );
 
     env.insert("SUBSTRATE_PROGRAM".to_string(), program);
-    env.insert("SHIM_PARENT_CMD_ID".to_string(), cmd_id.to_string());
+    env.insert("SHIM_PARENT_CMD_ID".to_string(), spec.cmd_id.to_string());
 
-    let inner_cmd = match stdin_mode {
+    let inner_cmd = match spec.stdin_mode {
         PersistentStdinMode::Eof => {
             r#"exec </dev/null /bin/bash --noprofile --norc -c "$SUBSTRATE_PROGRAM""#.to_string()
         }
