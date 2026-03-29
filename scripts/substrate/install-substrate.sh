@@ -724,6 +724,27 @@ select_package_manager_from_os_release() {
   return 1
 }
 
+select_package_manager_from_path_probe() {
+  local manager=""
+  local selected_manager=""
+
+  for manager in "${SUPPORTED_PKG_MANAGERS[@]}"; do
+    if command -v "${manager}" >/dev/null 2>&1; then
+      if [[ -z "${selected_manager}" ]]; then
+        selected_manager="${manager}"
+      fi
+    fi
+  done
+
+  if [[ -z "${selected_manager}" ]]; then
+    return 1
+  fi
+
+  PKG_MANAGER="${selected_manager}"
+  PKG_MANAGER_SOURCE="path_probe"
+  return 0
+}
+
 select_package_manager_from_flag() {
   if [[ -z "${PKG_MANAGER_FLAG_OVERRIDE}" ]]; then
     return 1
@@ -784,24 +805,7 @@ detect_package_manager() {
     return 0
   fi
 
-  if command -v apt-get >/dev/null 2>&1; then
-    PKG_MANAGER="apt-get"
-    return 0
-  fi
-  if command -v dnf >/dev/null 2>&1; then
-    PKG_MANAGER="dnf"
-    return 0
-  fi
-  if command -v yum >/dev/null 2>&1; then
-    PKG_MANAGER="yum"
-    return 0
-  fi
-  if command -v pacman >/dev/null 2>&1; then
-    PKG_MANAGER="pacman"
-    return 0
-  fi
-  if command -v zypper >/dev/null 2>&1; then
-    PKG_MANAGER="zypper"
+  if select_package_manager_from_path_probe; then
     return 0
   fi
 
@@ -814,7 +818,7 @@ maybe_emit_package_manager_decision_line() {
   fi
 
   case "${PKG_MANAGER_SOURCE}" in
-    flag|env|os_release)
+    flag|env|os_release|path_probe)
       ;;
     *)
       return

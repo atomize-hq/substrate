@@ -362,12 +362,19 @@ PATH="${manager_bin}"
 reset_detected_manager
 SUBSTRATE_INSTALL_OS_RELEASE_PATH="${arch_fixture}"
 detect_package_manager
-assert_detected_manager "apt-get" ""
+assert_detected_manager "apt-get" "path_probe"
 PATH="${original_path}"
 make_stub_command "${manager_bin}/dnf"
 make_stub_command "${manager_bin}/yum"
-make_stub_command "${manager_bin}/pacman"
 make_stub_command "${manager_bin}/zypper"
+
+PATH="${manager_bin}"
+reset_detected_manager
+SUBSTRATE_INSTALL_OS_RELEASE_PATH="${arch_fixture}"
+detect_package_manager
+assert_detected_manager "apt-get" "path_probe"
+PATH="${original_path}"
+make_stub_command "${manager_bin}/pacman"
 
 flag_decision_line='Detected distro: ubuntu (like: debian), using package manager: pacman (source: flag)'
 PATH="${manager_bin}"
@@ -445,7 +452,9 @@ reset_installer_state
 DRY_RUN=1
 SUBSTRATE_INSTALL_OS_RELEASE_PATH="${arch_fixture}"
 fallback_output="$(ensure_linux_packages_for_commands curl 2>&1)"
-assert_not_contains "${fallback_output}" "Detected distro:" "path_probe decision-line suppression"
+fallback_decision_line='Detected distro: endeavouros (like: arch), using package manager: apt-get (source: path_probe)'
+assert_contains_once "${fallback_output}" "${fallback_decision_line}" "path_probe decision line"
+assert_in_order "${fallback_output}" "${fallback_decision_line}" "[substrate-install] Installing packages: curl" "path_probe decision-line ordering"
 PATH="${original_path}"
 make_stub_command "${manager_bin}/dnf"
 make_stub_command "${manager_bin}/yum"
