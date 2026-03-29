@@ -8,3 +8,4 @@
   - source basis includes the contract, decision register, slice specs, spec manifest, impact map, CI checkpoint plan, manual playbook, and approved planning-gate context
   - the pack expands the source research into seven seams so downstream decomposition does not need to invent new ownership boundaries
   - the single checkpoint boundary remains preserved as `SEAM-07` terminal conformance work
+  - pack closeout requires macOS-hosted Lima-backed behavior evidence alongside Linux-direct feature evidence

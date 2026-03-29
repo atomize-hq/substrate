@@ -50,7 +50,8 @@ Make the final operator-facing entrypoints and docs faithfully reuse the install
 - `scripts/substrate/install.sh` pass-through for exits `0`, `2`, `3`, and `4`
 - `docs/INSTALLATION.md` propagation of precedence, reporting, warning, and remediation truth
 - `docs/reference/env/contract.md` propagation of `PKG_MANAGER` and `SUBSTRATE_INSTALL_OS_RELEASE_PATH`
-- Linux-only no-change posture for macOS and Windows
+- operator-facing clarification that macOS-hosted installs traverse the Lima-backed Linux backend even though the package-manager decision logic remains Linux-scoped
+- Windows no-change posture
 
 ### Out
 
@@ -75,7 +76,8 @@ Make the final operator-facing entrypoints and docs faithfully reuse the install
 1. wrapper preserves feature exits rather than collapsing them
 2. docs reuse contract truth instead of redefining it
 3. env docs keep hook and precedence semantics exact
-4. macOS and Windows remain explicit no-change platforms
+4. macOS docs distinguish Lima-backed hosted-install coverage from native macOS package-manager logic
+5. Windows remains an explicit no-change platform for this feature contract
 
 ## Dependencies
 
@@ -103,6 +105,7 @@ Make the final operator-facing entrypoints and docs faithfully reuse the install
 - `scripts/substrate/install.sh`
 - `docs/INSTALLATION.md`
 - `docs/reference/env/contract.md`
+- `docs/WORLD.md` when hosted-install wording must reference the Lima-backed path
 - source evidence in `BEDPM2-spec.md` and `contract.md`
 
 ## Verification
@@ -110,6 +113,7 @@ Make the final operator-facing entrypoints and docs faithfully reuse the install
 - wrapper preserves exits `0`, `2`, `3`, and `4`
 - installation docs restate the exact precedence chain and warning posture without drift
 - env docs keep allowed values, hook semantics, and Linux-only scope exact
+- installation/world docs make macOS-hosted Lima-backed coverage explicit without claiming native macOS package-manager-selection logic
 - no new operator-facing ambiguity is introduced by wrapper or doc wording
 
 ## Risks / unknowns
@@ -117,6 +121,7 @@ Make the final operator-facing entrypoints and docs faithfully reuse the install
 - wrapper path masking upstream failure classes
 - docs paraphrasing contract truth into conflicting wording
 - env-hook wording widening semantics beyond the source contract
+- macOS-hosted wording collapsing back into a misleading "no macOS coverage" statement
 
 ## Rollout / safety
 
@@ -139,6 +144,7 @@ It must consume stable upstream decision semantics first. Extraction keeps it fu
 - wrapper exit propagation boundary
 - exact doc reuse of precedence, warning, and remediation wording
 - env-doc treatment of `SUBSTRATE_INSTALL_OS_RELEASE_PATH`
+- macOS-hosted Lima-backed path wording and documentation placement
 
 ### Expected seam-local slice themes
 

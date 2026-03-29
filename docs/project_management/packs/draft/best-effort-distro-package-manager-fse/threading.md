@@ -8,9 +8,9 @@
 | SEAM-02 | next | mapping/reporting owner | family-table selection and stable decision line |
 | SEAM-03 | future | explicit selector owner | flag/env precedence and exit `2` / `3` contract |
 | SEAM-04 | future | fallback owner | path probe, warning line, exit `4`, no-manager posture |
-| SEAM-05 | future | operator integration owner | wrapper parity and no-drift docs |
-| SEAM-06 | future | evidence topology owner | repo harness, smoke wrapper, manual evidence |
-| SEAM-07 | future | checkpoint and handoff owner | CP1 evidence seal and downstream readiness |
+| SEAM-05 | future | operator integration owner | wrapper parity, no-drift docs, and macOS-hosted path wording |
+| SEAM-06 | future | evidence topology owner | repo harness, smoke wrapper, manual evidence, and macOS-hosted verification |
+| SEAM-07 | future | checkpoint and handoff owner | CP1 evidence seal, macOS-hosted behavior evidence, and downstream readiness |
 
 ## Contract Registry
 
@@ -101,7 +101,7 @@
   - **Direct consumers**: `SEAM-07`
   - **Derived consumers**: future maintenance
   - **Thread IDs**: `THR-06`
-  - **Definition**: authoritative validation topology covering repo harness path, thin smoke wrapper, and manual evidence model
+  - **Definition**: authoritative validation topology covering repo harness path, thin smoke wrapper, manual evidence model, and macOS-hosted Lima-backed verification of the Linux installer path
   - **Versioning / compat**: v1; no second assertion authority is allowed
 
 - **Contract ID**: `C-11`
@@ -110,7 +110,7 @@
   - **Direct consumers**: downstream pack
   - **Derived consumers**: pack closeout and future promotion
   - **Thread IDs**: `THR-09`
-  - **Definition**: CP1 evidence seal, downstream stale-trigger emission, and persistence-pack readiness statement
+  - **Definition**: CP1 evidence seal, explicit macOS-hosted behavior evidence, downstream stale-trigger emission, and persistence-pack readiness statement
   - **Versioning / compat**: v1; downstream handoff must consume recorded closeout truth only
 
 ## Thread Registry
@@ -169,11 +169,11 @@
   - **Producer seam**: `SEAM-06`
   - **Consumer seam(s)**: `SEAM-07`
   - **Carried contract IDs**: `C-10`
-  - **Purpose**: carry one authoritative validation topology and manual evidence model into checkpoint sealing
+  - **Purpose**: carry one authoritative validation topology, manual evidence model, and macOS-hosted verification posture into checkpoint sealing
   - **State**: defined
-  - **Revalidation trigger**: repo harness path, smoke-wrapper topology, or manual evidence expectations change
+  - **Revalidation trigger**: repo harness path, smoke-wrapper topology, manual evidence expectations, or macOS Lima-backed verification path change
   - **Satisfied by**: `SEAM-06` closeout with validation evidence recorded
-  - **Notes**: keeps repo harness authoritative and smoke wrapper thin
+  - **Notes**: keeps repo harness authoritative, smoke wrapper thin, and macOS-hosted verification explicit
 
 - **Thread ID**: `THR-07`
   - **Producer seam**: `SEAM-01`
@@ -199,9 +199,9 @@
   - **Producer seam**: `SEAM-07`
   - **Consumer seam(s)**: downstream pack (`persist-detected-linux-distro-pkg-manager`)
   - **Carried contract IDs**: `C-11`
-  - **Purpose**: publish the final checkpoint-backed readiness signal and any downstream stale triggers
+  - **Purpose**: publish the final checkpoint-backed readiness signal, including macOS-hosted behavior evidence and any downstream stale triggers
   - **State**: identified
-  - **Revalidation trigger**: checkpoint gate set or handoff evidence requirements change
+  - **Revalidation trigger**: checkpoint gate set, macOS-hosted evidence expectations, or handoff evidence requirements change
   - **Satisfied by**: `SEAM-07` closeout with `seam_exit_gate.status: passed`
   - **Notes**: downstream promotion may consume only realized closeout truth
 

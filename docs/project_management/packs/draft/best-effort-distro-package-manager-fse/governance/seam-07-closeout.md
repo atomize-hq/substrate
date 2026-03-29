@@ -31,6 +31,7 @@ open_remediations: []
 - **Contracts published or changed**: `C-11`
 - **Threads published / advanced**: `THR-09`
 - **Review-surface delta**:
+- **macOS-hosted checkpoint evidence**:
 - **Planned-vs-landed delta**:
 - **Downstream stale triggers raised**:
 - **Remediation disposition**:

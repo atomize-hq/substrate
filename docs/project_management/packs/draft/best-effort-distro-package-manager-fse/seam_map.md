@@ -10,9 +10,9 @@ This extraction deliberately expands the original four slice-oriented units into
 | SEAM-02 | capability | next | own distro-family mapping, availability-based selection, and stable decision-line reporting | `scripts/substrate/install-substrate.sh`, `contract.md` |
 | SEAM-03 | capability | future | own `--pkg-manager` and `PKG_MANAGER` explicit selection behavior, precedence, and exit `2`/`3` posture | `scripts/substrate/install-substrate.sh`, `contract.md` |
 | SEAM-04 | capability | future | own ordered PATH probing, multi-manager warning, exit `4`, and final fallback selection semantics | `scripts/substrate/install-substrate.sh`, `contract.md` |
-| SEAM-05 | integration | future | own wrapper pass-through plus operator/env-doc propagation with no contract drift | `scripts/substrate/install.sh`, `docs/INSTALLATION.md`, `docs/reference/env/contract.md` |
-| SEAM-06 | conformance | future | own validation topology: authoritative repo harness, thin smoke wrapper, and manual evidence model | `tests/installers/pkg_manager_detection_smoke.sh`, `smoke/linux-smoke.sh`, `manual_testing_playbook.md` |
-| SEAM-07 | conformance | future | own the single checkpoint boundary, evidence seal, downstream stale triggers, and persistence-pack handoff | `plan.md`, `pre-planning/ci_checkpoint_plan.md`, downstream contract boundary |
+| SEAM-05 | integration | future | own wrapper pass-through plus operator/env-doc propagation with no contract drift, including macOS-hosted wording where the hosted path uses Lima-backed Linux install flow | `scripts/substrate/install.sh`, `docs/INSTALLATION.md`, `docs/reference/env/contract.md` |
+| SEAM-06 | conformance | future | own validation topology: authoritative repo harness, thin smoke wrapper, manual evidence model, and macOS-hosted Lima-backed verification | `tests/installers/pkg_manager_detection_smoke.sh`, `smoke/linux-smoke.sh`, `manual_testing_playbook.md`, `scripts/mac/smoke.sh` |
+| SEAM-07 | conformance | future | own the single checkpoint boundary, evidence seal, macOS-hosted behavior evidence, downstream stale triggers, and persistence-pack handoff | `plan.md`, `pre-planning/ci_checkpoint_plan.md`, downstream contract boundary |
 
 ## Why The Seam Count Increased
 
@@ -35,7 +35,7 @@ This extraction deliberately expands the original four slice-oriented units into
 | `BEDPM2` slice contract | SEAM-05 |
 | `BEDPM3` slice contract | SEAM-06, SEAM-07 |
 | downstream persistence boundary | SEAM-01, SEAM-02, SEAM-07 |
-| checkpoint boundary and CI parity cadence | SEAM-07 |
+| checkpoint boundary, CI parity cadence, and macOS-hosted behavior evidence | SEAM-07 |
 
 ## Seam Relationships
 
@@ -58,9 +58,9 @@ flowchart LR
 2. `SEAM-02` turns normalized input into selection/reporting truth.
 3. `SEAM-03` adds explicit operator-controlled selection.
 4. `SEAM-04` finishes the decision pipeline with deterministic fallback and failure taxonomy.
-5. `SEAM-05` propagates the final operator-facing contract through wrapper and docs.
-6. `SEAM-06` locks one authoritative validation topology and evidence path.
-7. `SEAM-07` seals the checkpoint boundary and publishes downstream handoff truth.
+5. `SEAM-05` propagates the final operator-facing contract through wrapper and docs, including the macOS-hosted Lima-backed path description.
+6. `SEAM-06` locks one authoritative validation topology and evidence path, including macOS-hosted verification.
+7. `SEAM-07` seals the checkpoint boundary, records macOS-hosted evidence, and publishes downstream handoff truth.
 
 ## Horizon Discipline
 

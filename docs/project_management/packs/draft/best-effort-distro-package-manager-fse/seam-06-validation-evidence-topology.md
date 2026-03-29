@@ -54,6 +54,7 @@ Own one authoritative validation model so repo tests, feature smoke, and manual 
 - `tests/installers/pkg_manager_detection_smoke.sh` as the authoritative repo harness
 - `smoke/linux-smoke.sh` as a thin wrapper over the repo harness
 - `manual_testing_playbook.md` as the human evidence path
+- macOS-hosted verification of the Lima-backed Linux installer path
 - contract-to-assertion coverage for parser, mapping, selectors, fallback, warning, remediation, and wrapper parity
 
 ### Out
@@ -75,10 +76,11 @@ Own one authoritative validation model so repo tests, feature smoke, and manual 
 
 ## Key invariants / rules
 
-1. repo harness is the behavior authority
+1. repo harness is the behavior authority for installer contract assertions
 2. feature-local smoke wrapper adds no second assertion contract
-3. manual playbook references the same topology and expected stderr/exit outcomes
-4. validation evidence remains contract-shaped, not ad hoc
+3. macOS-hosted verification must prove the hosted path reaches the same Linux installer contract through Lima
+4. manual playbook references the same topology and expected stderr/exit outcomes
+5. validation evidence remains contract-shaped, not ad hoc
 
 ## Dependencies
 
@@ -107,6 +109,8 @@ Own one authoritative validation model so repo tests, feature smoke, and manual 
 - `tests/installers/pkg_manager_detection_smoke.sh`
 - `docs/project_management/packs/draft/best-effort-distro-package-manager/smoke/linux-smoke.sh`
 - `docs/project_management/packs/draft/best-effort-distro-package-manager/manual_testing_playbook.md`
+- `scripts/mac/smoke.sh`
+- `docs/WORLD.md`
 - source evidence in `BEDPM3-spec.md`, `decision_register.md`, and `ci_checkpoint_plan.md`
 
 ## Verification
@@ -114,12 +118,14 @@ Own one authoritative validation model so repo tests, feature smoke, and manual 
 - repo harness proves the full precedence chain and source vocabulary
 - smoke wrapper calls the harness and returns its result without introducing new assertions
 - manual playbook covers the selected Debian, Arch, flag, env, and failure-path evidence cases
+- macOS-hosted verification proves the Lima-backed path reaches the same installer contract and produces evidence rather than compile-only parity
 - wrapper parity and remediation branches are explicitly asserted through the validation topology
 
 ## Risks / unknowns
 
 - validation assets drifting into duplicate authorities
 - manual playbook and smoke wrapper going stale relative to the repo harness
+- macOS host-to-Lima behavior drifting from Linux-direct installer behavior
 - checkpoint consuming evidence that is not contract-complete
 
 ## Rollout / safety
@@ -143,12 +149,14 @@ It must consume the final operator-facing contract from upstream seams before re
 - whether the repo harness covers every published contract
 - whether smoke wrapper thinness is preserved
 - whether manual evidence cases match the same truth
+- whether macOS-hosted verification exercises the Lima-backed Linux path explicitly enough
 
 ### Expected seam-local slice themes
 
 - authoritative repo harness work
 - smoke-wrapper alignment
 - manual evidence updates
+- macOS-hosted verification updates
 - seam-exit publication of evidence topology truth
 
 ## Expected seam-exit concerns

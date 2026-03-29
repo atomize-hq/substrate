@@ -37,6 +37,7 @@ open_remediations: []
 - **Contracts published or changed**: `C-10`
 - **Threads published / advanced**: `THR-06`
 - **Review-surface delta**:
+- **macOS-hosted evidence**:
 - **Planned-vs-landed delta**:
 - **Downstream stale triggers raised**:
 - **Remediation disposition**:

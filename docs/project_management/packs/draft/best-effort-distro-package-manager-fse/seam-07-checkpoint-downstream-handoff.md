@@ -18,6 +18,7 @@ basis:
   stale_triggers:
     - checkpoint gate set changes
     - compile parity or CI quick requirements change
+    - macOS Lima-backed behavior-evidence expectations change
     - downstream persistence handoff assumptions change
 gates:
   pre_exec:
@@ -48,6 +49,7 @@ Seal the feature with the single approved checkpoint boundary, record evidence-b
 - compile parity across Linux, macOS, and Windows
 - quick CI testing across Linux, macOS, and Windows
 - Linux feature smoke at the checkpoint boundary
+- macOS-hosted behavior evidence for the Lima-backed Linux installer path
 - downstream stale-trigger emission and persistence-pack readiness statement
 - pack-closeout evidence summary inputs
 
@@ -74,7 +76,8 @@ Seal the feature with the single approved checkpoint boundary, record evidence-b
 1. this feature has one checkpoint boundary only
 2. checkpoint evidence must consume recorded upstream truth, not inferred status
 3. downstream pack promotion must rely on realized closeout evidence
-4. cross-platform parity remains no-change evidence for macOS and Windows
+4. macOS-hosted evidence is required whenever the hosted path routes through Lima-backed Linux installer behavior
+5. Windows remains parity-only unless future contract work says otherwise
 
 ## Dependencies
 
@@ -108,7 +111,7 @@ Seal the feature with the single approved checkpoint boundary, record evidence-b
 ## Verification
 
 - the single checkpoint boundary remains aligned to end-of-feature semantics
-- compile parity, quick CI testing, and Linux behavior smoke are all represented in evidence
+- compile parity, quick CI testing, Linux behavior smoke, and macOS-hosted Lima-backed behavior evidence are all represented in evidence
 - downstream stale triggers and readiness are published using realized closeout truth only
 - pack closeout can summarize unresolved threads or remediations without reconstructing missing evidence
 
@@ -116,6 +119,7 @@ Seal the feature with the single approved checkpoint boundary, record evidence-b
 
 - conformance work being mistaken for an empty final seam
 - checkpoint evidence missing a required upstream closeout
+- checkpoint evidence treating macOS as compile-only parity when it actually depends on the Linux backend path
 - downstream pack consuming planning assumptions instead of closeout truth
 
 ## Rollout / safety
@@ -137,12 +141,14 @@ It is terminal conformance work and should not be deeply planned until `SEAM-06`
 ### What the first seam-local review should focus on
 
 - checkpoint evidence completeness
+- macOS-hosted behavior evidence completeness
 - downstream handoff/stale-trigger semantics
 - pack-closeout-readiness and promotion constraints
 
 ### Expected seam-local slice themes
 
 - checkpoint evidence aggregation
+- macOS-hosted evidence aggregation
 - downstream handoff publication
 - pack-closeout alignment
 - terminal seam-exit realization

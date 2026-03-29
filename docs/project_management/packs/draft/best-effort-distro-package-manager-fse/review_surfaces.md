@@ -41,10 +41,13 @@ flowchart LR
   Harness["tests/installers/pkg_manager_detection_smoke.sh"] --> Installer["direct installer path"]
   Harness --> Wrapper["wrapper path"]
   Smoke["smoke/linux-smoke.sh"] --> Harness
+  MacSmoke["scripts/mac/smoke.sh or equivalent macOS host run"] --> Lima["Lima-backed Linux installer path"]
+  Lima --> Harness
   Playbook["manual_testing_playbook.md"] --> Smoke
   Playbook --> Harness
   Harness --> Evidence["contract evidence"]
   Smoke --> Evidence
+  MacSmoke --> Evidence
   Playbook --> Evidence
 ```
 
@@ -56,6 +59,7 @@ flowchart LR
   CP1 --> Parity["compile parity: linux / macos / windows"]
   CP1 --> Quick["CI testing quick: linux / macos / windows"]
   CP1 --> Behavior["Linux behavior smoke"]
+  CP1 --> MacBehavior["macOS-hosted Lima-backed behavior evidence"]
   CP1 --> Closeout["SEAM-07 closeout + handoff record"]
   Closeout --> Downstream["persist-detected-linux-distro-pkg-manager"]
 ```
@@ -71,9 +75,11 @@ Active seam focus:
 - selected-input contract and parser safety
 - alternate-input hook and `<unknown>` degradation
 - downstream inheritance boundary for parser/input truth
+- later macOS-hosted Lima-backed runs must consume the same parser/input truth without drift
 
 Next seam focus:
 
 - family-table coverage and availability rules
 - stable decision-line wording, timing, and suppression
 - clean handoff into explicit-selector and fallback seams
+- preserved semantics when the hosted install is exercised from macOS through the Lima backend
