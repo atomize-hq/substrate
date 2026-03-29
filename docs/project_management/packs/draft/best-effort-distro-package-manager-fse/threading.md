@@ -9,8 +9,8 @@
 | SEAM-03 | future | explicit selector owner | flag/env precedence and exit `2` / `3` contract |
 | SEAM-04 | future | fallback owner | path probe, warning line, exit `4`, no-manager posture |
 | SEAM-05 | future | operator integration owner | wrapper parity, no-drift docs, and macOS-hosted path wording |
-| SEAM-06 | active | evidence topology owner | repo harness, smoke wrapper, manual evidence, and macOS-hosted verification |
-| SEAM-07 | next | checkpoint and handoff owner | CP1 evidence seal, macOS-hosted behavior evidence, and downstream readiness |
+| SEAM-06 | future | evidence topology owner | repo harness, smoke wrapper, manual evidence, and macOS-hosted verification |
+| SEAM-07 | active | checkpoint and handoff owner | CP1 evidence seal, macOS-hosted behavior evidence, and downstream readiness |
 
 ## Contract Registry
 
@@ -170,9 +170,9 @@
   - **Consumer seam(s)**: `SEAM-07`
   - **Carried contract IDs**: `C-10`
   - **Purpose**: carry one authoritative validation topology, manual evidence model, and macOS-hosted verification posture into checkpoint sealing
-  - **State**: published
+  - **State**: revalidated
   - **Revalidation trigger**: repo harness path, smoke-wrapper topology, manual evidence expectations, or macOS Lima-backed verification path change
-  - **Satisfied by**: `SEAM-06` closeout with recorded validation evidence, published `C-10`, and `seam_exit_gate.status: passed`
+  - **Satisfied by**: `SEAM-06` closeout with recorded validation evidence, published `C-10`, and `SEAM-07` pre-exec revalidation against that handoff
   - **Notes**: keeps repo harness authoritative, smoke wrapper thin, and macOS-hosted verification explicit
 
 - **Thread ID**: `THR-07`

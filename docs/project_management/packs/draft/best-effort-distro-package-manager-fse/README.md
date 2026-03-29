@@ -12,8 +12,8 @@ This pack captures seam briefs, authoritative threading, pack-level review surfa
 
 Execution horizon:
 
-- Active seam: `SEAM-06` - validation evidence topology
-- Next seam: `SEAM-07` - checkpoint downstream handoff
+- Active seam: `SEAM-07` - checkpoint downstream handoff
+- Next seam: none
 
 Policy:
 
