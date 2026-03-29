@@ -1037,6 +1037,7 @@ async fn handle_persistent_session(
                                 let (child_events, pgid) = match spawn_persistent_exec(
                                     &world,
                                     &pty,
+                                    pty_bytes_read.clone(),
                                     &session_env,
                                     &session_cwd,
                                     &cmd_id,
@@ -1626,6 +1627,7 @@ fn parse_proc_environ(bytes: Vec<u8>) -> Result<HashMap<String, String>, String>
 fn spawn_persistent_exec(
     world: &PersistentWorldContext,
     pty: &RawPty,
+    pty_bytes_read: Arc<AtomicUsize>,
     session_env: &HashMap<String, String>,
     session_cwd: &std::path::Path,
     cmd_id: &str,
