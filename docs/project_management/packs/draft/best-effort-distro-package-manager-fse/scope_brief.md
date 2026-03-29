@@ -4,8 +4,8 @@ pack_version: v2
 pack_status: extracted
 source_ref: docs/project_management/packs/draft/best-effort-distro-package-manager/
 execution_horizon:
-  active_seam: SEAM-05
-  next_seam: SEAM-06
+  active_seam: SEAM-06
+  next_seam: SEAM-07
 ---
 
 # Scope Brief - Best-Effort Distro Package Manager

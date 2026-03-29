@@ -2,7 +2,7 @@
 seam_id: SEAM-05
 seam_slug: wrapper-doc-propagation
 status: landed
-execution_horizon: active
+execution_horizon: future
 plan_version: v1
 basis:
   currentness: current

@@ -2,8 +2,8 @@
 seam_id: SEAM-05
 seam_slug: wrapper-doc-propagation
 type: integration
-status: exec-ready
-execution_horizon: active
+status: landed
+execution_horizon: future
 plan_version: v2
 basis:
   currentness: current
@@ -18,8 +18,8 @@ basis:
     - THR-03
     - THR-04
   stale_triggers:
-    - decision-line wording changes
-    - exit taxonomy changes
+    - wrapper exit handling changes
+    - decision-line wording or placement changes
     - warning or remediation wording changes
     - env-hook semantics change
 gates:
@@ -28,12 +28,12 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
-  planned_location: reserved_final_slice
-  status: pending
+  planned_location: S4
+  status: passed
 open_remediations: []
 ---
 

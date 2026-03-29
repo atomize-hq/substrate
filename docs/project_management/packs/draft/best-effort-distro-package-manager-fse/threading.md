@@ -8,9 +8,9 @@
 | SEAM-02 | future | mapping/reporting owner | family-table selection and stable decision line |
 | SEAM-03 | future | explicit selector owner | flag/env precedence and exit `2` / `3` contract |
 | SEAM-04 | future | fallback owner | path probe, warning line, exit `4`, no-manager posture |
-| SEAM-05 | active | operator integration owner | wrapper parity, no-drift docs, and macOS-hosted path wording |
-| SEAM-06 | next | evidence topology owner | repo harness, smoke wrapper, manual evidence, and macOS-hosted verification |
-| SEAM-07 | future | checkpoint and handoff owner | CP1 evidence seal, macOS-hosted behavior evidence, and downstream readiness |
+| SEAM-05 | future | operator integration owner | wrapper parity, no-drift docs, and macOS-hosted path wording |
+| SEAM-06 | active | evidence topology owner | repo harness, smoke wrapper, manual evidence, and macOS-hosted verification |
+| SEAM-07 | next | checkpoint and handoff owner | CP1 evidence seal, macOS-hosted behavior evidence, and downstream readiness |
 
 ## Contract Registry
 
@@ -160,9 +160,9 @@
   - **Consumer seam(s)**: `SEAM-06`, `SEAM-07`
   - **Carried contract IDs**: `C-08`, `C-09`
   - **Purpose**: carry the final operator-facing contract into evidence-producing work
-  - **State**: published
+  - **State**: revalidated
   - **Revalidation trigger**: wrapper handling changes or doc wording drift
-  - **Satisfied by**: `SEAM-05` closeout with wrapper/doc parity evidence
+  - **Satisfied by**: `SEAM-05` closeout with wrapper/doc parity evidence and `SEAM-06` pre-exec revalidation against that handoff
   - **Notes**: docs are integration outputs, not a second authority
 
 - **Thread ID**: `THR-06`

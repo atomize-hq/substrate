@@ -2,11 +2,11 @@
 seam_id: SEAM-06
 seam_slug: validation-evidence-topology
 type: conformance
-status: proposed
-execution_horizon: next
+status: exec-ready
+execution_horizon: active
 plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v2
   upstream_closeouts:
@@ -22,21 +22,22 @@ basis:
     - THR-04
     - THR-05
   stale_triggers:
-    - any upstream contract changes
+    - wrapper/doc contract changes
     - repo harness path changes
     - smoke-wrapper topology changes
     - manual evidence expectations change
+    - macOS Lima-backed verification path changes
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
 seam_exit_gate:
   required: true
-  planned_location: reserved_final_slice
+  planned_location: S3
   status: pending
 open_remediations: []
 ---
@@ -135,9 +136,9 @@ Own one authoritative validation model so repo tests, feature smoke, and manual 
 
 ## Downstream decomposition context
 
-### Why this seam is `future`
+### Why this seam is `active`
 
-It must consume the final operator-facing contract from upstream seams before review can lock the validation topology.
+`SEAM-05` closeout now publishes `C-08`, `C-09`, and `THR-05`, so this seam can lock the validation topology against landed operator-facing truth instead of provisional upstream planning.
 
 ### Which threads matter most
 
@@ -153,10 +154,8 @@ It must consume the final operator-facing contract from upstream seams before re
 
 ### Expected seam-local slice themes
 
-- authoritative repo harness work
-- smoke-wrapper alignment
-- manual evidence updates
-- macOS-hosted verification updates
+- authoritative repo harness and smoke-wrapper alignment
+- manual evidence and macOS-hosted verification updates
 - seam-exit publication of evidence topology truth
 
 ## Expected seam-exit concerns

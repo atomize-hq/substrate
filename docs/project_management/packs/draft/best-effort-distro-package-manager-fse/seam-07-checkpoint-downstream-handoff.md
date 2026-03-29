@@ -3,7 +3,7 @@ seam_id: SEAM-07
 seam_slug: checkpoint-downstream-handoff
 type: conformance
 status: proposed
-execution_horizon: future
+execution_horizon: next
 plan_version: v2
 basis:
   currentness: provisional
@@ -129,9 +129,9 @@ Seal the feature with the single approved checkpoint boundary, record evidence-b
 
 ## Downstream decomposition context
 
-### Why this seam is `future`
+### Why this seam is `next`
 
-It is terminal conformance work and should not be deeply planned until `SEAM-06` publishes the evidence topology and upstream closeouts exist.
+`SEAM-06` is now the active conformance seam, so this seam becomes the next planning target but should not be deeply planned until `C-10` and `THR-06` are published.
 
 ### Which threads matter most
 
