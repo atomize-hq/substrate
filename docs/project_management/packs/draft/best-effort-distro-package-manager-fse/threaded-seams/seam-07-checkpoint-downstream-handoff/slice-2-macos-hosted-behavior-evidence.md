@@ -43,3 +43,13 @@ candidate_subslices: []
   - `../../governance/seam-06-closeout.md`
 - **Verification**:
   - review proves hosted evidence is behavior coverage, not compile-only parity
+
+## Realized macOS-hosted evidence
+
+- `SEAM-06` already published the authoritative hosted-behavior path for this feature: `scripts/mac/smoke.sh --bedpm-installer-conformance` runs `docs/project_management/packs/draft/best-effort-distro-package-manager/smoke/linux-smoke.sh` through the Lima-backed Linux guest path rather than asserting native macOS package-manager-selection behavior.
+- The published operator evidence still points at that same behavior path:
+  - `docs/project_management/packs/draft/best-effort-distro-package-manager/manual_testing_playbook.md` records the macOS-hosted Lima verification command and states that its output must match the authoritative Linux smoke behavior.
+  - `docs/WORLD.md` states that hosted installer behavior coverage on macOS flows through the Lima-backed Linux guest/world-agent path and explicitly avoids claiming native macOS package-manager selection.
+- The current CP1 compile-parity run `23711447102` (`https://github.com/atomize-hq/substrate/actions/runs/23711447102`) includes a successful `macos-14` lane, but this slice treats that result as parity evidence only, not as the hosted behavior proof required by `C-11`.
+- The current CP1 checkpoint record therefore ties macOS-hosted behavior evidence to the already-published `SEAM-06` conformance surface, while using the new CP1 runs only to show that the checkpoint still includes macOS parity coverage and has not widened the feature into native macOS behavior scope.
+- Quick CI failure in run `23711510594` does not change this boundary: it blocks a clean checkpoint outcome, but it does not convert compile parity into hosted behavior evidence or weaken the Lima-backed Linux path requirement.
