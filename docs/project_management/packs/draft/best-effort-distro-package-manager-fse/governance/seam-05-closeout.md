@@ -1,0 +1,47 @@
+---
+seam_id: SEAM-05
+status: landed
+closeout_version: v0
+seam_exit_gate:
+  source_ref:
+  status: pending
+  promotion_readiness: blocked
+basis:
+  currentness: current
+  upstream_closeouts:
+    - SEAM-02
+    - SEAM-03
+    - SEAM-04
+  required_threads:
+    - THR-02
+    - THR-03
+    - THR-04
+  stale_triggers: []
+gates:
+  post_exec:
+    landing: pending
+    closeout: pending
+open_remediations: []
+---
+
+# Closeout - SEAM-05 Wrapper And Doc Propagation
+
+## Seam-exit gate record
+
+- **Source artifact**:
+- **Landed evidence**:
+- **Contracts published or changed**: `C-08`, `C-09`
+- **Threads published / advanced**: `THR-05`
+- **Review-surface delta**:
+- **Planned-vs-landed delta**:
+- **Downstream stale triggers raised**:
+- **Remediation disposition**:
+- **Promotion blockers**:
+- **Promotion readiness**: ready | blocked
+
+## Post-exec gate disposition
+
+- **Landing gate**: pending | passed | failed
+- **Closeout gate**: pending | passed | failed
+- **Unresolved remediations**:
+- **Carried-forward remediations**:
