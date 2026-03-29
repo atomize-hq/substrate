@@ -483,6 +483,69 @@ resolve_selected_os_release_input() {
   return 0
 }
 
+trim_ascii_whitespace() {
+  local value="$1"
+  value="${value#"${value%%[!$' \t\r']*}"}"
+  value="${value%"${value##*[!$' \t\r']}"}"
+  printf '%s' "${value}"
+}
+
+strip_matching_quotes() {
+  local value="$1"
+  if [[ ${#value} -ge 2 ]]; then
+    case "${value:0:1}${value: -1}" in
+      "''"|'""')
+        value="${value:1:${#value}-2}"
+        ;;
+    esac
+  fi
+  printf '%s' "${value}"
+}
+
+parse_selected_os_release_fields() {
+  local line=""
+  local key=""
+  local raw_value=""
+  local normalized_value=""
+
+  DETECTED_DISTRO_ID="${DISTRO_UNKNOWN_SENTINEL}"
+  DETECTED_DISTRO_ID_LIKE="${DISTRO_UNKNOWN_SENTINEL}"
+
+  if [[ "${OS_RELEASE_INPUT_STATE}" != "selected" || -z "${OS_RELEASE_SELECTED_PATH}" ]]; then
+    return 1
+  fi
+
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    if [[ "${line}" =~ ^[[:space:]]*$ ]]; then
+      continue
+    fi
+    if [[ "${line}" =~ ^[[:space:]]*# ]]; then
+      continue
+    fi
+
+    key="${line%%=*}"
+    if [[ "${key}" == "${line}" ]]; then
+      continue
+    fi
+
+    raw_value="${line#*=}"
+    raw_value="$(trim_ascii_whitespace "${raw_value}")"
+    normalized_value="$(strip_matching_quotes "${raw_value}")"
+    normalized_value="${normalized_value,,}"
+
+    case "${key}" in
+      ID)
+        DETECTED_DISTRO_ID="${normalized_value}"
+        ;;
+      ID_LIKE)
+        DETECTED_DISTRO_ID_LIKE="${normalized_value}"
+        ;;
+    esac
+  done < "${OS_RELEASE_SELECTED_PATH}"
+
+  return 0
+}
+
 detect_package_manager() {
   if [[ -n "${PKG_MANAGER}" ]]; then
     return 0

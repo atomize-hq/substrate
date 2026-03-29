@@ -32,6 +32,14 @@ assert_unavailable() {
   assert_eq "${DETECTED_DISTRO_ID_LIKE}" "${DISTRO_UNKNOWN_SENTINEL}" "DETECTED_DISTRO_ID_LIKE"
 }
 
+assert_parsed_fields() {
+  local expected_id="$1"
+  local expected_id_like="$2"
+
+  assert_eq "${DETECTED_DISTRO_ID}" "${expected_id}" "DETECTED_DISTRO_ID"
+  assert_eq "${DETECTED_DISTRO_ID_LIKE}" "${expected_id_like}" "DETECTED_DISTRO_ID_LIKE"
+}
+
 tmpdir="$(mktemp -d -t substrate-pkg-manager-detection.XXXXXX)"
 trap 'rm -rf "${tmpdir}"' EXIT
 
@@ -43,6 +51,23 @@ missing_alt="${tmpdir}/missing-os-release"
 cat > "${valid_alt}" <<'EOF'
 ID=ubuntu
 ID_LIKE=debian
+EOF
+
+parser_fixture="${tmpdir}/parser-os-release"
+missing_id_fixture="${tmpdir}/missing-id-os-release"
+
+cat > "${parser_fixture}" <<'EOF'
+  # comment line
+NAME=ignored
+ID=ubuntu
+ID_LIKE="Debian Ubuntu"
+
+ID='$(printf UBUNTU)'
+ID_LIKE='RHEL Fedora'
+EOF
+
+cat > "${missing_id_fixture}" <<'EOF'
+ID_LIKE="Debian"
 EOF
 
 cat > "${unreadable_alt}" <<'EOF'
@@ -62,6 +87,20 @@ assert_selected "/etc/os-release"
 SUBSTRATE_INSTALL_OS_RELEASE_PATH="${valid_alt}"
 resolve_selected_os_release_input
 assert_selected "${valid_alt}"
+parse_selected_os_release_fields
+assert_parsed_fields "ubuntu" "debian"
+
+SUBSTRATE_INSTALL_OS_RELEASE_PATH="${parser_fixture}"
+resolve_selected_os_release_input
+assert_selected "${parser_fixture}"
+parse_selected_os_release_fields
+assert_parsed_fields '$(printf ubuntu)' "rhel fedora"
+
+SUBSTRATE_INSTALL_OS_RELEASE_PATH="${missing_id_fixture}"
+resolve_selected_os_release_input
+assert_selected "${missing_id_fixture}"
+parse_selected_os_release_fields
+assert_parsed_fields "${DISTRO_UNKNOWN_SENTINEL}" "debian"
 
 SUBSTRATE_INSTALL_OS_RELEASE_PATH="relative-os-release"
 if resolve_selected_os_release_input; then
@@ -69,6 +108,10 @@ if resolve_selected_os_release_input; then
   exit 1
 fi
 assert_unavailable
+if parse_selected_os_release_fields; then
+  printf '[pkg-manager-detection-smoke] unavailable input unexpectedly parsed\n' >&2
+  exit 1
+fi
 
 SUBSTRATE_INSTALL_OS_RELEASE_PATH="${missing_alt}"
 if resolve_selected_os_release_input; then
@@ -76,6 +119,10 @@ if resolve_selected_os_release_input; then
   exit 1
 fi
 assert_unavailable
+if parse_selected_os_release_fields; then
+  printf '[pkg-manager-detection-smoke] missing path unexpectedly parsed\n' >&2
+  exit 1
+fi
 
 SUBSTRATE_INSTALL_OS_RELEASE_PATH="${unreadable_alt}"
 if resolve_selected_os_release_input; then
@@ -83,6 +130,10 @@ if resolve_selected_os_release_input; then
   exit 1
 fi
 assert_unavailable
+if parse_selected_os_release_fields; then
+  printf '[pkg-manager-detection-smoke] unreadable path unexpectedly parsed\n' >&2
+  exit 1
+fi
 
 SUBSTRATE_INSTALL_OS_RELEASE_PATH="${non_regular_alt}"
 if resolve_selected_os_release_input; then
@@ -90,5 +141,9 @@ if resolve_selected_os_release_input; then
   exit 1
 fi
 assert_unavailable
+if parse_selected_os_release_fields; then
+  printf '[pkg-manager-detection-smoke] directory path unexpectedly parsed\n' >&2
+  exit 1
+fi
 
 printf '[pkg-manager-detection-smoke] OK\n' >&2
