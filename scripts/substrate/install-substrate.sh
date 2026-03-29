@@ -684,7 +684,7 @@ os_release_matches_suse_family() {
   local token=""
 
   case "${DETECTED_DISTRO_ID}" in
-    *suse*|*opensuse*)
+    *suse*)
       return 0
       ;;
   esac
@@ -695,7 +695,7 @@ os_release_matches_suse_family() {
 
   for token in ${DETECTED_DISTRO_ID_LIKE}; do
     case "${token}" in
-      *suse*|*opensuse*)
+      *suse*)
         return 0
         ;;
     esac
