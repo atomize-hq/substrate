@@ -70,6 +70,17 @@ assert_not_contains() {
   fi
 }
 
+assert_file_contains() {
+  local path="$1"
+  local needle="$2"
+  local label="$3"
+
+  if ! grep -Fq -- "${needle}" "${path}"; then
+    printf '[pkg-manager-detection-smoke] expected %s (%s) to contain %q\n' "${label}" "${path}" "${needle}" >&2
+    exit 1
+  fi
+}
+
 assert_contains_once() {
   local haystack="$1"
   local needle="$2"
@@ -217,6 +228,19 @@ run_no_manager_without_sudo_case() {
   ensure_linux_packages_for_commands curl tar
 }
 
+assert_smoke_wrapper_topology() {
+  local smoke_wrapper="${repo_root}/docs/project_management/packs/draft/best-effort-distro-package-manager/smoke/linux-smoke.sh"
+
+  assert_file_contains \
+    "${smoke_wrapper}" \
+    'HARNESS_PATH="${REPO_ROOT}/tests/installers/pkg_manager_detection_smoke.sh"' \
+    "smoke wrapper harness path"
+  assert_file_contains \
+    "${smoke_wrapper}" \
+    'exec bash "${HARNESS_PATH}" "$@"' \
+    "smoke wrapper exec pass-through"
+}
+
 tmpdir="$(mktemp -d -t substrate-pkg-manager-detection.XXXXXX)"
 trap 'rm -rf "${tmpdir}"' EXIT
 
@@ -290,6 +314,8 @@ make_stub_command "${manager_bin}/yum"
 make_stub_command "${manager_bin}/pacman"
 make_stub_command "${manager_bin}/zypper"
 make_stub_command "${manager_bin}/sudo"
+
+assert_smoke_wrapper_topology
 
 unset SUBSTRATE_INSTALL_OS_RELEASE_PATH
 resolve_selected_os_release_input
