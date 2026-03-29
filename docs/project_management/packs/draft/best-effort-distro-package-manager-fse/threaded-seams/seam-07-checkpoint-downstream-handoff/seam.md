@@ -1,7 +1,7 @@
 ---
 seam_id: SEAM-07
 seam_slug: checkpoint-downstream-handoff
-status: exec-ready
+status: landed
 execution_horizon: active
 plan_version: v1
 basis:
@@ -25,13 +25,14 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: failed
 seam_exit_gate:
   required: true
   planned_location: S5
-  status: pending
-open_remediations: []
+  status: failed
+open_remediations:
+  - REM-001
 ---
 # SEAM-07 - Checkpoint And Downstream Handoff
 
@@ -117,4 +118,5 @@ open_remediations: []
 ## Governance pointers
 
 - Pack remediation log: `../../governance/remediation-log.md`
+- Seam closeout: `../../governance/seam-07-closeout.md`
 - Upstream closeout consumed for promotion: `../../governance/seam-06-closeout.md`

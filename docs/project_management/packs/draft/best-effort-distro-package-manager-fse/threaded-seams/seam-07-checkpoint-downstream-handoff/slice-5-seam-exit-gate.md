@@ -3,7 +3,7 @@ slice_id: S5
 seam_id: SEAM-07
 slice_kind: seam_exit_gate
 execution_horizon: active
-status: exec-ready
+status: landed
 plan_version: v1
 basis:
   currentness: current
@@ -17,14 +17,15 @@ gates:
     contract: inherited
     revalidation: inherited
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: failed
 threads:
   - THR-09
 contracts_produced: []
 contracts_consumed:
   - C-11
-open_remediations: []
+open_remediations:
+  - REM-001
 candidate_subslices: []
 ---
 ### S5 - Seam exit gate

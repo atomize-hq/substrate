@@ -2,7 +2,7 @@
 seam_id: SEAM-07
 seam_slug: checkpoint-downstream-handoff
 type: conformance
-status: exec-ready
+status: landed
 execution_horizon: active
 plan_version: v2
 basis:
@@ -26,13 +26,14 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: failed
 seam_exit_gate:
   required: true
   planned_location: S5
-  status: pending
-open_remediations: []
+  status: failed
+open_remediations:
+  - REM-001
 ---
 
 # SEAM-07 - Checkpoint And Downstream Handoff
