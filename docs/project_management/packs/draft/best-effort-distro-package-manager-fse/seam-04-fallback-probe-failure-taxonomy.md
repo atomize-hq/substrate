@@ -2,11 +2,11 @@
 seam_id: SEAM-04
 seam_slug: fallback-probe-failure-taxonomy
 type: capability
-status: proposed
-execution_horizon: future
+status: exec-ready
+execution_horizon: active
 plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v2
   upstream_closeouts:
@@ -24,15 +24,15 @@ basis:
     - warning template or exit `4` remediation changes
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
 seam_exit_gate:
   required: true
-  planned_location: reserved_final_slice
+  planned_location: S4
   status: pending
 open_remediations: []
 ---
@@ -128,9 +128,9 @@ Finish the hosted-installer decision pipeline with one deterministic fallback ru
 
 ## Downstream decomposition context
 
-### Why this seam is `future`
+### Why this seam is `active`
 
-It should not be deeply planned until explicit-selector behavior is concrete because both seams share the same final decision pipeline and suppression rules.
+`SEAM-03` is now landed and closed out, so explicit-selector truth is current enough for this seam to own the fallback path probe, warning line, and exit `4` posture without reopening the upstream decision stages.
 
 ### Which threads matter most
 

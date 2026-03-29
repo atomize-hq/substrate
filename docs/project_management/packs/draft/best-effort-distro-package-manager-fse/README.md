@@ -12,8 +12,8 @@ This pack captures seam briefs, authoritative threading, pack-level review surfa
 
 Execution horizon:
 
-- Active seam: `SEAM-03` - explicit override selection
-- Next seam: `SEAM-04` - fallback probe failure taxonomy
+- Active seam: `SEAM-04` - fallback probe failure taxonomy
+- Next seam: `SEAM-05` - wrapper doc propagation
 
 Policy:
 

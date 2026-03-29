@@ -6,9 +6,9 @@
 |------|---------|------|------------|
 | SEAM-01 | future | parser/input contract owner | normalized distro facts, `<unknown>`, alternate input hook |
 | SEAM-02 | future | mapping/reporting owner | family-table selection and stable decision line |
-| SEAM-03 | active | explicit selector owner | flag/env precedence and exit `2` / `3` contract |
-| SEAM-04 | next | fallback owner | path probe, warning line, exit `4`, no-manager posture |
-| SEAM-05 | future | operator integration owner | wrapper parity, no-drift docs, and macOS-hosted path wording |
+| SEAM-03 | future | explicit selector owner | flag/env precedence and exit `2` / `3` contract |
+| SEAM-04 | active | fallback owner | path probe, warning line, exit `4`, no-manager posture |
+| SEAM-05 | next | operator integration owner | wrapper parity, no-drift docs, and macOS-hosted path wording |
 | SEAM-06 | future | evidence topology owner | repo harness, smoke wrapper, manual evidence, and macOS-hosted verification |
 | SEAM-07 | future | checkpoint and handoff owner | CP1 evidence seal, macOS-hosted behavior evidence, and downstream readiness |
 
@@ -140,9 +140,9 @@
   - **Consumer seam(s)**: `SEAM-04`, `SEAM-05`, `SEAM-06`
   - **Carried contract IDs**: `C-05`, `C-06`
   - **Purpose**: carry explicit selector semantics and the exit `2` / `3` failure posture
-  - **State**: defined
+  - **State**: revalidated
   - **Revalidation trigger**: precedence changes, supported-value changes, or remediation wording changes
-  - **Satisfied by**: `SEAM-03` closeout with landed explicit-selector evidence
+  - **Satisfied by**: `SEAM-03` closeout with landed explicit-selector evidence and `SEAM-04` pre-exec revalidation against that handoff
   - **Notes**: this thread fixes what the operator can force, not final fallback
 
 - **Thread ID**: `THR-04`
