@@ -1,7 +1,7 @@
 ---
 seam_id: SEAM-02
 seam_slug: family-mapping-reporting
-status: exec-ready
+status: landed
 execution_horizon: active
 plan_version: v2
 basis:
@@ -22,12 +22,12 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S3
-  status: pending
+  status: passed
 open_remediations: []
 ---
 # SEAM-02 - Family Mapping And Decision-Line Reporting
