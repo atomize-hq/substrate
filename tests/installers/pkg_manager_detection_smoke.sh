@@ -122,6 +122,8 @@ reset_detected_manager() {
   PKG_MANAGER_SOURCE=""
   PKG_MANAGER_ENV_OVERRIDE=""
   PKG_MANAGER_FLAG_OVERRIDE=""
+  PATH_PROBE_DETECTED_MANAGERS=()
+  PKG_MANAGER_PATH_PROBE_WARNING_EMITTED=0
 }
 
 reset_installer_state() {
@@ -451,15 +453,28 @@ PATH="${manager_bin}"
 reset_installer_state
 DRY_RUN=1
 SUBSTRATE_INSTALL_OS_RELEASE_PATH="${arch_fixture}"
-fallback_output="$(ensure_linux_packages_for_commands curl 2>&1)"
-fallback_decision_line='Detected distro: endeavouros (like: arch), using package manager: apt-get (source: path_probe)'
-assert_contains_once "${fallback_output}" "${fallback_decision_line}" "path_probe decision line"
-assert_in_order "${fallback_output}" "${fallback_decision_line}" "[substrate-install] Installing packages: curl" "path_probe decision-line ordering"
+single_path_probe_output="$(ensure_linux_packages_for_commands curl 2>&1)"
+path_probe_decision_line='Detected distro: endeavouros (like: arch), using package manager: apt-get (source: path_probe)'
+multi_path_probe_warning='Multiple supported package managers found in PATH: apt-get, dnf, yum, zypper; selecting apt-get by fixed probe order (apt-get -> dnf -> yum -> pacman -> zypper). Override with --pkg-manager <apt-get|dnf|yum|pacman|zypper> or PKG_MANAGER=<apt-get|dnf|yum|pacman|zypper>.'
+assert_contains_once "${single_path_probe_output}" "${path_probe_decision_line}" "single path_probe decision line"
+assert_in_order "${single_path_probe_output}" "${path_probe_decision_line}" "[substrate-install] Installing packages: curl" "single path_probe decision-line ordering"
+assert_not_contains "${single_path_probe_output}" "${multi_path_probe_warning}" "single path_probe warning omission"
 PATH="${original_path}"
 make_stub_command "${manager_bin}/dnf"
 make_stub_command "${manager_bin}/yum"
-make_stub_command "${manager_bin}/pacman"
 make_stub_command "${manager_bin}/zypper"
+
+PATH="${manager_bin}"
+reset_installer_state
+DRY_RUN=1
+SUBSTRATE_INSTALL_OS_RELEASE_PATH="${arch_fixture}"
+multi_path_probe_output="$(ensure_linux_packages_for_commands curl 2>&1)"
+assert_contains_once "${multi_path_probe_output}" "${multi_path_probe_warning}" "multi path_probe warning"
+assert_contains_once "${multi_path_probe_output}" "${path_probe_decision_line}" "multi path_probe decision line"
+assert_in_order "${multi_path_probe_output}" "${multi_path_probe_warning}" "${path_probe_decision_line}" "multi path_probe warning ordering"
+assert_in_order "${multi_path_probe_output}" "${path_probe_decision_line}" "[substrate-install] Installing packages: curl" "multi path_probe decision-line ordering"
+PATH="${original_path}"
+make_stub_command "${manager_bin}/pacman"
 
 SUBSTRATE_INSTALL_OS_RELEASE_PATH="${empty_value_fixture}"
 resolve_selected_os_release_input

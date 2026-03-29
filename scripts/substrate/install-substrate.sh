@@ -49,6 +49,8 @@ OS_RELEASE_INPUT_STATE="unavailable"
 DETECTED_DISTRO_ID="${DISTRO_UNKNOWN_SENTINEL}"
 DETECTED_DISTRO_ID_LIKE="${DISTRO_UNKNOWN_SENTINEL}"
 readonly SUPPORTED_PKG_MANAGERS=(apt-get dnf yum pacman zypper)
+PATH_PROBE_DETECTED_MANAGERS=()
+PKG_MANAGER_PATH_PROBE_WARNING_EMITTED=0
 
 log() {
   printf '[%s] %s\n' "${INSTALLER_NAME}" "$*" >&2
@@ -145,6 +147,20 @@ supported_pkg_manager_list() {
   local first=1
 
   for manager in "${SUPPORTED_PKG_MANAGERS[@]}"; do
+    if [[ "${first}" -eq 1 ]]; then
+      printf '%s' "${manager}"
+      first=0
+    else
+      printf ', %s' "${manager}"
+    fi
+  done
+}
+
+path_probe_detected_manager_list() {
+  local manager=""
+  local first=1
+
+  for manager in "${PATH_PROBE_DETECTED_MANAGERS[@]}"; do
     if [[ "${first}" -eq 1 ]]; then
       printf '%s' "${manager}"
       first=0
@@ -728,8 +744,12 @@ select_package_manager_from_path_probe() {
   local manager=""
   local selected_manager=""
 
+  PATH_PROBE_DETECTED_MANAGERS=()
+  PKG_MANAGER_PATH_PROBE_WARNING_EMITTED=0
+
   for manager in "${SUPPORTED_PKG_MANAGERS[@]}"; do
     if command -v "${manager}" >/dev/null 2>&1; then
+      PATH_PROBE_DETECTED_MANAGERS+=("${manager}")
       if [[ -z "${selected_manager}" ]]; then
         selected_manager="${manager}"
       fi
@@ -742,6 +762,7 @@ select_package_manager_from_path_probe() {
 
   PKG_MANAGER="${selected_manager}"
   PKG_MANAGER_SOURCE="path_probe"
+  maybe_emit_path_probe_multi_manager_warning
   return 0
 }
 
@@ -835,6 +856,28 @@ maybe_emit_package_manager_decision_line() {
     "${PKG_MANAGER}" \
     "${PKG_MANAGER_SOURCE}" >&2
   PKG_MANAGER_DECISION_LINE_EMITTED=1
+}
+
+maybe_emit_path_probe_multi_manager_warning() {
+  local manager_list=""
+
+  if [[ "${PKG_MANAGER_SOURCE}" != "path_probe" ]]; then
+    return
+  fi
+
+  if [[ "${PKG_MANAGER_PATH_PROBE_WARNING_EMITTED}" -eq 1 ]]; then
+    return
+  fi
+
+  if [[ ${#PATH_PROBE_DETECTED_MANAGERS[@]} -le 1 ]]; then
+    return
+  fi
+
+  manager_list="$(path_probe_detected_manager_list)"
+  printf 'Multiple supported package managers found in PATH: %s; selecting %s by fixed probe order (apt-get -> dnf -> yum -> pacman -> zypper). Override with --pkg-manager <apt-get|dnf|yum|pacman|zypper> or PKG_MANAGER=<apt-get|dnf|yum|pacman|zypper>.\n' \
+    "${manager_list}" \
+    "${PKG_MANAGER}" >&2
+  PKG_MANAGER_PATH_PROBE_WARNING_EMITTED=1
 }
 
 resolve_package_for_command() {
