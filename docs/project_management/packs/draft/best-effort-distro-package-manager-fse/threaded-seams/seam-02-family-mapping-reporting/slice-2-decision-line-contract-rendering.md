@@ -3,7 +3,7 @@ slice_id: S2
 seam_id: SEAM-02
 slice_kind: delivery
 execution_horizon: active
-status: exec-ready
+status: landed
 plan_version: v2
 basis:
   currentness: current
@@ -17,8 +17,8 @@ gates:
     contract: passed
     revalidation: inherited
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 threads:
   - THR-01
   - THR-02
@@ -49,6 +49,7 @@ candidate_subslices: []
   - `../../../best-effort-distro-package-manager/contract.md`
 - **Verification**:
   - fixture coverage proves wording, placement, and one-time emission
+  - landed slice coverage lives in `tests/installers/pkg_manager_detection_smoke.sh`
   - pass condition: the stable decision line remains confined to the os-release selection stage and does not leak into explicit-selector or fallback work
 - **Rollout/safety**:
   - stabilizes the operator-facing selection/reporting truth before later seams add override or fallback branches
