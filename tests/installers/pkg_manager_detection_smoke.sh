@@ -47,6 +47,7 @@ valid_alt="${tmpdir}/valid-os-release"
 unreadable_alt="${tmpdir}/unreadable-os-release"
 non_regular_alt="${tmpdir}/os-release-dir"
 missing_alt="${tmpdir}/missing-os-release"
+manager_bin="${tmpdir}/bin"
 
 cat > "${valid_alt}" <<'EOF'
 ID=ubuntu
@@ -55,6 +56,7 @@ EOF
 
 parser_fixture="${tmpdir}/parser-os-release"
 missing_id_fixture="${tmpdir}/missing-id-os-release"
+empty_value_fixture="${tmpdir}/empty-value-os-release"
 
 cat > "${parser_fixture}" <<'EOF'
   # comment line
@@ -70,11 +72,22 @@ cat > "${missing_id_fixture}" <<'EOF'
 ID_LIKE="Debian"
 EOF
 
+cat > "${empty_value_fixture}" <<'EOF'
+ID=""
+ID_LIKE='`APT-GET`'
+EOF
+
 cat > "${unreadable_alt}" <<'EOF'
 ID=fedora
 EOF
 chmod 000 "${unreadable_alt}"
 mkdir -p "${non_regular_alt}"
+mkdir -p "${manager_bin}"
+cat > "${manager_bin}/apt-get" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+chmod +x "${manager_bin}/apt-get"
 
 unset SUBSTRATE_INSTALL_OS_RELEASE_PATH
 resolve_selected_os_release_input
@@ -101,6 +114,22 @@ resolve_selected_os_release_input
 assert_selected "${missing_id_fixture}"
 parse_selected_os_release_fields
 assert_parsed_fields "${DISTRO_UNKNOWN_SENTINEL}" "debian"
+
+original_path="${PATH}"
+PATH="${manager_bin}"
+PKG_MANAGER=""
+SUBSTRATE_INSTALL_OS_RELEASE_PATH="${valid_alt}"
+detect_package_manager
+assert_eq "${PKG_MANAGER}" "apt-get" "PKG_MANAGER"
+assert_selected "${valid_alt}"
+assert_parsed_fields "ubuntu" "debian"
+PATH="${original_path}"
+
+SUBSTRATE_INSTALL_OS_RELEASE_PATH="${empty_value_fixture}"
+resolve_selected_os_release_input
+assert_selected "${empty_value_fixture}"
+parse_selected_os_release_fields
+assert_parsed_fields "${DISTRO_UNKNOWN_SENTINEL}" '`apt-get`'
 
 SUBSTRATE_INSTALL_OS_RELEASE_PATH="relative-os-release"
 if resolve_selected_os_release_input; then

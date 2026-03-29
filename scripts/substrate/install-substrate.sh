@@ -532,6 +532,9 @@ parse_selected_os_release_fields() {
     raw_value="$(trim_ascii_whitespace "${raw_value}")"
     normalized_value="$(strip_matching_quotes "${raw_value}")"
     normalized_value="${normalized_value,,}"
+    if [[ -z "${normalized_value}" ]]; then
+      normalized_value="${DISTRO_UNKNOWN_SENTINEL}"
+    fi
 
     case "${key}" in
       ID)
@@ -550,6 +553,9 @@ detect_package_manager() {
   if [[ -n "${PKG_MANAGER}" ]]; then
     return 0
   fi
+
+  resolve_selected_os_release_input || true
+  parse_selected_os_release_fields || true
 
   if command -v apt-get >/dev/null 2>&1; then
     PKG_MANAGER="apt-get"
