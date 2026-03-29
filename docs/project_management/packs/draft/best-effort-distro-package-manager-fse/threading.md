@@ -4,9 +4,9 @@
 
 | Seam | Horizon | Role | Key output |
 |------|---------|------|------------|
-| SEAM-01 | active | parser/input contract owner | normalized distro facts, `<unknown>`, alternate input hook |
-| SEAM-02 | next | mapping/reporting owner | family-table selection and stable decision line |
-| SEAM-03 | future | explicit selector owner | flag/env precedence and exit `2` / `3` contract |
+| SEAM-01 | future | parser/input contract owner | normalized distro facts, `<unknown>`, alternate input hook |
+| SEAM-02 | active | mapping/reporting owner | family-table selection and stable decision line |
+| SEAM-03 | next | explicit selector owner | flag/env precedence and exit `2` / `3` contract |
 | SEAM-04 | future | fallback owner | path probe, warning line, exit `4`, no-manager posture |
 | SEAM-05 | future | operator integration owner | wrapper parity, no-drift docs, and macOS-hosted path wording |
 | SEAM-06 | future | evidence topology owner | repo harness, smoke wrapper, manual evidence, and macOS-hosted verification |
@@ -120,9 +120,9 @@
   - **Consumer seam(s)**: `SEAM-02`, `SEAM-03`, `SEAM-04`, `SEAM-06`
   - **Carried contract IDs**: `C-01`, `C-02`
   - **Purpose**: move trusted Linux input and parser truth into all later selection and validation work
-  - **State**: defined
+  - **State**: revalidated
   - **Revalidation trigger**: parser rules, hook semantics, or `<unknown>` behavior change
-  - **Satisfied by**: `SEAM-01` closeout with landed parser and alternate-input evidence
+  - **Satisfied by**: `SEAM-01` closeout with landed parser and alternate-input evidence; `SEAM-02` pre-exec revalidation in seam-local planning
   - **Notes**: foundation thread for every later selection-stage seam
 
 - **Thread ID**: `THR-02`
@@ -180,7 +180,7 @@
   - **Consumer seam(s)**: downstream pack (`persist-detected-linux-distro-pkg-manager`)
   - **Carried contract IDs**: `C-01`, `C-02`
   - **Purpose**: export parser/input truth that downstream persistence must inherit rather than redefine
-  - **State**: defined
+  - **State**: published
   - **Revalidation trigger**: alternate-input hook or `<unknown>` semantics change
   - **Satisfied by**: `SEAM-01` closeout and published downstream stale triggers when needed
   - **Notes**: cross-pack boundary thread

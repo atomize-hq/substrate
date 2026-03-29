@@ -1,6 +1,6 @@
 ---
 seam_id: SEAM-01
-status: landed
+status: closed
 closeout_version: v1
 seam_exit_gate:
   source_ref: ../threaded-seams/seam-01-os-release-input-parser/slice-4-seam-exit-gate.md

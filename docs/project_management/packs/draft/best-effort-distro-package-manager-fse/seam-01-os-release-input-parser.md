@@ -2,11 +2,11 @@
 seam_id: SEAM-01
 seam_slug: os-release-input-parser
 type: domain
-status: proposed
-execution_horizon: active
+status: closed
+execution_horizon: future
 plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v2
   upstream_closeouts: []
@@ -18,16 +18,16 @@ basis:
     - downstream persistence pack diverges from inherited input truth
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
-  planned_location: reserved_final_slice
-  status: pending
+  planned_location: S4
+  status: passed
 open_remediations: []
 ---
 

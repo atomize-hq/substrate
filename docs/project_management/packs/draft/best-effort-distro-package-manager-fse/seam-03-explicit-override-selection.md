@@ -3,7 +3,7 @@ seam_id: SEAM-03
 seam_slug: explicit-override-selection
 type: capability
 status: proposed
-execution_horizon: future
+execution_horizon: next
 plan_version: v2
 basis:
   currentness: provisional

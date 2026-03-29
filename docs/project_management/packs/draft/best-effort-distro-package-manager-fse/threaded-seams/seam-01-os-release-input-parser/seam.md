@@ -1,8 +1,8 @@
 ---
 seam_id: SEAM-01
 seam_slug: os-release-input-parser
-status: landed
-execution_horizon: active
+status: closed
+execution_horizon: future
 plan_version: v2
 basis:
   currentness: current
