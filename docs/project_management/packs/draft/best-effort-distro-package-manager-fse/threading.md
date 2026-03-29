@@ -160,7 +160,7 @@
   - **Consumer seam(s)**: `SEAM-06`, `SEAM-07`
   - **Carried contract IDs**: `C-08`, `C-09`
   - **Purpose**: carry the final operator-facing contract into evidence-producing work
-  - **State**: defined
+  - **State**: published
   - **Revalidation trigger**: wrapper handling changes or doc wording drift
   - **Satisfied by**: `SEAM-05` closeout with wrapper/doc parity evidence
   - **Notes**: docs are integration outputs, not a second authority

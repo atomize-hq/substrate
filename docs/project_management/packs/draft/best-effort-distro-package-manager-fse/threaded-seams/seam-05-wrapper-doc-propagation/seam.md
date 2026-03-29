@@ -1,7 +1,7 @@
 ---
 seam_id: SEAM-05
 seam_slug: wrapper-doc-propagation
-status: exec-ready
+status: landed
 execution_horizon: active
 plan_version: v1
 basis:
@@ -17,8 +17,8 @@ basis:
     - THR-03
     - THR-04
   stale_triggers:
-    - decision-line wording changes
-    - exit taxonomy changes
+    - wrapper exit handling changes
+    - decision-line wording or placement changes
     - warning or remediation wording changes
     - env-hook semantics change
 gates:
@@ -27,12 +27,12 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S4
-  status: pending
+  status: passed
 open_remediations: []
 ---
 # SEAM-05 - Wrapper And Doc Propagation
@@ -72,8 +72,8 @@ open_remediations: []
     - `THR-03`
     - `THR-04`
   - Stale triggers:
-    - decision-line wording changes
-    - exit taxonomy changes
+    - wrapper exit handling changes
+    - decision-line wording or placement changes
     - warning or remediation wording changes
     - env-hook semantics change
 - **Threading constraints**
@@ -112,6 +112,11 @@ open_remediations: []
   - decision-line wording or placement changes
   - warning or remediation wording changes
   - env-hook semantics change
+- **Expected closeout evidence**:
+  - landed wrapper exit pass-through for installer exits `0`, `2`, `3`, and `4`
+  - landed no-drift installation doc propagation for precedence, warning, and remediation truth
+  - landed env-contract propagation for `PKG_MANAGER` and `SUBSTRATE_INSTALL_OS_RELEASE_PATH`
+  - landed macOS-hosted wording that keeps package-manager selection Linux-only while making the Lima-backed Linux path explicit
 
 ## Slice index
 
@@ -119,3 +124,8 @@ open_remediations: []
 - `S2` -> `slice-2-installation-doc-contract-propagation.md`
 - `S3` -> `slice-3-env-and-macos-hosted-doc-clarity.md`
 - `S4` -> `slice-4-seam-exit-gate.md`
+
+## Governance pointers
+
+- Pack remediation log: `../../governance/remediation-log.md`
+- Seam closeout: `../../governance/seam-05-closeout.md`
