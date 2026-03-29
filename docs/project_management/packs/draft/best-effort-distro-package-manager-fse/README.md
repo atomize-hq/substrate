@@ -2,7 +2,7 @@
 
 Source: `docs/project_management/packs/draft/best-effort-distro-package-manager/`
 
-This pack captures seam briefs, authoritative threading, pack-level review surfaces, seam-exit intent, and governance scaffolds for ADR-0031 (Detecting Badger). It is intentionally one level above seam-local decomposition.
+This pack captures seam briefs, authoritative threading, pack-level review surfaces, seam-exit intent, and governance scaffolds for ADR-0031. It is intentionally one level above seam-local decomposition.
 
 - Start here: `scope_brief.md`
 - Seam overview: `seam_map.md`
@@ -12,13 +12,18 @@ This pack captures seam briefs, authoritative threading, pack-level review surfa
 
 Execution horizon:
 
-- Active seam: `SEAM-01` (Distro Detection and Mapping)
-- Next seam: `SEAM-02` (Override Precedence and Fallback)
+- Active seam: `SEAM-01` - os-release input and parser contract
+- Next seam: `SEAM-02` - family mapping and decision-line reporting
 
 Policy:
 
-- Only the active seam is eligible for authoritative downstream sub-slices by default
-- The next seam may later receive seam-local review + slices, and only provisional candidate-subslice hints
-- Active and next seams must eventually terminate in a dedicated final `seam-exit-gate` slice once seam-local planning begins
-- Future seams remain seam briefs
-- `SEAM-03` and `SEAM-04` (future seams) stay at seam-brief depth only and will receive provisional deeper planning when promoted
+- only the active seam is eligible for authoritative downstream sub-slices by default
+- the next seam may later receive seam-local review + slices, and only provisional deeper planning
+- active and next seams must eventually terminate in a dedicated final `seam-exit-gate` slice once seam-local planning begins
+- future seams remain seam briefs
+
+Extraction assumptions:
+
+- the source planning pack is treated as approved input for extraction, including the previously human-reviewed planning-gate blocker
+- this extraction expands the original four slice-oriented units into seven seam briefs because the source pack contains more independent contracts than the slice count alone exposes
+- downstream seam planning must preserve the source pack's single checkpoint boundary at `BEDPM3` semantics even though the conformance work is split across `SEAM-06` and `SEAM-07`

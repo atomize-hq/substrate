@@ -1,211 +1,79 @@
 # Review Surfaces - Best-Effort Distro Package Manager
 
-These diagrams orient the pack. They show the actual product/work shape that is expected to land.
+These diagrams orient the pack. They show the actual product and validation shape expected to land.
 They do not, by themselves, satisfy seam-local pre-exec review.
 
-## R1 - Selection Precedence Flow
-
-```mermaid
-flowchart TD
-    Start([Install Substrate]) --> LinuxCheck{Linux host?}
-
-    LinuxCheck -->|No| ExistingPath[Use existing platform behavior]
-    LinuxCheck -->|Yes| ParseArgs[Parse CLI arguments]
-
-    ParseArgs --> FlagCheck{--pkg-manager set?}
-    FlagCheck -->|Yes| ValidateFlag{Valid?}
-    ValidateFlag -->|No| Exit2[Exit 2 - Invalid flag]
-    ValidateFlag -->|Yes| CheckPath1{In PATH?}
-    CheckPath1 -->|No| Exit3[Exit 3 - Missing binary]
-    CheckPath1 -->|Yes| SelectFlag[Select: flag]
-
-    FlagCheck -->|No| EnvCheck{PKG_MANAGER set?}
-    EnvCheck -->|Yes| ValidateEnv{Valid?}
-    ValidateEnv -->|No| Exit2b[Exit 2 - Invalid env]
-    ValidateEnv -->|Yes| CheckPath2{In PATH?}
-    CheckPath2 -->|No| Exit3b[Exit 3 - Missing binary]
-    CheckPath2 -->|Yes| SelectEnv[Select: env]
-
-    EnvCheck -->|No| OsRelease[Read /etc/os-release]
-    OsRelease --> MapFamily{Match distro family?}
-    MapFamily -->|Yes| CheckFamilyPath{Binary in PATH?}
-    CheckFamilyPath -->|Yes| SelectOsRelease[Select: os_release]
-    CheckFamilyPath -->|No| ProbePath[Probe PATH]
-
-    MapFamily -->|No| ProbePath
-    ProbePath --> ProbeCheck{Any found?}
-    ProbeCheck -->|No| Exit4[Exit 4 - None found]
-    ProbeCheck -->|Yes| MultiCheck{Multiple found?}
-    MultiCheck -->|Yes| EmitWarning[Emit multi-manager warning]
-    EmitWarning --> SelectPath[Select first in order: path_probe]
-    MultiCheck -->|No| SelectPath
-
-    SelectFlag --> EmitLine[Emit decision line]
-    SelectEnv --> EmitLine
-    SelectOsRelease --> EmitLine
-    SelectPath --> EmitLine
-
-    EmitLine --> InstallPkgs[Install prerequisites]
-    InstallPkgs --> Success[Exit 0]
-
-    ExistingPath --> Success
-
-    style Exit2 fill:#ffcccc
-    style Exit2b fill:#ffcccc
-    style Exit3 fill:#ffcccc
-    style Exit3b fill:#ffcccc
-    style Exit4 fill:#ffcccc
-    style SelectFlag fill:#ccffcc
-    style SelectEnv fill:#ccffcc
-    style SelectOsRelease fill:#ccffcc
-    style SelectPath fill:#ccffcc
-```
-
-## R2 - Package Manager Interface
+## R1 - Hosted Installer Decision Pipeline
 
 ```mermaid
 flowchart LR
-    subgraph CLI["CLI Surface"]
-        InstallDirect["install-substrate.sh<br/>Direct entrypoint"]
-        InstallWrapper["install.sh<br/>Wrapper entrypoint"]
-        Flag["--pkg-manager &lt;manager&gt;"]
-    end
-
-    subgraph Env["Environment"]
-        PkgManager["PKG_MANAGER=&lt;manager&gt;"]
-        OsReleasePath["SUBSTRATE_INSTALL_OS_RELEASE_PATH"]
-        PathEnv["PATH"]
-    end
-
-    subgraph Detection["Detection Engine"]
-        Parser["os-release Parser<br/>Safe line-oriented"]
-        Mapper["Distro Family Mapper<br/>Debian|Fedora/RHEL|Arch|SUSE"]
-        Prober["PATH Prober<br/>Fixed order: apt-get→dnf→yum→pacman→zypper"]
-    end
-
-    subgraph Output["Output Contract"]
-        Stderr["stderr: Decision line"]
-        ExitCode["Exit code taxonomy"]
-    end
-
-    subgraph Docs["Operator Docs"]
-        InstallDoc["INSTALLATION.md"]
-        EnvContract["env/contract.md"]
-        ThisContract["contract.md"]
-    end
-
-    InstallDirect --> Detection
-    InstallWrapper -.->|Preserves exit codes| InstallDirect
-    Flag --> Detection
-    PkgManager --> Detection
-    OsReleasePath -.->|Test hook| Parser
-    PathEnv --> Prober
-
-    Detection --> Stderr
-    Detection --> ExitCode
-
-    ThisContract -.->|Defines| Detection
-    ThisContract -.->|Defines| Output
-    InstallDoc -.->|Documents| CLI
-    EnvContract -.->|Documents| Env
+  CLI["CLI args"] --> EX["Explicit selector stage"]
+  ENV["PKG_MANAGER"] --> EX
+  ORS["Selected os-release input"] --> PARSE["Safe parser + normalized distro fields"]
+  PARSE --> MAP["Family mapping stage"]
+  EX --> DECIDE["Final manager decision"]
+  MAP --> DECIDE
+  PATH["Fixed PATH probe"] --> FALLBACK["Fallback + ambiguity handling"]
+  FALLBACK --> DECIDE
+  DECIDE --> REPORT["Warning line + stable decision line"]
+  REPORT --> INSTALL["Prerequisite installation"]
 ```
 
-## R3 - Component Touch Surface
+## R2 - Operator-Facing Surface That Lands
 
 ```mermaid
 flowchart TB
-    subgraph Installer["Installer Scripts"]
-        InstallSubstrate["scripts/substrate/install-substrate.sh<br/>Core detection + selection"]
-        InstallWrapper["scripts/substrate/install.sh<br/>Exit-code pass-through"]
-    end
-
-    subgraph Docs["Documentation"]
-        InstallMd["docs/INSTALLATION.md<br/>Operator guide"]
-        EnvContract["docs/reference/env/contract.md<br/>Env var contract"]
-        Contract["contract.md<br/>Feature contract"]
-    end
-
-    subgraph Validation["Validation"]
-        HermeticTest["tests/installers/pkg_manager_detection_smoke.sh<br/>Hermetic test suite"]
-        SmokeScript["smoke/linux-smoke.sh<br/>Thin wrapper"]
-        ManualPlaybook["manual_testing_playbook.md<br/>Operator validation"]
-    end
-
-    subgraph Pack["Planning Pack"]
-        Slices["slices/BEDPM{0,1,2,3}/<br/>Slice specs"]
-        Tasks["tasks.json<br/>Automation graph"]
-        Plan["plan.md<br/>Execution order"]
-    end
-
-    InstallSubstrate --> Contract
-    InstallWrapper --> Contract
-    Contract --> InstallMd
-    Contract --> EnvContract
-
-    HermeticTest -->|Validates| InstallSubstrate
-    SmokeScript -->|Calls| HermeticTest
-    ManualPlaybook -->|References| SmokeScript
-
-    Slices -->|Implement| InstallSubstrate
-    Tasks -->|Orchestrate| Slices
-    Plan -->|Sequences| Tasks
+  Direct["scripts/substrate/install-substrate.sh"] --> Out1["stderr decision line"]
+  Direct --> Out2["exit 0 / 2 / 3 / 4"]
+  Wrapper["scripts/substrate/install.sh"] --> Direct
+  Wrapper --> Out3["wrapper preserves feature exits"]
+  Contract["contract.md"] -.-> Direct
+  Contract["contract.md"] -.-> Wrapper
+  Docs1["docs/INSTALLATION.md"] -.-> Out1
+  Docs1["docs/INSTALLATION.md"] -.-> Out3
+  Docs2["docs/reference/env/contract.md"] -.-> ENV["PKG_MANAGER / SUBSTRATE_INSTALL_OS_RELEASE_PATH"]
 ```
 
-## R4 - Cross-Pack Contract Boundaries
+## R3 - Validation And Evidence Topology
 
 ```mermaid
 flowchart LR
-    subgraph ThisPack["best-effort-distro-package-manager<br/>(This Pack)"]
-        Detect["Detect + Select<br/>SEAM-01, SEAM-02"]
-        Report["Report + Fail<br/>SEAM-03"]
-        Validate["Validate<br/>SEAM-04"]
-    end
+  Harness["tests/installers/pkg_manager_detection_smoke.sh"] --> Installer["direct installer path"]
+  Harness --> Wrapper["wrapper path"]
+  Smoke["smoke/linux-smoke.sh"] --> Harness
+  Playbook["manual_testing_playbook.md"] --> Smoke
+  Playbook --> Harness
+  Harness --> Evidence["contract evidence"]
+  Smoke --> Evidence
+  Playbook --> Evidence
+```
 
-    subgraph Downstream["persist-detected-linux-distro-pkg-manager<br/>(Downstream Pack)"]
-        Persist["Persist to<br/>install_state.json"]
-    end
+## R4 - Checkpoint And Downstream Handoff
 
-    subgraph OtherRelated["Related ADRs"]
-        ADR30["ADR-0030<br/>Provisioning Otter<br/>(Guest world deps)"]
-        ADR32["ADR-0032<br/>Stashing Ferret<br/>(Persistence)"]
-        ADR35["ADR-0035<br/>Summoning Wombat<br/>(Install improvements)"]
-    end
-
-    Detect -->|pkg_manager.selected| Report
-    Report -->|Validated contract| Validate
-    Validate -->|C-01, C-02 contracted| Detect
-
-    Detect -.->|Contracts C-01, C-02| Downstream
-    Detect -.->|Detection boundary| ADR32
-    Report -.->|Host vs guest boundary| ADR30
-    Detect -.->|Shared file coordination| ADR35
-
-    style ThisPack fill:#e6f3ff
-    style Downstream fill:#f0f0f0
-    style OtherRelated fill:#f0f0f0
+```mermaid
+flowchart LR
+  Evidence["SEAM-06 validation evidence"] --> CP1["CP1 checkpoint"]
+  CP1 --> Parity["compile parity: linux / macos / windows"]
+  CP1 --> Quick["CI testing quick: linux / macos / windows"]
+  CP1 --> Behavior["Linux behavior smoke"]
+  CP1 --> Closeout["SEAM-07 closeout + handoff record"]
+  Closeout --> Downstream["persist-detected-linux-distro-pkg-manager"]
 ```
 
 ## Review Surface Notes
 
-**Active seam (SEAM-01) focus areas:**
-- os-release parser safety (no shell execution)
-- Mapping table accuracy (Debian, Fedora/RHEL, Arch, SUSE families)
-- Decision-line format and placement
-- `<unknown>` sentinel handling
+- These diagrams are pack-level orientation only.
+- `SEAM-01` and `SEAM-02` still require seam-local `review.md` before they become `exec-ready`.
+- Future seams will require seam-local review when promoted.
 
-**Next seam (SEAM-02) focus areas:**
-- Precedence chain: flag → env → os_release → path_probe
-- Exit-code taxonomy alignment with shared standards
-- Multi-manager warning template
-- Failure remediation content
+Active seam focus:
 
-**Future seams (SEAM-03, SEAM-04) will inherit:**
-- Stable contracts from SEAM-01 and SEAM-02
-- Defined threading state
-- Validation requirements from hermetic test design
+- selected-input contract and parser safety
+- alternate-input hook and `<unknown>` degradation
+- downstream inheritance boundary for parser/input truth
 
-## Seam-Local Review Required
+Next seam focus:
 
-- `SEAM-01` requires seam-local `review.md` before decomposing into sub-slices
-- `SEAM-02` requires seam-local `review.md` before decomposing into sub-slices
-- Future seams will require review when promoted to `active` or `next` horizon
+- family-table coverage and availability rules
+- stable decision-line wording, timing, and suppression
+- clean handoff into explicit-selector and fallback seams

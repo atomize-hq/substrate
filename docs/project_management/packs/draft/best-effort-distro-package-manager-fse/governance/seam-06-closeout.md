@@ -1,5 +1,5 @@
 ---
-seam_id: SEAM-02
+seam_id: SEAM-06
 status: landed
 closeout_version: v0
 seam_exit_gate:
@@ -10,8 +10,16 @@ basis:
   currentness: current
   upstream_closeouts:
     - SEAM-01
+    - SEAM-02
+    - SEAM-03
+    - SEAM-04
+    - SEAM-05
   required_threads:
     - THR-01
+    - THR-02
+    - THR-03
+    - THR-04
+    - THR-05
   stale_triggers: []
 gates:
   post_exec:
@@ -20,14 +28,14 @@ gates:
 open_remediations: []
 ---
 
-# Closeout - SEAM-02 Family Mapping And Decision-Line Reporting
+# Closeout - SEAM-06 Validation And Evidence Topology
 
 ## Seam-exit gate record
 
 - **Source artifact**:
 - **Landed evidence**:
-- **Contracts published or changed**: `C-03`, `C-04`
-- **Threads published / advanced**: `THR-02`, `THR-08`
+- **Contracts published or changed**: `C-10`
+- **Threads published / advanced**: `THR-06`
 - **Review-surface delta**:
 - **Planned-vs-landed delta**:
 - **Downstream stale triggers raised**:

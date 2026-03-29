@@ -2,188 +2,236 @@
 
 ## Execution Horizon Summary
 
-| Seam | Horizon | Role | Key Output |
+| Seam | Horizon | Role | Key output |
 |------|---------|------|------------|
-| SEAM-01 | active | Distro detection and mapping | os-release contract, mapping table, decision line |
-| SEAM-02 | next | Override and fallback | Precedence chain, failure classes, exit codes 2/3/4 |
-| SEAM-03 | future | Wrapper and docs | Wrapper pass-through, operator doc alignment |
-| SEAM-04 | future | Validation checkpoint | Hermetic coverage, CI checkpoint, contract lock-in |
+| SEAM-01 | active | parser/input contract owner | normalized distro facts, `<unknown>`, alternate input hook |
+| SEAM-02 | next | mapping/reporting owner | family-table selection and stable decision line |
+| SEAM-03 | future | explicit selector owner | flag/env precedence and exit `2` / `3` contract |
+| SEAM-04 | future | fallback owner | path probe, warning line, exit `4`, no-manager posture |
+| SEAM-05 | future | operator integration owner | wrapper parity and no-drift docs |
+| SEAM-06 | future | evidence topology owner | repo harness, smoke wrapper, manual evidence |
+| SEAM-07 | future | checkpoint and handoff owner | CP1 evidence seal and downstream readiness |
 
 ## Contract Registry
 
 - **Contract ID**: `C-01`
   - **Type**: schema
   - **Owner seam**: `SEAM-01`
-  - **Direct consumers**: `SEAM-02`, `SEAM-04`
-  - **Derived consumers**: downstream pack (`persist-detected-linux-distro-pkg-manager`)
-  - **Thread IDs**: THR-01, THR-02, THR-06
-  - **Definition**: os-release parsing contract (safe line-oriented parser, `ID`/`ID_LIKE` extraction, normalization, `<unknown>` sentinel)
-  - **Versioning / compat**: v1; additive changes only; breaking changes require new contract ID
+  - **Direct consumers**: `SEAM-02`, `SEAM-03`, `SEAM-04`, `SEAM-06`
+  - **Derived consumers**: downstream pack
+  - **Thread IDs**: `THR-01`, `THR-07`
+  - **Definition**: selected-input parser contract for `/etc/os-release`, normalized `distro_id` / `distro_id_like`, duplicate-key rules, and `<unknown>` sentinel
+  - **Versioning / compat**: v1; parser-rule changes require explicit revalidation of all downstream seams
 
 - **Contract ID**: `C-02`
-  - **Type**: schema
+  - **Type**: config
   - **Owner seam**: `SEAM-01`
-  - **Direct consumers**: `SEAM-02`, `SEAM-04`
-  - **Derived consumers**: downstream pack
-  - **Thread IDs**: THR-01, THR-06
-  - **Definition**: Selected-manager vocabulary (`apt-get`, `dnf`, `yum`, `pacman`, `zypper`) and `pkg_manager.source` vocabulary (`flag`, `env`, `os_release`, `path_probe`)
-  - **Versioning / compat**: v1; fixed vocabulary; new values require new contract ID
+  - **Direct consumers**: `SEAM-02`, `SEAM-06`
+  - **Derived consumers**: downstream pack, env docs
+  - **Thread IDs**: `THR-01`, `THR-07`
+  - **Definition**: `SUBSTRATE_INSTALL_OS_RELEASE_PATH` absolute-path validation, unreadable-path degradation, and no-fallback-to-`/etc/os-release` contract
+  - **Versioning / compat**: v1; hook name and absence semantics are fixed
 
 - **Contract ID**: `C-03`
-  - **Type**: API
-  - **Owner seam**: `SEAM-01`
-  - **Direct consumers**: `SEAM-03`, `SEAM-04`
-  - **Derived consumers**: operator docs
-  - **Thread IDs**: THR-01
-  - **Definition**: Stable stderr decision-line format and placement contract
-  - **Versioning / compat**: v1; template stability required; fields may be additive
-
-- **Contract ID**: `C-04`
   - **Type**: schema
   - **Owner seam**: `SEAM-02`
-  - **Direct consumers**: `SEAM-03`, `SEAM-04`
-  - **Derived consumers**: operator docs
-  - **Thread IDs**: THR-03, THR-04
-  - **Definition**: Exit-code taxonomy for package-manager failures (`2` invalid override, `3` forced missing, `4` none selected)
-  - **Versioning / compat**: v1; aligned with shared EXIT_CODE_TAXONOMY.md
+  - **Direct consumers**: `SEAM-03`, `SEAM-04`, `SEAM-05`, `SEAM-06`
+  - **Derived consumers**: downstream pack
+  - **Thread IDs**: `THR-02`, `THR-08`
+  - **Definition**: distro-family mapping table and availability-based manager selection rules
+  - **Versioning / compat**: v1; supported family rules are fixed for this feature
+
+- **Contract ID**: `C-04`
+  - **Type**: API
+  - **Owner seam**: `SEAM-02`
+  - **Direct consumers**: `SEAM-03`, `SEAM-04`, `SEAM-05`, `SEAM-06`
+  - **Derived consumers**: operators, downstream pack
+  - **Thread IDs**: `THR-02`, `THR-08`
+  - **Definition**: stable decision-line template, timing, suppression rules, and `pkg_manager.source=os_release` reporting posture
+  - **Versioning / compat**: v1; wording and placement are contractual
 
 - **Contract ID**: `C-05`
-  - **Type**: UX affordance
-  - **Owner seam**: `SEAM-02`
-  - **Direct consumers**: `SEAM-04`
-  - **Derived consumers**: operator docs
-  - **Thread IDs**: THR-03
-  - **Definition**: Multi-manager PATH warning template and deterministic selection order
-  - **Versioning / compat**: v1; warning text is contractual
-
-- **Contract ID**: `C-06`
-  - **Type**: config
-  - **Owner seam**: `SEAM-02`
-  - **Direct consumers**: `SEAM-04`
-  - **Derived consumers**: downstream pack
-  - **Thread IDs**: THR-02
-  - **Definition**: `SUBSTRATE_INSTALL_OS_RELEASE_PATH` env var contract (alternate input path for hermetic tests)
-  - **Versioning / compat**: v1; Linux-only installer-local env var
-
-- **Contract ID**: `C-07`
   - **Type**: API
   - **Owner seam**: `SEAM-03`
-  - **Direct consumers**: `SEAM-04`
+  - **Direct consumers**: `SEAM-04`, `SEAM-05`, `SEAM-06`
+  - **Derived consumers**: operators
+  - **Thread IDs**: `THR-03`
+  - **Definition**: `--pkg-manager` and `PKG_MANAGER` precedence, allowed values, `pkg_manager.source=flag|env`, and no-fallback-after-explicit-selection rule
+  - **Versioning / compat**: v1; selector names and source vocabulary are fixed
+
+- **Contract ID**: `C-06`
+  - **Type**: schema
+  - **Owner seam**: `SEAM-03`
+  - **Direct consumers**: `SEAM-05`, `SEAM-06`
   - **Derived consumers**: operator docs
-  - **Thread IDs**: THR-05
-  - **Definition**: Wrapper exit-status pass-through contract (preserves `0`, `2`, `3`, `4`)
-  - **Versioning / compat**: v1; preserves upstream taxonomy
+  - **Thread IDs**: `THR-03`
+  - **Definition**: explicit-selector failure taxonomy for exit `2` and `3`, including remediation element requirements
+  - **Versioning / compat**: v1; exit meanings and remediation elements are fixed
+
+- **Contract ID**: `C-07`
+  - **Type**: UX affordance
+  - **Owner seam**: `SEAM-04`
+  - **Direct consumers**: `SEAM-05`, `SEAM-06`
+  - **Derived consumers**: operators
+  - **Thread IDs**: `THR-04`
+  - **Definition**: ordered PATH probe, multi-manager warning template, `pkg_manager.source=path_probe`, and exit `4` no-manager remediation posture
+  - **Versioning / compat**: v1; ordered probe list and warning text are fixed
+
+- **Contract ID**: `C-08`
+  - **Type**: API
+  - **Owner seam**: `SEAM-05`
+  - **Direct consumers**: `SEAM-06`, `SEAM-07`
+  - **Derived consumers**: operators
+  - **Thread IDs**: `THR-05`
+  - **Definition**: wrapper pass-through contract for feature exits `0`, `2`, `3`, and `4`
+  - **Versioning / compat**: v1; wrapper must preserve upstream feature exit classes
+
+- **Contract ID**: `C-09`
+  - **Type**: UX affordance
+  - **Owner seam**: `SEAM-05`
+  - **Direct consumers**: `SEAM-06`, `SEAM-07`
+  - **Derived consumers**: docs readers and maintainers
+  - **Thread IDs**: `THR-05`
+  - **Definition**: no-drift propagation of precedence, warning, remediation, and alternate-input semantics into `docs/INSTALLATION.md` and `docs/reference/env/contract.md`
+  - **Versioning / compat**: v1; propagated docs must reuse upstream vocabulary verbatim
+
+- **Contract ID**: `C-10`
+  - **Type**: state
+  - **Owner seam**: `SEAM-06`
+  - **Direct consumers**: `SEAM-07`
+  - **Derived consumers**: future maintenance
+  - **Thread IDs**: `THR-06`
+  - **Definition**: authoritative validation topology covering repo harness path, thin smoke wrapper, and manual evidence model
+  - **Versioning / compat**: v1; no second assertion authority is allowed
+
+- **Contract ID**: `C-11`
+  - **Type**: state
+  - **Owner seam**: `SEAM-07`
+  - **Direct consumers**: downstream pack
+  - **Derived consumers**: pack closeout and future promotion
+  - **Thread IDs**: `THR-09`
+  - **Definition**: CP1 evidence seal, downstream stale-trigger emission, and persistence-pack readiness statement
+  - **Versioning / compat**: v1; downstream handoff must consume recorded closeout truth only
 
 ## Thread Registry
 
 - **Thread ID**: `THR-01`
   - **Producer seam**: `SEAM-01`
-  - **Consumer seam(s)**: `SEAM-02`, `SEAM-03`, `SEAM-04`, downstream pack
-  - **Carried contract IDs**: C-01, C-02, C-03
-  - **Purpose**: Carry parsed os-release data and emitted vocabulary from detection to all downstream seams
-  - **State**: identified → defined (upon C-01/C-02 publication)
-  - **Revalidation trigger**: os-release parser changes in SEAM-01
-  - **Satisfied by**: SEAM-01 closeout with landed parser + vocabulary
-  - **Notes**: Foundation thread; all other work depends on this
+  - **Consumer seam(s)**: `SEAM-02`, `SEAM-03`, `SEAM-04`, `SEAM-06`
+  - **Carried contract IDs**: `C-01`, `C-02`
+  - **Purpose**: move trusted Linux input and parser truth into all later selection and validation work
+  - **State**: defined
+  - **Revalidation trigger**: parser rules, hook semantics, or `<unknown>` behavior change
+  - **Satisfied by**: `SEAM-01` closeout with landed parser and alternate-input evidence
+  - **Notes**: foundation thread for every later selection-stage seam
 
 - **Thread ID**: `THR-02`
-  - **Producer seam**: `SEAM-01`
-  - **Consumer seam(s)**: `SEAM-04`
-  - **Carried contract IDs**: C-06 (carries C-01 contract for test inputs)
-  - **Purpose**: Enable hermetic tests to inject os-release inputs without mutating host
-  - **State**: identified → defined
-  - **Revalidation trigger**: hermetic test harness changes
-  - **Satisfied by**: SEAM-01 establishing C-06 contract
-  - **Notes**: Test-only contract; non-test environments ignore this
+  - **Producer seam**: `SEAM-02`
+  - **Consumer seam(s)**: `SEAM-03`, `SEAM-04`, `SEAM-05`, `SEAM-06`
+  - **Carried contract IDs**: `C-03`, `C-04`
+  - **Purpose**: carry mapping-table and decision-line truth into explicit selectors, fallback behavior, docs, and tests
+  - **State**: defined
+  - **Revalidation trigger**: family-table changes, decision-line template changes, or timing changes
+  - **Satisfied by**: `SEAM-02` closeout with landed mapping/reporting evidence
+  - **Notes**: downstream seams must not restate or fork the decision line
 
 - **Thread ID**: `THR-03`
-  - **Producer seam**: `SEAM-02`
-  - **Consumer seam(s)`: `SEAM-03`, `SEAM-04`
-  - **Carried contract IDs**: C-04, C-05
-  - **Purpose**: Carry failure-class taxonomy and warning semantics to wrapper and validation
-  - **State**: identified
-  - **Revalidation trigger**: exit-code meaning changes, warning template changes
-  - **Satisfied by**: SEAM-02 closeout with landed failure handling
-  - **Notes**: Critical for operator-visible contract stability
+  - **Producer seam**: `SEAM-03`
+  - **Consumer seam(s)**: `SEAM-04`, `SEAM-05`, `SEAM-06`
+  - **Carried contract IDs**: `C-05`, `C-06`
+  - **Purpose**: carry explicit selector semantics and the exit `2` / `3` failure posture
+  - **State**: defined
+  - **Revalidation trigger**: precedence changes, supported-value changes, or remediation wording changes
+  - **Satisfied by**: `SEAM-03` closeout with landed explicit-selector evidence
+  - **Notes**: this thread fixes what the operator can force, not final fallback
 
 - **Thread ID**: `THR-04`
-  - **Producer seam**: `SEAM-02`
-  - **Consumer seam(s)**: `SEAM-04`
-  - **Carried contract IDs**: C-04 (precedence chain validation)
-  - **Purpose**: Enable hermetic tests to validate full precedence chain
-  - **State**: identified
-  - **Revalidation trigger**: override precedence changes
-  - **Satisfied by**: SEAM-02 closeout with landed precedence implementation
-  - **Notes**: Test validation thread
+  - **Producer seam**: `SEAM-04`
+  - **Consumer seam(s)**: `SEAM-05`, `SEAM-06`
+  - **Carried contract IDs**: `C-07`
+  - **Purpose**: carry deterministic fallback, warning, and no-manager semantics into docs and validation
+  - **State**: defined
+  - **Revalidation trigger**: fixed probe order changes, warning-template changes, or exit `4` remediation changes
+  - **Satisfied by**: `SEAM-04` closeout with landed fallback evidence
+  - **Notes**: this is the final decision-stage thread before propagation
 
 - **Thread ID**: `THR-05`
-  - **Producer seam**: `SEAM-03`
-  - **Consumer seam(s)**: `SEAM-04`
-  - **Carried contract IDs**: C-07
-  - **Purpose**: Carry wrapper pass-through contract to validation seam
-  - **State**: identified
-  - **Revalidation trigger**: wrapper implementation changes
-  - **Satisfied by**: SEAM-03 closeout with landed wrapper changes
-  - **Notes**: Ensures wrapper path preserves taxonomy
+  - **Producer seam**: `SEAM-05`
+  - **Consumer seam(s)**: `SEAM-06`, `SEAM-07`
+  - **Carried contract IDs**: `C-08`, `C-09`
+  - **Purpose**: carry the final operator-facing contract into evidence-producing work
+  - **State**: defined
+  - **Revalidation trigger**: wrapper handling changes or doc wording drift
+  - **Satisfied by**: `SEAM-05` closeout with wrapper/doc parity evidence
+  - **Notes**: docs are integration outputs, not a second authority
 
 - **Thread ID**: `THR-06`
+  - **Producer seam**: `SEAM-06`
+  - **Consumer seam(s)**: `SEAM-07`
+  - **Carried contract IDs**: `C-10`
+  - **Purpose**: carry one authoritative validation topology and manual evidence model into checkpoint sealing
+  - **State**: defined
+  - **Revalidation trigger**: repo harness path, smoke-wrapper topology, or manual evidence expectations change
+  - **Satisfied by**: `SEAM-06` closeout with validation evidence recorded
+  - **Notes**: keeps repo harness authoritative and smoke wrapper thin
+
+- **Thread ID**: `THR-07`
   - **Producer seam**: `SEAM-01`
   - **Consumer seam(s)**: downstream pack (`persist-detected-linux-distro-pkg-manager`)
-  - **Carried contract IDs**: C-01, C-02
-  - **Purpose**: Export detection contract for persistence layer
-  - **State**: identified → defined (upon C-01/C-02 publication)
-  - **Revalidation trigger**: detection contract changes
-  - **Satisfied by**: SEAM-01 closeout
-  - **Notes**: Cross-pack thread; downstream pack owns persistence
+  - **Carried contract IDs**: `C-01`, `C-02`
+  - **Purpose**: export parser/input truth that downstream persistence must inherit rather than redefine
+  - **State**: defined
+  - **Revalidation trigger**: alternate-input hook or `<unknown>` semantics change
+  - **Satisfied by**: `SEAM-01` closeout and published downstream stale triggers when needed
+  - **Notes**: cross-pack boundary thread
+
+- **Thread ID**: `THR-08`
+  - **Producer seam**: `SEAM-02`
+  - **Consumer seam(s)**: downstream pack (`persist-detected-linux-distro-pkg-manager`)
+  - **Carried contract IDs**: `C-03`, `C-04`
+  - **Purpose**: export selected-manager and source/reporting truth into persistence work
+  - **State**: defined
+  - **Revalidation trigger**: mapping-table or decision-line/source-vocabulary change
+  - **Satisfied by**: `SEAM-02` closeout with published selection/reporting evidence
+  - **Notes**: downstream persistence owns storage, not selection semantics
+
+- **Thread ID**: `THR-09`
+  - **Producer seam**: `SEAM-07`
+  - **Consumer seam(s)**: downstream pack (`persist-detected-linux-distro-pkg-manager`)
+  - **Carried contract IDs**: `C-11`
+  - **Purpose**: publish the final checkpoint-backed readiness signal and any downstream stale triggers
+  - **State**: identified
+  - **Revalidation trigger**: checkpoint gate set or handoff evidence requirements change
+  - **Satisfied by**: `SEAM-07` closeout with `seam_exit_gate.status: passed`
+  - **Notes**: downstream promotion may consume only realized closeout truth
 
 ## Dependency Graph
 
-```
-           C-01          C-02          C-03
-            |             |             |
-            v             v             v
-[SEAM-01] --+--[THR-01]--+--[THR-01]--+--[THR-01]--> [SEAM-02]
-            |                                            |
-            +--[THR-02]--> [SEAM-04]                     |
-            |             (C-06)                         |
-            |                                            v
-            +----------------------------------> [downstream pack]
-            (THR-06)                                   |
-                                                     C-04, C-05
-                                                       |
-                                     +-----------------+-----------------+
-                                     |                 |                 |
-                                     v                 v                 v
-                                   [THR-03]         [THR-04]          [THR-05]
-                                     |                 |                 |
-                                     v                 v                 v
-                                   [SEAM-03]       [SEAM-04]          [SEAM-04]
-                                     |                                   |
-                                     +----------- [THR-05] ------------>+
-                                     (C-07)                              |
-                                                                         v
-                                                                   [CI Checkpoint]
+```mermaid
+flowchart LR
+  S1["SEAM-01"] -->|"THR-01"| S2["SEAM-02"]
+  S2 -->|"THR-02"| S3["SEAM-03"]
+  S3 -->|"THR-03"| S4["SEAM-04"]
+  S4 -->|"THR-04"| S5["SEAM-05"]
+  S5 -->|"THR-05"| S6["SEAM-06"]
+  S6 -->|"THR-06"| S7["SEAM-07"]
+  S1 -->|"THR-07"| D["Downstream pack"]
+  S2 -->|"THR-08"| D
+  S7 -->|"THR-09"| D
 ```
 
 ## Critical Path
 
-```
-SEAM-01 (C-01, C-02, C-03 defined)
-    |
-    v
-SEAM-02 (C-04, C-05 defined; THR-01 consumed)
-    |
-    v
-SEAM-03 (C-07 defined; THR-03 consumed)
-    |
-    v
-SEAM-04 (all threads consumed; CI checkpoint)
-```
+`SEAM-01` -> `SEAM-02` -> `SEAM-03` -> `SEAM-04` -> `SEAM-05` -> `SEAM-06` -> `SEAM-07`
 
 ## Workstreams
 
-No separate workstream owners. All work is seam-owned. Classification comes from seam `type` field:
-- `SEAM-01`: capability (detection capability)
-- `SEAM-02`: capability (override capability)
-- `SEAM-03`: integration (wrapper/docs integration)
-- `SEAM-04`: conformance (validation checkpoint)
+No separate workstream owner namespace is used. Ownership is seam-only:
+
+- `SEAM-01`: domain
+- `SEAM-02`: capability
+- `SEAM-03`: capability
+- `SEAM-04`: capability
+- `SEAM-05`: integration
+- `SEAM-06`: conformance
+- `SEAM-07`: conformance

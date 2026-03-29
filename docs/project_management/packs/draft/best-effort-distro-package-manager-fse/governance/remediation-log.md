@@ -2,31 +2,37 @@
 
 ## Open remediations
 
-No open remediations at seam extraction time. All seams are in `proposed` status, and extraction has not yet identified blocking issues.
+None at extraction time.
 
-Remediation schema for future additions:
+Canonical entry shape for future additions:
 
 ```yaml
 remediation_id: REM-001
 origin_phase: pre_exec
 source_gate: review
-related_seam: SEAM-<n>
+related_seam: SEAM-01
 related_slice: null
-related_thread: THR-<nn>
-related_contract: C-<nn>
-related_artifact: <repo-relative-path>
-severity: blocking | material | follow_up
-status: open | in_progress | resolved | accepted_risk | carried_forward
-owner_seam: SEAM-<n>
+related_thread: THR-01
+related_contract: C-01
+related_artifact: docs/project_management/packs/draft/best-effort-distro-package-manager-fse/seam-01-os-release-input-parser.md
+severity: blocking
+status: open
+owner_seam: SEAM-01
 blocked_targets:
-  - seam: SEAM-<n>
-    field: status | execution_horizon
-    value: decomposed | exec-ready | in_flight | landed | closed
-summary: <one-sentence machine-readable finding summary>
-required_fix: <one-sentence explicit fix>
+  - seam: SEAM-01
+    field: status
+    value: exec-ready
+summary: parser-input review found unresolved ambiguity in alternate-input absence semantics
+required_fix: make the selected-input fallback and invalid-path posture concrete in the seam-local review artifact without widening the hook contract
 resolution_evidence: []
 ```
 
+Rules:
+
+- use seam ownership only
+- use `blocked_targets: []` for non-blocking entries
+- use canonical blocked target values only: `proposed`, `decomposed`, `exec-ready`, `in-flight`, `landed`, `closed`, `active`, `next`, `future`
+
 ## Resolved remediations
 
-None yet. Remediations will be moved here once resolved, with `status: resolved` and populated `resolution_evidence`.
+None yet.
