@@ -120,6 +120,7 @@ Windows (WSL backend) is functional but experimental. When the world backend is 
 ## 3) macOS Architecture (Lima)
 
 Substrate on macOS uses a Lima VM (“substrate”) to host the world-agent. The shell guarantees the VM, agent, and forwarding layer are ready before routing commands.
+Hosted installer behavior coverage on macOS flows through this Lima-backed Linux guest/world-agent path; package-manager selection itself remains Linux-only and does not define native macOS package-manager selection.
 
 - Provisioning & lifecycle
 - `scripts/mac/lima-warm.sh` starts or creates the VM from `scripts/mac/lima/substrate.yaml`, installs required packages, and ensures the systemd unit writes to `/run/substrate.sock` with `/tmp` included in `ReadWritePaths`.
