@@ -30,6 +30,7 @@ IS_WSL=0
 ORIGINAL_PATH="${PATH}"
 PKG_MANAGER=""
 PKG_MANAGER_SOURCE=""
+PKG_MANAGER_DECISION_LINE_EMITTED=0
 APT_UPDATED=0
 SUDO_CMD=()
 MANAGER_ENV_PATH=""
@@ -704,6 +705,23 @@ detect_package_manager() {
   return 1
 }
 
+maybe_emit_package_manager_decision_line() {
+  if [[ -z "${PKG_MANAGER}" || "${PKG_MANAGER_SOURCE}" != "os_release" ]]; then
+    return
+  fi
+
+  if [[ "${PKG_MANAGER_DECISION_LINE_EMITTED}" -eq 1 ]]; then
+    return
+  fi
+
+  printf 'Detected distro: %s (like: %s), using package manager: %s (source: %s)\n' \
+    "${DETECTED_DISTRO_ID}" \
+    "${DETECTED_DISTRO_ID_LIKE}" \
+    "${PKG_MANAGER}" \
+    "${PKG_MANAGER_SOURCE}" >&2
+  PKG_MANAGER_DECISION_LINE_EMITTED=1
+}
+
 resolve_package_for_command() {
   local cmd="$1"
 
@@ -826,6 +844,8 @@ ensure_linux_packages_for_commands() {
   if ! detect_package_manager; then
     fatal "Unable to detect supported package manager. Install required commands (${missing_cmds[*]}) manually and re-run."
   fi
+
+  maybe_emit_package_manager_decision_line
 
   declare -A pkg_set=()
   local cmd pkg_list
