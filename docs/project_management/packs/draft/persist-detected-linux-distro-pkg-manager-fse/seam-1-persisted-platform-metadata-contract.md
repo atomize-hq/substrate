@@ -2,24 +2,24 @@
 seam_id: SEAM-1
 seam_slug: persisted-platform-metadata-contract
 type: integration
-status: proposed
+status: exec-ready
 execution_horizon: active
-plan_version: v1
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
   upstream_closeouts: []
   required_threads: []
   stale_triggers:
-    - upstream detection contract changes selected-manager or pkg_manager.source vocabulary
-    - os_release sentinel or field-path rules change before seam-local review
-    - ADR feature-directory authority changes and makes the current source-path story stale
+    - upstream detection contract changes selected-manager or pkg_manager.source vocabulary after pre-exec revalidation
+    - os_release sentinel or field-path rules change before closeout publishes C-01 and C-02
+    - ADR-0032 or related docs reintroduce a competing feature-directory authority before closeout
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
@@ -67,7 +67,7 @@ open_remediations: []
 - **Dependencies**
   - Direct blockers:
     - External detection contract remains authoritative for selected-manager vocabulary, source vocabulary, and normalized distro outputs
-    - ADR feature-directory drift must be resolved or explicitly governed before deep seam-local planning relies on one source path story
+    - The accepted `contract.md` authority override and `DR-0005` now govern the canonical feature-directory path; any new competing source-path reference before closeout is a stale trigger rather than a live blocker
   - Transitive blockers:
     - Adjacent installer and documentation packs that touch the same shared files can make current assumptions stale
   - Direct consumers:
@@ -86,20 +86,20 @@ open_remediations: []
     - `scripts/substrate/dev-install-substrate.sh`
 - **Verification**:
   - Because this seam **produces** owned contracts, verification should prove the contract is concrete enough for seam-local planning and implementation rather than requiring the final accepted artifact to exist already.
-  - The first seam-local review should try to falsify:
+  - The current pre-exec review revalidated:
     - whether any alternate field nesting or alias is still possible
     - whether any local re-derivation of selected manager or source remains hidden in downstream code paths
     - whether path semantics still imply more than one canonical metadata location
-  - A passing pre-exec posture should leave `SEAM-2` able to plan against one stable schema and one stable path rule.
+  - The resulting pre-exec posture leaves `SEAM-2` able to plan against one stable schema and one stable path rule.
 - **Risks / unknowns**:
   - Risk:
-    - ADR-0032 still points at a stale feature directory, which can create dual-authority planning inputs.
+    - ADR-0032 still contains stale feature-directory links even though `contract.md` and `DR-0005` now establish the single authoritative override for planning.
   - De-risk plan:
-    - Resolve or formally govern the drift before decomposition; keep it explicit as `REM-001`.
+    - Keep the override explicit in seam-exit and closeout evidence; treat any new competing path reference as a downstream stale trigger.
   - Risk:
     - Upstream detection vocabulary or sentinel semantics could change after extraction.
   - De-risk plan:
-    - Revalidate this seam against the latest external detection contract before seam-local review.
+    - Revalidate this seam against the latest external detection contract before closeout-backed downstream promotion.
   - Risk:
     - Existing runtime code may still assume event-only writes or alternate field handling.
   - De-risk plan:
@@ -122,6 +122,7 @@ open_remediations: []
   - Review-surface areas likely to shift after landing:
     - the authority-boundary map between upstream detection, writer code, and operator docs
     - the compatibility/rewrite diagram once real implementation evidence exists
+    - whether ADR-0032 still carries stale path links even though the accepted pack contract remains authoritative
   - Downstream seams most likely to require revalidation:
     - `SEAM-2`
     - `SEAM-3`
