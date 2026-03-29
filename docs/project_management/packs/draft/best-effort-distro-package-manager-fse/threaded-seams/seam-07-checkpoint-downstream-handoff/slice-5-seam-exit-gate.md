@@ -37,3 +37,10 @@ candidate_subslices: []
   - closeout records CP1 evidence, macOS-hosted behavior evidence, and downstream handoff truth
   - closeout accounts for `C-11` publication and advances `THR-09` to `published`
   - promotion readiness is explicit and backed by realized checkpoint evidence
+
+## Exit-gate outcome
+
+- `SEAM-07` now has a realized checkpoint record at tested SHA `09e3f1fe922bb283ff315844bb3750461d867741`: local harness verification passed, compile parity run `23711447102` passed, quick CI run `23711510594` failed, and Linux feature-smoke run `23711646303` passed.
+- `SEAM-06` remains the authoritative source for the hosted macOS behavior path, so this exit gate reuses the published Lima-backed verification surface instead of widening the checkpoint into native macOS package-manager behavior claims.
+- Because quick CI failed on Linux shell lint before the checkpoint closed cleanly, this exit gate records `C-11` and `THR-09` as prepared but unpublished and opens `REM-001` to block downstream readiness and promotion.
+- The seam therefore lands as a realized but failed checkpoint closeout: landing evidence is complete, closeout remains blocked, and promotion readiness stays `blocked` until the quick-CI failure is resolved or explicitly dispositioned and the checkpoint decision is rerun.
