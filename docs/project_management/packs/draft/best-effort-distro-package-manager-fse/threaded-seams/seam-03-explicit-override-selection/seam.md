@@ -1,8 +1,8 @@
 ---
 seam_id: SEAM-03
 seam_slug: explicit-override-selection
-status: exec-ready
-execution_horizon: active
+status: closed
+execution_horizon: future
 plan_version: v2
 basis:
   currentness: current
@@ -25,12 +25,12 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S4
-  status: pending
+  status: passed
 open_remediations: []
 ---
 # SEAM-03 - Explicit Override Selection
