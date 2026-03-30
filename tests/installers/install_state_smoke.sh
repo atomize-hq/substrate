@@ -4,6 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 HOST_PATH="${PATH}"
+REAL_PYTHON3="$(command -v python3)"
+REAL_MV="$(command -v mv)"
 STUB_BIN=""
 
 log() {
@@ -124,6 +126,32 @@ case "${cmd}" in
 esac
 EOF_STUB
   chmod +x "${STUB_BIN}/sudo"
+}
+
+write_stub_python3() {
+  cat >"${STUB_BIN}/python3" <<EOF_STUB
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "\${SUBSTRATE_TEST_FAIL_HOST_STATE_WRITE:-0}" -eq 1 && "\${1:-}" == "-" && -n "\${STATE_EVENTS:-}" ]]; then
+  exit 1
+fi
+exec "${REAL_PYTHON3}" "\$@"
+EOF_STUB
+  chmod +x "${STUB_BIN}/python3"
+}
+
+write_stub_mv() {
+  cat >"${STUB_BIN}/mv" <<EOF_STUB
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "\${SUBSTRATE_TEST_FAIL_HOST_STATE_REPLACE:-0}" -eq 1 && "\$#" -eq 2 ]]; then
+  if [[ "\$1" == "\${SUBSTRATE_TEST_FAIL_MV_SOURCE:-}" && "\$2" == "\${SUBSTRATE_TEST_FAIL_MV_DEST:-}" ]]; then
+    exit 1
+  fi
+fi
+exec "${REAL_MV}" "\$@"
+EOF_STUB
+  chmod +x "${STUB_BIN}/mv"
 }
 
 normalize_user_key() {
@@ -339,6 +367,8 @@ EOF_STUB
 
 prepare_stub_bin() {
   write_stub_sudo
+  write_stub_python3
+  write_stub_mv
   write_stub_id
   write_stub_getent
   write_stub_groupadd
@@ -557,6 +587,22 @@ print("upgrade metadata ok")
 PY
 }
 
+assert_log_contains() {
+  local path="$1"
+  local needle="$2"
+  if ! grep -Fq -- "${needle}" "${path}"; then
+    fatal "expected ${path} to contain: ${needle}"
+  fi
+}
+
+assert_log_not_contains() {
+  local path="$1"
+  local needle="$2"
+  if grep -Fq -- "${needle}" "${path}"; then
+    fatal "did not expect ${path} to contain: ${needle}"
+  fi
+}
+
 assert_cleanup_logs() {
   local group_log="$1"
   local linger_log="$2"
@@ -640,6 +686,7 @@ run_metadata_scenario() (
   local install_log="${work_root}/install.log"
   local fake_version="0.0.0-state"
   local state_path="${prefix}/install_state.json"
+  local baseline_state="${work_root}/baseline-state.json"
 
   mkdir -p "${prefix}" "${artifacts}" "${stub_bin}" "${fake_root}" "${home_dir}"
   : >"${systemctl_log}"; : >"${group_log}"; : >"${linger_log}"
@@ -650,6 +697,7 @@ run_metadata_scenario() (
   local fake_user="substrate-state"
 
   # Initial install to create metadata (group created, user added, linger logged).
+  SUBSTRATE_INSTALL_NO_PATH=1 \
   SUBSTRATE_TEST_SYSTEMCTL_LOG="${systemctl_log}" \
   SUBSTRATE_TEST_GROUP_LOG="${group_log}" \
   SUBSTRATE_TEST_LINGER_LOG="${linger_log}" \
@@ -671,6 +719,7 @@ run_metadata_scenario() (
 
   assert_env_sh_has_no_override_exports "${prefix}" "${HOST_PATH}"
   assert_metadata_file "${state_path}" "${fake_user}" "true" "true" "no"
+  assert_log_not_contains "${install_log}" "unsupported schema_version"
 
   # Simulate legacy metadata and rerun install to ensure upgrade path rewrites it.
   cat >"${state_path}" <<'EOF_STUB'
@@ -679,6 +728,7 @@ EOF_STUB
   sleep 1
   : >"${group_log}"; : >"${linger_log}"
 
+  SUBSTRATE_INSTALL_NO_PATH=1 \
   SUBSTRATE_TEST_SYSTEMCTL_LOG="${systemctl_log}" \
   SUBSTRATE_TEST_GROUP_LOG="${group_log}" \
   SUBSTRATE_TEST_LINGER_LOG="${linger_log}" \
@@ -701,6 +751,100 @@ EOF_STUB
 
   assert_env_sh_has_no_override_exports "${prefix}" "${HOST_PATH}"
   assert_metadata_upgraded "${state_path}" "${fake_user}"
+  assert_log_contains "${install_log}" "unsupported schema_version 0"
+
+  # Invalid JSON should warn, rebuild, and keep the run successful.
+  cat >"${state_path}" <<'EOF_STUB'
+{invalid
+EOF_STUB
+  sleep 1
+  : >"${group_log}"; : >"${linger_log}"; : >"${install_log}"
+
+  SUBSTRATE_INSTALL_NO_PATH=1 \
+  SUBSTRATE_TEST_SYSTEMCTL_LOG="${systemctl_log}" \
+  SUBSTRATE_TEST_GROUP_LOG="${group_log}" \
+  SUBSTRATE_TEST_LINGER_LOG="${linger_log}" \
+  SUBSTRATE_TEST_PRIMARY_USER="${fake_user}" \
+  SUBSTRATE_TEST_USER_GROUPS="substrate wheel" \
+  SUBSTRATE_TEST_GROUP_EXISTS=1 \
+  SUBSTRATE_TEST_LINGER_STATE="yes" \
+  FAKE_ROOT="${fake_root}" \
+  HOME="${home_dir}" \
+  PATH="${harness_path}" \
+  SHIM_ORIGINAL_PATH="${harness_path}" \
+  "${REPO_ROOT}/scripts/substrate/install-substrate.sh" \
+    --prefix "${prefix}" \
+    --version "${fake_version}" \
+    --artifact-dir "${artifacts}" \
+    >"${install_log}" 2>&1 || {
+      cat "${install_log}" >&2
+      fatal "invalid-json metadata install failed (see ${install_log})"
+    }
+
+  assert_env_sh_has_no_override_exports "${prefix}" "${HOST_PATH}"
+  assert_metadata_upgraded "${state_path}" "${fake_user}"
+  assert_log_contains "${install_log}" "warning: unable to parse"
+  assert_log_not_contains "${install_log}" "unsupported schema_version"
+
+  cp "${state_path}" "${baseline_state}"
+
+  # A render failure should warn, preserve the canonical file, and leave no temp file behind.
+  : >"${group_log}"; : >"${linger_log}"; : >"${install_log}"
+  SUBSTRATE_INSTALL_NO_PATH=1 \
+  SUBSTRATE_TEST_FAIL_HOST_STATE_WRITE=1 \
+  SUBSTRATE_TEST_SYSTEMCTL_LOG="${systemctl_log}" \
+  SUBSTRATE_TEST_GROUP_LOG="${group_log}" \
+  SUBSTRATE_TEST_LINGER_LOG="${linger_log}" \
+  SUBSTRATE_TEST_PRIMARY_USER="${fake_user}" \
+  SUBSTRATE_TEST_USER_GROUPS="substrate wheel" \
+  SUBSTRATE_TEST_GROUP_EXISTS=1 \
+  SUBSTRATE_TEST_LINGER_STATE="yes" \
+  FAKE_ROOT="${fake_root}" \
+  HOME="${home_dir}" \
+  PATH="${harness_path}" \
+  SHIM_ORIGINAL_PATH="${harness_path}" \
+  "${REPO_ROOT}/scripts/substrate/install-substrate.sh" \
+    --prefix "${prefix}" \
+    --version "${fake_version}" \
+    --artifact-dir "${artifacts}" \
+    >"${install_log}" 2>&1 || {
+      cat "${install_log}" >&2
+      fatal "host-state write failure scenario unexpectedly failed (see ${install_log})"
+    }
+
+  assert_log_contains "${install_log}" "Failed to write host state metadata"
+  cmp -s "${baseline_state}" "${state_path}" || fatal "canonical metadata changed after write failure"
+  [[ ! -e "${state_path}.tmp" ]] || fatal "temp file should be removed after write failure"
+
+  # A replace failure should warn, preserve the canonical file, and leave no temp file behind.
+  : >"${group_log}"; : >"${linger_log}"; : >"${install_log}"
+  SUBSTRATE_INSTALL_NO_PATH=1 \
+  SUBSTRATE_TEST_FAIL_HOST_STATE_REPLACE=1 \
+  SUBSTRATE_TEST_FAIL_MV_SOURCE="${state_path}.tmp" \
+  SUBSTRATE_TEST_FAIL_MV_DEST="${state_path}" \
+  SUBSTRATE_TEST_SYSTEMCTL_LOG="${systemctl_log}" \
+  SUBSTRATE_TEST_GROUP_LOG="${group_log}" \
+  SUBSTRATE_TEST_LINGER_LOG="${linger_log}" \
+  SUBSTRATE_TEST_PRIMARY_USER="${fake_user}" \
+  SUBSTRATE_TEST_USER_GROUPS="substrate wheel" \
+  SUBSTRATE_TEST_GROUP_EXISTS=1 \
+  SUBSTRATE_TEST_LINGER_STATE="yes" \
+  FAKE_ROOT="${fake_root}" \
+  HOME="${home_dir}" \
+  PATH="${harness_path}" \
+  SHIM_ORIGINAL_PATH="${harness_path}" \
+  "${REPO_ROOT}/scripts/substrate/install-substrate.sh" \
+    --prefix "${prefix}" \
+    --version "${fake_version}" \
+    --artifact-dir "${artifacts}" \
+    >"${install_log}" 2>&1 || {
+      cat "${install_log}" >&2
+      fatal "host-state replace failure scenario unexpectedly failed (see ${install_log})"
+    }
+
+  assert_log_contains "${install_log}" "Failed to replace host state metadata"
+  cmp -s "${baseline_state}" "${state_path}" || fatal "canonical metadata changed after replace failure"
+  [[ ! -e "${state_path}.tmp" ]] || fatal "temp file should be removed after replace failure"
 
   log "Metadata scenario completed (state: ${state_path})"
 )

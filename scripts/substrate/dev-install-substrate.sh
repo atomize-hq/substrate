@@ -352,15 +352,20 @@ schema_version = 1
 timestamp = datetime.datetime.utcnow().isoformat() + "Z"
 
 base = {}
+parsed_existing = False
 if path.exists():
     try:
         with path.open() as f:
             base = json.load(f)
+        parsed_existing = True
     except Exception as exc:  # noqa: BLE001
         sys.stderr.write(f"[dev-install-substrate] warning: unable to parse {path}: {exc}\n")
         base = {}
 
-if base.get("schema_version") != schema_version:
+if parsed_existing and base.get("schema_version") != schema_version:
+    sys.stderr.write(
+        f"[dev-install-substrate] warning: unsupported schema_version {base.get('schema_version')} at {path}; rebuilding metadata\n"
+    )
     base = {}
 
 base["schema_version"] = schema_version
@@ -426,7 +431,11 @@ PY
     return
   fi
 
-  mv "${tmp}" "${HOST_STATE_PATH}"
+  if ! mv "${tmp}" "${HOST_STATE_PATH}"; then
+    warn "Failed to replace host state metadata at ${HOST_STATE_PATH}; continuing without blocking install."
+    rm -f "${tmp}" || true
+    return
+  fi
   chmod 0644 "${HOST_STATE_PATH}" || true
   log "Host state metadata recorded at ${HOST_STATE_PATH}"
 }
