@@ -310,7 +310,7 @@ record_linger_state() {
 
 write_host_state_metadata() {
   local world_enabled="${1:-1}"
-  if [[ "${PLATFORM:-}" != "linux" || "${world_enabled}" -ne 1 ]]; then
+  if [[ "${PLATFORM:-}" != "linux" ]]; then
     return
   fi
   if [[ "${DRY_RUN}" -eq 1 ]]; then
@@ -338,11 +338,6 @@ write_host_state_metadata() {
   for entry in "${HOST_STATE_LINGER_ENTRIES[@]:-}"; do
     events+=("linger:${entry}")
   done
-
-  if [[ ${#events[@]} -eq 0 ]]; then
-    log "No host state changes detected; skipping host metadata write."
-    return
-  fi
 
   local event_payload
   event_payload="$(printf '%s\n' "${events[@]}")"

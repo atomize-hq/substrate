@@ -310,7 +310,7 @@ find_linux_world_agent() {
 }
 
 write_host_state_metadata() {
-  if [[ "${IS_LINUX}" -ne 1 || "${WORLD_ENABLED}" -ne 1 ]]; then
+  if [[ "${IS_LINUX}" -ne 1 ]]; then
     return
   fi
   if [[ -z "${HOST_STATE_PATH}" ]]; then
@@ -334,11 +334,6 @@ write_host_state_metadata() {
   for entry in "${HOST_STATE_LINGER_ENTRIES[@]:-}"; do
     events+=("linger:${entry}")
   done
-
-  if [[ ${#events[@]} -eq 0 ]]; then
-    log "No host state changes detected; skipping host metadata write."
-    return
-  fi
 
   local event_payload
   event_payload="$(printf '%s\n' "${events[@]}")"
