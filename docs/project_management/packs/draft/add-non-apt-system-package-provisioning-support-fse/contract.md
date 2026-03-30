@@ -1,6 +1,6 @@
 # add-non-apt-system-package-provisioning-support-fse — contract surface
 
-This file is the pack-root contract for the manager-aware world-deps surface. It defines `C-01`, the authoritative operator contract that downstream seams consume through `THR-01`.
+This file is the pack-root contract for the manager-aware world-deps surface. It defines `C-01`, the authoritative operator contract that downstream seams consume through `THR-01`, and records `C-02`, the authoritative in-world probe/support-gate contract consumed through `THR-02`.
 
 Reference inputs for this pack-root contract:
 - `docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md`
@@ -13,6 +13,7 @@ Reference inputs for this pack-root contract:
 ## Authority handoff
 
 - `C-01` is authoritative for the shared manager-aware operator contract for `substrate world enable --provision-deps` and for runtime `substrate world deps current sync|install` when system-package items are in scope.
+- `C-02` is authoritative for deterministic in-world world-manager probe and support-gate outcomes, including supported `apt` / `pacman` selection, fail-closed unsupported and contradiction handling, and the ban on host-derived routing inputs.
 - `docs/project_management/packs/implemented/world-deps-packages-bundles-contract/contract.md` remains authoritative for inventory layering, enabled-resolution semantics, bundle expansion, wrapper semantics, schema `version: 1` baseline, and non-system-package install behavior.
 - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md` remains authoritative for the base meaning of exit codes.
 - `docs/project_management/packs/implemented/world-deps-apt-provisioning/contract.md` remains authoritative for APT provisioning baseline semantics, provided it does not contradict `C-01`.
@@ -35,6 +36,19 @@ Reference inputs for this pack-root contract:
 - no new config, env, protocol, trace, or log surface
 
 The detailed command behavior, exit-code posture, and runtime remediation wording remain within `C-01` and the downstream execution seams. This file only fixes the authority handoff and decision basis that those seams consume.
+
+## `C-02` contract summary
+
+`C-02` is the accepted state contract for the in-world world-manager probe and support gate. It binds downstream seams to one truth for:
+
+- in-world routing inputs only: `/etc/os-release` (`ID`, `ID_LIKE`) plus `command -v pacman`
+- deterministic family mapping for Debian-family and Arch-family identifiers
+- fail-closed handling for unreadable, unmapped, ambiguous, and contradictory probe results
+- `apt`, `pacman`, or unsupported outcomes only
+- exit `4` for unsupported/contradiction cases and exit `3` when the world backend is unavailable and the probe cannot run in-world
+- dry-run performing the same probe and classification without mutation
+
+The detailed mapping rules, contradiction reasons, and supported-platform posture remain defined by `C-02` and the pack-level review surfaces that consume it.
 
 ## CLI
 
