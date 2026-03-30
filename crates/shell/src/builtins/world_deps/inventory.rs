@@ -160,7 +160,8 @@ pub(crate) struct BundleDefV1 {
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", tag = "kind")]
 pub(crate) enum InventoryItemDefV1 {
-    Package(PackageDefV1),
+    // Box to avoid a large enum (clippy::large_enum_variant).
+    Package(Box<PackageDefV1>),
     Bundle(BundleDefV1),
 }
 
@@ -177,7 +178,7 @@ impl InventoryViewV1 {
 
     pub(crate) fn get(&self, name: &str) -> Option<InventoryItemDefV1> {
         if let Some(pkg) = self.packages.get(name) {
-            return Some(InventoryItemDefV1::Package(pkg.clone()));
+            return Some(InventoryItemDefV1::Package(Box::new(pkg.clone())));
         }
         if let Some(bundle) = self.bundles.get(name) {
             return Some(InventoryItemDefV1::Bundle(bundle.clone()));
