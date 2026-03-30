@@ -5,6 +5,7 @@ use base64::Engine;
 use std::collections::HashMap;
 use tokio::runtime::Runtime;
 
+const PROBE_PROFILE: &str = "world-deps-probe";
 const PROVISION_PROFILE: &str = "world-deps-provision";
 const PROVISION_COMMAND: &str = "substrate world enable --provision-deps";
 const PROBE_PREFIX: &str = "__SUBSTRATE_WDAP0__";
@@ -24,6 +25,41 @@ pub(super) fn ensure_supported_backend_or_exit() {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum WorldManager {
+    Apt,
+    Pacman,
+    Unsupported,
+}
+
+impl WorldManager {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Apt => "apt",
+            Self::Pacman => "pacman",
+            Self::Unsupported => "unsupported",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct WorldManagerProbe {
+    pub manager: WorldManager,
+    pub reason: &'static str,
+    pub pacman_present: bool,
+}
+
+impl WorldManagerProbe {
+    fn render(self) -> String {
+        format!(
+            "World-manager probe result: {} (reason={}, pacman_present={})",
+            self.manager.as_str(),
+            self.reason,
+            self.pacman_present
+        )
+    }
+}
+
 pub(super) fn render_requirement(requirement: &AptSpecV1) -> String {
     match &requirement.version {
         Some(version) if !version.trim().is_empty() => {
@@ -38,6 +74,76 @@ pub(super) fn print_verbose_requirements(requirements: &[AptSpecV1]) {
     for requirement in requirements {
         println!("{}", render_requirement(requirement));
     }
+}
+
+pub(super) fn print_probe_result(probe: WorldManagerProbe) {
+    println!("{}", probe.render());
+}
+
+pub(super) fn exit_probe_result_not_supported(probe: WorldManagerProbe) -> ! {
+    match probe.manager {
+        WorldManager::Pacman => eprintln!(
+            "substrate: `{PROVISION_COMMAND}` detected a pacman-based world image (reason={}); this command currently provisions apt-backed packages only and exits 4 without mutating the world.",
+            probe.reason
+        ),
+        WorldManager::Unsupported => eprintln!(
+            "substrate: `{PROVISION_COMMAND}` probe returned unsupported (reason={}, pacman_present={}); this command cannot provision packages for the detected world image and exits 4 without mutating the world.",
+            probe.reason,
+            probe.pacman_present
+        ),
+        WorldManager::Apt => unreachable!("apt probe results must not be routed here"),
+    }
+    std::process::exit(4);
+}
+
+pub(super) fn probe_world_manager() -> Result<WorldManagerProbe, String> {
+    let response = execute_with_profile(&build_manager_probe_command(), PROBE_PROFILE)?;
+    if response.exit != 0 {
+        return Err(format!(
+            "world-manager probe failed (exit={}): {}",
+            response.exit,
+            response_snippet(&response)
+        ));
+    }
+
+    let stdout = decode_output(&response.stdout_b64);
+    let mut os_release_readable = false;
+    let mut id = None::<String>;
+    let mut id_like = None::<String>;
+    let mut pacman_present = None::<bool>;
+
+    for line in stdout.lines() {
+        let Some((key, value)) = parse_probe_line(line) else {
+            continue;
+        };
+        match key {
+            "os_release_readable" => os_release_readable = value == "1",
+            "id" if !value.trim().is_empty() => id = Some(value.trim().to_string()),
+            "id_like" if !value.trim().is_empty() => id_like = Some(value.trim().to_string()),
+            "pacman_present" => pacman_present = Some(value == "1"),
+            _ => {}
+        }
+    }
+
+    if !os_release_readable {
+        return Ok(classify_world_manager_probe(
+            false,
+            id.as_deref(),
+            id_like.as_deref(),
+            false,
+        ));
+    }
+
+    let Some(pacman_present) = pacman_present else {
+        return Err("world-manager probe output missing pacman_present".to_string());
+    };
+
+    Ok(classify_world_manager_probe(
+        os_release_readable,
+        id.as_deref(),
+        id_like.as_deref(),
+        pacman_present,
+    ))
 }
 
 pub(super) fn provision_apt_requirements(requirements: &[AptSpecV1]) {
@@ -58,10 +164,11 @@ pub(super) fn provision_apt_requirements(requirements: &[AptSpecV1]) {
         return;
     }
 
-    let response = match execute_with_profile(&build_install_command(&unsatisfied)) {
-        Ok(response) => response,
-        Err(detail) => exit_backend_unavailable(&detail),
-    };
+    let response =
+        match execute_with_profile(&build_install_command(&unsatisfied), PROVISION_PROFILE) {
+            Ok(response) => response,
+            Err(detail) => exit_backend_unavailable(&detail),
+        };
     if response.exit == 0 {
         return;
     }
@@ -91,8 +198,89 @@ pub(super) fn exit_backend_unavailable(detail: &str) -> ! {
     std::process::exit(3);
 }
 
+pub(super) fn classify_world_manager_probe(
+    os_release_readable: bool,
+    id: Option<&str>,
+    id_like: Option<&str>,
+    pacman_present: bool,
+) -> WorldManagerProbe {
+    if !os_release_readable {
+        return WorldManagerProbe {
+            manager: WorldManager::Unsupported,
+            reason: "os_release_unreadable",
+            pacman_present,
+        };
+    }
+
+    let normalized_id = id.unwrap_or("").trim().to_ascii_lowercase();
+    let normalized_id_like = id_like.unwrap_or("").trim().to_ascii_lowercase();
+
+    if normalized_id.is_empty() && normalized_id_like.is_empty() {
+        return WorldManagerProbe {
+            manager: WorldManager::Unsupported,
+            reason: "os_release_missing_identity",
+            pacman_present,
+        };
+    }
+
+    let mut is_debian_family = matches!(normalized_id.as_str(), "debian" | "ubuntu");
+    let mut is_arch_family = matches!(normalized_id.as_str(), "arch" | "archlinux");
+
+    for token in normalized_id_like.split_whitespace() {
+        match token {
+            "debian" | "ubuntu" => is_debian_family = true,
+            "arch" | "archlinux" => is_arch_family = true,
+            _ => {}
+        }
+    }
+
+    if is_debian_family && is_arch_family {
+        return WorldManagerProbe {
+            manager: WorldManager::Unsupported,
+            reason: "ambiguous_family_mapping",
+            pacman_present,
+        };
+    }
+
+    if is_debian_family {
+        return WorldManagerProbe {
+            manager: WorldManager::Apt,
+            reason: "debian_family",
+            pacman_present,
+        };
+    }
+
+    if is_arch_family {
+        if pacman_present {
+            return WorldManagerProbe {
+                manager: WorldManager::Pacman,
+                reason: "arch_family_pacman_present",
+                pacman_present,
+            };
+        }
+
+        return WorldManagerProbe {
+            manager: WorldManager::Unsupported,
+            reason: "arch_family_pacman_missing",
+            pacman_present,
+        };
+    }
+
+    WorldManagerProbe {
+        manager: WorldManager::Unsupported,
+        reason: "unmapped_family",
+        pacman_present,
+    }
+}
+
+fn parse_probe_line(line: &str) -> Option<(&str, &str)> {
+    let rest = line.strip_prefix(PROBE_PREFIX)?.trim_start();
+    let (key, value) = rest.split_once('=')?;
+    Some((key.trim(), value.trim()))
+}
+
 fn probe_requirements(requirements: &[AptSpecV1]) -> Result<HashMap<String, bool>, String> {
-    let response = execute_with_profile(&build_probe_command(requirements))?;
+    let response = execute_with_profile(&build_apt_probe_command(requirements), PROVISION_PROFILE)?;
     if response.exit != 0 {
         return Err(format!(
             "world-deps provisioning probe failed (exit={}): {}",
@@ -117,10 +305,13 @@ fn probe_requirements(requirements: &[AptSpecV1]) -> Result<HashMap<String, bool
     Ok(present)
 }
 
-fn execute_with_profile(cmd: &str) -> Result<agent_api_types::ExecuteResponse, String> {
+fn execute_with_profile(
+    cmd: &str,
+    profile: &str,
+) -> Result<agent_api_types::ExecuteResponse, String> {
     let (client, mut request, _) =
         build_agent_client_and_request(cmd).map_err(|err| format!("{err:#}"))?;
-    request.profile = Some(PROVISION_PROFILE.to_string());
+    request.profile = Some(profile.to_string());
     if cfg!(target_os = "macos") {
         request.cwd = Some("/tmp".to_string());
     }
@@ -134,7 +325,39 @@ fn execute_with_profile(cmd: &str) -> Result<agent_api_types::ExecuteResponse, S
     })
 }
 
-fn build_probe_command(requirements: &[AptSpecV1]) -> String {
+fn build_manager_probe_command() -> String {
+    let mut script = String::from("set -eu\n");
+    script.push_str("os_release='/etc/os-release'\n");
+    script.push_str("if [ ! -r \"$os_release\" ]; then\n");
+    script.push_str("  printf '");
+    script.push_str(PROBE_PREFIX);
+    script.push_str(" os_release_readable=%s\\n' 0\n");
+    script.push_str("  exit 0\n");
+    script.push_str("fi\n");
+    script.push_str(". \"$os_release\"\n");
+    script.push_str("printf '");
+    script.push_str(PROBE_PREFIX);
+    script.push_str(" os_release_readable=%s\\n' 1\n");
+    script.push_str("printf '");
+    script.push_str(PROBE_PREFIX);
+    script.push_str(" id=%s\\n' \"${ID-}\"\n");
+    script.push_str("printf '");
+    script.push_str(PROBE_PREFIX);
+    script.push_str(" id_like=%s\\n' \"${ID_LIKE-}\"\n");
+    script.push_str("if command -v pacman >/dev/null 2>&1; then\n");
+    script.push_str("  printf '");
+    script.push_str(PROBE_PREFIX);
+    script.push_str(" pacman_present=%s\\n' 1\n");
+    script.push_str("else\n");
+    script.push_str("  printf '");
+    script.push_str(PROBE_PREFIX);
+    script.push_str(" pacman_present=%s\\n' 0\n");
+    script.push_str("fi\n");
+    script.push_str("exit 0\n");
+    format!("sh -lc {}", sh_quote(&script))
+}
+
+fn build_apt_probe_command(requirements: &[AptSpecV1]) -> String {
     let mut script = String::from("set +e\n");
     script.push_str("check_pkg() {\n");
     script.push_str("  pkg_name=\"$1\"\n");
@@ -254,4 +477,49 @@ fn decode_output(raw: &str) -> String {
 
 fn sh_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\"'\"'"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn classifies_debian_family_as_apt() {
+        let probe = classify_world_manager_probe(true, Some("ubuntu"), Some("debian"), false);
+        assert_eq!(probe.manager, WorldManager::Apt);
+        assert_eq!(probe.reason, "debian_family");
+    }
+
+    #[test]
+    fn classifies_arch_family_with_pacman_present_as_pacman() {
+        let probe = classify_world_manager_probe(true, Some("arch"), Some("archlinux"), true);
+        assert_eq!(probe.manager, WorldManager::Pacman);
+        assert_eq!(probe.reason, "arch_family_pacman_present");
+    }
+
+    #[test]
+    fn classifies_arch_family_without_pacman_as_unsupported() {
+        let probe = classify_world_manager_probe(true, Some("arch"), Some("archlinux"), false);
+        assert_eq!(probe.manager, WorldManager::Unsupported);
+        assert_eq!(probe.reason, "arch_family_pacman_missing");
+    }
+
+    #[test]
+    fn classifies_unreadable_os_release_without_pacman_as_unsupported() {
+        let probe = classify_world_manager_probe(false, None, None, false);
+        assert_eq!(probe.manager, WorldManager::Unsupported);
+        assert_eq!(probe.reason, "os_release_unreadable");
+    }
+
+    #[test]
+    fn classifies_ambiguous_and_unmapped_as_unsupported() {
+        let ambiguous =
+            classify_world_manager_probe(true, Some("debian"), Some("arch ubuntu"), true);
+        assert_eq!(ambiguous.manager, WorldManager::Unsupported);
+        assert_eq!(ambiguous.reason, "ambiguous_family_mapping");
+
+        let unmapped = classify_world_manager_probe(true, Some("fedora"), Some("rhel"), true);
+        assert_eq!(unmapped.manager, WorldManager::Unsupported);
+        assert_eq!(unmapped.reason, "unmapped_family");
+    }
 }

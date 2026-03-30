@@ -14,7 +14,8 @@ use log_ops::{append_log_line, initialize_log_file, print_dry_run_plan};
 use manager_env::update_manager_env_exports;
 use paths::{locate_helper_script, next_log_path, resolve_version_dir, resolve_world_socket_path};
 use provision_deps::{
-    ensure_supported_backend_or_exit, print_verbose_requirements, provision_apt_requirements,
+    ensure_supported_backend_or_exit, exit_probe_result_not_supported, print_probe_result,
+    print_verbose_requirements, probe_world_manager, provision_apt_requirements, WorldManager,
 };
 use verify::verify_world_health;
 
@@ -167,16 +168,27 @@ fn run_enable_with_provision_deps(args: &WorldEnableArgs) -> Result<()> {
     let apt_requirements =
         crate::builtins::world_deps::resolve_effective_enabled_apt_requirements(&cwd)?;
 
-    if args.verbose {
-        print_verbose_requirements(&apt_requirements);
-    }
-
     if args.dry_run {
-        if !args.verbose {
+        let probe = match probe_world_manager() {
+            Ok(probe) => probe,
+            Err(err) => provision_deps::exit_backend_unavailable(&err),
+        };
+
+        print_probe_result(probe);
+
+        match probe.manager {
+            WorldManager::Apt => {}
+            _ => exit_probe_result_not_supported(probe),
+        }
+
+        if args.verbose {
+            print_verbose_requirements(&apt_requirements);
+        } else {
             for requirement in &apt_requirements {
                 println!("{}", provision_deps::render_requirement(requirement));
             }
         }
+
         return Ok(());
     }
 
@@ -281,6 +293,22 @@ fn run_enable_with_provision_deps(args: &WorldEnableArgs) -> Result<()> {
                     .unwrap_or("unknown")
             );
         }
+    }
+
+    let probe = match probe_world_manager() {
+        Ok(probe) => probe,
+        Err(err) => provision_deps::exit_backend_unavailable(&err),
+    };
+
+    print_probe_result(probe);
+
+    match probe.manager {
+        WorldManager::Apt => {}
+        _ => exit_probe_result_not_supported(probe),
+    }
+
+    if args.verbose {
+        print_verbose_requirements(&apt_requirements);
     }
 
     config.set_world_enabled(true);
