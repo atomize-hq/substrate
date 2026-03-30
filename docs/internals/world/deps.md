@@ -10,7 +10,7 @@ Operator-facing docs live under:
 The shell:
 1) Resolves the effective inventory view (built-ins + global inventory + workspace inventory chain).
 2) Resolves the effective enabled list (global + workspace patches).
-3) Computes the in-scope package set and normalized APT requirement set.
+3) Computes the in-scope package set and normalized APT and pacman requirement sets.
 4) If APT or pacman requirements exist, probes them read-only with `dpkg-query` and `pacman -Q`
    inside the world.
 5) If any system-package requirement is unsatisfied, exits `4` with remediation that points

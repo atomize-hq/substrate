@@ -9,6 +9,8 @@
 ## Scope
 
 - Feature directory: `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/` (ASSUMPTION: new pack)
+- Authoritative contract: `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/contract.md`
+- This ADR is rationale and sequencing context only; it must defer to the pack-root contract for normative behavior.
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/system/standards/adr/EXECUTIVE_SUMMARY_STANDARD.md`
@@ -17,7 +19,8 @@
 
 - Intake: `docs/project_management/intake/adrs/routing_weasel_adr_intake.md`
 - Internals (current behavior notes): `docs/internals/world/deps.md`
-- World-deps contract / install classes: `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
+- Pack-root manager-aware contract: `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/contract.md`
+- Inventory layering / enabled resolution / non-system-package behavior: `docs/project_management/packs/implemented/world-deps-packages-bundles-contract/contract.md`
 - Provisioning-time system packages (APT baseline): `docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md`
 - Linux guest-rootfs roadmap context (system packages on Linux): `docs/project_management/adrs/draft/ADR-0009-linux-guest-rootfs-backend-and-linux-system-packages-provisioning.md`
 - Operator reference: `docs/reference/world/deps/README.md`
@@ -38,18 +41,19 @@ ADR_BODY_SHA256: 56a82150e411657c131324d9a9c385d433b1e1195cf7c71813d3c7c0ae53481
 ### Changes (operator-facing)
 
 - Add Arch-family (pacman) provisioning-time support for world-deps system packages
-  - Existing: Substrate’s provisioning-time “system package” support is effectively APT-only; on Arch-family world OSes this can yield confusing “apt-like” expectations and incorrect remediation.
-  - New: When provisioning is supported, `substrate world enable --provision-deps` can provision world-deps system packages via `pacman` for Arch-family world OSes. On unsupported worlds/backends, Substrate fails with explicit “world OS package manager unsupported / provisioning unsupported” guidance (and does not imply host OS mutation).
+  - Existing: the canonical world-deps contract already defines the runtime fail-early posture and the provisioning-time guardrails; this ADR records the rationale for extending that contract family to `pacman`.
+  - New: when provisioning is supported, `substrate world enable --provision-deps` can provision world-deps system packages via `pacman` for Arch-family world OSes. On unsupported worlds/backends, Substrate fails with explicit “world OS package manager unsupported / provisioning unsupported” guidance (and does not imply host OS mutation).
   - Why: Extend the provisioning-time workflow to additional guest OS families without weakening the hardened runtime contract or mutating host-native Linux workstations.
   - Links:
     - `docs/project_management/adrs/draft/ADR-0033-routing-weasel.md#L1`
     - `docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md#L1`
-    - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md#L1`
+    - `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/contract.md#L1`
 
 ## Problem / Context
 
 - Some Substrate worlds (now or soon: Linux guest-rootfs; alternative guest images) may be Arch-family, where APT is not the correct OS package manager.
 - `ADR-0030` locks the posture that OS/system package mutation is explicit and provisioning-time only (`substrate world enable --provision-deps`), not a side-effect of runtime `substrate world deps current sync|install`.
+- The normative world-deps contract already lives in the pack-root contract; this ADR should not create a parallel source of truth.
 - Without non-APT provisioning support, the `--provision-deps` workflow is incomplete for non-Debian/Ubuntu world OSes, and failure modes tend to produce confusing/incorrect “apt-like” operator guidance.
 
 ## Goals
@@ -150,7 +154,7 @@ Introduce an abstract system-packages method and have Substrate translate packag
     - probe the world OS family/manager, and
     - execute the correct system-package provisioning path (APT per `ADR-0030`; pacman per this ADR) when supported.
   - `crates/world-agent/src/service.rs` (and/or execution plumbing): ensure provisioning execution is possible without weakening hardened runtime execution (distinct request profile or explicit guard rails).
-  - Docs: update operator reference and error text (`docs/reference/world/deps/…`) to reflect manager-aware provisioning guidance.
+  - Docs: update operator reference and error text (`docs/reference/world/deps/…`) to reflect manager-aware provisioning guidance without overriding the pack-root contract.
 - End-to-end flow:
   - Inputs:
     - world-deps inventory (built-ins + global + workspace chain)

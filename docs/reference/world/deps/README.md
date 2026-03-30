@@ -60,7 +60,7 @@ If a third-party installer “insists” on writing to `$HOME`, set its tool-spe
 - See enabled: `substrate world deps current list enabled`
 - Enable globally: `substrate world deps global add <name...>`
 - Enable for a workspace: `substrate world deps workspace add <name...>`
-- Provision APT-backed system packages: `substrate world enable --provision-deps`
+- Provision system packages: `substrate world enable --provision-deps`
 - Apply enabled set: `substrate world deps current sync`
 - Debug an item: `substrate world deps current show <name> --explain`
 
@@ -82,14 +82,15 @@ Operator workflow:
 ### Provisioning contract
 
 `substrate world enable --provision-deps` is the only operator-facing Substrate workflow that performs
-APT package mutation for world deps, and only on supported guest backends.
+provisioning-time system-package mutation for world deps, and only on supported guest backends.
 
 Behavior:
 - Supported on guest-backed worlds such as macOS Lima.
+- When the active world OS is Arch-family, pacman-backed provisioning follows the same operator-invoked `--provision-deps` path.
 - Unsupported on Linux host-native; Substrate must not mutate the host OS.
 - Unsupported on Windows.
 - Uses the effective enabled world-deps set for the current directory.
-- `--dry-run` prints the derived APT requirement set without mutating the world.
+- `--dry-run` prints the derived requirement sets without mutating the world.
 - `--verbose` additionally shows the provisioning request posture used for the world-agent call.
 
 ### Runtime contract
@@ -108,4 +109,4 @@ Behavior:
 Internal details and rationale:
 - `docs/internals/world/deps.md`
 - WDAP1 provisioning/remediation contract:
-  `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`
+  `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md` (compatibility shim only)
