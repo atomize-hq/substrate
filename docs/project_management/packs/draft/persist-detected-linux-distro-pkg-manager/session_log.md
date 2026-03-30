@@ -50,3 +50,24 @@
 - Verification results:
   - `rg -n "install_state.json|schema_version|host_state.platform|REM-002|checkpoint|feature-smoke|ci-compile-parity|ci-testing|plan.md|tasks.json|session_log.md|pack-closeout" docs/INSTALLATION.md docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/plan.md docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/tasks.json docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/session_log.md docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager-fse/governance/pack-closeout.md docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager-fse/governance/remediation-log.md` → confirmed the operator doc and evidence surfaces already pointed at the intended checkpoint story.
   - `sed -n '96,132p' docs/INSTALLATION.md` → confirmed the Linux metadata section now states the Linux-only boundary explicitly.
+
+## START — 2026-03-30T01:44:08Z — implementation — S3-seam-exit-gate
+- Feature: `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/`
+- Slice: `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager-fse/threaded-seams/seam-3-smoke-and-operator-conformance/slice-3-seam-exit-gate.md`
+- Goal: Publish seam-exit evidence for `C-05` / `C-06` and hand the pack toward promotion without changing runtime surfaces.
+- Owned tracked paths:
+  - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager-fse/governance/seam-3-closeout.md`
+  - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager-fse/governance/pack-closeout.md`
+  - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/session_log.md`
+- Planned checks:
+  - review `seam-3-closeout.md` against `seam.md`, `review.md`, S1/S2 outputs, and the remediation log
+  - confirm any pack-closeout wording stays handoff-only and does not pull in promotion handling
+
+## END — 2026-03-30T01:44:08Z — implementation — S3-seam-exit-gate
+- Summary:
+  - Recorded the landed SEAM-3 exit-gate evidence in `governance/seam-3-closeout.md`, including the smoke/doc evidence delta, `C-05` / `C-06`, `THR-02` / `THR-03`, and the resolved `REM-002` disposition.
+  - Updated `governance/pack-closeout.md` to reflect that the pack now has landed seam closeouts and that promotion remains a separate follow-on workflow.
+- Verification results:
+  - `sed -n '1,260p' docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager-fse/governance/seam-3-closeout.md` → confirmed the closeout now captures the seam-exit gate record and readiness state.
+  - `sed -n '1,220p' docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager-fse/governance/pack-closeout.md` → confirmed the handoff summary stays documentary and does not perform promotion.
+  - `sed -n '1,260p' docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/session_log.md` → confirmed the S3 implementation entry is recorded alongside the earlier S2 evidence-alignment entry.

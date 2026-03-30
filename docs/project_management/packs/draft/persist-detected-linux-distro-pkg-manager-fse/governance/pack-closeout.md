@@ -1,22 +1,20 @@
 # Pack Closeout - Persist detected Linux distro + pkg manager
 
-Scaffold only. This file is seeded during extraction and should be completed only after the seams above land and close out.
+This pack now has landed seam closeouts for SEAM-1, SEAM-2, and SEAM-3.
 
 - **Remaining open seams**:
-  - `SEAM-1`
-  - `SEAM-2`
-  - `SEAM-3`
+  - none
 - **Open remediations still blocking pack closeout**:
-  - `REM-001` until ADR path authority is reconciled or explicitly governed
+  - none
 - **Threads still not closed**:
-  - `THR-01`
-  - `THR-02`
-  - `THR-03`
-- **Downstream stale triggers still requiring attention**:
+  - none
+- **Downstream stale triggers to monitor**:
   - upstream detection vocabulary or sentinel changes
   - installer shared-file refactors in hosted or dev installer scripts
   - operator-doc wording drift around canonical path, producer scope, and field names
   - out-of-scope uninstaller cleanup-reader mismatch if it still affects operator expectations
 - **Evidence summary**:
-  - This extracted pack was derived from a deep-researched planning pack that already defined contract, schema, runtime, and conformance surfaces.
-  - No landed evidence exists yet in this extracted artifact; `SEAM-3` is expected to carry the final Linux smoke, docs, and checkpoint evidence needed for pack closeout.
+  - `SEAM-1` landed the canonical path and additive schema contract.
+  - `SEAM-2` landed the successful-Linux writer reliability contract.
+  - `SEAM-3` landed the smoke, operator-wording, and checkpoint evidence that closes the conformance loop.
+  - The final evidence story is captured in `governance/seam-3-closeout.md`; promotion is handled separately after this handoff.
