@@ -226,3 +226,13 @@ flowchart LR
   - `NASP-PWS-tasks_checkpoints`
     - owns the source pack's checkpoint cadence, kickoff prompts, `tasks.json`, `plan.md`, `session_log.md`, and `quality_gate_report.md`
     - remains represented here through closeout scaffolds, horizon policy, and pack-level governance rather than as a seam with product behavior
+
+## Terminal boundary accounting
+
+The pack does not introduce a separate closed-state vocabulary. At the SEAM-6 terminal boundary, the existing `revalidated` thread states are retained and recorded as consumed by the seam-exit closeout with no downstream carry.
+
+- `THR-01`: `revalidated`; consumed by `SEAM-6`; no downstream carry.
+- `THR-02`: `revalidated`; consumed by `SEAM-6`; no downstream carry.
+- `THR-03`: `revalidated`; consumed by `SEAM-6`; no downstream carry.
+- `THR-04`: `revalidated`; consumed by `SEAM-6`; no downstream carry.
+- `THR-05`: `revalidated`; consumed by `SEAM-6`; no downstream carry.
