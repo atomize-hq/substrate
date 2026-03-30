@@ -33,8 +33,8 @@ The extracted scope remains the same as the source pack:
 
 Execution horizon:
 
-- Active seam: `SEAM-5`
-- Next seam: `SEAM-6`
+- Active seam: `SEAM-6`
+- Next seam: none
 
 Policy:
 

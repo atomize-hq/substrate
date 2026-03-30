@@ -2,8 +2,8 @@
 seam_id: SEAM-5
 seam_slug: runtime-fail-early-remediation
 type: platform
-status: exec-ready
-execution_horizon: active
+status: landed
+execution_horizon: future
 plan_version: v2
 basis:
   currentness: current
@@ -27,18 +27,18 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S3
-  status: pending
+  status: passed
 open_remediations: []
 ---
 
 # SEAM-5 - Runtime fail-early and remediation
 
-This seam is now active and exec-ready. Its authoritative pre-exec planning lives in `threaded-seams/seam-5-runtime-fail-early-remediation/`.
+This seam is now landed and no longer in the forward planning window. Its authoritative execution record lives in `threaded-seams/seam-5-runtime-fail-early-remediation/` plus `governance/seam-5-closeout.md`.
 
 - **Goal / value**:
   - Keep runtime system-package handling read-only and deterministic while extending fail-early behavior and remediation to pacman-backed items alongside APT-backed items.
@@ -72,9 +72,7 @@ This seam is now active and exec-ready. Its authoritative pre-exec planning live
   - remediation must include the exact command `substrate world enable --provision-deps`
 - **Dependencies**
   - Direct blockers:
-    - `SEAM-1` publishing `C-01`
-    - `SEAM-3` publishing `C-03`
-    - `SEAM-4` publishing `C-04`
+    - none; `SEAM-1`, `SEAM-3`, and `SEAM-4` have already published the contracts this seam consumed.
   - Transitive blockers:
     - older runtime docs and tests still encode APT-only or mutation-at-runtime assumptions that can stale this seam's basis
   - Direct consumers:
@@ -112,9 +110,9 @@ This seam is now active and exec-ready. Its authoritative pre-exec planning live
   - This seam is a safety seam as much as a runtime UX seam. Its main job is to keep system-package mutation out of runtime while still giving operators deterministic next steps.
   - Backend-specific guidance for Linux host-native and Windows is load-bearing because it prevents host-mutation misinterpretation.
 - **Downstream decomposition context**:
-  - This seam is now active and exec-ready because `SEAM-4` closed with a passed seam-exit gate and published the `THR-04` handoff it consumes.
-  - The most important threads are `THR-01`, `THR-03`, `THR-04`, and `THR-05`.
-  - Its authoritative pre-exec planning now lives in `threaded-seams/seam-5-runtime-fail-early-remediation/`.
+  - Why this seam is now `future`: the runtime fail-early work is landed, `THR-05` is published, and active planning has moved to the terminal validation and reconciliation seam `SEAM-6`.
+  - The most important threads were `THR-01`, `THR-03`, `THR-04`, and `THR-05`, which are now closed out through landed runtime evidence and the downstream handoff.
+  - Its authoritative execution record lives in `threaded-seams/seam-5-runtime-fail-early-remediation/` and `governance/seam-5-closeout.md`.
   - Source-plan lineage: `NASP-PWS-runtime_fail_early` and `NASP3`.
 - **Expected seam-exit concerns**:
   - Contracts likely to publish:

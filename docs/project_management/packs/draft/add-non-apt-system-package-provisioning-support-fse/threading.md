@@ -2,13 +2,13 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-5`
-- **Next seam**: `SEAM-6`
+- **Active seam**: `SEAM-6`
+- **Next seam**: none
 - **Future seams**: none
 - **Horizon inference**:
-  - `SEAM-4` has landed, published `THR-04`, and moved out of the forward planning window.
-  - `SEAM-5` is now the active delivery seam because `THR-03` and `THR-04` are published, the prior active seam handed off with a passed seam-exit gate, and the runtime fail-early basis is current.
-  - `SEAM-6` is the next seam because terminal validation and reconciliation now depend most directly on `SEAM-5` publishing `THR-05`.
+  - `SEAM-5` has landed, published `THR-05`, and moved out of the forward planning window.
+  - `SEAM-6` is now the active terminal seam because `THR-01` through `THR-05` are landed or revalidated and the prior active seam handed off with a passed seam-exit gate.
+  - No queued `next` seam remains in this pack because `SEAM-6` is the terminal conformance seam.
 - **Governance-only lineage**:
   - `NASP-PWS-tasks_checkpoints` is intentionally represented as pack governance only. It is not a seam and does not own product behavior.
 
@@ -179,11 +179,11 @@
     - `C-05`
   - **Purpose**:
     - Carry runtime fail-early semantics, explicit-item scoping, and manager-aware remediation wording into validation evidence and doc reconciliation.
-  - **State**: published
+  - **State**: revalidated
   - **Revalidation trigger**:
     - runtime in-scope rules, read-only probe families, or backend-specific remediation wording change
   - **Satisfied by**:
-    - `SEAM-5` closeout publishing runtime read-only probe evidence, explicit-item scoping evidence, and accepted remediation wording
+    - `SEAM-5` closeout publishing runtime read-only probe evidence, explicit-item scoping evidence, and accepted remediation wording, with `SEAM-6` seam-local review revalidating the handoff for terminal conformance work
   - **Notes**:
     - This thread is what keeps runtime behavior from drifting back toward mutation-at-runtime semantics.
 
@@ -210,8 +210,8 @@ flowchart LR
 
 1. `SEAM-1` has already published the manager-aware contract, decision register, and authority handoff on `THR-01`.
 2. `SEAM-4` has now landed with a passed seam-exit gate and published `THR-04`, so the provisioning-routing handoff is a closeout-backed fact.
-3. `SEAM-5` has now published `THR-05`, closing the runtime fail-early handoff from `SEAM-5`.
-4. `SEAM-6` is next because the terminal conformance seam consumes the published `THR-05` handoff from `SEAM-5`.
+3. `SEAM-5` has now landed with a passed seam-exit gate and a published `THR-05` handoff.
+4. `SEAM-6` is the terminal active seam because it now consumes the revalidated `THR-05` handoff and no queued `next` seam remains.
 
 ## Workstreams
 

@@ -2,14 +2,19 @@
 seam_id: SEAM-6
 seam_slug: validation-evidence-contract-reconciliation
 type: conformance
-status: proposed
-execution_horizon: next
+status: exec-ready
+execution_horizon: active
 plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+  - governance/seam-1-closeout.md
+  - governance/seam-2-closeout.md
+  - governance/seam-3-closeout.md
+  - governance/seam-4-closeout.md
+  - governance/seam-5-closeout.md
   required_threads:
   - THR-01
   - THR-02
@@ -22,15 +27,15 @@ basis:
   - overlapping ADR or docs continue to present a second truth for manager-aware behavior
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
 seam_exit_gate:
   required: true
-  planned_location: reserved_final_slice
+  planned_location: S3
   status: pending
 open_remediations:
 - REM-001
@@ -38,6 +43,8 @@ open_remediations:
 ---
 
 # SEAM-6 - Validation evidence and contract reconciliation
+
+This seam is now active and exec-ready. Its authoritative pre-exec planning lives in `threaded-seams/seam-6-validation-evidence-contract-reconciliation/`.
 
 - **Goal / value**:
   - Lock the cross-platform evidence story and remove second-truth drift from overlapping ADR and documentation surfaces once the manager-aware behavior seams land.
@@ -72,11 +79,7 @@ open_remediations:
   - reconciliation is not complete until the named overlapping docs stop presenting a second truth for the shared manager-aware contract
 - **Dependencies**
   - Direct blockers:
-    - `SEAM-1`
-    - `SEAM-2`
-    - `SEAM-3`
-    - `SEAM-4`
-    - `SEAM-5`
+    - none; `SEAM-1` through `SEAM-5` now publish the contracts and closeouts this terminal seam consumes.
   - Transitive blockers:
     - checkpoint/task automation may need to be refreshed if validation scope changes, but that governance work is not a seam here
   - Direct consumers:
@@ -118,7 +121,7 @@ open_remediations:
   - This seam should not create new behavior. Its job is to prove and lock earlier behavior so the feature does not drift after landing.
   - Because it is a conformance seam, it must not become a cleanup bucket for net-new probe or provisioning work that belongs upstream.
 - **Downstream decomposition context**:
-  - This seam is now `next` and terminal. It should remain seam-brief only until the earlier behavior seams publish enough truth to validate and reconcile against.
+  - This seam is now `active` and terminal because `SEAM-5` closed with a passed seam-exit gate, published `THR-05`, and left the terminal validation basis current.
   - The most important threads are `THR-01`, `THR-02`, `THR-03`, `THR-04`, and `THR-05`.
   - The first seam-local review should focus on parity completeness, smoke/manual fixture assumptions, and every named second-truth reconciliation target.
   - Source-plan lineage: `NASP-PWS-docs_validation`, `NASP4`, `platform-parity-spec.md`, `manual_testing_playbook.md`, and the three smoke scripts.
@@ -126,7 +129,7 @@ open_remediations:
   - Contracts likely to publish:
     - none beyond terminal evidence and reconciliation truth
   - Threads likely to advance:
-    - `THR-01` through `THR-05` from `published` to `revalidated` or `closed`
+    - `THR-01` through `THR-05` from `revalidated` to `closed` or explicit terminal carry
   - Review-surface areas likely to shift after landing:
     - the platform posture diagram once automated vs manual evidence is fully recorded
     - the touch-surface map around reconciliation targets
