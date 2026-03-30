@@ -44,7 +44,7 @@ External authoritative inputs:
 - The producer write path is `<effective_prefix>/install_state.json`.
 - `effective_prefix` resolves from the installer's effective `--prefix` value.
 - The default prefix is `~/.substrate`.
-- The operator-facing name for the same canonical path is `$SUBSTRATE_HOME/install_state.json`.
+- The operator-facing name for the same canonical path is the default-prefix alias `$SUBSTRATE_HOME/install_state.json`.
 - This feature introduces no second metadata file and no feature-local config file.
 - `schema_version` remains `1`.
 - The persisted payload contract is additive-only under `schema_version = 1`.

@@ -6,19 +6,19 @@
 - Owner(s): TBD (ASSUMPTION: installer/host-provisioning maintainers)
 
 ## Scope
-- Feature directory: `docs/project_management/packs/draft/stashing-ferret/` (to be created during planning)
+- Feature directory: `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/system/standards/adr/EXECUTIVE_SUMMARY_STANDARD.md`
 
 ## Related Docs (links only)
 - Intake: `docs/project_management/intake/adrs/stashing_ferret_adr_intake.md`
-- Plan: `docs/project_management/packs/draft/stashing-ferret/plan.md`
-- Tasks: `docs/project_management/packs/draft/stashing-ferret/tasks.json`
-- Spec manifest: `docs/project_management/packs/draft/stashing-ferret/spec_manifest.md`
+- Plan: `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/plan.md`
+- Tasks: `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/tasks.json`
+- Spec manifest: `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/spec_manifest.md`
 - Specs: (TBD; at minimum an installer/metadata spec)
-- Decision Register (if required): `docs/project_management/packs/draft/stashing-ferret/decision_register.md`
-- Impact Map (if required): `docs/project_management/packs/draft/stashing-ferret/impact_map.md`
+- Decision Register (if required): `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/decision_register.md`
+- Impact Map (if required): `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/impact_map.md`
 
 ## Executive Summary (Operator)
 
@@ -171,7 +171,7 @@ ADR_BODY_SHA256: 45d3c1ee693075301345bff0e7fffea5197a59a57b8941c04e7c9c458fd321e
 
 ## Decision Summary
 - Decision Register entries (if applicable):
-  - `docs/project_management/packs/draft/stashing-ferret/decision_register.md`:
+  - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/decision_register.md`:
     - DR-0001 (metadata persistence location)
     - DR-0002 (field naming + nesting)
     - DR-0003 (pkg_manager.source enum set)

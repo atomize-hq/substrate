@@ -35,11 +35,11 @@ ADR-0032 requires Linux distro and package-manager metadata to survive beyond th
 **Recommendation**
 
 - **Selected:** Option A — Extend `install_state.json`
-- **Rationale (crisp):** one canonical installer metadata file is simpler, stays additive under `schema_version = 1`, matches the existing cleanup surface, and avoids fragmented state.
+- **Rationale (crisp):** one canonical installer metadata file is simpler, stays additive under `schema_version = 1`, matches the existing cleanup surface, keeps the default-prefix alias relationship unambiguous, and avoids fragmented state.
 
 **Follow-up tasks (explicit)**
 
-- `install-state-schema-spec.md` must define the additive `host_state.platform.*` fields under `schema_version = 1`.
+- `install-state-schema-spec.md` must define the additive `host_state.platform.*` fields under `schema_version = 1` and preserve the canonical location / alias wording.
 - `slices/PDLDPM0/PDLDPM0-spec.md` must trace field persistence into the existing document.
 - `slices/PDLDPM1/PDLDPM1-spec.md` must require reliable creation and update of `install_state.json` on successful Linux installs.
 - `docs/INSTALLATION.md` must describe only the canonical `install_state.json` path for this feature.
@@ -76,7 +76,7 @@ The planning pack must choose one stable JSON shape for persisted platform metad
 **Recommendation**
 
 - **Selected:** Option A — Nest new fields under `host_state.platform.os_release.*` and `host_state.platform.pkg_manager.*`
-- **Rationale (crisp):** one namespaced platform block is additive, preserves the existing host-state structure, keeps the field contract testable, and leaves package-manager vocabulary ownership external.
+- **Rationale (crisp):** one namespaced platform block is additive, preserves the existing host-state structure, keeps the field contract testable, leaves package-manager vocabulary ownership external, and keeps the canonical file rule independent of schema shape.
 
 **Follow-up tasks (explicit)**
 
