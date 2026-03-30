@@ -4,7 +4,7 @@ pack_version: v1
 pack_status: extracted
 source_ref: persist-detected-linux-distro-pkg-manager.zip
 execution_horizon:
-  active_seam: SEAM-3
+  active_seam: null
   next_seam: null
 ---
 
@@ -48,7 +48,7 @@ execution_horizon:
   - Linux-only behavior change; macOS and Windows stay compile and test parity participants only.
   - `install_state.json` remains the only persisted metadata file touched by this scope.
   - Same-directory temp-file replacement is required; in-place truncation is not allowed.
-  - The extracted pack must keep exactly one `active` seam and may leave `next_seam: null` when no future seam remains in the forward window.
+  - While forward planning remains open, the extracted pack keeps exactly one `active` seam and may leave `next_seam: null` when no future seam remains in the forward window.
   - Seam-local `review.md`, `seam.md`, and `slice-*.md` artifacts may exist only for the active seam and only after promotion refreshes them against landed upstream reality.
 - **External systems / dependencies**:
   - Upstream detection contract: `best-effort-distro-package-manager`
@@ -64,7 +64,7 @@ execution_horizon:
   - Invalid JSON, unreadable file, or non-`1` schema fallback behavior is contractually defined but still requires careful seam-local review before execution.
   - The extractor is inferring seam order from the source slice order; if upstream priorities changed since the deep-researched pack was produced, seam-local revalidation must confirm the horizon.
 - **Assumptions**:
-  - `PDLDPM0 -> PDLDPM1 -> PDLDPM2` remains the intended execution order and is therefore used to infer `SEAM-3` as the current active seam after `SEAM-2` closeout.
+  - `PDLDPM0 -> PDLDPM1 -> PDLDPM2` remained the intended execution order and was used to infer `SEAM-3` as the final active seam after `SEAM-2` closeout.
   - `CP1` remains the single checkpoint after the conformance/evidence seam unless downstream planning intentionally changes the horizon.
   - Source-pack decisions DR-0001 through DR-0005 remain the best available authority until superseded by newer accepted inputs.
-  - `governance/seam-1-closeout.md` and `governance/seam-2-closeout.md` are now landed evidence; `governance/seam-3-closeout.md` remains scaffolded until its owning seam lands.
+  - `governance/seam-1-closeout.md`, `governance/seam-2-closeout.md`, and `governance/seam-3-closeout.md` are now landed evidence, so no active seam remains in the forward window.

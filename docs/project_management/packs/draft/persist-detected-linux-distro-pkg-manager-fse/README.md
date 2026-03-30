@@ -28,16 +28,17 @@ The extracted scope remains the same as the source pack:
 - The source pack's planning workstreams are preserved as internal reasoning inputs, but they are rolled up into higher-level seams because extractor v2.3 must stay above slice decomposition.
 - `CP1` remains an end-of-feature evidence checkpoint, but it is treated here as part of the conformance seam rather than as a standalone seam.
 - `governance/seam-1-closeout.md` and `governance/seam-2-closeout.md` now record landed reality.
-- `governance/seam-3-closeout.md` remains scaffolded until the conformance seam lands.
+- `governance/seam-3-closeout.md` now records the landed conformance closeout.
 
 Execution horizon:
 
-- Active seam: `SEAM-3`
+- Active seam: none
 - Next seam: none
+- Future seam(s): `SEAM-1`, `SEAM-2`, `SEAM-3`
 
 Policy:
 
-- only the active seam is eligible for authoritative downstream sub-slices by default
+- only an active seam is eligible for authoritative downstream sub-slices by default
 - no next seam is currently reserved; new forward-window planning should be selected only if pack scope expands
 - active and next seams must eventually terminate in a dedicated final `seam-exit-gate` slice once seam-local planning begins
 - future seams remain seam briefs

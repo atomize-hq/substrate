@@ -2,8 +2,8 @@
 seam_id: SEAM-3
 seam_slug: smoke-and-operator-conformance
 type: conformance
-status: exec-ready
-execution_horizon: active
+status: landed
+execution_horizon: future
 plan_version: v1
 basis:
   currentness: current
@@ -25,12 +25,12 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: threaded-seams/seam-3-smoke-and-operator-conformance/slice-3-seam-exit-gate.md
-  status: pending
+  status: passed
 open_remediations: []
 ---
 
@@ -107,9 +107,8 @@ open_remediations: []
   - This seam should add evidence and documentation accuracy, not new runtime surface area.
   - It is the pack's main drift-guard seam and should capture any delta between planned and landed behavior before pack closeout.
 - **Downstream decomposition context**:
-  - This seam is `active` because `SEAM-1` and `SEAM-2` closeouts now publish the contract, path, branch-matrix, and reliability truth that the conformance work consumes.
-  - The most important threads are `THR-02` and `THR-03`, and both are revalidated against the current upstream closeouts.
-  - The first seam-local review should focus on exact smoke scenario coverage, documentation wording accuracy, and whether checkpoint evidence still matches the current contract.
+  - This seam is landed and no longer occupies the forward execution horizon because the conformance work has closed the remaining pack evidence loop.
+  - The most important inbound threads were `THR-02` and `THR-03`; both are now closed by the accepted SEAM-3 closeout evidence.
   - Source-plan lineage: primarily `PDLDPM2` plus the old `plan.md`, `tasks.json`, and checkpoint plan surfaces.
 - **Expected seam-exit concerns**:
   - Contracts likely to publish:
