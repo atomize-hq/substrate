@@ -2,14 +2,14 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-2`
-- **Next seam**: `SEAM-3`
+- **Active seam**: `SEAM-3`
+- **Next seam**: none
 - **Future seam(s)**: none
 
 Execution discipline for this extracted pack:
 
-- `SEAM-2` is the only seam eligible for authoritative downstream decomposition by default.
-- `SEAM-3` may later receive seam-local review and slices, but deeper planning must stay provisional until it revalidates against landed `SEAM-1` and `SEAM-2` truth.
+- `SEAM-3` is the only seam eligible for authoritative downstream decomposition by default.
+- No next seam remains in the forward window; any new next seam requires an explicit horizon decision.
 
 ## Contract registry
 
@@ -101,11 +101,11 @@ Execution discipline for this extracted pack:
   - **Carried contract IDs**: `C-03`, `C-04`
   - **Purpose**:
     - Carry the landed write matrix and reliability semantics into smoke coverage, operator docs, and checkpoint evidence.
-  - **State**: `published`
+  - **State**: `revalidated`
   - **Revalidation trigger**:
     - Any change to the successful-Linux branch matrix, dry-run/no-write behavior, non-Linux scope, temp-file placement, replace mechanics, or warning-only failure posture.
   - **Satisfied by**:
-    - `SEAM-2` closeout records landed writer behavior and `SEAM-3` consumes that record to update smoke branches, docs, and checkpoint evidence.
+    - `SEAM-2` closeout published landed writer behavior and `SEAM-3` seam-local review revalidated that record for smoke, docs, and checkpoint work.
   - **Notes**:
     - `CP1` belongs to this thread as evidence, not as a separate seam.
 
@@ -115,7 +115,7 @@ Execution discipline for this extracted pack:
   - **Carried contract IDs**: `C-01`, `C-02`
   - **Purpose**:
     - Carry the exact field names, path wording, and additive-compatibility rules into conformance work so smoke assertions and docs stay aligned to the persisted contract.
-  - **State**: `published`
+  - **State**: `revalidated`
   - **Revalidation trigger**:
     - Schema-version policy changes, field naming changes, path wording changes, or ADR reconciliation that changes which directory is authoritative.
   - **Satisfied by**:

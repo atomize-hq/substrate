@@ -2,14 +2,16 @@
 seam_id: SEAM-3
 seam_slug: smoke-and-operator-conformance
 type: conformance
-status: proposed
-execution_horizon: next
+status: exec-ready
+execution_horizon: active
 plan_version: v1
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+    - governance/seam-1-closeout.md
+    - governance/seam-2-closeout.md
   required_threads:
     - THR-02
     - THR-03
@@ -19,17 +21,18 @@ basis:
     - smoke harness scenarios or CI checkpoint surfaces move before this seam enters the horizon
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
 seam_exit_gate:
   required: true
-  planned_location: reserved_final_slice
+  planned_location: threaded-seams/seam-3-smoke-and-operator-conformance/slice-3-seam-exit-gate.md
   status: pending
-open_remediations: []
+open_remediations:
+  - REM-002
 ---
 
 # SEAM-3 - Smoke and operator conformance
@@ -105,8 +108,8 @@ open_remediations: []
   - This seam should add evidence and documentation accuracy, not new runtime surface area.
   - It is the pack's main drift-guard seam and should capture any delta between planned and landed behavior before pack closeout.
 - **Downstream decomposition context**:
-  - This seam is `future` because the source pack positioned smoke/docs/CP1 work after contract and runtime semantics were already stable.
-  - The most important threads are `THR-02` and `THR-03`.
+  - This seam is `active` because `SEAM-1` and `SEAM-2` closeouts now publish the contract, path, branch-matrix, and reliability truth that the conformance work consumes.
+  - The most important threads are `THR-02` and `THR-03`, and both are revalidated against the current upstream closeouts.
   - The first seam-local review should focus on exact smoke scenario coverage, documentation wording accuracy, and whether checkpoint evidence still matches the current contract.
   - Source-plan lineage: primarily `PDLDPM2` plus the old `plan.md`, `tasks.json`, and checkpoint plan surfaces.
 - **Expected seam-exit concerns**:
@@ -114,8 +117,8 @@ open_remediations: []
     - `C-05`
     - `C-06`
   - Threads likely to advance:
-    - `THR-02` from `published` to `revalidated` and then toward `closed`
-    - `THR-03` from `published` to `revalidated` and then toward `closed`
+    - `THR-02` from `revalidated` toward `closed`
+    - `THR-03` from `revalidated` toward `closed`
   - Review-surface areas likely to shift after landing:
     - final validation and checkpoint evidence flow
     - operator-facing wording about the canonical path and producer scope

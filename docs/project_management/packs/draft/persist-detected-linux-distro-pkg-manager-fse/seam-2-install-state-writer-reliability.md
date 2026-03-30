@@ -2,8 +2,8 @@
 seam_id: SEAM-2
 seam_slug: install-state-writer-reliability
 type: platform
-status: exec-ready
-execution_horizon: active
+status: landed
+execution_horizon: future
 plan_version: v2
 basis:
   currentness: current
@@ -23,12 +23,12 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: threaded-seams/seam-2-install-state-writer-reliability/slice-3-seam-exit-gate.md
-  status: pending
+  status: passed
 open_remediations:
   - REM-003
 ---
@@ -108,7 +108,7 @@ open_remediations:
   - It should preserve prior good state whenever a temp-file write or replace fails.
   - It should not hide unfinished net-new behavior inside any eventual seam-exit slice; runtime delivery must be complete before closeout accounting begins.
 - **Downstream decomposition context**:
-  - This seam is now `active` because `SEAM-1` closeout published `C-01` and `C-02`, and `THR-01` is revalidated for execution.
+  - This seam is landed and no longer occupies the forward execution horizon because `SEAM-2` closeout published `C-03`, `C-04`, and `THR-02` for downstream conformance work.
   - The most important inbound thread is `THR-01`; `THR-02` becomes the outbound handoff to conformance.
   - The refreshed seam-local review focuses on branch matrix completeness, temp-file placement, invalid-file fallback, and shared-file sequencing risk in the current hosted and dev installer scripts.
   - Source-plan lineage: primarily `PDLDPM1`, with the old pack's accepted write matrix and atomicity rules preserved as seam-level requirements.

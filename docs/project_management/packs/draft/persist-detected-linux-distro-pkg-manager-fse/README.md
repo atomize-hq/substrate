@@ -27,18 +27,18 @@ The extracted scope remains the same as the source pack:
 - The source pack's accepted slice order `PDLDPM0 -> PDLDPM1 -> PDLDPM2` is the best available critical-path signal, so it is used to infer the execution horizon in this seam pack.
 - The source pack's planning workstreams are preserved as internal reasoning inputs, but they are rolled up into higher-level seams because extractor v2.3 must stay above slice decomposition.
 - `CP1` remains an end-of-feature evidence checkpoint, but it is treated here as part of the conformance seam rather than as a standalone seam.
-- `governance/seam-1-closeout.md` now records landed SEAM-1 reality.
-- Remaining closeout documents in `governance/` stay scaffolds until their owning seams land.
+- `governance/seam-1-closeout.md` and `governance/seam-2-closeout.md` now record landed reality.
+- `governance/seam-3-closeout.md` remains scaffolded until the conformance seam lands.
 
 Execution horizon:
 
-- Active seam: `SEAM-2`
-- Next seam: `SEAM-3`
+- Active seam: `SEAM-3`
+- Next seam: none
 
 Policy:
 
 - only the active seam is eligible for authoritative downstream sub-slices by default
-- the next seam may later receive seam-local review + slices, and only provisional candidate-subslice hints
+- no next seam is currently reserved; new forward-window planning should be selected only if pack scope expands
 - active and next seams must eventually terminate in a dedicated final `seam-exit-gate` slice once seam-local planning begins
 - future seams remain seam briefs
 
