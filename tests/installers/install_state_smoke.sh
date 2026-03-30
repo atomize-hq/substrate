@@ -869,7 +869,7 @@ run_cleanup_scenario() (
   fi
 
   local home_dir="${work_root}/home"
-  local prefix="${home_dir}/.substrate"
+  local prefix="${work_root}/custom-substrate-home"
   local stub_bin="${work_root}/stub-bin"
   local fake_root="${work_root}/fakeroot"
   local systemctl_log="${work_root}/systemctl.log"
@@ -919,6 +919,7 @@ EOF_STUB
   SUBSTRATE_TEST_LINGER_STATE_ALICE="yes" \
   FAKE_ROOT="${fake_root}" \
   HOME="${home_dir}" \
+  SUBSTRATE_HOME="${prefix}" \
   PATH="${harness_path}" \
   SHIM_ORIGINAL_PATH="${harness_path}" \
   "${REPO_ROOT}/scripts/substrate/uninstall-substrate.sh" \

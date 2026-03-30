@@ -362,7 +362,8 @@ perform_auto_cleanup() {
 }
 
 AUTO_CLEANUP=0
-HOST_STATE_PATH="${HOME}/.substrate/install_state.json"
+SUBSTRATE_HOME="${SUBSTRATE_HOME:-${HOME}/.substrate}"
+HOST_STATE_PATH="${SUBSTRATE_HOME%/}/install_state.json"
 HOST_STATE_METADATA_LOADED=0
 RECORDED_GROUP_PREEXISTING=""
 RECORDED_GROUP_CREATED=""
