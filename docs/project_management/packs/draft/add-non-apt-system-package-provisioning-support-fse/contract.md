@@ -1,21 +1,40 @@
 # add-non-apt-system-package-provisioning-support-fse — contract surface
 
-This file is the canonical manager-aware contract for `substrate world enable --provision-deps` and for runtime `substrate world deps current sync|install` when system-package items are in scope.
+This file is the pack-root contract for the manager-aware world-deps surface. It defines `C-01`, the authoritative operator contract that downstream seams consume through `THR-01`.
 
-Reference inputs for this seam-local contract:
-- `docs/project_management/adrs/draft/ADR-0033-routing-weasel.md`
+Reference inputs for this pack-root contract:
 - `docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md`
+- `docs/project_management/adrs/draft/ADR-0033-routing-weasel.md`
 - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 - `docs/project_management/packs/implemented/world-deps-packages-bundles-contract/contract.md`
+- `docs/project_management/packs/implemented/world-deps-apt-provisioning/contract.md`
+- `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support-fse/decision_register.md`
 
 ## Authority handoff
 
-- This file is authoritative for the shared manager-aware semantics of `substrate world enable --provision-deps`.
-- This file is authoritative for runtime `substrate world deps current sync|install` handling of `install.method=apt` and `install.method=pacman`.
-- `docs/project_management/packs/implemented/world-deps-packages-bundles-contract/contract.md` remains authoritative for inventory layering, enabled resolution, bundle expansion, and non-system-package install behavior.
-- `docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md` remains the source of the provisioning-time-only OS mutation posture and runtime fail-early posture.
-- `docs/project_management/adrs/draft/ADR-0033-routing-weasel.md` remains the source of the rationale for extending provisioning-time system packages to pacman.
-- When any shared CLI/runtime statement in those documents conflicts with this file, this file wins.
+- `C-01` is authoritative for the shared manager-aware operator contract for `substrate world enable --provision-deps` and for runtime `substrate world deps current sync|install` when system-package items are in scope.
+- `docs/project_management/packs/implemented/world-deps-packages-bundles-contract/contract.md` remains authoritative for inventory layering, enabled-resolution semantics, bundle expansion, wrapper semantics, schema `version: 1` baseline, and non-system-package install behavior.
+- `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md` remains authoritative for the base meaning of exit codes.
+- `docs/project_management/packs/implemented/world-deps-apt-provisioning/contract.md` remains authoritative for APT provisioning baseline semantics, provided it does not contradict `C-01`.
+- `docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md` and `docs/project_management/adrs/draft/ADR-0033-routing-weasel.md` are orientation and rationale only; if they conflict with `C-01`, `C-01` wins.
+- The shared-contract reconciliation targets remain owned by `SEAM-6`:
+  - `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`
+  - `docs/reference/world/deps/README.md`
+  - any other shared world-deps doc that still implies runtime mutation or APT-only truth
+- `REM-001` stays owned by `SEAM-6` and is not a blocker for this seam.
+
+## `C-01` contract summary
+
+`C-01` is the accepted manager-aware operator contract for this pack. It binds downstream seams to one truth for:
+
+- `substrate world enable --provision-deps` as the only operator-facing system-package provisioning entrypoint
+- runtime `substrate world deps current sync|install` as read-only with respect to system-package managers
+- in-world manager selection only, with no host PATH or host package-manager routing
+- fail-closed handling for unsupported backends, manager mismatches, and mixed-manager enabled sets
+- v1 pacman support as provisioning-only and non-runnable
+- no new config, env, protocol, trace, or log surface
+
+The detailed command behavior, exit-code posture, and runtime remediation wording remain within `C-01` and the downstream execution seams. This file only fixes the authority handoff and decision basis that those seams consume.
 
 ## CLI
 
@@ -37,7 +56,7 @@ Reference inputs for this seam-local contract:
   - `deps current install <ITEM...>`: the explicit `<ITEM...>` arguments only, after bundle expansion. The effective enabled set is not added implicitly.
 - **Normalized APT requirement set**: the normalized union of `install.apt[]` entries for the in-scope APT-backed items, using the de-duplication, ordering, and version-conflict rules inherited from `docs/project_management/packs/implemented/world-deps-apt-provisioning/contract.md`.
 - **Normalized pacman requirement set**: the normalized union of `install.pacman[]` entries for the in-scope pacman-backed items. De-duplicate by exact package name and sort in ascending byte order.
-- **Detected world manager**: the provisioning-time manager selected by the in-world probe from ADR-0033. The only supported values are `apt` and `pacman`.
+- **Detected world manager**: the provisioning-time manager selected by the in-world probe described in DR-0002. The only supported values are `apt` and `pacman`.
 
 ### Operator-visible rendering
 
@@ -50,7 +69,7 @@ Reference inputs for this seam-local contract:
 - This feature introduces no new config keys.
 - This feature introduces no new environment variables.
 - `SUBSTRATE_WORLD_REQUEST_PROFILE` is not an operator control surface for this feature.
-- Provisioning MAY require stricter internal guard rails, but that is an implementation detail and not an operator-facing profile knob.
+- Provisioning may require stricter internal guard rails, but that is an implementation detail and not an operator-facing profile knob.
 - Runtime `substrate world deps current sync|install` MUST NOT use a provisioning request profile.
 - This feature does not add a new structured log field, trace field, protocol field, or agent API request field.
 
@@ -93,7 +112,7 @@ Phase 2 runs only after phase 1 succeeds.
 
 ### Manager selection
 
-- The in-world probe from ADR-0033 selects exactly one detected world manager or returns unsupported.
+- The in-world probe from DR-0002 selects exactly one detected world manager or returns unsupported.
 - Provisioning executes only the package manager that matches the detected world manager.
 - Provisioning MUST NOT fall back from `apt` to `pacman` or from `pacman` to `apt`.
 
@@ -112,7 +131,7 @@ Phase 2 runs only after phase 1 succeeds.
 
 ### Pacman-specific execution
 
-- Pacman provisioning uses the exact command shape selected in ADR-0033:
+- Pacman provisioning uses the exact command shape selected in DR-0003:
 
   ```text
   pacman -Sy --noconfirm --needed <packages...>
