@@ -11,10 +11,12 @@ The shell:
 1) Resolves the effective inventory view (built-ins + global inventory + workspace inventory chain).
 2) Resolves the effective enabled list (global + workspace patches).
 3) Computes the in-scope package set and normalized APT requirement set.
-4) If APT requirements exist, probes them read-only with `dpkg-query` inside the world.
-5) If any APT requirement is unsatisfied, exits `4` with remediation that points operators to
-   `substrate world enable --provision-deps`.
-6) If APT requirements are already satisfied, treats APT-backed items as no-op and proceeds with:
+4) If APT or pacman requirements exist, probes them read-only with `dpkg-query` and `pacman -Q`
+   inside the world.
+5) If any system-package requirement is unsatisfied, exits `4` with remediation that points
+   operators to `substrate world enable --provision-deps`.
+6) If system-package requirements are already satisfied, treats system-package items as no-op and
+   proceeds with:
    - `script` packages under the Substrate-managed prefix
    - `manual` packages as blocked/manual-only items
 
@@ -134,18 +136,18 @@ Implementation lives in:
 - Reconcile command: `crates/shell/src/builtins/world_deps/surfaces.rs`
   (`build_world_deps_bin_reconcile_command_v1`)
 
-## APT installs vs hardening
+## System-package runtime fail-early
 
-Runtime world-deps application is now probe-only for APT-backed items:
+Runtime world-deps application is now probe-only for APT-backed and pacman-backed items:
 - `substrate world deps current sync`
 - `substrate world deps current install <item...>`
 
-These commands never invoke `apt`, `apt-get`, or mutating `dpkg` at runtime. They only run a
-read-only `dpkg-query` probe inside the selected world, then:
+These commands never invoke `apt`, `apt-get`, mutating `dpkg`, or `pacman` at runtime. They only
+run read-only `dpkg-query` and `pacman -Q` probes inside the selected world, then:
 - fail early with exit `4` and remediation if required packages are missing, or
-- continue with non-APT work if the packages are already present.
+- continue with non-system-package work if the packages are already present.
 
-Provisioning-time APT is owned by:
+System-package provisioning is owned by:
 - `substrate world enable --provision-deps`
 
 On guest Linux agents, the `world-deps-provision` request profile is executed through a transient
@@ -163,7 +165,7 @@ Contract source:
 
 Implementation lives in:
 - runtime preflight/probe: `crates/shell/src/builtins/world_deps/surfaces.rs`
-- provisioning-time APT runner: `crates/shell/src/builtins/world_enable/runner/provision_deps.rs`
+- provisioning-time system-package runner: `crates/shell/src/builtins/world_enable/runner/provision_deps.rs`
 
 ## Debugging checklist
 

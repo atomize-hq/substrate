@@ -64,18 +64,19 @@ If a third-party installer “insists” on writing to `$HOME`, set its tool-spe
 - Apply enabled set: `substrate world deps current sync`
 - Debug an item: `substrate world deps current show <name> --explain`
 
-## APT packages (current limitation in hardened worlds)
+## System-package runtime fail-early
 
-If a package uses `install.method=apt`, runtime `substrate world deps current sync` and
-`substrate world deps current install ...` never invoke `apt`, `apt-get`, or mutating `dpkg`.
-Instead, Substrate derives the normalized APT requirement set, probes it read-only with
-`dpkg-query`, and fails early with remediation when any requirement is missing.
+If a package uses `install.method=apt` or `install.method=pacman`, runtime
+`substrate world deps current sync` and `substrate world deps current install ...` never invoke
+`apt`, `apt-get`, mutating `dpkg`, or `pacman`. Instead, Substrate derives the normalized APT and
+pacman requirement sets, probes them read-only with `dpkg-query` and `pacman -Q`, and fails early
+with remediation when any requirement is missing.
 
 Operator workflow:
 - Run `substrate world enable --provision-deps` before runtime `world deps current ...` commands.
 - On Linux host-native, Substrate will not mutate the host OS at runtime.
-- On Windows, provisioning-time APT is unsupported on Windows.
-- Runtime `current sync` and `current install` exit `4` when required APT packages are missing.
+- On Windows, `substrate world enable --provision-deps` is unsupported on Windows for runtime system-package provisioning.
+- Runtime `current sync` and `current install` exit `4` when required system packages are missing.
 - Missing-package remediation includes `substrate world enable --provision-deps`.
 
 ### Provisioning contract
@@ -93,15 +94,16 @@ Behavior:
 
 ### Runtime contract
 
-For APT-backed items, `substrate world deps current sync` and `substrate world deps current install`
-remain probe-only at runtime.
+For APT-backed and pacman-backed items, `substrate world deps current sync` and
+`substrate world deps current install` remain probe-only at runtime.
 
 Behavior:
-- They derive the in-scope APT requirement set and probe it read-only with `dpkg-query`.
-- If any required APT package is missing, they fail early with exit `4`.
-- If all required APT packages are already present, APT-backed items are treated as satisfied/no-op and
-  Substrate continues with non-APT work.
-- Runtime execution never invokes `apt`, `apt-get`, or mutating `dpkg`.
+- They derive the in-scope APT and pacman requirement sets and probe them read-only with
+  `dpkg-query` and `pacman -Q`.
+- If any required system package is missing, they fail early with exit `4`.
+- If all required system packages are already present, system-package items are treated as
+  satisfied/no-op and Substrate continues with non-system-package work.
+- Runtime execution never invokes `apt`, `apt-get`, mutating `dpkg`, or `pacman`.
 
 Internal details and rationale:
 - `docs/internals/world/deps.md`
