@@ -2,14 +2,17 @@
 seam_id: SEAM-4
 seam_slug: provisioning-routing-pacman-execution
 type: platform
-status: proposed
-execution_horizon: next
-plan_version: v1
+status: exec-ready
+execution_horizon: active
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+  - governance/seam-1-closeout.md
+  - governance/seam-2-closeout.md
+  - governance/seam-3-closeout.md
   required_threads:
   - THR-01
   - THR-02
@@ -21,21 +24,22 @@ basis:
     execution basis
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
 seam_exit_gate:
   required: true
-  planned_location: reserved_final_slice
+  planned_location: S3
   status: pending
-open_remediations:
-- REM-003
+open_remediations: []
 ---
 
 # SEAM-4 - Provisioning routing and pacman execution
+
+This seam is now active and exec-ready. Its authoritative pre-exec planning lives in `threaded-seams/seam-4-provisioning-routing-pacman-execution/`.
 
 - **Goal / value**:
   - Turn the manager-aware contract, probe support gate, and pacman schema truth into one deterministic provisioning-time execution path for `substrate world enable --provision-deps`.
@@ -110,9 +114,9 @@ open_remediations:
   - This seam is the only place in the pack where pacman execution becomes an owned behavior. That makes fail-closed behavior and exact command shape load-bearing safety controls.
   - Linux host-native and Windows remain unsupported; no host mutation is allowed.
 - **Downstream decomposition context**:
-  - This seam is `next` because `SEAM-2` has published `THR-02`, but provisioning routing still depends on `SEAM-3` publishing `THR-03`.
-  - The most important threads are `THR-02`, `THR-03`, and `THR-04`.
-  - The first seam-local review should focus on enabled-set input boundaries, normalization rules, shared-file overlap, request-profile posture, and exact pacman command construction.
+  - This seam is `active` because `SEAM-3` has now published `THR-03`, and the shared `world_enable` / `world-agent` touch surfaces were revalidated against the current repo state.
+  - The most important threads are `THR-01`, `THR-02`, `THR-03`, and `THR-04`.
+  - The seam-local review now fixes the owner contract baseline, request-profile boundary, shared-file touch surface, and exact pacman command construction before execution begins.
   - Source-plan lineage: `NASP-PWS-provisioning_wiring` and `NASP2`.
 - **Expected seam-exit concerns**:
   - Contracts likely to publish:

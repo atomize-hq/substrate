@@ -3,7 +3,7 @@ seam_id: SEAM-5
 seam_slug: runtime-fail-early-remediation
 type: platform
 status: proposed
-execution_horizon: future
+execution_horizon: next
 plan_version: v1
 basis:
   currentness: provisional

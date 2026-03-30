@@ -38,27 +38,6 @@ required_fix: keep the Arch manual fixture contract explicit in the playbook and
 resolution_evidence: []
 ```
 
-```yaml
-remediation_id: REM-003
-origin_phase: pre_exec
-source_gate: revalidation
-related_seam: SEAM-4
-related_slice: null
-related_thread: THR-04
-related_contract: C-04
-related_artifact: crates/world-agent/src/service.rs
-severity: blocking
-status: open
-owner_seam: SEAM-4
-blocked_targets:
-  - seam: SEAM-4
-    field: status
-    value: decomposed
-summary: adjacent staging and tracing work can stale the provisioning-wiring touch surface before seam-local planning reaches the shared world_enable and world-agent execution paths.
-required_fix: revalidate scripts/substrate/world-enable.sh and crates/world-agent/src/service.rs against adjacent packs before decomposing SEAM-4.
-resolution_evidence: []
-```
-
 Rules:
 
 - Use canonical YAML blocks for remediation entries.
@@ -69,3 +48,28 @@ Rules:
 ## Resolved remediations
 
 - Move resolved items here using the same schema, set `status: resolved`, and populate `resolution_evidence`.
+
+```yaml
+remediation_id: REM-003
+origin_phase: pre_exec
+source_gate: revalidation
+related_seam: SEAM-4
+related_slice: null
+related_thread: THR-04
+related_contract: C-04
+related_artifact: crates/world-agent/src/service.rs
+severity: blocking
+status: resolved
+owner_seam: SEAM-4
+blocked_targets:
+  - seam: SEAM-4
+    field: status
+    value: decomposed
+summary: adjacent staging and tracing work can stale the provisioning-wiring touch surface before seam-local planning reaches the shared world_enable and world-agent execution paths.
+required_fix: revalidate scripts/substrate/world-enable.sh and crates/world-agent/src/service.rs against adjacent packs before decomposing SEAM-4.
+resolution_evidence:
+  - scripts/substrate/world-enable.sh revalidated during SEAM-4 promotion; helper posture still delegates provisioning follow-up without contradicting in-world manager routing.
+  - crates/world-agent/src/service.rs revalidated during SEAM-4 promotion; reserved world-deps request-profile handling remains in place for provisioning wrappers.
+  - crates/shell/src/execution/routing/dispatch/world_ops.rs revalidated during SEAM-4 promotion; reserved profile handling still prevents host environment takeover of world-deps provisioning profiles.
+  - governance/seam-3-closeout.md now publishes THR-03 and closes the upstream schema handoff required for SEAM-4 basis currentness.
+```

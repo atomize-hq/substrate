@@ -2,8 +2,8 @@
 seam_id: SEAM-3
 seam_slug: pacman-schema-inventory-views
 type: integration
-status: exec-ready
-execution_horizon: active
+status: closed
+execution_horizon: future
 plan_version: v2
 basis:
   currentness: current
@@ -26,16 +26,18 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
-  planned_location: reserved_final_slice
-  status: pending
+  planned_location: S3
+  status: passed
 open_remediations: []
 ---
 
 # SEAM-3 - Pacman schema and inventory views
+
+This seam has landed. Its authoritative post-exec record lives in `governance/seam-3-closeout.md`, and it is no longer in the forward planning window.
 
 - **Goal / value**:
   - Extend world-deps authoring and view surfaces with additive pacman schema support while keeping inventory compatibility, validation determinism, and non-runnable v1 scope explicit.
