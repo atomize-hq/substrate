@@ -11,6 +11,12 @@ use crate::execution::config_model;
 use anyhow::Result;
 use std::path::{Path, PathBuf};
 
+#[derive(Debug, Clone)]
+pub(crate) struct WorldDepsProvisioningRequirementsV1 {
+    pub apt: Vec<AptSpecV1>,
+    pub pacman: Vec<String>,
+}
+
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
 pub(crate) struct WorldDepsDoctorSnapshotV1 {
     pub schema_version: u32,
@@ -71,8 +77,13 @@ pub(crate) fn collect_doctor_snapshot_v1(
     Ok(applied)
 }
 
-pub(crate) fn resolve_effective_enabled_apt_requirements(cwd: &Path) -> Result<Vec<AptSpecV1>> {
+pub(crate) fn resolve_effective_enabled_provisioning_requirements_v1(
+    cwd: &Path,
+) -> Result<WorldDepsProvisioningRequirementsV1> {
     let cfg = config_model::resolve_effective_config(cwd, &Default::default())?;
     let view = surfaces::resolve_current_inventory_view(cwd, &cfg)?;
-    surfaces::resolve_enabled_apt_requirements_v1(&view, &cfg.world.deps.enabled)
+    let apt = surfaces::resolve_enabled_apt_requirements_v1(&view, &cfg.world.deps.enabled)?;
+    let pacman = surfaces::resolve_enabled_pacman_packages_v1(&view, &cfg.world.deps.enabled)?;
+
+    Ok(WorldDepsProvisioningRequirementsV1 { apt, pacman })
 }

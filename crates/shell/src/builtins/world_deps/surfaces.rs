@@ -469,6 +469,36 @@ pub(crate) fn resolve_enabled_apt_requirements_v1(
     normalize_apt_requirements_v1(view, &package_names)
 }
 
+pub(crate) fn resolve_enabled_pacman_packages_v1(
+    view: &InventoryViewV1,
+    item_names: &[String],
+) -> Result<Vec<String>> {
+    let package_names = expand_items_to_packages_v1(view, item_names)?;
+    let mut packages: Vec<String> = Vec::new();
+
+    for pkg_name in package_names {
+        let pkg = view.packages.get(&pkg_name).ok_or_else(|| {
+            config_model::user_error(format!(
+                "invalid deps inventory: referenced package '{pkg_name}' is not visible for this platform"
+            ))
+        })?;
+        if pkg.install.method != InstallMethodV1::Pacman {
+            continue;
+        }
+        packages.extend(
+            pkg.install
+                .pacman
+                .iter()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty()),
+        );
+    }
+
+    packages.sort();
+    packages.dedup();
+    Ok(packages)
+}
+
 fn normalize_apt_requirements_v1(
     view: &InventoryViewV1,
     package_names: &[String],

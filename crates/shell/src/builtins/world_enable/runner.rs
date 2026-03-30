@@ -14,8 +14,9 @@ use log_ops::{append_log_line, initialize_log_file, print_dry_run_plan};
 use manager_env::update_manager_env_exports;
 use paths::{locate_helper_script, next_log_path, resolve_version_dir, resolve_world_socket_path};
 use provision_deps::{
-    ensure_supported_backend_or_exit, exit_probe_result_not_supported, print_probe_result,
-    print_verbose_requirements, probe_world_manager, provision_apt_requirements, WorldManager,
+    ensure_supported_backend_or_exit, exit_probe_result_not_supported, print_pacman_requirements,
+    print_probe_result, print_verbose_pacman_requirements, print_verbose_requirements,
+    probe_world_manager, provision_apt_requirements, provision_pacman_requirements, WorldManager,
 };
 use verify::verify_world_health;
 
@@ -165,8 +166,22 @@ fn run_enable_with_provision_deps(args: &WorldEnableArgs) -> Result<()> {
     ensure_supported_backend_or_exit();
 
     let cwd = env::current_dir().unwrap_or_else(|_| ".".into());
-    let apt_requirements =
-        crate::builtins::world_deps::resolve_effective_enabled_apt_requirements(&cwd)?;
+    let requirements =
+        crate::builtins::world_deps::resolve_effective_enabled_provisioning_requirements_v1(&cwd)?;
+    if !requirements.apt.is_empty() && !requirements.pacman.is_empty() {
+        eprintln!(
+            "substrate: `substrate world enable --provision-deps` found both apt and pacman packages in the enabled deps set; mixed-manager provisioning is unsupported and exits 4 without mutating the world."
+        );
+        std::process::exit(4);
+    }
+
+    let required_manager = if !requirements.apt.is_empty() {
+        Some(WorldManager::Apt)
+    } else if !requirements.pacman.is_empty() {
+        Some(WorldManager::Pacman)
+    } else {
+        None
+    };
 
     if args.dry_run {
         let probe = match probe_world_manager() {
@@ -176,16 +191,29 @@ fn run_enable_with_provision_deps(args: &WorldEnableArgs) -> Result<()> {
 
         print_probe_result(probe);
 
-        match probe.manager {
-            WorldManager::Apt => {}
-            _ => exit_probe_result_not_supported(probe),
-        }
+        if let Some(required_manager) = required_manager {
+            if probe.manager != required_manager {
+                exit_probe_result_not_supported(probe, required_manager);
+            }
 
-        if args.verbose {
-            print_verbose_requirements(&apt_requirements);
-        } else {
-            for requirement in &apt_requirements {
-                println!("{}", provision_deps::render_requirement(requirement));
+            match required_manager {
+                WorldManager::Apt => {
+                    if args.verbose {
+                        print_verbose_requirements(&requirements.apt);
+                    } else {
+                        for requirement in &requirements.apt {
+                            println!("{}", provision_deps::render_requirement(requirement));
+                        }
+                    }
+                }
+                WorldManager::Pacman => {
+                    if args.verbose {
+                        print_verbose_pacman_requirements(&requirements.pacman);
+                    } else {
+                        print_pacman_requirements(&requirements.pacman);
+                    }
+                }
+                WorldManager::Unsupported => unreachable!("unsupported required manager"),
             }
         }
 
@@ -295,27 +323,37 @@ fn run_enable_with_provision_deps(args: &WorldEnableArgs) -> Result<()> {
         }
     }
 
-    let probe = match probe_world_manager() {
-        Ok(probe) => probe,
-        Err(err) => provision_deps::exit_backend_unavailable(&err),
-    };
+    if let Some(required_manager) = required_manager {
+        let probe = match probe_world_manager() {
+            Ok(probe) => probe,
+            Err(err) => provision_deps::exit_backend_unavailable(&err),
+        };
 
-    print_probe_result(probe);
+        print_probe_result(probe);
 
-    match probe.manager {
-        WorldManager::Apt => {}
-        _ => exit_probe_result_not_supported(probe),
-    }
+        if probe.manager != required_manager {
+            exit_probe_result_not_supported(probe, required_manager);
+        }
 
-    if args.verbose {
-        print_verbose_requirements(&apt_requirements);
+        if args.verbose {
+            match required_manager {
+                WorldManager::Apt => print_verbose_requirements(&requirements.apt),
+                WorldManager::Pacman => print_verbose_pacman_requirements(&requirements.pacman),
+                WorldManager::Unsupported => unreachable!("unsupported required manager"),
+            }
+        }
     }
 
     config.set_world_enabled(true);
     save_install_config(&config_path, &config)?;
     update_manager_env_exports(&env_sh_path()?, true)?;
 
-    provision_apt_requirements(&apt_requirements);
+    match required_manager {
+        Some(WorldManager::Apt) => provision_apt_requirements(&requirements.apt),
+        Some(WorldManager::Pacman) => provision_pacman_requirements(&requirements.pacman),
+        None => {}
+        Some(WorldManager::Unsupported) => unreachable!("unsupported required manager"),
+    }
     run_sync_after_provisioning();
 
     println!(

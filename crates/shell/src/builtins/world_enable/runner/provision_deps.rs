@@ -76,22 +76,57 @@ pub(super) fn print_verbose_requirements(requirements: &[AptSpecV1]) {
     }
 }
 
+pub(super) fn render_pacman_requirement(requirement: &str) -> String {
+    requirement.trim().to_string()
+}
+
+pub(super) fn print_pacman_requirements(requirements: &[String]) {
+    for requirement in requirements {
+        println!("{}", render_pacman_requirement(requirement));
+    }
+}
+
+pub(super) fn print_verbose_pacman_requirements(requirements: &[String]) {
+    println!("Provisioning request profile: {PROVISION_PROFILE}");
+    for requirement in requirements {
+        println!("{}", render_pacman_requirement(requirement));
+    }
+}
+
 pub(super) fn print_probe_result(probe: WorldManagerProbe) {
     println!("{}", probe.render());
 }
 
-pub(super) fn exit_probe_result_not_supported(probe: WorldManagerProbe) -> ! {
-    match probe.manager {
-        WorldManager::Pacman => eprintln!(
-            "substrate: `{PROVISION_COMMAND}` detected a pacman-based world image (reason={}); this command currently provisions apt-backed packages only and exits 4 without mutating the world.",
-            probe.reason
-        ),
-        WorldManager::Unsupported => eprintln!(
-            "substrate: `{PROVISION_COMMAND}` probe returned unsupported (reason={}, pacman_present={}); this command cannot provision packages for the detected world image and exits 4 without mutating the world.",
-            probe.reason,
-            probe.pacman_present
-        ),
-        WorldManager::Apt => unreachable!("apt probe results must not be routed here"),
+pub(super) fn exit_probe_result_not_supported(
+    probe: WorldManagerProbe,
+    required_manager: WorldManager,
+) -> ! {
+    match required_manager {
+        WorldManager::Apt => match probe.manager {
+            WorldManager::Pacman => eprintln!(
+                "substrate: `{PROVISION_COMMAND}` detected a pacman-based world image (reason={}); this command currently provisions apt-backed packages only and exits 4 without mutating the world.",
+                probe.reason
+            ),
+            WorldManager::Unsupported => eprintln!(
+                "substrate: `{PROVISION_COMMAND}` probe returned unsupported (reason={}, pacman_present={}); this command cannot provision apt-backed packages for the detected world image and exits 4 without mutating the world.",
+                probe.reason,
+                probe.pacman_present
+            ),
+            WorldManager::Apt => unreachable!("apt probe results must not be routed here"),
+        },
+        WorldManager::Pacman => match probe.manager {
+            WorldManager::Apt => eprintln!(
+                "substrate: `{PROVISION_COMMAND}` detected an apt-based world image (reason={}); this command currently provisions pacman-backed packages only and exits 4 without mutating the world.",
+                probe.reason
+            ),
+            WorldManager::Unsupported => eprintln!(
+                "substrate: `{PROVISION_COMMAND}` probe returned unsupported (reason={}, pacman_present={}); this command cannot provision pacman-backed packages for the detected world image and exits 4 without mutating the world.",
+                probe.reason,
+                probe.pacman_present
+            ),
+            WorldManager::Pacman => unreachable!("pacman probe results must not be routed here"),
+        },
+        WorldManager::Unsupported => unreachable!("unsupported required manager is not valid"),
     }
     std::process::exit(4);
 }
@@ -183,6 +218,30 @@ pub(super) fn provision_apt_requirements(requirements: &[AptSpecV1]) {
 
     eprintln!(
         "substrate: `{PROVISION_COMMAND}` failed during in-world APT provisioning (exit={}): {snippet}",
+        response.exit
+    );
+    std::process::exit(4);
+}
+
+pub(super) fn provision_pacman_requirements(requirements: &[String]) {
+    if requirements.is_empty() {
+        return;
+    }
+
+    let response = match execute_with_profile(
+        &build_pacman_install_command(requirements),
+        PROVISION_PROFILE,
+    ) {
+        Ok(response) => response,
+        Err(detail) => exit_backend_unavailable(&detail),
+    };
+    if response.exit == 0 {
+        return;
+    }
+
+    let snippet = response_snippet(&response);
+    eprintln!(
+        "substrate: `{PROVISION_COMMAND}` failed during in-world pacman provisioning (exit={}): {snippet}",
         response.exit
     );
     std::process::exit(4);
@@ -457,6 +516,24 @@ fn build_install_command(requirements: &[AptSpecV1]) -> String {
     format!("sh -lc {}", sh_quote(&script))
 }
 
+fn build_pacman_install_command(requirements: &[String]) -> String {
+    let rendered = requirements
+        .iter()
+        .map(|requirement| sh_quote(&render_pacman_requirement(requirement)))
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    let mut script = String::from("set -eu\n");
+    script.push_str("if ! command -v pacman >/dev/null 2>&1; then\n");
+    script.push_str("  echo 'pacman not found in world; install.method=pacman requires a pacman-based world image' >&2\n");
+    script.push_str("  exit 127\n");
+    script.push_str("fi\n");
+    script.push_str("pacman -Sy --noconfirm --needed ");
+    script.push_str(&rendered);
+    script.push('\n');
+    format!("sh -lc {}", sh_quote(&script))
+}
+
 fn response_snippet(response: &agent_api_types::ExecuteResponse) -> String {
     let stderr = decode_output(&response.stderr_b64);
     if !stderr.trim().is_empty() {
@@ -521,5 +598,21 @@ mod tests {
         let unmapped = classify_world_manager_probe(true, Some("fedora"), Some("rhel"), true);
         assert_eq!(unmapped.manager, WorldManager::Unsupported);
         assert_eq!(unmapped.reason, "unmapped_family");
+    }
+
+    #[test]
+    fn builds_pacman_install_command_with_expected_flags_and_order() {
+        let cmd = build_pacman_install_command(&[
+            "alpm".to_string(),
+            "curl".to_string(),
+            "zlib".to_string(),
+        ]);
+
+        assert!(cmd.contains("pacman -Sy --noconfirm --needed"));
+        assert!(cmd.contains("alpm"));
+        assert!(cmd.contains("curl"));
+        assert!(cmd.contains("zlib"));
+        assert!(cmd.find("alpm").unwrap() < cmd.find("curl").unwrap());
+        assert!(cmd.find("curl").unwrap() < cmd.find("zlib").unwrap());
     }
 }
