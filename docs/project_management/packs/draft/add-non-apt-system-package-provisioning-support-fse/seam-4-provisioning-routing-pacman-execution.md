@@ -3,7 +3,7 @@ seam_id: SEAM-4
 seam_slug: provisioning-routing-pacman-execution
 type: platform
 status: proposed
-execution_horizon: future
+execution_horizon: next
 plan_version: v1
 basis:
   currentness: provisional
@@ -110,7 +110,7 @@ open_remediations:
   - This seam is the only place in the pack where pacman execution becomes an owned behavior. That makes fail-closed behavior and exact command shape load-bearing safety controls.
   - Linux host-native and Windows remain unsupported; no host mutation is allowed.
 - **Downstream decomposition context**:
-  - This seam is `future` because the default horizon stops before provisioning execution, even though the source accepted delivery order reaches this work after probe and schema settle.
+  - This seam is `next` because `SEAM-2` has published `THR-02`, but provisioning routing still depends on `SEAM-3` publishing `THR-03`.
   - The most important threads are `THR-02`, `THR-03`, and `THR-04`.
   - The first seam-local review should focus on enabled-set input boundaries, normalization rules, shared-file overlap, request-profile posture, and exact pacman command construction.
   - Source-plan lineage: `NASP-PWS-provisioning_wiring` and `NASP2`.

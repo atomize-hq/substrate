@@ -2,8 +2,8 @@
 seam_id: SEAM-2
 seam_slug: world-manager-probe-support-gate
 type: platform
-status: exec-ready
-execution_horizon: active
+status: closed
+execution_horizon: future
 plan_version: v2
 basis:
   currentness: current
@@ -25,16 +25,18 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S3
-  status: pending
+  status: passed
 open_remediations: []
 ---
 
 # SEAM-2 - World-manager probe and support gate
+
+This seam has landed. Its authoritative post-exec record lives in `governance/seam-2-closeout.md`, and it is no longer in the forward planning window.
 
 - **Goal / value**:
   - Turn the accepted manager-selection contract into one deterministic in-world probe and one fail-closed support gate that every provisioning path can trust.

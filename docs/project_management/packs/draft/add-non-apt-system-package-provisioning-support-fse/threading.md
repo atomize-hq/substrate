@@ -2,13 +2,13 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-2`
-- **Next seam**: `SEAM-3`
-- **Future seams**: `SEAM-4`, `SEAM-5`, `SEAM-6`
+- **Active seam**: `SEAM-3`
+- **Next seam**: `SEAM-4`
+- **Future seams**: `SEAM-5`, `SEAM-6`
 - **Horizon inference**:
-  - `SEAM-1` has landed, published `C-01`, and moved out of the forward planning window.
-  - `SEAM-2` is now the active delivery seam because `THR-01` is published and revalidated.
-  - `SEAM-3` is the next seam because `SEAM-4` depends on both probe truth (`THR-02`) and schema truth (`THR-03`).
+  - `SEAM-2` has landed, published `C-02`, and moved out of the forward planning window.
+  - `SEAM-3` is now the active delivery seam because `THR-01` remains revalidated and the prior active seam handed off with a passed seam-exit gate.
+  - `SEAM-4` is the next seam because provisioning routing depends on both probe truth (`THR-02`) and schema truth (`THR-03`).
 - **Governance-only lineage**:
   - `NASP-PWS-tasks_checkpoints` is intentionally represented as pack governance only. It is not a seam and does not own product behavior.
 
@@ -115,7 +115,7 @@
   - **Revalidation trigger**:
     - shared CLI/runtime wording, exit-code posture, request-profile posture, or authority-handoff targets change in ADR-0033, the APT pack, or the bundles contract
   - **Satisfied by**:
-    - `SEAM-1` closeout publishing `C-01` plus the authoritative handoff/defer list, and `SEAM-2` pre-exec revalidation against the published pack-root contract and decision register
+    - `SEAM-1` closeout publishing `C-01` plus the authoritative handoff/defer list, with downstream seam-local revalidation against the published pack-root contract and decision register
   - **Notes**:
     - This is the highest-load-bearing thread in the pack. It exists because the source planning pack explicitly split contract ownership from every later slice.
 
@@ -128,7 +128,7 @@
     - `C-02`
   - **Purpose**:
     - Carry deterministic in-world world-manager selection and support-gate outcomes into provisioning execution and platform validation.
-  - **State**: defined
+  - **State**: published
   - **Revalidation trigger**:
     - `/etc/os-release` tie-break rules, supported family mapping, or unsupported-backend posture changes
   - **Satisfied by**:
@@ -209,8 +209,8 @@ flowchart LR
 ## Critical path
 
 1. `SEAM-1` has already published the manager-aware contract, decision register, and authority handoff on `THR-01`.
-2. `SEAM-2` is the active seam, and `SEAM-3` is next because both consume `C-01` and `SEAM-4` cannot safely decompose until probe and schema truth are both stable.
-3. `SEAM-4` requires both `THR-02` and `THR-03`, so provisioning routing should not decompose until probe and schema truth are stable.
+2. `SEAM-2` has now published `THR-02`, so `SEAM-3` is the active schema seam and `SEAM-4` is next because provisioning routing still needs both `THR-02` and `THR-03`.
+3. `SEAM-4` requires both probe truth and schema truth, so provisioning routing should not decompose until `SEAM-3` publishes `THR-03`.
 4. `SEAM-5` depends on `SEAM-3` and `SEAM-4`, because runtime fail-early reuses the pacman schema contract and provisioning-time normalization story while keeping runtime mutation prohibited.
 5. `SEAM-6` is the terminal conformance seam. It should not close until `THR-01` through `THR-05` are published or explicitly revalidated.
 
