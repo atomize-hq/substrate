@@ -48,7 +48,7 @@ What is identical across platforms:
     - runtime fail-early ordering across APT-backed and pacman-backed items
     - explicit-item scoping
 - Arch-family success posture:
-  - The required pacman-success evidence is manual-only in this pack.
+  - The required pacman-success evidence is manual-only in this pack and is recorded separately from `smoke/macos-smoke.sh`.
   - The manual fixture is an Arch-family Lima VM named `substrate` whose guest exposes:
     - `/etc/os-release` with `ID=arch` or `ID_LIKE=arch`
     - `pacman` on `PATH`
