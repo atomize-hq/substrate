@@ -24,7 +24,7 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - To compute pack-derived Work Lift v1 from this Touch Set: `make pm-lift-pack PACK="docs/project_management/packs/draft/dev-install-world-agent-staging/"` (strict packs only).
 
 ### Create
-- `docs/project_management/packs/draft/dev-install-world-agent-staging/ci_checkpoint_plan.md`
+- `docs/project_management/packs/draft/dev-install-world-agent-staging/pre-planning/ci_checkpoint_plan.md`
 - `docs/project_management/packs/draft/dev-install-world-agent-staging/contract.md`
 - `docs/project_management/packs/draft/dev-install-world-agent-staging/decision_register.md`
 - `docs/project_management/packs/draft/dev-install-world-agent-staging/manual_testing_playbook.md`
@@ -125,7 +125,7 @@ For each externally visible change, list:
 List overlaps/conflicts with other in-flight work and resolve them deterministically.
 
 ### Relevant ADRs (queued/unimplemented)
-- ADR: `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`
+- ADR: `docs/project_management/adrs/implemented/ADR-0003-policy-and-config-mental-model-simplification.md`
   - Overlap surfaces:
     - `substrate world enable --home` semantics + `$SUBSTRATE_HOME` consistency
     - env-script ownership (`env.sh` vs `manager_env.sh`)
@@ -205,4 +205,3 @@ List overlaps/conflicts with other in-flight work and resolve them deterministic
   - `docs/project_management/adrs/draft/ADR-0035-summoning-wombat.md` — reconcile internal option label inconsistency and update Related Docs paths to the canonical pre-planning locations used by this pack (`pre-planning/spec_manifest.md`, `pre-planning/impact_map.md`).
   - `docs/project_management/packs/draft/dev-install-world-agent-staging/tasks.json` — reconcile `behavior_platforms_required` with Linux-only behavior change (either narrow to Linux or add deterministic “no change/unsupported” validations for macOS/Windows); add `meta.checkpoint_boundaries`; populate triad tasks + kickoff prompt paths.
   - `docs/project_management/packs/draft/dev-install-world-agent-staging/contract.md` — pin exit code for missing staged binary (taxonomy-aligned) + minimum remediation string; pin whether both staged paths are required and the `--dry-run` behavior for the missing-artifact path.
-

@@ -13,18 +13,20 @@
 
 ## Related Docs (links only)
 - Intake: `docs/project_management/intake/adrs/summoning_wombat_adr_intake.md`
-- Plan: `docs/project_management/packs/draft/dev-install-world-agent-staging/plan.md` (TBD)
-- Tasks: `docs/project_management/packs/draft/dev-install-world-agent-staging/tasks.json` (TBD)
-- Spec manifest: `docs/project_management/packs/draft/dev-install-world-agent-staging/spec_manifest.md` (TBD)
-- Specs: (TBD)
-- Contract (if present): `docs/project_management/packs/draft/dev-install-world-agent-staging/contract.md` (TBD)
-- Decision Register: `docs/project_management/packs/draft/dev-install-world-agent-staging/decision_register.md` (TBD; required)
-- Impact Map: `docs/project_management/packs/draft/dev-install-world-agent-staging/impact_map.md` (TBD)
-- Manual Playbook: `docs/project_management/packs/draft/dev-install-world-agent-staging/manual_testing_playbook.md` (TBD)
+- Plan: `docs/project_management/packs/draft/dev-install-world-agent-staging/plan.md`
+- Tasks: `docs/project_management/packs/draft/dev-install-world-agent-staging/tasks.json`
+- Spec manifest: `docs/project_management/packs/draft/dev-install-world-agent-staging/pre-planning/spec_manifest.md`
+- Slice specs:
+  - `docs/project_management/packs/draft/dev-install-world-agent-staging/slices/DIWAS0/DIWAS0-spec.md`
+  - `docs/project_management/packs/draft/dev-install-world-agent-staging/slices/DIWAS1/DIWAS1-spec.md`
+- Contract: `docs/project_management/packs/draft/dev-install-world-agent-staging/contract.md`
+- Decision Register: `docs/project_management/packs/draft/dev-install-world-agent-staging/decision_register.md`
+- Impact Map: `docs/project_management/packs/draft/dev-install-world-agent-staging/pre-planning/impact_map.md`
+- Manual Playbook: `docs/project_management/packs/draft/dev-install-world-agent-staging/manual_testing_playbook.md`
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 79959343e6450f1755631d11dcb7bafb06b0bd97c5b50b5fac147783a10e3906
+ADR_BODY_SHA256: 0a57c0f7a17a1bfcd2e32616e9867526a6d2909e55caa44948c51f017741fbbb
 
 ### Changes (operator-facing)
 - Linux dev installs done with `--no-world` become “enable later” ready without extra manual build steps.
@@ -87,7 +89,7 @@ Do not change build/stage behavior. Instead, add preflight checks so enable dete
 ### CLI
 - Commands:
   - `scripts/substrate/dev-install-substrate.sh --no-world` (Linux):
-    - Builds (or ensures the build of) `world-agent` for the host (ASSUMPTION: `--profile release` remains the default for enable provisioning).
+    - Builds (or ensures the build of) `world-agent` for the selected dev-install profile (`debug` or `release`).
     - Stages `world-agent` into the inferred version dir layout via `ensure_release_bin_bridge`, so `<repo>/target/bin/world-agent` and `<repo>/target/bin/linux/world-agent` exist after dev install.
     - Does **not** provision systemd units and leaves `world.enabled: false` in `~/.substrate/config.yaml`.
   - `substrate world enable` (Linux):
@@ -206,11 +208,13 @@ Do not change build/stage behavior. Instead, add preflight checks so enable dete
     - DR-0002 (dev meaning of `--no-world`: “skip provisioning only” vs “skip all world-related build outputs”)
     - DR-0003 (profile mapping for staging `world-agent`: release-only vs match `dev-install --profile`)
     - DR-0004 (overwrite policy if staged `world-agent` already exists in `target/bin/(linux/)`)
+    - DR-0005 (accepted staged path sufficiency rule: accept either vs require both)
 - Options (required; at least two):
-  - A) Stage `world-agent` during `dev-install-substrate.sh --no-world` so “enable later” is execution-ready (recommended).
-  - B) Build/stage `world-agent` during `substrate world enable` when missing (requires a source checkout + cargo toolchain).
+  - A) Build/stage `world-agent` during `substrate world enable` when missing (requires a source checkout + cargo toolchain).
+  - B) Always build/stage `world-agent` during `dev-install-substrate.sh --no-world` (recommended for this ADR).
+  - C) Keep behavior; improve failure messaging + docs (explicit 2-step enable).
 - Selection:
-  - Chosen: A
-  - Rationale: Keeps `substrate world enable` provisioning-focused and deterministic while making the dev `--no-world → enable later` workflow reliable without requiring ad-hoc manual builds.
-  - Choose A when: we want a reliable dev workflow that does not depend on `cargo` being available at enable time.
-  - Choose B when: we strongly prefer “enable builds what it needs” and can reliably detect a source checkout + cargo environment without surprising privileged behavior.
+  - Chosen: B (plus the early, deterministic preflight behavior from Option C).
+  - Rationale: Keeps `substrate world enable` provisioning-focused and deterministic while making the dev `--no-world -> enable later` workflow reliable without requiring ad-hoc manual builds.
+  - Choose B when: we want a reliable dev workflow that does not depend on `cargo` being available at enable time.
+  - Choose A when: we strongly prefer "enable builds what it needs" and can reliably detect a source checkout + cargo environment without surprising privileged behavior.

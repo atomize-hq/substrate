@@ -34,7 +34,7 @@ Each entry lists:
     - the coverage matrix (surface → authoritative doc)
     - follow-ups required to remove ambiguity before quality gate
   - Must define:
-    - an explicit “no implied surfaces” statement for every surface category that is *not* used by this feature (protocol, telemetry, etc.)
+    - an explicit "no implied surfaces" statement for every surface category that is *not* used by this feature (protocol, telemetry, policy, config formats).
   - Links (non-authoritative):
     - `docs/project_management/adrs/draft/ADR-0035-summoning-wombat.md`
     - planning + triad standards referenced in this manifest
@@ -74,7 +74,7 @@ Each entry lists:
   - Links (non-authoritative):
     - `docs/project_management/packs/draft/dev-install-world-agent-staging/tasks.json`
 
-- `docs/project_management/packs/draft/dev-install-world-agent-staging/impact_map.md` — touch set + cascading implications + cross-queue conflicts
+- `docs/project_management/packs/draft/dev-install-world-agent-staging/pre-planning/impact_map.md` — touch set + cascading implications + cross-queue conflicts
   - Owns (authoritative):
     - the explicit touch set (create/edit/deprecate/delete) for this feature
     - the explicit list of cascading implications and contradiction risks
@@ -90,14 +90,14 @@ Each entry lists:
     - `docs/project_management/packs/draft/dev-install-world-agent-staging/contract.md`
     - slice specs under `docs/project_management/packs/draft/dev-install-world-agent-staging/slices/`
 
-- `docs/project_management/packs/draft/dev-install-world-agent-staging/ci_checkpoint_plan.md` — CI cadence plan (schema v4 cross-platform automation packs)
+- `docs/project_management/packs/draft/dev-install-world-agent-staging/pre-planning/ci_checkpoint_plan.md` — CI cadence plan (schema v4 cross-platform automation packs)
   - Owns (authoritative):
     - checkpoint grouping + CI gates for this pack
   - Must define:
     - machine-readable plan per `docs/project_management/system/templates/planning_pack/ci_checkpoint_plan.md.tmpl`
     - `tasks.json` `meta.checkpoint_boundaries` MUST exist and MUST match the checkpoint group boundaries defined by this plan
   - Links (non-authoritative):
-    - `docs/project_management/packs/draft/dev-install-world-agent-staging/impact_map.md`
+    - `docs/project_management/packs/draft/dev-install-world-agent-staging/pre-planning/impact_map.md`
     - `docs/project_management/packs/draft/dev-install-world-agent-staging/contract.md`
 
 - `docs/project_management/packs/draft/dev-install-world-agent-staging/quality_gate_report.md` — planning quality gate outcome
@@ -197,8 +197,7 @@ Each entry lists:
 
 ### Slice specs (required)
 
-Slice specs MUST use the canonical layout:
-- `docs/project_management/packs/draft/dev-install-world-agent-staging/slices/<SLICE_ID>/<SLICE_ID>-spec.md`
+Slice specs MUST use the canonical layout (see triad planning standards). For this feature, the slice specs are:
 
 - `docs/project_management/packs/draft/dev-install-world-agent-staging/slices/DIWAS0/DIWAS0-spec.md` — enable preflight when `world-agent` is missing (Linux)
   - Owns (authoritative):
@@ -271,8 +270,8 @@ Every surface that ADR-0035 touches MUST appear here.
 | Slice definitions + AC IDs | `docs/project_management/packs/draft/dev-install-world-agent-staging/slices/DIWAS*/DIWAS*-spec.md` | behavior delta per slice; acceptance criteria IDs and checks |
 | Manual validation | `docs/project_management/packs/draft/dev-install-world-agent-staging/manual_testing_playbook.md` | exact commands; expected exit codes; expected file/config assertions |
 | Smoke validation (Linux) | `docs/project_management/packs/draft/dev-install-world-agent-staging/smoke/linux-smoke.sh` | automated commands; expected pass/fail; required privileges |
-| Touch set + cascading implications | `docs/project_management/packs/draft/dev-install-world-agent-staging/impact_map.md` | explicit touched files; contradiction risks (dev vs prod installs) |
-| CI cadence checkpoints | `docs/project_management/packs/draft/dev-install-world-agent-staging/ci_checkpoint_plan.md` | checkpoint groups; gates; rationale; tasks.json alignment |
+| Touch set + cascading implications | `docs/project_management/packs/draft/dev-install-world-agent-staging/pre-planning/impact_map.md` | explicit touched files; contradiction risks (dev vs prod installs) |
+| CI cadence checkpoints | `docs/project_management/packs/draft/dev-install-world-agent-staging/pre-planning/ci_checkpoint_plan.md` | checkpoint groups; gates; rationale; tasks.json alignment |
 | Task graph (automation) | `docs/project_management/packs/draft/dev-install-world-agent-staging/tasks.json` | tasks; dependencies; kickoff prompt paths; branch/worktree metadata |
 | Rollout / backwards compatibility | `docs/project_management/packs/draft/dev-install-world-agent-staging/pre-planning/spec_manifest.md` | this feature MUST NOT introduce migrations, backwards compatibility policy, or deprecation requirements |
 | New environment variables | `docs/project_management/packs/draft/dev-install-world-agent-staging/pre-planning/spec_manifest.md` | this feature MUST NOT introduce new `SUBSTRATE_*`, `SHIM_*`, or `WORLD_*` environment variables |
@@ -281,24 +280,4 @@ Every surface that ADR-0035 touches MUST appear here.
 
 ## Follow-ups (required to remove ambiguity)
 
-- ADR-0035 options are internally inconsistent:
-  - “Options” section labels Option A/B/C differently than the “Decision Summary” A/B labels.
-  - ADR MUST be corrected so option labels and the selected option are consistent.
-- ADR-0035 declares “no exit code overrides” but does not pin the exit code for “missing staged `world-agent`” early failure.
-  - `contract.md` MUST specify the exact exit code (taxonomy-aligned) and the minimum remediation text.
-- `scripts/substrate/install-substrate.sh` and `scripts/substrate/world-enable.sh` currently use `exit 1` for `fatal`.
-  - `contract.md` MUST state whether `substrate world enable` maps helper-script failures onto taxonomy exit codes, or whether helper exit codes are treated as opaque and surfaced as exit code `1`.
-- ADR-0035 asserts both `bin/world-agent` and `bin/linux/world-agent` should exist after dev-install.
-  - `decision_register.md` MUST decide whether BOTH are required or ONE is sufficient, and `contract.md` MUST reflect the decision.
-- `--dry-run` semantics for the missing-artifact path are not explicit.
-  - `contract.md` MUST state whether `--dry-run` performs the preflight check and what exit code/output occurs when the staged artifact is missing.
-- ADR-0035 does not address helper-script discovery overrides (`SUBSTRATE_WORLD_ENABLE_SCRIPT`) or socket overrides (`SUBSTRATE_WORLD_SOCKET`).
-  - `contract.md` MUST define how these environment variables interact with helper discovery, preflight checks, and health verification.
-- `tasks.json` currently declares `behavior_platforms_required` includes `macos` and `windows`, while ADR-0035 scopes behavior deltas and smoke validation to Linux only.
-  - The pack MUST choose exactly one:
-    - (A) update `tasks.json` platform requirements to match Linux-only behavior validation, or
-    - (B) add macOS/Windows validation artifacts that deterministically assert the intended “no change” / “unsupported” behavior.
-- `tasks.json` is schema v4 with `meta.cross_platform=true` but does not currently define `meta.checkpoint_boundaries`.
-  - `tasks.json` MUST add `meta.checkpoint_boundaries` and it MUST match `ci_checkpoint_plan.md` checkpoint group endings.
-- ADR-0035 “Related Docs” currently references `docs/project_management/packs/draft/dev-install-world-agent-staging/spec_manifest.md`, but this run’s canonical output is `docs/project_management/packs/draft/dev-install-world-agent-staging/pre-planning/spec_manifest.md`.
-  - The pack MUST choose one canonical spec manifest path and update ADR-0035 “Related Docs” links to match.
+- None

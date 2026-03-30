@@ -378,38 +378,38 @@
       "id": "world_deps_packages_bundles_contract",
       "title": "World deps packages/bundles contract",
       "branch": "feat/world-deps-packages-bundles-contract",
-      "directory": "docs/project_management/packs/active/world-deps-packages-bundles-contract",
-      "plan": "docs/project_management/packs/active/world-deps-packages-bundles-contract/plan.md",
+      "directory": "docs/project_management/packs/implemented/world-deps-packages-bundles-contract",
+      "plan": "docs/project_management/packs/implemented/world-deps-packages-bundles-contract/plan.md",
       "status": "completed",
       "sequence": [
         {
           "id": "WDP0",
-          "spec": "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP0-spec.md"
+          "spec": "docs/project_management/packs/implemented/world-deps-packages-bundles-contract/WDP0-spec.md"
         },
         {
           "id": "WDP1",
-          "spec": "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP1-spec.md"
+          "spec": "docs/project_management/packs/implemented/world-deps-packages-bundles-contract/WDP1-spec.md"
         },
         {
           "id": "WDP2",
-          "spec": "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP2-spec.md"
+          "spec": "docs/project_management/packs/implemented/world-deps-packages-bundles-contract/WDP2-spec.md"
         },
         {
           "id": "WDP3",
-          "spec": "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP3-spec.md"
+          "spec": "docs/project_management/packs/implemented/world-deps-packages-bundles-contract/WDP3-spec.md"
         },
         {
           "id": "WDP4",
-          "spec": "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP4-spec.md"
+          "spec": "docs/project_management/packs/implemented/world-deps-packages-bundles-contract/WDP4-spec.md"
         },
         {
           "id": "WDP5",
-          "spec": "docs/project_management/packs/active/world-deps-packages-bundles-contract/WDP5-spec.md"
+          "spec": "docs/project_management/packs/implemented/world-deps-packages-bundles-contract/WDP5-spec.md"
         }
       ],
       "notes": [
         "Implements ADR-0011 contract: inventory directories + enabled patches; legacy paths removed from plumbing.",
-        "CLI contract is owned by docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md and must remain in parity with ADR-0011."
+        "CLI contract is owned by docs/project_management/packs/implemented/world-deps-packages-bundles-contract/contract.md and must remain in parity with ADR-0011."
       ]
     },
     {
@@ -417,17 +417,17 @@
       "id": "world_deps_apt_provisioning",
       "title": "World deps APT provisioning",
       "branch": "feat/world-deps-apt-provisioning",
-      "directory": "docs/project_management/packs/draft/world-deps-apt-provisioning",
-      "plan": "docs/project_management/packs/draft/world-deps-apt-provisioning/plan.md",
+      "directory": "docs/project_management/packs/implemented/world-deps-apt-provisioning",
+      "plan": "docs/project_management/packs/implemented/world-deps-apt-provisioning/plan.md",
       "status": "completed",
       "sequence": [
         {
           "id": "WDAP0",
-          "spec": "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP0/WDAP0-spec.md"
+          "spec": "docs/project_management/packs/implemented/world-deps-apt-provisioning/slices/WDAP0/WDAP0-spec.md"
         },
         {
           "id": "WDAP1",
-          "spec": "docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP1/WDAP1-spec.md"
+          "spec": "docs/project_management/packs/implemented/world-deps-apt-provisioning/slices/WDAP1/WDAP1-spec.md"
         }
       ],
       "notes": [
@@ -472,25 +472,25 @@
       "id": "world_deps_host_visible_hardening",
       "title": "World deps host-visible hardening",
       "branch": "feat/world-deps-host-visible-hardening",
-      "directory": "docs/project_management/packs/active/world-deps-host-visible-hardening",
-      "plan": "docs/project_management/packs/active/world-deps-host-visible-hardening/plan.md",
+      "directory": "docs/project_management/packs/implemented/world-deps-host-visible-hardening",
+      "plan": "docs/project_management/packs/implemented/world-deps-host-visible-hardening/plan.md",
       "status": "completed",
       "sequence": [
         {
           "id": "WDH0",
-          "spec": "docs/project_management/packs/active/world-deps-host-visible-hardening/WDH0-spec.md"
+          "spec": "docs/project_management/packs/implemented/world-deps-host-visible-hardening/WDH0-spec.md"
         },
         {
           "id": "WDH1",
-          "spec": "docs/project_management/packs/active/world-deps-host-visible-hardening/WDH1-spec.md"
+          "spec": "docs/project_management/packs/implemented/world-deps-host-visible-hardening/WDH1-spec.md"
         },
         {
           "id": "WDH2",
-          "spec": "docs/project_management/packs/active/world-deps-host-visible-hardening/WDH2-spec.md"
+          "spec": "docs/project_management/packs/implemented/world-deps-host-visible-hardening/WDH2-spec.md"
         },
         {
           "id": "WDH3",
-          "spec": "docs/project_management/packs/active/world-deps-host-visible-hardening/WDH3-spec.md"
+          "spec": "docs/project_management/packs/implemented/world-deps-host-visible-hardening/WDH3-spec.md"
         }
       ],
       "notes": [
@@ -774,6 +774,29 @@
       "notes": [
         "Implements ADR-0027: strict schema + precedence + fail-closed defaults for llm.* and agents.* config/policy keys, plus agent inventory parsing and restriction-only overlays.",
         "Cross-platform automation pack (schema v4) with bounded CI checkpoint CP1; behavior + CI parity platforms are linux and macos; windows is deferred."
+      ]
+    },
+    {
+      "order": 41.2,
+      "id": "dev_install_world_agent_staging",
+      "title": "Dev install world-agent staging (enable later workflow)",
+      "branch": "feat/dev-install-world-agent-staging",
+      "directory": "docs/project_management/packs/draft/dev-install-world-agent-staging",
+      "plan": "docs/project_management/packs/draft/dev-install-world-agent-staging/plan.md",
+      "status": "not_started",
+      "sequence": [
+        {
+          "id": "DIWAS0",
+          "spec": "docs/project_management/packs/draft/dev-install-world-agent-staging/slices/DIWAS0/DIWAS0-spec.md"
+        },
+        {
+          "id": "DIWAS1",
+          "spec": "docs/project_management/packs/draft/dev-install-world-agent-staging/slices/DIWAS1/DIWAS1-spec.md"
+        }
+      ],
+      "notes": [
+        "Implements ADR-0035: Linux dev-install with --no-world stages world-agent and substrate world enable fails fast with a deterministic remediation when the staged artifact is missing.",
+        "Coordinates with ADR-0034 helper discovery robustness; prefer landing helper staging first to reduce merge conflict risk on shared installer/world-enable surfaces."
       ]
     }
   ]
