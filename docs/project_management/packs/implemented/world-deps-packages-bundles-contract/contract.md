@@ -10,6 +10,8 @@ This document defines the **user-facing contract** for `substrate world deps` us
 
 Global paths in this document are rooted at `$SUBSTRATE_HOME` (defaults to `~/.substrate` when `SUBSTRATE_HOME` is unset).
 
+For the add-non-APT system-package provisioning feature, this document remains authoritative for inventory layering, enabled resolution, bundle expansion, and non-system-package install behavior. The manager-aware provisioning/runtime semantics for that feature are defined by the pack-root contract at `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/contract.md`.
+
 ## Goals
 - Make world deps a predictable way to declare and apply **in-world** dependencies.
 - Unify the mental model around **inventory** (what exists) → **enabled** (what you want applied) → **applied** (what is present in the world).
@@ -72,9 +74,10 @@ Implication for `nvm`-style deps:
 
 ## Inventory Model
 ### Item types
-- **Package**: an installable unit (via apt or via a script).
+- **Package**: an installable unit (via apt, pacman, or via a script).
   - Install methods:
     - **apt** (world image install)
+    - **pacman** (world image install)
     - **script** (world deps prefix install; must create/ensure an entrypoint under `/var/lib/substrate/world-deps/bin`)
 - **Bundle**: named group of packages (no installer; expands to packages).
 
@@ -130,10 +133,11 @@ wrappers:                             # optional; used for function/rc-style too
     exec: <string>                    # required for kind=sh_env_exec; e.g. "foo"
 platforms: [linux|macos|windows]      # optional allowlist; default: all (host platform)
 install:                              # required
-  method: apt | script | manual
+  method: apt | pacman | script | manual
   apt:                                # required iff method=apt
     - name: <apt_package_name>
       version: <string optional>      # when omitted, installs the default candidate/latest
+  pacman: [<package_name>...]         # required iff method=pacman; ordered list of OS package names
   script_path: <string>               # recommended iff method=script (see deps/scripts/ below)
   script: |                           # allowed iff method=script (inline fallback)
     <sh script>                       # used only when script_path is omitted
@@ -156,6 +160,11 @@ packages: [<package_name>...]
 - Each `install.apt[]` entry MAY specify `version`.
 - If `version` is omitted, Substrate installs the default candidate (equivalent to `apt-get install <name>`).
 - If `version` is specified, Substrate installs exactly that version (equivalent to `apt-get install <name>=<version>`); if unavailable, the install MUST fail with an actionable error.
+
+### Pacman install notes (`install.method=pacman`)
+- `install.pacman[]` is an ordered list of package names to provision inside Arch-family worlds.
+- Version pinning is out of scope for v1.
+- Pacman provisioning remains explicit and provisioning-time only; runtime `world deps current sync|install` stays probe-only.
 
 ### Wrapper generation (`wrappers[]`)
 `wrappers[]` is an optional declarative mechanism to make function/rc-style tools runnable under the world shell contract.
@@ -469,31 +478,31 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 - Applies items immediately without modifying the enabled list.
 - It MUST:
   1) Expand bundles → packages.
-  2) Derive the normalized APT requirement set for any `install.method=apt` items.
-  3) Probe APT requirements read-only with `dpkg-query`.
-  4) Treat APT-backed items as satisfied/no-op when every requirement is already present.
+  2) Derive the normalized APT requirement set for any `install.method=apt` items and the normalized pacman requirement set for any `install.method=pacman` items.
+  3) Probe APT requirements read-only with `dpkg-query` and pacman requirements read-only with `pacman -Q`.
+  4) Treat APT-backed and pacman-backed items as satisfied/no-op when every requirement is already present.
   5) Apply **world deps prefix** installs second (scripts + entrypoints under `/var/lib/substrate/world-deps/bin`).
-  6) Never execute runtime `apt`, `apt-get`, or mutating `dpkg`.
+  6) Never execute runtime `apt`, `apt-get`, mutating `dpkg`, or `pacman`.
   7) Never execute `manual` installs; instead print `manual_instructions` and exit `4`.
-- When any required APT package is unsatisfied:
+- When any required APT or pacman package is unsatisfied:
   - It MUST exit `4` before any non-APT install work begins.
   - `stderr` MUST include `substrate world enable --provision-deps`.
   - Linux host-native guidance MUST include `Substrate will not mutate the host OS`.
   - Windows guidance MUST include `unsupported on Windows`.
 - `--dry-run`:
-  - MUST still apply the fail-early APT probe and exit `4` when requirements are unsatisfied.
-  - When APT requirements exist, stdout MUST include the normalized requirement rendering (`name` or `name=version`) in stable order.
+  - MUST still apply the fail-early APT/pacman probes and exit `4` when requirements are unsatisfied.
+  - When APT or pacman requirements exist, stdout MUST include the normalized requirement rendering (`name` or `name=version` for APT; package name list for pacman) in stable order.
 - `--verbose`:
-  - When fail-early exits `4`, stderr MUST include the normalized APT requirement rendering in stable order.
+  - When fail-early exits `4`, stderr MUST include the normalized APT and/or pacman requirement rendering in stable order.
 - On success, it MUST print:
-  - A short summary of what was applied (APT-backed items are probe-only at runtime; script items may mutate the world-deps prefix), then:
+  - A short summary of what was applied (APT- and pacman-backed items are probe-only at runtime; script items may mutate the world-deps prefix), then:
   - `substrate: note: this updates the world only (enabled list not modified)`
   - `substrate: hint: run 'substrate world deps current list applied' to verify`
 - Guarantee (runnable packages):
   - After success, runnable package entrypoints are invokable in-world via the standard world execution path (interactive `substrate>` and non-interactive runs) without requiring shell RC sourcing.
 - Runtime APT remediation/provisioning contract:
   - `docs/reference/world/deps/README.md`
-  - `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`
+  - `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md` (compatibility shim only)
 - Exit codes:
   - `0` success
   - `2` unknown item name / invalid YAML / invalid inventory
@@ -505,13 +514,13 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 #### substrate world deps current sync [--dry-run] ...
 - Applies the **current enabled list** (effective for `cwd`) using the same engine as `deps current install`.
 - `--all`:
-  - Ignores enabled list and applies every visible inventory item (debug/bring-up only), including any visible APT-backed items in the fail-early probe scope.
-- Runtime APT is provisioning-time only:
-  - `deps current sync` never executes runtime `apt`, `apt-get`, or mutating `dpkg`.
-  - Unsatisfied APT requirements MUST fail early with exit `4` and remediation that points to `substrate world enable --provision-deps`.
+  - Ignores enabled list and applies every visible inventory item (debug/bring-up only), including any visible APT- or pacman-backed items in the fail-early probe scope.
+- Runtime APT/pacman are provisioning-time only:
+  - `deps current sync` never executes runtime `apt`, `apt-get`, mutating `dpkg`, or `pacman`.
+  - Unsatisfied APT or pacman requirements MUST fail early with exit `4` and remediation that points to `substrate world enable --provision-deps`.
   - The detailed provisioning/remediation contract lives in:
     `docs/reference/world/deps/README.md`
-    and `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`
+    and `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md` (compatibility shim only)
 - On success, it MUST print:
   - A one-line confirmation plus:
   - `substrate: note: applied effective enabled deps list for this directory (sources: workspace, global, defaults as applicable)`

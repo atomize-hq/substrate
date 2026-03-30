@@ -2,11 +2,11 @@
 slice_id: S2
 seam_id: SEAM-2
 slice_kind: delivery
-execution_horizon: next
-status: decomposed
-plan_version: v1
+execution_horizon: active
+status: exec-ready
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   basis_ref: seam.md#basis
   stale_triggers:
   - upstream THR-01 publication changes “in-world only” posture or probe inputs
@@ -14,9 +14,9 @@ basis:
   - world-agent execution plumbing changes alter exit-code translation or stderr/stdout capture
 gates:
   pre_exec:
-    review: inherited
-    contract: inherited
-    revalidation: inherited
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
@@ -116,4 +116,3 @@ Checklist:
 - Test:
 - Validate:
 - Cleanup:
-

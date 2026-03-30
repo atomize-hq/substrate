@@ -1,14 +1,15 @@
 ---
 seam_id: SEAM-2
 seam_slug: world-manager-probe-support-gate
-status: decomposed
-execution_horizon: next
-plan_version: v1
+status: exec-ready
+execution_horizon: active
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_seam_brief: ../../seam-2-world-manager-probe-support-gate.md
   source_scope_ref: ../../scope_brief.md
-  upstream_closeouts: []
+  upstream_closeouts:
+  - ../../governance/seam-1-closeout.md
   required_threads:
   - THR-01
   stale_triggers:
@@ -19,9 +20,9 @@ basis:
   - platform parity assumptions change and require different support-gate outcomes
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
@@ -66,16 +67,16 @@ open_remediations: []
     - contradiction handling cannot silently fall back to the wrong manager
     - unsupported backend posture and exit `4` remain fail-closed and consistent across shell, dispatch, and world-agent layers
 - **Basis posture**:
-  - Currentness: `provisional` (until `THR-01` is published by `SEAM-1` closeout and revalidated here)
-  - Upstream closeouts assumed: none (revalidation is required before promotion)
-  - Required threads (inbound): `THR-01`
+  - Currentness: `current`
+  - Upstream closeouts assumed: `../../governance/seam-1-closeout.md`
+  - Required threads (inbound): `THR-01` (published and revalidated)
   - Stale triggers:
     - `C-01` changes manager-selection semantics, supported families, or unsupported-backend wording
     - `world_enable` or `world-agent` shared-file changes alter where the in-world probe runs
     - platform parity assumptions change and require different support-gate outcomes
 - **Threading constraints**
   - Upstream blockers:
-    - `SEAM-1` publishes `C-01` and advances `THR-01` to `published`
+    - none; `SEAM-1` published `C-01` and `SEAM-2` revalidated `THR-01` against the pack-root contract and decision register
   - Downstream blocked seams:
     - `SEAM-4` (consumes `C-02` / `THR-02`)
     - `SEAM-6` (consumes `C-02` / `THR-02`)
@@ -119,4 +120,3 @@ open_remediations: []
 
 - Pack remediation log: `../../governance/remediation-log.md`
 - Seam closeout: `../../governance/seam-2-closeout.md`
-

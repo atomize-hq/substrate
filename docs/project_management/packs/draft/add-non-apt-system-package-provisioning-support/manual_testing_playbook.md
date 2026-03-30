@@ -271,7 +271,16 @@ Expected:
 
 ## 4) macOS Arch-family guest — supported pacman provisioning success
 
-This case uses a manually prepared Lima VM named `substrate`. The fixture is valid only when all of the following commands succeed:
+This case is manual-only evidence on a non-default Arch-family Lima VM named `substrate`. It is valid only when the fixture assumptions below are true; if any check fails, do not use the result as Arch-family success evidence for this pack.
+
+Fixture assumptions:
+- The guest reports an Arch-family identity through `/etc/os-release` by setting `ID=arch` or `ID_LIKE=arch`.
+- `pacman` is available on `PATH` inside the guest.
+- `/usr/local/bin/substrate` exists and is executable.
+- `/usr/local/bin/substrate-world-agent` exists and is executable.
+- `/run/substrate.sock` exists and is reachable as a socket.
+
+Validate the fixture with all of the following commands:
 
 ```bash
 limactl shell substrate sh -lc 'grep -E "^(ID|ID_LIKE)=" /etc/os-release'

@@ -4,8 +4,8 @@ pack_version: v1
 pack_status: extracted
 source_ref: add-non-apt-system-package-provisioning-support.zip
 execution_horizon:
-  active_seam: SEAM-1
-  next_seam: SEAM-2
+  active_seam: null
+  next_seam: null
 ---
 
 # Scope Brief - Add non-APT system-package provisioning support

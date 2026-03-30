@@ -102,6 +102,39 @@ esac
     fs::set_permissions(bin_dir.join("dpkg-query"), perms).expect("chmod");
 }
 
+fn install_fake_pacman_probe_tools(fixture: &ShellEnvFixture) {
+    let bin_dir = fake_world_bin_dir(fixture);
+    fs::create_dir_all(&bin_dir).expect("create fake world bin");
+    write_file(
+        &bin_dir.join("pacman"),
+        r#"#!/bin/sh
+set -eu
+cmd="${1:-}"
+pkg="${2:-}"
+case "$cmd" in
+  -Q)
+    case "$pkg" in
+      alpm|curl)
+        exit 0
+        ;;
+      *)
+        exit 1
+        ;;
+    esac
+    ;;
+  *)
+    exit 1
+    ;;
+esac
+"#,
+    );
+    let mut perms = fs::metadata(bin_dir.join("pacman"))
+        .expect("metadata")
+        .permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(bin_dir.join("pacman"), perms).expect("chmod");
+}
+
 fn start_world_socket_host_execute(prefix: &str) -> (tempfile::TempDir, PathBuf, AgentSocket) {
     let sock_tmp = Builder::new()
         .prefix(prefix)
@@ -179,6 +212,20 @@ description: node + npm
 packages: ["node", "npm"]
 "#,
     );
+
+    write_file(
+        &global_deps_dir(fixture).join("packages/pacman-tool.yaml"),
+        r#"version: 1
+name: pacman-tool
+description: pacman-backed system package prerequisite
+runnable: false
+install:
+  method: pacman
+  pacman:
+    - curl
+    - alpm
+"#,
+    );
 }
 
 fn write_global_config_builtins_disabled(fixture: &ShellEnvFixture, extra_yaml: &str) {
@@ -199,6 +246,7 @@ fn test_current_install_dry_run_prints_deterministic_plan_and_orders_apt_before_
 
     seed_global_inventory(&fixture);
     install_fake_apt_probe_tools(&fixture);
+    install_fake_pacman_probe_tools(&fixture);
     write_global_config_builtins_disabled(&fixture, "    enabled: []\n");
 
     let (_sock_tmp, socket_path, _socket) =
@@ -221,6 +269,7 @@ fn test_current_install_dry_run_prints_deterministic_plan_and_orders_apt_before_
             "current",
             "install",
             "node-runtime",
+            "pacman-tool",
             "bun",
             "--dry-run",
         ]);
@@ -235,11 +284,16 @@ fn test_current_install_dry_run_prints_deterministic_plan_and_orders_apt_before_
     let stdout1 = normalize_stdout(&out1.stdout);
 
     assert_contains_case_insensitive(&stdout1, "apt");
+    assert_contains_case_insensitive(&stdout1, "pacman");
     assert_contains_case_insensitive(&stdout1, "script");
     assert_contains(&stdout1, "nodejs");
+    assert_contains(&stdout1, "alpm");
     assert_contains(&stdout1, "npm");
     assert_contains(&stdout1, "bun");
-    assert_before(&stdout1, "nodejs", "bun");
+    assert_contains(&stdout1, "curl");
+    assert_before(&stdout1, "nodejs", "alpm");
+    assert_before(&stdout1, "alpm", "curl");
+    assert_before(&stdout1, "curl", "bun");
 
     let mut cmd2 = substrate_command_for_home(&fixture);
     cmd2.current_dir(&ws_root)
@@ -256,6 +310,7 @@ fn test_current_install_dry_run_prints_deterministic_plan_and_orders_apt_before_
             "current",
             "install",
             "node-runtime",
+            "pacman-tool",
             "bun",
             "--dry-run",
         ]);

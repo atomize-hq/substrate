@@ -39,8 +39,8 @@ fn read_repo_file(relative: &str) -> String {
 fn wdap1_required_docs_reference_the_contract_and_provisioning_workflow() {
     let reference_readme = read_repo_file("docs/reference/world/deps/README.md");
     assert!(
-        reference_readme.contains("## APT packages (current limitation in hardened worlds)"),
-        "expected docs/reference/world/deps/README.md to include the WDAP1 heading"
+        reference_readme.contains("## System-package runtime fail-early"),
+        "expected docs/reference/world/deps/README.md to include the runtime heading"
     );
     assert!(
         reference_readme.contains("## Commands you will use"),
@@ -63,8 +63,8 @@ fn wdap1_required_docs_reference_the_contract_and_provisioning_workflow() {
         "expected docs/internals/world/deps.md to include the high-level flow heading"
     );
     assert!(
-        internals.contains("## APT installs vs hardening"),
-        "expected docs/internals/world/deps.md to include the APT hardening heading"
+        internals.contains("## System-package runtime fail-early"),
+        "expected docs/internals/world/deps.md to include the runtime fail-early heading"
     );
     assert!(
         internals.contains(
@@ -330,6 +330,43 @@ printf '%s\n' "$path"
 }
 
 #[cfg(unix)]
+fn install_fake_pacman_probe_tools(fixture: &ShellEnvFixture) {
+    let bin_dir = fake_world_bin_dir(fixture);
+    fs::create_dir_all(&bin_dir).expect("create fake world bin");
+    write_file(
+        &bin_dir.join("pacman"),
+        r#"#!/bin/sh
+set -eu
+exit 1
+"#,
+    );
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let path = bin_dir.join("pacman");
+        let mut perms = fs::metadata(&path).expect("metadata").permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&path, perms).expect("chmod");
+    }
+}
+
+#[cfg(unix)]
+fn write_pacman_package(fixture: &ShellEnvFixture, name: &str, packages: &[&str]) {
+    let mut body = format!(
+        "version: 1\nname: {name}\ndescription: {name} via pacman\nrunnable: false\ninstall:\n  method: pacman\n  pacman:\n"
+    );
+    for pkg in packages {
+        body.push_str(&format!("    - {pkg}\n"));
+    }
+    write_file(
+        &global_deps_dir(fixture).join(format!("packages/{name}.yaml")),
+        &body,
+    );
+}
+
+#[cfg(unix)]
 fn start_world_socket_host_execute_record(
     prefix: &str,
 ) -> (
@@ -491,6 +528,97 @@ fn current_install_scopes_apt_checks_to_explicit_items_only() {
         cmds.iter()
             .any(|cmd| cmd.contains("SCRIPT_TOKEN_WDAP1_EXPLICIT_ONLY")),
         "expected the explicit script package to run; cmds={cmds:?}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn current_install_scopes_pacman_checks_to_explicit_items_only() {
+    let fixture = ShellEnvFixture::new();
+    let ws_root = workspace_root(&fixture);
+    fs::create_dir_all(ws_root.join(".substrate")).expect("create workspace .substrate");
+
+    install_fake_world_tools(&fixture);
+    install_fake_pacman_probe_tools(&fixture);
+    write_pacman_package(&fixture, "pacman-tool", &["curl"]);
+    write_script_package(&fixture, "hello", "SCRIPT_TOKEN_WDAP1_PACMAN_EXPLICIT_ONLY");
+    write_global_config_builtins_disabled(&fixture, "[\"pacman-tool\"]");
+    write_workspace_config(&ws_root, "[]");
+
+    let (_sock_tmp, socket_path, _socket, records) =
+        start_world_socket_host_execute_record("substrate-wdap1-pacman-explicit-only-");
+
+    let output = world_deps_command(&fixture, &ws_root, &socket_path)
+        .args(["world", "deps", "current", "install", "hello"])
+        .output()
+        .expect("run substrate");
+    let stdout = normalize_output(&output.stdout);
+    let stderr = normalize_output(&output.stderr);
+
+    assert!(
+        output.status.success(),
+        "expected explicit non-pacman install to succeed\nstdout={stdout}\nstderr={stderr}"
+    );
+
+    let cmds = recorded_cmds(&records);
+    assert!(
+        cmds.iter().all(|cmd| !cmd.contains("pacman -Q")),
+        "expected no pacman probe for explicit non-pacman items; cmds={cmds:?}"
+    );
+    assert!(
+        cmds.iter()
+            .any(|cmd| cmd.contains("SCRIPT_TOKEN_WDAP1_PACMAN_EXPLICIT_ONLY")),
+        "expected the explicit script package to run; cmds={cmds:?}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn current_sync_fails_early_for_unsatisfied_pacman_requirements() {
+    let fixture = ShellEnvFixture::new();
+    let ws_root = workspace_root(&fixture);
+    fs::create_dir_all(ws_root.join(".substrate")).expect("create workspace .substrate");
+
+    install_fake_world_tools(&fixture);
+    install_fake_pacman_probe_tools(&fixture);
+    write_pacman_package(&fixture, "pacman-tool", &["curl"]);
+    write_global_config_builtins_disabled(&fixture, "[\"pacman-tool\"]");
+    write_workspace_config(&ws_root, "[]");
+
+    let (_sock_tmp, socket_path, _socket, records) =
+        start_world_socket_host_execute_record("substrate-wdap1-pacman-fail-early-");
+
+    let output = world_deps_command(&fixture, &ws_root, &socket_path)
+        .args(["world", "deps", "current", "sync"])
+        .output()
+        .expect("run substrate");
+    let stdout = normalize_output(&output.stdout);
+    let stderr = normalize_output(&output.stderr);
+
+    assert_eq!(
+        output.status.code(),
+        Some(4),
+        "expected sync to fail early on unsatisfied pacman requirements\nstdout={stdout}\nstderr={stderr}"
+    );
+    assert!(
+        stderr.contains("substrate world enable --provision-deps"),
+        "expected remediation command in stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("pacman"),
+        "expected pacman-specific remediation text in stderr: {stderr}"
+    );
+
+    let cmds = recorded_cmds(&records);
+    assert!(
+        cmds.iter().any(|cmd| cmd.contains("pacman -Q")),
+        "expected a read-only pacman probe request; cmds={cmds:?}"
+    );
+    assert_no_runtime_apt_mutation(&cmds);
+    assert!(
+        cmds.iter()
+            .all(|cmd| !cmd.contains("SCRIPT_TOKEN_WDAP1_PACMAN_FAIL_EARLY")),
+        "expected fail-early to suppress script installs; cmds={cmds:?}"
     );
 }
 

@@ -2,14 +2,17 @@
 seam_id: SEAM-5
 seam_slug: runtime-fail-early-remediation
 type: platform
-status: proposed
+status: landed
 execution_horizon: future
-plan_version: v1
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+  - governance/seam-1-closeout.md
+  - governance/seam-3-closeout.md
+  - governance/seam-4-closeout.md
   required_threads:
   - THR-01
   - THR-03
@@ -20,20 +23,22 @@ basis:
   - runtime docs or tests drift back toward mutation-at-runtime semantics
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
-  planned_location: reserved_final_slice
-  status: pending
+  planned_location: S3
+  status: passed
 open_remediations: []
 ---
 
 # SEAM-5 - Runtime fail-early and remediation
+
+This seam is now landed and no longer in the forward planning window. Its authoritative execution record lives in `threaded-seams/seam-5-runtime-fail-early-remediation/` plus `governance/seam-5-closeout.md`.
 
 - **Goal / value**:
   - Keep runtime system-package handling read-only and deterministic while extending fail-early behavior and remediation to pacman-backed items alongside APT-backed items.
@@ -67,9 +72,7 @@ open_remediations: []
   - remediation must include the exact command `substrate world enable --provision-deps`
 - **Dependencies**
   - Direct blockers:
-    - `SEAM-1` publishing `C-01`
-    - `SEAM-3` publishing `C-03`
-    - `SEAM-4` publishing `C-04`
+    - none; `SEAM-1`, `SEAM-3`, and `SEAM-4` have already published the contracts this seam consumed.
   - Transitive blockers:
     - older runtime docs and tests still encode APT-only or mutation-at-runtime assumptions that can stale this seam's basis
   - Direct consumers:
@@ -88,7 +91,7 @@ open_remediations: []
     - `docs/reference/world/deps/README.md`
     - `docs/internals/world/deps.md`
 - **Verification**:
-  - Because this seam **consumes** upstream contracts, verification may depend on accepted upstream evidence for the pacman schema contract and provisioning normalization contract.
+  - Because this seam **produces** `C-05` while consuming upstream contracts, verification must prove the runtime fail-early and remediation contract is concrete enough for downstream validation without waiting on post-exec publication.
   - The first seam-local review should try to falsify:
     - whether any runtime path can still mutate the world package manager
     - whether explicit-item installs can still be poisoned by unrelated enabled system-package items
@@ -107,9 +110,9 @@ open_remediations: []
   - This seam is a safety seam as much as a runtime UX seam. Its main job is to keep system-package mutation out of runtime while still giving operators deterministic next steps.
   - Backend-specific guidance for Linux host-native and Windows is load-bearing because it prevents host-mutation misinterpretation.
 - **Downstream decomposition context**:
-  - This seam is `future` because it sits after provisioning routing in the accepted source order and the default horizon does not deep-plan beyond the next seam.
-  - The most important threads are `THR-03`, `THR-04`, and `THR-05`.
-  - The first seam-local review should focus on explicit-item scope, read-only probe families, manager-aware ordering, and the exact remediation wording path through shell/runtime surfaces.
+  - Why this seam is now `future`: the runtime fail-early work is landed, `THR-05` is published, and active planning has moved to the terminal validation and reconciliation seam `SEAM-6`.
+  - The most important threads were `THR-01`, `THR-03`, `THR-04`, and `THR-05`, which are now closed out through landed runtime evidence and the downstream handoff.
+  - Its authoritative execution record lives in `threaded-seams/seam-5-runtime-fail-early-remediation/` and `governance/seam-5-closeout.md`.
   - Source-plan lineage: `NASP-PWS-runtime_fail_early` and `NASP3`.
 - **Expected seam-exit concerns**:
   - Contracts likely to publish:

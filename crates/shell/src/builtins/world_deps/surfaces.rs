@@ -326,6 +326,7 @@ fn run_current_show(args: &WorldDepsCurrentShowArgs) -> Result<()> {
 #[derive(Debug)]
 struct InstallPlanV1 {
     apt: Vec<AptSpecV1>,
+    pacman_packages: Vec<String>,
     apt_packages: Vec<String>,
     script_packages: Vec<String>,
     manual_packages: Vec<ManualPackagePlanV1>,
@@ -350,7 +351,12 @@ fn run_current_install(args: &WorldDepsCurrentInstallArgs) -> Result<()> {
         eprintln!("substrate: note: expanded packages: {}", expanded.join(","));
     }
 
-    preflight_runtime_apt_requirements_v1(&plan.apt, args.dry_run, args.verbose)?;
+    preflight_runtime_system_requirements_v1(
+        &plan.apt,
+        &plan.pacman_packages,
+        args.dry_run,
+        args.verbose,
+    )?;
 
     if args.dry_run {
         print_install_plan_v1(&plan);
@@ -391,7 +397,12 @@ fn run_current_sync(args: &WorldDepsCurrentSyncArgs) -> Result<()> {
         eprintln!("substrate: note: expanded packages: {}", expanded.join(","));
     }
 
-    preflight_runtime_apt_requirements_v1(&plan.apt, args.dry_run, args.verbose)?;
+    preflight_runtime_system_requirements_v1(
+        &plan.apt,
+        &plan.pacman_packages,
+        args.dry_run,
+        args.verbose,
+    )?;
 
     if args.dry_run {
         print_install_plan_v1(&plan);
@@ -415,6 +426,7 @@ fn compute_install_plan_v1(view: &InventoryViewV1, item_names: &[String]) -> Res
     let package_names = expand_items_to_packages_v1(view, item_names)?;
 
     let mut apt_packages: Vec<String> = Vec::new();
+    let mut pacman_packages: Vec<String> = Vec::new();
     let mut script_packages: Vec<String> = Vec::new();
     let mut manual_packages: Vec<ManualPackagePlanV1> = Vec::new();
 
@@ -428,6 +440,15 @@ fn compute_install_plan_v1(view: &InventoryViewV1, item_names: &[String]) -> Res
         match pkg.install.method {
             InstallMethodV1::Apt => {
                 apt_packages.push(pkg.name.clone());
+            }
+            InstallMethodV1::Pacman => {
+                pacman_packages.extend(
+                    pkg.install
+                        .pacman
+                        .iter()
+                        .map(|value| value.trim().to_string())
+                        .filter(|value| !value.is_empty()),
+                );
             }
             InstallMethodV1::Script => {
                 script_packages.push(pkg.name.clone());
@@ -447,6 +468,8 @@ fn compute_install_plan_v1(view: &InventoryViewV1, item_names: &[String]) -> Res
 
     let apt = normalize_apt_requirements_v1(view, &package_names)?;
     let apt_packages = dedupe_ordered(&apt_packages);
+    pacman_packages.sort();
+    pacman_packages.dedup();
     let script_packages = dedupe_ordered(&script_packages);
 
     manual_packages.sort_by(|a, b| a.name.cmp(&b.name));
@@ -454,6 +477,7 @@ fn compute_install_plan_v1(view: &InventoryViewV1, item_names: &[String]) -> Res
 
     Ok(InstallPlanV1 {
         apt,
+        pacman_packages,
         apt_packages,
         script_packages,
         manual_packages,
@@ -466,6 +490,36 @@ pub(crate) fn resolve_enabled_apt_requirements_v1(
 ) -> Result<Vec<AptSpecV1>> {
     let package_names = expand_items_to_packages_v1(view, item_names)?;
     normalize_apt_requirements_v1(view, &package_names)
+}
+
+pub(crate) fn resolve_enabled_pacman_packages_v1(
+    view: &InventoryViewV1,
+    item_names: &[String],
+) -> Result<Vec<String>> {
+    let package_names = expand_items_to_packages_v1(view, item_names)?;
+    let mut packages: Vec<String> = Vec::new();
+
+    for pkg_name in package_names {
+        let pkg = view.packages.get(&pkg_name).ok_or_else(|| {
+            config_model::user_error(format!(
+                "invalid deps inventory: referenced package '{pkg_name}' is not visible for this platform"
+            ))
+        })?;
+        if pkg.install.method != InstallMethodV1::Pacman {
+            continue;
+        }
+        packages.extend(
+            pkg.install
+                .pacman
+                .iter()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty()),
+        );
+    }
+
+    packages.sort();
+    packages.dedup();
+    Ok(packages)
 }
 
 fn normalize_apt_requirements_v1(
@@ -541,30 +595,54 @@ struct AptRequirementProbeStatusV1 {
     installed_version: Option<String>,
 }
 
-fn preflight_runtime_apt_requirements_v1(
-    requirements: &[AptSpecV1],
+fn preflight_runtime_system_requirements_v1(
+    apt_requirements: &[AptSpecV1],
+    pacman_requirements: &[String],
     dry_run: bool,
     verbose: bool,
 ) -> Result<()> {
-    if requirements.is_empty() {
+    if apt_requirements.is_empty() && pacman_requirements.is_empty() {
         return Ok(());
     }
 
     if dry_run {
-        print_normalized_apt_requirements_v1(requirements);
+        print_normalized_apt_requirements_v1(apt_requirements);
+        print_normalized_pacman_requirements_v1(pacman_requirements);
     }
 
-    if runtime_apt_preflight_disabled_v1() {
-        return Ok(());
-    }
+    let apt_statuses = if apt_requirements.is_empty() || runtime_apt_preflight_disabled_v1() {
+        None
+    } else {
+        Some(probe_world_apt_requirements_v1(apt_requirements)?)
+    };
+    let pacman_statuses =
+        if pacman_requirements.is_empty() || runtime_pacman_preflight_disabled_v1() {
+            None
+        } else {
+            Some(probe_world_pacman_requirements_v1(pacman_requirements)?)
+        };
 
-    let statuses = probe_world_apt_requirements_v1(requirements)?;
-    if statuses.iter().all(|status| status.satisfied) {
+    let apt_missing = apt_statuses
+        .as_ref()
+        .map(|statuses| statuses.iter().any(|status| !status.satisfied))
+        .unwrap_or(false);
+    let pacman_missing = pacman_statuses
+        .as_ref()
+        .map(|statuses| statuses.iter().any(|status| !status.satisfied))
+        .unwrap_or(false);
+
+    if !apt_missing && !pacman_missing {
         return Ok(());
     }
 
     Err(anyhow!(WorldDepsUnmetPrerequisiteError::new(
-        build_runtime_apt_remediation_v1(requirements, &statuses, verbose)
+        build_runtime_system_remediation_v1(
+            apt_requirements,
+            apt_statuses.as_deref().unwrap_or(&[]),
+            pacman_requirements,
+            pacman_statuses.as_deref().unwrap_or(&[]),
+            verbose,
+        )
     )))
 }
 
@@ -580,9 +658,27 @@ fn runtime_apt_preflight_disabled_v1() -> bool {
     )
 }
 
+fn runtime_pacman_preflight_disabled_v1() -> bool {
+    matches!(
+        env::var("SUBSTRATE_WORLD_DEPS_SKIP_PACMAN")
+            .ok()
+            .as_deref()
+            .map(str::trim)
+            .map(str::to_ascii_lowercase)
+            .as_deref(),
+        Some("1" | "true" | "yes")
+    )
+}
+
 fn print_normalized_apt_requirements_v1(requirements: &[AptSpecV1]) {
     for requirement in requirements {
         println!("{}", render_apt_requirement_v1(requirement));
+    }
+}
+
+fn print_normalized_pacman_requirements_v1(requirements: &[String]) {
+    for requirement in requirements {
+        println!("{requirement}");
     }
 }
 
@@ -693,29 +789,112 @@ fn build_world_apt_probe_command_v1(requirements: &[AptSpecV1]) -> String {
     script
 }
 
-fn build_runtime_apt_remediation_v1(
-    requirements: &[AptSpecV1],
-    statuses: &[AptRequirementProbeStatusV1],
+#[derive(Debug, Clone)]
+struct PacmanRequirementProbeStatusV1 {
+    requirement: String,
+    satisfied: bool,
+}
+
+fn probe_world_pacman_requirements_v1(
+    requirements: &[String],
+) -> Result<Vec<PacmanRequirementProbeStatusV1>> {
+    let out = run_world_command_output_for_deps_with_profile(
+        &build_world_pacman_probe_command_v1(requirements),
+        Some("/tmp"),
+        Some("world-deps-probe"),
+    )
+    .map_err(classify_world_backend_error)?;
+
+    if out.exit != 0 {
+        let snippet = output_snippet_for_error(&out);
+        return Err(anyhow!(WorldDepsBackendUnavailableError::new(format!(
+            "world pacman probe failed (exit={}): {}",
+            out.exit,
+            if snippet.trim().is_empty() {
+                "unknown error".to_string()
+            } else {
+                snippet
+            }
+        ))));
+    }
+
+    let mut observed: HashMap<String, bool> = HashMap::new();
+    for line in out.stdout.lines() {
+        let Some(rest) = line.strip_prefix("__SUBSTRATE_WDAP1__ ") else {
+            continue;
+        };
+        let mut parts = rest.splitn(2, ' ');
+        let Some(name) = parts.next() else {
+            continue;
+        };
+        let satisfied = matches!(parts.next(), Some("1"));
+        observed.insert(name.to_string(), satisfied);
+    }
+
+    Ok(requirements
+        .iter()
+        .cloned()
+        .map(|requirement| {
+            let satisfied = observed.get(&requirement).copied().unwrap_or(false);
+            PacmanRequirementProbeStatusV1 {
+                requirement,
+                satisfied,
+            }
+        })
+        .collect())
+}
+
+fn build_world_pacman_probe_command_v1(requirements: &[String]) -> String {
+    let mut script = String::new();
+    script.push_str("set +e\n");
+    script.push_str("probe_pkg() {\n");
+    script.push_str("  pkg_name=\"$1\"\n");
+    script.push_str("  if ! command -v pacman >/dev/null 2>&1; then\n");
+    script.push_str("    printf '__SUBSTRATE_WDAP1__ %s 0\\n' \"$pkg_name\"\n");
+    script.push_str("    return 0\n");
+    script.push_str("  fi\n");
+    script.push_str("  if pacman -Q \"$pkg_name\" >/dev/null 2>&1; then\n");
+    script.push_str("    printf '__SUBSTRATE_WDAP1__ %s 1\\n' \"$pkg_name\"\n");
+    script.push_str("  else\n");
+    script.push_str("    printf '__SUBSTRATE_WDAP1__ %s 0\\n' \"$pkg_name\"\n");
+    script.push_str("  fi\n");
+    script.push_str("}\n");
+
+    for requirement in requirements {
+        script.push_str("probe_pkg ");
+        script.push_str(&sh_quote(requirement));
+        script.push('\n');
+    }
+
+    script.push_str("exit 0\n");
+    script
+}
+
+fn build_runtime_system_remediation_v1(
+    apt_requirements: &[AptSpecV1],
+    apt_statuses: &[AptRequirementProbeStatusV1],
+    pacman_requirements: &[String],
+    pacman_statuses: &[PacmanRequirementProbeStatusV1],
     verbose: bool,
 ) -> String {
     const PROVISION_COMMAND: &str = "substrate world enable --provision-deps";
 
     let mut lines: Vec<String> = vec![
-        "substrate: APT-backed world deps are not satisfied in this world.".to_string(),
-        "substrate: provision APT packages during world enable, then retry.".to_string(),
+        "substrate: system-package world deps are not satisfied in this world.".to_string(),
+        "substrate: provision system packages during world enable, then retry.".to_string(),
         PROVISION_COMMAND.to_string(),
     ];
 
     if cfg!(windows) {
         lines.push(
-            "APT provisioning is unsupported on Windows. Substrate will not mutate the Windows host OS."
+            "substrate world enable --provision-deps is unsupported on Windows. Substrate will not mutate the Windows host OS."
                 .to_string(),
         );
     } else {
         lines.push("Substrate will not mutate the host OS.".to_string());
     }
 
-    let unsatisfied = statuses
+    let unsatisfied_apt = apt_statuses
         .iter()
         .filter(|status| !status.satisfied)
         .map(|status| match &status.installed_version {
@@ -727,16 +906,34 @@ fn build_runtime_apt_remediation_v1(
             None => render_apt_requirement_v1(&status.requirement),
         })
         .collect::<Vec<_>>();
-    if !unsatisfied.is_empty() {
+    if !unsatisfied_apt.is_empty() {
         lines.push(format!(
             "substrate: unsatisfied APT requirements: {}",
-            unsatisfied.join(", ")
+            unsatisfied_apt.join(", ")
+        ));
+    }
+
+    let unsatisfied_pacman = pacman_statuses
+        .iter()
+        .filter(|status| !status.satisfied)
+        .map(|status| status.requirement.clone())
+        .collect::<Vec<_>>();
+    if !unsatisfied_pacman.is_empty() {
+        lines.push(format!(
+            "substrate: unsatisfied pacman requirements: {}",
+            unsatisfied_pacman.join(", ")
         ));
     }
 
     if verbose {
-        lines.push("substrate: normalized APT requirements:".to_string());
-        lines.extend(requirements.iter().map(render_apt_requirement_v1));
+        if !apt_requirements.is_empty() {
+            lines.push("substrate: normalized APT requirements:".to_string());
+            lines.extend(apt_requirements.iter().map(render_apt_requirement_v1));
+        }
+        if !pacman_requirements.is_empty() {
+            lines.push("substrate: normalized pacman requirements:".to_string());
+            lines.extend(pacman_requirements.iter().cloned());
+        }
     }
 
     lines.join("\n")
@@ -1516,6 +1713,7 @@ fn print_install_plan_v1(plan: &InstallPlanV1) {
         })
         .collect();
     print_plan_list_v1("APT", &apt_items);
+    print_plan_list_v1("PACMAN", &plan.pacman_packages);
     print_plan_list_v1("SCRIPT", &plan.script_packages);
 
     if plan.manual_packages.is_empty() {
@@ -3145,6 +3343,7 @@ fn print_inventory_table(items: &[InventoryListItemSummaryV1]) {
             .as_ref()
             .map(|m| match m {
                 super::inventory::InstallMethodV1::Apt => "apt",
+                super::inventory::InstallMethodV1::Pacman => "pacman",
                 super::inventory::InstallMethodV1::Script => "script",
                 super::inventory::InstallMethodV1::Manual => "manual",
             })

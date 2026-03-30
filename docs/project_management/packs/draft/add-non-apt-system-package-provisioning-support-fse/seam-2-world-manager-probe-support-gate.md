@@ -2,14 +2,15 @@
 seam_id: SEAM-2
 seam_slug: world-manager-probe-support-gate
 type: platform
-status: proposed
-execution_horizon: next
-plan_version: v1
+status: closed
+execution_horizon: future
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+  - governance/seam-1-closeout.md
   required_threads:
   - THR-01
   stale_triggers:
@@ -20,20 +21,22 @@ basis:
   - platform parity assumptions change and require different support-gate outcomes
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
-  planned_location: reserved_final_slice
-  status: pending
+  planned_location: S3
+  status: passed
 open_remediations: []
 ---
 
 # SEAM-2 - World-manager probe and support gate
+
+This seam has landed. Its authoritative post-exec record lives in `governance/seam-2-closeout.md`, and it is no longer in the forward planning window.
 
 - **Goal / value**:
   - Turn the accepted manager-selection contract into one deterministic in-world probe and one fail-closed support gate that every provisioning path can trust.
@@ -66,7 +69,7 @@ open_remediations: []
   - dry-run still performs the in-world probe while performing no mutation
 - **Dependencies**
   - Direct blockers:
-    - `SEAM-1` publishing `C-01`
+    - none; `THR-01` is published and revalidated from `SEAM-1` closeout
   - Transitive blockers:
     - overlapping host-installer detection work can stale `/etc/os-release` vocabulary assumptions if guest routing starts reusing host logic
   - Direct consumers:
@@ -104,7 +107,7 @@ open_remediations: []
   - This seam should only make supported-vs-unsupported manager selection and gating explicit; it must not add new mutation paths by itself.
   - Every failure mode here should remain fail-closed and non-mutating.
 - **Downstream decomposition context**:
-  - This seam is `next` because the source accepted delivery order starts with `NASP0`, and provisioning routing cannot safely decompose until the support gate is fixed.
+  - This seam is `active` because `THR-01` is published and revalidated; `SEAM-3` now holds the next slot because `SEAM-4` depends on both probe truth and schema truth.
   - The most important threads are `THR-01` and `THR-02`.
   - The first seam-local review should focus on `/etc/os-release` normalization, contradiction handling, shared-file touch boundaries, and exact unsupported-backend outcomes.
   - Source-plan lineage: `NASP-PWS-os_probe` and `NASP0`.

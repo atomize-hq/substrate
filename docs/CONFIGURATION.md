@@ -54,6 +54,13 @@ overlay plumbing. World deps now uses:
 - Inventory directories: `$SUBSTRATE_HOME/deps/` (global) and `<workspace_root>/.substrate/deps/` (workspace chain)
 - Enabled patches: `$SUBSTRATE_HOME/config.yaml` (global) and `<workspace_root>/.substrate/workspace.yaml` (workspace)
 
+World deps probe toggles:
+
+| Variable | Purpose | Default | Example |
+|----------|---------|---------|---------|
+| `SUBSTRATE_WORLD_DEPS_SKIP_APT` | Skip in-world APT requirement probes during `substrate world deps current (sync|install)` (treat requirements as satisfied) | *unset* | `1` |
+| `SUBSTRATE_WORLD_DEPS_SKIP_PACMAN` | Skip in-world pacman requirement probes during `substrate world deps current (sync|install)` (treat requirements as satisfied) | *unset* | `1` |
+
 ## World Configuration
 
 Substrate distinguishes between:

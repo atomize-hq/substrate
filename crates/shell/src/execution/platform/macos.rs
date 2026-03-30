@@ -58,6 +58,12 @@ mod world_doctor_macos {
         }
     }
 
+    fn resolve_lima_vm_name() -> String {
+        std::env::var("SUBSTRATE_LIMA_VM_NAME")
+            .or_else(|_| std::env::var("LIMA_VM_NAME"))
+            .unwrap_or_else(|_| "substrate".to_string())
+    }
+
     fn probe_caps_uds(path: &Path) -> bool {
         let Ok(mut stream) = UnixStream::connect(path) else {
             return false;
@@ -99,14 +105,14 @@ mod world_doctor_macos {
         }
     }
 
-    fn probe_caps_in_vm(runner: &dyn CommandRunner) -> bool {
+    fn probe_caps_in_vm(runner: &dyn CommandRunner, vm_name: &str) -> bool {
         runner
             .run(
                 "limactl",
                 &[
                     "shell",
                     "--workdir=/",
-                    "substrate",
+                    vm_name,
                     "sudo",
                     "-n",
                     "timeout",
@@ -122,7 +128,7 @@ mod world_doctor_macos {
             .success
     }
 
-    fn fallback_world_report_v1_via_vm(runner: &dyn CommandRunner) -> Value {
+    fn fallback_world_report_v1_via_vm(runner: &dyn CommandRunner, vm_name: &str) -> Value {
         let collected_at_utc = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
 
         let landlock_output = runner.run(
@@ -130,7 +136,7 @@ mod world_doctor_macos {
             &[
                 "shell",
                 "--workdir=/",
-                "substrate",
+                vm_name,
                 "sudo",
                 "-n",
                 "sh",
@@ -186,7 +192,7 @@ cat /sys/kernel/security/landlock/abi_version
                 &[
                     "shell",
                     "--workdir=/",
-                    "substrate",
+                    vm_name,
                     "sudo",
                     "-n",
                     "timeout",
@@ -252,12 +258,33 @@ echo pass
         })
     }
 
+    fn lima_json_value(
+        vm_name: &str,
+        lima_installed: bool,
+        lima_virtualization: bool,
+        vm_status: &str,
+        service_active: bool,
+        agent_caps_ok: bool,
+        vsock_proxy: bool,
+    ) -> Value {
+        json!({
+            "vm_name": vm_name,
+            "installed": lima_installed,
+            "virtualization": lima_virtualization,
+            "vm_status": vm_status,
+            "service_active": service_active,
+            "agent_caps_ok": agent_caps_ok,
+            "vsock_proxy": vsock_proxy,
+        })
+    }
+
     pub(super) fn run_host(
         json_mode: bool,
         world_enabled: bool,
         runner: &dyn CommandRunner,
     ) -> i32 {
         let fs_policy = world_fs_policy();
+        let vm_name = resolve_lima_vm_name();
 
         let pass = |msg: &str| println!("PASS  | {}", msg);
         let warn = |msg: &str| println!("WARN  | {}", msg);
@@ -309,7 +336,7 @@ echo pass
 
         // VM status
         let vm_status = if lima_installed {
-            let vm = runner.run("limactl", &["list", "substrate", "--json"]);
+            let vm = runner.run("limactl", &["list", &vm_name, "--json"]);
             if vm.success {
                 match serde_json::from_str::<Value>(&vm.stdout) {
                     Ok(value) => value
@@ -328,10 +355,10 @@ echo pass
 
         if !json_mode {
             match vm_status.as_str() {
-                "Running" => pass("Lima VM 'substrate' running"),
-                "missing" => warn("Lima VM 'substrate' not found"),
+                "Running" => pass(&format!("Lima VM '{vm_name}' running")),
+                "missing" => warn(&format!("Lima VM '{vm_name}' not found")),
                 status => warn(&format!(
-                    "Lima VM 'substrate' not running (status: {status})"
+                    "Lima VM '{vm_name}' not running (status: {status})"
                 )),
             }
         }
@@ -347,7 +374,7 @@ echo pass
                     &[
                         "shell",
                         "--workdir=/",
-                        "substrate",
+                        &vm_name,
                         "systemctl",
                         "is-active",
                         "substrate-world-agent",
@@ -375,7 +402,7 @@ echo pass
             if sock.exists() && probe_caps_uds(&sock) {
                 true
             } else {
-                probe_caps_tcp("127.0.0.1", 17788) || probe_caps_in_vm(runner)
+                probe_caps_tcp("127.0.0.1", 17788) || probe_caps_in_vm(runner, &vm_name)
             }
         };
 
@@ -406,14 +433,15 @@ echo pass
                     "world_fs_mode": fs_policy.mode.as_str(),
                     "world_fs_isolation": fs_policy.isolation.as_str(),
                     "world_fs_require_world": fs_policy.require_world,
-                    "lima": {
-                        "installed": lima_installed,
-                        "virtualization": lima_virtualization,
-                        "vm_status": vm_status,
-                        "service_active": service_active,
-                        "agent_caps_ok": agent_caps_ok,
-                        "vsock_proxy": vsock_proxy,
-                    }
+                    "lima": lima_json_value(
+                        &vm_name,
+                        lima_installed,
+                        lima_virtualization,
+                        &vm_status,
+                        service_active,
+                        agent_caps_ok,
+                        vsock_proxy,
+                    )
                 }
             });
             println!("{}", serde_json::to_string_pretty(&out).unwrap());
@@ -432,6 +460,7 @@ echo pass
 
     pub(super) fn run(json_mode: bool, runner: &dyn CommandRunner) -> i32 {
         let fs_policy = world_fs_policy();
+        let vm_name = resolve_lima_vm_name();
         let world_enabled = std::env::var("SUBSTRATE_WORLD_ENABLED")
             .ok()
             .map(|raw| {
@@ -486,7 +515,7 @@ echo pass
         }
 
         let vm_status = if lima_installed {
-            let vm = runner.run("limactl", &["list", "substrate", "--json"]);
+            let vm = runner.run("limactl", &["list", &vm_name, "--json"]);
             if vm.success {
                 match serde_json::from_str::<Value>(&vm.stdout) {
                     Ok(value) => value
@@ -505,10 +534,10 @@ echo pass
 
         if !json_mode {
             match vm_status.as_str() {
-                "Running" => pass("Lima VM 'substrate' running"),
-                "missing" => warn("Lima VM 'substrate' not found"),
+                "Running" => pass(&format!("Lima VM '{vm_name}' running")),
+                "missing" => warn(&format!("Lima VM '{vm_name}' not found")),
                 status => warn(&format!(
-                    "Lima VM 'substrate' not running (status: {status})"
+                    "Lima VM '{vm_name}' not running (status: {status})"
                 )),
             }
         }
@@ -524,7 +553,7 @@ echo pass
                     &[
                         "shell",
                         "--workdir=/",
-                        "substrate",
+                        &vm_name,
                         "systemctl",
                         "is-active",
                         "substrate-world-agent",
@@ -552,7 +581,7 @@ echo pass
             if sock.exists() && probe_caps_uds(&sock) {
                 true
             } else {
-                probe_caps_tcp("127.0.0.1", 17788) || probe_caps_in_vm(runner)
+                probe_caps_tcp("127.0.0.1", 17788) || probe_caps_in_vm(runner, &vm_name)
             }
         };
 
@@ -577,14 +606,15 @@ echo pass
             "world_fs_mode": fs_policy.mode.as_str(),
             "world_fs_isolation": fs_policy.isolation.as_str(),
             "world_fs_require_world": fs_policy.require_world,
-            "lima": {
-                "installed": lima_installed,
-                "virtualization": lima_virtualization,
-                "vm_status": vm_status,
-                "service_active": service_active,
-                "agent_caps_ok": agent_caps_ok,
-                "vsock_proxy": vsock_proxy,
-            }
+            "lima": lima_json_value(
+                &vm_name,
+                lima_installed,
+                lima_virtualization,
+                &vm_status,
+                service_active,
+                agent_caps_ok,
+                vsock_proxy,
+            )
         });
 
         let mut exit_code = 4;
@@ -620,7 +650,7 @@ echo pass
                             &[
                                 "shell",
                                 "--workdir=/",
-                                "substrate",
+                                &vm_name,
                                 "sudo",
                                 "-n",
                                 "timeout",
@@ -654,7 +684,7 @@ echo pass
 
             let mut value = match report {
                 Some(report) => serde_json::to_value(report).unwrap_or_else(|_| json!({})),
-                None => fallback_world_report_v1_via_vm(runner),
+                None => fallback_world_report_v1_via_vm(runner, &vm_name),
             };
 
             let status = if value.get("ok").and_then(Value::as_bool) == Some(true) {
@@ -873,6 +903,20 @@ echo pass
             let _ = stream.write_all(reply.as_bytes());
         }
 
+        fn with_env_var<T>(key: &str, value: Option<&str>, f: impl FnOnce() -> T) -> T {
+            let prev = std::env::var_os(key);
+            match value {
+                Some(value) => std::env::set_var(key, value),
+                None => std::env::remove_var(key),
+            }
+            let result = f();
+            match prev {
+                Some(value) => std::env::set_var(key, value),
+                None => std::env::remove_var(key),
+            }
+            result
+        }
+
         #[test]
         #[serial]
         fn doctor_ok_json() {
@@ -928,6 +972,140 @@ echo pass
                 Some(value) => std::env::set_var("SUBSTRATE_WORLD_ENABLED", value),
                 None => std::env::remove_var("SUBSTRATE_WORLD_ENABLED"),
             }
+        }
+
+        #[test]
+        #[serial]
+        fn doctor_resolves_override_vm_name_and_reports_it() {
+            with_env_var("LIMA_VM_NAME", Some("substrate-fallback"), || {
+                with_env_var("SUBSTRATE_LIMA_VM_NAME", Some("substrate-arch"), || {
+                    assert_eq!(resolve_lima_vm_name(), "substrate-arch");
+                })
+            });
+        }
+
+        #[test]
+        #[serial]
+        fn world_doctor_json_uses_override_vm_name() {
+            let vm_name = "substrate-arch";
+            let vm_json = r#"{"status":"Running"}"#;
+            let temp = tempfile::tempdir().expect("tempdir");
+            let home = temp.path();
+            let sock = home.join(".substrate/sock/agent.sock");
+            let _sock_guard = AgentSocketGuard::start(&sock);
+
+            with_env_var("HOME", Some(home.to_str().expect("home path")), || {
+                with_env_var("SUBSTRATE_WORLD_ENABLED", Some("1"), || {
+                    with_env_var("LIMA_VM_NAME", Some("substrate-fallback"), || {
+                        with_env_var("SUBSTRATE_LIMA_VM_NAME", Some(vm_name), || {
+                            let responses = vec![
+                                (
+                                    "limactl".into(),
+                                    vec!["--version".into()],
+                                    success_out("Lima v1"),
+                                ),
+                                (
+                                    "sysctl".into(),
+                                    vec!["-n".into(), "kern.hv_support".into()],
+                                    success_out("1\n"),
+                                ),
+                                (
+                                    "limactl".into(),
+                                    vec!["list".into(), vm_name.into(), "--json".into()],
+                                    success_out(vm_json),
+                                ),
+                                (
+                                    "limactl".into(),
+                                    vec![
+                                        "shell".into(),
+                                        "--workdir=/".into(),
+                                        vm_name.into(),
+                                        "systemctl".into(),
+                                        "is-active".into(),
+                                        "substrate-world-agent".into(),
+                                    ],
+                                    success_out("active\n"),
+                                ),
+                            ];
+                            let runner = MockRunner::new(responses);
+                            let exit = run(true, &runner);
+                            assert_eq!(exit, 0);
+
+                            let lima =
+                                lima_json_value(vm_name, true, true, "Running", true, true, false);
+                            assert_eq!(lima["vm_name"], vm_name);
+                        })
+                    })
+                })
+            });
+        }
+
+        #[test]
+        #[serial]
+        fn host_doctor_json_uses_override_vm_name() {
+            let vm_name = "substrate-arch";
+            let vm_json = r#"{"status":"Running"}"#;
+            with_env_var("LIMA_VM_NAME", Some("substrate-fallback"), || {
+                with_env_var("SUBSTRATE_LIMA_VM_NAME", Some(vm_name), || {
+                    let responses = vec![
+                        (
+                            "limactl".into(),
+                            vec!["--version".into()],
+                            success_out("Lima v1"),
+                        ),
+                        (
+                            "sysctl".into(),
+                            vec!["-n".into(), "kern.hv_support".into()],
+                            success_out("1\n"),
+                        ),
+                        (
+                            "limactl".into(),
+                            vec!["list".into(), vm_name.into(), "--json".into()],
+                            success_out(vm_json),
+                        ),
+                        (
+                            "limactl".into(),
+                            vec![
+                                "shell".into(),
+                                "--workdir=/".into(),
+                                vm_name.into(),
+                                "systemctl".into(),
+                                "is-active".into(),
+                                "substrate-world-agent".into(),
+                            ],
+                            success_out("active\n"),
+                        ),
+                        // Capabilities probe fallback: when the host UDS socket is absent and the
+                        // TCP probe fails, run `curl` inside the guest without starting any
+                        // forwarding processes.
+                        (
+                            "limactl".into(),
+                            vec![
+                                "shell".into(),
+                                "--workdir=/".into(),
+                                vm_name.into(),
+                                "sudo".into(),
+                                "-n".into(),
+                                "timeout".into(),
+                                "5".into(),
+                                "curl".into(),
+                                "-sS".into(),
+                                "--fail".into(),
+                                "--unix-socket".into(),
+                                "/run/substrate.sock".into(),
+                                "http://localhost/v1/capabilities".into(),
+                            ],
+                            success_out("{}\n"),
+                        ),
+                    ];
+                    let runner = MockRunner::new(responses);
+                    let exit = run_host(true, true, &runner);
+                    assert_eq!(exit, 0);
+
+                    let lima = lima_json_value(vm_name, true, true, "Running", true, true, false);
+                    assert_eq!(lima["vm_name"], vm_name);
+                })
+            });
         }
 
         #[test]

@@ -2,14 +2,17 @@
 seam_id: SEAM-4
 seam_slug: provisioning-routing-pacman-execution
 type: platform
-status: proposed
+status: closed
 execution_horizon: future
-plan_version: v1
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+  - governance/seam-1-closeout.md
+  - governance/seam-2-closeout.md
+  - governance/seam-3-closeout.md
   required_threads:
   - THR-01
   - THR-02
@@ -21,21 +24,22 @@ basis:
     execution basis
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
-  planned_location: reserved_final_slice
-  status: pending
-open_remediations:
-- REM-003
+  planned_location: S3
+  status: passed
+open_remediations: []
 ---
 
 # SEAM-4 - Provisioning routing and pacman execution
+
+This seam has landed. Its authoritative post-exec record lives in `governance/seam-4-closeout.md`, and it is no longer in the forward planning window.
 
 - **Goal / value**:
   - Turn the manager-aware contract, probe support gate, and pacman schema truth into one deterministic provisioning-time execution path for `substrate world enable --provision-deps`.
@@ -110,9 +114,9 @@ open_remediations:
   - This seam is the only place in the pack where pacman execution becomes an owned behavior. That makes fail-closed behavior and exact command shape load-bearing safety controls.
   - Linux host-native and Windows remain unsupported; no host mutation is allowed.
 - **Downstream decomposition context**:
-  - This seam is `future` because the default horizon stops before provisioning execution, even though the source accepted delivery order reaches this work after probe and schema settle.
-  - The most important threads are `THR-02`, `THR-03`, and `THR-04`.
-  - The first seam-local review should focus on enabled-set input boundaries, normalization rules, shared-file overlap, request-profile posture, and exact pacman command construction.
+  - This seam is now outside the forward window because `SEAM-5` can consume the published `THR-04` handoff.
+  - The most important threads remain `THR-01`, `THR-02`, `THR-03`, and `THR-04`.
+  - `governance/seam-4-closeout.md` is the authoritative publication point for `C-04`, `THR-04`, and the resolved `REM-003` revalidation evidence.
   - Source-plan lineage: `NASP-PWS-provisioning_wiring` and `NASP2`.
 - **Expected seam-exit concerns**:
   - Contracts likely to publish:

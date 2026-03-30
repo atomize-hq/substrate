@@ -2,11 +2,11 @@
 slice_id: S1
 seam_id: SEAM-2
 slice_kind: delivery
-execution_horizon: next
-status: decomposed
-plan_version: v1
+execution_horizon: active
+status: exec-ready
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   basis_ref: seam.md#basis
   stale_triggers:
   - THR-01 changes probe precedence, supported families, or exit `4` posture
@@ -15,9 +15,9 @@ basis:
     supported-vs-unsupported gate outcome
 gates:
   pre_exec:
-    review: inherited
-    contract: inherited
-    revalidation: inherited
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
@@ -138,4 +138,3 @@ Dry-run MUST still perform the in-world probe + gate decision and MUST NOT mutat
 - `C-02` defines contradiction rules and is explicitly fail-closed.
 - Platform posture outcomes (Linux host-native unsupported; macOS Lima supported; Windows WSL unsupported) are explicit.
 - Exit-code posture matches `C-01` and references the canonical taxonomy.
-

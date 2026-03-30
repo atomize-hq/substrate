@@ -2,11 +2,11 @@
 seam_id: SEAM-1
 seam_slug: manager-aware-contract-surface
 type: integration
-status: proposed
-execution_horizon: active
-plan_version: v1
+status: closed
+execution_horizon: future
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
   upstream_closeouts: []
@@ -18,16 +18,16 @@ basis:
     basis stale
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
-  planned_location: reserved_final_slice
-  status: pending
+  planned_location: S3
+  status: passed
 open_remediations: []
 ---
 
@@ -111,7 +111,7 @@ open_remediations: []
   - This seam should land as an additive contract-definition seam only. It must not broaden scope into host mutation, new protocol/config surfaces, or runnable pacman behavior.
   - Fail-closed behavior is part of the contract surface and should be treated as load-bearing, not as implementation detail.
 - **Downstream decomposition context**:
-  - This seam is `active` because every other source workstream depends on it, even though the accepted delivery slice order starts at `NASP0`.
+  - This seam is closed and out of the forward planning window; downstream seams now consume published `C-01` via `THR-01` and revalidate on its recorded stale triggers.
   - The most important thread is `THR-01`.
   - The first seam-local review should focus on authority handoff, exit-code meanings, mixed-manager posture, request-profile boundaries, and pacman v1 scope.
   - Source-plan lineage: `NASP-PWS-contract`, `contract.md`, and `decision_register.md`.

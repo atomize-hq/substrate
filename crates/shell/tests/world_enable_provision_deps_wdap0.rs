@@ -12,6 +12,9 @@ use support::{substrate_shell_driver, temp_dir};
 use support::{AgentSocket, SocketResponse};
 use tempfile::{Builder, TempDir};
 
+const APT_PROBE_STDOUT: &str = "__SUBSTRATE_WDAP0__ os_release_readable=1\n__SUBSTRATE_WDAP0__ id=ubuntu\n__SUBSTRATE_WDAP0__ id_like=debian\n__SUBSTRATE_WDAP0__ pacman_present=0\n";
+const PACMAN_PROBE_STDOUT: &str = "__SUBSTRATE_WDAP0__ os_release_readable=1\n__SUBSTRATE_WDAP0__ id=arch\n__SUBSTRATE_WDAP0__ id_like=archlinux\n__SUBSTRATE_WDAP0__ pacman_present=1\n";
+
 const HELPER_SCRIPT: &str = r#"#!/usr/bin/env bash
 set -euo pipefail
 
@@ -175,6 +178,19 @@ impl WorldEnableProvisionFixture {
             &body,
         );
     }
+
+    fn write_pacman_package(&self, name: &str, pacman_entries: &[&str]) {
+        let mut body = format!(
+            "version: 1\nname: {name}\ndescription: {name} via pacman\nrunnable: false\ninstall:\n  method: pacman\n  pacman:\n"
+        );
+        for pkg_name in pacman_entries {
+            body.push_str(&format!("    - {pkg_name}\n"));
+        }
+        write_file(
+            &self.global_deps_dir().join(format!("packages/{name}.yaml")),
+            &body,
+        );
+    }
 }
 
 fn write_file(path: &Path, contents: &str) {
@@ -196,6 +212,26 @@ fn yaml_list(items: &[&str]) -> String {
     }
     out.push(']');
     out
+}
+
+fn assert_lines_in_order(haystack: &str, expected: &[&str]) {
+    let mut cursor = 0usize;
+    for needle in expected {
+        let Some(relative) = haystack[cursor..].find(needle) else {
+            panic!("expected to find '{needle}' after offset {cursor} in: {haystack}");
+        };
+        cursor += relative + needle.len();
+    }
+}
+
+fn assert_subsequence(haystack: &str, expected: &[&str]) {
+    let mut cursor = 0usize;
+    for needle in expected {
+        let Some(relative) = haystack[cursor..].find(needle) else {
+            panic!("expected to find '{needle}' after offset {cursor} in: {haystack}");
+        };
+        cursor += relative + needle.len();
+    }
 }
 
 fn start_world_socket_execute_record(
@@ -254,6 +290,35 @@ fn first_apt_like_profile(records: &Arc<Mutex<Vec<serde_json::Value>>>) -> Optio
     })
 }
 
+fn first_pacman_like_profile(records: &Arc<Mutex<Vec<serde_json::Value>>>) -> Option<String> {
+    recorded_requests(records).into_iter().find_map(|value| {
+        let cmd = value.get("cmd")?.as_str()?;
+        if cmd.contains("pacman -Sy --noconfirm --needed") {
+            return value
+                .get("profile")
+                .and_then(|profile| profile.as_str())
+                .map(|profile| profile.to_string());
+        }
+        None
+    })
+}
+
+fn first_probe_profile(records: &Arc<Mutex<Vec<serde_json::Value>>>) -> Option<String> {
+    recorded_requests(records).into_iter().find_map(|value| {
+        let cmd = value.get("cmd")?.as_str()?;
+        if cmd.contains("os_release_readable")
+            || cmd.contains("pacman_present")
+            || cmd.contains("/etc/os-release")
+        {
+            return value
+                .get("profile")
+                .and_then(|profile| profile.as_str())
+                .map(|profile| profile.to_string());
+        }
+        None
+    })
+}
+
 fn assert_no_apt_like_requests(records: &Arc<Mutex<Vec<serde_json::Value>>>) {
     let cmds = recorded_cmds(records);
     assert!(
@@ -264,7 +329,7 @@ fn assert_no_apt_like_requests(records: &Arc<Mutex<Vec<serde_json::Value>>>) {
 }
 
 #[test]
-fn world_enable_provision_deps_dry_run_prints_normalized_requirements_and_skips_side_effects() {
+fn world_enable_provision_deps_dry_run_runs_probe_and_skips_apt_side_effects() {
     let fixture = WorldEnableProvisionFixture::new();
     fixture.write_global_config(&["curl-unpinned", "nodejs-pinned", "nodejs-unpinned", "zlib"]);
     fixture.write_workspace_config(&[]);
@@ -274,7 +339,7 @@ fn world_enable_provision_deps_dry_run_prints_normalized_requirements_and_skips_
     fixture.write_apt_package("zlib", &[("zlib1g", None)]);
 
     let (_sock_tmp, socket_path, _socket, records) =
-        start_world_socket_execute_record("substrate-wdap0-dry-run-", "", "", 0);
+        start_world_socket_execute_record("substrate-wdap0-dry-run-", APT_PROBE_STDOUT, "", 0);
 
     let assert = fixture
         .command()
@@ -295,11 +360,18 @@ fn world_enable_provision_deps_dry_run_prints_normalized_requirements_and_skips_
     );
     assert!(
         fixture.log_contents().is_none(),
-        "helper must not run during --provision-deps --dry-run"
+        "dry-run must not run the helper or write helper logs"
     );
+    assert_eq!(
+        first_probe_profile(&records).as_deref(),
+        Some("world-deps-probe"),
+        "dry-run must execute the in-world manager probe; records={:?}",
+        recorded_requests(&records)
+    );
+    assert_no_apt_like_requests(&records);
     assert!(
-        recorded_requests(&records).is_empty(),
-        "dry-run must not execute world-agent requests"
+        stdout.contains("World-manager probe result: apt"),
+        "dry-run should surface the probe classification: {stdout}"
     );
 }
 
@@ -312,7 +384,7 @@ fn world_enable_provision_deps_conflicts_fail_before_helper_or_world_agent() {
     fixture.write_apt_package("nodejs-18", &[("nodejs", Some("18.0.0-1"))]);
 
     let (_sock_tmp, socket_path, _socket, records) =
-        start_world_socket_execute_record("substrate-wdap0-conflict-", "", "", 0);
+        start_world_socket_execute_record("substrate-wdap0-conflict-", APT_PROBE_STDOUT, "", 0);
 
     fixture
         .command()
@@ -343,7 +415,7 @@ fn world_enable_provision_deps_forces_helper_no_sync_and_provision_profile() {
     fixture.write_apt_package("nodejs", &[("nodejs", None)]);
 
     let (_sock_tmp, socket_path, _socket, records) =
-        start_world_socket_execute_record("substrate-wdap0-profile-", "", "", 0);
+        start_world_socket_execute_record("substrate-wdap0-profile-", APT_PROBE_STDOUT, "", 0);
 
     fixture
         .command()
@@ -374,7 +446,7 @@ fn world_enable_provision_deps_empty_requirement_set_skips_apt_execution() {
     fixture.write_workspace_config(&[]);
 
     let (_sock_tmp, socket_path, _socket, records) =
-        start_world_socket_execute_record("substrate-wdap0-empty-", "", "", 0);
+        start_world_socket_execute_record("substrate-wdap0-empty-", APT_PROBE_STDOUT, "", 0);
 
     fixture
         .command()
@@ -393,6 +465,45 @@ fn world_enable_provision_deps_empty_requirement_set_skips_apt_execution() {
 }
 
 #[test]
+fn world_enable_provision_deps_empty_dry_run_still_probes_and_surfaces_manager() {
+    let fixture = WorldEnableProvisionFixture::new();
+    fixture.write_global_config(&[]);
+    fixture.write_workspace_config(&[]);
+
+    let (_sock_tmp, socket_path, _socket, records) = start_world_socket_execute_record(
+        "substrate-wdap0-empty-dry-run-",
+        APT_PROBE_STDOUT,
+        "",
+        0,
+    );
+
+    let assert = fixture
+        .command()
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+        .env("SUBSTRATE_TEST_HELPER_PRESERVE_SOCKET", "1")
+        .args(["--provision-deps", "--dry-run"])
+        .assert()
+        .success();
+
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+    assert!(
+        stdout.contains("World-manager probe result: apt"),
+        "empty dry-run must still surface the detected manager: {stdout}"
+    );
+    assert!(
+        fixture.log_contents().is_none(),
+        "empty dry-run must remain a no-op"
+    );
+    assert_eq!(
+        first_probe_profile(&records).as_deref(),
+        Some("world-deps-probe"),
+        "empty dry-run must still perform the in-world probe; records={:?}",
+        recorded_requests(&records)
+    );
+    assert_no_apt_like_requests(&records);
+}
+
+#[test]
 fn world_enable_provision_deps_installs_with_dns_preflight_and_remediation() {
     let fixture = WorldEnableProvisionFixture::new();
     fixture.write_global_config(&["sl"]);
@@ -400,7 +511,7 @@ fn world_enable_provision_deps_installs_with_dns_preflight_and_remediation() {
     fixture.write_apt_package("sl", &[("sl", None)]);
 
     let (_sock_tmp, socket_path, _socket, records) =
-        start_world_socket_execute_record("substrate-wdap0-dns-", "", "", 0);
+        start_world_socket_execute_record("substrate-wdap0-dns-", APT_PROBE_STDOUT, "", 0);
 
     fixture
         .command()
@@ -426,5 +537,155 @@ fn world_enable_provision_deps_installs_with_dns_preflight_and_remediation() {
     assert!(
         install_cmd.contains("/run/systemd/resolve/resolv.conf"),
         "expected DNS remediation to link /etc/resolv.conf to /run/systemd/resolve/resolv.conf: {install_cmd}"
+    );
+}
+
+#[test]
+fn world_enable_provision_deps_dry_run_runs_pacman_probe_and_prints_normalized_packages() {
+    let fixture = WorldEnableProvisionFixture::new();
+    fixture.write_global_config(&["pkg-a", "pkg-b"]);
+    fixture.write_workspace_config(&[]);
+    fixture.write_pacman_package("pkg-a", &["zlib", "curl"]);
+    fixture.write_pacman_package("pkg-b", &["curl", "alpm"]);
+
+    let (_sock_tmp, socket_path, _socket, records) = start_world_socket_execute_record(
+        "substrate-wdap0-pacman-dry-run-",
+        PACMAN_PROBE_STDOUT,
+        "",
+        0,
+    );
+
+    let assert = fixture
+        .command()
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+        .env("SUBSTRATE_TEST_HELPER_PRESERVE_SOCKET", "1")
+        .args(["--provision-deps", "--dry-run", "--verbose"])
+        .assert()
+        .success();
+
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+    assert!(
+        stdout.contains("world-deps-provision"),
+        "verbose dry-run must print the provisioning profile: {stdout}"
+    );
+    assert_lines_in_order(&stdout, &["alpm", "curl", "zlib"]);
+    assert!(
+        stdout.contains("pacman -Sy --noconfirm --needed alpm curl zlib"),
+        "verbose dry-run must print the normalized pacman command preview: {stdout}"
+    );
+    assert_eq!(
+        first_probe_profile(&records).as_deref(),
+        Some("world-deps-probe"),
+        "dry-run must execute the in-world manager probe; records={:?}",
+        recorded_requests(&records)
+    );
+    assert_eq!(
+        first_pacman_like_profile(&records).as_deref(),
+        None,
+        "dry-run must not execute pacman provisioning; records={:?}",
+        recorded_requests(&records)
+    );
+}
+
+#[test]
+fn world_enable_provision_deps_runs_pacman_with_normalized_order_and_internal_profile() {
+    let fixture = WorldEnableProvisionFixture::new();
+    fixture.write_global_config(&["pkg-a", "pkg-b"]);
+    fixture.write_workspace_config(&[]);
+    fixture.write_pacman_package("pkg-a", &["zlib", "curl"]);
+    fixture.write_pacman_package("pkg-b", &["curl", "alpm"]);
+
+    let (_sock_tmp, socket_path, _socket, records) =
+        start_world_socket_execute_record("substrate-wdap0-pacman-", PACMAN_PROBE_STDOUT, "", 0);
+
+    fixture
+        .command()
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+        .env("SUBSTRATE_TEST_HELPER_PRESERVE_SOCKET", "1")
+        .args(["--provision-deps"])
+        .assert()
+        .success();
+
+    let log = fixture.log_contents().expect("helper log missing");
+    assert!(
+        log.contains("--no-sync-deps"),
+        "helper must receive --no-sync-deps when provision-deps is enabled: {log}"
+    );
+
+    let cmds = recorded_cmds(&records);
+    let install_cmd = cmds
+        .iter()
+        .find(|cmd| cmd.contains("pacman -Sy --noconfirm --needed"))
+        .unwrap_or_else(|| panic!("expected pacman install request; cmds={cmds:?}"));
+    assert_subsequence(
+        install_cmd,
+        &["pacman -Sy --noconfirm --needed", "alpm", "curl", "zlib"],
+    );
+    assert_eq!(
+        first_pacman_like_profile(&records).as_deref(),
+        Some("world-deps-provision"),
+        "pacman provisioning request must force profile=world-deps-provision; records={:?}",
+        recorded_requests(&records)
+    );
+}
+
+#[test]
+fn world_enable_provision_deps_rejects_mixed_manager_sets_before_helper_or_world_agent() {
+    let fixture = WorldEnableProvisionFixture::new();
+    fixture.write_global_config(&["apt-only", "pacman-only"]);
+    fixture.write_workspace_config(&[]);
+    fixture.write_apt_package("apt-only", &[("curl", None)]);
+    fixture.write_pacman_package("pacman-only", &["curl"]);
+
+    let (_sock_tmp, socket_path, _socket, records) =
+        start_world_socket_execute_record("substrate-wdap0-mixed-", APT_PROBE_STDOUT, "", 0);
+
+    fixture
+        .command()
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+        .env("SUBSTRATE_TEST_HELPER_PRESERVE_SOCKET", "1")
+        .args(["--provision-deps"])
+        .assert()
+        .code(4)
+        .stderr(predicate::str::contains("mixed-manager"))
+        .stderr(predicate::str::contains("apt"))
+        .stderr(predicate::str::contains("pacman"));
+
+    assert!(
+        fixture.log_contents().is_none(),
+        "helper must not run when mixed-manager provisioning is rejected"
+    );
+    assert!(
+        recorded_requests(&records).is_empty(),
+        "mixed-manager rejection must not execute world-agent requests"
+    );
+}
+
+#[test]
+fn world_enable_provision_deps_rejects_pacman_probe_before_apt_provisioning() {
+    let fixture = WorldEnableProvisionFixture::new();
+    fixture.write_global_config(&["curl"]);
+    fixture.write_workspace_config(&[]);
+    fixture.write_apt_package("curl", &[("curl", None)]);
+
+    let (_sock_tmp, socket_path, _socket, records) =
+        start_world_socket_execute_record("substrate-wdap0-pacman-", PACMAN_PROBE_STDOUT, "", 0);
+
+    fixture
+        .command()
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+        .env("SUBSTRATE_TEST_HELPER_PRESERVE_SOCKET", "1")
+        .args(["--provision-deps"])
+        .assert()
+        .code(4)
+        .stderr(predicate::str::contains("pacman"))
+        .stderr(predicate::str::contains("apt-backed packages only"));
+
+    assert_no_apt_like_requests(&records);
+    assert_eq!(
+        first_probe_profile(&records).as_deref(),
+        Some("world-deps-probe"),
+        "pacman classification must still come from the in-world probe; records={:?}",
+        recorded_requests(&records)
     );
 }

@@ -29,17 +29,18 @@ The extracted scope remains the same as the source pack:
 - The source pack's `NASP-PWS-contract` workstream is elevated into its own seam instead of being hidden inside `NASP0`, because every other source workstream depends on it and it owns the multi-pack authority handoff plus the accepted decision register.
 - `NASP-PWS-tasks_checkpoints` remains governance scaffolding, not a seam. Its outputs stay represented through pack-level threading, review surfaces, and closeout scaffolds rather than as a feature seam.
 - `plan.md`, `tasks.json`, `session_log.md`, kickoff prompts, and checkpoint docs are preserved as lineage and governance inputs only.
-- Closeout documents in `governance/` are scaffolds only. They do not assert landed reality yet.
+- Closeout documents in `governance/` start as scaffolds and become authoritative as seams land.
 
 Execution horizon:
 
-- Active seam: `SEAM-1`
-- Next seam: `SEAM-2`
+- Active seam: none
+- Next seam: none
+- Future seam(s): `SEAM-1`, `SEAM-2`, `SEAM-3`, `SEAM-4`, `SEAM-5`, `SEAM-6`
 
 Policy:
 
 - only the active seam is eligible for authoritative downstream sub-slices by default
-- the next seam may later receive seam-local review + slices, and only provisional candidate-subslice hints
+- no next seam is currently reserved; new forward-window planning should be selected only if pack scope expands
 - active and next seams must eventually terminate in a dedicated final `seam-exit-gate` slice once seam-local planning begins
 - future seams remain seam briefs
 

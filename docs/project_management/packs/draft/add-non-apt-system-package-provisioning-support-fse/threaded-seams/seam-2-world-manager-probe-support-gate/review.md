@@ -1,7 +1,7 @@
 ---
 seam_id: SEAM-2
 review_phase: pre_exec
-execution_horizon: next
+execution_horizon: active
 basis_ref: seam.md#basis
 ---
 # Review Bundle - SEAM-2 World-manager probe and support gate
@@ -53,20 +53,21 @@ flowchart LR
 ## Pre-exec findings
 
 - No new seam-owned remediations opened during decomposition.
-- This seam remains blocked on `THR-01` publication: `SEAM-1` must publish `C-01` before `SEAM-2` can pass `gates.pre_exec.revalidation`.
+- `THR-01` is now published by `SEAM-1` closeout and revalidated here against the published pack-root `contract.md` and `decision_register.md`.
+- The published `C-01` handoff keeps manager selection in-world only and leaves no host-derived routing input unresolved at pre-exec review time.
 
 ## Pre-exec gate disposition
 
-- **Review gate**: pending
+- **Review gate**: passed
 - **Contract gate concerns**:
-  - `C-02` must define:
+  - `C-02` now defines:
     - a deterministic family-mapping algorithm from `/etc/os-release` (`ID`, `ID_LIKE`)
     - explicit contradiction rules and fail-closed posture (exit `4`)
     - platform/backend posture outcomes (Linux host-native unsupported; macOS Lima supported; Windows WSL unsupported)
     - diagnostics and exit-code meaning aligned with `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 - **Revalidation prerequisites**:
-  - Consume published `C-01` (`THR-01`) and revalidate that no host-derived routing inputs are allowed.
-  - Revalidate that the probe runs in-world (not on host) and that the same behavior is reached from both “real” and dry-run paths.
+  - Consumed published `C-01` (`THR-01`) and confirmed that no host-derived routing inputs are allowed.
+  - Revalidated that the probe contract still requires in-world execution for both “real” and dry-run paths.
 - **Opened remediations**: none
 
 ## Planned seam-exit gate focus
@@ -79,4 +80,3 @@ flowchart LR
   - `C-02` / `THR-02`
 - **Which review-surface deltas would force downstream revalidation**:
   - Any change to mapping rules, contradiction policy, supported backend posture, or exit `4` semantics.
-

@@ -2,14 +2,16 @@
 seam_id: SEAM-3
 seam_slug: pacman-schema-inventory-views
 type: integration
-status: proposed
+status: closed
 execution_horizon: future
-plan_version: v1
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+  - governance/seam-1-closeout.md
+  - governance/seam-2-closeout.md
   required_threads:
   - THR-01
   stale_triggers:
@@ -20,20 +22,22 @@ basis:
     pacman behavior
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
-  planned_location: reserved_final_slice
-  status: pending
+  planned_location: S3
+  status: passed
 open_remediations: []
 ---
 
 # SEAM-3 - Pacman schema and inventory views
+
+This seam has landed. Its authoritative post-exec record lives in `governance/seam-3-closeout.md`, and it is no longer in the forward planning window.
 
 - **Goal / value**:
   - Extend world-deps authoring and view surfaces with additive pacman schema support while keeping inventory compatibility, validation determinism, and non-runnable v1 scope explicit.
@@ -104,7 +108,7 @@ open_remediations: []
   - This seam must remain additive and validation-driven; it should not widen into executable provisioning behavior or runtime mutation semantics.
   - Invalid pacman schema shapes should stay taxonomy-aligned as exit `2` behavior in downstream consumers.
 - **Downstream decomposition context**:
-  - This seam is `future` because the default horizon stops at one active seam and one next seam, even though the source pack treats schema work as an early delivery seam after the contract and probe settle.
+  - This seam is now `active` because `SEAM-2` closed with a passed seam-exit gate and `THR-01` remains current for additive schema work.
   - The most important threads are `THR-01` and `THR-03`.
   - The first seam-local review should focus on schema authority, invalid-state coverage, list/show rendering, and the exact boundary between schema order and provisioning normalization.
   - Source-plan lineage: `NASP-PWS-schema_inventory`, `world-deps-pacman-schema-spec.md`, and `NASP1`.

@@ -2,13 +2,13 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-1`
-- **Next seam**: `SEAM-2`
-- **Future seams**: `SEAM-3`, `SEAM-4`, `SEAM-5`, `SEAM-6`
+- **Active seam**: none
+- **Next seam**: none
+- **Future seams**: `SEAM-1`, `SEAM-2`, `SEAM-3`, `SEAM-4`, `SEAM-5`, `SEAM-6`
 - **Horizon inference**:
-  - The source pack's accepted slice order is `NASP0 -> NASP1 -> NASP2 -> NASP3 -> NASP4`.
-  - The source pack's workstream triage also identifies a prerequisite `NASP-PWS-contract` workstream with no dependencies.
-  - This extractor therefore elevates the contract workstream into `SEAM-1`, keeps `SEAM-2` as the next seam because the accepted delivery order starts at `NASP0`, and leaves the remaining delivery seams at brief depth.
+  - `SEAM-5` landed, published `THR-05`, and left the forward planning window.
+  - `SEAM-6` has now landed with a passed seam-exit gate and a terminal closeout-backed record for `THR-01` through `THR-05`.
+  - No queued `next` seam remains in this pack because the terminal conformance seam has completed.
 - **Governance-only lineage**:
   - `NASP-PWS-tasks_checkpoints` is intentionally represented as pack governance only. It is not a seam and does not own product behavior.
 
@@ -111,11 +111,11 @@
     - `C-01`
   - **Purpose**:
     - Carry the single authoritative manager-aware operator contract and accepted decision set into every downstream seam.
-  - **State**: defined
+  - **State**: revalidated
   - **Revalidation trigger**:
     - shared CLI/runtime wording, exit-code posture, request-profile posture, or authority-handoff targets change in ADR-0033, the APT pack, or the bundles contract
   - **Satisfied by**:
-    - `SEAM-1` closeout publishing `C-01` plus the authoritative handoff/defer list
+    - `SEAM-1` closeout publishing `C-01` plus the authoritative handoff/defer list, with downstream seam-local revalidation against the published pack-root contract and decision register
   - **Notes**:
     - This is the highest-load-bearing thread in the pack. It exists because the source planning pack explicitly split contract ownership from every later slice.
 
@@ -128,7 +128,7 @@
     - `C-02`
   - **Purpose**:
     - Carry deterministic in-world world-manager selection and support-gate outcomes into provisioning execution and platform validation.
-  - **State**: defined
+  - **State**: revalidated
   - **Revalidation trigger**:
     - `/etc/os-release` tie-break rules, supported family mapping, or unsupported-backend posture changes
   - **Satisfied by**:
@@ -146,11 +146,11 @@
     - `C-03`
   - **Purpose**:
     - Carry additive pacman schema truth and inventory-view obligations into provisioning, runtime fail-early handling, and validation surfaces.
-  - **State**: defined
+  - **State**: revalidated
   - **Revalidation trigger**:
     - `install.method` vocabulary, `install.pacman` shape, invalid-state rules, or non-runnable pacman scope changes
   - **Satisfied by**:
-    - `SEAM-3` closeout publishing the accepted schema/view contract and inventory examples
+    - `SEAM-3` closeout publishing the accepted schema/view contract and inventory implementation/test evidence
   - **Notes**:
     - This thread isolates authoring and validation churn from provisioning execution churn.
 
@@ -163,13 +163,13 @@
     - `C-04`
   - **Purpose**:
     - Carry provisioning-time normalization, mixed-manager rejection, request-profile routing, and exact pacman execution shape into runtime remediation and cross-platform validation.
-  - **State**: defined
+  - **State**: revalidated
   - **Revalidation trigger**:
     - requirement normalization rules, pacman command shape, mixed-manager posture, or shared `world_enable` / `world-agent` touch surfaces change
   - **Satisfied by**:
-    - `SEAM-4` closeout publishing provisioning-routing evidence and exact manager-aware dry-run/verbose rendering
+    - `SEAM-4` closeout publishing provisioning-routing evidence and exact manager-aware dry-run/verbose rendering, with `SEAM-5` seam-local review revalidating the runtime fail-early plan against that published basis
   - **Notes**:
-    - `REM-003` keeps this thread visible because adjacent shared-file work can stale its basis before decomposition.
+    - `REM-003` was resolved in `SEAM-4` closeout after the shared provisioning touch surface was revalidated.
 
 - **Thread ID**: `THR-05`
   - **Producer seam**: `SEAM-5`
@@ -179,11 +179,11 @@
     - `C-05`
   - **Purpose**:
     - Carry runtime fail-early semantics, explicit-item scoping, and manager-aware remediation wording into validation evidence and doc reconciliation.
-  - **State**: defined
+  - **State**: revalidated
   - **Revalidation trigger**:
     - runtime in-scope rules, read-only probe families, or backend-specific remediation wording change
   - **Satisfied by**:
-    - `SEAM-5` closeout publishing runtime read-only probe evidence and accepted remediation wording
+    - `SEAM-5` closeout publishing runtime read-only probe evidence, explicit-item scoping evidence, and accepted remediation wording, with `SEAM-6` seam-local review revalidating the handoff for terminal conformance work
   - **Notes**:
     - This thread is what keeps runtime behavior from drifting back toward mutation-at-runtime semantics.
 
@@ -208,11 +208,10 @@ flowchart LR
 
 ## Critical path
 
-1. `SEAM-1` must make the manager-aware contract, decision register, and authority handoff concrete enough for downstream planning.
-2. `SEAM-2` and `SEAM-3` both consume `C-01`. The horizon picks `SEAM-2` as `next` because the source accepted delivery order begins with `NASP0`, but `SEAM-3` remains a near-future peer dependency after `SEAM-1`.
-3. `SEAM-4` requires both `THR-02` and `THR-03`, so provisioning routing should not decompose until probe and schema truth are stable.
-4. `SEAM-5` depends on `SEAM-3` and `SEAM-4`, because runtime fail-early reuses the pacman schema contract and provisioning-time normalization story while keeping runtime mutation prohibited.
-5. `SEAM-6` is the terminal conformance seam. It should not close until `THR-01` through `THR-05` are published or explicitly revalidated.
+1. `SEAM-1` has already published the manager-aware contract, decision register, and authority handoff on `THR-01`.
+2. `SEAM-4` has now landed with a passed seam-exit gate and published `THR-04`, so the provisioning-routing handoff is a closeout-backed fact.
+3. `SEAM-5` has now landed with a passed seam-exit gate and a published `THR-05` handoff.
+4. `SEAM-6` has landed with a passed seam-exit gate after consuming the revalidated `THR-05` handoff, and no queued `next` seam remains.
 
 ## Workstreams
 
@@ -227,3 +226,13 @@ flowchart LR
   - `NASP-PWS-tasks_checkpoints`
     - owns the source pack's checkpoint cadence, kickoff prompts, `tasks.json`, `plan.md`, `session_log.md`, and `quality_gate_report.md`
     - remains represented here through closeout scaffolds, horizon policy, and pack-level governance rather than as a seam with product behavior
+
+## Terminal boundary accounting
+
+The pack does not introduce a separate closed-state vocabulary. At the SEAM-6 terminal boundary, the existing `revalidated` thread states are retained and recorded as consumed by the seam-exit closeout with no downstream carry.
+
+- `THR-01`: `revalidated`; consumed by `SEAM-6`; no downstream carry.
+- `THR-02`: `revalidated`; consumed by `SEAM-6`; no downstream carry.
+- `THR-03`: `revalidated`; consumed by `SEAM-6`; no downstream carry.
+- `THR-04`: `revalidated`; consumed by `SEAM-6`; no downstream carry.
+- `THR-05`: `revalidated`; consumed by `SEAM-6`; no downstream carry.
