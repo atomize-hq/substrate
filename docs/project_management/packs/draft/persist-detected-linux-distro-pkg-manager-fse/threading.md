@@ -2,15 +2,14 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-1`
-- **Next seam**: `SEAM-2`
-- **Future seam(s)**: `SEAM-3`
+- **Active seam**: `SEAM-2`
+- **Next seam**: `SEAM-3`
+- **Future seam(s)**: none
 
 Execution discipline for this extracted pack:
 
-- `SEAM-1` is the only seam eligible for authoritative downstream decomposition by default.
-- `SEAM-2` may later receive seam-local review and slices, but deeper planning must stay provisional until it revalidates against landed `SEAM-1` truth.
-- `SEAM-3` stays at seam-brief depth until both upstream seams have concrete closeout-backed inputs.
+- `SEAM-2` is the only seam eligible for authoritative downstream decomposition by default.
+- `SEAM-3` may later receive seam-local review and slices, but deeper planning must stay provisional until it revalidates against landed `SEAM-1` and `SEAM-2` truth.
 
 ## Contract registry
 
@@ -88,11 +87,11 @@ Execution discipline for this extracted pack:
   - **Carried contract IDs**: `C-01`, `C-02`
   - **Purpose**:
     - Carry the exact persisted schema, path rule, and authority boundary into runtime writer planning so the writer seam does not invent alternate field shapes or metadata paths.
-  - **State**: `published`
+  - **State**: `revalidated`
   - **Revalidation trigger**:
     - Upstream detection vocabulary changes, field-path changes, sentinel changes, or ADR path reconciliation that changes the canonical authority story.
   - **Satisfied by**:
-    - `SEAM-1` closeout published the concrete schema/path contract, and `SEAM-2` seam-local review consumes that closeout-backed truth.
+    - `SEAM-1` closeout published the concrete schema/path contract, and `SEAM-2` seam-local review revalidated that closeout-backed truth for execution.
   - **Notes**:
     - This thread exists because the source pack split payload ownership from runtime writer mechanics; downstream planning should preserve that split.
 

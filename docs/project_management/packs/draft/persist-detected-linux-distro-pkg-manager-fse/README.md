@@ -2,7 +2,7 @@
 
 Source: `persist-detected-linux-distro-pkg-manager.zip`
 
-This pack captures seam briefs, authoritative threading, pack-level review surfaces, seam-exit intent, and governance scaffolds. It is intentionally one level above seam-local decomposition.
+This pack captures seam briefs, authoritative threading, pack-level review surfaces, seam-exit intent, and governance scaffolds. It starts one level above seam-local decomposition, and promotion may add seam-local planning for the active seam.
 
 - Start here: `scope_brief.md`
 - Seam overview: `seam_map.md`
@@ -27,12 +27,13 @@ The extracted scope remains the same as the source pack:
 - The source pack's accepted slice order `PDLDPM0 -> PDLDPM1 -> PDLDPM2` is the best available critical-path signal, so it is used to infer the execution horizon in this seam pack.
 - The source pack's planning workstreams are preserved as internal reasoning inputs, but they are rolled up into higher-level seams because extractor v2.3 must stay above slice decomposition.
 - `CP1` remains an end-of-feature evidence checkpoint, but it is treated here as part of the conformance seam rather than as a standalone seam.
-- Closeout documents in `governance/` are scaffolds only. They do not assert landed reality yet.
+- `governance/seam-1-closeout.md` now records landed SEAM-1 reality.
+- Remaining closeout documents in `governance/` stay scaffolds until their owning seams land.
 
 Execution horizon:
 
-- Active seam: `SEAM-1`
-- Next seam: `SEAM-2`
+- Active seam: `SEAM-2`
+- Next seam: `SEAM-3`
 
 Policy:
 
