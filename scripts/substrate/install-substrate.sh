@@ -324,6 +324,7 @@ write_host_state_metadata() {
     warn "python3 not found; skipping host state metadata recording (${HOST_STATE_PATH})."
     return
   fi
+  detect_platform_metadata || true
 
   local events=()
   if [[ -n "${HOST_STATE_GROUP_EXISTED}" ]]; then
@@ -338,6 +339,12 @@ write_host_state_metadata() {
   for entry in "${HOST_STATE_LINGER_ENTRIES[@]:-}"; do
     events+=("linger:${entry}")
   done
+  if [[ -n "${PKG_MANAGER}" && -n "${PKG_MANAGER_SOURCE}" ]]; then
+    events+=("platform_os_release_id:${DETECTED_DISTRO_ID:-${DISTRO_UNKNOWN_SENTINEL}}")
+    events+=("platform_os_release_id_like:${DETECTED_DISTRO_ID_LIKE:-${DISTRO_UNKNOWN_SENTINEL}}")
+    events+=("platform_pkg_manager_selected:${PKG_MANAGER}")
+    events+=("platform_pkg_manager_source:${PKG_MANAGER_SOURCE}")
+  fi
 
   local event_payload
   event_payload="$(printf '%s\n' "${events[@]}")"
@@ -382,6 +389,9 @@ group.setdefault("name", "substrate")
 members = {m for m in group.get("members_added", []) if isinstance(m, str)}
 linger = host.setdefault("linger", {})
 linger_users = linger.setdefault("users", {})
+platform = host.get("platform") or {}
+os_release = platform.get("os_release") or {}
+pkg_manager = platform.get("pkg_manager") or {}
 
 
 def parse_bool(raw: str):
@@ -425,8 +435,22 @@ for raw_event in events:
             entry["enabled_by_substrate"] = enabled_val
         elif "enabled_by_substrate" not in entry:
             entry["enabled_by_substrate"] = False
+    elif kind == "platform_os_release_id" and len(parts) >= 2:
+        os_release["id"] = parts[1]
+    elif kind == "platform_os_release_id_like" and len(parts) >= 2:
+        os_release["id_like"] = parts[1]
+    elif kind == "platform_pkg_manager_selected" and len(parts) >= 2:
+        pkg_manager["selected"] = parts[1]
+    elif kind == "platform_pkg_manager_source" and len(parts) >= 2:
+        pkg_manager["source"] = parts[1]
 
 group["members_added"] = sorted(members)
+if os_release:
+    platform["os_release"] = os_release
+if pkg_manager:
+    platform["pkg_manager"] = pkg_manager
+if platform:
+    host["platform"] = platform
 json.dump(base, sys.stdout, indent=2, sort_keys=True)
 PY
   then
@@ -779,6 +803,27 @@ select_package_manager_from_path_probe() {
   PKG_MANAGER_SOURCE="path_probe"
   maybe_emit_path_probe_multi_manager_warning
   return 0
+}
+
+detect_platform_metadata() {
+  if [[ "${PLATFORM:-}" != "linux" ]]; then
+    return 1
+  fi
+
+  PKG_MANAGER=""
+  PKG_MANAGER_SOURCE=""
+  resolve_selected_os_release_input || true
+  parse_selected_os_release_fields || true
+
+  if select_package_manager_from_os_release; then
+    return 0
+  fi
+
+  if select_package_manager_from_path_probe; then
+    return 0
+  fi
+
+  return 1
 }
 
 select_package_manager_from_flag() {

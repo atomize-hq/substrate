@@ -1047,7 +1047,11 @@ run_dev_install_branch() {
   else
     assert_metadata_file "${state_path}" "substrate-state" "true" "no"
   fi
-  assert_additive_compatibility_preserved "${state_path}" "${expected_unknown_top}" "${expected_nested_note}" "${expected_state_id}" "${expected_state_id_like}" "${expected_state_pkg_manager}" "${expected_state_pkg_manager_source}"
+  if [[ "${expected_unknown_top}" == "__skip__" ]]; then
+    assert_platform_metadata "${state_path}" "${expected_state_id}" "${expected_state_id_like}" "${expected_state_pkg_manager}" "${expected_state_pkg_manager_source}"
+  else
+    assert_additive_compatibility_preserved "${state_path}" "${expected_unknown_top}" "${expected_nested_note}" "${expected_state_id}" "${expected_state_id_like}" "${expected_state_pkg_manager}" "${expected_state_pkg_manager_source}"
+  fi
 }
 
 assert_cleanup_logs() {
@@ -1147,6 +1151,7 @@ run_metadata_scenario() (
   assert_env_sh_has_no_override_exports "${hosted_prefix}" "${HOST_PATH}"
   assert_log_not_contains "${hosted_log}" "warning: unable to parse"
   assert_log_not_contains "${hosted_log}" "unsupported schema_version"
+  assert_platform_metadata "${hosted_state}" "${CURRENT_OS_RELEASE_ID}" "${CURRENT_OS_RELEASE_ID_LIKE}" "${expected_pkg_manager}" "os_release"
 
   local hosted_noworld_prefix="${work_root}/hosted-noworld"
   local hosted_noworld_state="${hosted_noworld_prefix}/install_state.json"
@@ -1155,6 +1160,7 @@ run_metadata_scenario() (
   run_hosted_install_branch "${work_root}/hosted-noworld" "${fake_version}" "${artifacts}" "${hosted_noworld_log}" "${hosted_noworld_state}" "no-world" "${runtime_os_release}"
   assert_env_sh_has_no_override_exports "${hosted_noworld_prefix}" "${HOST_PATH}"
   assert_log_not_contains "${hosted_noworld_log}" "warning: unable to parse"
+  assert_platform_metadata "${hosted_noworld_state}" "${CURRENT_OS_RELEASE_ID}" "${CURRENT_OS_RELEASE_ID_LIKE}" "${expected_pkg_manager}" "os_release"
 
   local invalid_prefix="${work_root}/invalid"
   local invalid_state="${invalid_prefix}/install_state.json"
@@ -1187,16 +1193,25 @@ EOF_INVALID
     }
   assert_log_contains "${invalid_log}" "warning: unable to parse"
   assert_metadata_file "${invalid_state}" "substrate-state" "true" "no"
+  assert_platform_metadata "${invalid_state}" "${CURRENT_OS_RELEASE_ID}" "${CURRENT_OS_RELEASE_ID_LIKE}" "${expected_pkg_manager}" "os_release"
 
   local missing_prefix="${work_root}/missing"
   local missing_state="${missing_prefix}/install_state.json"
   local missing_log="${work_root}/missing/install.log"
+  local unknown_distro="<unknown>"
   mkdir -p "${missing_prefix}" "$(dirname "${missing_log}")"
   seed_platform_fixture "${missing_state}" "${CURRENT_OS_RELEASE_ID}" "${CURRENT_OS_RELEASE_ID_LIKE}" "${expected_pkg_manager}" "os_release"
   run_hosted_install_branch "${work_root}/missing" "${fake_version}" "${artifacts}" "${missing_log}" "${missing_state}" "with-world" "${missing_os_release}"
   assert_env_sh_has_no_override_exports "${missing_prefix}" "${HOST_PATH}"
   assert_log_not_contains "${missing_log}" "unsupported schema_version"
-  assert_additive_compatibility_preserved "${missing_state}" "keep-me" "keep-host-note" "${CURRENT_OS_RELEASE_ID}" "${CURRENT_OS_RELEASE_ID_LIKE}" "${expected_pkg_manager}" "os_release"
+  assert_additive_compatibility_preserved "${missing_state}" "keep-me" "keep-host-note" "${unknown_distro}" "${unknown_distro}" "${expected_pkg_manager}" "path_probe"
+
+  local dev_fresh_prefix="${work_root}/dev-fresh"
+  local dev_fresh_state="${dev_fresh_prefix}/install_state.json"
+  local dev_fresh_log="${work_root}/dev-fresh/install.log"
+  mkdir -p "${dev_fresh_prefix}" "$(dirname "${dev_fresh_log}")"
+  run_dev_install_branch "${work_root}/dev-fresh" "${dev_fresh_log}" "${dev_fresh_state}" "with-world" "__skip__" "__skip__" "${CURRENT_OS_RELEASE_ID}" "${CURRENT_OS_RELEASE_ID_LIKE}" "${expected_pkg_manager}" "os_release"
+  assert_env_sh_has_no_override_exports "${dev_fresh_prefix}" "${HOST_PATH}"
 
   local dev_prefix="${work_root}/dev"
   local dev_state="${dev_prefix}/install_state.json"
