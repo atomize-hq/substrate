@@ -429,6 +429,7 @@ fn compute_install_plan_v1(view: &InventoryViewV1, item_names: &[String]) -> Res
             InstallMethodV1::Apt => {
                 apt_packages.push(pkg.name.clone());
             }
+            InstallMethodV1::Pacman => {}
             InstallMethodV1::Script => {
                 script_packages.push(pkg.name.clone());
             }
@@ -3145,6 +3146,7 @@ fn print_inventory_table(items: &[InventoryListItemSummaryV1]) {
             .as_ref()
             .map(|m| match m {
                 super::inventory::InstallMethodV1::Apt => "apt",
+                super::inventory::InstallMethodV1::Pacman => "pacman",
                 super::inventory::InstallMethodV1::Script => "script",
                 super::inventory::InstallMethodV1::Manual => "manual",
             })

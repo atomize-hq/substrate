@@ -52,6 +52,7 @@ fn parse_platform(raw: &str) -> Option<HostPlatform> {
 #[serde(rename_all = "snake_case")]
 pub(crate) enum InstallMethodV1 {
     Apt,
+    Pacman,
     Script,
     Manual,
 }
@@ -70,6 +71,8 @@ pub(crate) struct InstallDefV1 {
     pub method: InstallMethodV1,
     #[serde(default)]
     pub apt: Vec<AptSpecV1>,
+    #[serde(default)]
+    pub pacman: Vec<String>,
     #[serde(default)]
     pub script: Option<String>,
     #[serde(default)]
@@ -244,6 +247,7 @@ fn builtin_packages_v1() -> Vec<PackageDefV1> {
             install: InstallDefV1 {
                 method: InstallMethodV1::Script,
                 apt: Vec::new(),
+                pacman: Vec::new(),
                 script: Some(
                     r#"#!/usr/bin/env bash
 set -euo pipefail
@@ -289,6 +293,7 @@ ln -sf "${bun_root}/bin/bun" "${world_deps_bin}/bun"
                     name: "nodejs".to_string(),
                     version: None,
                 }],
+                pacman: Vec::new(),
                 script: None,
                 script_path: None,
                 manual_instructions: None,
@@ -312,6 +317,7 @@ ln -sf "${bun_root}/bin/bun" "${world_deps_bin}/bun"
                     name: "npm".to_string(),
                     version: None,
                 }],
+                pacman: Vec::new(),
                 script: None,
                 script_path: None,
                 manual_instructions: None,
@@ -482,6 +488,70 @@ fn validate_package_v1(
                 if spec.name.trim().is_empty() {
                     return Err(config_model::user_error(format!(
                         "invalid package schema in {}: install.apt[].name must be non-empty",
+                        path.display()
+                    )));
+                }
+            }
+        }
+        InstallMethodV1::Pacman => {
+            if pkg.install.pacman.is_empty() {
+                return Err(config_model::user_error(format!(
+                    "invalid package schema in {}: install.method=pacman requires a non-empty install.pacman list",
+                    path.display()
+                )));
+            }
+            if !pkg.install.apt.is_empty() {
+                return Err(config_model::user_error(format!(
+                    "invalid package schema in {}: install.method=pacman must not define install.apt",
+                    path.display()
+                )));
+            }
+            if pkg.install.script.is_some() || pkg.install.script_path.is_some() {
+                return Err(config_model::user_error(format!(
+                    "invalid package schema in {}: install.method=pacman must not define install.script or install.script_path",
+                    path.display()
+                )));
+            }
+            if pkg
+                .install
+                .manual_instructions
+                .as_deref()
+                .map(|value| !value.trim().is_empty())
+                .unwrap_or(false)
+            {
+                return Err(config_model::user_error(format!(
+                    "invalid package schema in {}: install.method=pacman must not define install.manual_instructions",
+                    path.display()
+                )));
+            }
+            if pkg.runnable {
+                return Err(config_model::user_error(format!(
+                    "invalid package schema in {}: install.method=pacman packages must not be runnable",
+                    path.display()
+                )));
+            }
+            if !pkg.entrypoints.is_empty() {
+                return Err(config_model::user_error(format!(
+                    "invalid package schema in {}: install.method=pacman packages must not define entrypoints",
+                    path.display()
+                )));
+            }
+            if !pkg.wrappers.is_empty() {
+                return Err(config_model::user_error(format!(
+                    "invalid package schema in {}: install.method=pacman packages must not define wrappers",
+                    path.display()
+                )));
+            }
+            if pkg.probe.is_some() {
+                return Err(config_model::user_error(format!(
+                    "invalid package schema in {}: install.method=pacman packages must not define probe",
+                    path.display()
+                )));
+            }
+            for package_name in &pkg.install.pacman {
+                if package_name.trim().is_empty() {
+                    return Err(config_model::user_error(format!(
+                        "invalid package schema in {}: install.pacman[] must contain non-empty strings",
                         path.display()
                     )));
                 }

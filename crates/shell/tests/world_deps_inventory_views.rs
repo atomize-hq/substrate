@@ -44,6 +44,17 @@ fn package_yaml(name: &str, description: &str, method: &str, entrypoints: &[&str
     }
 }
 
+fn pacman_package_yaml(name: &str, description: &str, packages: &[&str]) -> String {
+    let packages_yaml = packages
+        .iter()
+        .map(|p| format!("    - {p}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!(
+        "version: 1\nname: {name}\ndescription: {description}\nrunnable: false\ninstall:\n  method: pacman\n  pacman:\n{packages_yaml}\n"
+    )
+}
+
 fn bundle_yaml(name: &str, description: &str, packages: &[&str]) -> String {
     let packages_yaml = packages
         .iter()
@@ -83,6 +94,18 @@ fn test_current_list_available_includes_builtins_global_and_workspace() {
         &package_yaml("ws-tool", "ws tool", "apt", &["ws-tool"]),
     );
 
+    let global_pacman_path = global_deps_dir(&fixture).join("packages/global-pacman.yaml");
+    write_file(
+        &global_pacman_path,
+        &pacman_package_yaml("global-pacman", "global pacman tool", &["zstd", "pacman"]),
+    );
+
+    let ws_pacman_path = workspace_deps_dir(&workspace_root).join("packages/ws-pacman.yaml");
+    write_file(
+        &ws_pacman_path,
+        &pacman_package_yaml("ws-pacman", "workspace pacman tool", &["pacman", "zstd"]),
+    );
+
     let output = substrate_command_for_home(&fixture)
         .current_dir(&workspace_root)
         .args(["world", "deps", "current", "list", "available", "--json"])
@@ -99,6 +122,8 @@ fn test_current_list_available_includes_builtins_global_and_workspace() {
     assert!(contains_item(&items, "bundle", "node-runtime"));
     assert!(contains_item(&items, "package", "global-tool"));
     assert!(contains_item(&items, "package", "ws-tool"));
+    assert!(contains_item(&items, "package", "global-pacman"));
+    assert!(contains_item(&items, "package", "ws-pacman"));
 }
 
 #[test]
@@ -285,4 +310,143 @@ fn test_current_show_unknown_item_is_exit_2() {
         .assert()
         .code(2)
         .stderr(predicates::str::contains("unknown deps item"));
+}
+
+#[test]
+fn test_global_list_available_keeps_pacman_explicit() {
+    let fixture = ShellEnvFixture::new();
+    let path = global_deps_dir(&fixture).join("packages/global-pacman.yaml");
+    write_file(
+        &path,
+        &pacman_package_yaml("global-pacman", "global pacman tool", &["zstd", "pacman"]),
+    );
+
+    let output = substrate_command_for_home(&fixture)
+        .args(["world", "deps", "global", "list", "available", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let items = read_items(&output);
+    let item = items
+        .iter()
+        .find(|item| item["name"] == "global-pacman")
+        .expect("global pacman item");
+    assert_eq!(item["method"], serde_json::json!("pacman"));
+}
+
+#[test]
+fn test_workspace_list_available_keeps_pacman_explicit() {
+    let fixture = ShellEnvFixture::new();
+    let workspace_root = fixture.home().join("ws");
+    fs::create_dir_all(&workspace_root).expect("create ws");
+    ensure_workspace_root(&workspace_root);
+
+    let path = workspace_deps_dir(&workspace_root).join("packages/ws-pacman.yaml");
+    write_file(
+        &path,
+        &pacman_package_yaml("ws-pacman", "workspace pacman tool", &["pacman", "zstd"]),
+    );
+
+    let output = substrate_command_for_home(&fixture)
+        .current_dir(&workspace_root)
+        .args(["world", "deps", "workspace", "list", "available", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let items = read_items(&output);
+    let item = items
+        .iter()
+        .find(|item| item["name"] == "ws-pacman")
+        .expect("workspace pacman item");
+    assert_eq!(item["method"], serde_json::json!("pacman"));
+}
+
+#[test]
+fn test_current_show_json_preserves_pacman_order() {
+    let fixture = ShellEnvFixture::new();
+    let workspace_root = fixture.home().join("ws");
+    fs::create_dir_all(&workspace_root).expect("create ws");
+    ensure_workspace_root(&workspace_root);
+
+    let path = global_deps_dir(&fixture).join("packages/pacman-order-json.yaml");
+    write_file(
+        &path,
+        &pacman_package_yaml(
+            "pacman-order-json",
+            "pacman order json",
+            &["zstd", "pacman"],
+        ),
+    );
+
+    let output = substrate_command_for_home(&fixture)
+        .current_dir(&workspace_root)
+        .args([
+            "world",
+            "deps",
+            "current",
+            "show",
+            "pacman-order-json",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let value: serde_json::Value = serde_json::from_slice(&output).expect("stdout JSON");
+    let item = &value["item"];
+    assert_eq!(item["install"]["method"], serde_json::json!("pacman"));
+    assert_eq!(
+        item["install"]["pacman"],
+        serde_json::json!(["zstd", "pacman"])
+    );
+}
+
+#[test]
+fn test_current_show_yaml_preserves_pacman_order() {
+    let fixture = ShellEnvFixture::new();
+    let workspace_root = fixture.home().join("ws");
+    fs::create_dir_all(&workspace_root).expect("create ws");
+    ensure_workspace_root(&workspace_root);
+
+    let path = global_deps_dir(&fixture).join("packages/pacman-order-yaml.yaml");
+    write_file(
+        &path,
+        &pacman_package_yaml(
+            "pacman-order-yaml",
+            "pacman order yaml",
+            &["pacman", "zstd"],
+        ),
+    );
+
+    let output = substrate_command_for_home(&fixture)
+        .current_dir(&workspace_root)
+        .args(["world", "deps", "current", "show", "pacman-order-yaml"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let value: serde_yaml::Value = serde_yaml::from_slice(&output).expect("stdout YAML");
+    assert_eq!(
+        value["install"]["method"].as_str(),
+        Some("pacman"),
+        "expected pacman method in YAML output"
+    );
+    let pacman_values = value["install"]["pacman"]
+        .as_sequence()
+        .expect("pacman package list");
+    let rendered = pacman_values
+        .iter()
+        .map(|value| value.as_str().expect("string"))
+        .collect::<Vec<_>>();
+    assert_eq!(rendered, vec!["pacman", "zstd"]);
 }
