@@ -88,11 +88,11 @@ Execution discipline for this extracted pack:
   - **Carried contract IDs**: `C-01`, `C-02`
   - **Purpose**:
     - Carry the exact persisted schema, path rule, and authority boundary into runtime writer planning so the writer seam does not invent alternate field shapes or metadata paths.
-  - **State**: `defined`
+  - **State**: `published`
   - **Revalidation trigger**:
     - Upstream detection vocabulary changes, field-path changes, sentinel changes, or ADR path reconciliation that changes the canonical authority story.
   - **Satisfied by**:
-    - `SEAM-1` closeout publishes the concrete schema/path contract and `SEAM-2` seam-local review consumes that closeout-backed truth.
+    - `SEAM-1` closeout published the concrete schema/path contract, and `SEAM-2` seam-local review consumes that closeout-backed truth.
   - **Notes**:
     - This thread exists because the source pack split payload ownership from runtime writer mechanics; downstream planning should preserve that split.
 
@@ -116,7 +116,7 @@ Execution discipline for this extracted pack:
   - **Carried contract IDs**: `C-01`, `C-02`
   - **Purpose**:
     - Carry the exact field names, path wording, and additive-compatibility rules into conformance work so smoke assertions and docs stay aligned to the persisted contract.
-  - **State**: `defined`
+  - **State**: `published`
   - **Revalidation trigger**:
     - Schema-version policy changes, field naming changes, path wording changes, or ADR reconciliation that changes which directory is authoritative.
   - **Satisfied by**:
