@@ -88,8 +88,20 @@ pub(super) fn print_pacman_requirements(requirements: &[String]) {
 
 pub(super) fn print_verbose_pacman_requirements(requirements: &[String]) {
     println!("Provisioning request profile: {PROVISION_PROFILE}");
-    for requirement in requirements {
-        println!("{}", render_pacman_requirement(requirement));
+    let mut normalized = requirements
+        .iter()
+        .map(|requirement| render_pacman_requirement(requirement))
+        .filter(|requirement| !requirement.trim().is_empty())
+        .collect::<Vec<_>>();
+    normalized.sort();
+    normalized.dedup();
+
+    for requirement in &normalized {
+        println!("{requirement}");
+    }
+
+    if !normalized.is_empty() {
+        println!("pacman -Sy --noconfirm --needed {}", normalized.join(" "));
     }
 }
 

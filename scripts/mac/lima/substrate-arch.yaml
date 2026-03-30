@@ -1,0 +1,113 @@
+# Lima configuration for Substrate world backend on macOS (Arch-family guest)
+# Copy this file to ~/.lima/substrate-arch.yaml or use scripts/mac/lima-warm.sh with LIMA_PROFILE_PATH.
+
+images:
+  # aarch64 image source mirrors Lima's built-in archlinux template.
+  - location: "https://github.com/mcginty/arch-boxes-arm/releases/download/v20220323/Arch-Linux-aarch64-cloudimg-20220323.0.qcow2"
+    arch: "aarch64"
+  - location: "https://geo.mirror.pkgbuild.com/images/latest/Arch-Linux-x86_64-cloudimg.qcow2"
+    arch: "x86_64"
+
+vmType: "qemu"
+cpus: 4
+memory: "4GiB"
+disk: "20GiB"
+mounts:
+  - location: "$HOME"
+    writable: false
+  - location: "$PROJECT"
+    writable: true
+    mountPoint: "/src"
+provision:
+  - mode: system
+    script: |
+      #!/bin/sh
+      set -eux
+
+      # Pacman 7 defaults can require a dedicated download user and sandbox features that may not
+      # be available on older Arch-family kernels/images. Make provisioning deterministic.
+      if ! id -u alpm >/dev/null 2>&1; then
+        useradd -r -s /usr/bin/nologin -d / -M alpm || true
+      fi
+      sed -i 's/^#DisableSandboxFilesystem/DisableSandboxFilesystem/' /etc/pacman.conf || true
+      sed -i 's/^#DisableSandboxSyscalls/DisableSandboxSyscalls/' /etc/pacman.conf || true
+
+      # Keep keyring current on older images to avoid signature failures.
+      pacman -Sy --noconfirm --needed archlinuxarm-keyring archlinux-keyring || true
+
+      pacman -Sy --noconfirm --needed \
+        nftables iproute2 libseccomp curl jq git python python-pip \
+        base-devel pkgconf openssl dnsmasq openssh tmux unzip sudo
+
+      systemctl disable --now systemd-resolved || true
+      mkdir -p /etc/dnsmasq.d
+      cat >/etc/dnsmasq.d/substrate.conf <<'EOF'
+      port=53
+      listen-address=127.0.0.53
+      bind-interfaces
+      no-resolv
+      server=1.1.1.1
+      server=1.0.0.1
+      cache-size=1000
+      EOF
+      rm -f /etc/resolv.conf
+      echo 'nameserver 127.0.0.53' > /etc/resolv.conf
+
+      sysctl -w kernel.unprivileged_userns_clone=1 || true
+      mkdir -p /var/lib/substrate/overlay /run/substrate
+
+      # Ensure hostname resolves locally to silence sudo warnings
+      (hostnamectl set-hostname lima-substrate-arch || true)
+      grep -q 'lima-substrate-arch' /etc/hosts || echo '127.0.1.1 lima-substrate-arch' >> /etc/hosts
+
+      cat >/etc/systemd/system/substrate-world-agent.service <<'EOF'
+      [Unit]
+      Description=Substrate World Agent
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=simple
+      ExecStart=/usr/local/bin/substrate-world-agent
+      Restart=always
+      RestartSec=5
+      Environment=RUST_LOG=info
+      RuntimeDirectory=substrate
+      RuntimeDirectoryMode=0750
+      StateDirectory=substrate
+      StateDirectoryMode=0750
+      WorkingDirectory=/var/lib/substrate
+      StandardOutput=journal
+      StandardError=journal
+      NoNewPrivileges=yes
+      ProtectSystem=strict
+      ProtectHome=read-only
+      ReadWritePaths=/var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp
+      CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE
+      AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
+      chmod 644 /etc/systemd/system/substrate-world-agent.service
+
+      cat >/etc/systemd/system/substrate-world-agent.socket <<'EOF'
+      [Unit]
+      Description=Substrate World Agent Socket
+      PartOf=substrate-world-agent.service
+
+      [Socket]
+      ListenStream=/run/substrate.sock
+      SocketMode=0660
+      SocketUser=root
+      SocketGroup=substrate
+      DirectoryMode=0750
+      RemoveOnStop=yes
+      Service=substrate-world-agent.service
+
+      [Install]
+      WantedBy=sockets.target
+      EOF
+      chmod 644 /etc/systemd/system/substrate-world-agent.socket
+      systemctl daemon-reload
+      # Binary copied later; leave service disabled until Phase 0.4

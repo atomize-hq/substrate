@@ -468,7 +468,6 @@ fn compute_install_plan_v1(view: &InventoryViewV1, item_names: &[String]) -> Res
 
     let apt = normalize_apt_requirements_v1(view, &package_names)?;
     let apt_packages = dedupe_ordered(&apt_packages);
-    let mut pacman_packages = pacman_packages;
     pacman_packages.sort();
     pacman_packages.dedup();
     let script_packages = dedupe_ordered(&script_packages);
@@ -616,11 +615,12 @@ fn preflight_runtime_system_requirements_v1(
     } else {
         Some(probe_world_apt_requirements_v1(apt_requirements)?)
     };
-    let pacman_statuses = if pacman_requirements.is_empty() {
-        None
-    } else {
-        Some(probe_world_pacman_requirements_v1(pacman_requirements)?)
-    };
+    let pacman_statuses =
+        if pacman_requirements.is_empty() || runtime_pacman_preflight_disabled_v1() {
+            None
+        } else {
+            Some(probe_world_pacman_requirements_v1(pacman_requirements)?)
+        };
 
     let apt_missing = apt_statuses
         .as_ref()
@@ -649,6 +649,18 @@ fn preflight_runtime_system_requirements_v1(
 fn runtime_apt_preflight_disabled_v1() -> bool {
     matches!(
         env::var("SUBSTRATE_WORLD_DEPS_SKIP_APT")
+            .ok()
+            .as_deref()
+            .map(str::trim)
+            .map(str::to_ascii_lowercase)
+            .as_deref(),
+        Some("1" | "true" | "yes")
+    )
+}
+
+fn runtime_pacman_preflight_disabled_v1() -> bool {
+    matches!(
+        env::var("SUBSTRATE_WORLD_DEPS_SKIP_PACMAN")
             .ok()
             .as_deref()
             .map(str::trim)

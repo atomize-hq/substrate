@@ -569,6 +569,10 @@ fn world_enable_provision_deps_dry_run_runs_pacman_probe_and_prints_normalized_p
         "verbose dry-run must print the provisioning profile: {stdout}"
     );
     assert_lines_in_order(&stdout, &["alpm", "curl", "zlib"]);
+    assert!(
+        stdout.contains("pacman -Sy --noconfirm --needed alpm curl zlib"),
+        "verbose dry-run must print the normalized pacman command preview: {stdout}"
+    );
     assert_eq!(
         first_probe_profile(&records).as_deref(),
         Some("world-deps-probe"),

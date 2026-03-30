@@ -371,7 +371,9 @@ fn run_enable_with_provision_deps(args: &WorldEnableArgs) -> Result<()> {
 
 fn run_sync_after_provisioning() {
     let previous_skip_apt = env::var_os("SUBSTRATE_WORLD_DEPS_SKIP_APT");
+    let previous_skip_pacman = env::var_os("SUBSTRATE_WORLD_DEPS_SKIP_PACMAN");
     env::set_var("SUBSTRATE_WORLD_DEPS_SKIP_APT", "1");
+    env::set_var("SUBSTRATE_WORLD_DEPS_SKIP_PACMAN", "1");
 
     let sync_cmd = crate::WorldDepsCmd {
         action: crate::WorldDepsAction::Current(crate::execution::WorldDepsCurrentCmd {
@@ -389,6 +391,10 @@ fn run_sync_after_provisioning() {
     match previous_skip_apt {
         Some(value) => env::set_var("SUBSTRATE_WORLD_DEPS_SKIP_APT", value),
         None => env::remove_var("SUBSTRATE_WORLD_DEPS_SKIP_APT"),
+    }
+    match previous_skip_pacman {
+        Some(value) => env::set_var("SUBSTRATE_WORLD_DEPS_SKIP_PACMAN", value),
+        None => env::remove_var("SUBSTRATE_WORLD_DEPS_SKIP_PACMAN"),
     }
 
     if exit_code != 0 {

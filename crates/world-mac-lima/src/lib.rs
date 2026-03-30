@@ -39,7 +39,9 @@ pub struct MacLimaBackend {
 
 impl MacLimaBackend {
     pub fn new() -> Result<Self> {
-        let vm_name = "substrate".to_string();
+        let vm_name = std::env::var("SUBSTRATE_LIMA_VM_NAME")
+            .or_else(|_| std::env::var("LIMA_VM_NAME"))
+            .unwrap_or_else(|_| "substrate".to_string());
         let agent_socket = dirs::home_dir()
             .ok_or_else(|| anyhow::anyhow!("home directory not found"))?
             .join(".substrate/sock/agent.sock");
@@ -472,6 +474,11 @@ mod tests {
 
     #[test]
     fn test_backend_creation() {
+        let prev_substrate_lima_vm_name = std::env::var_os("SUBSTRATE_LIMA_VM_NAME");
+        let prev_lima_vm_name = std::env::var_os("LIMA_VM_NAME");
+        std::env::remove_var("SUBSTRATE_LIMA_VM_NAME");
+        std::env::remove_var("LIMA_VM_NAME");
+
         // This should work even if Lima is not installed
         match MacLimaBackend::new() {
             Ok(backend) => {
@@ -484,6 +491,36 @@ mod tests {
             Err(e) => {
                 println!("Expected failure when Lima not available: {}", e);
             }
+        }
+
+        match prev_substrate_lima_vm_name {
+            Some(value) => std::env::set_var("SUBSTRATE_LIMA_VM_NAME", value),
+            None => std::env::remove_var("SUBSTRATE_LIMA_VM_NAME"),
+        }
+        match prev_lima_vm_name {
+            Some(value) => std::env::set_var("LIMA_VM_NAME", value),
+            None => std::env::remove_var("LIMA_VM_NAME"),
+        }
+    }
+
+    #[test]
+    fn test_backend_vm_name_override_prefers_substrate_env() {
+        let prev_substrate_lima_vm_name = std::env::var_os("SUBSTRATE_LIMA_VM_NAME");
+        let prev_lima_vm_name = std::env::var_os("LIMA_VM_NAME");
+
+        std::env::set_var("LIMA_VM_NAME", "substrate-arch");
+        std::env::set_var("SUBSTRATE_LIMA_VM_NAME", "substrate-arch-override");
+
+        let backend = MacLimaBackend::new().expect("backend");
+        assert_eq!(backend.vm_name, "substrate-arch-override");
+
+        match prev_substrate_lima_vm_name {
+            Some(value) => std::env::set_var("SUBSTRATE_LIMA_VM_NAME", value),
+            None => std::env::remove_var("SUBSTRATE_LIMA_VM_NAME"),
+        }
+        match prev_lima_vm_name {
+            Some(value) => std::env::set_var("LIMA_VM_NAME", value),
+            None => std::env::remove_var("LIMA_VM_NAME"),
         }
     }
 
