@@ -357,7 +357,9 @@ echo pass
             match vm_status.as_str() {
                 "Running" => pass(&format!("Lima VM '{vm_name}' running")),
                 "missing" => warn(&format!("Lima VM '{vm_name}' not found")),
-                status => warn(&format!("Lima VM '{vm_name}' not running (status: {status})")),
+                status => warn(&format!(
+                    "Lima VM '{vm_name}' not running (status: {status})"
+                )),
             }
         }
 
@@ -534,7 +536,9 @@ echo pass
             match vm_status.as_str() {
                 "Running" => pass(&format!("Lima VM '{vm_name}' running")),
                 "missing" => warn(&format!("Lima VM '{vm_name}' not found")),
-                status => warn(&format!("Lima VM '{vm_name}' not running (status: {status})")),
+                status => warn(&format!(
+                    "Lima VM '{vm_name}' not running (status: {status})"
+                )),
             }
         }
 
@@ -1027,7 +1031,8 @@ echo pass
                             let exit = run(true, &runner);
                             assert_eq!(exit, 0);
 
-                            let lima = lima_json_value(vm_name, true, true, "Running", true, true, false);
+                            let lima =
+                                lima_json_value(vm_name, true, true, "Running", true, true, false);
                             assert_eq!(lima["vm_name"], vm_name);
                         })
                     })
@@ -1069,6 +1074,28 @@ echo pass
                                 "substrate-world-agent".into(),
                             ],
                             success_out("active\n"),
+                        ),
+                        // Capabilities probe fallback: when the host UDS socket is absent and the
+                        // TCP probe fails, run `curl` inside the guest without starting any
+                        // forwarding processes.
+                        (
+                            "limactl".into(),
+                            vec![
+                                "shell".into(),
+                                "--workdir=/".into(),
+                                vm_name.into(),
+                                "sudo".into(),
+                                "-n".into(),
+                                "timeout".into(),
+                                "5".into(),
+                                "curl".into(),
+                                "-sS".into(),
+                                "--fail".into(),
+                                "--unix-socket".into(),
+                                "/run/substrate.sock".into(),
+                                "http://localhost/v1/capabilities".into(),
+                            ],
+                            success_out("{}\n"),
                         ),
                     ];
                     let runner = MockRunner::new(responses);
