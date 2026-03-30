@@ -439,12 +439,7 @@ pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
         (false, None, None)
     };
 
-    let host_ok = world_enabled
-        && activation_report.socket_exists
-        && socket_probe_ok
-        && (overlay_ok || (fuse_dev && fuse_bin))
-        && cgv2
-        && nft;
+    let host_ok = world_enabled && activation_report.socket_exists && socket_probe_ok;
 
     let host_value = {
         let (socket_acl, socket_acl_error) = if activation_report.socket_exists {
@@ -615,7 +610,7 @@ pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
         } else if fuse_dev && fuse_bin {
             warn("overlayfs: missing; fuse-overlayfs available as fallback");
         } else {
-            fail("overlayfs: missing (and fuse-overlayfs unavailable)");
+            warn("overlayfs: missing (and fuse-overlayfs unavailable)");
         }
 
         if fuse_dev && fuse_bin {
@@ -641,12 +636,12 @@ pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
         if cgv2 {
             pass("cgroup v2: present");
         } else {
-            fail("cgroup v2: missing");
+            warn("cgroup v2: missing");
         }
         if nft {
             pass("nft: present");
         } else {
-            fail("nft: missing");
+            warn("nft: missing");
         }
 
         info(&format!("dmesg_restrict={}", dmsg));

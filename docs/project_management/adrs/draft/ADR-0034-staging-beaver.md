@@ -24,7 +24,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 43541d4c94fde16444d08b5577c603c1447aa3dfc22fd148ae3e7d2e29377bf7
+ADR_BODY_SHA256: eeac9675069d6bb9816517edb5a7b66846dd48204e4a1002a6341010ee562c8b
 
 ### Changes (operator-facing)
 - Dev installs stage a stable runtime bundle for `substrate world enable` under `$SUBSTRATE_HOME`.

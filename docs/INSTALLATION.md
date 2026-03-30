@@ -99,11 +99,17 @@ with `substrate --world ...` without changing the stored metadata.
 
 ### Installer Metadata & Cleanup
 
-- Both installers (`install-substrate.sh` + `dev-install-substrate.sh`) record
-  host-state details in `<prefix>/install_state.json` (default:
-  `~/.substrate/install_state.json`). Schema `version = 1` tracks whether the
-  `substrate` group existed, which users the installer added, and the observed
-  `loginctl` lingering state under `host_state.{group,linger}`.
+- On Linux, both installers (`install-substrate.sh` + `dev-install-substrate.sh`)
+  record host-state details in `<effective_prefix>/install_state.json` (default:
+  `~/.substrate/install_state.json`). `schema_version = 1` tracks whether the
+  `substrate` group existed, which users the installer added, the observed
+  `loginctl` lingering state under `host_state.{group,linger}`, and the Linux
+  platform metadata under `host_state.platform.os_release.id`,
+  `host_state.platform.os_release.id_like`,
+  `host_state.platform.pkg_manager.selected`, and
+  `host_state.platform.pkg_manager.source`. macOS and Windows do not write this
+  Linux host-state file; they only participate in compile/test parity for this
+  pack.
 - Metadata writes are idempotent; missing or corrupted files only emit warnings
   and never block install/uninstall runs.
 - Uninstallers accept `--cleanup-state`/`--auto-cleanup` to remove recorded

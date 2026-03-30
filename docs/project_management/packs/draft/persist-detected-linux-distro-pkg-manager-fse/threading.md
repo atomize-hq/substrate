@@ -2,15 +2,14 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-1`
-- **Next seam**: `SEAM-2`
-- **Future seam(s)**: `SEAM-3`
+- **Active seam**: none
+- **Next seam**: none
+- **Future seam(s)**: `SEAM-1`, `SEAM-2`, `SEAM-3`
 
 Execution discipline for this extracted pack:
 
-- `SEAM-1` is the only seam eligible for authoritative downstream decomposition by default.
-- `SEAM-2` may later receive seam-local review and slices, but deeper planning must stay provisional until it revalidates against landed `SEAM-1` truth.
-- `SEAM-3` stays at seam-brief depth until both upstream seams have concrete closeout-backed inputs.
+- No active seam remains in the forward window because all three seams are landed.
+- No next seam remains in the forward window; any new next seam requires an explicit horizon decision.
 
 ## Contract registry
 
@@ -88,11 +87,11 @@ Execution discipline for this extracted pack:
   - **Carried contract IDs**: `C-01`, `C-02`
   - **Purpose**:
     - Carry the exact persisted schema, path rule, and authority boundary into runtime writer planning so the writer seam does not invent alternate field shapes or metadata paths.
-  - **State**: `defined`
+  - **State**: `closed`
   - **Revalidation trigger**:
     - Upstream detection vocabulary changes, field-path changes, sentinel changes, or ADR path reconciliation that changes the canonical authority story.
   - **Satisfied by**:
-    - `SEAM-1` closeout publishes the concrete schema/path contract and `SEAM-2` seam-local review consumes that closeout-backed truth.
+    - `SEAM-1` closeout published the concrete schema/path contract, and `SEAM-2` landed against that closeout-backed truth without reopening the contract.
   - **Notes**:
     - This thread exists because the source pack split payload ownership from runtime writer mechanics; downstream planning should preserve that split.
 
@@ -102,11 +101,11 @@ Execution discipline for this extracted pack:
   - **Carried contract IDs**: `C-03`, `C-04`
   - **Purpose**:
     - Carry the landed write matrix and reliability semantics into smoke coverage, operator docs, and checkpoint evidence.
-  - **State**: `defined`
+  - **State**: `closed`
   - **Revalidation trigger**:
     - Any change to the successful-Linux branch matrix, dry-run/no-write behavior, non-Linux scope, temp-file placement, replace mechanics, or warning-only failure posture.
   - **Satisfied by**:
-    - `SEAM-2` closeout records landed writer behavior and `SEAM-3` consumes that record to update smoke branches, docs, and checkpoint evidence.
+    - `SEAM-2` closeout published landed writer behavior and `SEAM-3` closeout consumed that record as accepted smoke, docs, and checkpoint evidence.
   - **Notes**:
     - `CP1` belongs to this thread as evidence, not as a separate seam.
 
@@ -116,11 +115,11 @@ Execution discipline for this extracted pack:
   - **Carried contract IDs**: `C-01`, `C-02`
   - **Purpose**:
     - Carry the exact field names, path wording, and additive-compatibility rules into conformance work so smoke assertions and docs stay aligned to the persisted contract.
-  - **State**: `defined`
+  - **State**: `closed`
   - **Revalidation trigger**:
     - Schema-version policy changes, field naming changes, path wording changes, or ADR reconciliation that changes which directory is authoritative.
   - **Satisfied by**:
-    - `SEAM-3` seam-local review cites the latest `SEAM-1` closeout and confirms smoke/docs still match the landed contract.
+    - `SEAM-3` closeout cites the latest `SEAM-1` closeout and records smoke/docs evidence that matches the landed contract.
   - **Notes**:
     - This thread should stay separate from `THR-02` because docs and smoke can be correct about field names while still lagging the landed writer branch matrix.
 

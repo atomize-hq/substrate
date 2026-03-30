@@ -2,7 +2,7 @@
 
 Source: `persist-detected-linux-distro-pkg-manager.zip`
 
-This pack captures seam briefs, authoritative threading, pack-level review surfaces, seam-exit intent, and governance scaffolds. It is intentionally one level above seam-local decomposition.
+This pack captures seam briefs, authoritative threading, pack-level review surfaces, seam-exit intent, and governance scaffolds. It starts one level above seam-local decomposition, and promotion may add seam-local planning for the active seam.
 
 - Start here: `scope_brief.md`
 - Seam overview: `seam_map.md`
@@ -27,17 +27,19 @@ The extracted scope remains the same as the source pack:
 - The source pack's accepted slice order `PDLDPM0 -> PDLDPM1 -> PDLDPM2` is the best available critical-path signal, so it is used to infer the execution horizon in this seam pack.
 - The source pack's planning workstreams are preserved as internal reasoning inputs, but they are rolled up into higher-level seams because extractor v2.3 must stay above slice decomposition.
 - `CP1` remains an end-of-feature evidence checkpoint, but it is treated here as part of the conformance seam rather than as a standalone seam.
-- Closeout documents in `governance/` are scaffolds only. They do not assert landed reality yet.
+- `governance/seam-1-closeout.md` and `governance/seam-2-closeout.md` now record landed reality.
+- `governance/seam-3-closeout.md` now records the landed conformance closeout.
 
 Execution horizon:
 
-- Active seam: `SEAM-1`
-- Next seam: `SEAM-2`
+- Active seam: none
+- Next seam: none
+- Future seam(s): `SEAM-1`, `SEAM-2`, `SEAM-3`
 
 Policy:
 
-- only the active seam is eligible for authoritative downstream sub-slices by default
-- the next seam may later receive seam-local review + slices, and only provisional candidate-subslice hints
+- only an active seam is eligible for authoritative downstream sub-slices by default
+- no next seam is currently reserved; new forward-window planning should be selected only if pack scope expands
 - active and next seams must eventually terminate in a dedicated final `seam-exit-gate` slice once seam-local planning begins
 - future seams remain seam briefs
 

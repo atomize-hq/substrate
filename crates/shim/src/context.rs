@@ -393,14 +393,22 @@ mod tests {
 
         #[cfg(unix)]
         {
-            // PATH with duplicates
-            let original_path = "/usr/bin:/bin:/usr/bin:/usr/local/bin:/bin".to_string();
+            let a = temp.path().join("a");
+            let b = temp.path().join("b");
+            let c = temp.path().join("c");
+            fs::create_dir(&a).unwrap();
+            fs::create_dir(&b).unwrap();
+            fs::create_dir(&c).unwrap();
+            let original_path = format!(
+                "{}:{}:{}:{}:{}",
+                a.display(),
+                b.display(),
+                a.display(),
+                c.display(),
+                b.display()
+            );
             let paths = build_clean_search_path(&shim_dir, Some(original_path)).unwrap();
-            // Should be deduplicated
-            assert_eq!(paths.len(), 3);
-            assert_eq!(paths[0], PathBuf::from("/usr/bin"));
-            assert_eq!(paths[1], PathBuf::from("/bin"));
-            assert_eq!(paths[2], PathBuf::from("/usr/local/bin"));
+            assert_eq!(paths, vec![a, b, c]);
         }
     }
 

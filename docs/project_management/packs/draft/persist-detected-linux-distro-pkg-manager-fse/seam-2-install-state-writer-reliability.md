@@ -2,32 +2,33 @@
 seam_id: SEAM-2
 seam_slug: install-state-writer-reliability
 type: platform
-status: proposed
-execution_horizon: next
-plan_version: v1
+status: landed
+execution_horizon: future
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+    - governance/seam-1-closeout.md
   required_threads:
     - THR-01
   stale_triggers:
-    - any SEAM-1 closeout changes field names path semantics or copy-through rules
-    - adjacent packs refactor hosted or dev installer scripts before this seam is decomposed
-    - dry-run or invalid-file fallback semantics change upstream of seam-local review
+    - any SEAM-1 closeout changes field names path semantics or copy-through rules after THR-01 revalidation
+    - adjacent packs refactor hosted or dev installer scripts before this seam lands
+    - dry-run or invalid-file fallback semantics change before seam exit publishes C-03 and C-04
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
-  planned_location: reserved_final_slice
-  status: pending
+  planned_location: threaded-seams/seam-2-install-state-writer-reliability/slice-3-seam-exit-gate.md
+  status: passed
 open_remediations: []
 ---
 
@@ -106,9 +107,9 @@ open_remediations: []
   - It should preserve prior good state whenever a temp-file write or replace fails.
   - It should not hide unfinished net-new behavior inside any eventual seam-exit slice; runtime delivery must be complete before closeout accounting begins.
 - **Downstream decomposition context**:
-  - This seam is `next` because it is the first runtime consumer of the contract work in `SEAM-1` and therefore can be prepared provisionally but should not be deeply planned against stale assumptions.
-  - The most important thread is `THR-01`; `THR-02` becomes the outbound handoff to conformance.
-  - The first seam-local review should focus on branch matrix completeness, temp-file placement, invalid-file fallback, and shared-file sequencing risk.
+  - This seam is landed and no longer occupies the forward execution horizon because `SEAM-2` closeout published `C-03`, `C-04`, and `THR-02` for downstream conformance work.
+  - The most important inbound thread is `THR-01`; `THR-02` becomes the outbound handoff to conformance.
+  - The refreshed seam-local review focuses on branch matrix completeness, temp-file placement, invalid-file fallback, and shared-file sequencing risk in the current hosted and dev installer scripts.
   - Source-plan lineage: primarily `PDLDPM1`, with the old pack's accepted write matrix and atomicity rules preserved as seam-level requirements.
 - **Expected seam-exit concerns**:
   - Contracts likely to publish:

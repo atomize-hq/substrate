@@ -7,6 +7,9 @@ log()   { printf '[%s] %s\n' "${SCRIPT_NAME}" "$1"; }
 warn()  { printf '[%s][WARN] %s\n' "${SCRIPT_NAME}" "$1" >&2; }
 fatal() { printf '[%s][ERROR] %s\n' "${SCRIPT_NAME}" "$1" >&2; exit 1; }
 
+readonly DISTRO_UNKNOWN_SENTINEL="<unknown>"
+readonly SUPPORTED_PKG_MANAGERS=(apt-get dnf yum pacman zypper)
+
 usage() {
   cat <<'USAGE'
 Substrate Dev Installer
@@ -309,8 +312,260 @@ find_linux_world_agent() {
   return 1
 }
 
+reset_os_release_input_state() {
+  OS_RELEASE_SELECTED_PATH=""
+  OS_RELEASE_INPUT_STATE="unavailable"
+  DETECTED_DISTRO_ID="${DISTRO_UNKNOWN_SENTINEL}"
+  DETECTED_DISTRO_ID_LIKE="${DISTRO_UNKNOWN_SENTINEL}"
+}
+
+resolve_selected_os_release_input() {
+  local selected_path="${SUBSTRATE_INSTALL_OS_RELEASE_PATH:-}"
+  local os_release_fd
+
+  reset_os_release_input_state
+
+  if [[ -z "${selected_path}" ]]; then
+    selected_path="/etc/os-release"
+  fi
+
+  if [[ "${selected_path}" != /* ]]; then
+    return 1
+  fi
+
+  if [[ ! -f "${selected_path}" || ! -r "${selected_path}" ]]; then
+    return 1
+  fi
+
+  if ! exec {os_release_fd}<"${selected_path}"; then
+    return 1
+  fi
+  exec {os_release_fd}<&-
+
+  OS_RELEASE_SELECTED_PATH="${selected_path}"
+  OS_RELEASE_INPUT_STATE="selected"
+  return 0
+}
+
+trim_ascii_whitespace() {
+  local value="$1"
+  value="${value#"${value%%[!$' \t\r']*}"}"
+  value="${value%"${value##*[!$' \t\r']}"}"
+  printf '%s' "${value}"
+}
+
+strip_matching_quotes() {
+  local value="$1"
+  if [[ ${#value} -ge 2 ]]; then
+    case "${value:0:1}${value: -1}" in
+      "''"|'""')
+        value="${value:1:${#value}-2}"
+        ;;
+    esac
+  fi
+  printf '%s' "${value}"
+}
+
+parse_selected_os_release_fields() {
+  local line=""
+  local key=""
+  local raw_value=""
+  local normalized_value=""
+
+  DETECTED_DISTRO_ID="${DISTRO_UNKNOWN_SENTINEL}"
+  DETECTED_DISTRO_ID_LIKE="${DISTRO_UNKNOWN_SENTINEL}"
+
+  if [[ "${OS_RELEASE_INPUT_STATE}" != "selected" || -z "${OS_RELEASE_SELECTED_PATH}" ]]; then
+    return 1
+  fi
+
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    if [[ "${line}" =~ ^[[:space:]]*$ ]]; then
+      continue
+    fi
+    if [[ "${line}" =~ ^[[:space:]]*# ]]; then
+      continue
+    fi
+
+    key="${line%%=*}"
+    if [[ "${key}" == "${line}" ]]; then
+      continue
+    fi
+
+    raw_value="${line#*=}"
+    raw_value="$(trim_ascii_whitespace "${raw_value}")"
+    normalized_value="$(strip_matching_quotes "${raw_value}")"
+    normalized_value="${normalized_value,,}"
+    if [[ -z "${normalized_value}" ]]; then
+      normalized_value="${DISTRO_UNKNOWN_SENTINEL}"
+    fi
+
+    case "${key}" in
+      ID)
+        DETECTED_DISTRO_ID="${normalized_value}"
+        ;;
+      ID_LIKE)
+        DETECTED_DISTRO_ID_LIKE="${normalized_value}"
+        ;;
+    esac
+  done < "${OS_RELEASE_SELECTED_PATH}"
+
+  return 0
+}
+
+os_release_id_like_has_token() {
+  local needle="$1"
+  local token=""
+
+  if [[ -z "${needle}" || "${DETECTED_DISTRO_ID_LIKE}" == "${DISTRO_UNKNOWN_SENTINEL}" ]]; then
+    return 1
+  fi
+
+  for token in ${DETECTED_DISTRO_ID_LIKE}; do
+    if [[ "${token}" == "${needle}" ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+os_release_matches_debian_family() {
+  case "${DETECTED_DISTRO_ID}" in
+    debian|ubuntu|linuxmint|pop)
+      return 0
+      ;;
+  esac
+
+  os_release_id_like_has_token "debian" || os_release_id_like_has_token "ubuntu"
+}
+
+os_release_matches_fedora_rhel_family() {
+  case "${DETECTED_DISTRO_ID}" in
+    fedora|rhel|centos|rocky|almalinux|ol|amzn)
+      return 0
+      ;;
+  esac
+
+  os_release_id_like_has_token "fedora" || os_release_id_like_has_token "rhel"
+}
+
+os_release_matches_arch_family() {
+  case "${DETECTED_DISTRO_ID}" in
+    arch|manjaro|endeavouros|arcolinux|artix|garuda)
+      return 0
+      ;;
+  esac
+
+  os_release_id_like_has_token "arch"
+}
+
+os_release_matches_suse_family() {
+  local token=""
+
+  case "${DETECTED_DISTRO_ID}" in
+    *suse*)
+      return 0
+      ;;
+  esac
+
+  if [[ "${DETECTED_DISTRO_ID_LIKE}" == "${DISTRO_UNKNOWN_SENTINEL}" ]]; then
+    return 1
+  fi
+
+  for token in ${DETECTED_DISTRO_ID_LIKE}; do
+    case "${token}" in
+      *suse*)
+        return 0
+        ;;
+    esac
+  done
+
+  return 1
+}
+
+select_package_manager_from_os_release() {
+  PKG_MANAGER=""
+  PKG_MANAGER_SOURCE=""
+
+  if os_release_matches_debian_family; then
+    if command -v apt-get >/dev/null 2>&1; then
+      PKG_MANAGER="apt-get"
+      PKG_MANAGER_SOURCE="os_release"
+      return 0
+    fi
+    return 1
+  fi
+
+  if os_release_matches_fedora_rhel_family; then
+    if command -v dnf >/dev/null 2>&1; then
+      PKG_MANAGER="dnf"
+      PKG_MANAGER_SOURCE="os_release"
+      return 0
+    fi
+    if command -v yum >/dev/null 2>&1; then
+      PKG_MANAGER="yum"
+      PKG_MANAGER_SOURCE="os_release"
+      return 0
+    fi
+    return 1
+  fi
+
+  if os_release_matches_arch_family; then
+    if command -v pacman >/dev/null 2>&1; then
+      PKG_MANAGER="pacman"
+      PKG_MANAGER_SOURCE="os_release"
+      return 0
+    fi
+    return 1
+  fi
+
+  if os_release_matches_suse_family; then
+    if command -v zypper >/dev/null 2>&1; then
+      PKG_MANAGER="zypper"
+      PKG_MANAGER_SOURCE="os_release"
+      return 0
+    fi
+    return 1
+  fi
+
+  return 1
+}
+
+select_package_manager_from_path_probe() {
+  local manager=""
+  for manager in "${SUPPORTED_PKG_MANAGERS[@]}"; do
+    if command -v "${manager}" >/dev/null 2>&1; then
+      PKG_MANAGER="${manager}"
+      PKG_MANAGER_SOURCE="path_probe"
+      return 0
+    fi
+  done
+  return 1
+}
+
+detect_platform_metadata() {
+  if [[ "${IS_LINUX}" -ne 1 ]]; then
+    return 1
+  fi
+
+  PKG_MANAGER=""
+  PKG_MANAGER_SOURCE=""
+  resolve_selected_os_release_input || true
+  parse_selected_os_release_fields || true
+
+  if select_package_manager_from_os_release; then
+    return 0
+  fi
+  if select_package_manager_from_path_probe; then
+    return 0
+  fi
+
+  return 1
+}
+
 write_host_state_metadata() {
-  if [[ "${IS_LINUX}" -ne 1 || "${WORLD_ENABLED}" -ne 1 ]]; then
+  if [[ "${IS_LINUX}" -ne 1 ]]; then
     return
   fi
   if [[ -z "${HOST_STATE_PATH}" ]]; then
@@ -334,10 +589,11 @@ write_host_state_metadata() {
   for entry in "${HOST_STATE_LINGER_ENTRIES[@]:-}"; do
     events+=("linger:${entry}")
   done
-
-  if [[ ${#events[@]} -eq 0 ]]; then
-    log "No host state changes detected; skipping host metadata write."
-    return
+  if [[ -n "${PKG_MANAGER}" && -n "${PKG_MANAGER_SOURCE}" ]]; then
+    events+=("platform_os_release_id:${DETECTED_DISTRO_ID:-${DISTRO_UNKNOWN_SENTINEL}}")
+    events+=("platform_os_release_id_like:${DETECTED_DISTRO_ID_LIKE:-${DISTRO_UNKNOWN_SENTINEL}}")
+    events+=("platform_pkg_manager_selected:${PKG_MANAGER}")
+    events+=("platform_pkg_manager_source:${PKG_MANAGER_SOURCE}")
   fi
 
   local event_payload
@@ -357,15 +613,20 @@ schema_version = 1
 timestamp = datetime.datetime.utcnow().isoformat() + "Z"
 
 base = {}
+parsed_existing = False
 if path.exists():
     try:
         with path.open() as f:
             base = json.load(f)
+        parsed_existing = True
     except Exception as exc:  # noqa: BLE001
         sys.stderr.write(f"[dev-install-substrate] warning: unable to parse {path}: {exc}\n")
         base = {}
 
-if base.get("schema_version") != schema_version:
+if parsed_existing and base.get("schema_version") != schema_version:
+    sys.stderr.write(
+        f"[dev-install-substrate] warning: unsupported schema_version {base.get('schema_version')} at {path}; rebuilding metadata\n"
+    )
     base = {}
 
 base["schema_version"] = schema_version
@@ -378,6 +639,9 @@ group.setdefault("name", "substrate")
 members = {m for m in group.get("members_added", []) if isinstance(m, str)}
 linger = host.setdefault("linger", {})
 linger_users = linger.setdefault("users", {})
+platform = host.get("platform") or {}
+os_release = platform.get("os_release") or {}
+pkg_manager = platform.get("pkg_manager") or {}
 
 
 def parse_bool(raw: str):
@@ -421,8 +685,22 @@ for raw_event in events:
             entry["enabled_by_substrate"] = enabled_val
         elif "enabled_by_substrate" not in entry:
             entry["enabled_by_substrate"] = False
+    elif kind == "platform_os_release_id" and len(parts) >= 2:
+        os_release["id"] = parts[1]
+    elif kind == "platform_os_release_id_like" and len(parts) >= 2:
+        os_release["id_like"] = parts[1]
+    elif kind == "platform_pkg_manager_selected" and len(parts) >= 2:
+        pkg_manager["selected"] = parts[1]
+    elif kind == "platform_pkg_manager_source" and len(parts) >= 2:
+        pkg_manager["source"] = parts[1]
 
 group["members_added"] = sorted(members)
+if os_release:
+    platform["os_release"] = os_release
+if pkg_manager:
+    platform["pkg_manager"] = pkg_manager
+if platform:
+    host["platform"] = platform
 json.dump(base, sys.stdout, indent=2, sort_keys=True)
 PY
   then
@@ -431,7 +709,11 @@ PY
     return
   fi
 
-  mv "${tmp}" "${HOST_STATE_PATH}"
+  if ! mv "${tmp}" "${HOST_STATE_PATH}"; then
+    warn "Failed to replace host state metadata at ${HOST_STATE_PATH}; continuing without blocking install."
+    rm -f "${tmp}" || true
+    return
+  fi
   chmod 0644 "${HOST_STATE_PATH}" || true
   log "Host state metadata recorded at ${HOST_STATE_PATH}"
 }
@@ -795,6 +1077,12 @@ HOST_STATE_GROUP_EXISTED=""
 HOST_STATE_GROUP_CREATED=0
 HOST_STATE_ADDED_USERS=()
 HOST_STATE_LINGER_ENTRIES=()
+OS_RELEASE_SELECTED_PATH=""
+OS_RELEASE_INPUT_STATE="unavailable"
+DETECTED_DISTRO_ID="${DISTRO_UNKNOWN_SENTINEL}"
+DETECTED_DISTRO_ID_LIKE="${DISTRO_UNKNOWN_SENTINEL}"
+PKG_MANAGER=""
+PKG_MANAGER_SOURCE=""
 if [[ "$(uname -s)" == "Linux" ]]; then
   IS_LINUX=1
 fi
@@ -1235,4 +1523,5 @@ else
   warn "install metadata missing at ${INSTALL_CONFIG_PATH}; run 'substrate config init' after installing to create defaults."
 fi
 print_linger_guidance
+detect_platform_metadata || true
 write_host_state_metadata

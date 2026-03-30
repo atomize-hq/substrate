@@ -4,8 +4,8 @@ pack_version: v1
 pack_status: extracted
 source_ref: persist-detected-linux-distro-pkg-manager.zip
 execution_horizon:
-  active_seam: SEAM-1
-  next_seam: SEAM-2
+  active_seam: null
+  next_seam: null
 ---
 
 # Scope Brief - Persist detected Linux distro + pkg manager
@@ -48,8 +48,8 @@ execution_horizon:
   - Linux-only behavior change; macOS and Windows stay compile and test parity participants only.
   - `install_state.json` remains the only persisted metadata file touched by this scope.
   - Same-directory temp-file replacement is required; in-place truncation is not allowed.
-  - The extracted pack must keep exactly one `active` seam and one `next` seam by default.
-  - This pack must not reintroduce slices, seam-local `review.md`, or standalone subslice documents.
+  - While forward planning remains open, the extracted pack keeps exactly one `active` seam and may leave `next_seam: null` when no future seam remains in the forward window.
+  - Seam-local `review.md`, `seam.md`, and `slice-*.md` artifacts may exist only for the active seam and only after promotion refreshes them against landed upstream reality.
 - **External systems / dependencies**:
   - Upstream detection contract: `best-effort-distro-package-manager`
   - Hosted installer script: `scripts/substrate/install-substrate.sh`
@@ -59,13 +59,12 @@ execution_horizon:
   - CI parity and quick-testing surfaces used by `CP1`
   - Adjacent ADRs and packs that share installer or documentation files
 - **Known unknowns / risks**:
-  - ADR-0032 still contains feature-directory drift versus the resolved pack path, which can create dual-authority confusion during seam-local planning.
   - Shared-file edits across installer scripts and `docs/INSTALLATION.md` may collide with adjacent packs if sequencing is not explicit.
   - Hosted uninstaller cleanup semantics still trail the selected producer path rule and remain outside this scope.
   - Invalid JSON, unreadable file, or non-`1` schema fallback behavior is contractually defined but still requires careful seam-local review before execution.
   - The extractor is inferring seam order from the source slice order; if upstream priorities changed since the deep-researched pack was produced, seam-local revalidation must confirm the horizon.
 - **Assumptions**:
-  - `PDLDPM0 -> PDLDPM1 -> PDLDPM2` remains the intended execution order and is therefore used to infer `SEAM-1` as active and `SEAM-2` as next.
+  - `PDLDPM0 -> PDLDPM1 -> PDLDPM2` remained the intended execution order and was used to infer `SEAM-3` as the final active seam after `SEAM-2` closeout.
   - `CP1` remains the single checkpoint after the conformance/evidence seam unless downstream planning intentionally changes the horizon.
   - Source-pack decisions DR-0001 through DR-0005 remain the best available authority until superseded by newer accepted inputs.
-  - Governance closeout files are seeded now only as scaffolds and do not claim landed evidence.
+  - `governance/seam-1-closeout.md`, `governance/seam-2-closeout.md`, and `governance/seam-3-closeout.md` are now landed evidence, so no active seam remains in the forward window.
