@@ -40,7 +40,7 @@ flowchart TB
 ## Likely mismatch hotspots
 
 - `tests/installers/install_state_smoke.sh` already covers upgrade, invalid-JSON, write-failure, and replace-failure behavior, but it still needs the final conformance pass that freezes the exact producer matrix and persisted platform fields expected by `SEAM-3`.
-- `docs/INSTALLATION.md` remains the primary operator drift surface called out by `REM-002`; it must be checked against both the schema/path closeout and the runtime writer closeout before this seam lands.
+- `docs/INSTALLATION.md` was the primary operator drift surface called out by `REM-002`; the wording fix is now landed, so this seam can treat doc alignment as executable scope instead of a still-open remediation.
 - The source planning-pack evidence surfaces (`plan.md`, `tasks.json`, `session_log.md`) can stale independently from the smoke harness and docs unless they are updated from the same landed contract truth.
 
 ## Pre-exec findings
@@ -48,7 +48,7 @@ flowchart TB
 - `../../governance/seam-1-closeout.md` publishes `C-01`, `C-02`, and `THR-03` with promotion readiness `ready`, so schema and canonical-path truth are available for revalidated downstream consumption.
 - `../../governance/seam-2-closeout.md` publishes `C-03`, `C-04`, and `THR-02` with promotion readiness `ready`, so the successful-Linux branch matrix and warning-only reliability story are available for conformance planning.
 - The current smoke harness already contains reliability-focused assertions and additive-compatibility scaffolding, which keeps the remaining conformance work narrow instead of reopening runtime writer design.
-- `REM-002` remains visible as a material documentation-drift follow-up owned by `SEAM-3`, but it does not block pre-exec readiness because the seam-local slices make that work explicit and bounded.
+- `REM-002` is resolved, so the seam-local slices can focus on landing and closing out the documentation and evidence work instead of carrying an open wording-drift follow-up.
 
 ## Pre-exec gate disposition
 
@@ -61,7 +61,7 @@ flowchart TB
   - `THR-03` is revalidated against the published `SEAM-1` closeout.
   - current smoke and documentation surfaces still match the touch set described by the seam brief.
 - **Opened remediations**:
-  - none; `REM-002` remains the existing material follow-up explicitly owned by this seam
+  - none
 
 ## Planned seam-exit gate focus
 

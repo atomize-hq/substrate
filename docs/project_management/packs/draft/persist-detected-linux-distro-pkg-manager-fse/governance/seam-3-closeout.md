@@ -21,8 +21,7 @@ gates:
   post_exec:
     landing: pending
     closeout: pending
-open_remediations:
-  - REM-002
+open_remediations: []
 ---
 
 # Closeout - SEAM-3 Smoke and operator conformance
@@ -38,7 +37,7 @@ Scaffold only. The extractor created this document before execution; all evidenc
 - **Review-surface delta**: Pending; expect the validation and operator-guidance views to shift from source-pack intent to landed smoke/docs evidence
 - **Planned-vs-landed delta**: Pending
 - **Downstream stale triggers raised**: Pending
-- **Remediation disposition**: `REM-002` should be resolved before this seam claims operator-facing readiness
+- **Remediation disposition**: `REM-002` is resolved by the aligned operator wording in `docs/INSTALLATION.md`; seam-exit evidence should record that landed wording rather than carry the remediation forward.
 - **Promotion blockers**: missing upstream closeouts, stale smoke/docs inputs, or unresolved material documentation drift
 - **Promotion readiness**: blocked
 
@@ -46,5 +45,5 @@ Scaffold only. The extractor created this document before execution; all evidenc
 
 - **Landing gate**: pending
 - **Closeout gate**: pending
-- **Unresolved remediations**: `REM-002`
+- **Unresolved remediations**: none
 - **Carried-forward remediations**:

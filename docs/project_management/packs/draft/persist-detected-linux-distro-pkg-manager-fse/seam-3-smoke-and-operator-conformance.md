@@ -31,8 +31,7 @@ seam_exit_gate:
   required: true
   planned_location: threaded-seams/seam-3-smoke-and-operator-conformance/slice-3-seam-exit-gate.md
   status: pending
-open_remediations:
-  - REM-002
+open_remediations: []
 ---
 
 # SEAM-3 - Smoke and operator conformance

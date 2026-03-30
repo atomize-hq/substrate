@@ -11,7 +11,7 @@ basis:
   stale_triggers:
     - landed smoke evidence differs from the planned `C-05` contract
     - landed operator wording or checkpoint evidence differs from the planned `C-06` contract
-    - `REM-002` remains unresolved in a way that contradicts the claimed operator-facing readiness
+    - operator wording or checkpoint evidence drifts again after `REM-002` was resolved
 gates:
   pre_exec:
     review: passed
@@ -27,8 +27,7 @@ contracts_produced: []
 contracts_consumed:
   - C-05
   - C-06
-open_remediations:
-  - REM-002
+open_remediations: []
 candidate_subslices: []
 ---
 ### S3 - Seam exit gate
@@ -39,7 +38,7 @@ candidate_subslices: []
   - Out: net-new runtime delivery, schema/path contract changes, or unrelated documentation cleanup outside the accepted conformance scope
 - **Acceptance criteria**:
   - closeout records landed evidence for `C-05` and `C-06`
-  - closeout records the final disposition of `REM-002`
+  - closeout records the resolved disposition of `REM-002`
   - closeout advances `THR-02` and `THR-03` beyond pre-exec revalidation into accepted downstream evidence
   - promotion readiness is explicit and blocked if smoke, docs, or checkpoint truth remains unpublished or contradicted by an open blocking remediation
 - **Dependencies**:
@@ -53,7 +52,7 @@ candidate_subslices: []
   - evidence set includes contract publication, thread advancement, review-surface delta, remediation disposition, and final evidence-command posture
 - **Rollout/safety**:
   - prevents pack closeout on unpublished or ambiguous conformance truth
-  - keeps `REM-002` visible until operator wording is truly aligned
+  - keeps the resolved operator-wording fix visible in closeout evidence
 - **Review surface refs**:
   - `review.md` planned seam-exit gate focus
   - `../../review_surfaces.md` R1

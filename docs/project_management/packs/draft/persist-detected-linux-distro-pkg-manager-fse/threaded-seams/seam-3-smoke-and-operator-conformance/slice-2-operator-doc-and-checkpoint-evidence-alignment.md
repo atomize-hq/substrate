@@ -30,8 +30,7 @@ contracts_consumed:
   - C-03
   - C-04
   - C-05
-open_remediations:
-  - REM-002
+open_remediations: []
 candidate_subslices: []
 ---
 ### S2 - Operator doc and checkpoint evidence alignment
@@ -44,7 +43,7 @@ candidate_subslices: []
   - `docs/INSTALLATION.md` names the canonical path, shared producer scope, `schema_version = 1`, and the four persisted platform fields without drift
   - checkpoint and session evidence surfaces cite the same commands and contract story the smoke harness actually proves
   - cross-platform parity is stated as compile/test evidence rather than non-Linux runtime metadata behavior
-  - `REM-002` is either resolved by the landed wording or explicitly accounted for in seam-exit evidence
+  - `REM-002` stays resolved by the landed wording and is reflected accurately in seam-exit evidence
 - **Dependencies**:
   - `S1`
   - `../../governance/seam-1-closeout.md`
@@ -60,7 +59,7 @@ candidate_subslices: []
   - pass condition: operator wording and checkpoint evidence consume the same landed contract and smoke truth without reopening runtime scope
   - planned evidence cross-checks the doc and checkpoint surfaces against the seam closeouts and the landed smoke contract from `S1`
 - **Rollout/safety**:
-  - keeps `REM-002` explicit instead of letting operator drift hide inside a broader conformance bucket
+  - keeps the resolved operator-wording fix visible in the final conformance evidence instead of letting it disappear into a broader bucket
   - prevents pack closeout from relying on stale commands or stale path wording
 - **Review surface refs**:
   - `review.md` R2
@@ -94,7 +93,7 @@ candidate_subslices: []
 - `docs/INSTALLATION.md` is the authoritative operator-facing wording surface for the canonical path, shared Linux producer scope, `schema_version = 1`, and the four persisted platform fields.
 - Checkpoint and session evidence surfaces cite the same commands and artifacts the smoke harness uses.
 - Cross-platform parity remains compile/test evidence rather than non-Linux runtime metadata behavior.
-- `REM-002` is either resolved by the landed wording or carried explicitly in seam-exit evidence.
+- `REM-002` remains resolved by the landed wording and is reflected accurately in seam-exit evidence.
 
 ## Verification checklist for `C-06` readiness
 

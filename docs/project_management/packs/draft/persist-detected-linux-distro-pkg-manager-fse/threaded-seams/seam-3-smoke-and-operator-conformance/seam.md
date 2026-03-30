@@ -30,8 +30,7 @@ seam_exit_gate:
   required: true
   planned_location: S3
   status: pending
-open_remediations:
-  - REM-002
+open_remediations: []
 ---
 # SEAM-3 - Smoke And Operator Conformance
 

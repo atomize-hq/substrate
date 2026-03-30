@@ -29,8 +29,7 @@ seam_exit_gate:
   required: true
   planned_location: threaded-seams/seam-2-install-state-writer-reliability/slice-3-seam-exit-gate.md
   status: passed
-open_remediations:
-  - REM-003
+open_remediations: []
 ---
 
 # SEAM-2 - Install-state writer reliability

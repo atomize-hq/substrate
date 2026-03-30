@@ -1,7 +1,7 @@
 ---
 seam_id: SEAM-2
 status: landed
-closeout_version: v1
+closeout_version: v2
 seam_exit_gate:
   source_ref: ../threaded-seams/seam-2-install-state-writer-reliability/slice-3-seam-exit-gate.md
   status: passed
@@ -20,8 +20,7 @@ gates:
   post_exec:
     landing: passed
     closeout: passed
-open_remediations:
-  - REM-003
+open_remediations: []
 ---
 
 # Closeout - SEAM-2 Install-state writer reliability
@@ -41,7 +40,7 @@ This record captures the landed exit-gate evidence for SEAM-2.
 - **Review-surface delta**: The branch matrix now explicitly includes no-event successful Linux writes for hosted install, hosted `--no-world`, dev install, and dev `--no-world`; the reliability surface remains same-directory temp-file rendering, single replace, and warning-only degradation on failure.
 - **Planned-vs-landed delta**: No contract or path expansion landed. The seam stayed within the writer-reliability boundary and did not reopen `C-01` / `C-02` ownership.
 - **Downstream stale triggers raised**: Any later change to the successful-Linux write matrix, temp-file placement or replace mechanics, warning-only failure posture, or canonical path handling still requires `SEAM-3` revalidation.
-- **Remediation disposition**: `REM-003` remains open and is carried forward as an adjacent cleanup follow-up for `scripts/substrate/uninstall-substrate.sh`; it is visible but not blocking this seam's promotion.
+- **Remediation disposition**: `REM-003` is resolved by the uninstall cleanup-path alignment in `scripts/substrate/uninstall-substrate.sh` plus cleanup smoke coverage for a non-default `SUBSTRATE_HOME`; it no longer needs to be carried as a follow-up.
 - **Promotion blockers**: none
 - **Promotion readiness**: ready
 
@@ -49,6 +48,5 @@ This record captures the landed exit-gate evidence for SEAM-2.
 
 - **Landing gate**: passed
 - **Closeout gate**: passed
-- **Unresolved remediations**: `REM-003`
-- **Carried-forward remediations**:
-  - `REM-003`
+- **Unresolved remediations**: none
+- **Carried-forward remediations**: none
