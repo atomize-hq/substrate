@@ -179,11 +179,11 @@
     - `C-05`
   - **Purpose**:
     - Carry runtime fail-early semantics, explicit-item scoping, and manager-aware remediation wording into validation evidence and doc reconciliation.
-  - **State**: defined
+  - **State**: published
   - **Revalidation trigger**:
     - runtime in-scope rules, read-only probe families, or backend-specific remediation wording change
   - **Satisfied by**:
-    - `SEAM-5` closeout publishing runtime read-only probe evidence and accepted remediation wording
+    - `SEAM-5` closeout publishing runtime read-only probe evidence, explicit-item scoping evidence, and accepted remediation wording
   - **Notes**:
     - This thread is what keeps runtime behavior from drifting back toward mutation-at-runtime semantics.
 
@@ -210,8 +210,8 @@ flowchart LR
 
 1. `SEAM-1` has already published the manager-aware contract, decision register, and authority handoff on `THR-01`.
 2. `SEAM-4` has now landed with a passed seam-exit gate and published `THR-04`, so the provisioning-routing handoff is a closeout-backed fact.
-3. `SEAM-5` is the active runtime seam because it now has current upstream basis from `SEAM-3` and `SEAM-4`.
-4. `SEAM-6` is next because the terminal conformance seam should not become active until `SEAM-5` publishes `THR-05`.
+3. `SEAM-5` has now published `THR-05`, closing the runtime fail-early handoff from `SEAM-5`.
+4. `SEAM-6` is next because the terminal conformance seam consumes the published `THR-05` handoff from `SEAM-5`.
 
 ## Workstreams
 
