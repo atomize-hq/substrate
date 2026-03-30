@@ -29,12 +29,12 @@ The extracted scope remains the same as the source pack:
 - The source pack's `NASP-PWS-contract` workstream is elevated into its own seam instead of being hidden inside `NASP0`, because every other source workstream depends on it and it owns the multi-pack authority handoff plus the accepted decision register.
 - `NASP-PWS-tasks_checkpoints` remains governance scaffolding, not a seam. Its outputs stay represented through pack-level threading, review surfaces, and closeout scaffolds rather than as a feature seam.
 - `plan.md`, `tasks.json`, `session_log.md`, kickoff prompts, and checkpoint docs are preserved as lineage and governance inputs only.
-- Closeout documents in `governance/` are scaffolds only. They do not assert landed reality yet.
+- Closeout documents in `governance/` start as scaffolds and become authoritative as seams land.
 
 Execution horizon:
 
-- Active seam: `SEAM-1`
-- Next seam: `SEAM-2`
+- Active seam: `SEAM-2`
+- Next seam: `SEAM-3`
 
 Policy:
 

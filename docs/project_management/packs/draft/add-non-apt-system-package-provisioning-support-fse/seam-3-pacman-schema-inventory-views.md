@@ -3,7 +3,7 @@ seam_id: SEAM-3
 seam_slug: pacman-schema-inventory-views
 type: integration
 status: proposed
-execution_horizon: future
+execution_horizon: next
 plan_version: v1
 basis:
   currentness: provisional

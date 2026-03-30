@@ -2,13 +2,13 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-1`
-- **Next seam**: `SEAM-2`
-- **Future seams**: `SEAM-3`, `SEAM-4`, `SEAM-5`, `SEAM-6`
+- **Active seam**: `SEAM-2`
+- **Next seam**: `SEAM-3`
+- **Future seams**: `SEAM-4`, `SEAM-5`, `SEAM-6`
 - **Horizon inference**:
-  - The source pack's accepted slice order is `NASP0 -> NASP1 -> NASP2 -> NASP3 -> NASP4`.
-  - The source pack's workstream triage also identifies a prerequisite `NASP-PWS-contract` workstream with no dependencies.
-  - This extractor therefore elevates the contract workstream into `SEAM-1`, keeps `SEAM-2` as the next seam because the accepted delivery order starts at `NASP0`, and leaves the remaining delivery seams at brief depth.
+  - `SEAM-1` has landed, published `C-01`, and moved out of the forward planning window.
+  - `SEAM-2` is now the active delivery seam because `THR-01` is published and revalidated.
+  - `SEAM-3` is the next seam because `SEAM-4` depends on both probe truth (`THR-02`) and schema truth (`THR-03`).
 - **Governance-only lineage**:
   - `NASP-PWS-tasks_checkpoints` is intentionally represented as pack governance only. It is not a seam and does not own product behavior.
 
@@ -111,11 +111,11 @@
     - `C-01`
   - **Purpose**:
     - Carry the single authoritative manager-aware operator contract and accepted decision set into every downstream seam.
-  - **State**: defined
+  - **State**: revalidated
   - **Revalidation trigger**:
     - shared CLI/runtime wording, exit-code posture, request-profile posture, or authority-handoff targets change in ADR-0033, the APT pack, or the bundles contract
   - **Satisfied by**:
-    - `SEAM-1` closeout publishing `C-01` plus the authoritative handoff/defer list
+    - `SEAM-1` closeout publishing `C-01` plus the authoritative handoff/defer list, and `SEAM-2` pre-exec revalidation against the published pack-root contract and decision register
   - **Notes**:
     - This is the highest-load-bearing thread in the pack. It exists because the source planning pack explicitly split contract ownership from every later slice.
 
@@ -208,8 +208,8 @@ flowchart LR
 
 ## Critical path
 
-1. `SEAM-1` must make the manager-aware contract, decision register, and authority handoff concrete enough for downstream planning.
-2. `SEAM-2` and `SEAM-3` both consume `C-01`. The horizon picks `SEAM-2` as `next` because the source accepted delivery order begins with `NASP0`, but `SEAM-3` remains a near-future peer dependency after `SEAM-1`.
+1. `SEAM-1` has already published the manager-aware contract, decision register, and authority handoff on `THR-01`.
+2. `SEAM-2` is the active seam, and `SEAM-3` is next because both consume `C-01` and `SEAM-4` cannot safely decompose until probe and schema truth are both stable.
 3. `SEAM-4` requires both `THR-02` and `THR-03`, so provisioning routing should not decompose until probe and schema truth are stable.
 4. `SEAM-5` depends on `SEAM-3` and `SEAM-4`, because runtime fail-early reuses the pacman schema contract and provisioning-time normalization story while keeping runtime mutation prohibited.
 5. `SEAM-6` is the terminal conformance seam. It should not close until `THR-01` through `THR-05` are published or explicitly revalidated.

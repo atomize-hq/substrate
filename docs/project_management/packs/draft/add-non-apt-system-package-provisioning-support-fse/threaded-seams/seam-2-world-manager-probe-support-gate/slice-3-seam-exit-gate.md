@@ -2,20 +2,20 @@
 slice_id: S3
 seam_id: SEAM-2
 slice_kind: seam_exit_gate
-execution_horizon: next
-status: decomposed
-plan_version: v1
+execution_horizon: active
+status: exec-ready
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   basis_ref: seam.md#basis
   stale_triggers:
   - any downstream seam begins planning against host-derived manager detection
   - any downstream seam treats `/etc/os-release` as non-authoritative for family selection
 gates:
   pre_exec:
-    review: inherited
-    contract: inherited
-    revalidation: inherited
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
@@ -67,4 +67,3 @@ This slice plans the deterministic handoff that downstream seam promotion may co
   - probe runs in-world (not on host)
   - `/etc/os-release` remains authoritative for family selection
   - contradictions and unmapped cases remain fail-closed
-

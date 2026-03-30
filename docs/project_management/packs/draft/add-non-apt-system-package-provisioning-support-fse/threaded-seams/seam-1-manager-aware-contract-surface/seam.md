@@ -1,11 +1,11 @@
 ---
 seam_id: SEAM-1
 seam_slug: manager-aware-contract-surface
-status: decomposed
-execution_horizon: active
-plan_version: v1
+status: closed
+execution_horizon: future
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_seam_brief: ../../seam-1-manager-aware-contract-surface.md
   source_scope_ref: ../../scope_brief.md
   upstream_closeouts: []
@@ -16,16 +16,16 @@ basis:
   - v1 pacman scope or authority-handoff targets change and make the extracted contract basis stale
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S3
-  status: pending
+  status: passed
 open_remediations: []
 ---
 # SEAM-1 - Manager-aware contract surface
@@ -115,4 +115,3 @@ open_remediations: []
 
 - Pack remediation log: `../../governance/remediation-log.md`
 - Seam closeout: `../../governance/seam-1-closeout.md`
-
