@@ -195,9 +195,6 @@ pub(crate) fn candidate_roots() -> Vec<CopyDiffCandidate> {
             push_candidate(&mut seen, &mut roots, run_root, CopyDiffRootSource::Run);
         }
 
-        let run_root = PathBuf::from("/run/substrate/copydiff");
-        push_candidate(&mut seen, &mut roots, run_root, CopyDiffRootSource::Run);
-
         let tmp_root = PathBuf::from(format!("/tmp/substrate-{}-copydiff", uid));
         push_candidate(&mut seen, &mut roots, tmp_root, CopyDiffRootSource::Tmp);
 
