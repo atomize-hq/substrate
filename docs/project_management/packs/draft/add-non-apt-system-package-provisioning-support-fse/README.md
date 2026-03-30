@@ -33,13 +33,14 @@ The extracted scope remains the same as the source pack:
 
 Execution horizon:
 
-- Active seam: `SEAM-6`
+- Active seam: none
 - Next seam: none
+- Future seam(s): `SEAM-1`, `SEAM-2`, `SEAM-3`, `SEAM-4`, `SEAM-5`, `SEAM-6`
 
 Policy:
 
 - only the active seam is eligible for authoritative downstream sub-slices by default
-- the next seam may later receive seam-local review + slices, and only provisional candidate-subslice hints
+- no next seam is currently reserved; new forward-window planning should be selected only if pack scope expands
 - active and next seams must eventually terminate in a dedicated final `seam-exit-gate` slice once seam-local planning begins
 - future seams remain seam briefs
 

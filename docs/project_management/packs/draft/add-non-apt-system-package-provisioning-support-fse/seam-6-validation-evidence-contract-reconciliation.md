@@ -2,8 +2,8 @@
 seam_id: SEAM-6
 seam_slug: validation-evidence-contract-reconciliation
 type: conformance
-status: exec-ready
-execution_horizon: active
+status: landed
+execution_horizon: future
 plan_version: v2
 basis:
   currentness: current
@@ -31,20 +31,18 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S3
-  status: pending
-open_remediations:
-- REM-001
-- REM-002
+  status: passed
+open_remediations: []
 ---
 
 # SEAM-6 - Validation evidence and contract reconciliation
 
-This seam is now active and exec-ready. Its authoritative pre-exec planning lives in `threaded-seams/seam-6-validation-evidence-contract-reconciliation/`.
+This seam is landed. Its authoritative planning and exit-gate record live in `threaded-seams/seam-6-validation-evidence-contract-reconciliation/` and `governance/seam-6-closeout.md`.
 
 - **Goal / value**:
   - Lock the cross-platform evidence story and remove second-truth drift from overlapping ADR and documentation surfaces once the manager-aware behavior seams land.
@@ -102,12 +100,12 @@ This seam is now active and exec-ready. Its authoritative pre-exec planning live
     - `docs/reference/world/deps/README.md`
     - `docs/internals/world/deps.md`
 - **Verification**:
-  - Because this seam **consumes** upstream contracts, verification may depend on accepted upstream evidence from `SEAM-1` through `SEAM-5`.
-  - The first seam-local review should try to falsify:
+  - Because this seam **consumes** upstream contracts, verification depended on accepted upstream evidence from `SEAM-1` through `SEAM-5`.
+  - Seam-local review focused on falsifying:
     - whether any named reconciliation target can still present APT-only or mutation-at-runtime truth
     - whether smoke/manual evidence leaves a missing platform lane or an unrecorded fixture assumption
     - whether parity docs or smoke scripts accidentally redefine behavior instead of proving it
-  - A passing pre-exec posture should leave pack closeout able to trust one final validation story.
+  - The landed pre-exec and post-exec posture leaves pack closeout able to trust one final validation story.
 - **Risks / unknowns**:
   - Risk:
     - shared-contract reconciliation targets can remain out of sync and continue to present a second truth after earlier seams land.
@@ -121,18 +119,17 @@ This seam is now active and exec-ready. Its authoritative pre-exec planning live
   - This seam should not create new behavior. Its job is to prove and lock earlier behavior so the feature does not drift after landing.
   - Because it is a conformance seam, it must not become a cleanup bucket for net-new probe or provisioning work that belongs upstream.
 - **Downstream decomposition context**:
-  - This seam is now `active` and terminal because `SEAM-5` closed with a passed seam-exit gate, published `THR-05`, and left the terminal validation basis current.
+  - This seam was the terminal active seam after `SEAM-5` closed with a passed seam-exit gate, published `THR-05`, and left the terminal validation basis current.
   - The most important threads are `THR-01`, `THR-02`, `THR-03`, `THR-04`, and `THR-05`.
-  - The first seam-local review should focus on parity completeness, smoke/manual fixture assumptions, and every named second-truth reconciliation target.
+  - The landed seam-local review focused on parity completeness, smoke/manual fixture assumptions, and every named second-truth reconciliation target.
   - Source-plan lineage: `NASP-PWS-docs_validation`, `NASP4`, `platform-parity-spec.md`, `manual_testing_playbook.md`, and the three smoke scripts.
-- **Expected seam-exit concerns**:
-  - Contracts likely to publish:
+- **Realized seam-exit record**:
+  - Contracts published:
     - none beyond terminal evidence and reconciliation truth
-  - Threads likely to advance:
-    - `THR-01` through `THR-05` from `revalidated` to `closed` or explicit terminal carry
-  - Review-surface areas likely to shift after landing:
-    - the platform posture diagram once automated vs manual evidence is fully recorded
-    - the touch-surface map around reconciliation targets
-  - Downstream seams most likely to require revalidation:
-    - none inside this pack; this seam should feed pack closeout instead
-  - Accepted or published owned-contract artifacts belong here and in closeout evidence, not in pre-exec verification for the producing seam.
+  - Threads consumed:
+    - `THR-01` through `THR-05` remain `revalidated` and are recorded with explicit terminal no-downstream-carry accounting
+  - Review-surface areas that shifted at landing:
+    - the platform posture now records the manual-only Arch-family evidence lane explicitly
+    - the reconciliation targets now defer to or restate the accepted manager-aware contracts in one voice
+  - Downstream seams requiring revalidation:
+    - none inside this pack; the seam now feeds pack closeout instead

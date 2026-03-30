@@ -4,7 +4,7 @@ pack_version: v1
 pack_status: extracted
 source_ref: add-non-apt-system-package-provisioning-support.zip
 execution_horizon:
-  active_seam: SEAM-6
+  active_seam: null
   next_seam: null
 ---
 

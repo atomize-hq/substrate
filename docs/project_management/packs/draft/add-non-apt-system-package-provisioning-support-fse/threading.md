@@ -2,13 +2,13 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-6`
+- **Active seam**: none
 - **Next seam**: none
-- **Future seams**: none
+- **Future seams**: `SEAM-1`, `SEAM-2`, `SEAM-3`, `SEAM-4`, `SEAM-5`, `SEAM-6`
 - **Horizon inference**:
-  - `SEAM-5` has landed, published `THR-05`, and moved out of the forward planning window.
-  - `SEAM-6` is now the active terminal seam because `THR-01` through `THR-05` are landed or revalidated and the prior active seam handed off with a passed seam-exit gate.
-  - No queued `next` seam remains in this pack because `SEAM-6` is the terminal conformance seam.
+  - `SEAM-5` landed, published `THR-05`, and left the forward planning window.
+  - `SEAM-6` has now landed with a passed seam-exit gate and a terminal closeout-backed record for `THR-01` through `THR-05`.
+  - No queued `next` seam remains in this pack because the terminal conformance seam has completed.
 - **Governance-only lineage**:
   - `NASP-PWS-tasks_checkpoints` is intentionally represented as pack governance only. It is not a seam and does not own product behavior.
 
@@ -211,7 +211,7 @@ flowchart LR
 1. `SEAM-1` has already published the manager-aware contract, decision register, and authority handoff on `THR-01`.
 2. `SEAM-4` has now landed with a passed seam-exit gate and published `THR-04`, so the provisioning-routing handoff is a closeout-backed fact.
 3. `SEAM-5` has now landed with a passed seam-exit gate and a published `THR-05` handoff.
-4. `SEAM-6` is the terminal active seam because it now consumes the revalidated `THR-05` handoff and no queued `next` seam remains.
+4. `SEAM-6` has landed with a passed seam-exit gate after consuming the revalidated `THR-05` handoff, and no queued `next` seam remains.
 
 ## Workstreams
 
