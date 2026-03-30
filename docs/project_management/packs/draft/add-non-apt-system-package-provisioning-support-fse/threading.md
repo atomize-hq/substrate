@@ -2,13 +2,13 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-4`
-- **Next seam**: `SEAM-5`
-- **Future seams**: `SEAM-6`
+- **Active seam**: `SEAM-5`
+- **Next seam**: `SEAM-6`
+- **Future seams**: none
 - **Horizon inference**:
-  - `SEAM-3` has landed, published `C-03`, and moved out of the forward planning window.
-  - `SEAM-4` is now the active delivery seam because `THR-02` and `THR-03` are published, the prior active seam handed off with a passed seam-exit gate, and `REM-003` revalidation no longer blocks decomposition.
-  - `SEAM-5` is the next seam because runtime fail-early now depends most directly on `SEAM-4` publishing `THR-04`.
+  - `SEAM-4` has landed, published `THR-04`, and moved out of the forward planning window.
+  - `SEAM-5` is now the active delivery seam because `THR-03` and `THR-04` are published, the prior active seam handed off with a passed seam-exit gate, and the runtime fail-early basis is current.
+  - `SEAM-6` is the next seam because terminal validation and reconciliation now depend most directly on `SEAM-5` publishing `THR-05`.
 - **Governance-only lineage**:
   - `NASP-PWS-tasks_checkpoints` is intentionally represented as pack governance only. It is not a seam and does not own product behavior.
 
@@ -163,13 +163,13 @@
     - `C-04`
   - **Purpose**:
     - Carry provisioning-time normalization, mixed-manager rejection, request-profile routing, and exact pacman execution shape into runtime remediation and cross-platform validation.
-  - **State**: defined
+  - **State**: revalidated
   - **Revalidation trigger**:
     - requirement normalization rules, pacman command shape, mixed-manager posture, or shared `world_enable` / `world-agent` touch surfaces change
   - **Satisfied by**:
-    - `SEAM-4` closeout publishing provisioning-routing evidence and exact manager-aware dry-run/verbose rendering
+    - `SEAM-4` closeout publishing provisioning-routing evidence and exact manager-aware dry-run/verbose rendering, with `SEAM-5` seam-local review revalidating the runtime fail-early plan against that published basis
   - **Notes**:
-    - `REM-003` keeps this thread visible because adjacent shared-file work can stale its basis before decomposition.
+    - `REM-003` was resolved in `SEAM-4` closeout after the shared provisioning touch surface was revalidated.
 
 - **Thread ID**: `THR-05`
   - **Producer seam**: `SEAM-5`
@@ -209,9 +209,9 @@ flowchart LR
 ## Critical path
 
 1. `SEAM-1` has already published the manager-aware contract, decision register, and authority handoff on `THR-01`.
-2. `SEAM-2` and `SEAM-3` have now published `THR-02` and `THR-03`, so `SEAM-4` is the active provisioning seam with current upstream basis.
-3. `SEAM-5` is next because runtime fail-early reuses the pacman schema contract and provisioning-time normalization story once `SEAM-4` publishes `THR-04`.
-4. `SEAM-6` is the terminal conformance seam. It should not close until `THR-01` through `THR-05` are published or explicitly revalidated.
+2. `SEAM-4` has now landed with a passed seam-exit gate and published `THR-04`, so the provisioning-routing handoff is a closeout-backed fact.
+3. `SEAM-5` is the active runtime seam because it now has current upstream basis from `SEAM-3` and `SEAM-4`.
+4. `SEAM-6` is next because the terminal conformance seam should not become active until `SEAM-5` publishes `THR-05`.
 
 ## Workstreams
 

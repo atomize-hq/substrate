@@ -2,8 +2,8 @@
 seam_id: SEAM-4
 seam_slug: provisioning-routing-pacman-execution
 type: platform
-status: exec-ready
-execution_horizon: active
+status: closed
+execution_horizon: future
 plan_version: v2
 basis:
   currentness: current
@@ -28,18 +28,18 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S3
-  status: pending
+  status: passed
 open_remediations: []
 ---
 
 # SEAM-4 - Provisioning routing and pacman execution
 
-This seam is now active and exec-ready. Its authoritative pre-exec planning lives in `threaded-seams/seam-4-provisioning-routing-pacman-execution/`.
+This seam has landed. Its authoritative post-exec record lives in `governance/seam-4-closeout.md`, and it is no longer in the forward planning window.
 
 - **Goal / value**:
   - Turn the manager-aware contract, probe support gate, and pacman schema truth into one deterministic provisioning-time execution path for `substrate world enable --provision-deps`.
@@ -114,9 +114,9 @@ This seam is now active and exec-ready. Its authoritative pre-exec planning live
   - This seam is the only place in the pack where pacman execution becomes an owned behavior. That makes fail-closed behavior and exact command shape load-bearing safety controls.
   - Linux host-native and Windows remain unsupported; no host mutation is allowed.
 - **Downstream decomposition context**:
-  - This seam is `active` because `SEAM-3` has now published `THR-03`, and the shared `world_enable` / `world-agent` touch surfaces were revalidated against the current repo state.
-  - The most important threads are `THR-01`, `THR-02`, `THR-03`, and `THR-04`.
-  - The seam-local review now fixes the owner contract baseline, request-profile boundary, shared-file touch surface, and exact pacman command construction before execution begins.
+  - This seam is now outside the forward window because `SEAM-5` can consume the published `THR-04` handoff.
+  - The most important threads remain `THR-01`, `THR-02`, `THR-03`, and `THR-04`.
+  - `governance/seam-4-closeout.md` is the authoritative publication point for `C-04`, `THR-04`, and the resolved `REM-003` revalidation evidence.
   - Source-plan lineage: `NASP-PWS-provisioning_wiring` and `NASP2`.
 - **Expected seam-exit concerns**:
   - Contracts likely to publish:

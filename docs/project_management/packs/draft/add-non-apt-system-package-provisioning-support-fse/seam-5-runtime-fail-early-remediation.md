@@ -2,14 +2,17 @@
 seam_id: SEAM-5
 seam_slug: runtime-fail-early-remediation
 type: platform
-status: proposed
-execution_horizon: next
-plan_version: v1
+status: exec-ready
+execution_horizon: active
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+  - governance/seam-1-closeout.md
+  - governance/seam-3-closeout.md
+  - governance/seam-4-closeout.md
   required_threads:
   - THR-01
   - THR-03
@@ -20,20 +23,22 @@ basis:
   - runtime docs or tests drift back toward mutation-at-runtime semantics
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
 seam_exit_gate:
   required: true
-  planned_location: reserved_final_slice
+  planned_location: S3
   status: pending
 open_remediations: []
 ---
 
 # SEAM-5 - Runtime fail-early and remediation
+
+This seam is now active and exec-ready. Its authoritative pre-exec planning lives in `threaded-seams/seam-5-runtime-fail-early-remediation/`.
 
 - **Goal / value**:
   - Keep runtime system-package handling read-only and deterministic while extending fail-early behavior and remediation to pacman-backed items alongside APT-backed items.
@@ -88,7 +93,7 @@ open_remediations: []
     - `docs/reference/world/deps/README.md`
     - `docs/internals/world/deps.md`
 - **Verification**:
-  - Because this seam **consumes** upstream contracts, verification may depend on accepted upstream evidence for the pacman schema contract and provisioning normalization contract.
+  - Because this seam **produces** `C-05` while consuming upstream contracts, verification must prove the runtime fail-early and remediation contract is concrete enough for downstream validation without waiting on post-exec publication.
   - The first seam-local review should try to falsify:
     - whether any runtime path can still mutate the world package manager
     - whether explicit-item installs can still be poisoned by unrelated enabled system-package items
@@ -107,9 +112,9 @@ open_remediations: []
   - This seam is a safety seam as much as a runtime UX seam. Its main job is to keep system-package mutation out of runtime while still giving operators deterministic next steps.
   - Backend-specific guidance for Linux host-native and Windows is load-bearing because it prevents host-mutation misinterpretation.
 - **Downstream decomposition context**:
-  - This seam is `future` because it sits after provisioning routing in the accepted source order and the default horizon does not deep-plan beyond the next seam.
-  - The most important threads are `THR-03`, `THR-04`, and `THR-05`.
-  - The first seam-local review should focus on explicit-item scope, read-only probe families, manager-aware ordering, and the exact remediation wording path through shell/runtime surfaces.
+  - This seam is now active and exec-ready because `SEAM-4` closed with a passed seam-exit gate and published the `THR-04` handoff it consumes.
+  - The most important threads are `THR-01`, `THR-03`, `THR-04`, and `THR-05`.
+  - Its authoritative pre-exec planning now lives in `threaded-seams/seam-5-runtime-fail-early-remediation/`.
   - Source-plan lineage: `NASP-PWS-runtime_fail_early` and `NASP3`.
 - **Expected seam-exit concerns**:
   - Contracts likely to publish:

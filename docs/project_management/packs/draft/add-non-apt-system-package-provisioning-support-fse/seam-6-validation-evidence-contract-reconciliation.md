@@ -3,8 +3,8 @@ seam_id: SEAM-6
 seam_slug: validation-evidence-contract-reconciliation
 type: conformance
 status: proposed
-execution_horizon: future
-plan_version: v1
+execution_horizon: next
+plan_version: v2
 basis:
   currentness: provisional
   source_scope_ref: scope_brief.md
@@ -118,7 +118,7 @@ open_remediations:
   - This seam should not create new behavior. Its job is to prove and lock earlier behavior so the feature does not drift after landing.
   - Because it is a conformance seam, it must not become a cleanup bucket for net-new probe or provisioning work that belongs upstream.
 - **Downstream decomposition context**:
-  - This seam is `future` and terminal. It should remain seam-brief only until the earlier behavior seams publish enough truth to validate and reconcile against.
+  - This seam is now `next` and terminal. It should remain seam-brief only until the earlier behavior seams publish enough truth to validate and reconcile against.
   - The most important threads are `THR-01`, `THR-02`, `THR-03`, `THR-04`, and `THR-05`.
   - The first seam-local review should focus on parity completeness, smoke/manual fixture assumptions, and every named second-truth reconciliation target.
   - Source-plan lineage: `NASP-PWS-docs_validation`, `NASP4`, `platform-parity-spec.md`, `manual_testing_playbook.md`, and the three smoke scripts.
