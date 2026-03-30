@@ -35,7 +35,7 @@ ADR-0032 requires Linux distro and package-manager metadata to survive beyond th
 **Recommendation**
 
 - **Selected:** Option A — Extend `install_state.json`
-- **Rationale (crisp):** one canonical installer metadata file is simpler, matches the existing cleanup surface, and avoids fragmented state.
+- **Rationale (crisp):** one canonical installer metadata file is simpler, stays additive under `schema_version = 1`, matches the existing cleanup surface, and avoids fragmented state.
 
 **Follow-up tasks (explicit)**
 
@@ -76,7 +76,7 @@ The planning pack must choose one stable JSON shape for persisted platform metad
 **Recommendation**
 
 - **Selected:** Option A — Nest new fields under `host_state.platform.os_release.*` and `host_state.platform.pkg_manager.*`
-- **Rationale (crisp):** one namespaced platform block is additive, preserves the existing host-state structure, and keeps the field contract testable.
+- **Rationale (crisp):** one namespaced platform block is additive, preserves the existing host-state structure, keeps the field contract testable, and leaves package-manager vocabulary ownership external.
 
 **Follow-up tasks (explicit)**
 
@@ -121,7 +121,7 @@ This pack persists `pkg_manager.selected` and `pkg_manager.source`, but the plan
 **Follow-up tasks (explicit)**
 
 - `contract.md` must state that `pkg_manager.selected` and `pkg_manager.source` are copied verbatim from `best-effort-distro-package-manager`.
-- `install-state-schema-spec.md` must reference the upstream vocabulary owner instead of redefining it.
+- `install-state-schema-spec.md` must reference the upstream vocabulary owner instead of redefining it and must keep the schema additive under `schema_version = 1`.
 - `slices/PDLDPM0/PDLDPM0-spec.md` must require tests that prove no local re-derivation of `pkg_manager.selected` or `pkg_manager.source`.
 
 ## DR-0004 — Successful-install write-trigger scope
@@ -162,7 +162,7 @@ The planning pack must choose which successful Linux installer flows create or u
 
 - `contract.md` must publish the exact write matrix: hosted install, hosted `--no-world`, dev install, and dev `--no-world` write on success; hosted `--dry-run` does not write.
 - `slices/PDLDPM1/PDLDPM1-spec.md` must define idempotent create/update behavior and the exact temp-file replacement rule.
-- `tests/installers/install_state_smoke.sh` must add assertions for no-event Linux success and additive compatibility.
+- `tests/installers/install_state_smoke.sh` must add assertions for no-event Linux success and additive compatibility under `schema_version = 1`.
 - `docs/INSTALLATION.md` must describe the shared hosted-plus-dev metadata-producer contract.
 
 ## DR-0005 — Canonical feature-directory authority for this planning pack

@@ -91,28 +91,19 @@ Out of scope (authoritative elsewhere; this feature MUST NOT redefine):
   - Type: object
   - Required: yes when `host_state.platform` is present
 - `host_state.platform.pkg_manager.selected`
-  - Type: string enum
+  - Type: string
   - Required: yes when `host_state.platform.pkg_manager` is present
-  - Allowed values:
-    - `apt-get`
-    - `dnf`
-    - `yum`
-    - `pacman`
-    - `zypper`
   - Semantics:
     - MUST copy the selected package manager emitted by `best-effort-distro-package-manager`.
-    - MUST NOT be re-derived by the persistence writer.
+    - MUST NOT be re-derived, normalized, or locally enumerated by the persistence writer.
+    - The vocabulary is owned by `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`.
 - `host_state.platform.pkg_manager.source`
-  - Type: string enum
+  - Type: string
   - Required: yes when `host_state.platform.pkg_manager` is present
-  - Allowed values:
-    - `flag`
-    - `env`
-    - `os_release`
-    - `path_probe`
   - Semantics:
     - MUST copy the detection-contract source value verbatim.
-    - MUST use the same vocabulary as `best-effort-distro-package-manager`.
+    - MUST NOT be re-derived or locally enumerated by the persistence writer.
+    - The vocabulary is owned by `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`.
 
 ## Emission and merge rules (authoritative)
 
@@ -122,7 +113,7 @@ Out of scope (authoritative elsewhere; this feature MUST NOT redefine):
 - Writers MUST preserve the existing JSON values at `host_state.group` and `host_state.linger` exactly as they were read.
 - Writers MUST write `host_state.platform.os_release.id` and `host_state.platform.os_release.id_like` exactly as produced by distro detection.
 - Writers MUST write the literal `<unknown>` sentinel when distro detection emitted `<unknown>` for missing or unreadable `/etc/os-release` data.
-- Writers MUST write `host_state.platform.pkg_manager.selected` and `host_state.platform.pkg_manager.source` exactly as produced by package-manager detection.
+- Writers MUST write `host_state.platform.pkg_manager.selected` and `host_state.platform.pkg_manager.source` exactly as produced by package-manager detection, without applying a local allowlist or vocabulary rewrite.
 - Writers MUST update the file through the contract-defined temp-file replace flow so the resulting file is a complete JSON document after each successful write.
 - Writers MUST NOT remove `host_state.group` or `host_state.linger` solely because the current install run did not emit new values for those fields.
 
@@ -131,9 +122,9 @@ Out of scope (authoritative elsewhere; this feature MUST NOT redefine):
 - `schema_version != 1`
 - `host_state.platform` present without `host_state.platform.os_release`
 - `host_state.platform` present without `host_state.platform.pkg_manager`
-- `host_state.platform.pkg_manager.selected` outside the allowed enum
-- `host_state.platform.pkg_manager.source` outside the allowed enum
 - `host_state.platform.os_release.id` or `host_state.platform.os_release.id_like` omitted when `host_state.platform.os_release` is present
+
+This spec does not define additional invalid states for `host_state.platform.pkg_manager.selected` or `host_state.platform.pkg_manager.source`; those values are governed by the upstream detection contract.
 
 ## Examples (authoritative)
 

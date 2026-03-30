@@ -47,6 +47,10 @@ External authoritative inputs:
 - The operator-facing name for the same canonical path is `$SUBSTRATE_HOME/install_state.json`.
 - This feature introduces no second metadata file and no feature-local config file.
 - `schema_version` remains `1`.
+- The persisted payload contract is additive-only under `schema_version = 1`.
+- When present, `host_state.platform` contains both `os_release` and `pkg_manager`.
+- `host_state.platform.os_release.id` and `host_state.platform.os_release.id_like` copy the detector's normalized outputs verbatim, including the literal `<unknown>` sentinel when emitted.
+- `host_state.platform.pkg_manager.selected` and `host_state.platform.pkg_manager.source` copy the upstream detection contract verbatim; `best-effort-distro-package-manager/contract.md` owns that vocabulary.
 - Exact field paths, types, examples, and merge rules belong to `install-state-schema-spec.md`.
 
 ## Producer contract
@@ -82,6 +86,7 @@ External authoritative inputs:
 - A failed temp-file write MUST leave the prior canonical file unchanged.
 - A failed temp-file write MUST remove the temp file when removal succeeds.
 - Updates MUST preserve existing `host_state.group` and `host_state.linger` data.
+- Updates MUST preserve unknown keys unless another authoritative spec owns those keys.
 
 ## Future-consumer read contract
 
