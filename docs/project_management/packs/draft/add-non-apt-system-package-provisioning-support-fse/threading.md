@@ -146,11 +146,11 @@
     - `C-03`
   - **Purpose**:
     - Carry additive pacman schema truth and inventory-view obligations into provisioning, runtime fail-early handling, and validation surfaces.
-  - **State**: defined
+  - **State**: published
   - **Revalidation trigger**:
     - `install.method` vocabulary, `install.pacman` shape, invalid-state rules, or non-runnable pacman scope changes
   - **Satisfied by**:
-    - `SEAM-3` closeout publishing the accepted schema/view contract and inventory examples
+    - `SEAM-3` closeout publishing the accepted schema/view contract and inventory implementation/test evidence
   - **Notes**:
     - This thread isolates authoring and validation churn from provisioning execution churn.
 
