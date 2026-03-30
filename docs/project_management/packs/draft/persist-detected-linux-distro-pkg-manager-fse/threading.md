@@ -101,7 +101,7 @@ Execution discipline for this extracted pack:
   - **Carried contract IDs**: `C-03`, `C-04`
   - **Purpose**:
     - Carry the landed write matrix and reliability semantics into smoke coverage, operator docs, and checkpoint evidence.
-  - **State**: `defined`
+  - **State**: `published`
   - **Revalidation trigger**:
     - Any change to the successful-Linux branch matrix, dry-run/no-write behavior, non-Linux scope, temp-file placement, replace mechanics, or warning-only failure posture.
   - **Satisfied by**:
