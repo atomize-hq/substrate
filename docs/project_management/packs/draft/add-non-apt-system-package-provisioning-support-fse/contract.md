@@ -1,6 +1,6 @@
 # add-non-apt-system-package-provisioning-support-fse — contract surface
 
-This file is the pack-root contract for the manager-aware world-deps surface. It defines `C-01`, the authoritative operator contract that downstream seams consume through `THR-01`, and records `C-02`, the authoritative in-world probe/support-gate contract consumed through `THR-02`.
+This file is the pack-root contract for the manager-aware world-deps surface. It defines `C-01`, the authoritative operator contract that downstream seams consume through `THR-01`, records `C-02`, the authoritative in-world probe/support-gate contract consumed through `THR-02`, and publishes `C-03`, the additive pacman schema and inventory-view contract consumed through `THR-03`.
 
 Reference inputs for this pack-root contract:
 - `docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md`
@@ -14,6 +14,7 @@ Reference inputs for this pack-root contract:
 
 - `C-01` is authoritative for the shared manager-aware operator contract for `substrate world enable --provision-deps` and for runtime `substrate world deps current sync|install` when system-package items are in scope.
 - `C-02` is authoritative for deterministic in-world world-manager probe and support-gate outcomes, including supported `apt` / `pacman` selection, fail-closed unsupported and contradiction handling, and the ban on host-derived routing inputs.
+- `C-03` is authoritative for authored pacman-backed inventory shape, invalid-state rules, non-runnable v1 constraints, and inventory-view rendering for pacman-backed items.
 - `docs/project_management/packs/implemented/world-deps-packages-bundles-contract/contract.md` remains authoritative for inventory layering, enabled-resolution semantics, bundle expansion, wrapper semantics, schema `version: 1` baseline, and non-system-package install behavior.
 - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md` remains authoritative for the base meaning of exit codes.
 - `docs/project_management/packs/implemented/world-deps-apt-provisioning/contract.md` remains authoritative for APT provisioning baseline semantics, provided it does not contradict `C-01`.
@@ -49,6 +50,19 @@ The detailed command behavior, exit-code posture, and runtime remediation wordin
 - dry-run performing the same probe and classification without mutation
 
 The detailed mapping rules, contradiction reasons, and supported-platform posture remain defined by `C-02` and the pack-level review surfaces that consume it.
+
+## `C-03` contract summary
+
+`C-03` is the published additive schema and inventory-view contract for authored pacman-backed world-deps items. It binds downstream seams to one truth for:
+
+- additive support on `version: 1`
+- `install.method=pacman` as the explicit method selector for pacman-backed packages
+- `install.pacman` as the explicit package list for pacman-backed packages
+- invalid-state rejection when pacman-backed packages also declare `install.apt`, `install.script`, `install.script_embedded`, or `install.manual_instructions`
+- non-runnable v1 pacman scope, including no wrapper generation and no new pacman-specific present semantics
+- inventory JSON, YAML, and list/show rendering that keep `pacman` explicit and preserve authored `install.pacman` order
+
+`C-03` does not introduce a translation layer, a schema-version bump, or any remap into `apt`, `script`, or `manual`.
 
 ## CLI
 

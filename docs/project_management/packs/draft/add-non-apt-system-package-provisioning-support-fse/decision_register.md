@@ -1,6 +1,8 @@
 # Decision Register — add-non-apt-system-package-provisioning-support-fse
 
-This register captures the accepted decision basis that `C-01` depends on. The contract file is authoritative for operator-facing behavior; this register records the fixed choices behind it.
+This register captures the accepted decision basis that `C-01` and `C-03` depend on. The contract file is authoritative for operator-facing behavior; this register records the fixed choices behind it.
+
+These decisions publish the additive pacman schema and inventory-view basis that `C-03` carries through `THR-03`.
 
 ## DR-0001 — Explicit `install.method=pacman` plus `install.pacman`
 
@@ -18,12 +20,14 @@ The pack needs a non-APT system-package shape that stays readable in inventory a
 - Represent pacman-backed system packages with an explicit `install.method=pacman`.
 - Require an `install.pacman` list for those items.
 - Preserve manager-specific package naming in authored inventory.
+- Preserve authored `install.pacman` order in stored definitions and rendered inventory views.
 - Keep inventory resolution and enabled-set semantics unchanged.
 
 **Downstream constraints**
 
 - The schema extension must remain additive on `version: 1`.
 - Pacman support in this pack remains provisioning-only and non-runnable.
+- Inventory views must keep `install.method=pacman` explicit and preserve authored `install.pacman` order.
 - No distro-translation layer, remap layer, or abstract `system_packages` method is introduced.
 
 ## DR-0002 — In-world probe strategy for manager selection
