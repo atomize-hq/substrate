@@ -1,6 +1,6 @@
 # add-non-apt-system-package-provisioning-support-fse — contract surface
 
-This file is the pack-root contract for the manager-aware world-deps surface. It defines `C-01`, the authoritative operator contract that downstream seams consume through `THR-01`, records `C-02`, the authoritative in-world probe/support-gate contract consumed through `THR-02`, and publishes `C-03`, the additive pacman schema and inventory-view contract consumed through `THR-03`.
+This file is the pack-root contract for the manager-aware world-deps surface. It defines `C-01`, the authoritative operator contract that downstream seams consume through `THR-01`, records `C-02`, the authoritative in-world probe/support-gate contract consumed through `THR-02`, publishes `C-03`, the additive pacman schema and inventory-view contract consumed through `THR-03`, and publishes `C-05`, the runtime fail-early and remediation contract consumed through `THR-05`.
 
 Reference inputs for this pack-root contract:
 - `docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md`
@@ -15,6 +15,7 @@ Reference inputs for this pack-root contract:
 - `C-01` is authoritative for the shared manager-aware operator contract for `substrate world enable --provision-deps` and for runtime `substrate world deps current sync|install` when system-package items are in scope.
 - `C-02` is authoritative for deterministic in-world world-manager probe and support-gate outcomes, including supported `apt` / `pacman` selection, fail-closed unsupported and contradiction handling, and the ban on host-derived routing inputs.
 - `C-03` is authoritative for authored pacman-backed inventory shape, invalid-state rules, non-runnable v1 constraints, and inventory-view rendering for pacman-backed items.
+- `C-05` is authoritative for runtime `substrate world deps current sync|install` behavior when system-package items are in scope, including read-only probe families, explicit-item scope, manager-aware missing-requirement rendering, and deterministic remediation.
 - `docs/project_management/packs/implemented/world-deps-packages-bundles-contract/contract.md` remains authoritative for inventory layering, enabled-resolution semantics, bundle expansion, wrapper semantics, schema `version: 1` baseline, and non-system-package install behavior.
 - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md` remains authoritative for the base meaning of exit codes.
 - `docs/project_management/packs/implemented/world-deps-apt-provisioning/contract.md` remains authoritative for APT provisioning baseline semantics, provided it does not contradict `C-01`.
@@ -63,6 +64,16 @@ The detailed mapping rules, contradiction reasons, and supported-platform postur
 - inventory JSON, YAML, and list/show rendering that keep `pacman` explicit and preserve authored `install.pacman` order
 
 `C-03` does not introduce a translation layer, a schema-version bump, or any remap into `apt`, `script`, or `manual`.
+
+## `C-05` contract summary
+
+`C-05` is the authoritative runtime contract for `substrate world deps current sync|install` when system-package items are in scope. It binds downstream seams to one truth for:
+
+- runtime system-package handling stays read-only and does not invoke `apt`, `apt-get`, `dpkg`, or `pacman`
+- `deps current sync` uses the effective enabled set, while `deps current install <ITEM...>` scopes system-package checks only to the explicit expanded item set
+- runtime derives normalized APT and pacman requirement sets from the in-scope items and fails early with exit `4` when any requirement is missing
+- remediation always includes `substrate world enable --provision-deps` and remains fail-closed on Linux host-native and Windows
+- dry-run and verbose output may render normalized requirement sets, but must not widen into provisioning-time mutation semantics
 
 ## CLI
 
