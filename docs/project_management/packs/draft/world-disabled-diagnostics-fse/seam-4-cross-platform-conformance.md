@@ -2,29 +2,32 @@
 seam_id: SEAM-4
 seam_slug: cross-platform-conformance
 type: conformance
-status: proposed
-execution_horizon: next
-plan_version: v1
+status: exec-ready
+execution_horizon: active
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+    - governance/seam-1-closeout.md
+    - governance/seam-2-closeout.md
+    - governance/seam-3-closeout.md
   required_threads:
     - THR-02
     - THR-03
     - THR-04
     - THR-05
   stale_triggers:
-    - any landed delta in SEAM-1 through SEAM-3
+    - any landed delta in SEAM-1 through SEAM-3 that changes the disabled-mode status, omission, or exact-copy contracts
     - platform-specific socket/pipe/path assumptions change on Linux/macOS/Windows
-    - CP1 checkpoint scope changes or smoke environment assumptions change
-    - future packs touch shared diagnostics files without revalidating platform evidence
+    - smoke or doctor script expectations drift in scripts/mac/smoke.sh, scripts/windows/wsl-smoke.ps1, or the Linux world/health doctor workflow
+    - future packs touch health.rs, shim_doctor/report.rs, shim_doctor/output.rs, or docs/USAGE.md without revalidating platform evidence
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
@@ -88,8 +91,8 @@ open_remediations: []
 - **Rollout / safety**:
   This seam is conformance-only. Its value is preventing drift and making later promotions depend on recorded, cross-platform truth.
 - **Downstream decomposition context**:
-  - Why this seam is `active`, `next`, or `future`: it is now the queued next seam because `SEAM-2` published `THR-04`, but it still waits on `SEAM-3` to publish `THR-05` before conformance work can close the loop.
-  - Which threads matter most: `THR-04`, `THR-05`.
+  - Why this seam is `active`, `next`, or `future`: it is now the active seam because `SEAM-3` published `THR-05` through a passed seam-exit gate, so the remaining work is cross-platform conformance and pack-closeout evidence rather than runtime behavior discovery.
+  - Which threads matter most: `THR-02`, `THR-03`, `THR-04`, `THR-05`.
   - What the first seam-local review should focus on: platform parity, smoke determinism, and cross-pack revalidation triggers.
 - **Expected seam-exit concerns**:
   - Contracts likely to publish: none or minimal; this seam primarily publishes evidence and thread advancement rather than new runtime contracts

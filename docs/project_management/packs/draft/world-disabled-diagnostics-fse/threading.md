@@ -2,13 +2,14 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-3`
-  - active consumer of the landed shim status contracts; it now owns the disabled-aware health summary and docs alignment work
-- **Next seam**: `SEAM-4`
-  - queued conformance seam that now waits primarily on `THR-05` while consuming the published `THR-04` handoff from `SEAM-2`
-- **Future seams**: `SEAM-1`, `SEAM-2`
+- **Active seam**: `SEAM-4`
+  - active conformance seam consuming the fully landed shim and health contracts to publish cross-platform evidence and close the loop on downstream revalidation
+- **Next seam**: none
+  - no additional seam is queued inside this pack once `SEAM-4` entered the active window
+- **Future seams**: `SEAM-1`, `SEAM-2`, `SEAM-3`
   - `SEAM-1` has left the forward window with a passed seam-exit gate
   - `SEAM-2` has left the forward window after publishing the shim contracts through a passed seam-exit gate
+  - `SEAM-3` has left the forward window after publishing `C-05` / `THR-05` through a passed seam-exit gate
 
 ## Source basis carried forward from the deep-researched pack
 
@@ -110,40 +111,40 @@
   - **Consumer seam(s)**: `SEAM-3`, `SEAM-4`
   - **Carried contract IDs**: `C-02`
   - **Purpose**: publish the canonical world backend status enum so downstream summary logic and external tooling can distinguish disabled from broken.
-  - **State**: published
+  - **State**: revalidated
   - **Revalidation trigger**: JSON envelope/field-shape changes, added attribution fields, or shim payload restructuring.
-  - **Satisfied by**: `governance/seam-2-closeout.md` records the landed `.world.status` publication, disabled-mode exact copy, and regression tests that prove disabled, healthy, and needs-attention behavior.
-  - **Notes**: `SEAM-3` is now the active consumer of this handoff. Future JSON envelope work must preserve this field path inside any wrapper.
+  - **Satisfied by**: `governance/seam-2-closeout.md` records the landed `.world.status` publication, disabled-mode exact copy, and regression tests that prove disabled, healthy, and needs-attention behavior; `threaded-seams/seam-4-cross-platform-conformance/review.md` revalidates that handoff against the current Linux/macOS/Windows proof surfaces.
+  - **Notes**: `SEAM-4` is now the active consumer of this handoff. Future JSON envelope work must preserve this field path inside any wrapper.
 
 - **Thread ID**: `THR-03`
   - **Producer seam**: `SEAM-2`
   - **Consumer seam(s)**: `SEAM-3`, `SEAM-4`
   - **Carried contract IDs**: `C-03`
   - **Purpose**: carry world-deps status and omission semantics into health aggregation and cross-platform conformance.
-  - **State**: published
+  - **State**: revalidated
   - **Revalidation trigger**: world-deps report shape changes, provisioning guidance changes, or any disabled-mode code path that reintroduces probe-backed error fields.
-  - **Satisfied by**: `governance/seam-2-closeout.md` records the landed `.world_deps.status` emission, disabled omission semantics, and regression tests proving the no-probe boundary.
-  - **Notes**: `SEAM-3` is now the active consumer of this handoff. This thread exists specifically to prevent health from misclassifying skipped-disabled as an error.
+  - **Satisfied by**: `governance/seam-2-closeout.md` records the landed `.world_deps.status` emission, disabled omission semantics, and regression tests proving the no-probe boundary; `threaded-seams/seam-4-cross-platform-conformance/review.md` revalidates that handoff against the cross-platform conformance seam's smoke and manual proof surfaces.
+  - **Notes**: `SEAM-4` is now the active consumer of this handoff. This thread exists specifically to prevent downstream conformance from treating skipped-disabled as a probe-backed error.
 
 - **Thread ID**: `THR-04`
   - **Producer seam**: `SEAM-2`
   - **Consumer seam(s)**: `SEAM-4`
   - **Carried contract IDs**: `C-04`
   - **Purpose**: lock the exact shim-doctor disabled-mode operator experience and prove the no-probe boundary with platform-parity evidence.
-  - **State**: published
+  - **State**: revalidated
   - **Revalidation trigger**: copy changes, probe path refactors, or any new world-backend call on the disabled path.
-  - **Satisfied by**: `governance/seam-2-closeout.md` records the landed text renderer, exact-line assertions, and evidence that disabled-mode paths do not spawn backend or world-deps probes.
-  - **Notes**: `SEAM-4` is now the queued next consumer of this handoff. This thread should not close until conformance evidence exists on Linux/macOS/Windows.
+  - **Satisfied by**: `governance/seam-2-closeout.md` records the landed text renderer, exact-line assertions, and evidence that disabled-mode paths do not spawn backend or world-deps probes; `threaded-seams/seam-4-cross-platform-conformance/review.md` revalidates that handoff as the exact operator-copy baseline for platform smoke evidence.
+  - **Notes**: `SEAM-4` is now the active consumer of this handoff. This thread should not close until conformance evidence exists on Linux/macOS/Windows.
 
 - **Thread ID**: `THR-05`
   - **Producer seam**: `SEAM-3`
   - **Consumer seam(s)**: `SEAM-4`
   - **Carried contract IDs**: `C-05`
   - **Purpose**: carry `substrate health` summary/copy semantics into smoke evidence, docs alignment, and pack closeout.
-  - **State**: defined
+  - **State**: revalidated
   - **Revalidation trigger**: summary aggregation logic changes, `docs/USAGE.md` drift, or provisioning packs that modify enabled-mode guidance surfaces.
-  - **Satisfied by**: landed health summary behavior, docs updates, and smoke assertions across all required platforms.
-  - **Notes**: future packs touching `health.rs` must explicitly revalidate this thread.
+  - **Satisfied by**: `governance/seam-3-closeout.md` records the landed health summary behavior, docs alignment, and targeted `shim_health` regression coverage; `threaded-seams/seam-4-cross-platform-conformance/review.md` revalidates that handoff against the conformance seam's smoke and manual proof surfaces.
+  - **Notes**: `SEAM-4` is now the active consumer of this handoff. Future packs touching `health.rs` must explicitly revalidate this thread.
 
 ## Dependency graph
 
@@ -161,8 +162,8 @@ flowchart LR
 
 1. `SEAM-1` has now published `C-01` and the `THR-01` handoff through a passed seam-exit gate.
 2. `SEAM-2` has now published `C-02`, `C-03`, and `C-04` so the health command can branch on canonical status enums rather than legacy booleans/strings.
-3. `SEAM-3` is the active seam and must publish `C-05` so pack-level validation and operator docs can lock the final disabled-mode summary posture.
-4. `SEAM-4` is now the queued next seam and closes the loop with Linux/macOS/Windows evidence once `THR-05` lands.
+3. `SEAM-3` has now published `C-05` and `THR-05`, locking the final disabled-mode health summary posture and docs alignment.
+4. `SEAM-4` is now the active seam and owns Linux/macOS/Windows conformance evidence plus downstream stale-trigger capture for the landed diagnostics contracts.
 
 ## Workstreams
 
@@ -176,8 +177,8 @@ flowchart LR
 
 - **Health + docs workstream**
   - `SEAM-3`
-  - Active execution seam; it now consumes the published shim status contracts instead of planning against provisional assumptions.
+  - Closed publishing seam; it has now handed `THR-05` to the active conformance window.
 
 - **Conformance workstream**
   - `SEAM-4`
-  - Queued next seam; it now consumes landed reality from `SEAM-2` and waits on `SEAM-3` to publish the final health-summary contract.
+  - Active execution seam; it now consumes landed reality from `SEAM-2` and `SEAM-3` to publish cross-platform proof.
