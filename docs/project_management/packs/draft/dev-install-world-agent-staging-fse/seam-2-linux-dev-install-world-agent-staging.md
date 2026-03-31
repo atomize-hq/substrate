@@ -2,9 +2,9 @@
 seam_id: SEAM-2
 seam_slug: linux-dev-install-world-agent-staging
 type: capability
-status: exec-ready
-execution_horizon: active
-plan_version: v2
+status: closed
+execution_horizon: future
+plan_version: v3
 basis:
   currentness: current
   source_scope_ref: scope_brief.md
@@ -25,16 +25,19 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
-  planned_location: S3
-  status: pending
+  source_ref: threaded-seams/seam-2-linux-dev-install-world-agent-staging/slice-3-seam-exit-gate.md
+  status: passed
+  promotion_readiness: ready
 open_remediations: []
 ---
 
 # SEAM-2 - Linux dev-install world-agent staging
+
+This seam is closed. Its authoritative exit-gate record lives in `governance/seam-2-closeout.md`.
 
 - **Goal / value**: Make Linux `dev-install-substrate.sh --no-world` leave the enable-later workflow ready by staging `world-agent` into the accepted runtime paths while keeping the world disabled and skipping provisioning.
 - **Scope**
@@ -105,8 +108,8 @@ open_remediations: []
   - Preserve `world.enabled: false` until runtime enable verifies success.
   - Keep the staging change orthogonal to helper override behavior and future provisioning flags.
 - **Downstream decomposition context**:
-  - Why this seam is `active`: `SEAM-1` published `THR-01` through closeout, the production-installer surface remains reference-only / regression-only, and the active work can now plan against landed runtime truth instead of provisional pack assumptions.
-  - Which threads matter most: `THR-01` and `THR-03`.
+  - Why this seam is `closed`: `SEAM-2` published `C-04` / `THR-03` through closeout-backed staging evidence, leaving `SEAM-3` as the remaining active seam in the pack window.
+  - Which threads mattered most: `THR-01` and `THR-03`.
   - What the seam-local review focused on: selected-profile mapping, stale-link replacement, disabled-world invariants, installer-smoke regression boundaries, and keeping `scripts/substrate/install-substrate.sh` reference-only.
 - **Expected seam-exit concerns**:
   - Contracts likely to publish: `C-04`.
