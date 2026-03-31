@@ -62,7 +62,7 @@ open_remediations: []
   - Disabled mode must not make world-agent socket/pipe calls for diagnostics
   - Disabled mode must not compute world-deps applied state
   - Disabled mode must publish `.world.status = "disabled"` and `.world_deps.status = "skipped_disabled"`
-  - Disabled mode must omit probe-derived `world.error`, `world.stderr`, `world.exit_code`, `world.details`, `world_deps.error`, and `world_deps.report`
+  - Disabled mode must omit probe-derived `world.error`, `world.details`, `world_deps.error`, and `world_deps.report`
   - Enabled mode must never emit `disabled` or `skipped_disabled`
   - Status enums, not legacy booleans/strings alone, are the canonical machine-readable classifier
   - The exact disabled-mode text contract is:

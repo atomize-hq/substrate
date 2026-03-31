@@ -60,7 +60,7 @@ candidate_subslices: []
 #### C-03 contract rules (world-deps status + omission)
 
 1. Disabled mode must set `.world_deps.status = "skipped_disabled"` and must not compute applied world-deps state.
-2. Disabled mode must omit legacy probe-derived fields that imply a real probe occurred, specifically disabled-path `world.error`, `world.stderr`, `world.exit_code`, `world.details`, `world_deps.error`, and `world_deps.report`.
+2. Disabled mode must omit legacy probe-derived fields that imply a real probe occurred, specifically disabled-path `world.error`, `world.details`, `world_deps.error`, and `world_deps.report`.
 3. Enabled mode may emit `.world_deps.status = "ok"` or `"error"` according to the real applied-state result.
 
 #### C-04 contract rules (exact text)
