@@ -59,6 +59,7 @@ What surfaces this checkpoint stabilizes (from `spec_manifest.md` ownership):
 - Missing-`world-agent` enable preflight behavior (ordering + exit code + remediation; contract-defined).
 - Cross-cutting config invariants (`$SUBSTRATE_HOME/config.yaml`, `world.enabled` flip only after verification).
 - Platform guarantees: Linux behavior delta; macOS no-change posture; Windows unsupported posture (but still included in CI parity).
+- Installer smoke (`tests/installers/install_smoke.sh`) remains C-04 regression evidence for dev-install staging only; it does not create an additional Linux behavior-delta proof surface.
 
 What risk is reduced by running cross-platform CI here (from `impact_map.md`):
 - Catches cross-platform compile regressions from `crates/shell/src/builtins/world_enable/runner.rs` changes (Windows/macOS parity).

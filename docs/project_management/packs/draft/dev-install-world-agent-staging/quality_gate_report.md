@@ -19,5 +19,5 @@ python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_p
 ## Review checklist (minimum)
 - Contract is deterministic and matches the current code seams (`contract.md`, `decision_register.md`) in the source pack at `docs/project_management/packs/draft/dev-install-world-agent-staging/`.
 - Slice specs are singular-delta and testable (`slices/DIWAS0`, `slices/DIWAS1`).
-- Validation artifacts are runnable and aligned (`manual_testing_playbook.md`, `smoke/linux-smoke.sh`, `platform-parity-spec.md`) with Linux as the only behavior-delta proof surface.
+- Validation artifacts are runnable and aligned (`manual_testing_playbook.md`, `smoke/linux-smoke.sh`, `platform-parity-spec.md`) with Linux as the only behavior-delta proof surface and installer smoke kept as `C-04` regression evidence.
 - `tasks.json` wiring matches the checkpoint plan and is automation-ready.

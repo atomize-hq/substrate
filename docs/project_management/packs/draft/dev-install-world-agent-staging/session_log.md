@@ -30,3 +30,17 @@
 - Mechanical checks run:
   - `python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "docs/project_management/packs/draft/dev-install-world-agent-staging"`
   - `make planning-lint FEATURE_DIR="docs/project_management/packs/draft/dev-install-world-agent-staging"` (failed on an unrelated existing `ADR-0033-routing-weasel.md` hash mismatch outside S1)
+
+## START — 2026-03-30 — S2 — proof-surface and checkpoint alignment
+- Feature: `docs/project_management/packs/draft/dev-install-world-agent-staging/`
+- Seam: `SEAM-3` / `S2`
+- Goal: Align the Linux smoke, manual playbook, parity spec, checkpoint plan, and quality-gate wording to the closeout-backed evidence boundary without touching runtime code.
+
+## END — 2026-03-30 — S2 — proof-surface and checkpoint alignment
+- Summary of changes (exhaustive):
+  - Clarified that `smoke/linux-smoke.sh` is the Linux runtime proof surface only and that installer smoke is separate `C-04` regression evidence.
+  - Updated the manual playbook to describe absolute staged symlink targets, the separate installer smoke evidence note, and the Linux-only proof boundary.
+  - Tightened the platform parity spec so Linux remains the only behavior delta while macOS and Windows stay parity-only / unsupported.
+  - Aligned the checkpoint plan and quality-gate checklist to keep installer smoke framed as dev-install staging evidence, not a second Linux behavior delta.
+- Mechanical checks run:
+  - `git diff --check`

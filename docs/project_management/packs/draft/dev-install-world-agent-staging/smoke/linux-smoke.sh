@@ -19,6 +19,9 @@ require_cmd jq
 require_cmd mktemp
 require_cmd readlink
 
+# This script exercises the Linux runtime proof surface only.
+# Dev-install staging and C-04 regression coverage are validated separately
+# by tests/installers/install_smoke.sh.
 REPO_ROOT="${REPO_ROOT:-}"
 if [[ -z "${REPO_ROOT}" ]]; then
   REPO_ROOT="$(git rev-parse --show-toplevel)"
@@ -63,7 +66,7 @@ assert_contains() {
   fi
 }
 
-log "Case 1: dev-install --no-world stages world-agent for debug profile"
+log "Case 1: dev-install --no-world stages absolute world-agent bridge targets for debug profile"
 scripts/substrate/dev-install-substrate.sh --prefix "${SUBSTRATE_HOME}" --profile debug --no-world --no-shims
 
 expected_debug_world_agent="${REPO_ROOT}/target/debug/world-agent"
@@ -98,4 +101,3 @@ assert_contains "${dry_run_output}" "scripts/substrate/dev-install-substrate.sh 
 assert_contains "${dry_run_output}" "cargo build -p world-agent"
 
 log "Smoke complete"
-
