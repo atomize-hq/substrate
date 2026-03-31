@@ -174,6 +174,41 @@ remove_managed_prefix_linux_binary_copies() {
   rm -f "${manifest_path}"
 }
 
+record_protected_path() {
+  local path="$1"
+  if [[ -z "${path}" ]]; then
+    return
+  fi
+  if [[ -n "${PROTECTED_PATHS_SEEN["${path}"]:-}" ]]; then
+    return
+  fi
+  PROTECTED_PATHS_SEEN["${path}"]=1
+  PROTECTED_PATHS+=("${path}")
+}
+
+collect_protected_paths() {
+  local path
+  for path in "$@"; do
+    if [[ -e "${path}" || -L "${path}" ]]; then
+      record_protected_path "${path}"
+    fi
+  done
+}
+
+report_protected_paths() {
+  if [[ "${#PROTECTED_PATHS[@]}" -eq 0 ]]; then
+    return 0
+  fi
+
+  warn "Protected paths preserved during uninstall:"
+  while IFS= read -r path; do
+    [[ -n "${path}" ]] || continue
+    warn "Preserving protected path ${path}"
+  done < <(printf '%s\n' "${PROTECTED_PATHS[@]}" | LC_ALL=C sort)
+
+  return 0
+}
+
 load_host_state_metadata() {
   HOST_STATE_METADATA_LOADED=0
   RECORDED_GROUP_PREEXISTING=""
@@ -384,6 +419,8 @@ RECORDED_GROUP_PREEXISTING=""
 RECORDED_GROUP_CREATED=""
 RECORDED_MEMBERS_ADDED=()
 RECORDED_LINGER_USERS=()
+PROTECTED_PATHS=()
+declare -A PROTECTED_PATHS_SEEN=()
 IS_LINUX=0
 IS_MAC=0
 if [[ "$(uname -s)" == "Linux" ]]; then
@@ -532,11 +569,8 @@ if [[ -d "${BIN_DIR}" ]]; then
   for binary in substrate substrate-shim substrate-forwarder host-proxy world-agent substrate-world-agent; do
     for candidate in "${binary}" "${binary}.exe"; do
       target_path="${BIN_DIR}/${candidate}"
-      if [[ -L "${target_path}" ]]; then
-        target="$(readlink "${target_path}")"
-        if [[ -n "${target}" && "${target}" == "${REPO_ROOT}"/* ]]; then
-          rm -f "${target_path}"
-        fi
+      if remove_managed_symlink "${target_path}"; then
+        continue
       fi
     done
   done
@@ -626,8 +660,38 @@ fi
 cleanup_user="$(detect_invoking_user)"
 perform_auto_cleanup "${cleanup_user}"
 
+collect_protected_paths \
+  "${BIN_DIR}/substrate" \
+  "${BIN_DIR}/substrate.exe" \
+  "${BIN_DIR}/substrate-shim" \
+  "${BIN_DIR}/substrate-shim.exe" \
+  "${BIN_DIR}/substrate-forwarder" \
+  "${BIN_DIR}/substrate-forwarder.exe" \
+  "${BIN_DIR}/host-proxy" \
+  "${BIN_DIR}/host-proxy.exe" \
+  "${BIN_DIR}/world-agent" \
+  "${BIN_DIR}/world-agent.exe" \
+  "${BIN_DIR}/substrate-world-agent" \
+  "${BIN_DIR}/substrate-world-agent.exe" \
+  "${RUNTIME_SCRIPTS_DIR}/substrate/world-enable.sh" \
+  "${RUNTIME_SCRIPTS_DIR}/substrate/install-substrate.sh" \
+  "${RUNTIME_SCRIPTS_DIR}/substrate/world-deps.yaml" \
+  "${RUNTIME_SCRIPTS_DIR}/mac/lima-warm.sh" \
+  "${RUNTIME_SCRIPTS_DIR}/mac/lima/substrate.yaml" \
+  "${RUNTIME_SCRIPTS_DIR}/mac/lima/substrate-dev.yaml" \
+  "${BIN_LINUX_DIR}/substrate" \
+  "${BIN_LINUX_DIR}/world-agent"
+
+if [[ "${#PROTECTED_PATHS[@]}" -gt 0 ]]; then
+  report_protected_paths
+  warn "Protected-path refusal class exit 5"
+  exit 5
+fi
+
 cat <<'MSG'
 
 Dev shims removed. Open a new shell (or run `hash -r`) to clear cached commands.
 Built artifacts under target/ are left untouched.
 MSG
+
+exit 0

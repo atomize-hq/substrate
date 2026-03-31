@@ -15,6 +15,7 @@ Scenarios:
   dev-build         Dev installer (host cargo stub + in-guest build path).
   dev-runtime-bundle  Dev installer stages the stable world-enable runtime bundle under SUBSTRATE_HOME.
   dev-runtime-bundle-self-contained  Dev installer persists Linux guest binaries into the prefix bundle on macOS.
+  dev-runtime-bundle-protected-path-conflicts  Dev uninstall refuses explicit managed target conflicts with exit 5.
   sync-deps         Production installer with --sync-deps (world deps current sync wired).
   sync-deps-remediation  Production installer handles sync exit 4 with remediation guidance.
   sync-deps-generic-failure  Production installer handles non-4 sync failures with a generic warning only.
@@ -441,6 +442,15 @@ assert_not_contains() {
   fi
 }
 
+assert_contains_literal() {
+  local file="$1"
+  local pattern="$2"
+  local msg="$3"
+  if ! grep -Fq -- "${pattern}" "${file}"; then
+    fatal "${msg}: literal '${pattern}' missing in ${file}"
+  fi
+}
+
 run_prod_scenario() {
   local label="$1"
   local include_agent="$2"
@@ -698,6 +708,85 @@ TXT
   [[ ! -e "${prefix}/bin/linux/world-agent" ]] || fatal "expected cached Linux world-agent to be removed"
   [[ ! -e "${manifest}" ]] || fatal "expected managed binary manifest to be removed"
   [[ -f "${prefix}/bin/linux/user-managed.txt" ]] || fatal "expected user-managed Linux bundle file to survive uninstall"
+  assert_not_contains "${uninstall_log}" "Protected-path refusal class exit 5" \
+    "self-contained uninstall should not report protected-path refusal"
+  assert_not_contains "${uninstall_log}" "Preserving protected path" \
+    "self-contained uninstall should not preserve protected paths"
+
+  info "Scenario ${label} complete:"
+  info "  dev repo: ${dev_repo}"
+  info "  install log: ${log}"
+  info "  warm log: ${warm_log}"
+  info "  uninstall log: ${uninstall_log}"
+}
+
+run_dev_runtime_bundle_protected_path_conflicts_scenario() {
+  local label="dev-runtime-bundle-protected-path-conflicts"
+  info "Running scenario ${label}"
+  setup_workspace "${label}"
+  install_common_stubs
+  write_stub_cargo
+
+  local dev_repo
+  dev_repo="$(prepare_dev_repo_fixture 0)"
+  local prefix="${WORK_ROOT}/${label}-prefix"
+  mkdir -p "${prefix}"
+  local log="${WORK_ROOT}/${label}.log"
+  if ! "${dev_repo}/scripts/substrate/dev-install-substrate.sh" \
+    --prefix "${prefix}" \
+    --profile release \
+    --no-shims >"${log}" 2>&1; then
+    cat "${log}" >&2 || true
+    fatal "dev-install-substrate failed for ${label}"
+  fi
+
+  local warm_log="${WORK_ROOT}/${label}-warm.log"
+  if ! (cd "${prefix}" && "${prefix}/scripts/mac/lima-warm.sh" "${prefix}") >"${warm_log}" 2>&1; then
+    cat "${warm_log}" >&2 || true
+    fatal "staged lima-warm failed for ${label}"
+  fi
+
+  local managed_removed_target="${prefix}/scripts/substrate/world-enable.sh"
+  [[ -L "${managed_removed_target}" ]] || fatal "expected managed target to exist before uninstall"
+
+  local managed_file_target="${prefix}/scripts/mac/lima/substrate.yaml"
+  local managed_symlink_target="${prefix}/scripts/substrate/install-substrate.sh"
+  local unmanaged_link_source="${WORK_ROOT}/${label}-unmanaged-link-source.txt"
+  printf '%s\n' 'keep me too' >"${unmanaged_link_source}"
+
+  rm -f "${managed_file_target}"
+  cat >"${managed_file_target}" <<'TXT'
+user-managed file at managed target
+TXT
+
+  rm -f "${managed_symlink_target}"
+  ln -s "${unmanaged_link_source}" "${managed_symlink_target}"
+
+  local uninstall_log="${WORK_ROOT}/${label}-uninstall.log"
+  local uninstall_status=0
+  if "${dev_repo}/scripts/substrate/dev-uninstall-substrate.sh" --prefix "${prefix}" >"${uninstall_log}" 2>&1; then
+    fatal "dev-uninstall-substrate unexpectedly succeeded for ${label}; protected targets should exit 5"
+  else
+    uninstall_status=$?
+  fi
+  if [[ "${uninstall_status}" -ne 5 ]]; then
+    cat "${uninstall_log}" >&2 || true
+    fatal "dev-uninstall-substrate returned ${uninstall_status} instead of 5 for ${label}"
+  fi
+
+  [[ ! -e "${managed_removed_target}" ]] || fatal "expected managed target to be removed"
+  [[ -f "${managed_file_target}" ]] || fatal "expected protected regular file to survive uninstall"
+  [[ -L "${managed_symlink_target}" ]] || fatal "expected protected symlink to survive uninstall"
+  [[ ! -e "${prefix}/bin/linux/substrate" ]] || fatal "expected cached Linux substrate binary to be removed"
+  [[ ! -e "${prefix}/bin/linux/world-agent" ]] || fatal "expected cached Linux world-agent to be removed"
+  assert_contains_literal "${uninstall_log}" "Preserving protected path ${managed_file_target}" \
+    "uninstall log should report protected regular file"
+  assert_contains_literal "${uninstall_log}" "Preserving protected path ${managed_symlink_target}" \
+    "uninstall log should report protected symlink"
+  assert_not_contains "${uninstall_log}" "Preserving protected path ${prefix}/scripts/substrate/world-enable.sh" \
+    "uninstall log should only report explicit conflicting targets"
+  assert_contains "${uninstall_log}" "Removing managed symlink ${managed_removed_target}" \
+    "uninstall should still remove at least one managed target"
 
   info "Scenario ${label} complete:"
   info "  dev repo: ${dev_repo}"
@@ -860,6 +949,9 @@ run_selected() {
     dev-runtime-bundle-self-contained)
       run_dev_runtime_bundle_self_contained_scenario
       ;;
+    dev-runtime-bundle-protected-path-conflicts)
+      run_dev_runtime_bundle_protected_path_conflicts_scenario
+      ;;
     sync-deps)
       run_sync_deps_scenario
       ;;
@@ -878,6 +970,7 @@ run_selected() {
       run_dev_scenario
       run_dev_runtime_bundle_scenario
       run_dev_runtime_bundle_self_contained_scenario
+      run_dev_runtime_bundle_protected_path_conflicts_scenario
       run_sync_deps_scenario
       run_sync_deps_remediation_scenario
       run_sync_deps_generic_failure_scenario
