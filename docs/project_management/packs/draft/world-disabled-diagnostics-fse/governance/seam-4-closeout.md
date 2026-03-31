@@ -3,26 +3,34 @@ seam_id: SEAM-4
 status: landed
 closeout_version: v0
 seam_exit_gate:
-  source_ref: threaded-seams/seam-4-cross-platform-conformance/slice-<final>-seam-exit-gate.md
-  status: pending
+  source_ref: threaded-seams/seam-4-cross-platform-conformance/slice-3-seam-exit-gate.md
+  status: passed
   promotion_readiness: blocked
 basis:
-  currentness: stale
-  upstream_closeouts: []
+  currentness: current
+  upstream_closeouts:
+    - seam-1-closeout.md
+    - seam-2-closeout.md
+    - seam-3-closeout.md
   required_threads:
     - THR-04
     - THR-05
-  stale_triggers: []
+  stale_triggers:
+    - any landed delta in SEAM-1 through SEAM-3 that changes disabled-mode status, omission, or exact-copy contracts
+    - platform-specific socket, pipe, or path assumptions change on Linux/macOS/Windows before conformance evidence is captured
+    - scripts/mac/smoke.sh, scripts/windows/wsl-smoke.ps1, or the Linux world/health doctor workflow drift without synchronized revalidation
+    - future packs touch health.rs, shim_doctor/report.rs, shim_doctor/output.rs, or docs/USAGE.md before closeout
 gates:
   post_exec:
-    landing: pending
-    closeout: pending
-open_remediations: []
+    landing: passed
+    closeout: passed
+open_remediations:
+  - REM-001
 ---
 
 # Closeout - SEAM-4 Cross-platform conformance
 
-This is a post-exec scaffold. Do not treat it as landed evidence until the seam-local exit slice exists and the fields below are populated from real landed behavior.
+This is the final closeout record for SEAM-4. It records landed evidence and the remaining blocker for promotion readiness.
 
 ## Cross-platform proof matrix
 
@@ -55,7 +63,7 @@ This matrix is the operator-playbook view that `S2` and `S3` must consume. It is
 ## Seam-exit gate record
 
 - **Source artifact**: `threaded-seams/seam-4-cross-platform-conformance/slice-<final>-seam-exit-gate.md`
-- **Cross-platform evidence matrix**: retained as the required proof map; `S2` now has local evidence against the Linux anchor paths and the updated repo-native smoke wrappers.
+- **Cross-platform evidence matrix**: retained as the required proof map; `S2` has Linux anchor evidence and the repo-native smoke wrappers now carry the disabled-diagnostics conformance mode, but native Windows execution is still unproven in this environment.
 - **Landed evidence**:
   - [`cargo test -p shell --test shim_doctor -- --nocapture`](/home/spenser/__Active_code/substrate/crates/shell/tests/shim_doctor.rs) passed locally on Linux (`14/14` tests green).
   - [`cargo test -p shell --test shim_health -- --nocapture`](/home/spenser/__Active_code/substrate/crates/shell/tests/shim_health.rs) passed locally on Linux (`6/6` tests green).
@@ -79,14 +87,16 @@ This matrix is the operator-playbook view that `S2` and `S3` must consume. It is
   - any future drift in `crates/shell/tests/shim_doctor.rs`, `crates/shell/tests/shim_health.rs`, or the root smoke wrappers that stops proving the current disabled and enabled-broken contract shape
   - any future change to the human broken-path summary wording in `shim_doctor/output.rs` or `health.rs` that invalidates the updated smoke assertions
 - **Remediation disposition**:
-  - no repo remediation open from S2
+  - `REM-001` is open and records the native Windows proof gap that still blocks promotion readiness.
 - **Promotion blockers**:
-  - S3 exit-gate execution and closeout publication are still pending
+  - native Windows proof has not been executed in this environment; see `REM-001`.
 - **Promotion readiness**: blocked
 
 ## Post-exec gate disposition
 
-- **Landing gate**: pending
-- **Closeout gate**: pending
+- **Landing gate**: passed
+- **Closeout gate**: passed
 - **Unresolved remediations**:
+  - `REM-001`
 - **Carried-forward remediations**:
+  - `REM-001`
