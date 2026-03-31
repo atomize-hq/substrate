@@ -2,13 +2,13 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-1`
-  - critical-path foundation; every later seam depends on one canonical classifier and one config-error posture
-- **Next seam**: `SEAM-2`
-  - first publishing seam for disabled/skipped runtime contracts
-  - eligible only for provisional deeper planning until `THR-01` is published by `SEAM-1`
-- **Future seams**: `SEAM-3`, `SEAM-4`
-  - remain seam briefs only in this pack
+- **Active seam**: `SEAM-2`
+  - first publishing seam for disabled/skipped runtime contracts, now revalidated against the published `THR-01` handoff
+- **Next seam**: `SEAM-3`
+  - queued consumer of `SEAM-2`'s shim status contracts; remains provisional until `THR-02` and `THR-03` publish
+- **Future seams**: `SEAM-1`, `SEAM-4`
+  - `SEAM-1` has left the forward window with a passed seam-exit gate
+  - `SEAM-4` remains a seam brief until shim and health contracts land
 
 ## Source basis carried forward from the deep-researched pack
 
@@ -85,10 +85,10 @@
   - **Consumer seam(s)**: `SEAM-2`, `SEAM-3`
   - **Carried contract IDs**: `C-01`
   - **Purpose**: ensure both diagnostics commands branch from one authoritative effective-config decision and one config-error posture.
-  - **State**: defined
+  - **State**: revalidated
   - **Revalidation trigger**: effective-config precedence changes, workspace override-ignore behavior changes, or diagnostics routing changes for exit-code `2`.
-  - **Satisfied by**: landed shared helper or equivalent integration in both commands, plus invalid-config tests proving exit `2` before probes/output.
-  - **Notes**: until this thread is published, deeper planning in `SEAM-2` should stay provisional.
+  - **Satisfied by**: `governance/seam-1-closeout.md` records the published resolver-backed helper plus invalid-config fail-fast evidence, and `threaded-seams/seam-2-shim-doctor-disabled-aware-reporting/review.md` revalidates shim-doctor planning against that closeout-backed handoff.
+  - **Notes**: `SEAM-2` has now rebound to the published `C-01` truth as the active seam. `SEAM-3` still consumes the same handoff later alongside `THR-02` and `THR-03`.
 
 - **Thread ID**: `THR-02`
   - **Producer seam**: `SEAM-2`
@@ -144,24 +144,24 @@ flowchart LR
 
 ## Critical path
 
-1. `SEAM-1` must publish `C-01` so downstream seams stop guessing disabled vs enabled and config-error behavior.
-2. `SEAM-2` must publish `C-02`, `C-03`, and `C-04` so the health command can branch on canonical status enums rather than legacy booleans/strings.
-3. `SEAM-3` must publish `C-05` so pack-level validation and operator docs can lock the final disabled-mode summary posture.
-4. `SEAM-4` closes the loop with Linux/macOS/Windows evidence and becomes the pack-level proof point that adjacent packs must consume.
+1. `SEAM-1` has now published `C-01` and the `THR-01` handoff through a passed seam-exit gate.
+2. `SEAM-2` is the active seam and must publish `C-02`, `C-03`, and `C-04` so the health command can branch on canonical status enums rather than legacy booleans/strings.
+3. `SEAM-3` remains the queued next seam and must publish `C-05` so pack-level validation and operator docs can lock the final disabled-mode summary posture.
+4. `SEAM-4` still closes the loop with Linux/macOS/Windows evidence and becomes the pack-level proof point that adjacent packs must consume.
 
 ## Workstreams
 
 - **Foundation workstream**
   - `SEAM-1`
-  - Conflict-safe only until it touches shared diagnostics call sites; this is the earliest publishable seam.
+  - Closed foundation seam; its published handoff is now consumed by the active window.
 
 - **Shim reporting workstream**
   - `SEAM-2`
-  - May begin only as provisional planning until `THR-01` is published.
+  - Active execution seam; its basis is revalidated against the published `THR-01` handoff.
 
 - **Health + docs workstream**
   - `SEAM-3`
-  - Should wait for published shim status contracts so summary logic does not speculate about disabled-mode semantics.
+  - Queued next seam; should wait for published shim status contracts so summary logic does not speculate about disabled-mode semantics.
 
 - **Conformance workstream**
   - `SEAM-4`

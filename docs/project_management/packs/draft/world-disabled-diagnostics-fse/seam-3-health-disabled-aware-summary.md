@@ -3,13 +3,14 @@ seam_id: SEAM-3
 seam_slug: health-disabled-aware-summary
 type: capability
 status: proposed
-execution_horizon: future
-plan_version: v1
+execution_horizon: next
+plan_version: v2
 basis:
   currentness: provisional
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+    - governance/seam-1-closeout.md
   required_threads:
     - THR-01
     - THR-02
@@ -88,7 +89,7 @@ open_remediations: []
 - **Rollout / safety**:
   This seam should reduce misleading attention-required signals without hiding real failures. It must preserve enabled-mode remediation guidance and error visibility when `world.enabled=true`.
 - **Downstream decomposition context**:
-  - Why this seam is `active`, `next`, or `future`: it depends on published shim status contracts and therefore should stay future until those contracts land.
+  - Why this seam is `active`, `next`, or `future`: it is now the queued next seam because `THR-01` is published, but it remains provisional until `SEAM-2` lands `THR-02` and `THR-03`.
   - Which threads matter most: `THR-01`, `THR-02`, `THR-03`, `THR-05`.
   - What the first seam-local review should focus on: status-driven summary aggregation, guidance suppression, and documentation parity.
 - **Expected seam-exit concerns**:

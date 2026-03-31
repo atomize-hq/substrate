@@ -2,26 +2,27 @@
 seam_id: SEAM-2
 seam_slug: shim-doctor-disabled-aware-reporting
 type: capability
-status: proposed
-execution_horizon: next
-plan_version: v1
+status: exec-ready
+execution_horizon: active
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+    - governance/seam-1-closeout.md
   required_threads:
     - THR-01
   stale_triggers:
-    - C-01 changes after SEAM-1 review or closeout
+    - C-01 or THR-01 changes after SEAM-1 closeout
     - json-mode or attribution work reshapes shim payloads or field paths
     - hidden world backend or world-deps probe paths survive refactors in shim_doctor/report.rs
     - exact disabled-mode copy contract changes without synchronized test/doc updates
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
@@ -88,7 +89,7 @@ open_remediations: []
 - **Rollout / safety**:
   JSON remains additive-only, and enabled-mode failure visibility is preserved. The seam reduces backend traffic when disabled by preventing unnecessary probes.
 - **Downstream decomposition context**:
-  - Why this seam is `active`, `next`, or `future`: it is the first consumer of `C-01` and the first seam that publishes contracts required by the remaining feature.
+  - Why this seam is `active`, `next`, or `future`: it is now the active seam because `SEAM-1` published `C-01` / `THR-01`, and its seam-local plan has been refreshed against that closeout-backed handoff.
   - Which threads matter most: `THR-01`, `THR-02`, `THR-03`, `THR-04`.
   - What the first seam-local review should focus on: hidden probe paths, exact disabled-mode copy, and schema omission compatibility.
 - **Expected seam-exit concerns**:
