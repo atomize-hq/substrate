@@ -2,8 +2,8 @@
 
 ## Execution horizon summary
 
-- **Active**: `SEAM-1` — doctor text disable attribution. This is the first critical-path seam because all later health and JSON work depends on its exact message bodies, precedence mapping, fallback rule, and redaction posture.
-- **Next**: `SEAM-2` — JSON + health disable attribution. This seam consumes the first seam's truth and extends it to structured and secondary surfaces.
+- **Active**: `SEAM-2` — JSON + health disable attribution. This seam now advances against the published `SEAM-1` closeout because the remaining upstream blocker is manual proof capture rather than missing consumed contract truth.
+- **Previous active seam with remaining blocker**: `SEAM-1` — doctor text disable attribution. `REM-001` still blocks `promotion_readiness: ready` until native macOS/Windows doctor parity proof lands, but `governance/seam-1-closeout.md` already publishes the landed `C-01` / `C-02` handoff this seam consumes.
 - **Future**: none extracted. Cross-platform validation and adjacent-queue compatibility remain pack-level threads and closeout concerns rather than separate seams.
 
 ## Contract registry
@@ -48,20 +48,20 @@
   - **Consumer seam(s)**: `SEAM-2`
   - **Carried contract IDs**: `C-01`, `C-02`
   - **Purpose**: Carry the authoritative disable-attribution truth from doctor text into the structured and health surfaces without duplicating precedence logic.
-  - **State**: defined
+  - **State**: revalidated
   - **Revalidation trigger**: precedence changes for `world.enabled`, message-body changes, token-display changes, or any change in how provenance is exposed to doctor entrypoints
-  - **Satisfied by**: `SEAM-1` closeout records published `C-01`/`C-02`, doctor parity evidence passes, and the seam-exit gate marks downstream promotion readiness as `ready`
-  - **Notes**: This is the critical handoff thread. `SEAM-2` should not become authoritative until the upstream closeout proves the shared attribution model is real rather than inferred.
+  - **Satisfied by**: `governance/seam-1-closeout.md` already records published `C-01`/`C-02`, landed Linux evidence, and the downstream stale triggers for any later drift. The remaining `REM-001` proof work can still stale this thread if native macOS/Windows parity changes the published doctor truth.
+  - **Notes**: This remains the critical handoff thread, but it is now concrete enough for `SEAM-2` to advance to `active`. Final downstream publication must still revalidate if the deferred native proof changes message bodies, precedence truth, or token-display rules.
 
 - **Thread ID**: `THR-02`
   - **Producer seam**: `SEAM-1`
   - **Consumer seam(s)**: `SEAM-2`
   - **Carried contract IDs**: `C-01`
   - **Purpose**: Preserve exact message-body parity and CLI-flag attribution across health and nested doctor/shim paths.
-  - **State**: defined
+  - **State**: revalidated
   - **Revalidation trigger**: health summary framing changes, world-disabled-status UX changes, platform renderer drift, or any edit to the exact message-body set
-  - **Satisfied by**: `SEAM-2` seam-local review proves parity on Linux/macOS/Windows and confirms that nested health paths do not lose `cli_flag` attribution
-  - **Notes**: This thread exists because parity drift is the main failure mode after the doctor text contract is stabilized.
+  - **Satisfied by**: `governance/seam-1-closeout.md` publishes the current exact message-body contract, and `SEAM-2` now consumes that truth with the explicit obligation to revalidate if native macOS/Windows doctor proof or downstream health work shows drift.
+  - **Notes**: This thread exists because parity drift is the main failure mode after the doctor text contract is stabilized. The open `SEAM-1` proof blocker remains a closeout watchpoint, not a reason to keep `SEAM-2` out of the active window.
 
 ## Dependency graph
 
@@ -76,10 +76,10 @@ flowchart LR
 
 ## Critical path
 
-1. `SEAM-1` makes the effective-winner mapping, exact wording, fallback posture, and redaction invariants concrete enough for implementation and future review.
-2. `SEAM-1` lands doctor-facing truth and publishes closeout-backed handoff evidence for `C-01` and `C-02`.
-3. `SEAM-2` consumes that published handoff to add top-level JSON fields and health text/JSON parity.
-4. `SEAM-2` exits only after full cross-platform parity evidence confirms that structured and health surfaces still match the doctor-originated truth.
+1. `SEAM-1` made the effective-winner mapping, exact wording, fallback posture, and redaction invariants concrete enough for implementation and future review.
+2. `SEAM-1` landed doctor-facing truth and published closeout-backed handoff evidence for `C-01` and `C-02`.
+3. `REM-001` keeps `SEAM-1` promotion readiness blocked only on manual macOS/Windows doctor parity capture; that blocker is now explicitly treated as a closeout watchpoint rather than a substantive blocker for `SEAM-2`.
+4. `SEAM-2` may therefore advance to active/decomposition against the published handoff, and it exits only after its own JSON/health parity evidence is complete and any later `SEAM-1` proof drift is revalidated.
 
 ## Workstreams
 

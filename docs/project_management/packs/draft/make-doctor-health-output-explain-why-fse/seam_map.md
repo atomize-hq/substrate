@@ -8,11 +8,12 @@ The source pack already converged to two accepted execution units (`DHO0`, `DHO1
 
 ## Execution horizon policy
 
-- **Active seam**: `SEAM-1` inferred from the source pack's first critical-path checkpoint (`DHO0` / CP1). It is the earliest landable seam that establishes the authoritative disable-attribution contract in doctor text output.
-- **Next seam**: `SEAM-2` inferred from the source pack's second checkpoint (`DHO1` / CP2). It expands the same attribution truth into JSON and health surfaces after `SEAM-1` stabilizes.
+- **Active seam**: `SEAM-2`. It is now the current execution window because `governance/seam-1-closeout.md` already publishes landed `C-01`, `C-02`, `THR-01`, and `THR-02`, so the remaining `SEAM-1` blocker is post-exec proof capture rather than missing consumed contract truth.
+- **Previous active seam still carrying a closeout blocker**: `SEAM-1`. `REM-001` keeps `promotion_readiness: ready` blocked until native macOS/Windows doctor parity proof is captured, but that blocker no longer prevents `SEAM-2` from advancing in parallel.
+- **Next seam**: none extracted after the resequencing decision.
 - **Future seams**: none extracted. The source pack's own analysis says the behavior model converges cleanly to two execution seams, so additional seams would mostly duplicate verification or cleanup work already owned by these two seams.
 
-Only the active seam is eligible for authoritative downstream deep planning by default. The next seam may later receive seam-local review and slices, but any deeper work remains provisional until the active seam lands and publishes its closeout-backed handoff.
+Only the active seam is eligible for authoritative downstream deep planning by default. `SEAM-2` now owns that window. `SEAM-1` remains a closeout watchpoint whose stale triggers still revalidate `SEAM-2` if the later manual proof changes message bodies, precedence truth, or redaction posture.
 
 ## Candidate generation and pruning
 
@@ -34,8 +35,8 @@ Only the active seam is eligible for authoritative downstream deep planning by d
 
 | Seam | Horizon | Type | Source-pack mapping | Purpose | Primary touch surface | Verification anchor |
 |---|---|---|---|---|---|---|
-| `SEAM-1` | `active` | `capability` | `DHO0` | Make doctor text tell the truth about the effective disable source, with exact wording and redaction rules. | platform doctor entrypoints + shared attribution helper + doctor text renderers | winner-to-message mapping tests, manual CLI/env/workspace/global scenarios, Linux/macOS/Windows parity checks |
-| `SEAM-2` | `next` | `integration` | `DHO1` | Reuse the same attribution truth in top-level JSON fields and in health text/JSON, including nested doctor/shim paths. | health/shim reporting + doctor JSON + schema contract + parity validation | JSON emit/omit checks, health text parity checks, nested CLI-flag preservation, full CP2 cross-platform evidence |
+| `SEAM-1` | `landed; closeout proof still open` | `capability` | `DHO0` | Make doctor text tell the truth about the effective disable source, with exact wording and redaction rules. | platform doctor entrypoints + shared attribution helper + doctor text renderers | winner-to-message mapping tests, manual CLI/env/workspace/global scenarios, Linux/macOS/Windows parity checks |
+| `SEAM-2` | `active` | `integration` | `DHO1` | Reuse the same attribution truth in top-level JSON fields and in health text/JSON, including nested doctor/shim paths. | health/shim reporting + doctor JSON + schema contract + parity validation | JSON emit/omit checks, health text parity checks, nested CLI-flag preservation, full CP2 cross-platform evidence |
 
 ## Seam boundaries
 

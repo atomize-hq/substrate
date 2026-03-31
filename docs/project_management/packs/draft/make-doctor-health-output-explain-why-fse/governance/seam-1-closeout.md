@@ -41,8 +41,8 @@ open_remediations:
 - **Review-surface delta**: doctor entrypoints now resolve explain provenance once, derive the attribution line from the shared helper, and preserve enabled-case omission while keeping the existing exit codes and status framing intact
 - **Planned-vs-landed delta**: the planned split between proof and publication held; Linux text-surface proof landed, but macOS and Windows runtime parity were updated only at the code level in this environment and were not executed here
 - **Downstream stale triggers raised**: any future change to the `world.enabled` precedence chain, exact message bodies, tokenized display-path rules, or safe fallback behavior must revalidate `SEAM-1` and downstream consumers
-- **Remediation disposition**: `REM-001` records the missing macOS/Windows runtime parity proof for doctor text surfaces; the code paths are landed, but the proof run was not available in this Linux environment
-- **Promotion blockers**: native macOS and Windows runtime doctor parity evidence is still missing
+- **Remediation disposition**: `REM-001` records the missing macOS/Windows runtime parity proof for doctor text surfaces; the code paths are landed, the current closeout already publishes `C-01` / `C-02` for downstream consumption, and any later proof drift must revalidate downstream consumers rather than silently changing the handoff
+- **Promotion blockers**: native macOS and Windows runtime doctor parity evidence is still missing for `SEAM-1` promotion readiness; this is a closeout blocker, not a missing consumed-contract blocker for `SEAM-2`
 - **Promotion readiness**: blocked
 
 ## Post-exec gate disposition
