@@ -63,7 +63,7 @@
   - **Thread IDs**: `THR-03`
   - **Definition**: Canonical world-deps status enum at `.world_deps.status` / `.shim.world_deps.status` with values `ok | error | skipped_disabled | unknown`, plus disabled-mode omission of probe-derived legacy fields.
     - Disabled mode publishes `.world_deps.status = "skipped_disabled"` and must not compute applied world-deps state.
-    - Disabled mode omits probe-derived fields that would imply a real probe occurred, specifically disabled-path `world.error`, `world.details`, and `world_deps.report`.
+    - Disabled mode omits probe-derived fields that would imply a real probe occurred, specifically disabled-path `world.error`, `world.stderr`, `world.exit_code`, `world.details`, `world_deps.error`, and `world_deps.report`.
     - Enabled mode may publish `.world_deps.status = "ok"` or `.world_deps.status = "error"` according to the real applied-state result.
   - **Versioning / compat**: additive-only field; disabled-mode omission is canonical and must not be backfilled by downstream consumers.
 
@@ -77,10 +77,9 @@
     - The disabled-mode text contract is:
       - `World backend:`
       - `  Status: disabled`
-      - `  Reason: skipped because world diagnostics are disabled by effective config`
+      - `  Next: run \`substrate world enable\` to provision`
       - `World deps:`
       - `  Status: skipped (world disabled)`
-      - `  Reason: skipped because world diagnostics are disabled by effective config`
     - Disabled or skipped states must not print `Error:` lines.
     - Enabled-mode failure text remains fail-visible and must not collapse into disabled wording.
   - **Versioning / compat**: exact-line contract is intentionally small and explicit; enabled-mode copy remains flexible.
