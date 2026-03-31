@@ -3,10 +3,10 @@ slice_id: S3
 seam_id: SEAM-1
 slice_kind: seam_exit_gate
 execution_horizon: active
-status: decomposed
+status: exec-ready
 plan_version: v1
 basis:
-  currentness: provisional
+  currentness: current
   basis_ref: seam.md#basis
   stale_triggers: []
 gates:

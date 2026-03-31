@@ -1,11 +1,11 @@
 ---
 seam_id: SEAM-1
 seam_slug: effective-config-classifier
-status: decomposed
+status: exec-ready
 execution_horizon: active
 plan_version: v1
 basis:
-  currentness: provisional
+  currentness: current
   source_seam_brief: ../../seam-1-effective-config-classifier.md
   source_scope_ref: ../../scope_brief.md
   upstream_closeouts: []
@@ -18,9 +18,9 @@ basis:
     - adjacent diagnostics packs modify health or shim-doctor call paths before this seam publishes THR-01
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
@@ -52,7 +52,7 @@ open_remediations: []
   - Precedence and workspace override-ignore rules remain authoritative to `resolve_effective_config` (no ad-hoc local precedence).
   - The produced contract `C-01` is concrete enough for downstream planning and implementation (rules, boundaries, and a verification checklist exist), without requiring post-exec publication/acceptance evidence as a pre-exec input.
 - **Basis posture**:
-  - Currentness: provisional (cross-queue overlap and upstream contract drift risk)
+  - Currentness: current (revalidated against current repo docs/code; cross-queue risk remains captured as stale triggers)
   - Upstream closeouts assumed: none
   - Required threads: `THR-01`
   - Stale triggers: see frontmatter `basis.stale_triggers`

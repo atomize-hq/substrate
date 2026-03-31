@@ -51,13 +51,17 @@ flowchart LR
 
 ## Pre-exec findings
 
-- No new remediation opened in this decomposition. The slices below intentionally force a single helper + shared tests to make divergence and “probe-before-config” regressions hard.
+- Revalidated the basis against the current repo:
+  - `docs/reference/env/contract.md` defines CLI > workspace > global > defaults precedence for enabled workspaces and requires ignoring `SUBSTRATE_OVERRIDE_*` in that case.
+  - `crates/shell/src/execution/invocation/plan.rs` maps `--world/--no-world` into `CliConfigOverrides.world_enabled`.
+  - `crates/shell/src/execution/config_model.rs` owns `CliConfigOverrides { world_enabled: Option<bool>, .. }` for the effective-config resolver.
+- No remediation opened in this decomposition. The slices intentionally force a single helper + shared tests to make divergence and “probe-before-config” regressions hard.
 
 ## Pre-exec gate disposition
 
-- **Review gate**: pending
-- **Contract gate concerns**: `C-01` must be concrete (rules + verification checklist) and must not depend on post-exec publication as a pre-exec requirement.
-- **Revalidation prerequisites**: confirm the external precedence contract (`docs/reference/env/contract.md`) did not drift since the source pack, and confirm no adjacent queued packs rewired diagnostics routing.
+- **Review gate**: passed
+- **Contract gate**: passed (`C-01` rules + verification checklist are explicit and owned by this seam)
+- **Revalidation**: passed (basis rechecked against current repo docs/code; future drift remains guarded by stale triggers)
 - **Opened remediations**: none
 
 ## Planned seam-exit gate focus
