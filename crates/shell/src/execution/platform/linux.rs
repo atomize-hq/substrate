@@ -18,7 +18,11 @@ use std::time::Duration;
 use substrate_broker::{detect_profile, world_fs_policy};
 use which::which;
 
-pub(crate) fn host_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
+pub(crate) fn host_doctor_main(
+    json_mode: bool,
+    world_enabled: bool,
+    world_disable_attribution: Option<&crate::execution::config_model::DoctorDisableAttribution>,
+) -> i32 {
     // Helpers
     fn pass(msg: &str) {
         println!("PASS  | {}", msg);
@@ -194,7 +198,7 @@ pub(crate) fn host_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
             })),
         });
 
-        let out = json!({
+        let mut out = json!({
             "schema_version": 1,
             "platform": "linux",
             "world_enabled": world_enabled,
@@ -215,11 +219,17 @@ pub(crate) fn host_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
                 "world_socket": socket_json,
             },
         });
+        if let Some(attribution) = world_disable_attribution {
+            out["world_disable_reason"] = json!(attribution.reason);
+            out["world_disable_source"] = json!(attribution.source);
+        }
         println!("{}", serde_json::to_string_pretty(&out).unwrap());
     } else {
         println!("== substrate host doctor ==");
         if !world_enabled {
-            fail("world isolation disabled by effective config (--no-world)");
+            if let Some(attribution) = world_disable_attribution {
+                fail(attribution.reason);
+            }
         }
 
         if overlay_ok {
@@ -325,7 +335,11 @@ pub(crate) fn host_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
     }
 }
 
-pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
+pub(crate) fn world_doctor_main(
+    json_mode: bool,
+    world_enabled: bool,
+    world_disable_attribution: Option<&crate::execution::config_model::DoctorDisableAttribution>,
+) -> i32 {
     // Helpers
     fn pass(msg: &str) {
         println!("PASS  | {}", msg);
@@ -588,7 +602,7 @@ pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
     let ok = host_ok && world_value.get("ok").and_then(serde_json::Value::as_bool) == Some(true);
 
     if json_mode {
-        let out = json!({
+        let mut out = json!({
             "schema_version": 1,
             "platform": "linux",
             "world_enabled": world_enabled,
@@ -596,13 +610,19 @@ pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
             "host": host_value,
             "world": world_value,
         });
+        if let Some(attribution) = world_disable_attribution {
+            out["world_disable_reason"] = json!(attribution.reason);
+            out["world_disable_source"] = json!(attribution.source);
+        }
         println!("{}", serde_json::to_string_pretty(&out).unwrap());
     } else {
         println!("== substrate world doctor ==");
         println!("== Host ==");
 
         if !world_enabled {
-            fail("world isolation disabled by effective config (--no-world)");
+            if let Some(attribution) = world_disable_attribution {
+                fail(attribution.reason);
+            }
         }
 
         if overlay_ok {

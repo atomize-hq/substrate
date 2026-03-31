@@ -1,10 +1,14 @@
 use serde_json::{json, Value};
 use substrate_broker::world_fs_policy;
 
-pub(crate) fn host_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
+pub(crate) fn host_doctor_main(
+    json_mode: bool,
+    world_enabled: bool,
+    world_disable_attribution: Option<&crate::execution::config_model::DoctorDisableAttribution>,
+) -> i32 {
     let fs_policy = world_fs_policy();
     if json_mode {
-        let out = json!({
+        let mut out = json!({
             "schema_version": 1,
             "platform": "windows",
             "world_enabled": world_enabled,
@@ -19,15 +23,28 @@ pub(crate) fn host_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
                 "message": "host doctor is not yet implemented on Windows (use `substrate world doctor --json` for WSL backend diagnostics)",
             }
         });
+        if let Some(attribution) = world_disable_attribution {
+            out["world_disable_reason"] = json!(attribution.reason);
+            out["world_disable_source"] = json!(attribution.source);
+        }
         println!("{}", serde_json::to_string_pretty(&out).unwrap());
     } else {
         println!("== substrate host doctor ==");
+        if !world_enabled {
+            if let Some(attribution) = world_disable_attribution {
+                println!("FAIL  | {}", attribution.reason);
+            }
+        }
         println!("FAIL  | host doctor is not yet implemented on Windows");
     }
     4
 }
 
-pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
+pub(crate) fn world_doctor_main(
+    json_mode: bool,
+    world_enabled: bool,
+    world_disable_attribution: Option<&crate::execution::config_model::DoctorDisableAttribution>,
+) -> i32 {
     // Helpers
     fn pass(msg: &str) {
         println!("PASS  | {}", msg);
@@ -131,7 +148,7 @@ pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
     let ok = host_ok && world_value.get("ok").and_then(Value::as_bool) == Some(true);
 
     if json_mode {
-        let out = json!({
+        let mut out = json!({
             "schema_version": 1,
             "platform": "windows",
             "world_enabled": world_enabled,
@@ -139,12 +156,18 @@ pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
             "host": host_value,
             "world": world_value,
         });
+        if let Some(attribution) = world_disable_attribution {
+            out["world_disable_reason"] = json!(attribution.reason);
+            out["world_disable_source"] = json!(attribution.source);
+        }
         println!("{}", serde_json::to_string_pretty(&out).unwrap());
     } else {
         println!("== substrate world doctor ==");
         println!("== Host ==");
         if !world_enabled {
-            fail("world isolation disabled by effective config (--no-world)");
+            if let Some(attribution) = world_disable_attribution {
+                fail(attribution.reason);
+            }
         }
 
         info(&format!("transport: {}", transport));

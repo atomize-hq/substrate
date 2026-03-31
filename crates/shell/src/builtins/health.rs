@@ -1,9 +1,14 @@
 use super::shim_doctor::{self, ShimDoctorReport, WorldDepsDoctorStatus, WorldDoctorStatus};
+use crate::execution::config_model::DoctorDisableSource;
 use anyhow::Result;
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
 pub struct HealthReport {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub world_disable_reason: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub world_disable_source: Option<DoctorDisableSource>,
     pub shim: ShimDoctorReport,
     pub summary: HealthSummary,
 }
@@ -30,7 +35,10 @@ pub struct HealthSummary {
 pub fn run(json_mode: bool, cli_no_world: bool, cli_force_world: bool) -> Result<()> {
     let report = shim_doctor::collect_report(cli_no_world, cli_force_world)?;
     let summary = HealthSummary::from_report(&report);
+    let (world_disable_reason, world_disable_source) = world_disable_attribution(&report);
     let payload = HealthReport {
+        world_disable_reason,
+        world_disable_source,
         shim: report,
         summary,
     };
@@ -42,6 +50,28 @@ pub fn run(json_mode: bool, cli_no_world: bool, cli_force_world: bool) -> Result
     }
 
     Ok(())
+}
+
+fn world_disable_attribution(
+    report: &ShimDoctorReport,
+) -> (Option<&'static str>, Option<DoctorDisableSource>) {
+    let Some(world) = report.world.as_ref() else {
+        return (None, None);
+    };
+    (
+        world.world_disable_reason,
+        world.world_disable_source.clone(),
+    )
+}
+
+fn health_world_disable_reason(report: &HealthReport) -> Option<&'static str> {
+    report.world_disable_reason.or_else(|| {
+        report
+            .shim
+            .world
+            .as_ref()
+            .and_then(|world| world.world_disable_reason)
+    })
 }
 
 impl HealthSummary {
@@ -184,6 +214,10 @@ fn print_health_summary(report: &HealthReport) {
     }
     if report.summary.skip_manager_init {
         println!("  Manager init skipped via SUBSTRATE_SKIP_MANAGER_INIT");
+    }
+
+    if let Some(reason) = health_world_disable_reason(report) {
+        println!("{reason}");
     }
 
     if report

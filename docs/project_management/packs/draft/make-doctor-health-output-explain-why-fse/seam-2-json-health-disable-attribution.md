@@ -3,10 +3,10 @@ seam_id: SEAM-2
 seam_slug: json-health-disable-attribution
 type: integration
 status: proposed
-execution_horizon: next
+execution_horizon: active
 plan_version: v1
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
   upstream_closeouts:
@@ -15,7 +15,7 @@ basis:
     - THR-01
     - THR-02
   stale_triggers:
-    - SEAM-1 closeout changes message bodies, precedence truth, or fallback posture
+    - SEAM-1 closeout changes message bodies, precedence truth, fallback posture, or tokenized source rendering after deferred native parity proof
     - health or shim reporting changes root-object shape or nested doctor behavior
     - queued JSON envelope or provisioning work changes top-level payload expectations
     - tokenized path/env rendering rules change after this seam is reviewed
@@ -67,7 +67,7 @@ open_remediations: []
   - health text must reuse the same exact message bodies as doctor text; nested doctor invocation paths must not lose CLI attribution
 - **Dependencies**
   - Direct blockers:
-    - `SEAM-1` closeout must publish `C-01` and `C-02` so the seam consumes recorded upstream truth rather than inferred intent
+    - `governance/seam-1-closeout.md` must remain the authoritative published source of `C-01` and `C-02`; the current closeout already satisfies that handoff, and `REM-001` is scoped to `SEAM-1` promotion readiness rather than this seam's activation
     - health/shim reporting must be able to carry the shared attribution model without mutating it
     - adjacent JSON envelope work must preserve top-level field placement for this feature's additive contract
   - Transitive blockers:
@@ -101,7 +101,7 @@ open_remediations: []
   - health and doctor stay aligned on disable-attribution truth; no new knobs or policy surfaces are introduced
   - unsupported Windows host-doctor posture remains unchanged while world doctor and health still gain the structured fields where supported
 - **Downstream decomposition context**:
-  - Why this seam is `active`, `next`, or `future`: it is `next` because its correctness depends on the upstream doctor-text contract becoming published truth first
+  - Why this seam is `active`, `next`, or `future`: it is now `active` because the upstream doctor-text contract is already published truth in `governance/seam-1-closeout.md`; the only remaining upstream blocker is manual parity proof capture for `SEAM-1` closeout, which is a stale-trigger watchpoint rather than a missing consumed contract
   - Which threads matter most: `THR-01` carries the shared attribution model; `THR-02` is the parity guardrail for health and nested doctor flows
   - What the first seam-local review should focus on: top-level field placement, enabled-case omission, nested CLI-flag preservation, and compatibility with adjacent health/JSON work
 - **Expected seam-exit concerns**:
