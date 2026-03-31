@@ -2,15 +2,16 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-3`
+- **Active seam**: none
 - **Next seam**: none
-- **Future seams**: none
+- **Future seams**: `SEAM-1`, `SEAM-2`, `SEAM-3`
 
 Horizon policy for this pack:
 
 - only the active seam is eligible for authoritative downstream sub-slices by default
-- `SEAM-3` now has closeout-backed basis for authoritative seam-local planning and downstream sub-slices if later needed
-- no queued next seam remains after `SEAM-2` published landed cleanup/refusal truth through closeout
+- no next seam is currently reserved; new forward-window planning should be selected only if pack scope expands
+- `SEAM-3` has landed with a passed seam-exit gate and left the forward planning window
+- no queued next seam remains because the terminal conformance seam has completed
 
 ## Contract registry
 
@@ -67,20 +68,20 @@ Horizon policy for this pack:
   - **Consumer seam(s)**: `SEAM-3`
   - **Carried contract IDs**: `C-01`, `C-02`, `C-03`
   - **Purpose**: let the conformance seam prove helper discovery order, `cargo clean` survival, and fail-closed behavior against the landed runtime bundle.
-  - **State**: `published`
+  - **State**: `revalidated`
   - **Revalidation trigger**: override precedence changes, helper-order changes, helper-missing remediation text changes, or CLI flag-surface changes.
   - **Satisfied by**: `governance/seam-1-closeout.md` plus updated smoke and manual evidence reflecting the landed helper resolution flow.
-  - **Notes**: This thread is where macOS scope drift becomes visible if staged helper placement is mistaken for full provisioning parity.
+  - **Notes**: This thread is where macOS scope drift becomes visible if staged helper placement is mistaken for full provisioning parity. `SEAM-3` revalidated this thread through the landed claim-boundary and smoke-surface work recorded in `governance/seam-3-closeout.md`.
 
 - **Thread ID**: `THR-03`
   - **Producer seam**: `SEAM-2`
   - **Consumer seam(s)**: `SEAM-3`
   - **Carried contract IDs**: `C-04`
   - **Purpose**: let the conformance seam verify managed-only cleanup, preserved-path refusal, and protected-path exit behavior after cleanup lands.
-  - **State**: `published`
+  - **State**: `revalidated`
   - **Revalidation trigger**: ownership-guard algorithm changes, refusal messaging changes, exit-code mapping changes, or cleanup directory-pruning behavior changes.
   - **Satisfied by**: `governance/seam-2-closeout.md` records preserved-path evidence, removal evidence, and the final cleanup disposition.
-  - **Notes**: `SEAM-3` should not finalize parity claims until this thread is published from cleanup closeout.
+  - **Notes**: `SEAM-3` consumed and revalidated this thread through the landed protected-path conformance evidence recorded in `governance/seam-3-closeout.md`.
 
 ## Dependency graph
 
@@ -97,7 +98,7 @@ flowchart LR
 
 1. `SEAM-1` lands the durable bundle layout, helper lookup order, and managed-marker contract.
 2. `SEAM-2` revalidates against `SEAM-1` closeout and then lands managed-only cleanup and protected-path refusal.
-3. `SEAM-3` revalidates against both upstream closeouts and only then publishes parity evidence, smoke proof, and drift guards.
+3. `SEAM-3` has landed with a passed seam-exit gate after revalidating both upstream closeouts and publishing the terminal parity, smoke, and drift-guard evidence.
 
 Critical-path failure modes to watch:
 
@@ -121,5 +122,5 @@ Critical-path failure modes to watch:
 
 Concurrency posture:
 
-- `SEAM-3` now owns authoritative seam-local planning because `THR-01`, `THR-02`, and `THR-03` all have closeout-backed truth.
-- No next seam is queued in this pack; later promotion depends on `SEAM-3` landing or on a new extraction pass.
+- No seam currently owns the forward planning window because the terminal conformance seam has landed.
+- Later work in this area depends on a new extraction pass or on explicit pack-scope expansion.

@@ -4,7 +4,7 @@ pack_version: v1
 pack_status: extracted
 source_ref: stabilize-dev-install-helper-discovery.zip
 execution_horizon:
-  active_seam: SEAM-3
+  active_seam: null
   next_seam: null
 ---
 
@@ -55,6 +55,6 @@ execution_horizon:
   - ADR-0035 overlap can stale the basis if it changes install-script or helper-script surfaces first.
 - **Assumptions**:
   - Seam extraction is workflow-first rather than entity-first because the source pack already converged on a two-stage behavior change: land helper staging/discovery first, then cleanup safety.
-  - `SEAM-3` is the active horizon seam after the `SEAM-2` closeout; no queued next seam remains in this pack.
-  - The source planning pack remains the authoritative input for this extraction; `SEAM-3` now has seam-local planning, but no post-exec evidence exists yet.
+  - `SEAM-3` was the terminal active horizon seam after the `SEAM-2` closeout and has now landed with a passed seam-exit gate; no queued next seam remains in this pack.
+  - The source planning pack remains the authoritative input for this extraction; `SEAM-3` now has post-exec evidence in `governance/seam-3-closeout.md`.
   - Seam-exit concerns are inferred from the documented contracts, checkpoint plan, and known cross-queue overlaps rather than from landed code.

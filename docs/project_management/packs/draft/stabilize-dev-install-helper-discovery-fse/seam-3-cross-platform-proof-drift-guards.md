@@ -2,8 +2,8 @@
 seam_id: SEAM-3
 seam_slug: cross-platform-proof-drift-guards
 type: conformance
-status: exec-ready
-execution_horizon: active
+status: landed
+execution_horizon: future
 plan_version: v2
 basis:
   currentness: current
@@ -27,17 +27,18 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S3
-  status: pending
-open_remediations:
-  - REM-002
+  status: passed
+open_remediations: []
 ---
 
 # SEAM-3 - Cross-platform proof + drift guards
+
+This seam is landed. Its authoritative planning and exit-gate record live in `threaded-seams/seam-3-cross-platform-proof-drift-guards/` and `governance/seam-3-closeout.md`.
 
 - **Goal / value**: Keep the landed feature contract provable and non-drifting across Linux and macOS behavior validation, Windows compile parity, and checkpoint evidence after the first two seams land.
 - **Scope**
@@ -101,12 +102,12 @@ open_remediations:
   - Preserve deterministic skip behavior on non-target hosts.
   - Record stale triggers rather than silently carrying evidence forward when upstream reality changes.
 - **Downstream decomposition context**:
-  - Why this seam is now `active`: `SEAM-1` and `SEAM-2` now both have closeout-backed truth, so seam-local planning can consume `THR-01`, `THR-02`, and `THR-03` without inventing upstream behavior.
+  - This seam was the terminal active seam after `SEAM-2` closed with a passed seam-exit gate and published `THR-03`.
   - Which threads matter most: `THR-01`, `THR-02`, and `THR-03`.
-  - What the first seam-local review should focus on: evidence-to-contract alignment, platform claim boundaries, checkpoint proof, and stale-trigger handling.
-- **Pre-exec readiness posture**:
-  - `REM-002` remains open, but it is seam-local and non-blocking because the active seam slices now own the exact macOS claim-boundary, proof-surface refresh, and seam-exit disposition work.
-  - The seam owns evidence alignment only; it does not reopen upstream helper-bundle or cleanup behavior.
+  - The landed seam-local work focused on evidence-to-contract alignment, platform claim boundaries, checkpoint proof, and stale-trigger handling.
+- **Landed seam-exit posture**:
+  - `REM-002` is resolved by the landed claim-boundary and smoke-surface work recorded in `governance/seam-3-closeout.md`.
+  - The seam owned evidence alignment only and did not reopen upstream helper-bundle or cleanup behavior.
 - **Expected seam-exit concerns**:
   - Contracts likely to publish: minimal or none beyond finalized evidence mapping.
   - Threads likely to advance: `THR-01`, `THR-02`, and `THR-03` toward `revalidated` or `closed`.
