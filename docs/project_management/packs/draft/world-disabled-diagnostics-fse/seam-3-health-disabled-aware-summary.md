@@ -2,35 +2,34 @@
 seam_id: SEAM-3
 seam_slug: health-disabled-aware-summary
 type: capability
-status: proposed
+status: closed
 execution_horizon: future
-plan_version: v1
+plan_version: v3
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
-  required_threads:
-    - THR-01
-    - THR-02
-    - THR-03
+  upstream_closeouts:
+    - governance/seam-1-closeout.md
+    - governance/seam-2-closeout.md
+  required_threads: []
   stale_triggers:
-    - THR-02 or THR-03 publish different enum/omission semantics than assumed here
+    - THR-02 or THR-03 change after `SEAM-2` closeout
     - provisioning-related packs change enabled-mode world-deps remediation text in health.rs
     - docs/USAGE.md drifts from shipped JSON/text behavior
     - summary aggregation continues to consume legacy error strings rather than published status contracts
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: reserved_final_slice
-  status: pending
+  status: passed
 open_remediations: []
 ---
 
@@ -88,12 +87,12 @@ open_remediations: []
 - **Rollout / safety**:
   This seam should reduce misleading attention-required signals without hiding real failures. It must preserve enabled-mode remediation guidance and error visibility when `world.enabled=true`.
 - **Downstream decomposition context**:
-  - Why this seam is `active`, `next`, or `future`: it depends on published shim status contracts and therefore should stay future until those contracts land.
-  - Which threads matter most: `THR-01`, `THR-02`, `THR-03`, `THR-05`.
-  - What the first seam-local review should focus on: status-driven summary aggregation, guidance suppression, and documentation parity.
+  - Why this seam is `active`, `next`, or `future`: it is now a future seam because it has landed, passed its seam-exit gate, and handed `THR-05` to the active conformance seam.
+  - Which threads mattered most during execution: `THR-01`, `THR-02`, `THR-03`, `THR-05`.
+  - What downstream revalidation should keep watching: status-driven summary aggregation, guidance suppression, and documentation parity.
 - **Expected seam-exit concerns**:
-  - Contracts likely to publish: `C-05`
-  - Threads likely to advance: `THR-05`
-  - Review-surface areas likely to shift after landing: overall status line, summary JSON, guidance lines, and docs/examples
+  - Contracts published: `C-05`
+  - Threads advanced: `THR-05`
+  - Review-surface areas that landed: overall status line, summary JSON, guidance lines, and docs/examples
   - Downstream seams most likely to require revalidation: `SEAM-4` and future health/provisioning/json-envelope packs
-  - Accepted or published owned-contract artifacts belong here and in closeout evidence, not in pre-exec verification for the producing seam.
+  - Accepted owned-contract evidence now lives in `governance/seam-3-closeout.md`.

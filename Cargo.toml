@@ -18,6 +18,7 @@ path = "src/main.rs"
 [[bin]]
 name = "substrate-shim"
 path = "src/shim_main.rs"
+doc = false
 
 [dependencies]
 anyhow = { workspace = true }

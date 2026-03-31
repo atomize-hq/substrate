@@ -661,6 +661,17 @@ pub(crate) fn resolve_effective_config(
     Ok(resolve_effective_config_with_explain(cwd, cli, false)?.0)
 }
 
+/// Resolve the canonical diagnostics-side `world.enabled` decision.
+///
+/// This is a thin wrapper over effective config resolution so diagnostics
+/// callers share one precedence path and surface config errors before probing.
+pub(crate) fn resolve_diagnostics_world_enabled(
+    cwd: &Path,
+    cli: &CliConfigOverrides,
+) -> Result<bool> {
+    Ok(resolve_effective_config(cwd, cli)?.world.enabled)
+}
+
 pub(crate) fn resolve_effective_config_with_explain(
     cwd: &Path,
     cli: &CliConfigOverrides,
@@ -1744,6 +1755,12 @@ mod tests {
             std::env::set_var(key, value);
             Self { key, prev }
         }
+
+        fn set_str(key: &'static str, value: &str) -> Self {
+            let prev = std::env::var_os(key);
+            std::env::set_var(key, value);
+            Self { key, prev }
+        }
     }
 
     impl Drop for EnvGuard {
@@ -1945,6 +1962,97 @@ world:
         assert_eq!(
             inv.sources[0].path.as_deref(),
             Some(expected_global_path.as_str())
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_diagnostics_world_enabled_prefers_cli_over_workspace_and_env() {
+        let tmp = TempDir::new().unwrap();
+        let substrate_home = tmp.path().join(".substrate");
+        fs::create_dir_all(&substrate_home).unwrap();
+        let _guard = EnvGuard::set("SUBSTRATE_HOME", &substrate_home);
+
+        let global_path = global_config_path().unwrap();
+        write_file(
+            &global_path,
+            r#"
+world:
+  enabled: false
+"#,
+        );
+
+        let workspace_root = tmp.path().join("ws");
+        let workspace_yaml = crate::execution::workspace::workspace_marker_path(&workspace_root);
+        write_file(
+            &workspace_yaml,
+            r#"
+world:
+  enabled: true
+"#,
+        );
+
+        let _env_guard = EnvGuard::set_str("SUBSTRATE_OVERRIDE_WORLD", "disabled");
+
+        let enabled = resolve_diagnostics_world_enabled(
+            &workspace_root,
+            &CliConfigOverrides {
+                world_enabled: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(enabled, "CLI override should win over workspace and env");
+
+        let disabled = resolve_diagnostics_world_enabled(
+            &workspace_root,
+            &CliConfigOverrides {
+                world_enabled: Some(false),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(
+            !disabled,
+            "CLI disable override should win over workspace and env"
+        );
+
+        let resolved =
+            resolve_diagnostics_world_enabled(&workspace_root, &CliConfigOverrides::default())
+                .unwrap();
+        assert!(
+            resolved,
+            "workspace config should win over SUBSTRATE_OVERRIDE_WORLD when a workspace is enabled"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_diagnostics_world_enabled_uses_env_override_without_workspace() {
+        let tmp = TempDir::new().unwrap();
+        let substrate_home = tmp.path().join(".substrate");
+        fs::create_dir_all(&substrate_home).unwrap();
+        let _guard = EnvGuard::set("SUBSTRATE_HOME", &substrate_home);
+
+        let global_path = global_config_path().unwrap();
+        write_file(
+            &global_path,
+            r#"
+world:
+  enabled: true
+"#,
+        );
+
+        let workspace_root = tmp.path().join("ws");
+        fs::create_dir_all(&workspace_root).unwrap();
+        let _env_guard = EnvGuard::set_str("SUBSTRATE_OVERRIDE_WORLD", "disabled");
+
+        let resolved =
+            resolve_diagnostics_world_enabled(&workspace_root, &CliConfigOverrides::default())
+                .unwrap();
+        assert!(
+            !resolved,
+            "SUBSTRATE_OVERRIDE_WORLD should apply when no enabled workspace exists"
         );
     }
 

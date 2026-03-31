@@ -46,12 +46,12 @@ candidate_subslices: []
 
 #### C-01 contract rules (producer seam)
 
-1. **Authority**: diagnostics must not implement ad-hoc precedence; they must use the existing effective-config resolver (`resolve_effective_config`).
+1. **Authority**: diagnostics must not implement ad-hoc precedence or re-read config for world-enabled classification. They must use the shared effective-config resolver in `crates/shell/src/execution/config_model.rs` (`resolve_effective_config` / `resolve_effective_config_with_explain`) as the single source of truth.
 2. **CLI override mapping**:
-   - `--world` must set `CliConfigOverrides.world_enabled = Some(true)`
-   - `--no-world` must set `CliConfigOverrides.world_enabled = Some(false)`
-   - CLI overrides must take precedence over config-layer `world.enabled` in the resolver result.
-3. **Workspace override-ignore**: when in an enabled workspace (per the resolver’s rules), `SUBSTRATE_OVERRIDE_*` env overrides are ignored.
+   - `--world` must map to `CliConfigOverrides.world_enabled = Some(true)`
+   - `--no-world` must map to `CliConfigOverrides.world_enabled = Some(false)`
+   - The mapping must be performed before calling the resolver, and CLI overrides must take precedence over config-layer `world.enabled` in the resolver result.
+3. **Workspace override-ignore**: when an enabled workspace is discovered by the resolver, `SUBSTRATE_OVERRIDE_*` env overrides are ignored for effective config resolution, exactly as documented in `docs/reference/env/contract.md`.
 4. **Fail-fast config errors**:
    - Any config resolution error (invalid YAML, unreadable config, unsupported legacy workspace config, etc.) must be treated as terminal for diagnostics classification.
    - Both `substrate shim doctor` and `substrate health` must exit with code `2` and emit stderr.
@@ -76,6 +76,15 @@ candidate_subslices: []
 - **Workspace override-ignore**:
   - Outside workspace, `SUBSTRATE_OVERRIDE_WORLD` can affect the effective decision (per resolver contract).
   - Inside workspace, `SUBSTRATE_OVERRIDE_WORLD` is ignored (per resolver contract), and CLI flags still win.
+
+#### S1.S2 test target locations
+
+S2 should anchor the behavior above in these concrete locations:
+
+- `crates/shell/tests/shim_doctor.rs`
+- `crates/shell/tests/shim_health.rs`
+- `crates/shell/src/execution/config_model.rs` unit tests for resolver precedence / workspace-ignore semantics
+- `crates/shell/src/execution/routing.rs` or `crates/shell/src/builtins/health.rs` only if a top-level config-error exit-2 path needs explicit coverage
 
 #### S1.T1 - Record contract and verification targets in the seam-local slices
 

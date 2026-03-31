@@ -2,33 +2,32 @@
 seam_id: SEAM-1
 seam_slug: effective-config-classifier
 type: integration
-status: exec-ready
-execution_horizon: active
-plan_version: v1
+status: closed
+execution_horizon: future
+plan_version: v2
 basis:
   currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
   upstream_closeouts: []
-  required_threads:
-    - THR-01
+  required_threads: []
   stale_triggers:
     - docs/reference/env/contract.md changes effective-config precedence or the workspace override-ignore rule
     - resolve_effective_config semantics or signature change in crates/shell/src/execution/config_model.rs
-    - diagnostics routing or exit-code handling changes for user/config failures
-    - adjacent diagnostics packs modify health or shim-doctor call paths before this seam publishes THR-01
+    - diagnostics routing or exit-code handling changes for user/config failures after `THR-01` publication
+    - adjacent diagnostics packs modify health or shim-doctor call paths before downstream seams revalidate the published handoff
 gates:
   pre_exec:
     review: passed
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S3
-  status: pending
+  status: passed
 open_remediations: []
 ---
 
@@ -96,3 +95,7 @@ open_remediations: []
   - Review-surface areas likely to shift after landing: command decision flow and pre-probe branching in both diagnostics entrypoints
   - Downstream seams most likely to require revalidation: `SEAM-2`, `SEAM-3`
   - Accepted or published owned-contract artifacts belong here and in closeout evidence, not in pre-exec verification for the producing seam.
+- **Closeout posture**:
+  - This seam has left the forward window after `governance/seam-1-closeout.md` recorded `THR-01` as published with `promotion_readiness: ready`.
+  - The owned contract surface is now authoritative through `governance/seam-1-closeout.md` and the landed resolver-backed helper path.
+  - Downstream seams that consume this handoff are `SEAM-2` and `SEAM-3`.

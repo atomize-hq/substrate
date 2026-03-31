@@ -1,5 +1,6 @@
 use super::report::{
-    ManagerDoctorState, ShimDoctorReport, WorldDepsDoctorSection, WorldDoctorSnapshot,
+    ManagerDoctorState, ShimDoctorReport, WorldDepsDoctorSection, WorldDepsDoctorStatus,
+    WorldDoctorSnapshot, WorldDoctorStatus,
 };
 
 pub(crate) fn print_text_report(report: &ShimDoctorReport) {
@@ -128,14 +129,11 @@ fn print_world_section(section: Option<&WorldDoctorSnapshot>) {
     println!("World backend:");
     match section {
         Some(snapshot) => {
-            println!(
-                "  Status: {}",
-                if snapshot.ok {
-                    "healthy"
-                } else {
-                    "needs attention"
-                }
-            );
+            println!("  Status: {}", world_status_text(snapshot.status));
+            if snapshot.status == WorldDoctorStatus::Disabled {
+                println!("  Next: run `substrate world enable` to provision");
+                return;
+            }
             println!("  Platform: {}", snapshot.platform);
             if let Some(source) = &snapshot.source {
                 println!("  Source: {}", source);
@@ -160,6 +158,10 @@ fn print_world_deps_section(section: Option<&WorldDepsDoctorSection>) {
     println!("World deps:");
     match section {
         Some(section) => {
+            if section.status == WorldDepsDoctorStatus::SkippedDisabled {
+                println!("  Status: skipped (world disabled)");
+                return;
+            }
             if let Some(source) = &section.source {
                 println!("  Source: {}", source);
             }
@@ -218,5 +220,14 @@ fn bool_str(value: bool) -> &'static str {
         "yes"
     } else {
         "no"
+    }
+}
+
+fn world_status_text(status: WorldDoctorStatus) -> &'static str {
+    match status {
+        WorldDoctorStatus::Healthy => "healthy",
+        WorldDoctorStatus::NeedsAttention => "needs attention",
+        WorldDoctorStatus::Disabled => "disabled",
+        WorldDoctorStatus::Unknown => "unknown",
     }
 }
