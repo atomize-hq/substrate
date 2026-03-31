@@ -12,14 +12,14 @@ This pack captures seam briefs, authoritative threading, pack-level review surfa
 
 Execution horizon:
 
-- Active seam: `SEAM-2`
-- Next seam: `SEAM-3`
+- Active seam: `SEAM-3`
+- Next seam: none
 
 Policy:
 
 - only the active seam is eligible for authoritative downstream sub-slices by default
-- the next seam may later receive seam-local review + slices, and only provisional candidate-subslice hints
-- active and next seams must eventually terminate in a dedicated final `seam-exit-gate` slice once seam-local planning begins
+- active seams must eventually terminate in a dedicated final `seam-exit-gate` slice once seam-local planning begins
+- there is no queued next seam after the `SEAM-2` closeout; later work begins from `SEAM-3`
 - future seams remain seam briefs
 
 This extraction is workflow-first and infers the horizon from the critical path in the source pack:

@@ -2,15 +2,15 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-2`
-- **Next seam**: `SEAM-3`
-- **Future seams**: `SEAM-1`
+- **Active seam**: `SEAM-3`
+- **Next seam**: none
+- **Future seams**: none
 
 Horizon policy for this pack:
 
 - only the active seam is eligible for authoritative downstream sub-slices by default
-- `SEAM-2` now has closeout-backed basis for authoritative seam-local planning and downstream sub-slices
-- `SEAM-3` remains a seam brief until `SEAM-2` publishes landed cleanup/refusal truth that conformance can bind to
+- `SEAM-3` now has closeout-backed basis for authoritative seam-local planning and downstream sub-slices if later needed
+- no queued next seam remains after `SEAM-2` published landed cleanup/refusal truth through closeout
 
 ## Contract registry
 
@@ -121,5 +121,5 @@ Critical-path failure modes to watch:
 
 Concurrency posture:
 
-- `SEAM-2` can now own authoritative seam-local planning and downstream slices because `THR-01` is revalidated for the active cleanup seam.
-- `SEAM-3` is now the queued seam, and it can consume closeout-backed `THR-03` truth alongside `THR-02` when ready.
+- `SEAM-3` now owns authoritative seam-local planning because `THR-01`, `THR-02`, and `THR-03` all have closeout-backed truth.
+- No next seam is queued in this pack; later promotion depends on `SEAM-3` landing or on a new extraction pass.

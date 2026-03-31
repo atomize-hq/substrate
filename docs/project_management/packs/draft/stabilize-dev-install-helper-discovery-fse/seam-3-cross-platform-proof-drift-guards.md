@@ -2,14 +2,16 @@
 seam_id: SEAM-3
 seam_slug: cross-platform-proof-drift-guards
 type: conformance
-status: proposed
-execution_horizon: next
-plan_version: v1
+status: decomposed
+execution_horizon: active
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+    - governance/seam-1-closeout.md
+    - governance/seam-2-closeout.md
   required_threads:
     - THR-01
     - THR-02
@@ -29,9 +31,10 @@ gates:
     closeout: pending
 seam_exit_gate:
   required: true
-  planned_location: reserved_final_slice
+  planned_location: S3
   status: pending
-open_remediations: []
+open_remediations:
+  - REM-002
 ---
 
 # SEAM-3 - Cross-platform proof + drift guards
@@ -90,7 +93,7 @@ open_remediations: []
     - manual playbook cases and checkpoint wording match the landed upstream contracts
 - **Risks / unknowns**:
   - Risk: evidence can drift from actual landed behavior when upstream seams adjust path lists, messages, or refusal semantics.
-  - De-risk plan: require revalidation through `THR-01`, `THR-02`, and `THR-03` before this seam promotes from future planning.
+  - De-risk plan: require seam-local revalidation through `THR-01`, `THR-02`, and `THR-03` before this seam promotes to `exec-ready`.
   - Risk: Windows or macOS evidence can overclaim support if unsupported surfaces are described loosely.
   - De-risk plan: keep platform claims explicit and narrow in smoke output, parity docs, and closeout.
 - **Rollout / safety**:
@@ -98,7 +101,7 @@ open_remediations: []
   - Preserve deterministic skip behavior on non-target hosts.
   - Record stale triggers rather than silently carrying evidence forward when upstream reality changes.
 - **Downstream decomposition context**:
-  - Why this seam is now `next`: `SEAM-1` has already published `THR-01` and `THR-02`, so this seam is the queued successor behind active `SEAM-2`, but it still must wait for `THR-03` closeout-backed truth before seam-local planning becomes authoritative.
+  - Why this seam is now `active`: `SEAM-1` and `SEAM-2` now both have closeout-backed truth, so seam-local planning can consume `THR-01`, `THR-02`, and `THR-03` without inventing upstream behavior.
   - Which threads matter most: `THR-01`, `THR-02`, and `THR-03`.
   - What the first seam-local review should focus on: evidence-to-contract alignment, platform claim boundaries, checkpoint proof, and stale-trigger handling.
 - **Expected seam-exit concerns**:
