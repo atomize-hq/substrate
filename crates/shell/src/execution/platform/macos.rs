@@ -298,7 +298,7 @@ echo pass
     pub(super) fn run_host(
         json_mode: bool,
         world_enabled: bool,
-        world_disable_attribution: Option<&'static str>,
+        world_disable_attribution: Option<&crate::execution::config_model::DoctorDisableAttribution>,
         runner: &dyn CommandRunner,
     ) -> i32 {
         let fs_policy = world_fs_policy();
@@ -485,7 +485,7 @@ echo pass
     pub(super) fn run(
         json_mode: bool,
         world_enabled: bool,
-        world_disable_attribution: Option<&'static str>,
+        world_disable_attribution: Option<&crate::execution::config_model::DoctorDisableAttribution>,
         runner: &dyn CommandRunner,
     ) -> i32 {
         let fs_policy = world_fs_policy();
