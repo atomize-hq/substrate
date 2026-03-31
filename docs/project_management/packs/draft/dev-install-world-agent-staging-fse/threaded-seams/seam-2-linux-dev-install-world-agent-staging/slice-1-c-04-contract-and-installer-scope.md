@@ -31,19 +31,19 @@ contracts_consumed:
 open_remediations: []
 candidate_subslices: []
 ---
-### S1 - Define `C-04` staging contract and freeze installer scope
+### S1 - Define `C-04` contract and freeze installer scope
 
 - **User/system value**: Downstream seams can rely on one exact Linux staging contract without inheriting runtime-message work from `SEAM-1` or accidental production-installer scope.
 - **Scope (in/out)**:
   - In:
-    - concrete `C-04` statements for staged paths, selected-profile mapping, refresh semantics, disabled-world invariants, and no-provisioning posture
-    - explicit resolution of the production-installer scope question from `REM-002`
+    - authoritative `C-04` statements for staged paths, selected-profile mapping, refresh semantics, disabled-world invariants, and no-provisioning posture
+    - contract-to-surface and verification mapping for the SEAM-2 staging and regression surfaces
   - Out:
     - runtime preflight or remediation wording
     - any owned behavior change in `scripts/substrate/install-substrate.sh`
 - **Acceptance criteria**:
-  - `C-04` is stated as executable rules that downstream seams can revalidate without guessing.
-  - `scripts/substrate/install-substrate.sh` is explicitly recorded as a regression-only reference surface, not an owned touch surface.
+  - `C-04` is stated as a pre-exec contract-definition artifact that downstream seams can revalidate without guessing.
+  - `scripts/substrate/install-substrate.sh` is explicitly recorded as reference-only / regression-only, not an owned touch surface.
   - verification names concrete surfaces for installer smoke and staged-link evidence.
 
 #### `C-04` - Linux `--no-world` staging contract (authoritative pre-exec text)
@@ -56,7 +56,13 @@ candidate_subslices: []
 - Re-running the script refreshes both staged links with `ln -sfn`; stale debug/release links do not persist across reruns.
 - The `--no-world` path keeps `world.enabled: false`, skips provisioning, and performs no systemd mutation.
 - `substrate world enable --profile` does not retarget the staged bridge; staging ownership remains with dev-install.
-- `scripts/substrate/install-substrate.sh` remains a regression-only reference surface unless a later seam explicitly widens scope.
+- `scripts/substrate/install-substrate.sh` remains reference-only / regression-only and is not part of the owned SEAM-2 touch surface.
+
+#### Contract-to-surface map
+
+- `C-04` is owned by `scripts/substrate/dev-install-substrate.sh` as the authoritative Linux `--no-world` staging contract.
+- `tests/installers/install_smoke.sh` is the regression proof surface for installer scope and staged-link evidence.
+- `scripts/substrate/install-substrate.sh` stays outside the owned touch surface and serves only as a regression reference boundary.
 
 #### Verification checklist
 
@@ -64,9 +70,10 @@ candidate_subslices: []
 - both staged paths are owned and refreshed
 - `world.enabled: false` and no-provisioning semantics are explicit
 - installer smoke remains the production-installer regression boundary
+- reference-only installer scope stays excluded from SEAM-2 implementation work
 
 Checklist:
 - Implement: N/A (contract-definition slice)
 - Test: N/A (contract-definition slice)
-- Validate: confirm `REM-002` is resolved in review and remediation log
+- Validate: confirm the installer boundary is explicit and regression-only in the slice text
 - Cleanup: none

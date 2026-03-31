@@ -85,7 +85,7 @@ open_remediations: []
   - `target/bin/world-agent`
   - `target/bin/linux/world-agent`
   - `tests/installers/install_smoke.sh`
-  - `scripts/substrate/install-substrate.sh` as a possible regression-sensitive reference surface pending seam-local scope confirmation
+  - `scripts/substrate/install-substrate.sh` as a reference-only / regression-only surface outside the SEAM-2 owned touch set
 - **Verification**:
   - If this seam **consumes** an upstream contract, verification may depend on accepted upstream evidence.
   - If this seam **produces** an owned contract, verification should describe the contract becoming concrete enough for seam-local planning and implementation rather than requiring the final accepted artifact to exist already.
@@ -97,8 +97,6 @@ open_remediations: []
     - installer smoke remains green and does not show unintended production-installer drift
     - a staged artifact produced here satisfies the runtime preflight contract from `SEAM-1`
 - **Risks / unknowns**:
-  - Risk: the source pack leaves ambiguity about whether `scripts/substrate/install-substrate.sh` is a true touched surface or only a regression boundary.
-  - De-risk plan: resolve that scope question in the first seam-local review and keep the change set narrow if installer behavior remains reference-only.
   - Risk: selected-profile staging can look inconsistent with the helper’s default release-oriented log labeling.
   - De-risk plan: keep profile mapping explicit in seam-local review, smoke output, and closeout evidence so operators understand that staging source and log label are different contracts.
 - **Rollout / safety**:
@@ -107,7 +105,7 @@ open_remediations: []
   - Preserve `world.enabled: false` until runtime enable verifies success.
   - Keep the staging change orthogonal to helper override behavior and future provisioning flags.
 - **Downstream decomposition context**:
-  - Why this seam is `active`: `SEAM-1` published `THR-01` through closeout, `REM-002` was resolved during seam-local review, and the active work can now plan against landed runtime truth instead of provisional pack assumptions.
+  - Why this seam is `active`: `SEAM-1` published `THR-01` through closeout, the production-installer surface remains reference-only / regression-only, and the active work can now plan against landed runtime truth instead of provisional pack assumptions.
   - Which threads matter most: `THR-01` and `THR-03`.
   - What the seam-local review focused on: selected-profile mapping, stale-link replacement, disabled-world invariants, installer-smoke regression boundaries, and keeping `scripts/substrate/install-substrate.sh` reference-only.
 - **Expected seam-exit concerns**:
