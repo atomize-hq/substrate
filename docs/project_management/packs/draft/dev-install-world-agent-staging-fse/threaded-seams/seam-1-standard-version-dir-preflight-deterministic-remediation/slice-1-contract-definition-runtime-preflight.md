@@ -94,6 +94,18 @@ These are the binding contract statements this seam must land and later publish 
 - **Test notes**: Prefer integration tests in `crates/shell/tests/world_enable.rs` that assert both exit status and stderr text.
 - **Risk/rollback notes**: If contract text is ambiguous, downstream revalidation becomes non-deterministic.
 
+#### S1.T2 - Freeze the contract-to-locus map for downstream seams
+
+- **Outcome**: `C-01` / `C-02` / `C-03` each have a single authoritative locus in the runtime surface and a single downstream revalidation path in closeout.
+- **Mapping rules**:
+  - `C-01` is the path/derivation contract. Its implementation locus is `crates/shell/src/builtins/world_enable/runner/paths.rs`, and its downstream consumers are S2 for path discovery wiring and S3 for revalidation against landed truth.
+  - `C-02` is the deterministic missing-artifact failure contract. Its implementation locus is `crates/shell/src/builtins/world_enable/runner.rs`, and its downstream consumer is S3 for stderr visibility, exit-code classification, and no-write ordering proof.
+  - `C-03` is the state-root / ordering / override carve-out contract. Its implementation locus is `crates/shell/src/builtins/world_enable/runner.rs`, and its downstream consumers are S2 for dry-run parity and S3 for success-path ordering proof.
+- **Closeout binding**:
+  - `governance/seam-1-closeout.md` must record the landed rule statements for each contract, keyed back to `THR-01` and `THR-02`.
+  - `threading.md` remains the canonical contract registry; this slice only freezes how the contract text maps to runtime loci and downstream revalidation.
+- **Acceptance criteria**: A reader can trace any `C-*` bullet in this slice to one runtime file, one primary downstream seam, and one closeout artifact without inferring extra scope.
+
 Checklist:
 - Implement: N/A (contract slice)
 - Test: N/A (contract slice)
