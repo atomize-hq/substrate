@@ -2,7 +2,7 @@
 seam_id: SEAM-1
 seam_slug: doctor-text-disable-attribution
 type: capability
-status: decomposed
+status: exec-ready
 execution_horizon: active
 plan_version: v1
 basis:
@@ -20,9 +20,9 @@ basis:
     - platform doctor renderers bypass tokenized path or env redaction
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending

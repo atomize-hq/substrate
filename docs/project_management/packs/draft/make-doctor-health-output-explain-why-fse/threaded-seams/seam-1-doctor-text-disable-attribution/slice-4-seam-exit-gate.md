@@ -3,7 +3,7 @@ slice_id: S4
 seam_id: SEAM-1
 slice_kind: seam_exit_gate
 execution_horizon: active
-status: decomposed
+status: exec-ready
 plan_version: v1
 basis:
   currentness: current
@@ -46,4 +46,3 @@ candidate_subslices: []
 - **Review surface refs**:
   - `../../review_surfaces.md`
   - `../../threading.md`
-

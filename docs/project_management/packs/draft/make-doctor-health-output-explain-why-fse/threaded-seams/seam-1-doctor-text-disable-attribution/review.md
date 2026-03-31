@@ -50,13 +50,15 @@ flowchart TB
 
 ## Pre-exec findings
 
-- No new remediations opened yet. If provenance cannot be surfaced cleanly for a doctor entrypoint, open a blocking pre-exec remediation and require `source unknown` rather than any heuristic mapping.
+- This seam’s core contracts (`C-01` exact message bodies; `C-02` winner mapping + fallback + redaction/tokenization rules) are concrete and implementation-ready in `slice-1-contract-definition-disable-attribution.md`.
+- No upstream closeouts are required for `SEAM-1` revalidation (first seam on the critical path); basis is treated as `current` as long as `resolve_effective_config_with_explain(..., explain=true)` remains the single source of truth for winner provenance.
+- If any doctor entrypoint cannot surface safe provenance, the only allowed behavior is `source unknown` (no guessing). Open a blocking pre-exec remediation if a platform cannot comply without heuristics.
 
 ## Pre-exec gate disposition
 
-- **Review gate**: pending
-- **Contract gate concerns**: exact message bodies must remain stable once published (`C-01`); mapping and fallback rules must be explicit (`C-02`)
-- **Revalidation prerequisites**: confirm the `world.enabled` precedence and explain source layers remain as documented in `threading.md` and `config_model.rs`
+- **Review gate**: passed
+- **Contract gate**: passed (contracts are concrete; mapping binds to effective-config explain provenance; fallback + tokenization/redaction posture is explicit)
+- **Revalidation gate**: passed (no required upstream closeouts; contract/precedence truth matches `threading.md`)
 - **Opened remediations**: none
 
 ## Planned seam-exit gate focus
@@ -67,4 +69,3 @@ flowchart TB
   - `THR-01` (shared attribution model + message bodies) and `THR-02` (parity drift protection).
 - **Which review-surface deltas would force downstream revalidation**:
   - any change in precedence, message bodies, fallback posture, or redaction/tokenization rules.
-
