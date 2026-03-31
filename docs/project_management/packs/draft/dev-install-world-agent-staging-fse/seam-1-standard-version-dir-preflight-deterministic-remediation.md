@@ -2,15 +2,17 @@
 seam_id: SEAM-1
 seam_slug: standard-version-dir-preflight-deterministic-remediation
 type: capability
-status: proposed
+status: exec-ready
 execution_horizon: active
 plan_version: v1
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
   upstream_closeouts: []
-  required_threads: []
+  required_threads:
+    - THR-01
+    - THR-02
   stale_triggers:
     - accepted staged path set or sufficiency rule changes
     - standard version-dir derivation changes
@@ -19,17 +21,18 @@ basis:
     - overlapping helper-discovery or provisioning work lands first on shared world-enable surfaces
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
 seam_exit_gate:
   required: true
-  planned_location: reserved_final_slice
+  planned_location: S4
   status: pending
-open_remediations: []
+open_remediations:
+  - REM-001
 ---
 
 # SEAM-1 - Standard version-dir preflight + deterministic remediation
