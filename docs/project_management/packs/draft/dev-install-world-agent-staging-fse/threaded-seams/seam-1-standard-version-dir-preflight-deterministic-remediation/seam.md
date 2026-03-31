@@ -1,17 +1,15 @@
 ---
 seam_id: SEAM-1
 seam_slug: standard-version-dir-preflight-deterministic-remediation
-status: exec-ready
-execution_horizon: active
+status: closed
+execution_horizon: future
 plan_version: v1
 basis:
   currentness: current
   source_seam_brief: ../../seam-1-standard-version-dir-preflight-deterministic-remediation.md
   source_scope_ref: ../../scope_brief.md
   upstream_closeouts: []
-  required_threads:
-    - THR-01
-    - THR-02
+  required_threads: []
   stale_triggers:
     - accepted staged path set or sufficiency rule changes
     - standard version-dir derivation changes
@@ -24,16 +22,18 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S4
-  status: pending
-open_remediations:
-  - REM-001
+  status: passed
+  promotion_readiness: ready
+open_remediations: []
 ---
 # SEAM-1 - Standard version-dir preflight + deterministic remediation
+
+This seam is closed. Its authoritative exit-gate record lives in `../../governance/seam-1-closeout.md`.
 
 ## Seam Brief (Restated)
 
@@ -79,15 +79,22 @@ open_remediations:
 
 - **Planned location**: `S4` (`slice-4-seam-exit-gate.md`)
 - **Why this seam needs an explicit exit gate**: This seam publishes the first runtime-facing contract boundary for the enable-later workflow; downstream seams must be able to bind to landed truth (not inferred intent) before promotion.
-- **Expected contracts to publish**: `C-01`, `C-02`, `C-03`
-- **Expected threads to publish / advance**: `THR-01`, `THR-02`
+- **Contracts published**: `C-01`, `C-02`, `C-03`
+- **Threads published / advanced**:
+  - `THR-01`: `published`
+  - `THR-02`: `published`
 - **Likely downstream stale triggers**:
   - Any change to standard version-dir derivation or accepted staged path set
   - Any change to missing-artifact remediation content, visibility, or exit-code taxonomy
   - Any new step inserted before preflight (helper launch, provisioning, config writes)
-- **Expected closeout evidence**:
-  - Captured landed rule statements (paths + ordering) in `governance/seam-1-closeout.md`
-  - Test names + stdout/stderr snippets sufficient for downstream revalidation
+- **Landed closeout evidence**:
+  - `8cba8d5a` froze the `C-01` / `C-02` / `C-03` contract-to-locus map in `slice-1-contract-definition-runtime-preflight.md`.
+  - `9f542d54` landed accepted staged-path discovery and dry-run parity in `runner.rs`, `runner/paths.rs`, and `world_enable.rs`.
+  - `d755ee7e` landed the visible remediation block and exit-3 / no-write ordering proof in `runner.rs` and `world_enable.rs`.
+  - `cargo test -p shell world_enable_exits_3_when_accepted_staged_world_agent_missing -- --exact --nocapture` passed.
+  - `cargo test -p shell world_enable_dry_run_exits_3_when_accepted_staged_world_agent_missing -- --exact --nocapture` passed.
+  - `cargo test -p shell render_missing_accepted_staged_world_agent_remediation_includes_paths_and_commands -- --exact --nocapture` passed.
+  - `governance/seam-1-closeout.md` records `THR-01` and `THR-02` as published with `promotion_readiness: ready`.
 
 ## Slice index
 

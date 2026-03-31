@@ -2,17 +2,15 @@
 seam_id: SEAM-1
 seam_slug: standard-version-dir-preflight-deterministic-remediation
 type: capability
-status: exec-ready
-execution_horizon: active
+status: closed
+execution_horizon: future
 plan_version: v1
 basis:
   currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
   upstream_closeouts: []
-  required_threads:
-    - THR-01
-    - THR-02
+  required_threads: []
   stale_triggers:
     - accepted staged path set or sufficiency rule changes
     - standard version-dir derivation changes
@@ -25,14 +23,14 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
-  planned_location: S4
-  status: pending
-open_remediations:
-  - REM-001
+  source_ref: threaded-seams/seam-1-standard-version-dir-preflight-deterministic-remediation/slice-4-seam-exit-gate.md
+  status: passed
+  promotion_readiness: ready
+open_remediations: []
 ---
 
 # SEAM-1 - Standard version-dir preflight + deterministic remediation
@@ -112,9 +110,9 @@ open_remediations:
   - Preserve the existing Windows unsupported posture and avoid widening macOS promises.
   - Keep the feature orthogonal to future dependency-provisioning flags.
 - **Downstream decomposition context**:
-  - Why this seam is `active`: it publishes the first runtime-facing contracts and the source pack’s accepted slice order already puts this failure boundary before staging.
+  - Why this seam is `closed`: it published the first runtime-facing contracts and recorded the landing/closeout evidence in `governance/seam-1-closeout.md`.
   - Which threads matter most: `THR-01` and `THR-02`.
-  - What the first seam-local review should focus on: exact version-dir derivation, visible remediation rendering, dry-run no-write proof, `world.enabled` ordering, and override carve-out fidelity.
+  - What the first seam-local review focused on: exact version-dir derivation, visible remediation rendering, dry-run no-write proof, `world.enabled` ordering, and override carve-out fidelity.
 - **Expected seam-exit concerns**:
   - Contracts likely to publish: `C-01`, `C-02`, `C-03`.
   - Threads likely to advance: `THR-01`, `THR-02`.
