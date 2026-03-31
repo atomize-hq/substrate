@@ -176,6 +176,8 @@ set_array_from_stdin branches < <(
 )
 
 # Best-effort: merge in registry entries (if present + valid) to catch any extra spawned worktrees.
+reg_worktrees=()
+reg_branches=()
 if [[ -f "${REGISTRY_ABS}" ]]; then
     if jq -e . >/dev/null 2>&1 <"${REGISTRY_ABS}"; then
         set_array_from_stdin reg_worktrees < <(jq -r '.entries[]?.worktree // empty' "${REGISTRY_ABS}" | sort -u)
