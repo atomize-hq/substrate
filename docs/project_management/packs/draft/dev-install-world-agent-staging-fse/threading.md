@@ -2,15 +2,16 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-3`
+- **Active seam**: none
 - **Next seam**: none
-- **Future seams**: none
+- **Future seams**: `SEAM-1`, `SEAM-2`, `SEAM-3`
 
 Horizon policy for this pack:
 
-- `SEAM-3` is now the active seam because `SEAM-2` landed with `seam_exit_gate.status: passed`, `promotion_readiness: ready`, and published `THR-03`
-- no next seam remains because every extracted seam is now either closed or active in the current window
-- downstream planning now binds to closeout-backed truth from `SEAM-1` and `SEAM-2` rather than provisional scaffold assumptions
+- no active seam remains in the forward window because all three seams are now landed or closed
+- no next seam remains in the forward window; any new next seam requires an explicit horizon decision
+- `SEAM-3` has landed with a passed seam-exit gate and left the forward planning window
+- downstream planning now binds to closeout-backed truth from `SEAM-1`, `SEAM-2`, and `SEAM-3`
 
 ## Contract registry
 
@@ -57,30 +58,30 @@ Horizon policy for this pack:
   - **Consumer seam(s)**: `SEAM-2`, `SEAM-3`
   - **Carried contract IDs**: `C-01`, `C-03`
   - **Purpose**: publish the accepted staged path rule, state-root precedence, and no-write ordering that Linux staging and later conformance must honor.
-  - **State**: `revalidated`
+  - **State**: `closed`
   - **Revalidation trigger**: accepted path set changes, standard-version-dir derivation changes, `--home` precedence changes, `world.enabled` ordering changes, or `SUBSTRATE_WORLD_ENABLE_SCRIPT` carve-out changes.
-  - **Satisfied by**: `governance/seam-1-closeout.md` records the landed path derivation, ordering evidence, and any downstream stale triggers raised by those realities.
-  - **Notes**: `SEAM-2` and `SEAM-3` have both revalidated this thread against `governance/seam-1-closeout.md`; downstream evidence work must now preserve that closeout-backed truth.
+  - **Satisfied by**: `governance/seam-1-closeout.md` published the landed path derivation and ordering truth, and `governance/seam-3-closeout.md` records the final evidence lock-in that consumed that truth without reopening it.
+  - **Notes**: `SEAM-2` and `SEAM-3` both landed against the same closeout-backed runtime basis; downstream work now treats this thread as closed unless a stale trigger fires.
 
 - **Thread ID**: `THR-02`
   - **Producer seam**: `SEAM-1`
   - **Consumer seam(s)**: `SEAM-3`
   - **Carried contract IDs**: `C-01`, `C-02`
   - **Purpose**: let the conformance seam prove the deterministic missing-artifact failure, dry-run parity, and visible remediation posture against the landed runtime boundary.
-  - **State**: `revalidated`
+  - **State**: `closed`
   - **Revalidation trigger**: remediation text changes, exit-code mapping changes, helper-output suppression changes, or any new enable step appears before preflight.
-  - **Satisfied by**: `governance/seam-1-closeout.md` plus SEAM-3 seam-local review that binds smoke, manual, and checkpoint evidence to the landed stderr block and early-failure behavior.
-  - **Notes**: `SEAM-3` revalidated this operator-facing failure contract during promotion; if remediation drifts into the helper or logs only, the evidence basis becomes stale.
+  - **Satisfied by**: `governance/seam-1-closeout.md` published the landed remediation and early-failure contract, and `governance/seam-3-closeout.md` records smoke, manual, and checkpoint evidence that consumes that same closeout-backed truth.
+  - **Notes**: `SEAM-3` finished the only downstream conformance work that needed this operator-facing failure contract, so the thread is now closed pending any future stale trigger.
 
 - **Thread ID**: `THR-03`
   - **Producer seam**: `SEAM-2`
   - **Consumer seam(s)**: `SEAM-3`
   - **Carried contract IDs**: `C-04`
   - **Purpose**: publish the actual staged `world-agent` bridge layout, selected-profile mapping, and refresh posture that the checkpoint evidence must consume.
-  - **State**: `revalidated`
+  - **State**: `closed`
   - **Revalidation trigger**: selected-profile mapping changes, `ln -sfn` refresh semantics change, accepted staging paths change, or `scripts/substrate/install-substrate.sh` moves from reference-only posture into an actual touched surface.
-  - **Satisfied by**: `governance/seam-2-closeout.md` plus SEAM-3 seam-local review that binds Linux smoke, installer smoke, and checkpoint evidence to the landed `C-04` bridge layout.
-  - **Notes**: `SEAM-3` revalidated the closeout-backed bridge layout, selected-profile mapping, and refresh posture during promotion and can now execute against current staging truth.
+  - **Satisfied by**: `governance/seam-2-closeout.md` published the landed `C-04` bridge layout, and `governance/seam-3-closeout.md` records Linux smoke, installer smoke, and checkpoint evidence that consumed that closeout-backed staging truth.
+  - **Notes**: `SEAM-3` completed the final downstream consumption of the selected-profile and refresh contract, so this thread is now closed.
 
 ## Dependency graph
 

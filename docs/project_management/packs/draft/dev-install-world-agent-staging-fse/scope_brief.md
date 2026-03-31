@@ -4,7 +4,7 @@ pack_version: v1
 pack_status: extracted
 source_ref: dev-install-world-agent-staging.zip
 execution_horizon:
-  active_seam: SEAM-3
+  active_seam: null
   next_seam: null
 ---
 

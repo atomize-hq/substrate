@@ -2,8 +2,8 @@
 seam_id: SEAM-3
 seam_slug: cross-platform-validation-drift-guards
 type: conformance
-status: exec-ready
-execution_horizon: active
+status: closed
+execution_horizon: future
 plan_version: v2
 basis:
   currentness: current
@@ -27,16 +27,19 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
-  planned_location: S3
-  status: pending
+  source_ref: threaded-seams/seam-3-cross-platform-validation-drift-guards/slice-3-seam-exit-gate.md
+  status: passed
+  promotion_readiness: ready
 open_remediations: []
 ---
 
 # SEAM-3 - Cross-platform validation + drift guards
+
+This seam is closed. Its authoritative exit-gate record lives in `governance/seam-3-closeout.md`.
 
 - **Goal / value**: Keep the landed feature contract provable and non-drifting by aligning Linux smoke, installer smoke, manual cases, compile parity, and checkpoint evidence to the actual behavior that lands from the first two seams.
 - **Scope**
