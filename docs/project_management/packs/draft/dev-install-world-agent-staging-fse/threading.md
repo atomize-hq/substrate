@@ -2,15 +2,15 @@
 
 ## Execution horizon summary
 
-- **Active seam**: none
-- **Next seam**: none
-- **Future seams**: `SEAM-2`, `SEAM-3`
+- **Active seam**: `SEAM-2`
+- **Next seam**: `SEAM-3`
+- **Future seams**: none
 
 Horizon policy for this pack:
 
-- no active seam remains in the forward window because `SEAM-1` closed and published its exit-gate evidence
-- `SEAM-2` and `SEAM-3` remain future seams until they are promoted into an active forward window by a later planning pass
-- downstream planning should now bind to the landed path rule, dry-run ordering, and override carve-out from closeout-backed truth rather than provisional assumptions
+- `SEAM-2` is now the active seam because `SEAM-1` closed with `seam_exit_gate.status: passed`, `promotion_readiness: ready`, and published `THR-01` / `THR-02`
+- `SEAM-3` is the next seam and remains provisional until `SEAM-2` lands and publishes `THR-03`
+- downstream planning now binds to the landed path rule, dry-run ordering, and override carve-out from closeout-backed truth rather than provisional assumptions
 
 ## Contract registry
 
@@ -57,10 +57,10 @@ Horizon policy for this pack:
   - **Consumer seam(s)**: `SEAM-2`, `SEAM-3`
   - **Carried contract IDs**: `C-01`, `C-03`
   - **Purpose**: publish the accepted staged path rule, state-root precedence, and no-write ordering that Linux staging and later conformance must honor.
-  - **State**: `published`
+  - **State**: `revalidated`
   - **Revalidation trigger**: accepted path set changes, standard-version-dir derivation changes, `--home` precedence changes, `world.enabled` ordering changes, or `SUBSTRATE_WORLD_ENABLE_SCRIPT` carve-out changes.
   - **Satisfied by**: `governance/seam-1-closeout.md` records the landed path derivation, ordering evidence, and any downstream stale triggers raised by those realities.
-  - **Notes**: `SEAM-2` and `SEAM-3` now consume closeout-backed truth instead of provisional planning assumptions.
+  - **Notes**: `SEAM-2` revalidated this thread against `governance/seam-1-closeout.md` during promotion; `SEAM-3` still consumes the same published truth later alongside `THR-02` and `THR-03`.
 
 - **Thread ID**: `THR-02`
   - **Producer seam**: `SEAM-1`

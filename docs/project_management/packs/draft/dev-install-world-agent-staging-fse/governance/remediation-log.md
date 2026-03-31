@@ -3,24 +3,6 @@
 ## Open remediations
 
 ```yaml
-remediation_id: REM-002
-origin_phase: pre_exec
-source_gate: revalidation
-related_seam: SEAM-2
-related_slice: null
-related_thread: THR-03
-related_contract: C-04
-related_artifact: scripts/substrate/install-substrate.sh
-severity: material
-status: open
-owner_seam: SEAM-2
-blocked_targets: []
-summary: The source pack leaves ambiguity about whether scripts/substrate/install-substrate.sh is an actual changed surface or only a regression boundary guarded by installer smoke.
-required_fix: Resolve the production-installer scope during SEAM-2 review and narrow the seam touch set or regression evidence explicitly before decomposition promotes.
-resolution_evidence: []
-```
-
-```yaml
 remediation_id: REM-003
 origin_phase: pre_exec
 source_gate: revalidation
@@ -61,6 +43,27 @@ resolution_evidence:
   - "cargo test -p shell world_enable_exits_3_when_accepted_staged_world_agent_missing -- --exact --nocapture passed."
   - "cargo test -p shell world_enable_dry_run_exits_3_when_accepted_staged_world_agent_missing -- --exact --nocapture passed."
   - "cargo test -p shell render_missing_accepted_staged_world_agent_remediation_includes_paths_and_commands -- --exact --nocapture passed."
+```
+
+```yaml
+remediation_id: REM-002
+origin_phase: pre_exec
+source_gate: revalidation
+related_seam: SEAM-2
+related_slice: null
+related_thread: THR-03
+related_contract: C-04
+related_artifact: scripts/substrate/install-substrate.sh
+severity: material
+status: resolved
+owner_seam: SEAM-2
+blocked_targets: []
+summary: The source pack leaves ambiguity about whether scripts/substrate/install-substrate.sh is an actual changed surface or only a regression boundary guarded by installer smoke.
+required_fix: Resolve the production-installer scope during SEAM-2 review and narrow the seam touch set or regression evidence explicitly before decomposition promotes.
+resolution_evidence:
+  - "threaded-seams/seam-2-linux-dev-install-world-agent-staging/review.md narrows production-installer treatment to a regression-only reference surface."
+  - "threaded-seams/seam-2-linux-dev-install-world-agent-staging/slice-1-c-04-contract-and-installer-scope.md freezes the SEAM-2 touch set around dev-install staging, staged links, and installer smoke evidence."
+  - "docs/project_management/packs/draft/dev-install-world-agent-staging-fse/seam-2-linux-dev-install-world-agent-staging.md now promotes with open_remediations: [] after the installer-scope boundary was revalidated."
 ```
 
 Rules:
