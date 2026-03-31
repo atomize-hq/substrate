@@ -62,7 +62,7 @@ This matrix is the operator-playbook view that `S2` and `S3` must consume. It is
 
 ## Seam-exit gate record
 
-- **Source artifact**: `threaded-seams/seam-4-cross-platform-conformance/slice-<final>-seam-exit-gate.md`
+- **Source artifact**: `threaded-seams/seam-4-cross-platform-conformance/slice-3-seam-exit-gate.md`
 - **Cross-platform evidence matrix**: retained as the required proof map; `S2` has Linux anchor evidence and the repo-native smoke wrappers now carry the disabled-diagnostics conformance mode, but native Windows execution is still unproven in this environment.
 - **Landed evidence**:
   - [`cargo test -p shell --test shim_doctor -- --nocapture`](/home/spenser/__Active_code/substrate/crates/shell/tests/shim_doctor.rs) passed locally on Linux (`14/14` tests green).
