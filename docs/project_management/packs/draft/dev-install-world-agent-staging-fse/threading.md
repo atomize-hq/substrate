@@ -77,10 +77,10 @@ Horizon policy for this pack:
   - **Consumer seam(s)**: `SEAM-3`
   - **Carried contract IDs**: `C-04`
   - **Purpose**: publish the actual staged `world-agent` bridge layout, selected-profile mapping, and refresh posture that the checkpoint evidence must consume.
-  - **State**: `defined`
+  - **State**: `published`
   - **Revalidation trigger**: selected-profile mapping changes, `ln -sfn` refresh semantics change, accepted staging paths change, or `scripts/substrate/install-substrate.sh` moves from reference-only posture into an actual touched surface.
-  - **Satisfied by**: `governance/seam-2-closeout.md` records staged-link evidence, disabled-world evidence, and installer-smoke disposition for the landed staging behavior.
-  - **Notes**: `SEAM-3` should not finalize checkpoint claims until this thread is published from staging closeout.
+  - **Satisfied by**: `governance/seam-2-closeout.md` records the landed `C-04` staging contract, selected-profile staging evidence, rerun refresh evidence, disabled-world / no-provisioning evidence, and installer-smoke disposition.
+  - **Notes**: `SEAM-3` can now consume the closeout-backed bridge layout, selected-profile mapping, and refresh posture without relying on provisional scaffold text.
 
 ## Dependency graph
 
