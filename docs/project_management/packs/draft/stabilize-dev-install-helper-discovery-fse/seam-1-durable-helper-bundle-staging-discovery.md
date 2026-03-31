@@ -2,11 +2,11 @@
 seam_id: SEAM-1
 seam_slug: durable-helper-bundle-staging-discovery
 type: capability
-status: proposed
+status: exec-ready
 execution_horizon: active
-plan_version: v1
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
   upstream_closeouts: []
@@ -18,9 +18,9 @@ basis:
     - ADR-0035 changes shared install-script or helper-script surfaces
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
@@ -28,7 +28,8 @@ seam_exit_gate:
   required: true
   planned_location: reserved_final_slice
   status: pending
-open_remediations: []
+open_remediations:
+  - REM-001
 ---
 
 # SEAM-1 - Durable helper-bundle staging + discovery
@@ -59,7 +60,8 @@ open_remediations: []
 - **Key invariants / rules**:
   - `SUBSTRATE_WORLD_ENABLE_SCRIPT` remains the highest-priority helper candidate.
   - The prefix helper bundle must survive `cargo clean` even when `<repo>/target/scripts/...` disappears.
-  - Script and YAML assets stage as repo-managed symlinks; copied Linux guest binaries are allowed only as best-effort manifest-tracked outputs.
+  - Script, YAML, and macOS support assets stage as repo-managed symlinks.
+  - Linux guest binaries under `bin/linux/` are dev-managed only as repo-managed symlinks into local build outputs or as manifest-tracked copied outputs cached from Lima.
   - `$SUBSTRATE_HOME/bin/substrate` remains unchanged and keeps pointing at the live host build output.
   - Missing helper candidates remain a fail-closed condition rather than a best-effort fallback.
 - **Dependencies**
@@ -98,9 +100,9 @@ open_remediations: []
   - Preserve user-managed destination safety; do not introduce destructive overwrite shortcuts.
   - Keep Windows unchanged except for compile-parity validation downstream.
 - **Downstream decomposition context**:
-  - Why this seam is `active`: it establishes the bundle layout, helper-order contract, and managed-marker shape that every later seam consumes.
+  - Why this seam is now `exec-ready`: seam-local review revalidated the current installer and helper-resolution surfaces, froze the managed-asset boundary, and left no blocking pre-exec issue in the owned contract baseline.
   - Which threads matter most: `THR-01` and `THR-02`.
-  - What the first seam-local review should focus on: exact staged path list, overwrite/refusal behavior, helper-order resolution, `cargo clean` survival, and flag/message fidelity.
+  - What the seam-local review confirmed: exact staged path membership, managed-asset classes, helper-order resolution, `cargo clean` survival posture, and the current `--home` / invalid `--prefix` CLI surface.
 - **Expected seam-exit concerns**:
   - Contracts likely to publish: `C-01`, `C-02`, `C-03`.
   - Threads likely to advance: `THR-01`, `THR-02`.

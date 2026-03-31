@@ -38,6 +38,15 @@ required_fix: Keep playbook and parity evidence explicit that macOS scope is lim
 resolution_evidence: []
 ```
 
+Rules:
+
+- Use canonical YAML blocks for remediation entries.
+- Use seam ownership only. Do not emit `WS-*` owners.
+- For `severity: blocking`, `blocked_targets` must not be empty.
+- For `severity: material` or `follow_up`, use `blocked_targets: []` unless a concrete blocked transition also applies.
+
+## Resolved remediations
+
 ```yaml
 remediation_id: REM-003
 origin_phase: pre_exec
@@ -48,21 +57,13 @@ related_thread: THR-01
 related_contract: C-02
 related_artifact: scripts/substrate/dev-install-substrate.sh
 severity: follow_up
-status: open
+status: resolved
 owner_seam: SEAM-1
 blocked_targets: []
 summary: ADR-0035 shares install-script and helper-script surfaces that can stale the extracted basis before SEAM-1 promotes.
 required_fix: Revalidate SEAM-1 and downstream seam bases against any ADR-0035 changes touching shared script surfaces before promotion.
-resolution_evidence: []
+resolution_evidence:
+  - 2026-03-30 pre-exec revalidation confirmed the current `scripts/substrate/dev-install-substrate.sh` runtime-bundle surface still matches the SEAM-1 owned contract.
+  - 2026-03-30 pre-exec revalidation confirmed `crates/shell/src/builtins/world_enable/runner/paths.rs` still preserves the planned helper-order contract alongside the current `crates/shell/tests/world_enable.rs` coverage.
+  - ADR-0035 remains a future stale trigger only if shared install-script or helper-script surfaces change again.
 ```
-
-Rules:
-
-- Use canonical YAML blocks for remediation entries.
-- Use seam ownership only. Do not emit `WS-*` owners.
-- For `severity: blocking`, `blocked_targets` must not be empty.
-- For `severity: material` or `follow_up`, use `blocked_targets: []` unless a concrete blocked transition also applies.
-
-## Resolved remediations
-
-None yet. Move resolved items here using the same schema, set `status: resolved`, and populate `resolution_evidence`.

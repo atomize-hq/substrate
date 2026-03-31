@@ -3,7 +3,7 @@ seam_id: SEAM-1
 status: landed
 closeout_version: v0
 seam_exit_gate:
-  source_ref: reserved_final_slice
+  source_ref: ../threaded-seams/seam-1-durable-helper-bundle-staging-discovery/slice-4-seam-exit-gate.md
   status: pending
   promotion_readiness: blocked
 basis:
@@ -27,7 +27,7 @@ This is a post-exec scaffold only. Replace placeholder statements with landed ev
 
 ## Seam-exit gate record
 
-- **Source artifact**: reserved final seam-exit slice to be named during seam-local decomposition
+- **Source artifact**: `../threaded-seams/seam-1-durable-helper-bundle-staging-discovery/slice-4-seam-exit-gate.md`
 - **Landed evidence**: not yet recorded
 - **Contracts published or changed**: not yet recorded
 - **Threads published / advanced**: not yet recorded

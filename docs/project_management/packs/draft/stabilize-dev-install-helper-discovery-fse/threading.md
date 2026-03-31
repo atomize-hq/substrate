@@ -38,8 +38,8 @@ Horizon policy for this pack:
   - **Direct consumers**: `SEAM-2`, `SEAM-3`
   - **Derived consumers**: future install/uninstall work that must distinguish dev-managed from user-managed assets
   - **Thread IDs**: `THR-01`, `THR-02`
-  - **Definition**: repo-owned script assets stage as repo-managed symlinks, and copied Linux guest binaries are removable only when they are recorded in the dev-install manifest; no other asset class is considered dev-managed.
-  - **Versioning / compat**: manifest location/schema changes or symlink-ownership inference changes force cleanup and conformance revalidation.
+  - **Definition**: repo-owned script, YAML, and macOS support assets stage as repo-managed symlinks. Linux guest binaries under `bin/linux/` are dev-managed only when they remain repo-managed symlinks into local build outputs or when they are copied from Lima and recorded in `.dev-install-managed/mac-linux-binaries.txt`; no other asset class is considered dev-managed.
+  - **Versioning / compat**: managed-binary manifest location/schema changes, Linux guest asset-class changes, or symlink-ownership inference changes force cleanup and conformance revalidation.
 
 - **Contract ID**: `C-04`
   - **Type**: `UX affordance`
