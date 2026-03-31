@@ -420,38 +420,6 @@ fn run_enable_with_provision_deps(args: &WorldEnableArgs) -> Result<()> {
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::tempdir;
-
-    #[test]
-    fn render_missing_accepted_staged_world_agent_remediation_includes_paths_and_commands() {
-        let temp = tempdir().unwrap();
-        let version_dir = temp.path().join("version");
-
-        let message = render_missing_accepted_staged_world_agent_remediation(&version_dir);
-
-        assert!(message.contains(
-            &version_dir
-                .join("bin")
-                .join("world-agent")
-                .display()
-                .to_string()
-        ));
-        assert!(message.contains(
-            &version_dir
-                .join("bin")
-                .join("linux")
-                .join("world-agent")
-                .display()
-                .to_string()
-        ));
-        assert!(message.contains("scripts/substrate/dev-install-substrate.sh --no-world"));
-        assert!(message.contains("cargo build -p world-agent"));
-    }
-}
-
 fn run_sync_after_provisioning() {
     let previous_skip_apt = env::var_os("SUBSTRATE_WORLD_DEPS_SKIP_APT");
     let previous_skip_pacman = env::var_os("SUBSTRATE_WORLD_DEPS_SKIP_PACMAN");
@@ -482,5 +450,37 @@ fn run_sync_after_provisioning() {
 
     if exit_code != 0 {
         std::process::exit(exit_code);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn render_missing_accepted_staged_world_agent_remediation_includes_paths_and_commands() {
+        let temp = tempdir().unwrap();
+        let version_dir = temp.path().join("version");
+
+        let message = render_missing_accepted_staged_world_agent_remediation(&version_dir);
+
+        assert!(message.contains(
+            &version_dir
+                .join("bin")
+                .join("world-agent")
+                .display()
+                .to_string()
+        ));
+        assert!(message.contains(
+            &version_dir
+                .join("bin")
+                .join("linux")
+                .join("world-agent")
+                .display()
+                .to_string()
+        ));
+        assert!(message.contains("scripts/substrate/dev-install-substrate.sh --no-world"));
+        assert!(message.contains("cargo build -p world-agent"));
     }
 }
