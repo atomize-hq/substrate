@@ -541,6 +541,78 @@ fn world_enable_exits_3_when_accepted_staged_world_agent_missing() {
         stderr.contains("accepted staged world-agent artifact missing"),
         "stderr should identify the missing staged artifact: {stderr}"
     );
+    assert!(
+        stderr.contains("bin/world-agent"),
+        "stderr should list the root staged path suffix: {stderr}"
+    );
+    assert!(
+        stderr.contains("bin/linux/world-agent"),
+        "stderr should list the linux fallback staged path suffix: {stderr}"
+    );
+    assert!(
+        stderr.contains("scripts/substrate/dev-install-substrate.sh --no-world"),
+        "stderr should point operators at the staging remediation: {stderr}"
+    );
+    assert!(
+        stderr.contains("cargo build -p world-agent"),
+        "stderr should point operators at rebuilding world-agent: {stderr}"
+    );
+}
+
+#[test]
+fn world_enable_dry_run_exits_3_when_accepted_staged_world_agent_missing() {
+    let fixture = WorldEnableFixture::new();
+    fixture.install_prefix_runtime_scripts();
+    let _version_dir = fixture.install_version_dir_binary();
+
+    let output = fixture
+        .command_without_override()
+        .arg("--dry-run")
+        .output()
+        .expect("failed to run substrate world enable dry-run with missing staged world-agent");
+
+    assert!(
+        !output.status.success(),
+        "missing accepted staged world-agent should fail closed in dry-run: {output:?}"
+    );
+    assert_eq!(
+        output.status.code(),
+        Some(3),
+        "missing accepted staged world-agent should exit 3 in dry-run: {output:?}"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("accepted staged world-agent artifact missing"),
+        "stderr should identify the missing staged artifact: {stderr}"
+    );
+    assert!(
+        stderr.contains("bin/world-agent"),
+        "stderr should list the root staged path suffix: {stderr}"
+    );
+    assert!(
+        stderr.contains("bin/linux/world-agent"),
+        "stderr should list the linux fallback staged path suffix: {stderr}"
+    );
+    assert!(
+        stderr.contains("scripts/substrate/dev-install-substrate.sh --no-world"),
+        "stderr should point operators at the staging remediation: {stderr}"
+    );
+    assert!(
+        stderr.contains("cargo build -p world-agent"),
+        "stderr should point operators at rebuilding world-agent: {stderr}"
+    );
+    assert!(
+        fixture.log_contents().is_none(),
+        "dry-run preflight failure should not write a helper log"
+    );
+    assert!(
+        !fixture.config_exists(),
+        "dry-run preflight failure should not create config"
+    );
+    assert!(
+        !fixture.env_sh_exists(),
+        "dry-run preflight failure should not create env.sh"
+    );
 }
 
 #[test]
