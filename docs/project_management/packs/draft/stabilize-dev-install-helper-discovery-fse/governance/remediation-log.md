@@ -3,24 +3,6 @@
 ## Open remediations
 
 ```yaml
-remediation_id: REM-001
-origin_phase: pre_exec
-source_gate: review
-related_seam: SEAM-1
-related_slice: null
-related_thread: THR-02
-related_contract: C-01
-related_artifact: crates/shell/src/builtins/world_enable/runner/paths.rs
-severity: material
-status: open
-owner_seam: SEAM-1
-blocked_targets: []
-summary: Helper-missing remediation text may still assume a production bundle and misdirect dev-install operators when all helper candidates are absent.
-required_fix: Confirm or narrow the missing-helper message during seam-local review so the operator guidance matches staged-prefix reality.
-resolution_evidence: []
-```
-
-```yaml
 remediation_id: REM-002
 origin_phase: pre_exec
 source_gate: revalidation
@@ -46,6 +28,30 @@ Rules:
 - For `severity: material` or `follow_up`, use `blocked_targets: []` unless a concrete blocked transition also applies.
 
 ## Resolved remediations
+
+```yaml
+remediation_id: REM-001
+origin_phase: pre_exec
+source_gate: review
+related_seam: SEAM-1
+related_slice: null
+related_thread: THR-02
+related_contract: C-01
+related_artifact: crates/shell/src/builtins/world_enable/runner/paths.rs
+severity: material
+status: resolved
+owner_seam: SEAM-1
+blocked_targets: []
+summary: Helper-missing remediation text now matches staged-prefix dev-install reality when all helper candidates are absent.
+required_fix: Resolved by the landed helper-guidance and prefix-bundle fallback fixes plus the passing helper-resolution and world_enable test runs.
+resolution_evidence:
+  - `b5130df2` updates `crates/shell/src/builtins/world_enable/runner/paths.rs` so the fail-closed helper-missing branch points operators at rerunning `dev-install-substrate.sh --prefix <home>` and the staged prefix helper path under `$SUBSTRATE_HOME/scripts/substrate/world-enable.sh`.
+  - `b5130df2` adds `locate_helper_script_reports_staged_prefix_guidance_when_missing` in `crates/shell/src/builtins/world_enable/runner/paths.rs` and `world_enable_reports_staged_prefix_guidance_when_helper_missing` in `crates/shell/tests/world_enable.rs` to lock the wording through both the unit and CLI paths.
+  - `f5b9e050` updates `crates/shell/src/builtins/world_enable/runner.rs` and `crates/shell/src/builtins/world_enable/runner/paths.rs` so the prefix helper remains usable even when the inferred version directory cannot be resolved from `$SUBSTRATE_HOME/bin/substrate`.
+  - `f5b9e050` adds `locate_helper_script_uses_prefix_bundle_without_version_dir` and `world_enable_uses_prefix_runtime_bundle_when_version_binary_is_missing` to lock the post-`cargo clean` helper path through both the unit and CLI surfaces.
+  - `cargo test -p shell locate_helper_script -- --nocapture` passed.
+  - `cargo test -p shell world_enable -- --nocapture` passed.
+```
 
 ```yaml
 remediation_id: REM-003

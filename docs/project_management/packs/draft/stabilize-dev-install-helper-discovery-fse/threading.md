@@ -57,7 +57,7 @@ Horizon policy for this pack:
   - **Consumer seam(s)**: `SEAM-2`, `SEAM-3`
   - **Carried contract IDs**: `C-02`, `C-03`
   - **Purpose**: publish the real staged bundle surface and the managed-asset eligibility rules that cleanup and conformance must consume.
-  - **State**: `defined`
+  - **State**: `published`
   - **Revalidation trigger**: staged path list changes, file-type policy changes, manifest location/schema changes, or Linux guest copy rules change.
   - **Satisfied by**: `governance/seam-1-closeout.md` records the landed bundle tree, managed-marker evidence, and any downstream stale triggers.
   - **Notes**: `SEAM-2` must not promote off provisional assumptions once `SEAM-1` lands; it must rebind to the actual closeout-backed bundle layout.
@@ -67,7 +67,7 @@ Horizon policy for this pack:
   - **Consumer seam(s)**: `SEAM-3`
   - **Carried contract IDs**: `C-01`, `C-02`, `C-03`
   - **Purpose**: let the conformance seam prove helper discovery order, `cargo clean` survival, and fail-closed behavior against the landed runtime bundle.
-  - **State**: `defined`
+  - **State**: `published`
   - **Revalidation trigger**: override precedence changes, helper-order changes, helper-missing remediation text changes, or CLI flag-surface changes.
   - **Satisfied by**: `governance/seam-1-closeout.md` plus updated smoke and manual evidence reflecting the landed helper resolution flow.
   - **Notes**: This thread is where macOS scope drift becomes visible if staged helper placement is mistaken for full provisioning parity.

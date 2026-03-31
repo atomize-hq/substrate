@@ -21,14 +21,14 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S4
-  status: pending
-open_remediations:
-  - REM-001
+  status: passed
+  promotion_readiness: ready
+open_remediations: []
 ---
 # SEAM-1 - Durable helper-bundle staging + discovery
 
@@ -89,23 +89,26 @@ open_remediations:
 - **Planned location**: `S4` (`slice-4-seam-exit-gate.md`)
 - **Why this seam needs an explicit exit gate**:
   - Both downstream seams depend on closeout-backed truth for the fixed bundle surface, helper lookup order, and managed-asset classification. The seam-exit gate turns those from provisional planning assumptions into promotion-safe recorded facts.
-- **Expected contracts to publish**:
+- **Contracts published**:
   - `C-01`
   - `C-02`
   - `C-03`
-- **Expected threads to publish / advance**:
-  - `THR-01`: `defined` -> `published`
-  - `THR-02`: `defined` -> `published`
+- **Threads published / advanced**:
+  - `THR-01`: `published`
+  - `THR-02`: `published`
 - **Likely downstream stale triggers**:
   - any change to the fixed staged path list
   - any change to helper candidate order, helper-missing wording, or `world enable` flag surface
   - any change to which assets are repo-managed symlinks versus manifest-tracked copied binaries
   - any macOS scope expansion that turns helper discovery proof into a broader provisioning claim
-- **Expected closeout evidence**:
-  - landed staged bundle inventory for the fixed durable paths
-  - landed managed-asset evidence for repo-managed symlinks and any manifest-tracked copied Linux guest binaries
-  - landed helper-resolution proof showing prefix-helper precedence and `cargo clean` survival
-  - explicit downstream stale-trigger record for `SEAM-2` and `SEAM-3`
+- **Landed closeout evidence**:
+  - `8b0c3777` published the SEAM-1 contract and decision artifacts for `C-01`, `C-02`, and `C-03`.
+  - `5f18c5d1` landed provenance-aware durable bundle staging in `dev-install-substrate.sh`.
+  - `b5130df2` resolved the helper-missing wording and regression tests in `paths.rs` and `world_enable.rs`.
+  - `f5b9e050` preserved prefix-helper resolution when the inferred version directory is unavailable, which is the post-`cargo clean` helper-discovery path that `THR-02` carries forward.
+  - `cargo test -p shell locate_helper_script -- --nocapture` passed.
+  - `cargo test -p shell world_enable -- --nocapture` passed.
+  - `governance/seam-1-closeout.md` records `THR-01` and `THR-02` as published and `promotion_readiness: ready`.
 
 ## Slice index
 
