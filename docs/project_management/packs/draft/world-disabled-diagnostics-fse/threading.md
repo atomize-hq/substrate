@@ -90,8 +90,8 @@
   - **Direct consumers**: `SEAM-4`
   - **Derived consumers**: `docs/USAGE.md`, future provisioning packs, and human operators who read `substrate health`
   - **Thread IDs**: `THR-05`
-  - **Definition**: Disabled-mode `substrate health` copy and summary contract: `summary.world_ok = null`, omitted summary error fields, empty world-deps arrays, and suppression of enabled-world guidance when disabled.
-  - **Versioning / compat**: additive-only summary posture; enabled-mode guidance and failure aggregation remain unchanged unless explicitly amended.
+  - **Definition**: Disabled-mode `substrate health` copy and summary contract derived from the landed `.shim.world.status` / `.shim.world_deps.status` contract: when `.shim.world.status = "disabled"`, `summary.world_ok = null`, `summary.world_error` and `summary.world_deps_error` are omitted, `world_deps_missing` and `world_deps_blocked` are empty arrays, and skipped-disabled probes do not contribute failure entries. Disabled text must print the exact contract lines from `S1` and suppress enabled-world world-deps guidance such as `substrate world deps current`; enabled-mode failure visibility and guidance remain unchanged.
+  - **Versioning / compat**: additive-only summary posture; downstream consumers must treat disabled-mode omission and guidance suppression as canonical, while enabled-mode guidance and failure aggregation remain unchanged unless explicitly amended.
 
 ## Thread registry
 
