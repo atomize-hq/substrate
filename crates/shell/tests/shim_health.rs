@@ -64,6 +64,7 @@ managers:
 
     let output = fixture
         .command()
+        .arg("--world")
         .arg("health")
         .arg("--json")
         .output()
@@ -77,6 +78,79 @@ managers:
     assert_eq!(summary["world_ok"], json!(false));
     assert_eq!(summary["world_deps_missing"], json!(["a"]));
     assert_eq!(summary["ok"], json!(false));
+}
+
+#[test]
+fn health_json_uses_disabled_status_contracts_and_omits_disabled_failures() {
+    let fixture = DoctorFixture::new(
+        r#"version: 2
+managers:
+  - name: SampleManager
+    priority: 1
+    detect:
+      script: "exit 0"
+    init:
+      shell: |
+        export SAMPLE_MANAGER=1
+    repair_hint: |
+      export SAMPLE_MANAGER=1
+"#,
+    );
+
+    fixture.write_world_doctor_fixture(json!({
+        "platform": "fixture-linux",
+        "ok": false,
+        "stderr": "this fixture should be ignored when diagnostics are disabled"
+    }));
+    fixture.write_world_deps_fixture(json!({
+        "schema_version": 1,
+        "cwd": fixture.home(),
+        "inventory_packages": 1,
+        "inventory_bundles": 0,
+        "inventory_mode": "merged",
+        "builtins": "enabled",
+        "enabled": ["ignored"],
+        "applied": [
+            {
+                "kind": "package",
+                "name": "ignored",
+                "enabled": true,
+                "world": "missing"
+            }
+        ]
+    }));
+
+    let output = fixture
+        .command()
+        .arg("--no-world")
+        .arg("health")
+        .arg("--json")
+        .output()
+        .expect("failed to run substrate health --json with --no-world");
+    assert!(
+        output.status.success(),
+        "health --json should succeed in disabled mode"
+    );
+
+    let payload: Value = serde_json::from_slice(&output.stdout).expect("valid JSON payload");
+    let summary = payload.get("summary").expect("summary object missing");
+
+    assert_eq!(summary["world_ok"], Value::Null);
+    assert!(
+        summary.get("world_error").is_none(),
+        "disabled mode should omit world_error: {summary:?}"
+    );
+    assert!(
+        summary.get("world_deps_error").is_none(),
+        "disabled mode should omit world_deps_error: {summary:?}"
+    );
+    assert_eq!(summary["world_deps_missing"], json!([]));
+    assert_eq!(summary["world_deps_blocked"], json!([]));
+    assert_eq!(summary["ok"], json!(true));
+    assert!(
+        summary.get("failures").is_none(),
+        "disabled mode should not emit failure entries: {summary:?}"
+    );
 }
 
 #[test]
@@ -110,6 +184,7 @@ managers:
 
     let output = fixture
         .command()
+        .arg("--world")
         .arg("health")
         .output()
         .expect("failed to run substrate health");
@@ -123,6 +198,77 @@ managers:
     assert!(
         stdout.contains("Overall status: attention required"),
         "expected attention required summary, got: {stdout}"
+    );
+}
+
+#[test]
+fn health_human_summary_uses_disabled_contract_lines_without_guidance() {
+    let fixture = DoctorFixture::new(
+        r#"version: 2
+managers:
+  - name: SampleManager
+    priority: 1
+    detect:
+      script: "exit 0"
+    init:
+      shell: |
+        export SAMPLE_MANAGER=1
+    repair_hint: |
+      export SAMPLE_MANAGER=1
+"#,
+    );
+
+    fixture.write_world_doctor_fixture(json!({
+        "platform": "fixture-linux",
+        "ok": false,
+        "stderr": "this fixture should be ignored when diagnostics are disabled"
+    }));
+    fixture.write_world_deps_fixture(json!({
+        "schema_version": 1,
+        "cwd": fixture.home(),
+        "inventory_packages": 1,
+        "inventory_bundles": 0,
+        "inventory_mode": "merged",
+        "builtins": "enabled",
+        "enabled": ["ignored"],
+        "applied": [
+            {
+                "kind": "package",
+                "name": "ignored",
+                "enabled": true,
+                "world": "missing"
+            }
+        ]
+    }));
+
+    let output = fixture
+        .command()
+        .arg("--no-world")
+        .arg("health")
+        .output()
+        .expect("failed to run substrate health in disabled mode");
+    assert!(
+        output.status.success(),
+        "health should succeed in disabled mode"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout
+            .contains("World backend: disabled\n  Next: run `substrate world enable` to provision"),
+        "expected disabled world contract lines, got: {stdout}"
+    );
+    assert!(
+        stdout.contains("World deps: skipped (world disabled)"),
+        "expected disabled world deps contract lines, got: {stdout}"
+    );
+    assert!(
+        !stdout.contains("substrate world deps current"),
+        "disabled mode should not print enabled-world guidance: {stdout}"
+    );
+    assert!(
+        stdout.contains("Overall status: healthy"),
+        "disabled mode should not report attention required, got: {stdout}"
     );
 }
 
@@ -156,6 +302,7 @@ managers:
 
     let output = fixture
         .command()
+        .arg("--world")
         .arg("health")
         .arg("--json")
         .output()

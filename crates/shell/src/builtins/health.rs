@@ -1,4 +1,4 @@
-use super::shim_doctor::{self, ShimDoctorReport};
+use super::shim_doctor::{self, ShimDoctorReport, WorldDepsDoctorStatus, WorldDoctorStatus};
 use anyhow::Result;
 use serde::Serialize;
 
@@ -53,50 +53,71 @@ impl HealthSummary {
             .map(|state| state.name.clone())
             .collect::<Vec<_>>();
 
-        let world_ok = report.world.as_ref().map(|world| world.ok);
-        let world_error = report.world.as_ref().and_then(|world| {
-            if let Some(err) = &world.error {
-                Some(err.clone())
-            } else if !world.ok {
-                world.stderr.clone()
-            } else {
-                None
-            }
-        });
+        let disabled = report
+            .world
+            .as_ref()
+            .map(|world| world.status == WorldDoctorStatus::Disabled)
+            .unwrap_or(false)
+            || report
+                .world_deps
+                .as_ref()
+                .map(|section| section.status == WorldDepsDoctorStatus::SkippedDisabled)
+                .unwrap_or(false);
+
+        let world_ok = if disabled {
+            None
+        } else {
+            report.world.as_ref().map(|world| world.ok)
+        };
+        let world_error = if disabled {
+            None
+        } else {
+            report.world.as_ref().and_then(|world| {
+                if let Some(err) = &world.error {
+                    Some(err.clone())
+                } else if !world.ok {
+                    world.stderr.clone()
+                } else {
+                    None
+                }
+            })
+        };
 
         let mut world_deps_missing = Vec::new();
         let mut world_deps_blocked = Vec::new();
         let mut world_deps_error = None;
 
-        if let Some(section) = &report.world_deps {
-            if let Some(err) = &section.error {
-                world_deps_error = Some(err.clone());
-            } else if let Some(snapshot) = &section.report {
-                if let Some(err) = &snapshot.applied_error {
+        if !disabled {
+            if let Some(section) = &report.world_deps {
+                if let Some(err) = &section.error {
                     world_deps_error = Some(err.clone());
-                } else {
-                    for item in &snapshot.applied {
-                        let enabled = item.enabled.unwrap_or(false);
-                        if !enabled {
-                            continue;
-                        }
-                        let Some(world) = item.world.as_deref() else {
-                            continue;
-                        };
-                        if world == "missing" {
-                            world_deps_missing.push(item.name.clone());
-                        } else if world == "blocked" {
-                            world_deps_blocked.push(item.name.clone());
+                } else if let Some(snapshot) = &section.report {
+                    if let Some(err) = &snapshot.applied_error {
+                        world_deps_error = Some(err.clone());
+                    } else {
+                        for item in &snapshot.applied {
+                            let enabled = item.enabled.unwrap_or(false);
+                            if !enabled {
+                                continue;
+                            }
+                            let Some(world) = item.world.as_deref() else {
+                                continue;
+                            };
+                            if world == "missing" {
+                                world_deps_missing.push(item.name.clone());
+                            } else if world == "blocked" {
+                                world_deps_blocked.push(item.name.clone());
+                            }
                         }
                     }
                 }
             }
-        }
 
-        world_deps_missing.sort();
-        world_deps_missing.dedup();
-        world_deps_blocked.sort();
-        world_deps_blocked.dedup();
+            world_deps_missing.sort();
+            world_deps_missing.dedup();
+            world_deps_blocked.sort();
+            world_deps_blocked.dedup();
+        }
 
         let mut failures = Vec::new();
         if report.skip_all_requested {
@@ -165,16 +186,35 @@ fn print_health_summary(report: &HealthReport) {
         println!("  Manager init skipped via SUBSTRATE_SKIP_MANAGER_INIT");
     }
 
-    match report.summary.world_ok {
-        Some(true) => println!("World backend: healthy"),
-        Some(false) => println!("World backend: needs attention"),
-        None => println!("World backend: unknown"),
-    }
-    if let Some(err) = &report.summary.world_error {
-        println!("  Error: {err}");
+    if report
+        .shim
+        .world
+        .as_ref()
+        .map(|world| world.status == WorldDoctorStatus::Disabled)
+        .unwrap_or(false)
+    {
+        println!("World backend: disabled");
+        println!("  Next: run `substrate world enable` to provision");
+    } else {
+        match report.summary.world_ok {
+            Some(true) => println!("World backend: healthy"),
+            Some(false) => println!("World backend: needs attention"),
+            None => println!("World backend: unknown"),
+        }
+        if let Some(err) = &report.summary.world_error {
+            println!("  Error: {err}");
+        }
     }
 
-    if let Some(err) = &report.summary.world_deps_error {
+    if report
+        .shim
+        .world_deps
+        .as_ref()
+        .map(|section| section.status == WorldDepsDoctorStatus::SkippedDisabled)
+        .unwrap_or(false)
+    {
+        println!("World deps: skipped (world disabled)");
+    } else if let Some(err) = &report.summary.world_deps_error {
         println!("World deps: unavailable ({})", err.trim());
     } else if report.summary.world_deps_missing.is_empty()
         && report.summary.world_deps_blocked.is_empty()

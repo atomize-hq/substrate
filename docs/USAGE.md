@@ -152,12 +152,12 @@ substrate health --json | jq '.summary'
 substrate shim doctor --json # detailed shim-centric payload
 ```
 
-`substrate health` is a thin summary over `substrate shim doctor`:
+`substrate health` is a thin summary over `substrate shim doctor` and the canonical machine-readable inputs are `.shim.world.status` and `.shim.world_deps.status`:
 - `summary.missing_managers` – managers not detected on the host.
-- `summary.world_ok` / `summary.world_error` – world backend health.
-- `summary.world_deps_missing` – enabled deps missing in the world.
-- `summary.world_deps_blocked` – enabled deps that require manual install (blocked).
+- `summary.world_ok` / `summary.world_error` – world backend health when the world is enabled.
+- `summary.world_deps_missing` / `summary.world_deps_blocked` – enabled deps missing or blocked in the world.
 - `summary.world_deps_error` – world deps snapshot unavailable (world backend down, etc).
+- Disabled mode sets `summary.world_ok = null`, omits `summary.world_error` and `summary.world_deps_error`, and keeps `summary.world_deps_missing` / `summary.world_deps_blocked` empty.
 
 Example (Linux, bash):
 
@@ -179,6 +179,8 @@ Machine-readable summary:
 ```bash
 $ substrate health --json | jq '.summary | {ok, missing_managers, world_ok, world_deps_missing, world_deps_blocked, world_deps_error}'
 ```
+
+When `.shim.world.status` is `disabled` and `.shim.world_deps.status` is `skipped_disabled`, the summary stays non-error and the human output prints the disabled contract lines instead of enabled-world remediation guidance.
 
 Both commands honor the same overrides (`HOME`, `SUBSTRATE_MANAGER_MANIFEST`,
 `SHIM_TRACE_LOG`). Drop fixture files into `~/.substrate/health/world_doctor.json`
