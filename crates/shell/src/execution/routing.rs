@@ -188,6 +188,10 @@ pub(crate) fn handle_shim_command(cmd: &ShimCmd, cli: &Cli) -> ! {
         ShimAction::Doctor { json } => {
             let exit = match commands::shim_doctor::run_doctor(*json, cli.no_world, cli.world) {
                 Ok(_) => 0,
+                Err(err) if config_model::is_user_error(&err) => {
+                    eprintln!("substrate shim doctor failed: {:#}", err);
+                    2
+                }
                 Err(err) => {
                     eprintln!("substrate shim doctor failed: {:#}", err);
                     1

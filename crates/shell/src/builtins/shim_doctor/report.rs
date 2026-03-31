@@ -1,5 +1,6 @@
 use crate::builtins::world_deps::{self, WorldDepsDoctorSnapshotV1};
 use crate::execution::{
+    config_model::{self, CliConfigOverrides},
     current_platform,
     manager_init::{self, ManagerInitConfig, ManifestPaths},
     manager_manifest_base_path,
@@ -169,6 +170,22 @@ pub(crate) fn normalize_path(segment: &str) -> String {
 }
 
 fn build_report(cli_no_world: bool, cli_force_world: bool) -> Result<ShimDoctorReport> {
+    let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let cli_world_enabled = if cli_force_world {
+        Some(true)
+    } else if cli_no_world {
+        Some(false)
+    } else {
+        None
+    };
+    let _world_enabled = config_model::resolve_diagnostics_world_enabled(
+        &cwd,
+        &CliConfigOverrides {
+            world_enabled: cli_world_enabled,
+            ..Default::default()
+        },
+    )?;
+
     let (manifest_info, manifest_paths) = build_manifest_paths()?;
     let manifest = ManagerManifest::load(&manifest_info.base, manifest_info.overlay.as_deref())?;
     let spec_map = manifest_spec_map(manifest);

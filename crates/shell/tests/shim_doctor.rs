@@ -88,6 +88,16 @@ fn read_shim_doctor_json(fixture: &DoctorFixture) -> Value {
     serde_json::from_slice(&output.stdout).expect("doctor output JSON")
 }
 
+fn write_invalid_workspace_fixture(root: &std::path::Path) {
+    let substrate_dir = root.join(".substrate");
+    fs::create_dir_all(&substrate_dir).expect("create workspace substrate dir");
+    fs::write(
+        substrate_dir.join("workspace.yaml"),
+        "world:\n  enabled: [true\n",
+    )
+    .expect("write invalid workspace.yaml");
+}
+
 #[test]
 fn shim_doctor_human_mode_reports_status_and_path_diagnostics() {
     let manifest = r#"version: 2
@@ -274,6 +284,41 @@ managers:
             .expect("applied array missing")
             .is_empty(),
         "default world deps fixture should report zero applied items"
+    );
+}
+
+#[test]
+fn shim_doctor_json_exits_2_before_output_on_invalid_workspace_yaml() {
+    let fixture = DoctorFixture::new(detected_manager_manifest());
+    let workspace_root = fixture.home().join("workspace");
+    fs::create_dir_all(&workspace_root).expect("create workspace root");
+    write_invalid_workspace_fixture(&workspace_root);
+
+    let output = fixture
+        .command()
+        .current_dir(&workspace_root)
+        .arg("shim")
+        .arg("doctor")
+        .arg("--json")
+        .output()
+        .expect("failed to run shim doctor --json with invalid workspace yaml");
+
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "shim doctor should exit 2 for invalid workspace yaml: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        output.stdout.is_empty(),
+        "shim doctor should not emit JSON on config error: stdout={}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("invalid YAML") || stderr.contains("failed to read"),
+        "stderr should report the config parse failure: {stderr}"
     );
 }
 

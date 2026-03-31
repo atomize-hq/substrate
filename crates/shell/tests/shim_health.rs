@@ -6,6 +6,16 @@ mod common;
 use common::doctor_fixture::DoctorFixture;
 use serde_json::{json, Value};
 
+fn write_invalid_workspace_fixture(root: &std::path::Path) {
+    let substrate_dir = root.join(".substrate");
+    std::fs::create_dir_all(&substrate_dir).expect("create workspace substrate dir");
+    std::fs::write(
+        substrate_dir.join("workspace.yaml"),
+        "world:\n  enabled: [true\n",
+    )
+    .expect("write invalid workspace.yaml");
+}
+
 #[test]
 fn health_json_reports_world_deps_missing_and_world_backend_status() {
     let fixture = DoctorFixture::new(
@@ -160,5 +170,53 @@ managers:
     assert!(
         err.contains("invalid world deps fixture"),
         "expected world deps fixture error, got: {err}"
+    );
+}
+
+#[test]
+fn health_json_exits_2_before_output_on_invalid_workspace_yaml() {
+    let fixture = DoctorFixture::new(
+        r#"version: 2
+managers:
+  - name: SampleManager
+    priority: 1
+    detect:
+      script: "exit 0"
+    init:
+      shell: |
+        export SAMPLE_MANAGER=1
+    repair_hint: |
+      export SAMPLE_MANAGER=1
+"#,
+    );
+
+    let workspace_root = fixture.home().join("workspace");
+    std::fs::create_dir_all(&workspace_root).expect("create workspace root");
+    write_invalid_workspace_fixture(&workspace_root);
+
+    let output = fixture
+        .command()
+        .current_dir(&workspace_root)
+        .arg("health")
+        .arg("--json")
+        .output()
+        .expect("failed to run substrate health --json with invalid workspace yaml");
+
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "health should exit 2 for invalid workspace yaml: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        output.stdout.is_empty(),
+        "health should not emit JSON on config error: stdout={}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("invalid YAML") || stderr.contains("failed to read"),
+        "stderr should report the config parse failure: {stderr}"
     );
 }
