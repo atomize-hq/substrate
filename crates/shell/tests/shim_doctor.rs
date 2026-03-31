@@ -79,6 +79,7 @@ fn write_world_doctor_netfilter_fixture(
 fn read_shim_doctor_json(fixture: &DoctorFixture) -> Value {
     let output = fixture
         .command()
+        .arg("--world")
         .arg("shim")
         .arg("doctor")
         .arg("--json")
@@ -161,6 +162,7 @@ managers:
     let output = fixture
         .command()
         .env("PATH", &path_value)
+        .arg("--world")
         .arg("shim")
         .arg("doctor")
         .output()
@@ -236,6 +238,7 @@ managers:
 
     let output = fixture
         .command()
+        .arg("--world")
         .arg("shim")
         .arg("doctor")
         .arg("--json")
@@ -366,6 +369,7 @@ managers:
     let output = fixture
         .command()
         .env("PATH", host_path.display().to_string())
+        .arg("--world")
         .arg("shim")
         .arg("doctor")
         .arg("--json")
@@ -501,6 +505,7 @@ managers:
 
     let json_output = fixture
         .command()
+        .arg("--world")
         .arg("shim")
         .arg("doctor")
         .arg("--json")
@@ -544,6 +549,7 @@ managers:
 
     let text_output = fixture
         .command()
+        .arg("--world")
         .arg("shim")
         .arg("doctor")
         .output()
@@ -655,7 +661,7 @@ managers:
 }
 
 #[test]
-fn shim_doctor_marks_world_deps_skipped_when_no_world_requested() {
+fn shim_doctor_disabled_mode_uses_disabled_statuses_and_omits_probe_fields() {
     let manifest = r#"version: 2
 managers:
   - name: SkipWorld
@@ -667,39 +673,165 @@ managers:
     repair_hint: "skip"
 "#;
     let fixture = DoctorFixture::new(manifest);
-    let world_deps_fixture = fixture.health_dir().join("world_deps.json");
-    fs::remove_file(&world_deps_fixture).expect("fixture world_deps.json should exist");
+    fixture.write_world_doctor_fixture(json!({
+        "platform": "fixture-linux",
+        "ok": false,
+        "stderr": "this fixture should be ignored when diagnostics are disabled"
+    }));
+    fixture.write_world_deps_fixture(json!({
+        "schema_version": 1,
+        "cwd": fixture.home(),
+        "inventory_packages": 1,
+        "inventory_bundles": 0,
+        "inventory_mode": "merged",
+        "builtins": "enabled",
+        "enabled": ["ignored"],
+        "applied": [
+            {
+                "kind": "package",
+                "name": "ignored",
+                "enabled": true,
+                "world": "missing"
+            }
+        ]
+    }));
 
     let output = fixture
         .command()
         .arg("shim")
         .arg("doctor")
         .arg("--json")
-        .arg("--no-world")
         .output()
-        .expect("failed to run shim doctor --json --no-world");
+        .expect("failed to run shim doctor --json");
 
     assert!(
         output.status.success(),
-        "shim doctor --no-world should succeed: stderr={}",
+        "shim doctor should succeed in disabled mode: stderr={}",
         String::from_utf8_lossy(&output.stderr)
     );
 
     let report: Value =
-        serde_json::from_slice(&output.stdout).expect("doctor --json output should be valid JSON");
-    assert!(
-        report["world_deps"]["report"].is_null(),
-        "expected world deps report to be omitted when --no-world is active"
-    );
+        serde_json::from_slice(&output.stdout).expect("doctor output should be valid JSON");
+    assert_eq!(report["world"]["status"], json!("disabled"));
+    assert_eq!(report["world_deps"]["status"], json!("skipped_disabled"));
+    assert_eq!(report["world"]["ok"], json!(false));
     assert_eq!(
         report["world_deps"]["source"].as_str(),
-        Some("skipped"),
-        "expected world deps source=skipped when --no-world is active"
+        Some("disabled"),
+        "expected world deps source=disabled when diagnostics are disabled"
     );
-    let err = report["world_deps"]["error"].as_str().unwrap_or_default();
+    for key in ["error", "stderr", "exit_code", "details"] {
+        assert!(
+            report["world"].get(key).is_none(),
+            "expected world.{key} to be omitted in disabled mode: {report:?}"
+        );
+    }
+    for key in ["error", "report"] {
+        assert!(
+            report["world_deps"].get(key).is_none(),
+            "expected world_deps.{key} to be omitted in disabled mode: {report:?}"
+        );
+    }
+}
+
+#[test]
+fn shim_doctor_disabled_mode_prints_exact_contract_lines_without_error_lines() {
+    let fixture = DoctorFixture::new(detected_manager_manifest());
+    fixture.write_world_doctor_fixture(json!({
+        "platform": "fixture-linux",
+        "ok": false,
+        "stderr": "this fixture should be ignored when diagnostics are disabled"
+    }));
+    fixture.write_world_deps_fixture(json!({
+        "schema_version": 1,
+        "cwd": fixture.home(),
+        "inventory_packages": 1,
+        "inventory_bundles": 0,
+        "inventory_mode": "merged",
+        "builtins": "enabled",
+        "enabled": ["ignored"],
+        "applied": [
+            {
+                "kind": "package",
+                "name": "ignored",
+                "enabled": true,
+                "world": "missing"
+            }
+        ]
+    }));
+
+    let output = fixture
+        .command()
+        .arg("shim")
+        .arg("doctor")
+        .output()
+        .expect("failed to run shim doctor in disabled mode");
     assert!(
-        err.contains("skipped world deps"),
-        "expected skipped world deps error message, got: {err}"
+        output.status.success(),
+        "shim doctor should succeed in disabled mode"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains(
+            "World backend:\n  Status: disabled\n  Next: run `substrate world enable` to provision"
+        ),
+        "disabled world section should match the contract lines: {stdout}"
+    );
+    assert!(
+        stdout.contains("World deps:\n  Status: skipped (world disabled)"),
+        "disabled world deps section should match the contract lines: {stdout}"
+    );
+    assert!(
+        !stdout.contains("  Error:"),
+        "disabled sections must not print error lines: {stdout}"
+    );
+}
+
+#[test]
+fn shim_doctor_force_world_preserves_enabled_probe_backed_statuses() {
+    let fixture = DoctorFixture::new(detected_manager_manifest());
+    fixture.write_world_doctor_fixture(json!({
+        "platform": "fixture-linux",
+        "ok": false,
+        "stderr": "failed to connect to /run/substrate.sock"
+    }));
+    fixture.write_world_deps_fixture(json!({
+        "schema_version": 1,
+        "cwd": fixture.home(),
+        "inventory_packages": 0,
+        "inventory_bundles": 0,
+        "inventory_mode": "merged",
+        "builtins": "enabled",
+        "enabled": [],
+        "applied": [],
+        "applied_error": "world backend unavailable"
+    }));
+
+    let output = fixture
+        .command()
+        .arg("--world")
+        .arg("shim")
+        .arg("doctor")
+        .arg("--json")
+        .output()
+        .expect("failed to run shim doctor --json with --world");
+    assert!(
+        output.status.success(),
+        "shim doctor --json with --world should succeed"
+    );
+
+    let report: Value =
+        serde_json::from_slice(&output.stdout).expect("doctor output should be valid JSON");
+    assert_eq!(report["world"]["status"], json!("needs_attention"));
+    assert_eq!(report["world_deps"]["status"], json!("error"));
+    assert!(
+        report["world"].get("details").is_some(),
+        "enabled mode should preserve world details: {report:?}"
+    );
+    assert!(
+        report["world_deps"].get("report").is_some(),
+        "enabled mode should preserve world deps reports: {report:?}"
     );
 }
 
@@ -769,6 +901,7 @@ managers:
 
     let output = fixture
         .command()
+        .arg("--world")
         .arg("shim")
         .arg("doctor")
         .arg("--json")
@@ -852,6 +985,7 @@ managers:
 
     let output = fixture
         .command()
+        .arg("--world")
         .arg("shim")
         .arg("doctor")
         .arg("--json")

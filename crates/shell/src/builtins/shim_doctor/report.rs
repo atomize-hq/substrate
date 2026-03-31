@@ -79,6 +79,7 @@ pub struct HintRecord {
 
 #[derive(Debug, Serialize, Clone)]
 pub struct WorldDoctorSnapshot {
+    pub status: WorldDoctorStatus,
     pub ok: bool,
     pub platform: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -95,12 +96,33 @@ pub struct WorldDoctorSnapshot {
 
 #[derive(Debug, Serialize, Clone)]
 pub struct WorldDepsDoctorSection {
+    pub status: WorldDepsDoctorStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub report: Option<WorldDepsDoctorSnapshotV1>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorldDoctorStatus {
+    Healthy,
+    NeedsAttention,
+    Disabled,
+    Unknown,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorldDepsDoctorStatus {
+    Ok,
+    Error,
+    SkippedDisabled,
+    Unknown,
 }
 
 pub(crate) fn collect_report(
@@ -178,7 +200,7 @@ fn build_report(cli_no_world: bool, cli_force_world: bool) -> Result<ShimDoctorR
     } else {
         None
     };
-    let _world_enabled = config_model::resolve_diagnostics_world_enabled(
+    let world_enabled = config_model::resolve_diagnostics_world_enabled(
         &cwd,
         &CliConfigOverrides {
             world_enabled: cli_world_enabled,
@@ -211,8 +233,16 @@ fn build_report(cli_no_world: bool, cli_force_world: bool) -> Result<ShimDoctorR
         skip_all_requested: skip_requested,
         states,
         hints,
-        world: Some(gather_world_doctor_snapshot()),
-        world_deps: Some(gather_world_deps_section(cli_no_world, cli_force_world)),
+        world: Some(if world_enabled {
+            gather_world_doctor_snapshot()
+        } else {
+            disabled_world_doctor_snapshot()
+        }),
+        world_deps: Some(if world_enabled {
+            gather_world_deps_section(cli_no_world, cli_force_world)
+        } else {
+            disabled_world_deps_section()
+        }),
     })
 }
 
@@ -367,6 +397,28 @@ fn parse_ts(raw: &str) -> Option<DateTime<Utc>> {
         .ok()
 }
 
+fn disabled_world_doctor_snapshot() -> WorldDoctorSnapshot {
+    WorldDoctorSnapshot {
+        status: WorldDoctorStatus::Disabled,
+        ok: false,
+        platform: env::consts::OS.to_string(),
+        source: None,
+        exit_code: None,
+        stderr: None,
+        error: None,
+        details: None,
+    }
+}
+
+fn disabled_world_deps_section() -> WorldDepsDoctorSection {
+    WorldDepsDoctorSection {
+        status: WorldDepsDoctorStatus::SkippedDisabled,
+        report: None,
+        error: None,
+        source: Some("disabled".to_string()),
+    }
+}
+
 fn gather_world_doctor_snapshot() -> WorldDoctorSnapshot {
     match try_load_health_fixture("world_doctor.json") {
         Ok(Some(value)) => {
@@ -375,6 +427,7 @@ fn gather_world_doctor_snapshot() -> WorldDoctorSnapshot {
         }
         Err(err) => {
             return WorldDoctorSnapshot {
+                status: WorldDoctorStatus::NeedsAttention,
                 ok: false,
                 platform: env::consts::OS.to_string(),
                 source: Some("fixture".to_string()),
@@ -390,6 +443,7 @@ fn gather_world_doctor_snapshot() -> WorldDoctorSnapshot {
     match run_json_subcommand(&["world", "doctor", "--json"]) {
         Ok(output) => snapshot_from_command(output),
         Err(err) => WorldDoctorSnapshot {
+            status: WorldDoctorStatus::NeedsAttention,
             ok: false,
             platform: env::consts::OS.to_string(),
             source: Some("command".to_string()),
@@ -403,11 +457,7 @@ fn gather_world_doctor_snapshot() -> WorldDoctorSnapshot {
 
 fn gather_world_deps_section(cli_no_world: bool, cli_force_world: bool) -> WorldDepsDoctorSection {
     if cli_no_world && !cli_force_world {
-        return WorldDepsDoctorSection {
-            report: None,
-            error: Some("skipped world deps (world disabled via --no-world)".to_string()),
-            source: Some("skipped".to_string()),
-        };
+        return disabled_world_deps_section();
     }
 
     match try_load_health_fixture("world_deps.json") {
@@ -415,6 +465,7 @@ fn gather_world_deps_section(cli_no_world: bool, cli_force_world: bool) -> World
         {
             Ok(report) => {
                 return WorldDepsDoctorSection {
+                    status: status_for_world_deps_report(&report),
                     report: Some(report),
                     error: None,
                     source: Some("fixture".to_string()),
@@ -422,6 +473,7 @@ fn gather_world_deps_section(cli_no_world: bool, cli_force_world: bool) -> World
             }
             Err(err) => {
                 return WorldDepsDoctorSection {
+                    status: WorldDepsDoctorStatus::Error,
                     report: None,
                     error: Some(format!("invalid world deps fixture: {err}")),
                     source: Some("fixture".to_string()),
@@ -430,6 +482,7 @@ fn gather_world_deps_section(cli_no_world: bool, cli_force_world: bool) -> World
         },
         Err(err) => {
             return WorldDepsDoctorSection {
+                status: WorldDepsDoctorStatus::Error,
                 report: None,
                 error: Some(format!("failed to read world deps fixture: {err}")),
                 source: Some("fixture".to_string()),
@@ -441,15 +494,25 @@ fn gather_world_deps_section(cli_no_world: bool, cli_force_world: bool) -> World
     let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     match world_deps::collect_doctor_snapshot_v1(&cwd, false) {
         Ok(report) => WorldDepsDoctorSection {
+            status: status_for_world_deps_report(&report),
             report: Some(report),
             error: None,
             source: Some("command".to_string()),
         },
         Err(err) => WorldDepsDoctorSection {
+            status: WorldDepsDoctorStatus::Error,
             report: None,
             error: Some(format!("failed to collect world deps snapshot: {:#}", err)),
             source: Some("command".to_string()),
         },
+    }
+}
+
+fn status_for_world_deps_report(report: &WorldDepsDoctorSnapshotV1) -> WorldDepsDoctorStatus {
+    if report.applied_error.is_some() {
+        WorldDepsDoctorStatus::Error
+    } else {
+        WorldDepsDoctorStatus::Ok
     }
 }
 
@@ -461,6 +524,11 @@ fn snapshot_from_value(value: Value, source: &str) -> WorldDoctorSnapshot {
         .unwrap_or(env::consts::OS)
         .to_string();
     WorldDoctorSnapshot {
+        status: if ok {
+            WorldDoctorStatus::Healthy
+        } else {
+            WorldDoctorStatus::NeedsAttention
+        },
         ok,
         platform,
         source: Some(source.to_string()),
@@ -494,6 +562,11 @@ fn snapshot_from_command(output: JsonCommandOutput) -> WorldDoctorSnapshot {
         Some(output.stderr)
     };
     WorldDoctorSnapshot {
+        status: if ok {
+            WorldDoctorStatus::Healthy
+        } else {
+            WorldDoctorStatus::NeedsAttention
+        },
         ok,
         platform,
         source: Some("command".to_string()),
