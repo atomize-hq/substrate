@@ -60,12 +60,18 @@ candidate_subslices: []
 #### C-03 contract rules (world-deps status + omission)
 
 1. Disabled mode must set `.world_deps.status = "skipped_disabled"` and must not compute applied world-deps state.
-2. Disabled mode must omit legacy probe-derived fields that imply a real probe occurred, including any disabled-path `world.error`, `world.details`, or `world_deps.report` payloads that the source contract forbids.
+2. Disabled mode must omit legacy probe-derived fields that imply a real probe occurred, specifically disabled-path `world.error`, `world.details`, and `world_deps.report`.
 3. Enabled mode may emit `.world_deps.status = "ok"` or `"error"` according to the real applied-state result.
 
 #### C-04 contract rules (exact text)
 
-1. Disabled shim-doctor text must use exact contract lines captured in `crates/shell/tests/shim_doctor.rs`.
+1. Disabled shim-doctor text must use these exact contract lines:
+   - `World backend:`
+   - `  Status: disabled`
+   - `  Reason: skipped because world diagnostics are disabled by effective config`
+   - `World deps:`
+   - `  Status: skipped (world disabled)`
+   - `  Reason: skipped because world diagnostics are disabled by effective config`
 2. Disabled or skipped states must not print `Error:` lines.
 3. Enabled-mode failure text remains fail-visible and is not collapsed into disabled wording.
 

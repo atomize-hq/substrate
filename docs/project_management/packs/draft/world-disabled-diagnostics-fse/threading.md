@@ -49,6 +49,10 @@
   - **Derived consumers**: JSON automation, `json-mode`, and future attribution work
   - **Thread IDs**: `THR-02`
   - **Definition**: Canonical world backend status enum at `.world.status` / `.shim.world.status` with values `healthy | needs_attention | disabled | unknown`.
+    - Disabled mode publishes `.world.status = "disabled"` and short-circuits all world backend probes before any `substrate world doctor --json` subprocess or equivalent backend call.
+    - Enabled healthy mode publishes `.world.status = "healthy"`.
+    - Enabled failure mode publishes `.world.status = "needs_attention"` and preserves enabled-mode diagnostics.
+    - `unknown` is reserved for genuinely unavailable classification surfaces, not for disabled-by-choice mode.
   - **Versioning / compat**: additive-only field; no renames/removals; downstream consumers must ignore unknown enum values.
 
 - **Contract ID**: `C-03`
@@ -57,7 +61,10 @@
   - **Direct consumers**: `SEAM-3`, `SEAM-4`
   - **Derived consumers**: provisioning-related diagnostics work and JSON automation
   - **Thread IDs**: `THR-03`
-  - **Definition**: Canonical world-deps status enum at `.world_deps.status` / `.shim.world_deps.status` with values `ok | error | skipped_disabled | unknown`, plus disabled-mode omission of legacy error/report fields.
+  - **Definition**: Canonical world-deps status enum at `.world_deps.status` / `.shim.world_deps.status` with values `ok | error | skipped_disabled | unknown`, plus disabled-mode omission of probe-derived legacy fields.
+    - Disabled mode publishes `.world_deps.status = "skipped_disabled"` and must not compute applied world-deps state.
+    - Disabled mode omits probe-derived fields that would imply a real probe occurred, specifically disabled-path `world.error`, `world.details`, and `world_deps.report`.
+    - Enabled mode may publish `.world_deps.status = "ok"` or `.world_deps.status = "error"` according to the real applied-state result.
   - **Versioning / compat**: additive-only field; disabled-mode omission is canonical and must not be backfilled by downstream consumers.
 
 - **Contract ID**: `C-04`
@@ -67,6 +74,15 @@
   - **Derived consumers**: docs/examples and future copy-attribution work
   - **Thread IDs**: `THR-04`
   - **Definition**: Exact disabled-mode `substrate shim doctor` lines, no `Error:` lines for disabled/skipped states, and a no-probe operator posture.
+    - The disabled-mode text contract is:
+      - `World backend:`
+      - `  Status: disabled`
+      - `  Reason: skipped because world diagnostics are disabled by effective config`
+      - `World deps:`
+      - `  Status: skipped (world disabled)`
+      - `  Reason: skipped because world diagnostics are disabled by effective config`
+    - Disabled or skipped states must not print `Error:` lines.
+    - Enabled-mode failure text remains fail-visible and must not collapse into disabled wording.
   - **Versioning / compat**: exact-line contract is intentionally small and explicit; enabled-mode copy remains flexible.
 
 - **Contract ID**: `C-05`
