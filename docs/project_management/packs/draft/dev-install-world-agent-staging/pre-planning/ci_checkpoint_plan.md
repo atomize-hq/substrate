@@ -2,6 +2,8 @@
 
 This file defines **when** cross-platform CI gates run for this feature.
 
+The canonical checkpoint-plan path for this pack is `docs/project_management/packs/draft/dev-install-world-agent-staging/pre-planning/ci_checkpoint_plan.md`; the extracted `-fse` seam docs are planning inputs only.
+
 Standard:
 - `docs/project_management/system/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md`
 
@@ -66,8 +68,8 @@ What risk is reduced by running cross-platform CI here (from `impact_map.md`):
 ## Follow-ups
 
 - Path canonicalization:
-  - `pre-planning/impact_map.md` Touch Set currently lists `docs/project_management/packs/draft/dev-install-world-agent-staging/ci_checkpoint_plan.md` as the create path, but this pre-planning plan lives at `docs/project_management/packs/draft/dev-install-world-agent-staging/pre-planning/ci_checkpoint_plan.md`.
-  - During full planning, choose one canonical path (root vs `pre-planning/`) and update the manifest/impact-map references accordingly.
+  - The canonical checkpoint-plan path is `docs/project_management/packs/draft/dev-install-world-agent-staging/pre-planning/ci_checkpoint_plan.md`.
+  - Keep any impact-map or manifest references aligned to that path if they still point at the legacy root-level location.
 - Mechanical validity (when slice tasks exist in `tasks.json`):
   - Ensure the final slice ids match `DIWAS0`, `DIWAS1` (or update both this plan and `tasks.json` consistently).
   - Add slice triad tasks (`DIWAS{0,1}-{code,test,integ}` plus any `-integ-core` / platform-fix tasks required by schema v4 cross-platform standards).

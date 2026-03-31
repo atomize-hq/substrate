@@ -1,10 +1,11 @@
 # dev-install-world-agent-staging — platform parity spec
 
-This spec is authoritative for platform scope and validation evidence for the planning pack.
+This spec is authoritative for platform scope and validation evidence for the source pack at `docs/project_management/packs/draft/dev-install-world-agent-staging/`. The extracted `-fse` seam docs remain planning inputs only.
 
 ## Scope
 - Linux carries the only behavior delta in this feature.
 - macOS and Windows remain CI parity surfaces for the touched Rust and shell code paths.
+- `REM-003` is a revalidation watchpoint, not a blocker, unless upstream overlap changes the current closeout-backed basis.
 
 ## Required platforms
 - Behavior platforms: `linux`

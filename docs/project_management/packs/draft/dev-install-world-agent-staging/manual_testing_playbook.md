@@ -1,6 +1,7 @@
 # dev-install-world-agent-staging — manual testing playbook
 
 This playbook records the operator evidence required before execution closes the feature.
+It is bound to the source pack at `docs/project_management/packs/draft/dev-install-world-agent-staging/`; the extracted `-fse` seam docs remain planning inputs only.
 
 ## Shared setup
 - Platform: Linux for behavior cases.
