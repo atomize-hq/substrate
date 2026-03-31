@@ -77,7 +77,7 @@ Horizon policy for this pack:
   - **Consumer seam(s)**: `SEAM-3`
   - **Carried contract IDs**: `C-04`
   - **Purpose**: let the conformance seam verify managed-only cleanup, preserved-path refusal, and protected-path exit behavior after cleanup lands.
-  - **State**: `defined`
+  - **State**: `published`
   - **Revalidation trigger**: ownership-guard algorithm changes, refusal messaging changes, exit-code mapping changes, or cleanup directory-pruning behavior changes.
   - **Satisfied by**: `governance/seam-2-closeout.md` records preserved-path evidence, removal evidence, and the final cleanup disposition.
   - **Notes**: `SEAM-3` should not finalize parity claims until this thread is published from cleanup closeout.
@@ -122,4 +122,4 @@ Critical-path failure modes to watch:
 Concurrency posture:
 
 - `SEAM-2` can now own authoritative seam-local planning and downstream slices because `THR-01` is revalidated for the active cleanup seam.
-- `SEAM-3` is now the queued seam, but it stays seam-brief depth until `THR-02` and `THR-03` both have closeout-backed truth to consume.
+- `SEAM-3` is now the queued seam, and it can consume closeout-backed `THR-03` truth alongside `THR-02` when ready.
