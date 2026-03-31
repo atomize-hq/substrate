@@ -71,7 +71,15 @@ Contract notes:
 ## Downstream contract consumers
 
 - `SEAM-2` consumes `C-02` and `C-03` for cleanup and managed-asset reasoning.
-- `SEAM-3` consumes `C-01`, `C-02`, and `C-03` for conformance and drift-guard planning.
+- `SEAM-3` consumes `C-01`, `C-02`, `C-03`, and `C-04` for conformance and drift-guard planning.
+
+## `C-04` - Protected-path refusal and preserved-path reporting
+
+- Protected-path conflicts preserve user-managed regular files and non-repo-managed symlinks.
+- Cleanup reports the preserved path deterministically.
+- Protected-path cleanup refusal uses exit class `5` rather than destructive cleanup.
+- No other asset class is considered eligible for protected-path deletion authority by this seam.
+- Any change to refusal classification, preserved-path messaging, or cleanup eligibility forces conformance revalidation.
 
 ## Verification summary
 
@@ -81,5 +89,6 @@ Contract notes:
 | Managed-asset rules | `scripts/substrate/dev-install-substrate.sh` and later closeout evidence | symlinked assets and manifest-tracked copied binaries are distinguishable without ambiguity |
 | Helper order | `crates/shell/src/builtins/world_enable/runner/paths.rs` | prefix helper wins over inferred version-dir when env override is absent |
 | Flag and fail-closed behavior | `crates/shell/tests/world_enable.rs` | `--home` remains valid, `--prefix` remains invalid, and missing helpers still fail closed |
+| Protected-path refusal | `scripts/substrate/dev-uninstall-substrate.sh` and later closeout evidence | preserved-path reporting stays deterministic and exits with class `5` |
 
 Contract-readiness for SEAM-1 is documentary: the publication artifact is complete when the contract boundaries above are explicit enough for downstream implementation and closeout without reopening ownership or lookup-order questions.
