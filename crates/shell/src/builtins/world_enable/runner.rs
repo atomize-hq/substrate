@@ -5,14 +5,17 @@ use crate::execution::socket_activation;
 use crate::WorldEnableArgs;
 use anyhow::{bail, Result};
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 use substrate_common::paths as substrate_paths;
 
 use helper_script::run_helper_script;
 use log_ops::{append_log_line, initialize_log_file, print_dry_run_plan};
 use manager_env::update_manager_env_exports;
-use paths::{locate_helper_script, next_log_path, resolve_version_dir, resolve_world_socket_path};
+use paths::{
+    locate_helper_script, next_log_path, resolve_version_dir, resolve_world_socket_path,
+    select_accepted_staged_world_agent,
+};
 use provision_deps::{
     ensure_supported_backend_or_exit, exit_probe_result_not_supported, print_pacman_requirements,
     print_probe_result, print_verbose_pacman_requirements, print_verbose_requirements,
@@ -40,6 +43,27 @@ fn resolve_helper_version_dir(
         Ok(version_dir) => Ok(Some(version_dir)),
         Err(_) if prefix_helper.exists() => Ok(None),
         Err(err) => Err(err),
+    }
+}
+
+fn enforce_standard_version_dir_preflight(
+    version_dir: Option<&Path>,
+    helper_override: &Option<PathBuf>,
+) {
+    if helper_override.is_some() {
+        return;
+    }
+
+    let Some(version_dir) = version_dir else {
+        return;
+    };
+
+    if select_accepted_staged_world_agent(version_dir).is_none() {
+        eprintln!(
+            "substrate: accepted staged world-agent artifact missing under {}",
+            version_dir.display()
+        );
+        std::process::exit(3);
     }
 }
 
@@ -85,6 +109,7 @@ pub fn run_enable(args: &WorldEnableArgs) -> Result<()> {
         .ok()
         .map(PathBuf::from);
     let version_dir = resolve_helper_version_dir(&substrate_home, &helper_override)?;
+    enforce_standard_version_dir_preflight(version_dir.as_deref(), &helper_override);
     let script_path =
         locate_helper_script(&substrate_home, version_dir.as_deref(), helper_override)?;
     let log_path = next_log_path(&substrate_home)?;
@@ -195,6 +220,17 @@ fn run_enable_with_provision_deps(args: &WorldEnableArgs) -> Result<()> {
         None
     };
 
+    if let Some(home) = &args.home {
+        env::set_var("SUBSTRATE_HOME", home);
+    }
+
+    let substrate_home = substrate_paths::substrate_home()?;
+    let helper_override = env::var("SUBSTRATE_WORLD_ENABLE_SCRIPT")
+        .ok()
+        .map(PathBuf::from);
+    let version_dir = resolve_helper_version_dir(&substrate_home, &helper_override)?;
+    enforce_standard_version_dir_preflight(version_dir.as_deref(), &helper_override);
+
     if args.dry_run {
         let probe = match probe_world_manager() {
             Ok(probe) => probe,
@@ -231,12 +267,6 @@ fn run_enable_with_provision_deps(args: &WorldEnableArgs) -> Result<()> {
 
         return Ok(());
     }
-
-    if let Some(home) = &args.home {
-        env::set_var("SUBSTRATE_HOME", home);
-    }
-
-    let substrate_home = substrate_paths::substrate_home()?;
     let config_path = substrate_paths::config_file()?;
     let mut corrupt_config = false;
     let mut config = match load_install_config(&config_path) {
@@ -261,10 +291,6 @@ fn run_enable_with_provision_deps(args: &WorldEnableArgs) -> Result<()> {
         );
     }
 
-    let helper_override = env::var("SUBSTRATE_WORLD_ENABLE_SCRIPT")
-        .ok()
-        .map(PathBuf::from);
-    let version_dir = resolve_helper_version_dir(&substrate_home, &helper_override)?;
     let script_path =
         locate_helper_script(&substrate_home, version_dir.as_deref(), helper_override)?;
     let log_path = next_log_path(&substrate_home)?;
