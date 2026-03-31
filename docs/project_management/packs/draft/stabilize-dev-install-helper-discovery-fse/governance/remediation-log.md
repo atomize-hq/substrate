@@ -2,6 +2,15 @@
 
 ## Open remediations
 
+Rules:
+
+- Use canonical YAML blocks for remediation entries.
+- Use seam ownership only. Do not emit `WS-*` owners.
+- For `severity: blocking`, `blocked_targets` must not be empty.
+- For `severity: material` or `follow_up`, use `blocked_targets: []` unless a concrete blocked transition also applies.
+
+## Resolved remediations
+
 ```yaml
 remediation_id: REM-002
 origin_phase: pre_exec
@@ -12,22 +21,21 @@ related_thread: THR-02
 related_contract: C-02
 related_artifact: manual_testing_playbook.md
 severity: material
-status: open
+status: resolved
 owner_seam: SEAM-3
 blocked_targets: []
 summary: macOS validation surfaces can overclaim provisioning parity because helper discovery correctness does not guarantee all release-root assets are staged.
 required_fix: Keep `threaded-seams/seam-3-cross-platform-proof-drift-guards/slice-1-freeze-platform-evidence-boundaries.md`, `threaded-seams/seam-3-cross-platform-proof-drift-guards/slice-2-refresh-cross-platform-proof-surfaces.md`, and `threaded-seams/seam-3-cross-platform-proof-drift-guards/slice-3-seam-exit-gate.md` explicit that macOS scope is limited to helper discovery, validation, and managed cleanup unless additional release-root assets are intentionally added, and keep Windows wording compile-parity only through seam-exit accounting.
-resolution_evidence: []
+resolution_evidence:
+  - `136f53cd` creates `manual_testing_playbook.md` and `platform-parity-spec.md`, freezing the SEAM-3 wording boundary so macOS remains limited to helper discovery, validation, and managed cleanup while Windows remains compile-parity only.
+  - `f73a76d7` creates `smoke/linux-smoke.sh`, `smoke/macos-smoke.sh`, and `smoke/windows-smoke.ps1`, keeping the proof surfaces aligned to landed `C-01`..`C-04` without broadening macOS provisioning claims or implying Windows behavior support.
+  - `bash -n docs/project_management/packs/draft/stabilize-dev-install-helper-discovery-fse/smoke/linux-smoke.sh` passed.
+  - `bash -n docs/project_management/packs/draft/stabilize-dev-install-helper-discovery-fse/smoke/macos-smoke.sh` passed.
+  - `bash docs/project_management/packs/draft/stabilize-dev-install-helper-discovery-fse/smoke/macos-smoke.sh` passed.
+  - `cargo test -p shell world_enable --no-run` passed.
+  - `cargo test -p shell locate_helper_script --no-run` passed.
+  - `pwsh` was unavailable locally, so the Windows smoke wrapper was reviewed textually while the wrapped compile-only cargo commands completed successfully from the host shell.
 ```
-
-Rules:
-
-- Use canonical YAML blocks for remediation entries.
-- Use seam ownership only. Do not emit `WS-*` owners.
-- For `severity: blocking`, `blocked_targets` must not be empty.
-- For `severity: material` or `follow_up`, use `blocked_targets: []` unless a concrete blocked transition also applies.
-
-## Resolved remediations
 
 ```yaml
 remediation_id: REM-001
