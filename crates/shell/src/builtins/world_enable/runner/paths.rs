@@ -45,17 +45,16 @@ pub(super) fn locate_helper_script(
         );
     }
 
+    let prefix_candidate = prefix.join("scripts/substrate/world-enable.sh");
+    if prefix_candidate.exists() {
+        return Ok(prefix_candidate);
+    }
+
     let version_dir =
         version_dir.ok_or_else(|| anyhow!("missing version directory for helper discovery"))?;
-    let candidates = [
-        prefix.join("scripts/substrate/world-enable.sh"),
-        version_dir.join("scripts/substrate/world-enable.sh"),
-    ];
-
-    for candidate in candidates {
-        if candidate.exists() {
-            return Ok(candidate);
-        }
+    let version_candidate = version_dir.join("scripts/substrate/world-enable.sh");
+    if version_candidate.exists() {
+        return Ok(version_candidate);
     }
 
     bail!(
@@ -198,6 +197,17 @@ mod tests {
         let resolved =
             locate_helper_script(temp.path(), Some(version_dir.as_ref()), None).expect("script");
         assert_eq!(resolved, version_script);
+    }
+
+    #[test]
+    fn locate_helper_script_uses_prefix_bundle_without_version_dir() {
+        let temp = tempdir().unwrap();
+        let prefix_script = temp.path().join("scripts/substrate/world-enable.sh");
+        std::fs::create_dir_all(prefix_script.parent().unwrap()).unwrap();
+        std::fs::write(&prefix_script, "#!/bin/sh\necho prefix").unwrap();
+
+        let resolved = locate_helper_script(temp.path(), None, None).expect("script");
+        assert_eq!(resolved, prefix_script);
     }
 
     #[test]
