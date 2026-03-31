@@ -18,6 +18,8 @@ usage() {
 Usage: scripts/mac/smoke.sh [--netfilter-conformance | --bedpm-installer-conformance] [--log-dir DIR]
 
 Options:
+  --world-disabled-diagnostics
+                           Run the world-disabled-diagnostics conformance smoke instead of the generic smoke
   --netfilter-conformance  Run the posture-aware Lima netfilter smoke instead of the generic smoke
   --bedpm-installer-conformance
                            Run the BEDPM Linux installer smoke through the Lima-backed guest path
@@ -30,6 +32,10 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --netfilter-conformance)
       MODE="netfilter-conformance"
+      shift
+      ;;
+    --world-disabled-diagnostics)
+      MODE="world-disabled-diagnostics"
       shift
       ;;
     --bedpm-installer-conformance)
@@ -274,6 +280,232 @@ run_netfilter_posture() {
   jq '.world.netfilter_status' "${doctor_json}" > "${prefix}-netfilter-status.json"
 }
 
+run_world_disabled_diagnostics() {
+  local slice_id="${SUBSTRATE_SMOKE_SLICE_ID:-WDD2}"
+
+  case "${slice_id}" in
+    WDD0|WDD1|WDD2) ;;
+    *)
+      echo "ERROR: unsupported SUBSTRATE_SMOKE_SLICE_ID=${slice_id} (expected WDD0, WDD1, or WDD2)" >&2
+      exit 2
+      ;;
+  esac
+
+  WDD_WORKDIR="$(mktemp -d)"
+  trap 'rm -rf "${WDD_WORKDIR:-}"' EXIT
+
+  require_cmd jq
+
+  require_contains() {
+    local haystack="$1"
+    local needle="$2"
+    printf '%s\n' "$haystack" | grep -Fq "$needle" || {
+      echo "ERROR: missing expected line: $needle" >&2
+      return 1
+    }
+  }
+
+  require_not_contains() {
+    local haystack="$1"
+    local needle="$2"
+    if printf '%s\n' "$haystack" | grep -Fq "$needle"; then
+      echo "ERROR: found forbidden substring: $needle" >&2
+      return 1
+    fi
+  }
+
+  run_json_capture() {
+    local label="$1"
+    shift
+
+    local stdout_file stderr_file
+    stdout_file="$(mktemp)"
+    stderr_file="$(mktemp)"
+
+    set +e
+    "$@" 1>"${stdout_file}" 2>"${stderr_file}"
+    local rc=$?
+    set -e
+
+    if [[ "${rc}" -ne 0 ]]; then
+      echo "ERROR: ${label} (exit=${rc})" >&2
+      cat "${stderr_file}" >&2 || true
+      cat "${stdout_file}" >&2 || true
+      return "${rc}"
+    fi
+
+    local json
+    json="$(cat "${stdout_file}")"
+    rm -f "${stdout_file}" "${stderr_file}"
+    printf '%s' "${json}"
+  }
+
+  check_invalid_config() {
+    local home
+    home="$(mktemp -d)"
+    printf 'world: [\n' > "${home}/config.yaml"
+
+    local out rc
+
+    set +e
+    out="$(SUBSTRATE_HOME="${home}" "${SUBSTRATE_BIN}" shim doctor 2>&1)"
+    rc=$?
+    set -e
+    [[ "${rc}" -eq 2 ]] || { echo "ERROR: shim doctor invalid config expected exit=2, got=${rc}" >&2; printf '%s\n' "${out}" >&2; return 1; }
+    printf '%s\n' "${out}" | grep -Fq "config.yaml" || { echo "ERROR: shim doctor invalid config stderr must mention config.yaml" >&2; printf '%s\n' "${out}" >&2; return 1; }
+
+    set +e
+    out="$(SUBSTRATE_HOME="${home}" "${SUBSTRATE_BIN}" shim doctor --json 2>&1)"
+    rc=$?
+    set -e
+    [[ "${rc}" -eq 2 ]] || { echo "ERROR: shim doctor --json invalid config expected exit=2, got=${rc}" >&2; printf '%s\n' "${out}" >&2; return 1; }
+    printf '%s\n' "${out}" | grep -Fq "config.yaml" || { echo "ERROR: shim doctor --json invalid config stderr must mention config.yaml" >&2; printf '%s\n' "${out}" >&2; return 1; }
+
+    set +e
+    out="$(SUBSTRATE_HOME="${home}" "${SUBSTRATE_BIN}" health 2>&1)"
+    rc=$?
+    set -e
+    [[ "${rc}" -eq 2 ]] || { echo "ERROR: health invalid config expected exit=2, got=${rc}" >&2; printf '%s\n' "${out}" >&2; return 1; }
+    printf '%s\n' "${out}" | grep -Fq "config.yaml" || { echo "ERROR: health invalid config stderr must mention config.yaml" >&2; printf '%s\n' "${out}" >&2; return 1; }
+
+    set +e
+    out="$(SUBSTRATE_HOME="${home}" "${SUBSTRATE_BIN}" health --json 2>&1)"
+    rc=$?
+    set -e
+    [[ "${rc}" -eq 2 ]] || { echo "ERROR: health --json invalid config expected exit=2, got=${rc}" >&2; printf '%s\n' "${out}" >&2; return 1; }
+    printf '%s\n' "${out}" | grep -Fq "config.yaml" || { echo "ERROR: health --json invalid config stderr must mention config.yaml" >&2; printf '%s\n' "${out}" >&2; return 1; }
+
+    rm -rf "${home}"
+  }
+
+  check_shim_doctor_disabled_and_broken() {
+    local home
+    home="$(mktemp -d)"
+
+    local out rc
+    set +e
+    out="$(SUBSTRATE_HOME="${home}" SUBSTRATE_OVERRIDE_WORLD=disabled "${SUBSTRATE_BIN}" shim doctor 2>&1)"
+    rc=$?
+    set -e
+    [[ "${rc}" -eq 0 ]] || { echo "ERROR: shim doctor disabled expected exit=0, got=${rc}" >&2; printf '%s\n' "${out}" >&2; return 1; }
+
+    require_contains "${out}" "World backend:"
+    require_contains "${out}" "  Status: disabled"
+    require_contains "${out}" "  Next: run \`substrate world enable\` to provision"
+    require_contains "${out}" "World deps:"
+    require_contains "${out}" "  Status: skipped (world disabled)"
+    require_not_contains "${out}" "  Error:"
+
+    local json
+    json="$(run_json_capture "shim doctor --json (disabled)" env SUBSTRATE_HOME="${home}" SUBSTRATE_OVERRIDE_WORLD=disabled "${SUBSTRATE_BIN}" shim doctor --json)"
+    printf '%s\n' "${json}" | jq -e '
+      .world.status == "disabled" and
+      .world_deps.status == "skipped_disabled" and
+      (.world | has("error") | not) and
+      (.world | has("stderr") | not) and
+      (.world | has("exit_code") | not) and
+      (.world | has("details") | not) and
+      (.world_deps | has("error") | not) and
+      (.world_deps | has("report") | not)
+    ' >/dev/null
+
+    local sock="${home}/does-not-exist.sock"
+    rm -f "${sock}" || true
+
+    set +e
+    out="$(SUBSTRATE_HOME="${home}" SUBSTRATE_WORLD_SOCKET="${sock}" "${SUBSTRATE_BIN}" --world shim doctor 2>&1)"
+    rc=$?
+    set -e
+    [[ "${rc}" -eq 0 ]] || { echo "ERROR: shim doctor enabled-but-broken expected exit=0, got=${rc}" >&2; printf '%s\n' "${out}" >&2; return 1; }
+
+    require_contains "${out}" "World backend:"
+    require_contains "${out}" "  Status: needs attention"
+    require_contains "${out}" "  Details:"
+    require_contains "${out}" "  Applied:"
+    require_not_contains "${out}" "  Status: disabled"
+
+    json="$(run_json_capture "shim doctor --json (broken)" env SUBSTRATE_HOME="${home}" SUBSTRATE_WORLD_SOCKET="${sock}" "${SUBSTRATE_BIN}" --world shim doctor --json)"
+    printf '%s\n' "${json}" | jq -e '
+      .world.status == "needs_attention" and
+      (.world.details | type == "object") and
+      .world_deps.status == "error" and
+      (.world_deps.report | type == "object")
+    ' >/dev/null
+
+    rm -rf "${home}"
+  }
+
+  check_health_disabled_and_broken() {
+    local home
+    home="$(mktemp -d)"
+
+    local out rc
+    set +e
+    out="$(SUBSTRATE_HOME="${home}" SUBSTRATE_OVERRIDE_WORLD=disabled "${SUBSTRATE_BIN}" health 2>&1)"
+    rc=$?
+    set -e
+    [[ "${rc}" -eq 0 ]] || { echo "ERROR: health disabled expected exit=0, got=${rc}" >&2; printf '%s\n' "${out}" >&2; return 1; }
+
+    require_contains "${out}" "World backend: disabled"
+    require_contains "${out}" "  Next: run \`substrate world enable\` to provision"
+    require_contains "${out}" "World deps: skipped (world disabled)"
+    require_not_contains "${out}" "substrate world deps current"
+
+    local json
+    json="$(run_json_capture "health --json (disabled)" env SUBSTRATE_HOME="${home}" SUBSTRATE_OVERRIDE_WORLD=disabled "${SUBSTRATE_BIN}" health --json)"
+    printf '%s\n' "${json}" | jq -e '
+      .shim.world.status == "disabled" and
+      .shim.world_deps.status == "skipped_disabled" and
+      .summary.world_ok == null and
+      (.summary | has("world_error") | not) and
+      (.summary | has("world_deps_error") | not) and
+      .summary.world_deps_missing == [] and
+      .summary.world_deps_blocked == []
+    ' >/dev/null
+
+    local sock="${home}/does-not-exist.sock"
+    rm -f "${sock}" || true
+
+    set +e
+    out="$(SUBSTRATE_HOME="${home}" SUBSTRATE_WORLD_SOCKET="${sock}" "${SUBSTRATE_BIN}" --world health 2>&1)"
+    rc=$?
+    set -e
+    [[ "${rc}" -eq 0 ]] || { echo "ERROR: health enabled-but-broken expected exit=0, got=${rc}" >&2; printf '%s\n' "${out}" >&2; return 1; }
+
+    require_contains "${out}" "World backend: needs attention"
+    require_contains "${out}" "World deps: unavailable"
+    require_contains "${out}" "Overall status: attention required"
+    require_contains "${out}" "  - world backend health check failed"
+    require_not_contains "${out}" "World backend: disabled"
+
+    json="$(run_json_capture "health --json (broken)" env SUBSTRATE_HOME="${home}" SUBSTRATE_WORLD_SOCKET="${sock}" "${SUBSTRATE_BIN}" --world health --json)"
+    printf '%s\n' "${json}" | jq -e '
+      .shim.world.status == "needs_attention" and
+      .summary.world_ok == false and
+      .shim.world_deps.status == "error" and
+      (.summary.world_deps_error | type == "string" and length > 0)
+    ' >/dev/null
+
+    rm -rf "${home}"
+  }
+
+  echo "INFO: world-disabled-diagnostics macOS smoke slice=${slice_id}"
+  check_invalid_config
+  if [[ "${slice_id}" == "WDD0" ]]; then
+    echo "OK: world-disabled-diagnostics macOS smoke (${slice_id})"
+    return 0
+  fi
+
+  check_shim_doctor_disabled_and_broken
+  if [[ "${slice_id}" == "WDD1" ]]; then
+    echo "OK: world-disabled-diagnostics macOS smoke (${slice_id})"
+    return 0
+  fi
+
+  check_health_disabled_and_broken
+  echo "OK: world-disabled-diagnostics macOS smoke (${slice_id})"
+}
+
 run_generic_smoke() {
   local trace_log
   trace_log="${SHIM_TRACE_LOG:-$HOME/.substrate/trace.jsonl}"
@@ -346,16 +578,20 @@ Netfilter conformance artifacts:
 EOF
 }
 
-ensure_host_prereqs
 ensure_substrate_binary
 
-if [[ "${MODE}" == "netfilter-conformance" ]]; then
+if [[ "${MODE}" == "world-disabled-diagnostics" ]]; then
+  run_world_disabled_diagnostics
+elif [[ "${MODE}" == "netfilter-conformance" ]]; then
+  ensure_host_prereqs
   if [[ -z "${LOG_DIR}" ]]; then
     LOG_DIR="$(default_netfilter_log_dir)"
   fi
   run_netfilter_conformance "${LOG_DIR}"
 elif [[ "${MODE}" == "bedpm-installer-conformance" ]]; then
+  ensure_host_prereqs
   run_bedpm_installer_conformance
 else
+  ensure_host_prereqs
   run_generic_smoke
 fi

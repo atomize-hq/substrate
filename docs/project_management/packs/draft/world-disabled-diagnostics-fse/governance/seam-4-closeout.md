@@ -55,15 +55,33 @@ This matrix is the operator-playbook view that `S2` and `S3` must consume. It is
 ## Seam-exit gate record
 
 - **Source artifact**: `threaded-seams/seam-4-cross-platform-conformance/slice-<final>-seam-exit-gate.md`
-- **Cross-platform evidence matrix**: pending execution in `S2`; this scaffold defines the required proof paths and operator assertions.
+- **Cross-platform evidence matrix**: retained as the required proof map; `S2` now has local evidence against the Linux anchor paths and the updated repo-native smoke wrappers.
 - **Landed evidence**:
+  - [`cargo test -p shell --test shim_doctor -- --nocapture`](/home/spenser/__Active_code/substrate/crates/shell/tests/shim_doctor.rs) passed locally on Linux (`14/14` tests green).
+  - [`cargo test -p shell --test shim_health -- --nocapture`](/home/spenser/__Active_code/substrate/crates/shell/tests/shim_health.rs) passed locally on Linux (`6/6` tests green).
+  - [`scripts/mac/smoke.sh`](/home/spenser/__Active_code/substrate/scripts/mac/smoke.sh) now exposes `--world-disabled-diagnostics`; `scripts/mac/smoke.sh --world-disabled-diagnostics` passed locally on Linux as a host-neutral contract check.
+  - [`scripts/windows/wsl-smoke.ps1`](/home/spenser/__Active_code/substrate/scripts/windows/wsl-smoke.ps1) now exposes `-WorldDisabledDiagnostics`, but native Windows execution remains blocked in this environment because neither `pwsh` nor `powershell` is installed.
+  - Manual Linux proof commands captured the current contract shape:
+    - `SUBSTRATE_OVERRIDE_WORLD=disabled target/debug/substrate shim doctor` prints `World backend: disabled` and `World deps: skipped (world disabled)`.
+    - `SUBSTRATE_WORLD_SOCKET=<missing> target/debug/substrate --world shim doctor` prints `World backend: needs attention` plus `Details:` / `Applied:` visibility; JSON carries `world.details` and `world_deps.report`.
+    - `SUBSTRATE_WORLD_SOCKET=<missing> target/debug/substrate --world health` prints `World backend: needs attention`, `World deps: unavailable`, `Overall status: attention required`, and the world-backend-failure bullet; JSON carries `summary.world_deps_error` and omits a disabled-path `summary.world_error`.
+  - Shared-file revalidation statement: repo evidence shows [`crates/shell/src/builtins/health.rs`](/home/spenser/__Active_code/substrate/crates/shell/src/builtins/health.rs), [`crates/shell/src/builtins/shim_doctor/report.rs`](/home/spenser/__Active_code/substrate/crates/shell/src/builtins/shim_doctor/report.rs), [`crates/shell/src/builtins/shim_doctor/output.rs`](/home/spenser/__Active_code/substrate/crates/shell/src/builtins/shim_doctor/output.rs), and [`docs/USAGE.md`](/home/spenser/__Active_code/substrate/docs/USAGE.md) still expose the published disabled/skipped contract surfaces, and S2 did not need to edit those files because the proof-surface alignment work was confined to the smoke wrappers and this closeout.
 - **Contracts published or changed**: none or minimal
 - **Threads published / advanced**: `THR-04`, `THR-05`
 - **Review-surface delta**:
+  - the macOS smoke wrapper now has a dedicated disabled-diagnostics conformance mode keyed by `SUBSTRATE_SMOKE_SLICE_ID=WDD0|WDD1|WDD2`
+  - the Windows smoke wrapper now has a dedicated disabled-diagnostics conformance mode behind `-WorldDisabledDiagnostics`
+  - both wrappers now track the actual current broken-path JSON shape: `shim doctor` exposes `details` / `report`, and `health` carries `summary.world_deps_error` without inventing a `summary.world_error`
 - **Planned-vs-landed delta**:
+  - the planned cross-platform proof shape held, but Windows-native execution is still blocked here by missing PowerShell tooling
+  - the disabled-text and omission proof remained intact; the enabled-broken branch required adjusting the smoke wrappers to the live `details`/`report` contract
 - **Downstream stale triggers raised**:
+  - any future drift in `crates/shell/tests/shim_doctor.rs`, `crates/shell/tests/shim_health.rs`, or the root smoke wrappers that stops proving the current disabled and enabled-broken contract shape
+  - any future change to the human broken-path summary wording in `shim_doctor/output.rs` or `health.rs` that invalidates the updated smoke assertions
 - **Remediation disposition**:
+  - no repo remediation open from S2
 - **Promotion blockers**:
+  - S3 exit-gate execution and closeout publication are still pending
 - **Promotion readiness**: blocked
 
 ## Post-exec gate disposition
