@@ -27,7 +27,7 @@ open_remediations: []
 
 ## Seam-exit gate record
 
-- **Source artifact**: `threaded-seams/seam-1-doctor-text-disable-attribution/slice-<final>-seam-exit-gate.md`
+- **Source artifact**: `threaded-seams/seam-1-doctor-text-disable-attribution/slice-4-seam-exit-gate.md`
 - **Landed evidence**: merged doctor-path changes, targeted winner-mapping tests, manual CLI/env/workspace/global checks, and platform smoke results for the doctor surface
 - **Contracts published or changed**: `C-01`, `C-02`
 - **Threads published / advanced**: `THR-01`, `THR-02`

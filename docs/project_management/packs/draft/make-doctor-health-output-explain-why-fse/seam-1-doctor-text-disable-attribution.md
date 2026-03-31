@@ -2,7 +2,7 @@
 seam_id: SEAM-1
 seam_slug: doctor-text-disable-attribution
 type: capability
-status: proposed
+status: decomposed
 execution_horizon: active
 plan_version: v1
 basis:
@@ -28,7 +28,7 @@ gates:
     closeout: pending
 seam_exit_gate:
   required: true
-  planned_location: reserved_final_slice
+  planned_location: S4
   status: pending
 open_remediations: []
 ---
