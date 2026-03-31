@@ -26,6 +26,16 @@ fn parse_json(stdout: &[u8], label: &str) -> Value {
     })
 }
 
+fn stdout_string(output: &std::process::Output) -> String {
+    String::from_utf8_lossy(&output.stdout).into_owned()
+}
+
+fn attribution_line(stdout: &str) -> Option<&str> {
+    stdout
+        .lines()
+        .find(|line| line.contains("world isolation disabled by"))
+}
+
 fn assert_host_doctor_envelope_v1(payload: &Value) {
     assert_eq!(
         payload.get("schema_version").and_then(Value::as_u64),
@@ -325,6 +335,121 @@ fn host_doctor_json_matches_envelope_v1_when_available() {
 fn world_doctor_json_matches_envelope_v1_when_available() {
     let payload = run_world_doctor_json(default_world_doctor_report());
     assert_world_doctor_envelope_v1(&payload);
+}
+
+fn write_workspace_config(home: &std::path::Path, body: &str) {
+    let path = home.join(".substrate").join("workspace.yaml");
+    std::fs::create_dir_all(path.parent().expect("workspace parent"))
+        .expect("create workspace dir");
+    std::fs::write(&path, body).expect("write workspace config");
+}
+
+fn write_global_config(home: &std::path::Path, body: &str) {
+    let path = home.join(".substrate").join("config.yaml");
+    std::fs::create_dir_all(path.parent().expect("global parent")).expect("create global dir");
+    std::fs::write(&path, body).expect("write global config");
+}
+
+#[test]
+fn host_doctor_text_omits_disable_line_when_enabled() {
+    let fixture = ShellEnvFixture::new();
+    let mut cmd = support::substrate_command_for_home(&fixture);
+    let output = cmd
+        .arg("host")
+        .arg("doctor")
+        .output()
+        .expect("substrate host doctor");
+    let stdout = stdout_string(&output);
+
+    assert!(
+        attribution_line(&stdout).is_none(),
+        "enabled host doctor should omit disable attribution: {stdout}"
+    );
+}
+
+#[test]
+fn host_doctor_text_prints_cli_flag_attribution_once() {
+    let fixture = ShellEnvFixture::new();
+    let mut cmd = support::substrate_command_for_home(&fixture);
+    cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD");
+    let output = cmd
+        .arg("host")
+        .arg("doctor")
+        .arg("--no-world")
+        .output()
+        .expect("substrate host doctor --no-world");
+    let stdout = stdout_string(&output);
+    let line = attribution_line(&stdout).expect("expected disable attribution line");
+    assert_eq!(
+        line,
+        "FAIL  | world isolation disabled by CLI flag --no-world"
+    );
+    assert_eq!(stdout.matches("world isolation disabled by").count(), 1);
+}
+
+#[test]
+fn world_doctor_text_prints_env_override_attribution_once() {
+    let fixture = ShellEnvFixture::new();
+    let mut cmd = support::substrate_command_for_home(&fixture);
+    cmd.env("SUBSTRATE_OVERRIDE_WORLD", "disabled");
+    let output = cmd
+        .arg("world")
+        .arg("doctor")
+        .output()
+        .expect("substrate world doctor");
+    let stdout = stdout_string(&output);
+    let line = attribution_line(&stdout).expect("expected disable attribution line");
+    assert_eq!(
+        line,
+        "FAIL  | world isolation disabled by env override SUBSTRATE_OVERRIDE_WORLD=disabled"
+    );
+    assert_eq!(stdout.matches("world isolation disabled by").count(), 1);
+}
+
+#[test]
+fn world_doctor_text_prefers_workspace_over_global_and_masks_paths() {
+    let fixture = ShellEnvFixture::new();
+    write_global_config(
+        fixture.home(),
+        r#"
+world:
+  enabled: true
+"#,
+    );
+    write_workspace_config(
+        fixture.home(),
+        r#"
+world:
+  enabled: false
+"#,
+    );
+
+    let mut cmd = support::substrate_command_for_home(&fixture);
+    cmd.env("SUBSTRATE_OVERRIDE_WORLD", "disabled");
+    let output = cmd
+        .arg("world")
+        .arg("doctor")
+        .output()
+        .expect("substrate world doctor");
+    let stdout = stdout_string(&output);
+    let line = attribution_line(&stdout).expect("expected disable attribution line");
+    assert_eq!(
+        line,
+        "FAIL  | world isolation disabled by workspace config <workspace>/.substrate/workspace.yaml (world.enabled: false)"
+    );
+
+    let workspace_path = fixture.home().join(".substrate").join("workspace.yaml");
+    let global_path = fixture.home().join(".substrate").join("config.yaml");
+    let line_owned = line.to_string();
+    assert!(
+        !line_owned.contains(workspace_path.to_string_lossy().as_ref()),
+        "workspace attribution line should not expose raw workspace path: {line_owned}"
+    );
+    assert!(
+        !line_owned.contains(global_path.to_string_lossy().as_ref()),
+        "workspace attribution line should not expose raw global path: {line_owned}"
+    );
+    assert_eq!(stdout.matches("world isolation disabled by").count(), 1);
 }
 
 #[cfg(target_os = "linux")]

@@ -492,6 +492,12 @@ pub(crate) struct ConfigExplainV1 {
     pub keys: OrderedExplainKeys,
 }
 
+impl ConfigExplainV1 {
+    pub(crate) fn world_enabled_explain(&self) -> Option<&ConfigExplainKey> {
+        self.keys.0.get("world.enabled")
+    }
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub(crate) struct ConfigExplainKey {
     pub merge_strategy: String,

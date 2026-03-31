@@ -1,7 +1,11 @@
 use serde_json::{json, Value};
 use substrate_broker::world_fs_policy;
 
-pub(crate) fn host_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
+pub(crate) fn host_doctor_main(
+    json_mode: bool,
+    world_enabled: bool,
+    world_disable_attribution: Option<&'static str>,
+) -> i32 {
     let fs_policy = world_fs_policy();
     if json_mode {
         let out = json!({
@@ -22,12 +26,21 @@ pub(crate) fn host_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
         println!("{}", serde_json::to_string_pretty(&out).unwrap());
     } else {
         println!("== substrate host doctor ==");
+        if !world_enabled {
+            if let Some(msg) = world_disable_attribution {
+                println!("FAIL  | {}", msg);
+            }
+        }
         println!("FAIL  | host doctor is not yet implemented on Windows");
     }
     4
 }
 
-pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
+pub(crate) fn world_doctor_main(
+    json_mode: bool,
+    world_enabled: bool,
+    world_disable_attribution: Option<&'static str>,
+) -> i32 {
     // Helpers
     fn pass(msg: &str) {
         println!("PASS  | {}", msg);
@@ -144,7 +157,9 @@ pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
         println!("== substrate world doctor ==");
         println!("== Host ==");
         if !world_enabled {
-            fail("world isolation disabled by effective config (--no-world)");
+            if let Some(msg) = world_disable_attribution {
+                fail(msg);
+            }
         }
 
         info(&format!("transport: {}", transport));

@@ -1,18 +1,35 @@
 use serde_json::json;
 use substrate_broker::world_fs_policy;
 
-pub(crate) fn host_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
-    world_doctor_macos::run_host(json_mode, world_enabled, &world_doctor_macos::SystemRunner)
+pub(crate) fn host_doctor_main(
+    json_mode: bool,
+    world_enabled: bool,
+    world_disable_attribution: Option<&'static str>,
+) -> i32 {
+    world_doctor_macos::run_host(
+        json_mode,
+        world_enabled,
+        world_disable_attribution,
+        &world_doctor_macos::SystemRunner,
+    )
 }
 
-pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
-    // `world_doctor_macos::run` is used by unit tests; keep its signature stable and pass the
-    // effective world-enabled state via an existing env flag.
+pub(crate) fn world_doctor_main(
+    json_mode: bool,
+    world_enabled: bool,
+    world_disable_attribution: Option<&'static str>,
+) -> i32 {
+    // Preserve the world-enabled state for downstream consumers that still read the env var.
     std::env::set_var(
         "SUBSTRATE_WORLD_ENABLED",
         if world_enabled { "1" } else { "0" },
     );
-    world_doctor_macos::run(json_mode, &world_doctor_macos::SystemRunner)
+    world_doctor_macos::run(
+        json_mode,
+        world_enabled,
+        world_disable_attribution,
+        &world_doctor_macos::SystemRunner,
+    )
 }
 
 mod world_doctor_macos {
@@ -281,6 +298,7 @@ echo pass
     pub(super) fn run_host(
         json_mode: bool,
         world_enabled: bool,
+        world_disable_attribution: Option<&'static str>,
         runner: &dyn CommandRunner,
     ) -> i32 {
         let fs_policy = world_fs_policy();
@@ -296,7 +314,9 @@ echo pass
         }
 
         if !world_enabled && !json_mode {
-            fail("world isolation disabled by effective config (--no-world)");
+            if let Some(msg) = world_disable_attribution {
+                fail(msg);
+            }
             // Continue gathering best-effort host facts.
         }
 
@@ -458,18 +478,14 @@ echo pass
         }
     }
 
-    pub(super) fn run(json_mode: bool, runner: &dyn CommandRunner) -> i32 {
+    pub(super) fn run(
+        json_mode: bool,
+        world_enabled: bool,
+        world_disable_attribution: Option<&'static str>,
+        runner: &dyn CommandRunner,
+    ) -> i32 {
         let fs_policy = world_fs_policy();
         let vm_name = resolve_lima_vm_name();
-        let world_enabled = std::env::var("SUBSTRATE_WORLD_ENABLED")
-            .ok()
-            .map(|raw| {
-                matches!(
-                    raw.trim(),
-                    "1" | "true" | "TRUE" | "yes" | "YES" | "on" | "ON"
-                )
-            })
-            .unwrap_or(true);
 
         let pass = |msg: &str| println!("PASS  | {}", msg);
         let warn = |msg: &str| println!("WARN  | {}", msg);
@@ -482,7 +498,9 @@ echo pass
         }
 
         if !world_enabled && !json_mode {
-            fail("world isolation disabled by effective config (--no-world)");
+            if let Some(msg) = world_disable_attribution {
+                fail(msg);
+            }
         }
 
         let lima_installed = runner.run("limactl", &["--version"]).success;
@@ -961,7 +979,7 @@ echo pass
                 ),
             ];
             let runner = MockRunner::new(responses);
-            let exit = run(true, &runner);
+            let exit = run(true, true, None, &runner);
             assert_eq!(exit, 0);
 
             match prev_home {
@@ -1028,7 +1046,7 @@ echo pass
                                 ),
                             ];
                             let runner = MockRunner::new(responses);
-                            let exit = run(true, &runner);
+                            let exit = run(true, true, None, &runner);
                             assert_eq!(exit, 0);
 
                             let lima =
@@ -1099,7 +1117,7 @@ echo pass
                         ),
                     ];
                     let runner = MockRunner::new(responses);
-                    let exit = run_host(true, true, &runner);
+                    let exit = run_host(true, true, None, &runner);
                     assert_eq!(exit, 0);
 
                     let lima = lima_json_value(vm_name, true, true, "Running", true, true, false);
@@ -1119,7 +1137,7 @@ echo pass
                 ),
             ];
             let runner = MockRunner::new(responses);
-            let exit = run(false, &runner);
+            let exit = run(false, true, None, &runner);
             assert_eq!(exit, 4);
         }
     }

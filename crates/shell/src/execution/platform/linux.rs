@@ -18,7 +18,11 @@ use std::time::Duration;
 use substrate_broker::{detect_profile, world_fs_policy};
 use which::which;
 
-pub(crate) fn host_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
+pub(crate) fn host_doctor_main(
+    json_mode: bool,
+    world_enabled: bool,
+    world_disable_attribution: Option<&'static str>,
+) -> i32 {
     // Helpers
     fn pass(msg: &str) {
         println!("PASS  | {}", msg);
@@ -219,7 +223,9 @@ pub(crate) fn host_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
     } else {
         println!("== substrate host doctor ==");
         if !world_enabled {
-            fail("world isolation disabled by effective config (--no-world)");
+            if let Some(msg) = world_disable_attribution {
+                fail(msg);
+            }
         }
 
         if overlay_ok {
@@ -325,7 +331,11 @@ pub(crate) fn host_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
     }
 }
 
-pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
+pub(crate) fn world_doctor_main(
+    json_mode: bool,
+    world_enabled: bool,
+    world_disable_attribution: Option<&'static str>,
+) -> i32 {
     // Helpers
     fn pass(msg: &str) {
         println!("PASS  | {}", msg);
@@ -602,7 +612,9 @@ pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
         println!("== Host ==");
 
         if !world_enabled {
-            fail("world isolation disabled by effective config (--no-world)");
+            if let Some(msg) = world_disable_attribution {
+                fail(msg);
+            }
         }
 
         if overlay_ok {
