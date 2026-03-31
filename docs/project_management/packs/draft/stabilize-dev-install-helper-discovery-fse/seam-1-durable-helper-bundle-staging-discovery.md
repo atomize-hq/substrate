@@ -2,8 +2,8 @@
 seam_id: SEAM-1
 seam_slug: durable-helper-bundle-staging-discovery
 type: capability
-status: exec-ready
-execution_horizon: active
+status: closed
+execution_horizon: future
 plan_version: v2
 basis:
   currentness: current
@@ -22,14 +22,13 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
-  planned_location: reserved_final_slice
-  status: pending
-open_remediations:
-  - REM-001
+  planned_location: S4
+  status: passed
+open_remediations: []
 ---
 
 # SEAM-1 - Durable helper-bundle staging + discovery
@@ -99,13 +98,7 @@ open_remediations:
   - Fail closed when no helper candidate exists.
   - Preserve user-managed destination safety; do not introduce destructive overwrite shortcuts.
   - Keep Windows unchanged except for compile-parity validation downstream.
-- **Downstream decomposition context**:
-  - Why this seam is now `exec-ready`: seam-local review revalidated the current installer and helper-resolution surfaces, froze the managed-asset boundary, and left no blocking pre-exec issue in the owned contract baseline.
-  - Which threads matter most: `THR-01` and `THR-02`.
-  - What the seam-local review confirmed: exact staged path membership, managed-asset classes, helper-order resolution, `cargo clean` survival posture, and the current `--home` / invalid `--prefix` CLI surface.
-- **Expected seam-exit concerns**:
-  - Contracts likely to publish: `C-01`, `C-02`, `C-03`.
-  - Threads likely to advance: `THR-01`, `THR-02`.
-  - Review-surface areas likely to shift after landing: the staged bundle tree, helper-resolution branch order, and any operator-facing helper-missing guidance.
-  - Downstream seams most likely to require revalidation: `SEAM-2`, `SEAM-3`.
-  - Accepted or published owned-contract artifacts belong here and in closeout evidence, not in pre-exec verification for the producing seam.
+- **Closeout posture**:
+  - This seam has left the forward window after `governance/seam-1-closeout.md` recorded `THR-01` and `THR-02` as published with `promotion_readiness: ready`.
+  - The owned contract surface is now authoritative pack truth through `contract.md`, `decision_register.md`, and the seam closeout record rather than through provisional planning only.
+  - Downstream seams that consume this handoff are `SEAM-2` and `SEAM-3`.

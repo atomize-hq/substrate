@@ -1,8 +1,8 @@
 ---
 seam_id: SEAM-1
 seam_slug: durable-helper-bundle-staging-discovery
-status: exec-ready
-execution_horizon: active
+status: closed
+execution_horizon: future
 plan_version: v2
 basis:
   currentness: current

@@ -2,15 +2,15 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-1`
-- **Next seam**: `SEAM-2`
-- **Future seams**: `SEAM-3`
+- **Active seam**: `SEAM-2`
+- **Next seam**: `SEAM-3`
+- **Future seams**: `SEAM-1`
 
 Horizon policy for this pack:
 
-- only `SEAM-1` is eligible for authoritative downstream sub-slices by default
-- `SEAM-2` may later receive seam-local review + slices, but any deeper planning should stay provisional until `SEAM-1` publishes the landed bundle layout and managed-marker facts
-- `SEAM-3` remains a seam brief until both producer seams close and conformance can bind to landed truth
+- only the active seam is eligible for authoritative downstream sub-slices by default
+- `SEAM-2` now has closeout-backed basis for authoritative seam-local planning and downstream sub-slices
+- `SEAM-3` remains a seam brief until `SEAM-2` publishes landed cleanup/refusal truth that conformance can bind to
 
 ## Contract registry
 
@@ -57,10 +57,10 @@ Horizon policy for this pack:
   - **Consumer seam(s)**: `SEAM-2`, `SEAM-3`
   - **Carried contract IDs**: `C-02`, `C-03`
   - **Purpose**: publish the real staged bundle surface and the managed-asset eligibility rules that cleanup and conformance must consume.
-  - **State**: `published`
+  - **State**: `revalidated`
   - **Revalidation trigger**: staged path list changes, file-type policy changes, manifest location/schema changes, or Linux guest copy rules change.
-  - **Satisfied by**: `governance/seam-1-closeout.md` records the landed bundle tree, managed-marker evidence, and any downstream stale triggers.
-  - **Notes**: `SEAM-2` must not promote off provisional assumptions once `SEAM-1` lands; it must rebind to the actual closeout-backed bundle layout.
+  - **Satisfied by**: `governance/seam-1-closeout.md` records the landed bundle tree, managed-marker evidence, and any downstream stale triggers; `threaded-seams/seam-2-managed-cleanup-protected-path-guard/review.md` revalidates cleanup planning against that published handoff.
+  - **Notes**: `SEAM-2` has now rebound to the actual closeout-backed bundle layout. `SEAM-3` still consumes the same published truth later alongside `THR-02` and `THR-03`.
 
 - **Thread ID**: `THR-02`
   - **Producer seam**: `SEAM-1`
@@ -121,5 +121,5 @@ Critical-path failure modes to watch:
 
 Concurrency posture:
 
-- `SEAM-2` can draft seam-local review questions early, but authoritative decomposition waits on `THR-01`.
-- `SEAM-3` can sketch evidence scaffolds early, but it stays future until `THR-01`, `THR-02`, and `THR-03` have closeout-backed truth to consume.
+- `SEAM-2` can now own authoritative seam-local planning and downstream slices because `THR-01` is revalidated for the active cleanup seam.
+- `SEAM-3` is now the queued seam, but it stays seam-brief depth until `THR-02` and `THR-03` both have closeout-backed truth to consume.

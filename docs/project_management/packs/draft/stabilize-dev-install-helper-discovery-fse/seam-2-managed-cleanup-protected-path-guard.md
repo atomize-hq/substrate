@@ -2,14 +2,15 @@
 seam_id: SEAM-2
 seam_slug: managed-cleanup-protected-path-guard
 type: capability
-status: proposed
-execution_horizon: next
-plan_version: v1
+status: exec-ready
+execution_horizon: active
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+    - governance/seam-1-closeout.md
   required_threads:
     - THR-01
   stale_triggers:
@@ -17,17 +18,18 @@ basis:
     - repo-managed symlink ownership rules change
     - fixed bundle path list changes
     - protected-path exit-code taxonomy changes
+    - ADR-0035 changes shared install-script or helper-script surfaces
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
 seam_exit_gate:
   required: true
-  planned_location: reserved_final_slice
+  planned_location: S3
   status: pending
 open_remediations: []
 ---
@@ -96,7 +98,7 @@ open_remediations: []
   - Keep unmanaged paths in place even when cleanup cannot complete fully.
   - Do not broaden deletion authority beyond the exact managed contract published upstream.
 - **Downstream decomposition context**:
-  - Why this seam is `next`: it is bounded and decomposable, but its basis must be revalidated against the actual landed bundle and manifest shape from `SEAM-1`.
+  - Why this seam is active: it is bounded and decomposable, and its basis is now revalidated against the landed bundle and manifest shape from `SEAM-1`.
   - Which threads matter most: `THR-01` and `THR-03`.
   - What the first seam-local review should focus on: ownership classification, manifest schema and location, refusal messaging, negative cases, and directory-pruning behavior.
 - **Expected seam-exit concerns**:

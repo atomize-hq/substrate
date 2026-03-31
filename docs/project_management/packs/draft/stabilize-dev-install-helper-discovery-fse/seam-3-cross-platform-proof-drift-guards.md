@@ -3,7 +3,7 @@ seam_id: SEAM-3
 seam_slug: cross-platform-proof-drift-guards
 type: conformance
 status: proposed
-execution_horizon: future
+execution_horizon: next
 plan_version: v1
 basis:
   currentness: provisional
@@ -98,7 +98,7 @@ open_remediations: []
   - Preserve deterministic skip behavior on non-target hosts.
   - Record stale triggers rather than silently carrying evidence forward when upstream reality changes.
 - **Downstream decomposition context**:
-  - Why this seam is `future`: it should consume landed truth from the first two seams, not drive their contract decisions.
+  - Why this seam is now `next`: `SEAM-1` has already published `THR-01` and `THR-02`, so this seam is the queued successor behind active `SEAM-2`, but it still must wait for `THR-03` closeout-backed truth before seam-local planning becomes authoritative.
   - Which threads matter most: `THR-01`, `THR-02`, and `THR-03`.
   - What the first seam-local review should focus on: evidence-to-contract alignment, platform claim boundaries, checkpoint proof, and stale-trigger handling.
 - **Expected seam-exit concerns**:
