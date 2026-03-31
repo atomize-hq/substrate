@@ -857,6 +857,124 @@ is_linux_elf() {
   return 0
 }
 
+path_is_repo_managed_symlink() {
+  local path="$1"
+  local repo_root="$2"
+
+  if [[ ! -L "${path}" ]]; then
+    return 1
+  fi
+
+  local target
+  target="$(readlink "${path}" 2>/dev/null || true)"
+  if [[ -z "${target}" ]]; then
+    return 1
+  fi
+
+  if [[ "${target}" != /* ]]; then
+    target="${path%/*}/${target}"
+  fi
+
+  local target_dir
+  target_dir="$(dirname "${target}")"
+  if target_dir="$(cd "${target_dir}" 2>/dev/null && pwd -P)"; then
+    target="${target_dir}/$(basename "${target}")"
+  fi
+
+  case "${target}" in
+    "${repo_root%/}/"*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+path_is_recorded_managed_linux_binary() {
+  local path="$1"
+  local manifest_path="$2"
+
+  if [[ -z "${manifest_path}" || ! -f "${manifest_path}" ]]; then
+    return 1
+  fi
+
+  grep -Fxq -- "${path}" "${manifest_path}"
+}
+
+path_is_managed_bundle_entry() {
+  local path="$1"
+  local repo_root="$2"
+  local manifest_path="$3"
+
+  if path_is_repo_managed_symlink "${path}" "${repo_root}"; then
+    return 0
+  fi
+
+  if path_is_recorded_managed_linux_binary "${path}" "${manifest_path}"; then
+    return 0
+  fi
+
+  return 1
+}
+
+stage_managed_bundle_symlink() {
+  local src="$1"
+  local dest="$2"
+  local repo_root="$3"
+  local manifest_path="$4"
+  local label="$5"
+
+  if [[ ! -e "${src}" ]]; then
+    warn "${label} source missing at ${src}; leaving ${dest} unchanged."
+    return 0
+  fi
+
+  mkdir -p "$(dirname "${dest}")"
+
+  if [[ -e "${dest}" || -L "${dest}" ]]; then
+    if path_is_managed_bundle_entry "${dest}" "${repo_root}" "${manifest_path}"; then
+      rm -f "${dest}"
+    else
+      fatal "Refusing to overwrite unmanaged ${label} at ${dest}"
+    fi
+  fi
+
+  ln -s "${src}" "${dest}"
+  log "Linked ${label} into ${dest}"
+}
+
+stage_managed_linux_binary_copy() {
+  local vm_path="$1"
+  local dest_path="$2"
+  local repo_root="$3"
+  local manifest_path="$4"
+  local label="$5"
+
+  mkdir -p "$(dirname "${dest_path}")"
+
+  if [[ -e "${dest_path}" || -L "${dest_path}" ]]; then
+    if path_is_managed_bundle_entry "${dest_path}" "${repo_root}" "${manifest_path}"; then
+      rm -f "${dest_path}"
+    else
+      fatal "Refusing to overwrite unmanaged ${label} at ${dest_path}"
+    fi
+  fi
+
+  if ! limactl copy "substrate:${vm_path}" "${dest_path}"; then
+    warn "Failed to copy Linux ${label} from Lima into ${dest_path}"
+    return 1
+  fi
+  chmod 0755 "${dest_path}" 2>/dev/null || true
+  if ! is_linux_elf "${dest_path}"; then
+    warn "Copied Linux ${label} at ${dest_path} is not a Linux ELF"
+    rm -f "${dest_path}"
+    return 1
+  fi
+  record_managed_prefix_linux_binary "${dest_path}"
+  log "Cached Linux ${label} into ${dest_path}"
+}
+
 clear_managed_prefix_linux_binary_cache() {
   if [[ ! -f "${MANAGED_MAC_LINUX_BINARIES_PATH}" ]]; then
     return 0
@@ -897,21 +1015,7 @@ cache_linux_binary_from_lima() {
   local vm_path="$1"
   local dest_path="$2"
   local label="$3"
-
-  mkdir -p "$(dirname "${dest_path}")"
-  rm -f "${dest_path}"
-  if ! limactl copy "substrate:${vm_path}" "${dest_path}"; then
-    warn "Failed to copy Linux ${label} from Lima into ${dest_path}"
-    return 1
-  fi
-  chmod 0755 "${dest_path}" 2>/dev/null || true
-  if ! is_linux_elf "${dest_path}"; then
-    warn "Copied Linux ${label} at ${dest_path} is not a Linux ELF"
-    rm -f "${dest_path}"
-    return 1
-  fi
-  record_managed_prefix_linux_binary "${dest_path}"
-  log "Cached Linux ${label} into ${dest_path}"
+  stage_managed_linux_binary_copy "${vm_path}" "${dest_path}" "${PREFIX}" "${MANAGED_MAC_LINUX_BINARIES_PATH}" "${label}"
 }
 
 verify_prefix_linux_bundle() {
@@ -949,32 +1053,23 @@ stage_dev_world_runtime_bundle() {
   for pair in "${script_pairs[@]}"; do
     src="${pair%%:*}"
     dest="${pair#*:}"
-    if [[ -f "${src}" ]]; then
-      ln -sfn "${src}" "${dest}"
-      log "Linked runtime bundle artifact into ${dest}"
-    else
-      warn "Runtime bundle source missing at ${src}; world enable may fail."
-    fi
+    stage_managed_bundle_symlink "${src}" "${dest}" "${repo_root}" "${MANAGED_MAC_LINUX_BINARIES_PATH}" "runtime bundle artifact"
   done
 
   local linux_cli
   linux_cli="$(find_linux_substrate_cli "${repo_root}" "${target_dir}")" || true
   if [[ -n "${linux_cli:-}" ]]; then
-    ln -sfn "${linux_cli}" "${bin_linux_dir}/substrate"
-    log "Linked Linux substrate CLI into ${bin_linux_dir}/substrate"
+    stage_managed_bundle_symlink "${linux_cli}" "${bin_linux_dir}/substrate" "${repo_root}" "${MANAGED_MAC_LINUX_BINARIES_PATH}" "Linux substrate CLI"
   else
-    rm -f "${bin_linux_dir}/substrate"
-    log "Linux substrate CLI not available; Lima warm will build guest CLI only if needed."
+    warn "Linux substrate CLI not available; leaving ${bin_linux_dir}/substrate unchanged."
   fi
 
   local linux_agent
   linux_agent="$(find_linux_world_agent_elf "${repo_root}" "${target_dir}")" || true
   if [[ -n "${linux_agent:-}" ]]; then
-    ln -sfn "${linux_agent}" "${bin_linux_dir}/world-agent"
-    log "Linked Linux world-agent into ${bin_linux_dir}/world-agent"
+    stage_managed_bundle_symlink "${linux_agent}" "${bin_linux_dir}/world-agent" "${repo_root}" "${MANAGED_MAC_LINUX_BINARIES_PATH}" "Linux world-agent"
   else
-    rm -f "${bin_linux_dir}/world-agent"
-    log "Linux world-agent not available; Lima warm will fall back to in-guest build."
+    warn "Linux world-agent not available; leaving ${bin_linux_dir}/world-agent unchanged."
   fi
 }
 
@@ -1258,18 +1353,18 @@ fi
 for binary in substrate substrate-shim substrate-forwarder host-proxy world-agent; do
   src="${REPO_ROOT}/target/${TARGET_DIR}/${binary}"
   if [[ -x "${src}" ]]; then
-    ln -sfn "${src}" "${BIN_DIR}/${binary}"
+    stage_managed_bundle_symlink "${src}" "${BIN_DIR}/${binary}" "${REPO_ROOT}" "" "host binary ${binary}"
   elif [[ -x "${src}.exe" ]]; then
-    ln -sfn "${src}.exe" "${BIN_DIR}/${binary}.exe"
+    stage_managed_bundle_symlink "${src}.exe" "${BIN_DIR}/${binary}.exe" "${REPO_ROOT}" "" "host binary ${binary}.exe"
   fi
 done
 
 # Provide substrate-world-agent alias so CLI discovery works without extra config.
 world_agent_src="${REPO_ROOT}/target/${TARGET_DIR}/world-agent"
 if [[ -x "${world_agent_src}" ]]; then
-  ln -sfn "${world_agent_src}" "${BIN_DIR}/substrate-world-agent"
+  stage_managed_bundle_symlink "${world_agent_src}" "${BIN_DIR}/substrate-world-agent" "${REPO_ROOT}" "" "host binary substrate-world-agent"
 elif [[ -x "${world_agent_src}.exe" ]]; then
-  ln -sfn "${world_agent_src}.exe" "${BIN_DIR}/substrate-world-agent.exe"
+  stage_managed_bundle_symlink "${world_agent_src}.exe" "${BIN_DIR}/substrate-world-agent.exe" "${REPO_ROOT}" "" "host binary substrate-world-agent.exe"
 fi
 
 if [[ -d "${REPO_ROOT}/target" ]]; then

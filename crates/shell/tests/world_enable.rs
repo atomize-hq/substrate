@@ -231,6 +231,15 @@ impl WorldEnableFixture {
     }
 
     fn install_prefix_runtime_bundle(&self) {
+        self.install_prefix_runtime_scripts();
+
+        let bin_dir = self.substrate_home.join("bin");
+        fs::create_dir_all(&bin_dir).expect("create bin dir");
+        let substrate_bin = bin_dir.join("substrate");
+        symlink(PathBuf::from(binary_path()), &substrate_bin).expect("symlink substrate binary");
+    }
+
+    fn install_prefix_runtime_scripts(&self) {
         let helper_path = self
             .substrate_home
             .join("scripts/substrate/world-enable.sh");
@@ -252,7 +261,9 @@ impl WorldEnableFixture {
             .permissions();
         perms.set_mode(0o755);
         fs::set_permissions(&install_helper, perms).expect("chmod install helper");
+    }
 
+    fn install_version_dir_binary(&self) {
         let bin_dir = self.substrate_home.join("bin");
         fs::create_dir_all(&bin_dir).expect("create bin dir");
         let substrate_bin = bin_dir.join("substrate");
@@ -442,6 +453,62 @@ fn world_enable_prefers_prefix_runtime_bundle_without_override() {
     assert!(
         !stdout.contains("/target/scripts/substrate/world-enable.sh"),
         "dry-run should not resolve helper from target scripts: {stdout}"
+    );
+}
+
+#[test]
+fn world_enable_uses_prefix_runtime_bundle_when_version_binary_is_missing() {
+    let fixture = WorldEnableFixture::new();
+    fixture.install_prefix_runtime_scripts();
+
+    let output = fixture
+        .command_skip_doctor_without_override()
+        .arg("--dry-run")
+        .output()
+        .expect("failed to run substrate world enable without version binary");
+
+    assert!(
+        output.status.success(),
+        "prefix helper should remain usable without an inferred version dir: {output:?}"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains(
+            &fixture
+                .substrate_home
+                .join("scripts/substrate/world-enable.sh")
+                .display()
+                .to_string()
+        ),
+        "dry-run should resolve helper from the prefix runtime bundle: {stdout}"
+    );
+}
+
+#[test]
+fn world_enable_reports_staged_prefix_guidance_when_helper_missing() {
+    let fixture = WorldEnableFixture::new();
+    fixture.install_version_dir_binary();
+
+    let output = fixture
+        .command_without_override()
+        .arg("--dry-run")
+        .output()
+        .expect("failed to run substrate world enable with missing helper");
+
+    assert!(
+        !output.status.success(),
+        "missing helpers should fail closed: {output:?}"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("world-enable helper script not found under"),
+        "stderr should identify the failing lookup: {stderr}"
+    );
+    assert!(
+        stderr.contains(
+            "staged prefix helper under $SUBSTRATE_HOME/scripts/substrate/world-enable.sh"
+        ),
+        "stderr should point operators at the staged prefix bundle: {stderr}"
     );
 }
 

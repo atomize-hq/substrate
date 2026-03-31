@@ -2,14 +2,16 @@
 seam_id: SEAM-3
 seam_slug: cross-platform-proof-drift-guards
 type: conformance
-status: proposed
+status: landed
 execution_horizon: future
-plan_version: v1
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+    - governance/seam-1-closeout.md
+    - governance/seam-2-closeout.md
   required_threads:
     - THR-01
     - THR-02
@@ -21,20 +23,22 @@ basis:
     - checkpoint boundary or checkpoint evidence requirements change
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
-  planned_location: reserved_final_slice
-  status: pending
+  planned_location: S3
+  status: passed
 open_remediations: []
 ---
 
 # SEAM-3 - Cross-platform proof + drift guards
+
+This seam is landed. Its authoritative planning and exit-gate record live in `threaded-seams/seam-3-cross-platform-proof-drift-guards/` and `governance/seam-3-closeout.md`.
 
 - **Goal / value**: Keep the landed feature contract provable and non-drifting across Linux and macOS behavior validation, Windows compile parity, and checkpoint evidence after the first two seams land.
 - **Scope**
@@ -90,7 +94,7 @@ open_remediations: []
     - manual playbook cases and checkpoint wording match the landed upstream contracts
 - **Risks / unknowns**:
   - Risk: evidence can drift from actual landed behavior when upstream seams adjust path lists, messages, or refusal semantics.
-  - De-risk plan: require revalidation through `THR-01`, `THR-02`, and `THR-03` before this seam promotes from future planning.
+  - De-risk plan: require seam-local revalidation through `THR-01`, `THR-02`, and `THR-03` before this seam promotes to `exec-ready`.
   - Risk: Windows or macOS evidence can overclaim support if unsupported surfaces are described loosely.
   - De-risk plan: keep platform claims explicit and narrow in smoke output, parity docs, and closeout.
 - **Rollout / safety**:
@@ -98,9 +102,12 @@ open_remediations: []
   - Preserve deterministic skip behavior on non-target hosts.
   - Record stale triggers rather than silently carrying evidence forward when upstream reality changes.
 - **Downstream decomposition context**:
-  - Why this seam is `future`: it should consume landed truth from the first two seams, not drive their contract decisions.
+  - This seam was the terminal active seam after `SEAM-2` closed with a passed seam-exit gate and published `THR-03`.
   - Which threads matter most: `THR-01`, `THR-02`, and `THR-03`.
-  - What the first seam-local review should focus on: evidence-to-contract alignment, platform claim boundaries, checkpoint proof, and stale-trigger handling.
+  - The landed seam-local work focused on evidence-to-contract alignment, platform claim boundaries, checkpoint proof, and stale-trigger handling.
+- **Landed seam-exit posture**:
+  - `REM-002` is resolved by the landed claim-boundary and smoke-surface work recorded in `governance/seam-3-closeout.md`.
+  - The seam owned evidence alignment only and did not reopen upstream helper-bundle or cleanup behavior.
 - **Expected seam-exit concerns**:
   - Contracts likely to publish: minimal or none beyond finalized evidence mapping.
   - Threads likely to advance: `THR-01`, `THR-02`, and `THR-03` toward `revalidated` or `closed`.

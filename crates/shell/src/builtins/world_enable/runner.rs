@@ -27,6 +27,22 @@ mod paths;
 mod provision_deps;
 mod verify;
 
+fn resolve_helper_version_dir(
+    substrate_home: &std::path::Path,
+    helper_override: &Option<PathBuf>,
+) -> Result<Option<PathBuf>> {
+    if helper_override.is_some() {
+        return Ok(None);
+    }
+
+    let prefix_helper = substrate_home.join("scripts/substrate/world-enable.sh");
+    match resolve_version_dir(substrate_home) {
+        Ok(version_dir) => Ok(Some(version_dir)),
+        Err(_) if prefix_helper.exists() => Ok(None),
+        Err(err) => Err(err),
+    }
+}
+
 pub fn run_enable(args: &WorldEnableArgs) -> Result<()> {
     if args.provision_deps {
         return run_enable_with_provision_deps(args);
@@ -68,11 +84,7 @@ pub fn run_enable(args: &WorldEnableArgs) -> Result<()> {
     let helper_override = env::var("SUBSTRATE_WORLD_ENABLE_SCRIPT")
         .ok()
         .map(PathBuf::from);
-    let version_dir = if helper_override.is_some() {
-        None
-    } else {
-        Some(resolve_version_dir(&substrate_home)?)
-    };
+    let version_dir = resolve_helper_version_dir(&substrate_home, &helper_override)?;
     let script_path =
         locate_helper_script(&substrate_home, version_dir.as_deref(), helper_override)?;
     let log_path = next_log_path(&substrate_home)?;
@@ -252,11 +264,7 @@ fn run_enable_with_provision_deps(args: &WorldEnableArgs) -> Result<()> {
     let helper_override = env::var("SUBSTRATE_WORLD_ENABLE_SCRIPT")
         .ok()
         .map(PathBuf::from);
-    let version_dir = if helper_override.is_some() {
-        None
-    } else {
-        Some(resolve_version_dir(&substrate_home)?)
-    };
+    let version_dir = resolve_helper_version_dir(&substrate_home, &helper_override)?;
     let script_path =
         locate_helper_script(&substrate_home, version_dir.as_deref(), helper_override)?;
     let log_path = next_log_path(&substrate_home)?;

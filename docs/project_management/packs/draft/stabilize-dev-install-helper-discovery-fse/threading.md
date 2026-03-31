@@ -2,15 +2,16 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-1`
-- **Next seam**: `SEAM-2`
-- **Future seams**: `SEAM-3`
+- **Active seam**: none
+- **Next seam**: none
+- **Future seams**: `SEAM-1`, `SEAM-2`, `SEAM-3`
 
 Horizon policy for this pack:
 
-- only `SEAM-1` is eligible for authoritative downstream sub-slices by default
-- `SEAM-2` may later receive seam-local review + slices, but any deeper planning should stay provisional until `SEAM-1` publishes the landed bundle layout and managed-marker facts
-- `SEAM-3` remains a seam brief until both producer seams close and conformance can bind to landed truth
+- only the active seam is eligible for authoritative downstream sub-slices by default
+- no next seam is currently reserved; new forward-window planning should be selected only if pack scope expands
+- `SEAM-3` has landed with a passed seam-exit gate and left the forward planning window
+- no queued next seam remains because the terminal conformance seam has completed
 
 ## Contract registry
 
@@ -38,8 +39,8 @@ Horizon policy for this pack:
   - **Direct consumers**: `SEAM-2`, `SEAM-3`
   - **Derived consumers**: future install/uninstall work that must distinguish dev-managed from user-managed assets
   - **Thread IDs**: `THR-01`, `THR-02`
-  - **Definition**: repo-owned script assets stage as repo-managed symlinks, and copied Linux guest binaries are removable only when they are recorded in the dev-install manifest; no other asset class is considered dev-managed.
-  - **Versioning / compat**: manifest location/schema changes or symlink-ownership inference changes force cleanup and conformance revalidation.
+  - **Definition**: repo-owned script, YAML, and macOS support assets stage as repo-managed symlinks. Linux guest binaries under `bin/linux/` are dev-managed only when they remain repo-managed symlinks into local build outputs or when they are copied from Lima and recorded in `.dev-install-managed/mac-linux-binaries.txt`; no other asset class is considered dev-managed.
+  - **Versioning / compat**: managed-binary manifest location/schema changes, Linux guest asset-class changes, or symlink-ownership inference changes force cleanup and conformance revalidation.
 
 - **Contract ID**: `C-04`
   - **Type**: `UX affordance`
@@ -57,30 +58,30 @@ Horizon policy for this pack:
   - **Consumer seam(s)**: `SEAM-2`, `SEAM-3`
   - **Carried contract IDs**: `C-02`, `C-03`
   - **Purpose**: publish the real staged bundle surface and the managed-asset eligibility rules that cleanup and conformance must consume.
-  - **State**: `defined`
+  - **State**: `revalidated`
   - **Revalidation trigger**: staged path list changes, file-type policy changes, manifest location/schema changes, or Linux guest copy rules change.
-  - **Satisfied by**: `governance/seam-1-closeout.md` records the landed bundle tree, managed-marker evidence, and any downstream stale triggers.
-  - **Notes**: `SEAM-2` must not promote off provisional assumptions once `SEAM-1` lands; it must rebind to the actual closeout-backed bundle layout.
+  - **Satisfied by**: `governance/seam-1-closeout.md` records the landed bundle tree, managed-marker evidence, and any downstream stale triggers; `threaded-seams/seam-2-managed-cleanup-protected-path-guard/review.md` revalidates cleanup planning against that published handoff.
+  - **Notes**: `SEAM-2` has now rebound to the actual closeout-backed bundle layout. `SEAM-3` still consumes the same published truth later alongside `THR-02` and `THR-03`.
 
 - **Thread ID**: `THR-02`
   - **Producer seam**: `SEAM-1`
   - **Consumer seam(s)**: `SEAM-3`
   - **Carried contract IDs**: `C-01`, `C-02`, `C-03`
   - **Purpose**: let the conformance seam prove helper discovery order, `cargo clean` survival, and fail-closed behavior against the landed runtime bundle.
-  - **State**: `defined`
+  - **State**: `revalidated`
   - **Revalidation trigger**: override precedence changes, helper-order changes, helper-missing remediation text changes, or CLI flag-surface changes.
   - **Satisfied by**: `governance/seam-1-closeout.md` plus updated smoke and manual evidence reflecting the landed helper resolution flow.
-  - **Notes**: This thread is where macOS scope drift becomes visible if staged helper placement is mistaken for full provisioning parity.
+  - **Notes**: This thread is where macOS scope drift becomes visible if staged helper placement is mistaken for full provisioning parity. `SEAM-3` revalidated this thread through the landed claim-boundary and smoke-surface work recorded in `governance/seam-3-closeout.md`.
 
 - **Thread ID**: `THR-03`
   - **Producer seam**: `SEAM-2`
   - **Consumer seam(s)**: `SEAM-3`
   - **Carried contract IDs**: `C-04`
   - **Purpose**: let the conformance seam verify managed-only cleanup, preserved-path refusal, and protected-path exit behavior after cleanup lands.
-  - **State**: `defined`
+  - **State**: `revalidated`
   - **Revalidation trigger**: ownership-guard algorithm changes, refusal messaging changes, exit-code mapping changes, or cleanup directory-pruning behavior changes.
   - **Satisfied by**: `governance/seam-2-closeout.md` records preserved-path evidence, removal evidence, and the final cleanup disposition.
-  - **Notes**: `SEAM-3` should not finalize parity claims until this thread is published from cleanup closeout.
+  - **Notes**: `SEAM-3` consumed and revalidated this thread through the landed protected-path conformance evidence recorded in `governance/seam-3-closeout.md`.
 
 ## Dependency graph
 
@@ -97,7 +98,7 @@ flowchart LR
 
 1. `SEAM-1` lands the durable bundle layout, helper lookup order, and managed-marker contract.
 2. `SEAM-2` revalidates against `SEAM-1` closeout and then lands managed-only cleanup and protected-path refusal.
-3. `SEAM-3` revalidates against both upstream closeouts and only then publishes parity evidence, smoke proof, and drift guards.
+3. `SEAM-3` has landed with a passed seam-exit gate after revalidating both upstream closeouts and publishing the terminal parity, smoke, and drift-guard evidence.
 
 Critical-path failure modes to watch:
 
@@ -121,5 +122,5 @@ Critical-path failure modes to watch:
 
 Concurrency posture:
 
-- `SEAM-2` can draft seam-local review questions early, but authoritative decomposition waits on `THR-01`.
-- `SEAM-3` can sketch evidence scaffolds early, but it stays future until `THR-01`, `THR-02`, and `THR-03` have closeout-backed truth to consume.
+- No seam currently owns the forward planning window because the terminal conformance seam has landed.
+- Later work in this area depends on a new extraction pass or on explicit pack-scope expansion.
