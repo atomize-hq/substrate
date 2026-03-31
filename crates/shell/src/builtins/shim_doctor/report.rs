@@ -83,6 +83,10 @@ pub struct WorldDoctorSnapshot {
     pub ok: bool,
     pub platform: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub world_disable_reason: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub world_disable_source: Option<config_model::DoctorDisableSource>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub exit_code: Option<i32>,
@@ -200,13 +204,25 @@ fn build_report(cli_no_world: bool, cli_force_world: bool) -> Result<ShimDoctorR
     } else {
         None
     };
-    let world_enabled = config_model::resolve_diagnostics_world_enabled(
+    let (effective, explain) = config_model::resolve_effective_config_with_explain(
         &cwd,
         &CliConfigOverrides {
             world_enabled: cli_world_enabled,
             ..Default::default()
         },
+        true,
     )?;
+    let world_enabled = effective.world.enabled;
+    let disable_attribution = if world_enabled {
+        None
+    } else {
+        config_model::world_disable_attribution(
+            world_enabled,
+            explain
+                .as_ref()
+                .and_then(|explain| explain.world_enabled_explain()),
+        )
+    };
 
     let (manifest_info, manifest_paths) = build_manifest_paths()?;
     let manifest = ManagerManifest::load(&manifest_info.base, manifest_info.overlay.as_deref())?;
@@ -236,7 +252,7 @@ fn build_report(cli_no_world: bool, cli_force_world: bool) -> Result<ShimDoctorR
         world: Some(if world_enabled {
             gather_world_doctor_snapshot()
         } else {
-            disabled_world_doctor_snapshot()
+            disabled_world_doctor_snapshot(disable_attribution.as_ref())
         }),
         world_deps: Some(if world_enabled {
             gather_world_deps_section(cli_no_world, cli_force_world)
@@ -397,11 +413,15 @@ fn parse_ts(raw: &str) -> Option<DateTime<Utc>> {
         .ok()
 }
 
-fn disabled_world_doctor_snapshot() -> WorldDoctorSnapshot {
+fn disabled_world_doctor_snapshot(
+    disable_attribution: Option<&config_model::DoctorDisableAttribution>,
+) -> WorldDoctorSnapshot {
     WorldDoctorSnapshot {
         status: WorldDoctorStatus::Disabled,
         ok: false,
         platform: env::consts::OS.to_string(),
+        world_disable_reason: disable_attribution.map(|attribution| attribution.reason),
+        world_disable_source: disable_attribution.map(|attribution| attribution.source.clone()),
         source: None,
         exit_code: None,
         stderr: None,
@@ -430,6 +450,8 @@ fn gather_world_doctor_snapshot() -> WorldDoctorSnapshot {
                 status: WorldDoctorStatus::NeedsAttention,
                 ok: false,
                 platform: env::consts::OS.to_string(),
+                world_disable_reason: None,
+                world_disable_source: None,
                 source: Some("fixture".to_string()),
                 exit_code: None,
                 stderr: None,
@@ -446,6 +468,8 @@ fn gather_world_doctor_snapshot() -> WorldDoctorSnapshot {
             status: WorldDoctorStatus::NeedsAttention,
             ok: false,
             platform: env::consts::OS.to_string(),
+            world_disable_reason: None,
+            world_disable_source: None,
             source: Some("command".to_string()),
             exit_code: None,
             stderr: None,
@@ -531,6 +555,8 @@ fn snapshot_from_value(value: Value, source: &str) -> WorldDoctorSnapshot {
         },
         ok,
         platform,
+        world_disable_reason: None,
+        world_disable_source: None,
         source: Some(source.to_string()),
         exit_code: None,
         stderr: None,
@@ -569,6 +595,8 @@ fn snapshot_from_command(output: JsonCommandOutput) -> WorldDoctorSnapshot {
         },
         ok,
         platform,
+        world_disable_reason: None,
+        world_disable_source: None,
         source: Some("command".to_string()),
         exit_code: output.exit_code,
         stderr,

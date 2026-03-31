@@ -74,6 +74,14 @@ managers:
     let payload: Value = serde_json::from_slice(&output.stdout).expect("valid JSON payload");
     let summary = payload.get("summary").expect("summary object missing");
 
+    assert!(
+        payload.get("world_disable_reason").is_none(),
+        "enabled health JSON should omit world_disable_reason: {payload:?}"
+    );
+    assert!(
+        payload.get("world_disable_source").is_none(),
+        "enabled health JSON should omit world_disable_source: {payload:?}"
+    );
     assert_eq!(summary["missing_managers"], json!(["MissingManager"]));
     assert_eq!(summary["world_ok"], json!(false));
     assert_eq!(summary["world_deps_missing"], json!(["a"]));
@@ -135,6 +143,23 @@ managers:
     let payload: Value = serde_json::from_slice(&output.stdout).expect("valid JSON payload");
     let summary = payload.get("summary").expect("summary object missing");
 
+    assert_eq!(
+        payload["world_disable_reason"],
+        json!("world isolation disabled by CLI flag --no-world")
+    );
+    assert_eq!(
+        payload["world_disable_source"],
+        json!({
+            "key": "world.enabled",
+            "layer": "cli_flag",
+            "value_display": false,
+            "flag": "--no-world"
+        })
+    );
+    assert!(payload["world_disable_source"].get("env").is_none());
+    assert!(payload["world_disable_source"]
+        .get("path_display")
+        .is_none());
     assert_eq!(summary["world_ok"], Value::Null);
     assert!(
         summary.get("world_error").is_none(),
@@ -253,6 +278,16 @@ managers:
     );
 
     let stdout = String::from_utf8_lossy(&output.stdout);
+    let reason_index = stdout
+        .find("world isolation disabled by CLI flag --no-world")
+        .expect("missing disabled attribution line");
+    let guidance_index = stdout
+        .find("World backend: disabled")
+        .expect("missing disabled world guidance");
+    assert!(
+        reason_index < guidance_index,
+        "expected attribution line before disabled guidance: {stdout}"
+    );
     assert!(
         stdout
             .contains("World backend: disabled\n  Next: run `substrate world enable` to provision"),

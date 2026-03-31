@@ -735,6 +735,85 @@ managers:
 }
 
 #[test]
+fn shim_doctor_no_world_preserves_cli_flag_disable_attribution() {
+    let fixture = DoctorFixture::new(detected_manager_manifest());
+    fixture.write_world_doctor_fixture(json!({
+        "platform": "fixture-linux",
+        "ok": false,
+        "stderr": "this fixture should be ignored when diagnostics are disabled"
+    }));
+    fixture.write_world_deps_fixture(json!({
+        "schema_version": 1,
+        "cwd": fixture.home(),
+        "inventory_packages": 1,
+        "inventory_bundles": 0,
+        "inventory_mode": "merged",
+        "builtins": "enabled",
+        "enabled": ["ignored"],
+        "applied": [
+            {
+                "kind": "package",
+                "name": "ignored",
+                "enabled": true,
+                "world": "missing"
+            }
+        ]
+    }));
+
+    let output = fixture
+        .command()
+        .arg("--no-world")
+        .arg("shim")
+        .arg("doctor")
+        .arg("--json")
+        .output()
+        .expect("failed to run shim doctor --json with --no-world");
+    assert!(
+        output.status.success(),
+        "shim doctor should succeed in disabled mode"
+    );
+
+    let report: Value =
+        serde_json::from_slice(&output.stdout).expect("doctor output should be valid JSON");
+    assert_eq!(report["world"]["status"], json!("disabled"));
+    assert_eq!(
+        report["world"]["world_disable_reason"],
+        json!("world isolation disabled by CLI flag --no-world")
+    );
+    assert_eq!(
+        report["world"]["world_disable_source"],
+        json!({
+            "key": "world.enabled",
+            "layer": "cli_flag",
+            "value_display": false,
+            "flag": "--no-world"
+        })
+    );
+    assert!(report["world"]["world_disable_source"].get("env").is_none());
+    assert!(report["world"]["world_disable_source"]
+        .get("path_display")
+        .is_none());
+    assert_eq!(report["world_deps"]["status"], json!("skipped_disabled"));
+    assert_eq!(
+        report["world_deps"]["source"].as_str(),
+        Some("disabled"),
+        "expected world deps source=disabled when diagnostics are disabled"
+    );
+    for key in ["error", "stderr", "exit_code", "details"] {
+        assert!(
+            report["world"].get(key).is_none(),
+            "expected world.{key} to be omitted in disabled mode: {report:?}"
+        );
+    }
+    for key in ["error", "report"] {
+        assert!(
+            report["world_deps"].get(key).is_none(),
+            "expected world_deps.{key} to be omitted in disabled mode: {report:?}"
+        );
+    }
+}
+
+#[test]
 fn shim_doctor_disabled_mode_prints_exact_contract_lines_without_error_lines() {
     let fixture = DoctorFixture::new(detected_manager_manifest());
     fixture.write_world_doctor_fixture(json!({
@@ -823,6 +902,14 @@ fn shim_doctor_force_world_preserves_enabled_probe_backed_statuses() {
 
     let report: Value =
         serde_json::from_slice(&output.stdout).expect("doctor output should be valid JSON");
+    assert!(
+        report["world"].get("world_disable_reason").is_none(),
+        "enabled world doctor snapshots should omit world_disable_reason: {report:?}"
+    );
+    assert!(
+        report["world"].get("world_disable_source").is_none(),
+        "enabled world doctor snapshots should omit world_disable_source: {report:?}"
+    );
     assert_eq!(report["world"]["status"], json!("needs_attention"));
     assert_eq!(report["world_deps"]["status"], json!("error"));
     assert!(
