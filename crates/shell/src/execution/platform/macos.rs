@@ -4,7 +4,7 @@ use substrate_broker::world_fs_policy;
 pub(crate) fn host_doctor_main(
     json_mode: bool,
     world_enabled: bool,
-    world_disable_attribution: Option<&'static str>,
+    world_disable_attribution: Option<&crate::execution::config_model::DoctorDisableAttribution>,
 ) -> i32 {
     world_doctor_macos::run_host(
         json_mode,
@@ -17,7 +17,7 @@ pub(crate) fn host_doctor_main(
 pub(crate) fn world_doctor_main(
     json_mode: bool,
     world_enabled: bool,
-    world_disable_attribution: Option<&'static str>,
+    world_disable_attribution: Option<&crate::execution::config_model::DoctorDisableAttribution>,
 ) -> i32 {
     // Preserve the world-enabled state for downstream consumers that still read the env var.
     std::env::set_var(
@@ -314,8 +314,8 @@ echo pass
         }
 
         if !world_enabled && !json_mode {
-            if let Some(msg) = world_disable_attribution {
-                fail(msg);
+            if let Some(attribution) = world_disable_attribution {
+                fail(attribution.reason);
             }
             // Continue gathering best-effort host facts.
         }
@@ -442,7 +442,7 @@ echo pass
             && agent_caps_ok;
 
         if json_mode {
-            let out = json!({
+            let mut out = json!({
                 "schema_version": 1,
                 "platform": "macos",
                 "world_enabled": world_enabled,
@@ -464,6 +464,10 @@ echo pass
                     )
                 }
             });
+            if let Some(attribution) = world_disable_attribution {
+                out["world_disable_reason"] = json!(attribution.reason);
+                out["world_disable_source"] = json!(attribution.source);
+            }
             println!("{}", serde_json::to_string_pretty(&out).unwrap());
         }
 
@@ -498,8 +502,8 @@ echo pass
         }
 
         if !world_enabled && !json_mode {
-            if let Some(msg) = world_disable_attribution {
-                fail(msg);
+            if let Some(attribution) = world_disable_attribution {
+                fail(attribution.reason);
             }
         }
 
@@ -725,7 +729,7 @@ echo pass
         let ok = host_ok && world_value.get("ok").and_then(Value::as_bool) == Some(true);
 
         if json_mode {
-            let out = json!({
+            let mut out = json!({
                 "schema_version": 1,
                 "platform": "macos",
                 "world_enabled": world_enabled,
@@ -733,6 +737,10 @@ echo pass
                 "host": host_value,
                 "world": world_value,
             });
+            if let Some(attribution) = world_disable_attribution {
+                out["world_disable_reason"] = json!(attribution.reason);
+                out["world_disable_source"] = json!(attribution.source);
+            }
             println!("{}", serde_json::to_string_pretty(&out).unwrap());
         } else {
             println!("== World ==");

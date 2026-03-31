@@ -43,9 +43,9 @@ use windows::host_doctor_main;
 fn resolve_doctor_world_disable_attribution(
     effective_world_enabled: bool,
     explain: Option<&crate::execution::config_model::ConfigExplainV1>,
-) -> Option<&'static str> {
+) -> Option<crate::execution::config_model::DoctorDisableAttribution> {
     let world_enabled_explain = explain.and_then(|explain| explain.world_enabled_explain());
-    crate::execution::config_model::world_disable_attribution_message(
+    crate::execution::config_model::world_disable_attribution(
         effective_world_enabled,
         world_enabled_explain,
     )
@@ -63,11 +63,13 @@ mod fallback {
     pub(crate) fn world_doctor_main(
         json_mode: bool,
         world_enabled: bool,
-        world_disable_attribution: Option<&'static str>,
+        world_disable_attribution: Option<
+            &crate::execution::config_model::DoctorDisableAttribution,
+        >,
     ) -> i32 {
         let world_fs = world_fs_policy();
         if json_mode {
-            let out = json!({
+            let mut out = json!({
                 "schema_version": 1,
                 "platform": std::env::consts::OS,
                 "world_enabled": world_enabled,
@@ -81,11 +83,15 @@ mod fallback {
                 },
                 "world": {"status": "unsupported", "ok": false}
             });
+            if let Some(attribution) = world_disable_attribution {
+                out["world_disable_reason"] = json!(attribution.reason);
+                out["world_disable_source"] = json!(attribution.source);
+            }
             println!("{}", serde_json::to_string_pretty(&out).unwrap());
         } else {
             println!("== substrate world doctor ==");
-            if let Some(msg) = world_disable_attribution {
-                println!("FAIL  | {}", msg);
+            if let Some(attribution) = world_disable_attribution {
+                println!("FAIL  | {}", attribution.reason);
             }
             println!("== Host ==");
             println!("WARN  | unsupported platform: {}", std::env::consts::OS);
@@ -98,11 +104,13 @@ mod fallback {
     pub(crate) fn host_doctor_main(
         json_mode: bool,
         world_enabled: bool,
-        world_disable_attribution: Option<&'static str>,
+        world_disable_attribution: Option<
+            &crate::execution::config_model::DoctorDisableAttribution,
+        >,
     ) -> i32 {
         let world_fs = world_fs_policy();
         if json_mode {
-            let out = json!({
+            let mut out = json!({
                 "schema_version": 1,
                 "platform": std::env::consts::OS,
                 "world_enabled": world_enabled,
@@ -115,11 +123,15 @@ mod fallback {
                     "world_fs_require_world": world_fs.require_world,
                 },
             });
+            if let Some(attribution) = world_disable_attribution {
+                out["world_disable_reason"] = json!(attribution.reason);
+                out["world_disable_source"] = json!(attribution.source);
+            }
             println!("{}", serde_json::to_string_pretty(&out).unwrap());
         } else {
             println!("== substrate host doctor ==");
-            if let Some(msg) = world_disable_attribution {
-                println!("FAIL  | {}", msg);
+            if let Some(attribution) = world_disable_attribution {
+                println!("FAIL  | {}", attribution.reason);
             }
             println!("WARN  | unsupported platform: {}", std::env::consts::OS);
         }
@@ -184,7 +196,11 @@ pub(crate) fn handle_world_command(cmd: &WorldCmd, cli: &Cli) -> Result<()> {
             crate::execution::export_runtime_config_env(&effective);
             let _ = substrate_broker::set_global_broker(substrate_broker::BrokerHandle::new());
             let _ = substrate_broker::detect_profile(&launch_cwd);
-            let code = world_doctor_main(*json, effective.world.enabled, world_disable_attribution);
+            let code = world_doctor_main(
+                *json,
+                effective.world.enabled,
+                world_disable_attribution.as_ref(),
+            );
             std::process::exit(code);
         }
         WorldAction::Enable(opts) => {
@@ -237,7 +253,11 @@ pub(crate) fn handle_host_command(cmd: &HostCmd, cli: &Cli) -> Result<()> {
             crate::execution::export_runtime_config_env(&effective);
             let _ = substrate_broker::set_global_broker(substrate_broker::BrokerHandle::new());
             let _ = substrate_broker::detect_profile(&launch_cwd);
-            let code = host_doctor_main(*json, effective.world.enabled, world_disable_attribution);
+            let code = host_doctor_main(
+                *json,
+                effective.world.enabled,
+                world_disable_attribution.as_ref(),
+            );
             std::process::exit(code);
         }
     }

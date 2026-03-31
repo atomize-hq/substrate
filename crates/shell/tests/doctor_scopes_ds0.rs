@@ -111,6 +111,40 @@ fn assert_world_doctor_envelope_v1(payload: &Value) {
         .expect("world doctor world.status missing");
 }
 
+fn assert_disable_attribution_fields(payload: &Value, expected_reason: &str, expected_layer: &str) {
+    assert_eq!(
+        payload.get("world_disable_reason").and_then(Value::as_str),
+        Some(expected_reason),
+        "unexpected world_disable_reason: {payload}"
+    );
+    let source = payload
+        .get("world_disable_source")
+        .expect("missing world_disable_source");
+    assert_eq!(
+        source.get("key").and_then(Value::as_str),
+        Some("world.enabled")
+    );
+    assert_eq!(
+        source.get("layer").and_then(Value::as_str),
+        Some(expected_layer)
+    );
+    assert_eq!(
+        source.get("value_display").and_then(Value::as_bool),
+        Some(false)
+    );
+}
+
+fn assert_disable_attribution_omitted(payload: &Value) {
+    assert!(
+        payload.get("world_disable_reason").is_none(),
+        "enabled payload should omit world_disable_reason: {payload}"
+    );
+    assert!(
+        payload.get("world_disable_source").is_none(),
+        "enabled payload should omit world_disable_source: {payload}"
+    );
+}
+
 #[cfg(target_os = "linux")]
 #[derive(Debug)]
 struct ExpectedNetfilterStatus<'a> {
@@ -329,12 +363,79 @@ fn host_doctor_json_matches_envelope_v1_when_available() {
         return;
     }
     assert_host_doctor_envelope_v1(&payload);
+    assert_disable_attribution_omitted(&payload);
 }
 
 #[test]
 fn world_doctor_json_matches_envelope_v1_when_available() {
     let payload = run_world_doctor_json(default_world_doctor_report());
     assert_world_doctor_envelope_v1(&payload);
+    assert_disable_attribution_omitted(&payload);
+}
+
+#[test]
+fn host_doctor_json_emits_disable_attribution_root_fields_when_disabled() {
+    let fixture = ShellEnvFixture::new();
+
+    let mut cmd = support::substrate_command_for_home(&fixture);
+    cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD");
+    let output = cmd
+        .arg("host")
+        .arg("doctor")
+        .arg("--json")
+        .arg("--no-world")
+        .output()
+        .expect("substrate host doctor --json --no-world");
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("unrecognized subcommand") || stderr.contains("unknown subcommand") {
+            return;
+        }
+    }
+
+    let payload = parse_json(&output.stdout, "host doctor --json --no-world");
+    if !has_ds0_envelope(&payload) {
+        return;
+    }
+    assert_host_doctor_envelope_v1(&payload);
+    assert_disable_attribution_fields(
+        &payload,
+        "world isolation disabled by CLI flag --no-world",
+        "cli_flag",
+    );
+}
+
+#[test]
+fn world_doctor_json_emits_disable_attribution_root_fields_when_disabled() {
+    let fixture = ShellEnvFixture::new();
+
+    let mut cmd = support::substrate_command_for_home(&fixture);
+    cmd.env("SUBSTRATE_OVERRIDE_WORLD", "disabled");
+    let output = cmd
+        .arg("world")
+        .arg("doctor")
+        .arg("--json")
+        .output()
+        .expect("substrate world doctor --json");
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("unrecognized subcommand") || stderr.contains("unknown subcommand") {
+            return;
+        }
+    }
+
+    let payload = parse_json(&output.stdout, "world doctor --json disabled");
+    if !has_ds0_envelope(&payload) {
+        return;
+    }
+    assert_world_doctor_envelope_v1(&payload);
+    assert_disable_attribution_fields(
+        &payload,
+        "world isolation disabled by env override SUBSTRATE_OVERRIDE_WORLD=disabled",
+        "override_env",
+    );
 }
 
 fn write_workspace_config(home: &std::path::Path, body: &str) {
