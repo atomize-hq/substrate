@@ -815,17 +815,6 @@ pub(crate) fn resolve_effective_config(
     Ok(resolve_effective_config_with_explain(cwd, cli, false)?.0)
 }
 
-/// Resolve the canonical diagnostics-side `world.enabled` decision.
-///
-/// This is a thin wrapper over effective config resolution so diagnostics
-/// callers share one precedence path and surface config errors before probing.
-pub(crate) fn resolve_diagnostics_world_enabled(
-    cwd: &Path,
-    cli: &CliConfigOverrides,
-) -> Result<bool> {
-    Ok(resolve_effective_config(cwd, cli)?.world.enabled)
-}
-
 pub(crate) fn resolve_effective_config_with_explain(
     cwd: &Path,
     cli: &CliConfigOverrides,
@@ -2172,32 +2161,37 @@ world:
 
         let _env_guard = EnvGuard::set_str("SUBSTRATE_OVERRIDE_WORLD", "disabled");
 
-        let enabled = resolve_diagnostics_world_enabled(
+        let enabled = resolve_effective_config(
             &workspace_root,
             &CliConfigOverrides {
                 world_enabled: Some(true),
                 ..Default::default()
             },
         )
-        .unwrap();
+        .unwrap()
+        .world
+        .enabled;
         assert!(enabled, "CLI override should win over workspace and env");
 
-        let disabled = resolve_diagnostics_world_enabled(
+        let disabled = resolve_effective_config(
             &workspace_root,
             &CliConfigOverrides {
                 world_enabled: Some(false),
                 ..Default::default()
             },
         )
-        .unwrap();
+        .unwrap()
+        .world
+        .enabled;
         assert!(
             !disabled,
             "CLI disable override should win over workspace and env"
         );
 
-        let resolved =
-            resolve_diagnostics_world_enabled(&workspace_root, &CliConfigOverrides::default())
-                .unwrap();
+        let resolved = resolve_effective_config(&workspace_root, &CliConfigOverrides::default())
+            .unwrap()
+            .world
+            .enabled;
         assert!(
             resolved,
             "workspace config should win over SUBSTRATE_OVERRIDE_WORLD when a workspace is enabled"
@@ -2225,9 +2219,10 @@ world:
         fs::create_dir_all(&workspace_root).unwrap();
         let _env_guard = EnvGuard::set_str("SUBSTRATE_OVERRIDE_WORLD", "disabled");
 
-        let resolved =
-            resolve_diagnostics_world_enabled(&workspace_root, &CliConfigOverrides::default())
-                .unwrap();
+        let resolved = resolve_effective_config(&workspace_root, &CliConfigOverrides::default())
+            .unwrap()
+            .world
+            .enabled;
         assert!(
             !resolved,
             "SUBSTRATE_OVERRIDE_WORLD should apply when no enabled workspace exists"
