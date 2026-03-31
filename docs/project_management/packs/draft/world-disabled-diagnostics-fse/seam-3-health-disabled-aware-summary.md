@@ -2,29 +2,30 @@
 seam_id: SEAM-3
 seam_slug: health-disabled-aware-summary
 type: capability
-status: proposed
-execution_horizon: next
+status: exec-ready
+execution_horizon: active
 plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
   upstream_closeouts:
     - governance/seam-1-closeout.md
+    - governance/seam-2-closeout.md
   required_threads:
     - THR-01
     - THR-02
     - THR-03
   stale_triggers:
-    - THR-02 or THR-03 publish different enum/omission semantics than assumed here
+    - THR-02 or THR-03 change after `SEAM-2` closeout
     - provisioning-related packs change enabled-mode world-deps remediation text in health.rs
     - docs/USAGE.md drifts from shipped JSON/text behavior
     - summary aggregation continues to consume legacy error strings rather than published status contracts
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
@@ -89,7 +90,7 @@ open_remediations: []
 - **Rollout / safety**:
   This seam should reduce misleading attention-required signals without hiding real failures. It must preserve enabled-mode remediation guidance and error visibility when `world.enabled=true`.
 - **Downstream decomposition context**:
-  - Why this seam is `active`, `next`, or `future`: it is now the queued next seam because `THR-01` is published, but it remains provisional until `SEAM-2` lands `THR-02` and `THR-03`.
+  - Why this seam is `active`, `next`, or `future`: it is now the active seam because `SEAM-2` published `THR-02` and `THR-03` through a passed seam-exit gate, so the health summary can consume landed shim status contracts instead of provisional assumptions.
   - Which threads matter most: `THR-01`, `THR-02`, `THR-03`, `THR-05`.
   - What the first seam-local review should focus on: status-driven summary aggregation, guidance suppression, and documentation parity.
 - **Expected seam-exit concerns**:

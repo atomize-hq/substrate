@@ -3,7 +3,7 @@ seam_id: SEAM-4
 seam_slug: cross-platform-conformance
 type: conformance
 status: proposed
-execution_horizon: future
+execution_horizon: next
 plan_version: v1
 basis:
   currentness: provisional
@@ -88,7 +88,7 @@ open_remediations: []
 - **Rollout / safety**:
   This seam is conformance-only. Its value is preventing drift and making later promotions depend on recorded, cross-platform truth.
 - **Downstream decomposition context**:
-  - Why this seam is `active`, `next`, or `future`: it has no value until upstream behavior actually lands and therefore must remain future at extraction time.
+  - Why this seam is `active`, `next`, or `future`: it is now the queued next seam because `SEAM-2` published `THR-04`, but it still waits on `SEAM-3` to publish `THR-05` before conformance work can close the loop.
   - Which threads matter most: `THR-04`, `THR-05`.
   - What the first seam-local review should focus on: platform parity, smoke determinism, and cross-pack revalidation triggers.
 - **Expected seam-exit concerns**:

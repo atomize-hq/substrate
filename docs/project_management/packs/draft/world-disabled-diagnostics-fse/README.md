@@ -15,13 +15,13 @@ This pack captures seam briefs, authoritative threading, pack-level review surfa
 
 Execution horizon:
 
-- Active seam: `SEAM-2`
-- Next seam: `SEAM-3`
+- Active seam: `SEAM-3`
+- Next seam: `SEAM-4`
 
 Policy:
 
 - only the active seam is eligible for authoritative downstream sub-slices by default
 - the next seam may later receive seam-local review + slices, and only provisional candidate-subslice hints
-- `SEAM-3` should stay spike-grade and discardable until `THR-02` and `THR-03` are published by `SEAM-2`
+- `SEAM-4` should stay spike-grade and discardable until `THR-04` and `THR-05` are published by `SEAM-2` and `SEAM-3`
 - active and next seams must eventually terminate in a dedicated final `seam-exit-gate` slice once seam-local planning begins
 - future seams remain seam briefs

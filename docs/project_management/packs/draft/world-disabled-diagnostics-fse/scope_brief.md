@@ -4,8 +4,8 @@ pack_version: v1
 pack_status: extracted
 source_ref: /mnt/data/world-disabled-diagnostics.zip
 execution_horizon:
-  active_seam: SEAM-2
-  next_seam: SEAM-3
+  active_seam: SEAM-3
+  next_seam: SEAM-4
 ---
 
 # Scope Brief - World Disabled Diagnostics

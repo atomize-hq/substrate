@@ -2,8 +2,8 @@
 seam_id: SEAM-2
 seam_slug: shim-doctor-disabled-aware-reporting
 type: capability
-status: exec-ready
-execution_horizon: active
+status: closed
+execution_horizon: future
 plan_version: v2
 basis:
   currentness: current
@@ -11,8 +11,7 @@ basis:
   source_scope_version: v1
   upstream_closeouts:
     - governance/seam-1-closeout.md
-  required_threads:
-    - THR-01
+  required_threads: []
   stale_triggers:
     - C-01 or THR-01 changes after SEAM-1 closeout
     - json-mode or attribution work reshapes shim payloads or field paths
@@ -24,12 +23,12 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: reserved_final_slice
-  status: pending
+  status: passed
 open_remediations: []
 ---
 
