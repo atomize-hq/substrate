@@ -1280,7 +1280,9 @@ fi
 log "Building Substrate (${PROFILE})..."
 cargo "${BUILD_FLAGS[@]}"
 
-if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
+# Linux dev-install always builds world-agent so the accepted staging bridge can
+# be refreshed even when --no-world skips provisioning.
+if [[ "${IS_LINUX}" -eq 1 ]]; then
   log "Building world-agent (${PROFILE})..."
   if [[ "${PROFILE}" == "release" ]]; then
     cargo build -p world-agent --release
