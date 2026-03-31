@@ -59,7 +59,7 @@ pub(super) fn locate_helper_script(
     }
 
     bail!(
-        "world-enable helper script not found under {}. Reinstall Substrate to refresh scripts.",
+        "world-enable helper script not found under {}. Rerun dev-install-substrate.sh --prefix <home> so the staged prefix helper under $SUBSTRATE_HOME/scripts/substrate/world-enable.sh is present.",
         version_dir.display()
     )
 }
@@ -198,5 +198,27 @@ mod tests {
         let resolved =
             locate_helper_script(temp.path(), Some(version_dir.as_ref()), None).expect("script");
         assert_eq!(resolved, version_script);
+    }
+
+    #[test]
+    fn locate_helper_script_reports_staged_prefix_guidance_when_missing() {
+        let temp = tempdir().unwrap();
+        let version_dir = temp.path().join("version");
+        std::fs::create_dir_all(&version_dir).unwrap();
+
+        let err = locate_helper_script(temp.path(), Some(version_dir.as_ref()), None)
+            .expect_err("missing helpers should fail closed");
+        let msg = err.to_string();
+
+        assert!(
+            msg.contains("world-enable helper script not found under"),
+            "missing-helper message should identify the failing lookup: {msg}"
+        );
+        assert!(
+            msg.contains(
+                "staged prefix helper under $SUBSTRATE_HOME/scripts/substrate/world-enable.sh"
+            ),
+            "missing-helper message should point operators at the staged prefix bundle: {msg}"
+        );
     }
 }
