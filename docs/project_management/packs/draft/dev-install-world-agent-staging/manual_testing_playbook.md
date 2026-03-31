@@ -1,11 +1,16 @@
 # dev-install-world-agent-staging — manual testing playbook
 
 This playbook records the operator evidence required before execution closes the feature.
+It is bound to the source pack at `docs/project_management/packs/draft/dev-install-world-agent-staging/`; the extracted `-fse` seam docs remain planning inputs only.
 
 ## Shared setup
 - Platform: Linux for behavior cases.
-- Run the planning-pack smoke script first:
+- Run the Linux runtime smoke script first:
   - `bash docs/project_management/packs/draft/dev-install-world-agent-staging/smoke/linux-smoke.sh`
+- Run installer smoke separately as dev-install staging / `C-04` regression evidence:
+  - `tests/installers/install_smoke.sh --scenario dev`
+  - `tests/installers/install_smoke.sh --scenario dev-no-world`
+- Treat installer smoke as a staging regression surface, not as a second Linux behavior-delta proof surface.
 - Use a clean temp home for every case:
   - `export SUBSTRATE_HOME="$(mktemp -d)/substrate-home"`
 - Use the repo checkout root as the working directory.
@@ -20,7 +25,7 @@ This playbook records the operator evidence required before execution closes the
   - `readlink target/bin/linux/world-agent`
   - `grep -n "enabled: false" "$SUBSTRATE_HOME/config.yaml"`
 - Expected result:
-  - both accepted staged paths resolve to `target/debug/world-agent`
+  - both accepted staged paths resolve to the absolute `$(pwd)/target/debug/world-agent`
   - config persists `world.enabled: false`
   - no provisioning or systemd mutation occurs during the dev-install run
 
@@ -32,7 +37,7 @@ This playbook records the operator evidence required before execution closes the
   - `readlink target/bin/world-agent`
   - `readlink target/bin/linux/world-agent`
 - Expected result:
-  - both accepted staged paths resolve to `target/release/world-agent` after the second run
+  - both accepted staged paths resolve to the absolute `$(pwd)/target/release/world-agent` after the second run
 
 ## Case 3 — missing-artifact dry-run fails before helper launch
 - Setup:
@@ -80,3 +85,4 @@ This playbook records the operator evidence required before execution closes the
 ## Evidence capture
 - Paste the command lines, exit codes, and the two `readlink` results into the `DIWAS1-integ-core` and `CP1-ci-checkpoint` session-log entries.
 - Capture the missing-artifact stderr block once and reuse it in the feature closeout notes.
+- Record installer smoke output separately under the `C-04` regression evidence note; do not fold it into the Linux behavior-delta proof surface.

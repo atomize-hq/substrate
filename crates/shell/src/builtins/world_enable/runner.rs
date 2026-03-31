@@ -5,14 +5,17 @@ use crate::execution::socket_activation;
 use crate::WorldEnableArgs;
 use anyhow::{bail, Result};
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 use substrate_common::paths as substrate_paths;
 
 use helper_script::run_helper_script;
 use log_ops::{append_log_line, initialize_log_file, print_dry_run_plan};
 use manager_env::update_manager_env_exports;
-use paths::{locate_helper_script, next_log_path, resolve_version_dir, resolve_world_socket_path};
+use paths::{
+    locate_helper_script, next_log_path, resolve_version_dir, resolve_world_socket_path,
+    select_accepted_staged_world_agent,
+};
 use provision_deps::{
     ensure_supported_backend_or_exit, exit_probe_result_not_supported, print_pacman_requirements,
     print_probe_result, print_verbose_pacman_requirements, print_verbose_requirements,
@@ -43,6 +46,45 @@ fn resolve_helper_version_dir(
     }
 }
 
+fn enforce_standard_version_dir_preflight(
+    version_dir: Option<&Path>,
+    helper_override: &Option<PathBuf>,
+) {
+    if helper_override.is_some() {
+        return;
+    }
+
+    let Some(version_dir) = version_dir else {
+        return;
+    };
+
+    if select_accepted_staged_world_agent(version_dir).is_none() {
+        eprintln!(
+            "{}",
+            render_missing_accepted_staged_world_agent_remediation(version_dir)
+        );
+        std::process::exit(3);
+    }
+}
+
+fn render_missing_accepted_staged_world_agent_remediation(version_dir: &Path) -> String {
+    let root_candidate = version_dir.join("bin").join("world-agent");
+    let linux_candidate = version_dir.join("bin").join("linux").join("world-agent");
+
+    format!(
+        "substrate: accepted staged world-agent artifact missing under {}\n\
+         substrate: expected one of:\n\
+           - {}\n\
+           - {}\n\
+         substrate: remediation:\n\
+           - scripts/substrate/dev-install-substrate.sh --no-world\n\
+           - cargo build -p world-agent",
+        version_dir.display(),
+        root_candidate.display(),
+        linux_candidate.display(),
+    )
+}
+
 pub fn run_enable(args: &WorldEnableArgs) -> Result<()> {
     if args.provision_deps {
         return run_enable_with_provision_deps(args);
@@ -57,6 +99,11 @@ pub fn run_enable(args: &WorldEnableArgs) -> Result<()> {
     }
 
     let substrate_home = substrate_paths::substrate_home()?;
+    let helper_override = env::var("SUBSTRATE_WORLD_ENABLE_SCRIPT")
+        .ok()
+        .map(PathBuf::from);
+    let version_dir = resolve_helper_version_dir(&substrate_home, &helper_override)?;
+    enforce_standard_version_dir_preflight(version_dir.as_deref(), &helper_override);
     let config_path = substrate_paths::config_file()?;
     let mut corrupt_config = false;
     let mut config = match load_install_config(&config_path) {
@@ -80,11 +127,6 @@ pub fn run_enable(args: &WorldEnableArgs) -> Result<()> {
             config_path.display()
         );
     }
-
-    let helper_override = env::var("SUBSTRATE_WORLD_ENABLE_SCRIPT")
-        .ok()
-        .map(PathBuf::from);
-    let version_dir = resolve_helper_version_dir(&substrate_home, &helper_override)?;
     let script_path =
         locate_helper_script(&substrate_home, version_dir.as_deref(), helper_override)?;
     let log_path = next_log_path(&substrate_home)?;
@@ -177,6 +219,17 @@ pub fn run_enable(args: &WorldEnableArgs) -> Result<()> {
 fn run_enable_with_provision_deps(args: &WorldEnableArgs) -> Result<()> {
     ensure_supported_backend_or_exit();
 
+    if let Some(home) = &args.home {
+        env::set_var("SUBSTRATE_HOME", home);
+    }
+
+    let substrate_home = substrate_paths::substrate_home()?;
+    let helper_override = env::var("SUBSTRATE_WORLD_ENABLE_SCRIPT")
+        .ok()
+        .map(PathBuf::from);
+    let version_dir = resolve_helper_version_dir(&substrate_home, &helper_override)?;
+    enforce_standard_version_dir_preflight(version_dir.as_deref(), &helper_override);
+
     let cwd = env::current_dir().unwrap_or_else(|_| ".".into());
     let requirements =
         crate::builtins::world_deps::resolve_effective_enabled_provisioning_requirements_v1(&cwd)?;
@@ -231,12 +284,6 @@ fn run_enable_with_provision_deps(args: &WorldEnableArgs) -> Result<()> {
 
         return Ok(());
     }
-
-    if let Some(home) = &args.home {
-        env::set_var("SUBSTRATE_HOME", home);
-    }
-
-    let substrate_home = substrate_paths::substrate_home()?;
     let config_path = substrate_paths::config_file()?;
     let mut corrupt_config = false;
     let mut config = match load_install_config(&config_path) {
@@ -261,10 +308,6 @@ fn run_enable_with_provision_deps(args: &WorldEnableArgs) -> Result<()> {
         );
     }
 
-    let helper_override = env::var("SUBSTRATE_WORLD_ENABLE_SCRIPT")
-        .ok()
-        .map(PathBuf::from);
-    let version_dir = resolve_helper_version_dir(&substrate_home, &helper_override)?;
     let script_path =
         locate_helper_script(&substrate_home, version_dir.as_deref(), helper_override)?;
     let log_path = next_log_path(&substrate_home)?;
@@ -407,5 +450,37 @@ fn run_sync_after_provisioning() {
 
     if exit_code != 0 {
         std::process::exit(exit_code);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn render_missing_accepted_staged_world_agent_remediation_includes_paths_and_commands() {
+        let temp = tempdir().unwrap();
+        let version_dir = temp.path().join("version");
+
+        let message = render_missing_accepted_staged_world_agent_remediation(&version_dir);
+
+        assert!(message.contains(
+            &version_dir
+                .join("bin")
+                .join("world-agent")
+                .display()
+                .to_string()
+        ));
+        assert!(message.contains(
+            &version_dir
+                .join("bin")
+                .join("linux")
+                .join("world-agent")
+                .display()
+                .to_string()
+        ));
+        assert!(message.contains("scripts/substrate/dev-install-substrate.sh --no-world"));
+        assert!(message.contains("cargo build -p world-agent"));
     }
 }

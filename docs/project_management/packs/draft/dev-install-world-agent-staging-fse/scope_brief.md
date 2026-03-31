@@ -4,8 +4,8 @@ pack_version: v1
 pack_status: extracted
 source_ref: dev-install-world-agent-staging.zip
 execution_horizon:
-  active_seam: SEAM-1
-  next_seam: SEAM-2
+  active_seam: null
+  next_seam: null
 ---
 
 # Scope Brief - dev-install-world-agent-staging
@@ -60,6 +60,6 @@ execution_horizon:
   - this feature must not overclaim robustness against `cargo clean`; that broader fix belongs to adjacent helper-discovery work
 - **Assumptions**:
   - the seam axis is workflow-first because the source pack already converged on a two-step user flow: make runtime enable fail deterministically, then make dev-install satisfy that contract
-  - `SEAM-1` and `SEAM-2` are inferred as active and next from the source pack’s accepted slice order (`DIWAS0` then `DIWAS1`) and the single checkpoint after `DIWAS1`
+  - the source pack’s accepted slice order (`DIWAS0` then `DIWAS1`) established the original behavior-seam sequence; after `SEAM-2` closeout, the pack now treats `SEAM-3` as the active seam in the forward window
   - the attached planning pack is treated as the authoritative basis for extraction; external ADRs referenced by the pack were not separately inspected here
   - seam-exit concerns are inferred from the source contract, slice specs, validation surfaces, and cross-queue scan rather than from landed code or existing closeout evidence

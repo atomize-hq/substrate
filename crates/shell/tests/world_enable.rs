@@ -4,11 +4,11 @@
 mod common;
 
 use assert_cmd::Command;
-use common::{binary_path, shared_tmpdir, substrate_shell_driver, temp_dir};
+use common::{shared_tmpdir, substrate_shell_driver, temp_dir};
 use serde_yaml::Value as YamlValue;
 use std::fs;
 use std::os::unix::fs::{symlink, FileTypeExt, PermissionsExt};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tempfile::{Builder, TempDir};
 
 const HELPER_SCRIPT: &str = r#"#!/usr/bin/env bash
@@ -232,11 +232,6 @@ impl WorldEnableFixture {
 
     fn install_prefix_runtime_bundle(&self) {
         self.install_prefix_runtime_scripts();
-
-        let bin_dir = self.substrate_home.join("bin");
-        fs::create_dir_all(&bin_dir).expect("create bin dir");
-        let substrate_bin = bin_dir.join("substrate");
-        symlink(PathBuf::from(binary_path()), &substrate_bin).expect("symlink substrate binary");
     }
 
     fn install_prefix_runtime_scripts(&self) {
@@ -263,11 +258,36 @@ impl WorldEnableFixture {
         fs::set_permissions(&install_helper, perms).expect("chmod install helper");
     }
 
-    fn install_version_dir_binary(&self) {
+    fn install_version_dir_binary(&self) -> PathBuf {
+        let version_dir = self._temp.path().join("version-dir");
+        let version_bin = version_dir.join("bin").join("substrate");
+        fs::create_dir_all(version_bin.parent().expect("version bin parent"))
+            .expect("create version dir bin");
+        fs::write(&version_bin, "#!/usr/bin/env bash\nexit 0\n").expect("write version substrate");
+        let mut perms = fs::metadata(&version_bin)
+            .expect("version substrate metadata")
+            .permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&version_bin, perms).expect("chmod version substrate");
+
         let bin_dir = self.substrate_home.join("bin");
         fs::create_dir_all(&bin_dir).expect("create bin dir");
         let substrate_bin = bin_dir.join("substrate");
-        symlink(PathBuf::from(binary_path()), &substrate_bin).expect("symlink substrate binary");
+        symlink(&version_bin, &substrate_bin).expect("symlink substrate binary");
+
+        version_dir
+    }
+
+    fn install_accepted_staged_world_agent(&self, version_dir: &Path, relative_path: &str) {
+        let path = version_dir.join(relative_path);
+        fs::create_dir_all(path.parent().expect("world-agent parent"))
+            .expect("create staged world-agent dir");
+        fs::write(&path, "#!/usr/bin/env bash\nexit 0\n").expect("write staged world-agent");
+        let mut perms = fs::metadata(&path)
+            .expect("staged world-agent metadata")
+            .permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&path, perms).expect("chmod staged world-agent");
     }
 }
 
@@ -485,31 +505,164 @@ fn world_enable_uses_prefix_runtime_bundle_when_version_binary_is_missing() {
 }
 
 #[test]
-fn world_enable_reports_staged_prefix_guidance_when_helper_missing() {
+fn world_enable_exits_3_when_accepted_staged_world_agent_missing() {
     let fixture = WorldEnableFixture::new();
-    fixture.install_version_dir_binary();
+    fixture.install_prefix_runtime_scripts();
+    let _version_dir = fixture.install_version_dir_binary();
+
+    let output = fixture
+        .command_without_override()
+        .output()
+        .expect("failed to run substrate world enable with missing staged world-agent");
+
+    assert!(
+        !output.status.success(),
+        "missing accepted staged world-agent should fail closed: {output:?}"
+    );
+    assert_eq!(
+        output.status.code(),
+        Some(3),
+        "missing accepted staged world-agent should exit 3: {output:?}"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        fixture.log_contents().is_none(),
+        "preflight failure should not write a helper log"
+    );
+    assert!(
+        !fixture.config_exists(),
+        "preflight failure should not create config"
+    );
+    assert!(
+        !fixture.env_sh_exists(),
+        "preflight failure should not create env.sh"
+    );
+    assert!(
+        stderr.contains("accepted staged world-agent artifact missing"),
+        "stderr should identify the missing staged artifact: {stderr}"
+    );
+    assert!(
+        stderr.contains("bin/world-agent"),
+        "stderr should list the root staged path suffix: {stderr}"
+    );
+    assert!(
+        stderr.contains("bin/linux/world-agent"),
+        "stderr should list the linux fallback staged path suffix: {stderr}"
+    );
+    assert!(
+        stderr.contains("scripts/substrate/dev-install-substrate.sh --no-world"),
+        "stderr should point operators at the staging remediation: {stderr}"
+    );
+    assert!(
+        stderr.contains("cargo build -p world-agent"),
+        "stderr should point operators at rebuilding world-agent: {stderr}"
+    );
+}
+
+#[test]
+fn world_enable_dry_run_exits_3_when_accepted_staged_world_agent_missing() {
+    let fixture = WorldEnableFixture::new();
+    fixture.install_prefix_runtime_scripts();
+    let _version_dir = fixture.install_version_dir_binary();
 
     let output = fixture
         .command_without_override()
         .arg("--dry-run")
         .output()
-        .expect("failed to run substrate world enable with missing helper");
+        .expect("failed to run substrate world enable dry-run with missing staged world-agent");
 
     assert!(
         !output.status.success(),
-        "missing helpers should fail closed: {output:?}"
+        "missing accepted staged world-agent should fail closed in dry-run: {output:?}"
+    );
+    assert_eq!(
+        output.status.code(),
+        Some(3),
+        "missing accepted staged world-agent should exit 3 in dry-run: {output:?}"
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("world-enable helper script not found under"),
-        "stderr should identify the failing lookup: {stderr}"
+        stderr.contains("accepted staged world-agent artifact missing"),
+        "stderr should identify the missing staged artifact: {stderr}"
     );
     assert!(
-        stderr.contains(
-            "staged prefix helper under $SUBSTRATE_HOME/scripts/substrate/world-enable.sh"
-        ),
-        "stderr should point operators at the staged prefix bundle: {stderr}"
+        stderr.contains("bin/world-agent"),
+        "stderr should list the root staged path suffix: {stderr}"
     );
+    assert!(
+        stderr.contains("bin/linux/world-agent"),
+        "stderr should list the linux fallback staged path suffix: {stderr}"
+    );
+    assert!(
+        stderr.contains("scripts/substrate/dev-install-substrate.sh --no-world"),
+        "stderr should point operators at the staging remediation: {stderr}"
+    );
+    assert!(
+        stderr.contains("cargo build -p world-agent"),
+        "stderr should point operators at rebuilding world-agent: {stderr}"
+    );
+    assert!(
+        fixture.log_contents().is_none(),
+        "dry-run preflight failure should not write a helper log"
+    );
+    assert!(
+        !fixture.config_exists(),
+        "dry-run preflight failure should not create config"
+    );
+    assert!(
+        !fixture.env_sh_exists(),
+        "dry-run preflight failure should not create env.sh"
+    );
+}
+
+#[test]
+fn world_enable_dry_run_accepts_root_staged_world_agent() {
+    let fixture = WorldEnableFixture::new();
+    fixture.install_prefix_runtime_scripts();
+    let version_dir = fixture.install_version_dir_binary();
+    fixture.install_accepted_staged_world_agent(&version_dir, "bin/world-agent");
+
+    let output = fixture
+        .command_without_override()
+        .arg("--dry-run")
+        .output()
+        .expect("failed to run substrate world enable dry-run with root staged world-agent");
+
+    assert!(
+        output.status.success(),
+        "root staged world-agent should satisfy dry-run preflight: {output:?}"
+    );
+    assert!(
+        fixture.log_contents().is_none(),
+        "dry-run should not create a helper log"
+    );
+    assert!(!fixture.config_exists(), "dry-run should not create config");
+    assert!(!fixture.env_sh_exists(), "dry-run should not create env.sh");
+}
+
+#[test]
+fn world_enable_dry_run_accepts_linux_fallback_staged_world_agent() {
+    let fixture = WorldEnableFixture::new();
+    fixture.install_prefix_runtime_scripts();
+    let version_dir = fixture.install_version_dir_binary();
+    fixture.install_accepted_staged_world_agent(&version_dir, "bin/linux/world-agent");
+
+    let output = fixture
+        .command_without_override()
+        .arg("--dry-run")
+        .output()
+        .expect("failed to run substrate world enable dry-run with linux staged world-agent");
+
+    assert!(
+        output.status.success(),
+        "linux fallback staged world-agent should satisfy dry-run preflight: {output:?}"
+    );
+    assert!(
+        fixture.log_contents().is_none(),
+        "dry-run should not create a helper log"
+    );
+    assert!(!fixture.config_exists(), "dry-run should not create config");
+    assert!(!fixture.env_sh_exists(), "dry-run should not create env.sh");
 }
 
 #[test]

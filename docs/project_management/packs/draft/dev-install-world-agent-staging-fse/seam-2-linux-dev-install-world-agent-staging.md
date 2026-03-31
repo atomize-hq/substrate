@@ -2,14 +2,15 @@
 seam_id: SEAM-2
 seam_slug: linux-dev-install-world-agent-staging
 type: capability
-status: proposed
-execution_horizon: next
-plan_version: v1
+status: closed
+execution_horizon: future
+plan_version: v3
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+    - governance/seam-1-closeout.md
   required_threads:
     - THR-01
   stale_triggers:
@@ -20,20 +21,23 @@ basis:
     - overlapping helper-discovery work lands first on dev-install surfaces
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
-  planned_location: reserved_final_slice
-  status: pending
+  source_ref: threaded-seams/seam-2-linux-dev-install-world-agent-staging/slice-3-seam-exit-gate.md
+  status: passed
+  promotion_readiness: ready
 open_remediations: []
 ---
 
 # SEAM-2 - Linux dev-install world-agent staging
+
+This seam is closed. Its authoritative exit-gate record lives in `governance/seam-2-closeout.md`.
 
 - **Goal / value**: Make Linux `dev-install-substrate.sh --no-world` leave the enable-later workflow ready by staging `world-agent` into the accepted runtime paths while keeping the world disabled and skipping provisioning.
 - **Scope**
@@ -84,7 +88,7 @@ open_remediations: []
   - `target/bin/world-agent`
   - `target/bin/linux/world-agent`
   - `tests/installers/install_smoke.sh`
-  - `scripts/substrate/install-substrate.sh` as a possible regression-sensitive reference surface pending seam-local scope confirmation
+  - `scripts/substrate/install-substrate.sh` as a reference-only / regression-only surface outside the SEAM-2 owned touch set
 - **Verification**:
   - If this seam **consumes** an upstream contract, verification may depend on accepted upstream evidence.
   - If this seam **produces** an owned contract, verification should describe the contract becoming concrete enough for seam-local planning and implementation rather than requiring the final accepted artifact to exist already.
@@ -96,8 +100,6 @@ open_remediations: []
     - installer smoke remains green and does not show unintended production-installer drift
     - a staged artifact produced here satisfies the runtime preflight contract from `SEAM-1`
 - **Risks / unknowns**:
-  - Risk: the source pack leaves ambiguity about whether `scripts/substrate/install-substrate.sh` is a true touched surface or only a regression boundary.
-  - De-risk plan: resolve that scope question in the first seam-local review and keep the change set narrow if installer behavior remains reference-only.
   - Risk: selected-profile staging can look inconsistent with the helper’s default release-oriented log labeling.
   - De-risk plan: keep profile mapping explicit in seam-local review, smoke output, and closeout evidence so operators understand that staging source and log label are different contracts.
 - **Rollout / safety**:
@@ -106,9 +108,9 @@ open_remediations: []
   - Preserve `world.enabled: false` until runtime enable verifies success.
   - Keep the staging change orthogonal to helper override behavior and future provisioning flags.
 - **Downstream decomposition context**:
-  - Why this seam is `next`: it is tightly bounded and already well-specified by the source pack, but it should promote only after `SEAM-1` publishes the accepted path and ordering contracts as landed truth.
-  - Which threads matter most: `THR-01` and `THR-03`.
-  - What the first seam-local review should focus on: selected-profile mapping, stale-link replacement, disabled-world invariants, regression boundaries for installer smoke, and the exact scope of production-installer references.
+  - Why this seam is `closed`: `SEAM-2` published `C-04` / `THR-03` through closeout-backed staging evidence, leaving `SEAM-3` as the remaining active seam in the pack window.
+  - Which threads mattered most: `THR-01` and `THR-03`.
+  - What the seam-local review focused on: selected-profile mapping, stale-link replacement, disabled-world invariants, installer-smoke regression boundaries, and keeping `scripts/substrate/install-substrate.sh` reference-only.
 - **Expected seam-exit concerns**:
   - Contracts likely to publish: `C-04`.
   - Threads likely to advance: `THR-03`, plus consumption-side revalidation against `THR-01`.

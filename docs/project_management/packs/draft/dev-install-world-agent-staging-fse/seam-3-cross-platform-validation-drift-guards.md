@@ -2,14 +2,16 @@
 seam_id: SEAM-3
 seam_slug: cross-platform-validation-drift-guards
 type: conformance
-status: proposed
+status: closed
 execution_horizon: future
-plan_version: v1
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+    - governance/seam-1-closeout.md
+    - governance/seam-2-closeout.md
   required_threads:
     - THR-01
     - THR-02
@@ -21,20 +23,23 @@ basis:
     - upstream helper-discovery or provisioning work changes shared runner or installer surfaces after evidence is drafted
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
-  planned_location: reserved_final_slice
-  status: pending
+  source_ref: threaded-seams/seam-3-cross-platform-validation-drift-guards/slice-3-seam-exit-gate.md
+  status: passed
+  promotion_readiness: ready
 open_remediations: []
 ---
 
 # SEAM-3 - Cross-platform validation + drift guards
+
+This seam is closed. Its authoritative exit-gate record lives in `governance/seam-3-closeout.md`.
 
 - **Goal / value**: Keep the landed feature contract provable and non-drifting by aligning Linux smoke, installer smoke, manual cases, compile parity, and checkpoint evidence to the actual behavior that lands from the first two seams.
 - **Scope**
@@ -108,9 +113,9 @@ open_remediations: []
   - Preserve deterministic skip / unsupported posture on non-Linux platforms.
   - Record stale triggers instead of silently reusing evidence when upstream reality changes.
 - **Downstream decomposition context**:
-  - Why this seam is `future`: it should consume landed truth from the first two seams, not drive their contract decisions or guess their final evidence.
+  - Why this seam is `active`: `SEAM-1` and `SEAM-2` now provide closeout-backed truth for `THR-01`, `THR-02`, and `THR-03`, so the conformance seam can execute against landed behavior instead of provisional planning assumptions.
   - Which threads matter most: `THR-01`, `THR-02`, and `THR-03`.
-  - What the first seam-local review should focus on: evidence-to-contract alignment, platform claim boundaries, checkpoint wiring, and stale-trigger capture.
+  - What the seam-local review focused on: evidence-to-contract alignment, platform claim boundaries, checkpoint wiring, and stale-trigger capture.
 - **Expected seam-exit concerns**:
   - Contracts likely to publish: minimal or none beyond finalized evidence mapping and stale-trigger records.
   - Threads likely to advance: `THR-01`, `THR-02`, and `THR-03` toward `revalidated` or `closed`.

@@ -16,12 +16,13 @@ fatal() {
 
 usage() {
   cat <<'USAGE' >&2
-Usage: tests/installers/install_smoke.sh --scenario <prod|prod-no-world|dev> [--keep-root]
+Usage: tests/installers/install_smoke.sh --scenario <prod|prod-no-world|dev|dev-no-world> [--keep-root]
 
 Scenarios:
   prod           Production installer with world provisioning.
   prod-no-world  Production installer with --no-world.
   dev            Dev installer (builds binaries + runs linux/world-provision.sh).
+  dev-no-world   Dev installer without provisioning; proves Linux `--no-world` staging.
 
 The harness stubs privileged/systemd commands and uses fake release bundles so
 it never touches the host. It verifies config/manifest output plus socket
@@ -62,6 +63,7 @@ SCENARIO_KIND="prod"
 SCENARIO_WORLD_ENABLED=1
 KEEP_ROOT=0
 FAKE_VERSION="${FAKE_VERSION:-0.0.0-test}"
+DEV_TARGET_CREATED=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -99,6 +101,11 @@ case "${SCENARIO}" in
     SCENARIO="dev"
     SCENARIO_KIND="dev"
     SCENARIO_WORLD_ENABLED=1
+    ;;
+  dev-no-world|dev-noworld)
+    SCENARIO="dev-no-world"
+    SCENARIO_KIND="dev-no-world"
+    SCENARIO_WORLD_ENABLED=0
     ;;
   *)
     usage
@@ -181,6 +188,17 @@ assert_systemctl_log() {
   if [[ "${EXPECT_SOCKET_UNITS}" -eq 1 && "${socket_hits}" -eq 0 ]]; then
     fatal "[${phase}] expected socket unit commands (SUBSTRATE_INSTALLER_EXPECT_SOCKET=1), but none recorded. See ${log_path}."
   fi
+}
+
+assert_systemctl_log_empty() {
+  local phase="$1"
+  local log_path="$2"
+  if [[ -s "${log_path}" ]]; then
+    log "[${phase}] unexpected systemctl activity:"
+    cat "${log_path}" >&2 || true
+    fatal "[${phase}] expected no systemctl activity, but log is not empty: ${log_path}"
+  fi
+  log "[${phase}] systemctl log remained empty as expected."
 }
 
 compute_sha256() {
@@ -695,6 +713,53 @@ assert_manifest_present() {
   log "Verified manager manifest at ${manifest}"
 }
 
+assert_dev_manifest_present() {
+  local prefix="$1"
+  local version_label="$2"
+  local manifest="${prefix}/versions/${version_label}/config/manager_hooks.yaml"
+  if [[ ! -f "${manifest}" ]]; then
+    fatal "dev manager manifest missing after install: ${manifest}"
+  fi
+  log "Verified dev manager manifest at ${manifest}"
+}
+
+assert_dev_install_config_disabled() {
+  local prefix="$1"
+  local config="${prefix}/config.yaml"
+  if [[ ! -f "${config}" ]]; then
+    fatal "dev install config missing after install: ${config}"
+  fi
+
+  python3 - <<'PY' "${config}"
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+world_enabled = None
+section = None
+
+for raw in path.read_text().splitlines():
+    line = raw.split("#", 1)[0].rstrip()
+    if not line.strip():
+        continue
+    if not line.startswith(" ") and line.endswith(":"):
+        section = line.strip()[:-1]
+        continue
+    if section != "world" or not line.startswith("  "):
+        continue
+    key, _, value = line.partition(":")
+    if key.strip() == "enabled":
+        world_enabled = value.strip().lower()
+
+if world_enabled is None:
+    raise SystemExit("world.enabled missing in dev config.yaml")
+if world_enabled != "false":
+    raise SystemExit(f"world.enabled={world_enabled} (expected false)")
+PY
+
+  log "Verified dev install config at ${config} (world.enabled=false)"
+}
+
 assert_env_sh_has_no_override_exports() {
   local env_sh="${PREFIX}/env.sh"
   if [[ ! -f "${env_sh}" ]]; then
@@ -767,15 +832,18 @@ run_prod_uninstall() {
 }
 
 run_dev_install() {
+  local profile="$1"
+  local prefix="$2"
+  local version_label="$3"
+  local world_enabled="${4:-0}"
   local harness_path="${STUB_BIN}:${PATH}"
-  local args=("--prefix" "${PREFIX}" "--version-label" "smoke-dev")
-  if [[ "${SCENARIO_WORLD_ENABLED}" -eq 0 ]]; then
+  local args=("--prefix" "${prefix}" "--profile" "${profile}" "--version-label" "${version_label}")
+  if [[ "${world_enabled}" -eq 0 ]]; then
     args+=("--no-world")
   fi
   local dev_target_root="${REPO_ROOT}/target"
-  local cargo_target_preexisting=0
-  if [[ -d "${dev_target_root}" ]]; then
-    cargo_target_preexisting=1
+  if [[ ! -d "${dev_target_root}" ]]; then
+    DEV_TARGET_CREATED=1
   fi
 
   if ! HOME="${HOME_DIR}" \
@@ -791,11 +859,34 @@ run_dev_install() {
     cat "${INSTALL_LOG}" >&2
     fatal "Dev install script failed; see ${INSTALL_LOG}"
   fi
-
-  if [[ "${cargo_target_preexisting}" -eq 0 ]]; then
-    rm -rf "${dev_target_root}"
-  fi
   cat "${INSTALL_LOG}"
+}
+
+assert_dev_world_agent_links() {
+  local profile="$1"
+  local expected_target="${REPO_ROOT}/target/${profile}/world-agent"
+  local -a link_paths=(
+    "${REPO_ROOT}/target/bin/world-agent"
+    "${REPO_ROOT}/target/bin/linux/world-agent"
+  )
+  local link_path
+  local actual_target
+  for link_path in "${link_paths[@]}"; do
+    if [[ ! -L "${link_path}" ]]; then
+      fatal "Expected staged world-agent link at ${link_path}"
+    fi
+    actual_target="$(readlink "${link_path}")"
+    if [[ "${actual_target}" != "${expected_target}" ]]; then
+      fatal "Staged world-agent link ${link_path} points to ${actual_target}; expected ${expected_target}"
+    fi
+  done
+  log "Verified staged world-agent links for ${profile}: ${expected_target}"
+}
+
+poison_dev_world_agent_links() {
+  local stale_target="$1"
+  ln -sfn "${stale_target}" "${REPO_ROOT}/target/bin/world-agent"
+  ln -sfn "${stale_target}" "${REPO_ROOT}/target/bin/linux/world-agent"
 }
 
 assert_config_init_hint_logged() {
@@ -811,7 +902,7 @@ assert_config_init_hint_logged() {
 prepare_stub_bin
 reset_systemctl_log
 
-  if [[ "${SCENARIO_KIND}" == "prod" ]]; then
+if [[ "${SCENARIO}" == "prod" ]]; then
     build_fake_release
     run_prod_install
     assert_env_sh_has_no_override_exports
@@ -828,14 +919,48 @@ reset_systemctl_log
   run_prod_uninstall
   uninstall_systemctl_log="$(capture_systemctl_log uninstall)"
   assert_systemctl_log "uninstall" "${uninstall_systemctl_log}" 1
-  elif [[ "${SCENARIO_KIND}" == "dev" ]]; then
-    run_dev_install
+elif [[ "${SCENARIO}" == "dev" ]]; then
+    run_dev_install "debug" "${PREFIX}" "smoke-dev" 1
     assert_env_sh_has_no_override_exports
     install_systemctl_log="$(capture_systemctl_log install)"
     assert_systemctl_log "install" "${install_systemctl_log}" 1
+elif [[ "${SCENARIO}" == "dev-no-world" ]]; then
+    dev_prefix_debug="${WORK_ROOT}/prefix-debug"
+    dev_prefix_release="${WORK_ROOT}/prefix-release"
+
+    run_dev_install "debug" "${dev_prefix_debug}" "smoke-dev-debug" 0
+    PREFIX="${dev_prefix_debug}"
+    assert_env_sh_has_no_override_exports
+    assert_dev_install_config_disabled "${PREFIX}"
+    assert_dev_manifest_present "${PREFIX}" "smoke-dev-debug"
+    install_systemctl_log="$(capture_systemctl_log install)"
+    assert_systemctl_log_empty "install-debug" "${install_systemctl_log}"
+    assert_dev_world_agent_links "debug"
+
+    poison_dev_world_agent_links "${WORK_ROOT}/stale-world-agent"
+    run_dev_install "debug" "${dev_prefix_debug}" "smoke-dev-debug" 0
+    PREFIX="${dev_prefix_debug}"
+    assert_dev_install_config_disabled "${PREFIX}"
+    assert_dev_manifest_present "${PREFIX}" "smoke-dev-debug"
+    install_systemctl_log="$(capture_systemctl_log install)"
+    assert_systemctl_log_empty "install-debug-refresh" "${install_systemctl_log}"
+    assert_dev_world_agent_links "debug"
+
+    run_dev_install "release" "${dev_prefix_release}" "smoke-dev-release" 0
+    PREFIX="${dev_prefix_release}"
+    assert_env_sh_has_no_override_exports
+    assert_dev_install_config_disabled "${PREFIX}"
+    assert_dev_manifest_present "${PREFIX}" "smoke-dev-release"
+    install_systemctl_log="$(capture_systemctl_log install)"
+    assert_systemctl_log_empty "install-release" "${install_systemctl_log}"
+    assert_dev_world_agent_links "release"
   else
     fatal "Unsupported scenario kind: ${SCENARIO_KIND}"
   fi
+
+if [[ "${DEV_TARGET_CREATED}" -eq 1 ]]; then
+  rm -rf "${REPO_ROOT}/target"
+fi
 
 log "Scenario ${SCENARIO} completed using PREFIX=${PREFIX}"
 log "Temp root: ${WORK_ROOT}"
