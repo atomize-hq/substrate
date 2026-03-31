@@ -2,7 +2,7 @@
 seam_id: SEAM-3
 seam_slug: cross-platform-proof-drift-guards
 type: conformance
-status: decomposed
+status: exec-ready
 execution_horizon: active
 plan_version: v2
 basis:
@@ -23,9 +23,9 @@ basis:
     - checkpoint boundary or checkpoint evidence requirements change
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
@@ -104,6 +104,9 @@ open_remediations:
   - Why this seam is now `active`: `SEAM-1` and `SEAM-2` now both have closeout-backed truth, so seam-local planning can consume `THR-01`, `THR-02`, and `THR-03` without inventing upstream behavior.
   - Which threads matter most: `THR-01`, `THR-02`, and `THR-03`.
   - What the first seam-local review should focus on: evidence-to-contract alignment, platform claim boundaries, checkpoint proof, and stale-trigger handling.
+- **Pre-exec readiness posture**:
+  - `REM-002` remains open, but it is seam-local and non-blocking because the active seam slices now own the exact macOS claim-boundary, proof-surface refresh, and seam-exit disposition work.
+  - The seam owns evidence alignment only; it does not reopen upstream helper-bundle or cleanup behavior.
 - **Expected seam-exit concerns**:
   - Contracts likely to publish: minimal or none beyond finalized evidence mapping.
   - Threads likely to advance: `THR-01`, `THR-02`, and `THR-03` toward `revalidated` or `closed`.

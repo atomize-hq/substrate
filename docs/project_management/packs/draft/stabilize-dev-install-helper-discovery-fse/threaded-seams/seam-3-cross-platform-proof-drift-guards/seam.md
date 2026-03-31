@@ -1,7 +1,7 @@
 ---
 seam_id: SEAM-3
 seam_slug: cross-platform-proof-drift-guards
-status: decomposed
+status: exec-ready
 execution_horizon: active
 plan_version: v1
 basis:
@@ -22,9 +22,9 @@ basis:
     - checkpoint boundary or checkpoint evidence requirements change
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
@@ -93,6 +93,12 @@ open_remediations:
 ## Review bundle
 
 - `review.md` is the authoritative artifact for `gates.pre_exec.review`.
+
+## Pre-exec readiness posture
+
+- `REM-002` remains open, but it is seam-local and non-blocking because `S1`, `S2`, and `S3` now own the exact macOS claim-boundary, Windows compile-parity, and seam-exit accounting work needed before landing.
+- `SEAM-3` owns evidence and wording alignment only; it does not reopen the upstream helper-bundle or cleanup contracts already published by `SEAM-1` and `SEAM-2`.
+- Execution work may begin because the remaining ambiguity is bounded to seam-local proof surfaces and closeout disposition, not to an upstream handoff or an unresolved producer contract.
 
 ## Seam-exit gate plan
 

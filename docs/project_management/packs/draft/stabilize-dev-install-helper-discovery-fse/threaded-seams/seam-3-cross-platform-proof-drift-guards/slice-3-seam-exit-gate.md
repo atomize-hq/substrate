@@ -3,7 +3,7 @@ slice_id: S3
 seam_id: SEAM-3
 slice_kind: seam_exit_gate
 execution_horizon: active
-status: decomposed
+status: exec-ready
 plan_version: v1
 basis:
   currentness: current
@@ -66,3 +66,8 @@ This slice plans the deterministic handoff that pack closeout may consume once `
 - One closeout-backed Windows compile-parity evidence set
 - One recorded manual/checkpoint evidence set aligned to the landed upstream contracts
 - One planned-vs-landed delta note covering any platform or checkpoint wording movement
+
+#### REM-002 closeout accounting
+
+- `../../governance/seam-3-closeout.md` must say explicitly whether `REM-002` was resolved by landed wording, accepted as a scoped carry, or left open for later follow-on work.
+- The closeout record must point back to the final landed playbook, parity, smoke, and checkpoint surfaces that justify that disposition.

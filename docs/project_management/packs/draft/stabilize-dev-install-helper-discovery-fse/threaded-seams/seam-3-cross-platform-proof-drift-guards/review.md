@@ -44,16 +44,22 @@ flowchart TB
 
 ## Pre-exec findings
 
-- `REM-002` remains open and must be handled explicitly during seam-local review so playbook, parity, and smoke wording make the macOS support boundary explicit against the landed upstream contracts.
+- `REM-002` remains open, but it is seam-local and non-blocking because `slice-1-freeze-platform-evidence-boundaries.md`, `slice-2-refresh-cross-platform-proof-surfaces.md`, and `slice-3-seam-exit-gate.md` already own the exact macOS scope, Windows compile-parity wording, and closeout-disposition work the remediation requires.
 - Upstream basis freshness is now good enough for active seam-local planning: `THR-01`, `THR-02`, and `THR-03` all have closeout-backed truth.
+- `SEAM-3` still owns no new runtime contract; the remaining work is evidence alignment against the landed `C-01`..`C-04` contracts rather than a reopened producer-seam decision.
 
 ## Pre-exec gate disposition
 
-- **Review gate**: pending
-- **Contract gate**: pending
-- **Revalidation gate**: pending
-- **Opened remediations**:
-  - `REM-002`
+- **Review gate**: passed
+- **Review gate concerns**:
+  - none; the review bundle and seam-local slices now make the macOS-claim, Windows-compile-parity, and checkpoint-drift risks explicit enough to falsify the plan.
+- **Contract gate**: passed
+- **Contract gate concerns**:
+  - none; `SEAM-3` owns evidence-boundary and proof-surface planning only, and the slice contracts are concrete enough to implement without reopening upstream behavior scope.
+- **Revalidation gate**: passed
+- **Revalidation gate concerns**:
+  - none; `SEAM-1` and `SEAM-2` closeouts provide the closeout-backed `C-01`..`C-04` truth this seam consumes, and the remaining work is bounded to seam-local evidence alignment.
+- **Opened remediations**: none
 
 ## Planned seam-exit gate focus
 

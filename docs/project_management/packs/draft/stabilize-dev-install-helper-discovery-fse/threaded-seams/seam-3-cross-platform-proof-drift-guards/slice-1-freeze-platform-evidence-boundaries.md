@@ -3,7 +3,7 @@ slice_id: S1
 seam_id: SEAM-3
 slice_kind: delivery
 execution_horizon: active
-status: decomposed
+status: exec-ready
 plan_version: v1
 basis:
   currentness: current
@@ -57,3 +57,47 @@ candidate_subslices: []
 - **Review surface refs**:
   - `review.md` R1
   - `review.md` R2
+
+#### S1.T1 - Freeze the macOS claim boundary for `REM-002`
+
+- **Outcome**: macOS evidence surfaces stop implying release-root parity that the landed upstream seams did not publish.
+- **Files**:
+  - `manual_testing_playbook.md`
+  - `platform-parity-spec.md`
+- **Thread/contract refs**:
+  - `THR-01`
+  - `THR-02`
+  - `THR-03`
+  - `REM-002`
+- **Acceptance criteria**:
+  - macOS wording is limited to helper discovery, validation, and managed cleanup
+  - no playbook or parity text implies that all release-root assets are staged
+  - any future release-root expansion is described as out-of-scope follow-on work rather than silently folded into this seam
+
+#### S1.T2 - Freeze Windows compile-parity wording
+
+- **Outcome**: Windows evidence remains an explicit compile-parity lane and does not drift into implied behavior support.
+- **Files**:
+  - `platform-parity-spec.md`
+  - checkpoint-facing evidence summaries
+- **Thread/contract refs**:
+  - `THR-02`
+  - `THR-03`
+- **Acceptance criteria**:
+  - Windows wording remains compile parity only
+  - checkpoint-facing summaries do not imply supported `substrate world enable` behavior on Windows
+
+## Claim-boundary freeze
+
+- `manual_testing_playbook.md` and `platform-parity-spec.md` are the authoritative planning targets for the operator-facing macOS scope boundary.
+- macOS evidence may prove helper discovery, validation, and managed cleanup only unless additional release-root assets are intentionally staged by later work.
+- Windows evidence remains compile parity only.
+- `REM-002` stays open until landed evidence records whether the wording drift was resolved, accepted, or carried forward, but it no longer acts as an implicit readiness blocker.
+
+## Verification checklist for S1 readiness
+
+| Check | Planned location | Pass condition |
+| --- | --- | --- |
+| macOS scope wording | `manual_testing_playbook.md`, `platform-parity-spec.md` | wording is limited to helper discovery, validation, and managed cleanup. |
+| release-root overclaim refusal | `manual_testing_playbook.md`, checkpoint-facing evidence summaries | no operator-facing proof surface implies that unstaged release-root assets are already covered. |
+| Windows compile-parity wording | `platform-parity-spec.md`, checkpoint-facing evidence summaries | Windows remains explicit compile parity only. |

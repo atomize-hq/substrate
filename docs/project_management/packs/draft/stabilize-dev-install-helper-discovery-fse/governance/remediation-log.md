@@ -16,7 +16,7 @@ status: open
 owner_seam: SEAM-3
 blocked_targets: []
 summary: macOS validation surfaces can overclaim provisioning parity because helper discovery correctness does not guarantee all release-root assets are staged.
-required_fix: Keep playbook and parity evidence explicit that macOS scope is limited to helper discovery, validation, and managed cleanup unless additional release-root assets are intentionally added.
+required_fix: Keep `threaded-seams/seam-3-cross-platform-proof-drift-guards/slice-1-freeze-platform-evidence-boundaries.md`, `threaded-seams/seam-3-cross-platform-proof-drift-guards/slice-2-refresh-cross-platform-proof-surfaces.md`, and `threaded-seams/seam-3-cross-platform-proof-drift-guards/slice-3-seam-exit-gate.md` explicit that macOS scope is limited to helper discovery, validation, and managed cleanup unless additional release-root assets are intentionally added, and keep Windows wording compile-parity only through seam-exit accounting.
 resolution_evidence: []
 ```
 
