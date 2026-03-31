@@ -505,6 +505,40 @@ pub(crate) struct ConfigExplainSource {
     pub path: Option<String>,
 }
 
+pub(crate) fn world_disable_attribution_message(
+    world_enabled: bool,
+    world_enabled_explain: Option<&ConfigExplainKey>,
+) -> Option<&'static str> {
+    if world_enabled {
+        return None;
+    }
+
+    let Some(explain) = world_enabled_explain else {
+        return Some("world isolation disabled by effective config (source unknown)");
+    };
+
+    let Some(source) = explain.sources.as_slice().first() else {
+        return Some("world isolation disabled by effective config (source unknown)");
+    };
+
+    if explain.sources.len() != 1 {
+        return Some("world isolation disabled by effective config (source unknown)");
+    }
+
+    match source.layer.as_str() {
+        "cli_flag" => Some("world isolation disabled by CLI flag --no-world"),
+        "override_env" => Some("world isolation disabled by env override SUBSTRATE_OVERRIDE_WORLD=disabled"),
+        "workspace_patch" => Some(
+            "world isolation disabled by workspace config <workspace>/.substrate/workspace.yaml (world.enabled: false)",
+        ),
+        "global_patch" => Some(
+            "world isolation disabled by global config $SUBSTRATE_HOME/config.yaml (world.enabled: false)",
+        ),
+        "default" => Some("world isolation disabled by default config (world.enabled: false)"),
+        _ => Some("world isolation disabled by effective config (source unknown)"),
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct OrderedExplainKeys(BTreeMap<String, ConfigExplainKey>);
 
@@ -1783,6 +1817,30 @@ mod tests {
         path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
     }
 
+    fn resolve_world_disable_message(
+        cwd: &Path,
+        overrides: CliConfigOverrides,
+    ) -> Option<&'static str> {
+        let (effective, explain) =
+            resolve_effective_config_with_explain(cwd, &overrides, true).unwrap();
+        world_disable_attribution_message(
+            effective.world.enabled,
+            explain
+                .as_ref()
+                .and_then(|explain| explain.keys.get("world.enabled")),
+        )
+    }
+
+    fn explain_key(layer: &str, path: Option<&str>) -> ConfigExplainKey {
+        ConfigExplainKey {
+            merge_strategy: "replace".to_string(),
+            sources: vec![ConfigExplainSource {
+                layer: layer.to_string(),
+                path: path.map(|value| value.to_string()),
+            }],
+        }
+    }
+
     fn assert_same_path(actual: Option<&String>, expected: &Path) {
         let actual = actual
             .map(PathBuf::from)
@@ -2053,6 +2111,222 @@ world:
         assert!(
             !resolved,
             "SUBSTRATE_OVERRIDE_WORLD should apply when no enabled workspace exists"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_world_disable_attribution_maps_cli_flag() {
+        let tmp = TempDir::new().unwrap();
+        let substrate_home = tmp.path().join(".substrate");
+        fs::create_dir_all(&substrate_home).unwrap();
+        let _guard = EnvGuard::set("SUBSTRATE_HOME", &substrate_home);
+
+        let global_path = global_config_path().unwrap();
+        write_file(
+            &global_path,
+            r#"
+world:
+  enabled: true
+"#,
+        );
+
+        let workspace_root = tmp.path().join("ws");
+        let workspace_yaml = crate::execution::workspace::workspace_marker_path(&workspace_root);
+        write_file(
+            &workspace_yaml,
+            r#"
+world:
+  enabled: true
+"#,
+        );
+
+        let _env_guard = EnvGuard::set_str("SUBSTRATE_OVERRIDE_WORLD", "disabled");
+        let message = resolve_world_disable_message(
+            &workspace_root,
+            CliConfigOverrides {
+                world_enabled: Some(false),
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            message,
+            Some("world isolation disabled by CLI flag --no-world")
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_world_disable_attribution_maps_override_env() {
+        let tmp = TempDir::new().unwrap();
+        let substrate_home = tmp.path().join(".substrate");
+        fs::create_dir_all(&substrate_home).unwrap();
+        let _guard = EnvGuard::set("SUBSTRATE_HOME", &substrate_home);
+
+        let global_path = global_config_path().unwrap();
+        write_file(
+            &global_path,
+            r#"
+world:
+  enabled: true
+"#,
+        );
+
+        let workspace_root = tmp.path().join("ws");
+        fs::create_dir_all(&workspace_root).unwrap();
+        let _env_guard = EnvGuard::set_str("SUBSTRATE_OVERRIDE_WORLD", "disabled");
+
+        let message = resolve_world_disable_message(&workspace_root, CliConfigOverrides::default());
+        assert_eq!(
+            message,
+            Some("world isolation disabled by env override SUBSTRATE_OVERRIDE_WORLD=disabled")
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_world_disable_attribution_maps_workspace_patch() {
+        let tmp = TempDir::new().unwrap();
+        let substrate_home = tmp.path().join(".substrate");
+        fs::create_dir_all(&substrate_home).unwrap();
+        let _guard = EnvGuard::set("SUBSTRATE_HOME", &substrate_home);
+
+        let global_path = global_config_path().unwrap();
+        write_file(
+            &global_path,
+            r#"
+world:
+  enabled: true
+"#,
+        );
+
+        let workspace_root = tmp.path().join("ws");
+        let workspace_yaml = crate::execution::workspace::workspace_marker_path(&workspace_root);
+        write_file(
+            &workspace_yaml,
+            r#"
+world:
+  enabled: false
+"#,
+        );
+
+        let message = resolve_world_disable_message(&workspace_root, CliConfigOverrides::default());
+        assert_eq!(
+            message,
+            Some("world isolation disabled by workspace config <workspace>/.substrate/workspace.yaml (world.enabled: false)")
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_world_disable_attribution_maps_global_patch() {
+        let tmp = TempDir::new().unwrap();
+        let substrate_home = tmp.path().join(".substrate");
+        fs::create_dir_all(&substrate_home).unwrap();
+        let _guard = EnvGuard::set("SUBSTRATE_HOME", &substrate_home);
+
+        let global_path = global_config_path().unwrap();
+        write_file(
+            &global_path,
+            r#"
+world:
+  enabled: false
+"#,
+        );
+
+        let workspace_root = tmp.path().join("ws");
+        fs::create_dir_all(&workspace_root).unwrap();
+
+        let message = resolve_world_disable_message(&workspace_root, CliConfigOverrides::default());
+        assert_eq!(
+            message,
+            Some("world isolation disabled by global config $SUBSTRATE_HOME/config.yaml (world.enabled: false)")
+        );
+    }
+
+    #[test]
+    fn test_world_disable_attribution_maps_default_layer() {
+        let message = world_disable_attribution_message(false, Some(&explain_key("default", None)));
+        assert_eq!(
+            message,
+            Some("world isolation disabled by default config (world.enabled: false)")
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_world_disable_attribution_omits_enabled_cases() {
+        let tmp = TempDir::new().unwrap();
+        let substrate_home = tmp.path().join(".substrate");
+        fs::create_dir_all(&substrate_home).unwrap();
+        let _guard = EnvGuard::set("SUBSTRATE_HOME", &substrate_home);
+
+        let workspace_root = tmp.path().join("ws");
+        let workspace_yaml = crate::execution::workspace::workspace_marker_path(&workspace_root);
+        write_file(
+            &workspace_yaml,
+            r#"
+world:
+  enabled: true
+"#,
+        );
+
+        let message = resolve_world_disable_message(
+            &workspace_root,
+            CliConfigOverrides {
+                world_enabled: Some(true),
+                ..Default::default()
+            },
+        );
+        assert_eq!(message, None);
+    }
+
+    #[test]
+    fn test_world_disable_attribution_falls_back_when_provenance_missing() {
+        assert_eq!(
+            world_disable_attribution_message(false, None),
+            Some("world isolation disabled by effective config (source unknown)")
+        );
+        assert_eq!(
+            world_disable_attribution_message(
+                false,
+                Some(&ConfigExplainKey {
+                    merge_strategy: "replace".to_string(),
+                    sources: vec![],
+                }),
+            ),
+            Some("world isolation disabled by effective config (source unknown)")
+        );
+        assert_eq!(
+            world_disable_attribution_message(
+                false,
+                Some(&ConfigExplainKey {
+                    merge_strategy: "replace".to_string(),
+                    sources: vec![ConfigExplainSource {
+                        layer: "not-a-real-layer".to_string(),
+                        path: Some("/tmp/secret/path".to_string()),
+                    }],
+                })
+            ),
+            Some("world isolation disabled by effective config (source unknown)")
+        );
+    }
+
+    #[test]
+    fn test_world_disable_attribution_ignores_source_path() {
+        let message = world_disable_attribution_message(
+            false,
+            Some(&ConfigExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![ConfigExplainSource {
+                    layer: "global_patch".to_string(),
+                    path: Some("/tmp/secret/substrate/config.yaml".to_string()),
+                }],
+            }),
+        );
+        assert_eq!(
+            message,
+            Some("world isolation disabled by global config $SUBSTRATE_HOME/config.yaml (world.enabled: false)")
         );
     }
 
