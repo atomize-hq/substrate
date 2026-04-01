@@ -512,7 +512,7 @@ pub(crate) struct ConfigExplainSource {
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub(crate) struct DoctorDisableSource {
+pub(crate) struct WorldDisableSource {
     pub key: &'static str,
     pub layer: &'static str,
     pub value_display: bool,
@@ -525,10 +525,13 @@ pub(crate) struct DoctorDisableSource {
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub(crate) struct DoctorDisableAttribution {
+pub(crate) struct WorldDisableAttribution {
     pub reason: &'static str,
-    pub source: DoctorDisableSource,
+    pub source: WorldDisableSource,
 }
+
+pub(crate) type DoctorDisableSource = WorldDisableSource;
+pub(crate) type DoctorDisableAttribution = WorldDisableAttribution;
 
 #[allow(dead_code)]
 pub(crate) fn world_disable_attribution_message(
@@ -542,15 +545,15 @@ pub(crate) fn world_disable_attribution_message(
 pub(crate) fn world_disable_attribution(
     world_enabled: bool,
     world_enabled_explain: Option<&ConfigExplainKey>,
-) -> Option<DoctorDisableAttribution> {
+) -> Option<WorldDisableAttribution> {
     if world_enabled {
         return None;
     }
 
     let Some(explain) = world_enabled_explain else {
-        return Some(DoctorDisableAttribution {
+        return Some(WorldDisableAttribution {
             reason: "world isolation disabled by effective config (source unknown)",
-            source: DoctorDisableSource {
+            source: WorldDisableSource {
                 key: "world.enabled",
                 layer: "source_unknown",
                 value_display: false,
@@ -562,9 +565,9 @@ pub(crate) fn world_disable_attribution(
     };
 
     let Some(source) = explain.sources.as_slice().first() else {
-        return Some(DoctorDisableAttribution {
+        return Some(WorldDisableAttribution {
             reason: "world isolation disabled by effective config (source unknown)",
-            source: DoctorDisableSource {
+            source: WorldDisableSource {
                 key: "world.enabled",
                 layer: "source_unknown",
                 value_display: false,
@@ -576,9 +579,9 @@ pub(crate) fn world_disable_attribution(
     };
 
     if explain.sources.len() != 1 {
-        return Some(DoctorDisableAttribution {
+        return Some(WorldDisableAttribution {
             reason: "world isolation disabled by effective config (source unknown)",
-            source: DoctorDisableSource {
+            source: WorldDisableSource {
                 key: "world.enabled",
                 layer: "source_unknown",
                 value_display: false,
@@ -590,9 +593,9 @@ pub(crate) fn world_disable_attribution(
     }
 
     match source.layer.as_str() {
-        "cli_flag" => Some(DoctorDisableAttribution {
+        "cli_flag" => Some(WorldDisableAttribution {
             reason: "world isolation disabled by CLI flag --no-world",
-            source: DoctorDisableSource {
+            source: WorldDisableSource {
                 key: "world.enabled",
                 layer: "cli_flag",
                 value_display: false,
@@ -601,9 +604,9 @@ pub(crate) fn world_disable_attribution(
                 path_display: None,
             },
         }),
-        "override_env" => Some(DoctorDisableAttribution {
+        "override_env" => Some(WorldDisableAttribution {
             reason: "world isolation disabled by env override SUBSTRATE_OVERRIDE_WORLD=disabled",
-            source: DoctorDisableSource {
+            source: WorldDisableSource {
                 key: "world.enabled",
                 layer: "override_env",
                 value_display: false,
@@ -612,9 +615,9 @@ pub(crate) fn world_disable_attribution(
                 path_display: None,
             },
         }),
-        "workspace_patch" => Some(DoctorDisableAttribution {
+        "workspace_patch" => Some(WorldDisableAttribution {
             reason: "world isolation disabled by workspace config <workspace>/.substrate/workspace.yaml (world.enabled: false)",
-            source: DoctorDisableSource {
+            source: WorldDisableSource {
                 key: "world.enabled",
                 layer: "workspace_patch",
                 value_display: false,
@@ -623,9 +626,9 @@ pub(crate) fn world_disable_attribution(
                 path_display: Some("<workspace>/.substrate/workspace.yaml"),
             },
         }),
-        "global_patch" => Some(DoctorDisableAttribution {
+        "global_patch" => Some(WorldDisableAttribution {
             reason: "world isolation disabled by global config $SUBSTRATE_HOME/config.yaml (world.enabled: false)",
-            source: DoctorDisableSource {
+            source: WorldDisableSource {
                 key: "world.enabled",
                 layer: "global_patch",
                 value_display: false,
@@ -634,9 +637,9 @@ pub(crate) fn world_disable_attribution(
                 path_display: Some("$SUBSTRATE_HOME/config.yaml"),
             },
         }),
-        "default" => Some(DoctorDisableAttribution {
+        "default" => Some(WorldDisableAttribution {
             reason: "world isolation disabled by default config (world.enabled: false)",
-            source: DoctorDisableSource {
+            source: WorldDisableSource {
                 key: "world.enabled",
                 layer: "default",
                 value_display: false,
@@ -645,9 +648,9 @@ pub(crate) fn world_disable_attribution(
                 path_display: None,
             },
         }),
-        _ => Some(DoctorDisableAttribution {
+        _ => Some(WorldDisableAttribution {
             reason: "world isolation disabled by effective config (source unknown)",
-            source: DoctorDisableSource {
+            source: WorldDisableSource {
                 key: "world.enabled",
                 layer: "source_unknown",
                 value_display: false,
@@ -2452,7 +2455,7 @@ world:
             (
                 "cli_flag",
                 Some("world isolation disabled by CLI flag --no-world"),
-                DoctorDisableSource {
+                WorldDisableSource {
                     key: "world.enabled",
                     layer: "cli_flag",
                     value_display: false,
@@ -2464,7 +2467,7 @@ world:
             (
                 "override_env",
                 Some("world isolation disabled by env override SUBSTRATE_OVERRIDE_WORLD=disabled"),
-                DoctorDisableSource {
+                WorldDisableSource {
                     key: "world.enabled",
                     layer: "override_env",
                     value_display: false,
@@ -2476,7 +2479,7 @@ world:
             (
                 "workspace_patch",
                 Some("world isolation disabled by workspace config <workspace>/.substrate/workspace.yaml (world.enabled: false)"),
-                DoctorDisableSource {
+                WorldDisableSource {
                     key: "world.enabled",
                     layer: "workspace_patch",
                     value_display: false,
@@ -2488,7 +2491,7 @@ world:
             (
                 "global_patch",
                 Some("world isolation disabled by global config $SUBSTRATE_HOME/config.yaml (world.enabled: false)"),
-                DoctorDisableSource {
+                WorldDisableSource {
                     key: "world.enabled",
                     layer: "global_patch",
                     value_display: false,
@@ -2500,7 +2503,7 @@ world:
             (
                 "default",
                 Some("world isolation disabled by default config (world.enabled: false)"),
-                DoctorDisableSource {
+                WorldDisableSource {
                     key: "world.enabled",
                     layer: "default",
                     value_display: false,
@@ -2512,7 +2515,7 @@ world:
             (
                 "source_unknown",
                 Some("world isolation disabled by effective config (source unknown)"),
-                DoctorDisableSource {
+                WorldDisableSource {
                     key: "world.enabled",
                     layer: "source_unknown",
                     value_display: false,
