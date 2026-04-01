@@ -329,3 +329,10 @@
   - `CODEX_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/packs/active/world_process_exec_tracing_parity/logs/WPEP1/integ/stderr.log`
 - Recovery: `Original Codex integration run stalled. Integration was completed manually in the task worktree, make integ-checks passed, and make triad-task-finish TASK_ID="WPEP1-integ" merged the branch back to orchestration.`
 - Blockers: `NONE`
+
+## START — 2026-04-01T19:00:34Z — code — WPEP2-code
+- Worktree: `wt/world-process-exec-tracing-parity-wpep2-code`
+- Branch: `world-process-exec-tracing-parity-wpep2-code`
+- Orchestration branch: `feat/world-process-exec-tracing-parity`
+- Dispatch:
+  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/packs/active/world_process_exec_tracing_parity" SLICE_ID="WPEP2" LAUNCH_CODEX=1 FORCE=1`
