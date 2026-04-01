@@ -2,22 +2,97 @@
 
 use crate::stream::{emit_chunk, StreamKind};
 use anyhow::{anyhow, Context, Result};
+#[cfg(target_os = "linux")]
+use chrono::{SecondsFormat, Utc};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::thread;
+use substrate_common::ProcessTelemetry;
 use tracing::warn;
 use world_api::WorldFsMode;
 
 #[cfg(target_os = "linux")]
 use std::sync::{Mutex, OnceLock};
+#[cfg(target_os = "linux")]
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+#[cfg(target_os = "linux")]
+use substrate_common::{ProcessEvent, ProcessEventType, ProcessEventsStatus};
 
 #[cfg(target_os = "linux")]
 fn active_exec_registry() -> &'static Mutex<HashMap<String, i32>> {
     static ACTIVE_EXEC_REGISTRY: OnceLock<Mutex<HashMap<String, i32>>> = OnceLock::new();
     ACTIVE_EXEC_REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+const PROCESS_EVENTS_DEFAULT_MAX: usize = 10_000;
+
+#[cfg(target_os = "linux")]
+const PROCESS_EVENTS_BACKEND: &str = "world-linux-ptrace";
+
+const SUBSTRATE_PARENT_SPAN_ENV: &str = "SUBSTRATE_PARENT_SPAN_ID";
+
+#[derive(Clone, Debug)]
+pub struct ProcessCaptureSpec {
+    pub session_id: String,
+    pub world_id: String,
+    pub parent_span: String,
+    pub parent_cmd_id: Option<String>,
+    pub max_events: usize,
+}
+
+impl ProcessCaptureSpec {
+    pub fn from_env(world_id: &str, env: &HashMap<String, String>, span_id: Option<&str>) -> Self {
+        let session_id = env
+            .get("SHIM_SESSION_ID")
+            .cloned()
+            .unwrap_or_else(|| "unknown".to_string());
+        let parent_span = env
+            .get(SUBSTRATE_PARENT_SPAN_ENV)
+            .cloned()
+            .or_else(|| span_id.map(ToOwned::to_owned))
+            .unwrap_or_else(|| "unknown".to_string());
+
+        Self {
+            session_id,
+            world_id: world_id.to_string(),
+            parent_span,
+            parent_cmd_id: env.get("SHIM_PARENT_CMD_ID").cloned(),
+            max_events: PROCESS_EVENTS_DEFAULT_MAX,
+        }
+    }
+}
+
+pub struct CapturedCommandOutput {
+    pub output: Output,
+    pub process_telemetry: ProcessTelemetry,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct CommandCapture<'a> {
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    span_id: Option<&'a str>,
+    process_capture: Option<&'a ProcessCaptureSpec>,
+}
+
+impl<'a> CommandCapture<'a> {
+    pub(crate) const fn new(
+        span_id: Option<&'a str>,
+        process_capture: Option<&'a ProcessCaptureSpec>,
+    ) -> Self {
+        Self {
+            span_id,
+            process_capture,
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub struct TracedProcessTreeResult {
+    pub raw_exit_status: i32,
+    pub process_telemetry: ProcessTelemetry,
 }
 
 #[cfg(target_os = "linux")]
@@ -119,6 +194,451 @@ fn configure_child_process_group(command: &mut Command) {
     }
 }
 
+#[cfg(not(unix))]
+fn configure_child_process_group(_command: &mut Command) {}
+
+#[cfg(target_os = "linux")]
+fn configure_traced_child_process(command: &mut Command) {
+    use std::os::unix::process::CommandExt;
+
+    unsafe {
+        command.pre_exec(|| {
+            if libc::setpgid(0, 0) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+
+            if libc::ptrace(libc::PTRACE_TRACEME, 0, 0, 0) == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+
+            Ok(())
+        });
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub fn process_capture_capability_available() -> bool {
+    let Ok(status) = std::fs::read_to_string("/proc/self/status") else {
+        return false;
+    };
+    let Some(raw_caps) = status
+        .lines()
+        .find_map(|line| line.strip_prefix("CapEff:\t"))
+        .map(str::trim)
+    else {
+        return false;
+    };
+    let Ok(bits) = u64::from_str_radix(raw_caps, 16) else {
+        return false;
+    };
+
+    bits & (1u64 << 19) != 0
+}
+
+#[cfg(target_os = "linux")]
+pub fn unavailable_process_telemetry(reason: &str) -> ProcessTelemetry {
+    let mut telemetry = ProcessTelemetry::unavailable(reason);
+    telemetry.process_events_backend = Some(PROCESS_EVENTS_BACKEND.to_string());
+    telemetry
+}
+
+#[cfg(target_os = "linux")]
+fn error_process_telemetry(error: String) -> ProcessTelemetry {
+    ProcessTelemetry {
+        process_events: Vec::new(),
+        process_events_status: ProcessEventsStatus::Error,
+        process_events_reason: Some("internal_error".to_string()),
+        process_events_dropped: None,
+        process_events_max: None,
+        process_events_backend: Some(PROCESS_EVENTS_BACKEND.to_string()),
+        process_events_error: Some(error),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn ptrace_continue(pid: libc::pid_t, sig: libc::c_int) {
+    let deliver = if sig == libc::SIGTRAP { 0 } else { sig };
+    unsafe {
+        libc::ptrace(libc::PTRACE_CONT, pid, 0, deliver);
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn ptrace_setoptions(pid: libc::pid_t) -> std::io::Result<()> {
+    let options = (libc::PTRACE_O_TRACEFORK
+        | libc::PTRACE_O_TRACEVFORK
+        | libc::PTRACE_O_TRACEEXEC
+        | libc::PTRACE_O_TRACEEXIT) as libc::c_long;
+    let rc = unsafe { libc::ptrace(libc::PTRACE_SETOPTIONS, pid, 0, options) };
+    if rc == -1 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn ptrace_geteventmsg(pid: libc::pid_t) -> Option<u64> {
+    let mut value: libc::c_ulong = 0;
+    let rc = unsafe {
+        libc::ptrace(
+            libc::PTRACE_GETEVENTMSG,
+            pid,
+            0,
+            &mut value as *mut libc::c_ulong,
+        )
+    };
+    if rc == -1 {
+        return None;
+    }
+    Some(value as u64)
+}
+
+#[cfg(target_os = "linux")]
+fn proc_link(pid: libc::pid_t, kind: &str) -> Option<String> {
+    std::fs::read_link(format!("/proc/{pid}/{kind}"))
+        .ok()
+        .map(|path| path.display().to_string())
+}
+
+#[cfg(target_os = "linux")]
+fn proc_ppid(pid: libc::pid_t) -> Option<u32> {
+    let status = std::fs::read_to_string(format!("/proc/{pid}/status")).ok()?;
+    status.lines().find_map(|line| {
+        let value = line.strip_prefix("PPid:\t")?;
+        value.trim().parse::<u32>().ok()
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn now_ts_parts() -> (String, u64) {
+    let now = SystemTime::now();
+    let unix = now
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_else(|_| Duration::from_secs(0));
+    (
+        Utc::now().to_rfc3339_opts(SecondsFormat::Nanos, true),
+        unix.as_nanos().min(u128::from(u64::MAX)) as u64,
+    )
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone)]
+struct TrackedProcess {
+    ppid: u32,
+    cwd: String,
+    exe: Option<String>,
+    started_at: Instant,
+    start_ts: String,
+    start_unix_ns: u64,
+    exit_cwd: Option<String>,
+    options_applied: bool,
+    start_emitted: bool,
+}
+
+#[cfg(target_os = "linux")]
+struct TelemetryCollector {
+    spec: ProcessCaptureSpec,
+    events: Vec<ProcessEvent>,
+    dropped: u64,
+}
+
+#[cfg(target_os = "linux")]
+impl TelemetryCollector {
+    fn new(spec: ProcessCaptureSpec) -> Self {
+        Self {
+            spec,
+            events: Vec::new(),
+            dropped: 0,
+        }
+    }
+
+    fn push(&mut self, event: ProcessEvent) {
+        if self.events.len() < self.spec.max_events {
+            self.events.push(event);
+        } else {
+            self.dropped = self.dropped.saturating_add(1);
+        }
+    }
+
+    fn finish(mut self) -> ProcessTelemetry {
+        self.events.sort_by(|a, b| {
+            a.ts_unix_ns
+                .cmp(&b.ts_unix_ns)
+                .then_with(|| a.pid.cmp(&b.pid))
+                .then_with(|| {
+                    let lhs = match a.event_type {
+                        ProcessEventType::WorldProcessStart => 0,
+                        ProcessEventType::WorldProcessExit => 1,
+                    };
+                    let rhs = match b.event_type {
+                        ProcessEventType::WorldProcessStart => 0,
+                        ProcessEventType::WorldProcessExit => 1,
+                    };
+                    lhs.cmp(&rhs)
+                })
+        });
+
+        if self.dropped > 0 {
+            ProcessTelemetry {
+                process_events: self.events,
+                process_events_status: ProcessEventsStatus::Truncated,
+                process_events_reason: Some("capture_overflow".to_string()),
+                process_events_dropped: Some(self.dropped),
+                process_events_max: Some(self.spec.max_events as u64),
+                process_events_backend: Some(PROCESS_EVENTS_BACKEND.to_string()),
+                process_events_error: None,
+            }
+        } else {
+            ProcessTelemetry {
+                process_events: self.events,
+                process_events_status: ProcessEventsStatus::Ok,
+                process_events_reason: None,
+                process_events_dropped: None,
+                process_events_max: None,
+                process_events_backend: Some(PROCESS_EVENTS_BACKEND.to_string()),
+                process_events_error: None,
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn emit_start_event(collector: &mut TelemetryCollector, pid: libc::pid_t, state: &TrackedProcess) {
+    collector.push(ProcessEvent {
+        event_type: ProcessEventType::WorldProcessStart,
+        ts: state.start_ts.clone(),
+        ts_unix_ns: state.start_unix_ns,
+        session_id: collector.spec.session_id.clone(),
+        world_id: collector.spec.world_id.clone(),
+        pid: pid as u32,
+        ppid: state.ppid,
+        cwd: state.cwd.clone(),
+        parent_span: collector.spec.parent_span.clone(),
+        parent_cmd_id: collector.spec.parent_cmd_id.clone(),
+        argv: None,
+        argv_omitted: Some(true),
+        exe: state.exe.clone(),
+        exit_code: None,
+        signal: None,
+        duration_ms: None,
+        env: None,
+    });
+}
+
+#[cfg(target_os = "linux")]
+fn build_tracked_process(pid: libc::pid_t, parent_pid: Option<u32>) -> TrackedProcess {
+    let (start_ts, start_unix_ns) = now_ts_parts();
+    TrackedProcess {
+        ppid: parent_pid.or_else(|| proc_ppid(pid)).unwrap_or(0),
+        cwd: proc_link(pid, "cwd").unwrap_or_else(|| "/".to_string()),
+        exe: proc_link(pid, "exe"),
+        started_at: Instant::now(),
+        start_ts,
+        start_unix_ns,
+        exit_cwd: None,
+        options_applied: false,
+        start_emitted: false,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn finish_tracked_process(
+    collector: &mut TelemetryCollector,
+    pid: libc::pid_t,
+    state: TrackedProcess,
+    raw_status: libc::c_int,
+) {
+    let (ts, ts_unix_ns) = now_ts_parts();
+    let duration_ms = state
+        .started_at
+        .elapsed()
+        .as_millis()
+        .min(u128::from(u64::MAX)) as u64;
+    collector.push(ProcessEvent {
+        event_type: ProcessEventType::WorldProcessExit,
+        ts,
+        ts_unix_ns,
+        session_id: collector.spec.session_id.clone(),
+        world_id: collector.spec.world_id.clone(),
+        pid: pid as u32,
+        ppid: state.ppid,
+        cwd: state.exit_cwd.unwrap_or(state.cwd),
+        parent_span: collector.spec.parent_span.clone(),
+        parent_cmd_id: collector.spec.parent_cmd_id.clone(),
+        argv: None,
+        argv_omitted: Some(true),
+        exe: state.exe,
+        exit_code: if libc::WIFEXITED(raw_status) {
+            Some(libc::WEXITSTATUS(raw_status))
+        } else {
+            None
+        },
+        signal: if libc::WIFSIGNALED(raw_status) {
+            Some(libc::WTERMSIG(raw_status))
+        } else {
+            None
+        },
+        duration_ms: Some(duration_ms),
+        env: None,
+    });
+}
+
+#[cfg(target_os = "linux")]
+fn wait_for_ptrace_exit(pid: libc::pid_t) -> libc::c_int {
+    loop {
+        let mut status = 0;
+        let rc = unsafe { libc::waitpid(pid, &mut status as *mut libc::c_int, 0) };
+        if rc < 0 {
+            let err = std::io::Error::last_os_error();
+            if err.kind() == std::io::ErrorKind::Interrupted {
+                continue;
+            }
+            return 1 << 8;
+        }
+        if libc::WIFSTOPPED(status) {
+            ptrace_continue(pid, libc::WSTOPSIG(status));
+            continue;
+        }
+        return status;
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub fn trace_spawned_process_tree(
+    root_pid: libc::pid_t,
+    spec: &ProcessCaptureSpec,
+) -> TracedProcessTreeResult {
+    let mut collector = TelemetryCollector::new(spec.clone());
+    let mut tracked: HashMap<libc::pid_t, TrackedProcess> = HashMap::new();
+    let mut final_root_status: Option<libc::c_int> = None;
+
+    let mut status = 0;
+    let rc = unsafe { libc::waitpid(root_pid, &mut status as *mut libc::c_int, 0) };
+    if rc < 0 {
+        return TracedProcessTreeResult {
+            raw_exit_status: 1 << 8,
+            process_telemetry: error_process_telemetry(format!(
+                "waitpid initial ptrace stop failed: {}",
+                std::io::Error::last_os_error()
+            )),
+        };
+    }
+
+    if !libc::WIFSTOPPED(status) {
+        return TracedProcessTreeResult {
+            raw_exit_status: status,
+            process_telemetry: error_process_telemetry(
+                "child did not enter ptrace stop as expected".to_string(),
+            ),
+        };
+    }
+
+    if let Err(err) = ptrace_setoptions(root_pid) {
+        ptrace_continue(root_pid, libc::WSTOPSIG(status));
+        return TracedProcessTreeResult {
+            raw_exit_status: wait_for_ptrace_exit(root_pid),
+            process_telemetry: if matches!(
+                err.raw_os_error(),
+                Some(libc::EPERM) | Some(libc::EACCES)
+            ) {
+                unavailable_process_telemetry("ptrace_not_permitted")
+            } else {
+                error_process_telemetry(format!("ptrace SETOPTIONS failed: {err}"))
+            },
+        };
+    }
+
+    let mut root_state = build_tracked_process(root_pid, None);
+    root_state.options_applied = true;
+    emit_start_event(&mut collector, root_pid, &root_state);
+    root_state.start_emitted = true;
+    tracked.insert(root_pid, root_state);
+    ptrace_continue(root_pid, libc::WSTOPSIG(status));
+
+    while !tracked.is_empty() {
+        status = 0;
+        let rc = unsafe {
+            libc::waitpid(
+                -1,
+                &mut status as *mut libc::c_int,
+                libc::__WALL | libc::WUNTRACED,
+            )
+        };
+        if rc < 0 {
+            let err = std::io::Error::last_os_error();
+            if err.kind() == std::io::ErrorKind::Interrupted {
+                continue;
+            }
+            return TracedProcessTreeResult {
+                raw_exit_status: final_root_status.unwrap_or(1 << 8),
+                process_telemetry: error_process_telemetry(format!("ptrace waitpid failed: {err}")),
+            };
+        }
+
+        let pid = rc;
+
+        if libc::WIFSTOPPED(status) {
+            let sig = libc::WSTOPSIG(status);
+            let event = (status >> 16) & 0xffff;
+            let state = tracked
+                .entry(pid)
+                .or_insert_with(|| build_tracked_process(pid, None));
+
+            if !state.options_applied {
+                if let Err(err) = ptrace_setoptions(pid) {
+                    ptrace_continue(pid, sig);
+                    return TracedProcessTreeResult {
+                        raw_exit_status: final_root_status.unwrap_or(1 << 8),
+                        process_telemetry: if matches!(
+                            err.raw_os_error(),
+                            Some(libc::EPERM) | Some(libc::EACCES)
+                        ) {
+                            unavailable_process_telemetry("ptrace_not_permitted")
+                        } else {
+                            error_process_telemetry(format!(
+                                "ptrace SETOPTIONS failed for pid {pid}: {err}"
+                            ))
+                        },
+                    };
+                }
+                state.options_applied = true;
+            }
+
+            if !state.start_emitted {
+                emit_start_event(&mut collector, pid, state);
+                state.start_emitted = true;
+            }
+
+            if event == libc::PTRACE_EVENT_EXIT {
+                state.exit_cwd = proc_link(pid, "cwd");
+            } else if matches!(event, libc::PTRACE_EVENT_FORK | libc::PTRACE_EVENT_VFORK) {
+                if let Some(child_pid) = ptrace_geteventmsg(pid) {
+                    tracked.entry(child_pid as libc::pid_t).or_insert_with(|| {
+                        build_tracked_process(child_pid as libc::pid_t, Some(pid as u32))
+                    });
+                }
+            }
+
+            ptrace_continue(pid, sig);
+            continue;
+        }
+
+        if libc::WIFEXITED(status) || libc::WIFSIGNALED(status) {
+            if let Some(state) = tracked.remove(&pid) {
+                finish_tracked_process(&mut collector, pid, state, status);
+            }
+            if pid == root_pid {
+                final_root_status = Some(status);
+            }
+        }
+    }
+
+    TracedProcessTreeResult {
+        raw_exit_status: final_root_status.unwrap_or(1 << 8),
+        process_telemetry: collector.finish(),
+    }
+}
+
 /// Execute `cmd` via `sh -lc` in the provided directory/environment, pushing
 /// stdout/stderr chunks through the global stream sink while accumulating the
 /// full output for the caller.
@@ -129,6 +649,115 @@ pub fn execute_shell_command(
     login_shell: bool,
     _span_id: Option<&str>,
 ) -> Result<Output> {
+    Ok(execute_shell_command_with_capture(
+        cmd,
+        cwd,
+        env,
+        login_shell,
+        CommandCapture::new(_span_id, None),
+    )?
+    .output)
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn execute_shell_command_with_capture(
+    cmd: &str,
+    cwd: &Path,
+    env: &HashMap<String, String>,
+    login_shell: bool,
+    capture: CommandCapture<'_>,
+) -> Result<CapturedCommandOutput> {
+    fn build_command(
+        cmd: &str,
+        cwd: &Path,
+        env: &HashMap<String, String>,
+        login_shell: bool,
+        enable_ptrace: bool,
+    ) -> Command {
+        let mut command = Command::new("sh");
+        if login_shell {
+            command.arg("-lc");
+        } else {
+            command.arg("-c");
+        }
+        command.arg(cmd);
+        command.current_dir(cwd);
+        command.env_clear();
+        command.envs(env);
+        command.stdout(Stdio::piped());
+        command.stderr(Stdio::piped());
+        if enable_ptrace {
+            configure_traced_child_process(&mut command);
+        } else {
+            configure_child_process_group(&mut command);
+        }
+        command
+    }
+
+    let tracing_requested = capture.process_capture.is_some();
+    let tracing_permitted = tracing_requested && process_capture_capability_available();
+
+    let mut telemetry = if tracing_requested && !tracing_permitted {
+        unavailable_process_telemetry("ptrace_not_permitted")
+    } else {
+        ProcessTelemetry::default()
+    };
+
+    let mut child = build_command(cmd, cwd, env, login_shell, tracing_permitted)
+        .spawn()
+        .with_context(|| format!("Failed to spawn command: {cmd}"))?;
+    let _active_exec = register_active_exec(capture.span_id, child.id() as i32);
+
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| anyhow!("Failed to capture stdout pipe"))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| anyhow!("Failed to capture stderr pipe"))?;
+
+    let stdout_handle = spawn_reader(stdout, StreamKind::Stdout);
+    let stderr_handle = spawn_reader(stderr, StreamKind::Stderr);
+
+    let status = if tracing_permitted {
+        let trace = trace_spawned_process_tree(
+            child.id() as libc::pid_t,
+            capture.process_capture.expect("capture spec"),
+        );
+        telemetry = trace.process_telemetry;
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::ExitStatusExt;
+            std::process::ExitStatus::from_raw(trace.raw_exit_status)
+        }
+    } else {
+        child
+            .wait()
+            .context("Failed to wait for child process completion")?
+    };
+
+    let stdout_buf = join_reader(stdout_handle, "stdout");
+    let stderr_buf = join_reader(stderr_handle, "stderr");
+
+    Ok(CapturedCommandOutput {
+        output: Output {
+            status,
+            stdout: stdout_buf,
+            stderr: stderr_buf,
+        },
+        process_telemetry: telemetry,
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn execute_shell_command_with_capture(
+    cmd: &str,
+    cwd: &Path,
+    env: &HashMap<String, String>,
+    login_shell: bool,
+    capture: CommandCapture<'_>,
+) -> Result<CapturedCommandOutput> {
     let mut command = Command::new("sh");
     if login_shell {
         command.arg("-lc");
@@ -137,21 +766,15 @@ pub fn execute_shell_command(
     }
     command.arg(cmd);
     command.current_dir(cwd);
-    // Ensure the child process environment is fully determined by the caller-provided env map.
-    // This prevents leaking the world-agent service environment (and any host-derived PATH fragments)
-    // into `--world` executions, which must be deterministic under host-visible worlds.
     command.env_clear();
     command.envs(env);
     command.stdout(Stdio::piped());
     command.stderr(Stdio::piped());
-    #[cfg(unix)]
     configure_child_process_group(&mut command);
 
     let mut child = command
         .spawn()
         .with_context(|| format!("Failed to spawn command: {cmd}"))?;
-    #[cfg(target_os = "linux")]
-    let _active_exec = register_active_exec(_span_id, child.id() as i32);
 
     let stdout = child
         .stdout
@@ -172,10 +795,19 @@ pub fn execute_shell_command(
     let stdout_buf = join_reader(stdout_handle, "stdout");
     let stderr_buf = join_reader(stderr_handle, "stderr");
 
-    Ok(Output {
-        status,
-        stdout: stdout_buf,
-        stderr: stderr_buf,
+    let telemetry = if capture.process_capture.is_some() {
+        ProcessTelemetry::not_supported_platform()
+    } else {
+        ProcessTelemetry::default()
+    };
+
+    Ok(CapturedCommandOutput {
+        output: Output {
+            status,
+            stdout: stdout_buf,
+            stderr: stderr_buf,
+        },
+        process_telemetry: telemetry,
     })
 }
 
@@ -589,6 +1221,44 @@ pub(crate) fn execute_shell_command_with_project_bind_mount(
     _attach_policy: CgroupAttachPolicy<'_>,
     _span_id: Option<&str>,
 ) -> Result<Output> {
+    Ok(execute_shell_command_with_project_bind_mount_capture(
+        cmd,
+        mount,
+        env,
+        login_shell,
+        _attach_policy,
+        CommandCapture::new(_span_id, None),
+    )?
+    .output)
+}
+
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn execute_shell_command_with_project_bind_mount_capture(
+    cmd: &str,
+    mount: ProjectBindMount<'_>,
+    env: &HashMap<String, String>,
+    login_shell: bool,
+    _attach_policy: CgroupAttachPolicy<'_>,
+    _capture: CommandCapture<'_>,
+) -> Result<CapturedCommandOutput> {
+    let _ = cmd;
+    let _ = mount;
+    let _ = env;
+    let _ = login_shell;
+    Err(anyhow!(
+        "project bind mount enforcement is only supported on Linux"
+    ))
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn execute_shell_command_with_project_bind_mount_capture(
+    cmd: &str,
+    mount: ProjectBindMount<'_>,
+    env: &HashMap<String, String>,
+    login_shell: bool,
+    _attach_policy: CgroupAttachPolicy<'_>,
+    capture: CommandCapture<'_>,
+) -> Result<CapturedCommandOutput> {
     #[cfg(not(target_os = "linux"))]
     {
         let _ = cmd;
@@ -622,6 +1292,13 @@ pub(crate) fn execute_shell_command_with_project_bind_mount(
             .map(|raw| raw.trim().to_ascii_lowercase())
             .unwrap_or_else(|| "workspace".to_string());
         let isolation_full = isolation == "full";
+        let tracing_requested = capture.process_capture.is_some();
+        let tracing_permitted = tracing_requested && process_capture_capability_available();
+        let mut telemetry = if tracing_requested && !tracing_permitted {
+            unavailable_process_telemetry("ptrace_not_permitted")
+        } else {
+            ProcessTelemetry::default()
+        };
 
         let mut command = Command::new("unshare");
         command.arg("--mount");
@@ -644,8 +1321,11 @@ pub(crate) fn execute_shell_command_with_project_bind_mount(
         command.envs(env_map);
         command.stdout(Stdio::piped());
         command.stderr(Stdio::piped());
-        #[cfg(unix)]
-        configure_child_process_group(&mut command);
+        if tracing_permitted {
+            configure_traced_child_process(&mut command);
+        } else {
+            configure_child_process_group(&mut command);
+        }
 
         let mut child = match command.spawn() {
             Ok(child) => child,
@@ -654,17 +1334,19 @@ pub(crate) fn execute_shell_command_with_project_bind_mount(
                     let message = format!(
                         "substrate: error: world_fs.isolation=full requested but failed to spawn unshare wrapper: {err}\n"
                     );
-                    return Ok(Output {
-                        status: std::process::ExitStatus::from_raw(126 << 8),
-                        stdout: Vec::new(),
-                        stderr: message.into_bytes(),
+                    return Ok(CapturedCommandOutput {
+                        output: Output {
+                            status: std::process::ExitStatus::from_raw(126 << 8),
+                            stdout: Vec::new(),
+                            stderr: message.into_bytes(),
+                        },
+                        process_telemetry: telemetry,
                     });
                 }
                 return Err(err).with_context(|| format!("Failed to spawn command: {cmd}"));
             }
         };
-        #[cfg(target_os = "linux")]
-        let _active_exec = register_active_exec(_span_id, child.id() as i32);
+        let _active_exec = register_active_exec(capture.span_id, child.id() as i32);
 
         let stdout = child
             .stdout
@@ -678,9 +1360,18 @@ pub(crate) fn execute_shell_command_with_project_bind_mount(
         let stdout_handle = spawn_reader(stdout, StreamKind::Stdout);
         let stderr_handle = spawn_reader(stderr, StreamKind::Stderr);
 
-        let status = child
-            .wait()
-            .context("Failed to wait for child process completion")?;
+        let status = if tracing_permitted {
+            let trace = trace_spawned_process_tree(
+                child.id() as libc::pid_t,
+                capture.process_capture.expect("capture spec"),
+            );
+            telemetry = trace.process_telemetry;
+            std::process::ExitStatus::from_raw(trace.raw_exit_status)
+        } else {
+            child
+                .wait()
+                .context("Failed to wait for child process completion")?
+        };
 
         let stdout_buf = join_reader(stdout_handle, "stdout");
         let mut stderr_buf = join_reader(stderr_handle, "stderr");
@@ -703,10 +1394,13 @@ pub(crate) fn execute_shell_command_with_project_bind_mount(
             }
         }
 
-        Ok(Output {
-            status,
-            stdout: stdout_buf,
-            stderr: stderr_buf,
+        Ok(CapturedCommandOutput {
+            output: Output {
+                status,
+                stdout: stdout_buf,
+                stderr: stderr_buf,
+            },
+            process_telemetry: telemetry,
         })
     }
 }
@@ -791,6 +1485,48 @@ pub(crate) fn execute_shell_command_with_world_deps_bind_mount(
     _attach_policy: CgroupAttachPolicy<'_>,
     _span_id: Option<&str>,
 ) -> Result<Output> {
+    Ok(execute_shell_command_with_world_deps_bind_mount_capture(
+        cmd,
+        cwd,
+        env,
+        login_shell,
+        world_deps_root,
+        _attach_policy,
+        CommandCapture::new(_span_id, None),
+    )?
+    .output)
+}
+
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn execute_shell_command_with_world_deps_bind_mount_capture(
+    cmd: &str,
+    cwd: &Path,
+    env: &HashMap<String, String>,
+    login_shell: bool,
+    world_deps_root: &Path,
+    _attach_policy: CgroupAttachPolicy<'_>,
+    _capture: CommandCapture<'_>,
+) -> Result<CapturedCommandOutput> {
+    let _ = cmd;
+    let _ = cwd;
+    let _ = env;
+    let _ = login_shell;
+    let _ = world_deps_root;
+    Err(anyhow!(
+        "world-deps bind mount fallback is only supported on Linux"
+    ))
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn execute_shell_command_with_world_deps_bind_mount_capture(
+    cmd: &str,
+    cwd: &Path,
+    env: &HashMap<String, String>,
+    login_shell: bool,
+    world_deps_root: &Path,
+    _attach_policy: CgroupAttachPolicy<'_>,
+    capture: CommandCapture<'_>,
+) -> Result<CapturedCommandOutput> {
     #[cfg(not(target_os = "linux"))]
     {
         let _ = cmd;
@@ -822,6 +1558,13 @@ pub(crate) fn execute_shell_command_with_world_deps_bind_mount(
             world_deps_root,
             _attach_policy,
         );
+        let tracing_requested = capture.process_capture.is_some();
+        let tracing_permitted = tracing_requested && process_capture_capability_available();
+        let mut telemetry = if tracing_requested && !tracing_permitted {
+            unavailable_process_telemetry("ptrace_not_permitted")
+        } else {
+            ProcessTelemetry::default()
+        };
 
         let mut command = Command::new("unshare");
         command.arg("--mount");
@@ -839,14 +1582,16 @@ pub(crate) fn execute_shell_command_with_world_deps_bind_mount(
         command.envs(env_map);
         command.stdout(Stdio::piped());
         command.stderr(Stdio::piped());
-        #[cfg(unix)]
-        configure_child_process_group(&mut command);
+        if tracing_permitted {
+            configure_traced_child_process(&mut command);
+        } else {
+            configure_child_process_group(&mut command);
+        }
 
         let mut child = command
             .spawn()
             .with_context(|| format!("Failed to spawn command: {cmd}"))?;
-        #[cfg(target_os = "linux")]
-        let _active_exec = register_active_exec(_span_id, child.id() as i32);
+        let _active_exec = register_active_exec(capture.span_id, child.id() as i32);
 
         let stdout = child
             .stdout
@@ -860,9 +1605,19 @@ pub(crate) fn execute_shell_command_with_world_deps_bind_mount(
         let stdout_handle = spawn_reader(stdout, StreamKind::Stdout);
         let stderr_handle = spawn_reader(stderr, StreamKind::Stderr);
 
-        let status = child
-            .wait()
-            .context("Failed to wait for child process completion")?;
+        let status = if tracing_permitted {
+            use std::os::unix::process::ExitStatusExt;
+            let trace = trace_spawned_process_tree(
+                child.id() as libc::pid_t,
+                capture.process_capture.expect("capture spec"),
+            );
+            telemetry = trace.process_telemetry;
+            std::process::ExitStatus::from_raw(trace.raw_exit_status)
+        } else {
+            child
+                .wait()
+                .context("Failed to wait for child process completion")?
+        };
 
         let stdout_buf = join_reader(stdout_handle, "stdout");
         let stderr_buf = join_reader(stderr_handle, "stderr");
@@ -873,10 +1628,13 @@ pub(crate) fn execute_shell_command_with_world_deps_bind_mount(
             }
         }
 
-        Ok(Output {
-            status,
-            stdout: stdout_buf,
-            stderr: stderr_buf,
+        Ok(CapturedCommandOutput {
+            output: Output {
+                status,
+                stdout: stdout_buf,
+                stderr: stderr_buf,
+            },
+            process_telemetry: telemetry,
         })
     }
 }
@@ -993,6 +1751,8 @@ fn join_reader(handle: thread::JoinHandle<Result<Vec<u8>>>, label: &str) -> Vec<
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "linux")]
+    use substrate_common::ProcessEventsStatus;
 
     #[test]
     fn workspace_isolation_preserves_world_deps_root_before_tmpfs() {
@@ -1016,6 +1776,44 @@ mod tests {
         // HOME (/root) must be made writable even when / is remounted read-only by strict deny.
         assert!(PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT.contains("mount -t tmpfs tmpfs /root"));
         assert!(WORLD_DEPS_BIND_MOUNT_FALLBACK_SCRIPT.contains("mount -t tmpfs tmpfs /root"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn process_capture_spec_reads_trace_metadata_from_env() {
+        let env = HashMap::from([
+            ("SHIM_SESSION_ID".to_string(), "ses_test".to_string()),
+            (
+                SUBSTRATE_PARENT_SPAN_ENV.to_string(),
+                "spn_parent".to_string(),
+            ),
+            ("SHIM_PARENT_CMD_ID".to_string(), "cmd_test".to_string()),
+        ]);
+
+        let spec = ProcessCaptureSpec::from_env("wld_test", &env, None);
+        assert_eq!(spec.session_id, "ses_test");
+        assert_eq!(spec.world_id, "wld_test");
+        assert_eq!(spec.parent_span, "spn_parent");
+        assert_eq!(spec.parent_cmd_id.as_deref(), Some("cmd_test"));
+        assert_eq!(spec.max_events, PROCESS_EVENTS_DEFAULT_MAX);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn unavailable_process_telemetry_reports_ptrace_backend() {
+        let telemetry = unavailable_process_telemetry("ptrace_not_permitted");
+        assert_eq!(
+            telemetry.process_events_status,
+            ProcessEventsStatus::Unavailable
+        );
+        assert_eq!(
+            telemetry.process_events_reason.as_deref(),
+            Some("ptrace_not_permitted")
+        );
+        assert_eq!(
+            telemetry.process_events_backend.as_deref(),
+            Some(PROCESS_EVENTS_BACKEND)
+        );
     }
 
     #[test]

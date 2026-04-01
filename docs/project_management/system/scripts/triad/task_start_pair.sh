@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
     cat <<'USAGE'
 Usage:
-  make triad-task-start-pair FEATURE_DIR=<path> SLICE_ID=<slice> [LAUNCH_CODEX=1] [CODEX_PROFILE=<p>] [CODEX_MODEL=<m>] [CODEX_JSONL=1] [DRY_RUN=1]
+  make triad-task-start-pair FEATURE_DIR=<path> SLICE_ID=<slice> [LAUNCH_CODEX=1] [CODEX_PROFILE=<p>] [CODEX_MODEL=<m>] [CODEX_JSONL=1] [FORCE=1] [DRY_RUN=1]
 
 Required:
   --feature-dir <path>     Feature Planning Pack dir (docs/project_management/packs/active/<feature> or equivalent)
@@ -19,6 +19,7 @@ Options:
   --codex-profile <p>      Codex profile (passed to `codex exec --profile`)
   --codex-model <m>        Codex model (passed to `codex exec --model`)
   --codex-jsonl            Capture Codex JSONL event stream (uses `codex exec --json`)
+  --force                  Bypass depends_on completion checks for the paired start
   --dry-run                Print what would happen; do not mutate git/worktrees
 
 Stdout contract (machine-parseable):
@@ -84,6 +85,7 @@ CODEX_PROFILE=""
 CODEX_MODEL=""
 CODEX_JSONL=0
 DRY_RUN=0
+FORCE=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -125,6 +127,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --dry-run)
             DRY_RUN=1
+            shift 1
+            ;;
+        --force)
+            FORCE=1
             shift 1
             ;;
         -h|--help)
@@ -262,8 +268,12 @@ for dep in deps:
 PY
 }
 
-require_deps_completed "${CODE_TASK_ID}"
-require_deps_completed "${TEST_TASK_ID}"
+if [[ "${FORCE}" -eq 1 ]]; then
+    log "Force enabled; bypassing depends_on completion gate for ${CODE_TASK_ID} and ${TEST_TASK_ID}"
+else
+    require_deps_completed "${CODE_TASK_ID}"
+    require_deps_completed "${TEST_TASK_ID}"
+fi
 
 log "Ensuring orchestration branch exists/checked out: ${ORCH_BRANCH}"
 if [[ "${DRY_RUN}" -eq 1 ]]; then
@@ -284,6 +294,7 @@ if [[ "${DRY_RUN}" -eq 1 ]]; then code_args+=(--dry-run); fi
 if [[ -n "${CODEX_PROFILE}" ]]; then code_args+=(--codex-profile "${CODEX_PROFILE}"); fi
 if [[ -n "${CODEX_MODEL}" ]]; then code_args+=(--codex-model "${CODEX_MODEL}"); fi
 if [[ "${CODEX_JSONL}" -eq 1 ]]; then code_args+=(--codex-jsonl); fi
+if [[ "${FORCE}" -eq 1 ]]; then code_args+=(--force); fi
 code_out="$("${code_args[@]}")"
 
 log "Creating test worktree: ${TEST_TASK_ID}"
@@ -292,6 +303,7 @@ if [[ "${DRY_RUN}" -eq 1 ]]; then test_args+=(--dry-run); fi
 if [[ -n "${CODEX_PROFILE}" ]]; then test_args+=(--codex-profile "${CODEX_PROFILE}"); fi
 if [[ -n "${CODEX_MODEL}" ]]; then test_args+=(--codex-model "${CODEX_MODEL}"); fi
 if [[ "${CODEX_JSONL}" -eq 1 ]]; then test_args+=(--codex-jsonl); fi
+if [[ "${FORCE}" -eq 1 ]]; then test_args+=(--force); fi
 test_out="$("${test_args[@]}")"
 
 CODE_WORKTREE="$(parse_kv WORKTREE "${code_out}")"

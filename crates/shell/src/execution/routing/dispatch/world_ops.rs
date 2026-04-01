@@ -19,7 +19,7 @@ use crate::execution::{policy_snapshot::bootstrap_world_spec, socket_activation}
 use agent_api_client::AgentClient;
 #[cfg(not(target_os = "windows"))]
 use agent_api_types::ExecuteCancelRequestV1;
-use agent_api_types::{ExecuteRequest, ExecuteStreamFrame, WorldFsMode};
+use agent_api_types::{ExecuteRequest, ExecuteStreamFrame, ProcessTelemetry, WorldFsMode};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use std::env;
@@ -39,7 +39,26 @@ use world_api::WorldBackend;
 
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 const WORLD_PROJECT_DIR_OVERRIDE_ENV: &str = "SUBSTRATE_WORLD_PROJECT_DIR";
+const SUBSTRATE_PARENT_SPAN_ENV: &str = "SUBSTRATE_PARENT_SPAN_ID";
 const RESERVED_WORLD_REQUEST_PROFILES: &[&str] = &["world-deps-provision", "world-deps-probe"];
+
+fn inject_process_trace_env(
+    env_map: &mut std::collections::HashMap<String, String>,
+    parent_span_id: Option<&str>,
+    parent_cmd_id: Option<&str>,
+) {
+    if let Ok(session_id) = std::env::var("SHIM_SESSION_ID") {
+        if !session_id.is_empty() {
+            env_map.insert("SHIM_SESSION_ID".to_string(), session_id);
+        }
+    }
+    if let Some(span_id) = parent_span_id {
+        env_map.insert(SUBSTRATE_PARENT_SPAN_ENV.to_string(), span_id.to_string());
+    }
+    if let Some(cmd_id) = parent_cmd_id {
+        env_map.insert("SHIM_PARENT_CMD_ID".to_string(), cmd_id.to_string());
+    }
+}
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub(super) fn normalize_env_for_linux_guest(
@@ -167,16 +186,18 @@ pub(super) fn collect_world_telemetry(
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub(crate) struct PtyWorldOutcome {
     pub(crate) exit_code: i32,
     pub(crate) fs_strategy: Option<WorldFsStrategyTraceMeta>,
+    pub(crate) process_telemetry: ProcessTelemetry,
 }
 
 #[cfg(target_os = "linux")]
 pub(super) fn execute_world_pty_over_ws(
     cmd: &str,
     span_id: &str,
+    parent_cmd_id: Option<&str>,
 ) -> anyhow::Result<PtyWorldOutcome> {
     use base64::engine::general_purpose::STANDARD;
     use base64::Engine;
@@ -222,6 +243,7 @@ pub(super) fn execute_world_pty_over_ws(
             &mut env_map,
         )?;
         ensure_world_deps_bin_on_path(&mut env_map);
+        inject_process_trace_env(&mut env_map, Some(span_id), parent_cmd_id);
         #[cfg(unix)]
         let (cols, rows) = get_term_size();
         #[cfg(not(target_os = "linux"))]
@@ -375,6 +397,7 @@ pub(super) fn execute_world_pty_over_ws(
 
         let mut exit_code: i32 = 0;
         let mut fs_strategy: Option<WorldFsStrategyTraceMeta> = None;
+        let mut process_telemetry = ProcessTelemetry::default();
         while let Some(msg) = stream.next().await {
             let msg = msg.map_err(|e| anyhow::anyhow!("ws recv: {}", e))?;
             if msg.is_text() {
@@ -391,6 +414,7 @@ pub(super) fn execute_world_pty_over_ws(
                         }
                         Some("exit") => {
                             exit_code = v.get("code").and_then(|c| c.as_i64()).unwrap_or(0) as i32;
+                            process_telemetry = extract_process_telemetry_from_ws_exit(&v);
                             if let (Some(primary), Some(final_strategy), Some(reason)) = (
                                 v.get("world_fs_strategy_primary")
                                     .and_then(serde_json::Value::as_str)
@@ -447,6 +471,7 @@ pub(super) fn execute_world_pty_over_ws(
         Ok::<PtyWorldOutcome, anyhow::Error>(PtyWorldOutcome {
             exit_code,
             fs_strategy,
+            process_telemetry,
         })
     })?;
     Ok(outcome)
@@ -623,7 +648,11 @@ where
 }
 
 #[cfg(target_os = "macos")]
-pub(super) fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyhow::Result<i32> {
+pub(super) fn execute_world_pty_over_ws_macos(
+    cmd: &str,
+    span_id: &str,
+    _parent_cmd_id: Option<&str>,
+) -> anyhow::Result<PtyWorldOutcome> {
     use base64::engine::general_purpose::STANDARD;
     use base64::Engine;
     use futures::StreamExt;
@@ -641,7 +670,7 @@ pub(super) fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyho
             ws: tungs::WebSocketStream<S>,
             cmd: &str,
             span_id: &str,
-        ) -> anyhow::Result<i32>
+        ) -> anyhow::Result<PtyWorldOutcome>
         where
             S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
         {
@@ -752,6 +781,8 @@ pub(super) fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyho
             });
 
             let mut exit_code: i32 = 0;
+            let mut fs_strategy: Option<WorldFsStrategyTraceMeta> = None;
+            let mut process_telemetry = ProcessTelemetry::default();
             while let Some(msg) = stream.next().await {
                 let msg = msg.map_err(|e| anyhow::anyhow!("ws recv: {}", e))?;
                 if msg.is_text() {
@@ -769,13 +800,47 @@ pub(super) fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyho
                             Some("exit") => {
                                 exit_code =
                                     v.get("code").and_then(|c| c.as_i64()).unwrap_or(0) as i32;
+                                process_telemetry = extract_process_telemetry_from_ws_exit(&v);
+                                if let (Some(primary), Some(final_strategy), Some(reason)) = (
+                                    v.get("world_fs_strategy_primary")
+                                        .and_then(serde_json::Value::as_str)
+                                        .and_then(substrate_common::WorldFsStrategy::parse),
+                                    v.get("world_fs_strategy_final")
+                                        .and_then(serde_json::Value::as_str)
+                                        .and_then(substrate_common::WorldFsStrategy::parse),
+                                    v.get("world_fs_strategy_fallback_reason")
+                                        .and_then(serde_json::Value::as_str)
+                                        .and_then(
+                                            substrate_common::WorldFsStrategyFallbackReason::parse,
+                                        ),
+                                ) {
+                                    fs_strategy = Some(WorldFsStrategyTraceMeta {
+                                        primary,
+                                        final_strategy,
+                                        fallback_reason: reason,
+                                    });
+                                }
                                 break;
                             }
                             Some("error") => {
-                                if let Some(msg) = v.get("message").and_then(|m| m.as_str()) {
-                                    eprintln!("world-agent error: {}", msg);
+                                if let Some(message) = v.get("message").and_then(|m| m.as_str()) {
+                                    if message.contains("WORLD_FS_STRATEGY_UNAVAILABLE") {
+                                        return Err(anyhow::Error::new(
+                                            WorldFsStrategyUnavailableError {
+                                                raw_message: message.to_string(),
+                                                fallback_reason:
+                                                    parse_world_fs_strategy_unavailable_reason(
+                                                        message,
+                                                    ),
+                                            },
+                                        ));
+                                    }
+                                    return Err(anyhow::anyhow!(
+                                        "world-agent error: {}",
+                                        message
+                                    ));
                                 }
-                                break;
+                                return Err(anyhow::anyhow!("world-agent error"));
                             }
                             _ => {}
                         }
@@ -787,7 +852,11 @@ pub(super) fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyho
 
             stdin_task.abort();
             resize_task.abort();
-            Ok::<i32, anyhow::Error>(exit_code)
+            Ok::<PtyWorldOutcome, anyhow::Error>(PtyWorldOutcome {
+                exit_code,
+                fs_strategy,
+                process_telemetry,
+            })
         }
 
         // Connect according to transport and delegate to generic handler
@@ -827,6 +896,7 @@ pub(crate) struct AgentStreamOutcome {
     pub(crate) scopes_used: Vec<String>,
     pub(crate) fs_diff: Option<substrate_common::FsDiff>,
     pub(crate) fs_strategy: Option<WorldFsStrategyTraceMeta>,
+    pub(crate) process_telemetry: ProcessTelemetry,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -865,6 +935,47 @@ fn parse_world_fs_strategy_unavailable_reason(
     None
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn extract_process_telemetry_from_ws_exit(value: &serde_json::Value) -> ProcessTelemetry {
+    let process_events = value
+        .get("process_events")
+        .cloned()
+        .and_then(|raw| serde_json::from_value(raw).ok())
+        .unwrap_or_default();
+    let process_events_status = value
+        .get("process_events_status")
+        .and_then(serde_json::Value::as_str)
+        .and_then(substrate_common::ProcessEventsStatus::parse)
+        .unwrap_or(substrate_common::ProcessEventsStatus::Unavailable);
+
+    ProcessTelemetry {
+        process_events,
+        process_events_status,
+        process_events_reason: value
+            .get("process_events_reason")
+            .and_then(serde_json::Value::as_str)
+            .map(ToOwned::to_owned)
+            .or_else(|| {
+                (process_events_status == substrate_common::ProcessEventsStatus::Unavailable)
+                    .then(|| "backend_disabled".to_string())
+            }),
+        process_events_dropped: value
+            .get("process_events_dropped")
+            .and_then(serde_json::Value::as_u64),
+        process_events_max: value
+            .get("process_events_max")
+            .and_then(serde_json::Value::as_u64),
+        process_events_backend: value
+            .get("process_events_backend")
+            .and_then(serde_json::Value::as_str)
+            .map(ToOwned::to_owned),
+        process_events_error: value
+            .get("process_events_error")
+            .and_then(serde_json::Value::as_str)
+            .map(ToOwned::to_owned),
+    }
+}
+
 pub(crate) fn build_agent_client_and_request(
     cmd: &str,
 ) -> anyhow::Result<(
@@ -872,7 +983,19 @@ pub(crate) fn build_agent_client_and_request(
     agent_api_types::ExecuteRequest,
     String,
 )> {
-    build_agent_client_and_request_impl(cmd)
+    build_agent_client_and_request_with_trace_metadata(cmd, None, None)
+}
+
+pub(crate) fn build_agent_client_and_request_with_trace_metadata(
+    cmd: &str,
+    parent_span_id: Option<&str>,
+    parent_cmd_id: Option<&str>,
+) -> anyhow::Result<(
+    agent_api_client::AgentClient,
+    agent_api_types::ExecuteRequest,
+    String,
+)> {
+    build_agent_client_and_request_impl(cmd, parent_span_id, parent_cmd_id)
 }
 
 pub(crate) fn build_agent_client_and_pending_diff_request() -> anyhow::Result<(
@@ -901,6 +1024,8 @@ fn current_world_request_profile() -> Option<String> {
 #[cfg(target_os = "linux")]
 fn build_agent_client_and_request_impl(
     cmd: &str,
+    parent_span_id: Option<&str>,
+    parent_cmd_id: Option<&str>,
 ) -> anyhow::Result<(
     agent_api_client::AgentClient,
     agent_api_types::ExecuteRequest,
@@ -929,6 +1054,7 @@ fn build_agent_client_and_request_impl(
     )?;
     ensure_world_deps_bin_on_path(&mut env_map);
     preserve_world_project_dir_override(&mut env_map);
+    inject_process_trace_env(&mut env_map, parent_span_id, parent_cmd_id);
 
     let request = ExecuteRequest {
         profile: current_world_request_profile(),
@@ -996,6 +1122,8 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
 #[cfg(target_os = "macos")]
 fn build_agent_client_and_request_impl(
     cmd: &str,
+    parent_span_id: Option<&str>,
+    parent_cmd_id: Option<&str>,
 ) -> anyhow::Result<(
     agent_api_client::AgentClient,
     agent_api_types::ExecuteRequest,
@@ -1022,6 +1150,7 @@ fn build_agent_client_and_request_impl(
             &policy_snapshot,
             &mut env_map,
         )?;
+        inject_process_trace_env(&mut env_map, parent_span_id, parent_cmd_id);
 
         let request = ExecuteRequest {
             profile: current_world_request_profile(),
@@ -1074,6 +1203,7 @@ fn build_agent_client_and_request_impl(
         &policy_snapshot,
         &mut env_map,
     )?;
+    inject_process_trace_env(&mut env_map, parent_span_id, parent_cmd_id);
 
     let request = ExecuteRequest {
         profile: current_world_request_profile(),
@@ -1174,6 +1304,8 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
 #[cfg(target_os = "windows")]
 fn build_agent_client_and_request_impl(
     cmd: &str,
+    parent_span_id: Option<&str>,
+    parent_cmd_id: Option<&str>,
 ) -> anyhow::Result<(
     agent_api_client::AgentClient,
     agent_api_types::ExecuteRequest,
@@ -1220,6 +1352,7 @@ fn build_agent_client_and_request_impl(
         &policy_snapshot,
         &mut env_map,
     )?;
+    inject_process_trace_env(&mut env_map, parent_span_id, parent_cmd_id);
 
     let request = ExecuteRequest {
         profile,
@@ -1280,8 +1413,13 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
     Ok((client, request, agent_id))
 }
 
-pub(crate) fn stream_non_pty_via_agent(command: &str) -> anyhow::Result<AgentStreamOutcome> {
-    let (client, request, agent_id) = build_agent_client_and_request(command)?;
+pub(crate) fn stream_non_pty_via_agent(
+    command: &str,
+    parent_span_id: Option<&str>,
+    parent_cmd_id: Option<&str>,
+) -> anyhow::Result<AgentStreamOutcome> {
+    let (client, request, agent_id) =
+        build_agent_client_and_request_with_trace_metadata(command, parent_span_id, parent_cmd_id)?;
 
     let host_visible = request.policy_snapshot.world_fs.host_visible;
     let empty_env: std::collections::HashMap<String, String> = std::collections::HashMap::new();
@@ -1301,6 +1439,7 @@ pub(crate) fn stream_non_pty_via_agent(command: &str) -> anyhow::Result<AgentStr
             scopes_used: Vec::new(),
             fs_diff: None,
             fs_strategy: None,
+            process_telemetry: ProcessTelemetry::default(),
         });
     }
 
@@ -1348,6 +1487,7 @@ pub(crate) fn stream_non_pty_via_agent(command: &str) -> anyhow::Result<AgentStr
                 scopes_used: response.scopes_used,
                 fs_diff: response.fs_diff,
                 fs_strategy: None,
+                process_telemetry: ProcessTelemetry::not_supported_platform(),
             })
         }
 
@@ -1435,6 +1575,7 @@ where
     let mut scopes_used = Vec::new();
     let mut fs_diff = None;
     let mut fs_strategy = None;
+    let mut process_telemetry = ProcessTelemetry::default();
     let mut active_span_id: Option<String> = None;
 
     loop {
@@ -1471,6 +1612,7 @@ where
                 &mut scopes_used,
                 &mut fs_diff,
                 &mut fs_strategy,
+                &mut process_telemetry,
             )?;
             if exit_code.is_some() {
                 break;
@@ -1487,6 +1629,7 @@ where
             &mut scopes_used,
             &mut fs_diff,
             &mut fs_strategy,
+            &mut process_telemetry,
         )?;
     }
 
@@ -1498,6 +1641,7 @@ where
         scopes_used,
         fs_diff,
         fs_strategy,
+        process_telemetry,
     })
 }
 
@@ -1510,6 +1654,7 @@ pub(crate) fn consume_agent_stream_buffer(
     fs_diff: &mut Option<substrate_common::FsDiff>,
 ) -> anyhow::Result<()> {
     let mut ignored = None;
+    let mut process_telemetry = ProcessTelemetry::default();
     consume_agent_stream_buffer_with_meta(
         agent_label,
         buffer,
@@ -1518,10 +1663,12 @@ pub(crate) fn consume_agent_stream_buffer(
         scopes_used,
         fs_diff,
         &mut ignored,
+        &mut process_telemetry,
     )
 }
 
-fn consume_agent_stream_buffer_with_meta(
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn consume_agent_stream_buffer_with_meta(
     agent_label: &str,
     buffer: &mut Vec<u8>,
     active_span_id: &mut Option<String>,
@@ -1529,6 +1676,7 @@ fn consume_agent_stream_buffer_with_meta(
     scopes_used: &mut Vec<String>,
     fs_diff: &mut Option<substrate_common::FsDiff>,
     fs_strategy: &mut Option<WorldFsStrategyTraceMeta>,
+    process_telemetry: &mut ProcessTelemetry,
 ) -> anyhow::Result<()> {
     use anyhow::Context as _;
 
@@ -1595,11 +1743,13 @@ fn consume_agent_stream_buffer_with_meta(
                 exit,
                 scopes_used: scopes,
                 fs_diff: diff,
+                process_telemetry: exit_process_telemetry,
                 ..
             } => {
                 *exit_code = Some(exit);
                 *scopes_used = scopes;
                 *fs_diff = diff;
+                *process_telemetry = exit_process_telemetry;
             }
             ExecuteStreamFrame::Error { message } => {
                 if message.contains("WORLD_FS_STRATEGY_UNAVAILABLE") {
@@ -1642,12 +1792,13 @@ pub(super) fn emit_stream_chunk(agent_label: &str, data: &[u8], is_stderr: bool)
 mod tests {
     use super::{
         current_world_request_profile, ensure_world_deps_bin_on_path,
-        preserve_world_project_dir_override, process_agent_stream_body,
-        WORLD_PROJECT_DIR_OVERRIDE_ENV,
+        extract_process_telemetry_from_ws_exit, preserve_world_project_dir_override,
+        process_agent_stream_body, WORLD_PROJECT_DIR_OVERRIDE_ENV,
     };
     use agent_api_types::ExecuteStreamFrame;
     use futures::stream;
     use http_body_util::StreamBody;
+    use serde_json::json;
     use std::convert::Infallible;
     use std::sync::{Arc, Mutex, OnceLock};
     use std::time::Duration;
@@ -1794,6 +1945,7 @@ mod tests {
                     span_id: "spn_interrupt".to_string(),
                     scopes_used: Vec::new(),
                     fs_diff: None,
+                    process_telemetry: agent_api_types::ProcessTelemetry::default(),
                 }),
             ];
 
@@ -1845,5 +1997,105 @@ mod tests {
                 &[("spn_interrupt".to_string(), "INT".to_string())]
             );
         });
+    }
+
+    #[test]
+    fn extract_process_telemetry_from_ws_exit_preserves_ptrace_not_permitted_reason() {
+        let exit = json!({
+            "type": "exit",
+            "exit": 0,
+            "span_id": "spn_ptrace_denied",
+            "scopes_used": [],
+            "process_events": [],
+            "process_events_status": "unavailable",
+            "process_events_reason": "ptrace_not_permitted"
+        });
+
+        let process_telemetry = extract_process_telemetry_from_ws_exit(&exit);
+
+        assert_eq!(
+            process_telemetry.process_events_status,
+            substrate_common::ProcessEventsStatus::Unavailable
+        );
+        assert_eq!(
+            process_telemetry.process_events_reason.as_deref(),
+            Some("ptrace_not_permitted")
+        );
+        assert!(process_telemetry.process_events.is_empty());
+        assert!(process_telemetry.process_events_dropped.is_none());
+    }
+
+    #[test]
+    fn extract_process_telemetry_from_ws_exit_preserves_linux_process_event_fields() {
+        let exit = json!({
+            "type": "exit",
+            "exit": 0,
+            "span_id": "spn_parent",
+            "scopes_used": [],
+            "process_events": [
+                {
+                    "ts": "2026-04-01T00:00:00Z",
+                    "ts_unix_ns": 1_743_465_600_000_000_000u64,
+                    "event_type": "world_process_start",
+                    "session_id": "ses_linux",
+                    "world_id": "wld_linux",
+                    "pid": 42,
+                    "ppid": 1,
+                    "cwd": "/project",
+                    "parent_span": "spn_parent",
+                    "parent_cmd_id": "cmd_parent",
+                    "argv_omitted": true
+                },
+                {
+                    "ts": "2026-04-01T00:00:01Z",
+                    "ts_unix_ns": 1_743_465_601_000_000_000u64,
+                    "event_type": "world_process_exit",
+                    "session_id": "ses_linux",
+                    "world_id": "wld_linux",
+                    "pid": 42,
+                    "ppid": 1,
+                    "cwd": "/project",
+                    "parent_span": "spn_parent",
+                    "parent_cmd_id": "cmd_parent",
+                    "argv_omitted": true,
+                    "exit_code": 0,
+                    "duration_ms": 11
+                }
+            ],
+            "process_events_status": "truncated",
+            "process_events_reason": "capture_overflow",
+            "process_events_dropped": 7,
+            "process_events_max": 10000,
+            "process_events_backend": "ptrace"
+        });
+
+        let process_telemetry = extract_process_telemetry_from_ws_exit(&exit);
+
+        assert_eq!(
+            process_telemetry.process_events_status,
+            substrate_common::ProcessEventsStatus::Truncated
+        );
+        assert_eq!(
+            process_telemetry.process_events_reason.as_deref(),
+            Some("capture_overflow")
+        );
+        assert_eq!(process_telemetry.process_events_dropped, Some(7));
+        assert_eq!(process_telemetry.process_events_max, Some(10_000));
+        assert_eq!(
+            process_telemetry.process_events_backend.as_deref(),
+            Some("ptrace")
+        );
+        assert_eq!(process_telemetry.process_events.len(), 2);
+        assert_eq!(process_telemetry.process_events[0].argv_omitted, Some(true));
+        assert_eq!(
+            process_telemetry.process_events[0].parent_span,
+            "spn_parent"
+        );
+        assert_eq!(
+            process_telemetry.process_events[0].parent_cmd_id.as_deref(),
+            Some("cmd_parent")
+        );
+        assert_eq!(process_telemetry.process_events[1].exit_code, Some(0));
+        assert_eq!(process_telemetry.process_events[1].duration_ms, Some(11));
     }
 }

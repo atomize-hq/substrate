@@ -115,11 +115,15 @@ pub struct ExecResult {
     /// Reason for falling back from the primary strategy (ADR-0004).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub world_fs_strategy_fallback_reason: Option<WorldFsStrategyFallbackReason>,
+    /// Process telemetry returned by the world backend (ADR-0028/WPEP1).
+    #[serde(flatten, default)]
+    pub process_telemetry: ProcessTelemetry,
 }
 
 // Re-export shared types from substrate_common
 pub use substrate_common::{
-    FsDiff, WorldFsMode, WorldFsStrategy, WorldFsStrategyFallbackReason, WorldFsStrategyProbe,
+    FsDiff, ProcessEvent, ProcessEventType, ProcessEventsStatus, ProcessTelemetry, WorldFsMode,
+    WorldFsStrategy, WorldFsStrategyFallbackReason, WorldFsStrategyProbe,
     WorldFsStrategyProbeResult,
 };
 

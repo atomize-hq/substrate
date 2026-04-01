@@ -74,6 +74,18 @@ pub enum SocketResponse {
         scopes: Vec<String>,
         records: Arc<Mutex<Vec<JsonValue>>>,
     },
+    /// Like `CapabilitiesAndExecute`, but includes explicit process-event
+    /// diagnostics and optional batched `world_process_*` records.
+    CapabilitiesAndExecuteWithProcessEvents {
+        stdout: String,
+        stderr: String,
+        exit: i32,
+        scopes: Vec<String>,
+        process_events: Vec<JsonValue>,
+        process_events_status: String,
+        process_events_reason: Option<String>,
+        process_events_dropped: Option<u64>,
+    },
     /// Executes `/v1/execute` and `/v1/execute/stream` requests on the host, using
     /// the request's `cwd` and `env` for a lightweight world-agent simulation.
     CapabilitiesAndHostExecute { scopes: Vec<String> },
@@ -367,15 +379,16 @@ impl AgentSocket {
                                         build_stream_payload(*exit, stdout, stderr, scopes);
                                     write_stream_response(&mut stream, &payload);
                                 } else if first_line.starts_with("POST /v1/execute") {
-                                    let payload = json!({
+                                    let mut payload = json!({
                                         "exit": exit,
                                         "span_id": "agent-span",
                                         "stdout_b64": BASE64.encode(stdout.as_bytes()),
                                         "stderr_b64": BASE64.encode(stderr.as_bytes()),
                                         "scopes_used": scopes,
                                         "fs_diff": serde_json::Value::Null
-                                    })
-                                    .to_string();
+                                    });
+                                    apply_default_process_telemetry_fields(&mut payload);
+                                    let payload = payload.to_string();
                                     write_response(&mut stream, &payload);
                                 } else {
                                     let _ = stream.write_all(b"HTTP/1.1 400 Bad Request\r\n\r\n");
@@ -399,16 +412,68 @@ impl AgentSocket {
                                     write_stream_response(&mut stream, &payload);
                                 } else if first_line.starts_with("POST /v1/execute") {
                                     record_execute_request(records, &request);
-                                    let payload = json!({
+                                    let mut payload = json!({
                                         "exit": exit,
                                         "span_id": "agent-span",
                                         "stdout_b64": BASE64.encode(stdout.as_bytes()),
                                         "stderr_b64": BASE64.encode(stderr.as_bytes()),
                                         "scopes_used": scopes,
                                         "fs_diff": serde_json::Value::Null
-                                    })
-                                    .to_string();
+                                    });
+                                    apply_default_process_telemetry_fields(&mut payload);
+                                    let payload = payload.to_string();
                                     write_response(&mut stream, &payload);
+                                } else {
+                                    let _ = stream.write_all(b"HTTP/1.1 400 Bad Request\r\n\r\n");
+                                }
+                            }
+                            SocketResponse::CapabilitiesAndExecuteWithProcessEvents {
+                                stdout,
+                                stderr,
+                                exit,
+                                scopes,
+                                process_events,
+                                process_events_status,
+                                process_events_reason,
+                                process_events_dropped,
+                            } => {
+                                if first_line.starts_with("GET /v1/capabilities") {
+                                    write_capabilities(&mut stream);
+                                } else if first_line.starts_with("GET /v1/doctor/world") {
+                                    write_world_doctor_report(&mut stream);
+                                } else if first_line.starts_with("POST /v1/execute/stream") {
+                                    let payload = build_stream_payload_with_process_events(
+                                        *exit,
+                                        stdout,
+                                        stderr,
+                                        scopes,
+                                        process_events,
+                                        process_events_status,
+                                        process_events_reason.as_deref(),
+                                        *process_events_dropped,
+                                    );
+                                    write_stream_response(&mut stream, &payload);
+                                } else if first_line.starts_with("POST /v1/execute") {
+                                    let mut payload = json!({
+                                        "exit": exit,
+                                        "span_id": "agent-span",
+                                        "stdout_b64": BASE64.encode(stdout.as_bytes()),
+                                        "stderr_b64": BASE64.encode(stderr.as_bytes()),
+                                        "scopes_used": scopes,
+                                        "fs_diff": serde_json::Value::Null,
+                                        "process_events": process_events,
+                                        "process_events_status": process_events_status,
+                                        "process_events_max": serde_json::Value::Null,
+                                        "process_events_backend": serde_json::Value::Null,
+                                        "process_events_error": serde_json::Value::Null,
+                                    });
+                                    if let Some(reason) = process_events_reason {
+                                        payload["process_events_reason"] = json!(reason);
+                                    }
+                                    if let Some(dropped) = process_events_dropped {
+                                        payload["process_events_dropped"] = json!(dropped);
+                                    }
+                                    write_response(&mut stream, &payload.to_string());
                                 } else {
                                     let _ = stream.write_all(b"HTTP/1.1 400 Bad Request\r\n\r\n");
                                 }
@@ -536,15 +601,16 @@ impl AgentSocket {
                                         build_stream_payload(*exit, stdout, stderr, scopes);
                                     write_stream_response(&mut stream, &payload);
                                 } else if first_line.starts_with("POST /v1/execute") {
-                                    let payload = json!({
+                                    let mut payload = json!({
                                         "exit": exit,
                                         "span_id": "agent-span",
                                         "stdout_b64": BASE64.encode(stdout.as_bytes()),
                                         "stderr_b64": BASE64.encode(stderr.as_bytes()),
                                         "scopes_used": scopes,
                                         "fs_diff": serde_json::Value::Null
-                                    })
-                                    .to_string();
+                                    });
+                                    apply_default_process_telemetry_fields(&mut payload);
+                                    let payload = payload.to_string();
                                     write_response(&mut stream, &payload);
                                 } else if is_pending_diff_reconcile_route(first_line) {
                                     let mut guard =
@@ -1004,15 +1070,16 @@ struct ExecuteRequestStub {
 fn handle_host_execute(request: &HttpRequest, scopes: &[String]) -> anyhow::Result<String> {
     let parsed: ExecuteRequestStub = serde_json::from_slice(&request.body)?;
     let output = run_host_command(&parsed)?;
-    Ok(json!({
+    let mut payload = json!({
         "exit": output.exit,
         "span_id": "agent-span",
         "stdout_b64": BASE64.encode(&output.stdout),
         "stderr_b64": BASE64.encode(&output.stderr),
         "scopes_used": scopes,
-        "fs_diff": serde_json::Value::Null
-    })
-    .to_string())
+        "fs_diff": serde_json::Value::Null,
+    });
+    apply_default_process_telemetry_fields(&mut payload);
+    Ok(payload.to_string())
 }
 
 fn handle_host_execute_stream(request: &HttpRequest, scopes: &[String]) -> anyhow::Result<String> {
@@ -1056,6 +1123,39 @@ fn run_host_command(request: &ExecuteRequestStub) -> anyhow::Result<HostCommandO
 }
 
 fn build_stream_payload(exit: i32, stdout: &str, stderr: &str, scopes: &[String]) -> String {
+    build_stream_payload_with_process_events(
+        exit,
+        stdout,
+        stderr,
+        scopes,
+        &[],
+        "unavailable",
+        Some("backend_disabled"),
+        None,
+    )
+}
+
+fn apply_default_process_telemetry_fields(payload: &mut JsonValue) {
+    payload["process_events"] = json!([]);
+    payload["process_events_status"] = json!("unavailable");
+    payload["process_events_reason"] = json!("backend_disabled");
+    payload["process_events_dropped"] = JsonValue::Null;
+    payload["process_events_max"] = JsonValue::Null;
+    payload["process_events_backend"] = JsonValue::Null;
+    payload["process_events_error"] = JsonValue::Null;
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_stream_payload_with_process_events(
+    exit: i32,
+    stdout: &str,
+    stderr: &str,
+    scopes: &[String],
+    process_events: &[JsonValue],
+    process_events_status: &str,
+    process_events_reason: Option<&str>,
+    process_events_dropped: Option<u64>,
+) -> String {
     let mut frames = String::new();
     frames.push_str(
         &json!({
@@ -1085,16 +1185,22 @@ fn build_stream_payload(exit: i32, stdout: &str, stderr: &str, scopes: &[String]
         );
         frames.push('\n');
     }
-    frames.push_str(
-        &json!({
-            "type": "exit",
-            "exit": exit,
-            "span_id": "agent-span",
-            "scopes_used": scopes,
-            "fs_diff": serde_json::Value::Null
-        })
-        .to_string(),
-    );
+    let mut exit_frame = json!({
+        "type": "exit",
+        "exit": exit,
+        "span_id": "agent-span",
+        "scopes_used": scopes,
+        "fs_diff": serde_json::Value::Null,
+        "process_events": process_events,
+        "process_events_status": process_events_status,
+    });
+    if let Some(reason) = process_events_reason {
+        exit_frame["process_events_reason"] = json!(reason);
+    }
+    if let Some(dropped) = process_events_dropped {
+        exit_frame["process_events_dropped"] = json!(dropped);
+    }
+    frames.push_str(&exit_frame.to_string());
     frames.push('\n');
     frames
 }

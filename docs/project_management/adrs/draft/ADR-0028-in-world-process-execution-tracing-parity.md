@@ -30,7 +30,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: ef913d97dd8c4a9789080513f362ee40d84cdc55c4a509effe2dbf00ec9c205c
+ADR_BODY_SHA256: 799e22a5981fbf644d83626d36c3bbd7b788b80a22ec85629e59c499c25815af
 ### Changes (operator-facing)
 - World executions gain subprocess-level visibility (exec/exit telemetry) comparable to host shim tracing
   - Existing: host execution is richly observable via shims, but world execution is observable primarily at “one command per world execute/stream” granularity (no structured visibility into spawned subprocess trees).

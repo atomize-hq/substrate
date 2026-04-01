@@ -207,6 +207,9 @@ impl SessionWorld {
         span_id: Option<String>,
     ) -> Result<ExecResult> {
         let output;
+        let process_capture =
+            crate::exec::ProcessCaptureSpec::from_env(&self.id, &env, span_id.as_deref());
+        let process_telemetry;
         let scopes_used;
         let mut diff_opt: Option<FsDiff> = None;
         let mut fs_strategy_meta: Option<crate::overlayfs::WorldFsStrategyMeta> = None;
@@ -257,7 +260,9 @@ impl SessionWorld {
                 require_cgroup_attach,
                 span_id: span_id.as_deref(),
             };
-            output = self.execute_with_overlay_helpers(&exec_ctx)?;
+            let captured = self.execute_with_overlay_helpers(&exec_ctx, &process_capture)?;
+            output = captured.output;
+            process_telemetry = captured.process_telemetry;
 
             if self.spec.fs_mode == WorldFsMode::ReadOnly {
                 diff_opt = Some(FsDiff::default());
@@ -269,14 +274,16 @@ impl SessionWorld {
                 }
             }
         } else {
-            output = crate::exec::execute_shell_command(
+            let captured = crate::exec::execute_shell_command_with_capture(
                 &command_to_run,
                 cwd,
                 &env,
                 false,
-                span_id.as_deref(),
+                crate::exec::CommandCapture::new(span_id.as_deref(), Some(&process_capture)),
             )
             .context("Failed to execute command")?;
+            output = captured.output;
+            process_telemetry = captured.process_telemetry;
         }
 
         // Track network scopes if filter is active
@@ -295,13 +302,15 @@ impl SessionWorld {
             world_fs_strategy_primary: fs_strategy_meta.as_ref().map(|m| m.primary),
             world_fs_strategy_final: fs_strategy_meta.as_ref().map(|m| m.final_strategy),
             world_fs_strategy_fallback_reason: fs_strategy_meta.as_ref().map(|m| m.fallback_reason),
+            process_telemetry,
         })
     }
 
     fn execute_with_overlay_helpers(
         &self,
         exec_ctx: &OverlayExecutionContext<'_>,
-    ) -> Result<std::process::Output> {
+        process_capture: &crate::exec::ProcessCaptureSpec,
+    ) -> Result<crate::exec::CapturedCommandOutput> {
         let project_attach_policy = if exec_ctx.require_cgroup_attach {
             crate::exec::CgroupAttachPolicy::required(
                 "project_bind_mount",
@@ -311,7 +320,7 @@ impl SessionWorld {
             crate::exec::CgroupAttachPolicy::optional("project_bind_mount")
         };
 
-        match crate::exec::execute_shell_command_with_project_bind_mount(
+        match crate::exec::execute_shell_command_with_project_bind_mount_capture(
             exec_ctx.command_to_run,
             crate::exec::ProjectBindMount {
                 merged_dir: exec_ctx.merged_dir,
@@ -322,11 +331,11 @@ impl SessionWorld {
             exec_ctx.env,
             false,
             project_attach_policy,
-            exec_ctx.span_id,
+            crate::exec::CommandCapture::new(exec_ctx.span_id, Some(process_capture)),
         ) {
             Ok(output)
                 if !exec_ctx.require_cgroup_attach
-                    || !crate::exec::is_cgroup_attach_wrapper_failure(&output.stderr) =>
+                    || !crate::exec::is_cgroup_attach_wrapper_failure(&output.output.stderr) =>
             {
                 Ok(output)
             }
@@ -334,10 +343,11 @@ impl SessionWorld {
                 exec_ctx,
                 anyhow!(
                     "project bind mount helper refused isolated execution before command start: {}",
-                    String::from_utf8_lossy(&output.stderr).trim()
+                    String::from_utf8_lossy(&output.output.stderr).trim()
                 ),
+                process_capture,
             ),
-            Err(err) => self.execute_world_deps_fallback(exec_ctx, err),
+            Err(err) => self.execute_world_deps_fallback(exec_ctx, err, process_capture),
         }
     }
 
@@ -345,7 +355,8 @@ impl SessionWorld {
         &self,
         exec_ctx: &OverlayExecutionContext<'_>,
         primary_err: anyhow::Error,
-    ) -> Result<std::process::Output> {
+        process_capture: &crate::exec::ProcessCaptureSpec,
+    ) -> Result<crate::exec::CapturedCommandOutput> {
         if self.spec.fs_mode == WorldFsMode::ReadOnly {
             return Err(primary_err).context(
                 "failed to enforce read-only world via mount-namespace bind; refusing to run with possible absolute-path escape",
@@ -376,24 +387,24 @@ impl SessionWorld {
             crate::exec::CgroupAttachPolicy::optional("world_deps_fallback")
         };
 
-        match crate::exec::execute_shell_command_with_world_deps_bind_mount(
+        match crate::exec::execute_shell_command_with_world_deps_bind_mount_capture(
             exec_ctx.command_to_run,
             &target_dir,
             exec_ctx.env,
             false,
             &fallback_world_deps_root,
             fallback_attach_policy,
-            exec_ctx.span_id,
+            crate::exec::CommandCapture::new(exec_ctx.span_id, Some(process_capture)),
         ) {
             Ok(output)
                 if !exec_ctx.require_cgroup_attach
-                    || !crate::exec::is_cgroup_attach_wrapper_failure(&output.stderr) =>
+                    || !crate::exec::is_cgroup_attach_wrapper_failure(&output.output.stderr) =>
             {
                 Ok(output)
             }
             Ok(output) => Err(primary_err).context(format!(
                 "world-deps fallback helper refused isolated execution before command start: {}",
-                String::from_utf8_lossy(&output.stderr).trim()
+                String::from_utf8_lossy(&output.output.stderr).trim()
             )),
             Err(world_deps_err) => {
                 if exec_ctx.require_cgroup_attach {
@@ -401,12 +412,12 @@ impl SessionWorld {
                         "world-deps fallback helper also failed: {world_deps_err:#}"
                     ))
                 } else {
-                    crate::exec::execute_shell_command(
+                    crate::exec::execute_shell_command_with_capture(
                         exec_ctx.command_to_run,
                         &target_dir,
                         exec_ctx.env,
                         false,
-                        exec_ctx.span_id,
+                        crate::exec::CommandCapture::new(exec_ctx.span_id, Some(process_capture)),
                     )
                         .with_context(|| {
                             format!(
@@ -842,15 +853,17 @@ mod tests {
             require_cgroup_attach: true,
             span_id: None,
         };
+        let process_capture =
+            crate::exec::ProcessCaptureSpec::from_env(&world.id, &env, exec_ctx.span_id);
 
-        let err = match world.execute_with_overlay_helpers(&exec_ctx) {
+        let err = match world.execute_with_overlay_helpers(&exec_ctx, &process_capture) {
             Ok(output) => {
-                if output.status.success() {
+                if output.output.status.success() {
                     panic!(
                         "isolated helper flow should not succeed when cgroup attach cannot start"
                     );
                 }
-                let stderr = String::from_utf8_lossy(&output.stderr);
+                let stderr = String::from_utf8_lossy(&output.output.stderr);
                 if stderr.contains("Operation not permitted")
                     || stderr.contains("EPERM")
                     || stderr.contains("unshare")

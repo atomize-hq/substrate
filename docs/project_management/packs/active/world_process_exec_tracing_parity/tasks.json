@@ -17,7 +17,7 @@
       "name": "Execution preflight gate (feature start)",
       "type": "ops",
       "phase": "F0",
-      "status": "pending",
+      "status": "completed",
       "description": "Validate Planning Pack mechanical invariants and smoke script syntax before starting WPEP0.",
       "references": [
         "docs/project_management/packs/active/world_process_exec_tracing_parity/plan.md",
@@ -47,7 +47,7 @@
       "name": "WPEP0 code",
       "type": "code",
       "phase": "WPEP0",
-      "status": "pending",
+      "status": "completed",
       "description": "Implement span correctness + joinability foundation per WPEP0.",
       "references": [
         "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP0-spec.md",
@@ -81,7 +81,7 @@
       "name": "WPEP0 tests",
       "type": "test",
       "phase": "WPEP0",
-      "status": "pending",
+      "status": "completed",
       "description": "Add/adjust tests for span correctness + joinability foundation per WPEP0.",
       "references": [
         "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP0-spec.md"
@@ -111,7 +111,7 @@
       "name": "WPEP0 integration (core merge)",
       "type": "integration",
       "phase": "WPEP0",
-      "status": "pending",
+      "status": "completed",
       "description": "Merge WPEP0 code+test and validate core invariants before platform fixes.",
       "references": [
         "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP0-spec.md"
@@ -149,7 +149,7 @@
       "name": "WPEP0 integration (linux parity)",
       "type": "integration",
       "phase": "WPEP0",
-      "status": "pending",
+      "status": "completed",
       "description": "Resolve Linux-specific compile/test parity issues for WPEP0.",
       "references": [
         "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP0-spec.md"
@@ -182,7 +182,7 @@
       "name": "WPEP0 integration (macos parity)",
       "type": "integration",
       "phase": "WPEP0",
-      "status": "pending",
+      "status": "completed",
       "description": "Resolve macOS-specific compile/test parity issues for WPEP0.",
       "references": [
         "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP0-spec.md"
@@ -215,7 +215,7 @@
       "name": "WPEP0 integration (windows parity)",
       "type": "integration",
       "phase": "WPEP0",
-      "status": "pending",
+      "status": "completed",
       "description": "Resolve Windows-specific compile/test parity issues for WPEP0.",
       "references": [
         "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP0-spec.md"
@@ -315,7 +315,7 @@
       "name": "WPEP1 code",
       "type": "code",
       "phase": "WPEP1",
-      "status": "pending",
+      "status": "completed",
       "description": "Implement world-agent API/types + shell persistence plumbing for process event diagnostics per WPEP1.",
       "references": [
         "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP1-spec.md",
@@ -349,7 +349,7 @@
       "name": "WPEP1 tests",
       "type": "test",
       "phase": "WPEP1",
-      "status": "pending",
+      "status": "completed",
       "description": "Add/adjust tests for process telemetry diagnostics/persistence per WPEP1.",
       "references": [
         "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP1-spec.md"
@@ -378,7 +378,7 @@
       "name": "WPEP1 integration",
       "type": "integration",
       "phase": "WPEP1",
-      "status": "pending",
+      "status": "completed",
       "description": "Merge WPEP1 code+test.",
       "references": [
         "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP1-spec.md",
@@ -520,7 +520,7 @@
       "name": "WPEP3 code",
       "type": "code",
       "phase": "WPEP3",
-      "status": "pending",
+      "status": "completed",
       "description": "Implement redaction hardening + argv/env capture for process telemetry per WPEP3.",
       "references": [
         "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP3-spec.md",
@@ -554,7 +554,7 @@
       "name": "WPEP3 tests",
       "type": "test",
       "phase": "WPEP3",
-      "status": "pending",
+      "status": "completed",
       "description": "Add/adjust tests for redaction + argv/env capture per WPEP3.",
       "references": [
         "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP3-spec.md"
@@ -583,7 +583,7 @@
       "name": "WPEP3 integration (core merge)",
       "type": "integration",
       "phase": "WPEP3",
-      "status": "pending",
+      "status": "completed",
       "description": "Merge WPEP3 code+test and validate core invariants before platform fixes.",
       "references": [
         "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP3-spec.md"

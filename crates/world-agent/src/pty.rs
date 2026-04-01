@@ -15,20 +15,21 @@ use crate::service::{
 use agent_api_types::PolicyResolutionModeV1;
 use agent_api_types::{PolicySnapshotV3, WorldNetworkRoutingV1};
 use axum::extract::ws::{Message, WebSocket};
+#[cfg(target_os = "linux")]
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use futures_util::stream::SplitSink;
 use futures_util::stream::SplitStream;
 use futures_util::{SinkExt, StreamExt};
 #[cfg(target_os = "linux")]
 use once_cell::sync::OnceCell;
-use portable_pty::*;
 #[cfg(target_os = "linux")]
 use rand::rngs::OsRng;
 #[cfg(target_os = "linux")]
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::{Read, Write};
+#[cfg(target_os = "linux")]
+use std::io::Read;
 #[cfg(target_os = "linux")]
 use std::os::fd::{AsRawFd, FromRawFd};
 use std::path::PathBuf;
@@ -57,6 +58,7 @@ fn record_doctor_request_context_for_pty(
     service.record_doctor_request_context(policy_resolution_mode, isolate_network);
 }
 
+#[cfg(target_os = "linux")]
 fn ensure_xdg_dirs(env: &mut HashMap<String, String>) {
     // Some minimal images don't ship with pre-created XDG dirs (e.g. /root/.local/share),
     // and TUIs like `nano` expect them to exist.
@@ -81,7 +83,7 @@ fn ensure_xdg_dirs(env: &mut HashMap<String, String>) {
     }
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn parse_signal(sig: &str) -> Option<i32> {
     match sig {
         "INT" | "SIGINT" => Some(libc::SIGINT),
@@ -92,7 +94,7 @@ fn parse_signal(sig: &str) -> Option<i32> {
     }
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn forward_signal(child_pid: Option<i32>, sig: &str) {
     if let (Some(pid), Some(signo)) = (child_pid, parse_signal(sig)) {
         // Safety: libc::kill is async-signal-safe and we are not accessing shared data
@@ -100,9 +102,6 @@ fn forward_signal(child_pid: Option<i32>, sig: &str) {
         info!("ws_pty: forwarded signal {} to pid {}", sig, pid);
     }
 }
-
-#[cfg(not(unix))]
-fn forward_signal(_child_pid: Option<i32>, _sig: &str) {}
 
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -142,6 +141,7 @@ pub enum ServerMessage {
 type WsSender = SplitSink<WebSocket, Message>;
 type WsReceiver = SplitStream<WebSocket>;
 
+#[cfg(target_os = "linux")]
 async fn send_ws_message(tx: &Arc<Mutex<WsSender>>, msg: &ServerMessage) -> Result<(), ()> {
     let text = serde_json::to_string(msg).map_err(|err| {
         error!(%err, "ws_pty: failed to serialize server message");
@@ -394,6 +394,180 @@ fn pty_fionread(master_fd: libc::c_int) -> Result<usize, std::io::Error> {
         return Err(std::io::Error::last_os_error());
     }
     Ok(bytes_readable.max(0) as usize)
+}
+
+#[cfg(target_os = "linux")]
+fn exit_code_from_raw_wait_status(status: libc::c_int) -> i32 {
+    if libc::WIFEXITED(status) {
+        libc::WEXITSTATUS(status) as i32
+    } else if libc::WIFSIGNALED(status) {
+        128 + libc::WTERMSIG(status) as i32
+    } else {
+        1
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn spawn_legacy_ws_exec(
+    pty: &RawPty,
+    command_to_run: &str,
+    cwd: &std::path::Path,
+    env: HashMap<String, String>,
+    netns_name: Option<String>,
+    cgroup_path: Option<std::path::PathBuf>,
+    process_capture: world::exec::ProcessCaptureSpec,
+) -> Result<
+    (
+        std::sync::mpsc::Receiver<Result<world::exec::TracedProcessTreeResult, String>>,
+        libc::pid_t,
+    ),
+    String,
+> {
+    use std::os::unix::process::{CommandExt, ExitStatusExt};
+    use std::time::Duration;
+
+    let stdin_fd = unsafe { libc::dup(pty.slave.as_raw_fd()) };
+    let stdout_fd = unsafe { libc::dup(pty.slave.as_raw_fd()) };
+    let stderr_fd = unsafe { libc::dup(pty.slave.as_raw_fd()) };
+    if stdin_fd < 0 || stdout_fd < 0 || stderr_fd < 0 {
+        return Err(format!(
+            "dup(pty slave) failed: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+
+    let stdin_file = unsafe { std::fs::File::from_raw_fd(stdin_fd) };
+    let stdout_file = unsafe { std::fs::File::from_raw_fd(stdout_fd) };
+    let stderr_file = unsafe { std::fs::File::from_raw_fd(stderr_fd) };
+
+    let needs_userns = unsafe { libc::geteuid() != 0 };
+    let mut cmd = if let Some(ref ns_name) = netns_name {
+        let mut cmd = Command::new("ip");
+        cmd.arg("netns");
+        cmd.arg("exec");
+        cmd.arg(ns_name);
+        cmd.arg("unshare");
+        cmd.arg("--mount");
+        cmd.arg("--fork");
+        if needs_userns {
+            cmd.arg("--user");
+            cmd.arg("--map-root-user");
+        }
+        cmd.arg("--");
+        cmd.arg("sh");
+        cmd.arg("-c");
+        cmd.arg(command_to_run);
+        cmd
+    } else {
+        let mut cmd = Command::new("unshare");
+        cmd.arg("--mount");
+        cmd.arg("--fork");
+        if needs_userns {
+            cmd.arg("--user");
+            cmd.arg("--map-root-user");
+        }
+        cmd.arg("--");
+        cmd.arg("sh");
+        cmd.arg("-c");
+        cmd.arg(command_to_run);
+        cmd
+    };
+    cmd.current_dir(cwd);
+    cmd.env_clear();
+    cmd.envs(env);
+    cmd.stdin(Stdio::from(stdin_file));
+    cmd.stdout(Stdio::from(stdout_file));
+    cmd.stderr(Stdio::from(stderr_file));
+
+    let tracing_permitted = world::exec::process_capture_capability_available();
+    unsafe {
+        cmd.pre_exec(move || {
+            for signo in &[
+                libc::SIGCHLD,
+                libc::SIGHUP,
+                libc::SIGINT,
+                libc::SIGQUIT,
+                libc::SIGTERM,
+                libc::SIGALRM,
+            ] {
+                libc::signal(*signo, libc::SIG_DFL);
+            }
+
+            if libc::setsid() == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+
+            if libc::ioctl(0, libc::TIOCSCTTY as _, 0) == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+
+            let open_max = libc::sysconf(libc::_SC_OPEN_MAX);
+            let max_fd = if open_max > 0 && open_max <= i64::from(i32::MAX) {
+                open_max as i32
+            } else {
+                1024
+            };
+            for fd in 3..max_fd {
+                libc::close(fd);
+            }
+
+            if tracing_permitted && libc::ptrace(libc::PTRACE_TRACEME, 0, 0, 0) == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+
+            Ok(())
+        });
+    }
+
+    let (pid_tx, pid_rx) = std::sync::mpsc::sync_channel::<Result<libc::pid_t, String>>(1);
+    let (result_tx, result_rx) =
+        std::sync::mpsc::channel::<Result<world::exec::TracedProcessTreeResult, String>>();
+
+    std::thread::spawn(move || {
+        let mut child = match cmd.spawn() {
+            Ok(child) => child,
+            Err(err) => {
+                let _ = pid_tx.send(Err(format!("spawn failed: {err}")));
+                let _ = result_tx.send(Err(format!("spawn failed: {err}")));
+                return;
+            }
+        };
+
+        let pid = child.id() as libc::pid_t;
+        if let Some(ref cg) = cgroup_path {
+            let _ = std::fs::create_dir_all(cg);
+            let _ = std::fs::write(cg.join("cgroup.procs"), pid.to_string());
+        }
+        let _ = pid_tx.send(Ok(pid));
+
+        let trace_result = if tracing_permitted {
+            world::exec::trace_spawned_process_tree(pid, &process_capture)
+        } else {
+            let status = match child.wait() {
+                Ok(status) => status,
+                Err(err) => {
+                    let _ = result_tx.send(Err(format!("wait failed: {err}")));
+                    return;
+                }
+            };
+            world::exec::TracedProcessTreeResult {
+                raw_exit_status: status.into_raw(),
+                process_telemetry: world::exec::unavailable_process_telemetry(
+                    "ptrace_not_permitted",
+                ),
+            }
+        };
+
+        let _ = result_tx.send(Ok(trace_result));
+    });
+
+    let pid = match pid_rx.recv_timeout(Duration::from_secs(5)) {
+        Ok(Ok(pid)) => pid,
+        Ok(Err(message)) => return Err(message),
+        Err(_) => return Err("timed out waiting for child pid".to_string()),
+    };
+
+    Ok((result_rx, pid))
 }
 
 #[cfg(target_os = "linux")]
@@ -2067,8 +2241,9 @@ fn traced_wait_loop(
     });
 }
 
+#[cfg(target_os = "linux")]
 async fn handle_legacy_start(
-    #[cfg_attr(not(target_os = "linux"), allow(unused_variables))] service: WorldAgentService,
+    service: WorldAgentService,
     tx: Arc<Mutex<WsSender>>,
     mut rx: WsReceiver,
     first_text: String,
@@ -2382,15 +2557,9 @@ async fn handle_legacy_start(
         command_to_run = PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT.to_string();
     }
 
-    // Create PTY
-    let pty_system = native_pty_system();
-    let pair = match pty_system.openpty(PtySize {
-        rows,
-        cols,
-        pixel_width: 0,
-        pixel_height: 0,
-    }) {
-        Ok(pair) => pair,
+    #[cfg(target_os = "linux")]
+    let pty = match open_raw_pty(rows, cols) {
+        Ok(pty) => pty,
         Err(e) => {
             let _ = send_ws_message(
                 &tx,
@@ -2404,59 +2573,28 @@ async fn handle_legacy_start(
     };
 
     #[cfg(target_os = "linux")]
-    let mut cmd_builder = {
-        let needs_userns = unsafe { libc::geteuid() != 0 };
+    let process_capture = world::exec::ProcessCaptureSpec::from_env(
+        world_id_for_logs.as_deref().unwrap_or("unknown"),
+        &env,
+        _span_id.as_deref(),
+    );
 
-        if let Some(ref ns_name) = ns_name_opt {
-            let mut builder = CommandBuilder::new("ip");
-            builder.arg("netns");
-            builder.arg("exec");
-            builder.arg(ns_name);
-            builder.arg("unshare");
-            builder.arg("--mount");
-            builder.arg("--fork");
-            if needs_userns {
-                builder.arg("--user");
-                builder.arg("--map-root-user");
-            }
-            builder.arg("--");
-            builder.arg("sh");
-            builder.arg("-c");
-            builder.arg(&command_to_run);
-            builder
-        } else {
-            let mut builder = CommandBuilder::new("unshare");
-            builder.arg("--mount");
-            builder.arg("--fork");
-            if needs_userns {
-                builder.arg("--user");
-                builder.arg("--map-root-user");
-            }
-            builder.arg("--");
-            builder.arg("sh");
-            builder.arg("-c");
-            builder.arg(&command_to_run);
-            builder
-        }
-    };
-    #[cfg(not(target_os = "linux"))]
-    let mut cmd_builder = {
-        let mut builder = CommandBuilder::new("sh");
-        builder.args(["-lc", &command_to_run]);
-        builder
-    };
-    cmd_builder.cwd(&cwd_for_child);
-    for (key, value) in env {
-        cmd_builder.env(key, value);
-    }
-
-    let mut child = match pair.slave.spawn_command(cmd_builder) {
-        Ok(child) => child,
-        Err(e) => {
+    #[cfg(target_os = "linux")]
+    let (trace_rx, child_pid) = match spawn_legacy_ws_exec(
+        &pty,
+        &command_to_run,
+        &cwd_for_child,
+        env,
+        ns_name_opt.clone(),
+        cgroup_path_opt.clone(),
+        process_capture,
+    ) {
+        Ok((trace_rx, pid)) => (trace_rx, Some(pid)),
+        Err(message) => {
             let _ = send_ws_message(
                 &tx,
                 &ServerMessage::Error {
-                    message: format!("Failed to spawn command: {}", e),
+                    message: format!("Failed to spawn command: {message}"),
                 },
             )
             .await;
@@ -2464,19 +2602,6 @@ async fn handle_legacy_start(
         }
     };
 
-    // Cache child PID for signal handling
-    let child_pid: Option<i32> = child.process_id().map(|p| p as i32);
-
-    // Attach child to world cgroup (best-effort)
-    #[cfg(target_os = "linux")]
-    if let (Some(pid), Some(ref cg)) = (child.process_id(), cgroup_path_opt.as_ref()) {
-        let _ = std::fs::create_dir_all(cg);
-        let _ = std::fs::write(cg.join("cgroup.procs"), pid.to_string());
-    }
-
-    drop(pair.slave);
-
-    // Log start with in-world context
     let world_id_log = world_id_for_logs.as_deref().unwrap_or("-");
     info!(
         world_id = %world_id_log,
@@ -2491,120 +2616,132 @@ async fn handle_legacy_start(
         "ws_pty: start"
     );
 
-    // Reader task: forward PTY output to WebSocket
-    let reader = match pair.master.try_clone_reader() {
-        Ok(reader) => reader,
-        Err(e) => {
-            let _ = send_ws_message(
-                &tx,
-                &ServerMessage::Error {
-                    message: format!("Failed to clone PTY reader: {}", e),
-                },
-            )
-            .await;
-            return;
-        }
-    };
-    let tx_clone = tx.clone();
-    let reader_task = tokio::spawn(async move {
-        let mut reader = reader;
-        let mut buf = [0u8; 8192];
-        loop {
-            let read_result = tokio::task::spawn_blocking(move || {
-                let result = reader.read(&mut buf);
-                (reader, buf, result)
-            })
-            .await;
+    #[cfg(target_os = "linux")]
+    let reader_fd = unsafe { libc::dup(pty.master.as_raw_fd()) };
+    #[cfg(target_os = "linux")]
+    if reader_fd < 0 {
+        let _ = send_ws_message(
+            &tx,
+            &ServerMessage::Error {
+                message: format!(
+                    "Failed to duplicate PTY reader fd: {}",
+                    std::io::Error::last_os_error()
+                ),
+            },
+        )
+        .await;
+        return;
+    }
+    #[cfg(target_os = "linux")]
+    let mut reader_task = {
+        let tx_clone = tx.clone();
+        tokio::spawn(async move {
+            let mut reader = unsafe { std::fs::File::from_raw_fd(reader_fd) };
+            let mut buf = [0u8; 8192];
+            loop {
+                let read_result = tokio::task::spawn_blocking(move || {
+                    let result = reader.read(&mut buf);
+                    (reader, buf, result)
+                })
+                .await;
 
-            match read_result {
-                Ok((r, b, Ok(n))) if n > 0 => {
-                    reader = r;
-                    buf = b;
-                    let data_b64 = BASE64.encode(&buf[..n]);
-                    let msg = ServerMessage::Stdout { data_b64 };
-                    if send_ws_message(&tx_clone, &msg).await.is_err() {
-                        break;
+                match read_result {
+                    Ok((r, b, Ok(n))) if n > 0 => {
+                        reader = r;
+                        buf = b;
+                        let data_b64 = BASE64.encode(&buf[..n]);
+                        let msg = ServerMessage::Stdout { data_b64 };
+                        if send_ws_message(&tx_clone, &msg).await.is_err() {
+                            break;
+                        }
                     }
+                    Ok((r, b, Err(err)))
+                        if matches!(
+                            err.kind(),
+                            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted
+                        ) =>
+                    {
+                        reader = r;
+                        buf = b;
+                        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                    }
+                    _ => break,
                 }
-                _ => break,
             }
-        }
-    });
-
-    // Get writer once using take_writer
-    let writer = match pair.master.take_writer() {
-        Ok(writer) => writer,
-        Err(e) => {
-            let _ = send_ws_message(
-                &tx,
-                &ServerMessage::Error {
-                    message: format!("Failed to take PTY writer: {}", e),
-                },
-            )
-            .await;
-            return;
-        }
+        })
     };
 
-    // Keep master for resize operations
-    let master = Arc::new(Mutex::new(pair.master));
-    let master_clone = master.clone();
-
-    // Writer task: handle WebSocket messages
+    #[cfg(target_os = "linux")]
+    let master_fd = pty.master.as_raw_fd();
+    #[cfg(target_os = "linux")]
     let input_task = tokio::spawn(async move {
-        let mut writer = writer;
         while let Some(msg) = rx.next().await {
             match msg {
-                Ok(Message::Text(text)) => {
-                    match serde_json::from_str::<ClientMessage>(&text) {
-                        Ok(ClientMessage::Stdin { data_b64 }) => {
-                            match BASE64.decode(&data_b64) {
-                                Ok(data) => {
-                                    let write_result = tokio::task::spawn_blocking(move || {
-                                        let result = writer.write_all(&data);
-                                        (writer, result)
-                                    })
-                                    .await;
-
-                                    match write_result {
-                                        Ok((w, Ok(_))) => {
-                                            writer = w;
-                                        }
-                                        _ => break,
-                                    }
-                                }
-                                Err(_) => continue, // Ignore invalid base64
-                            }
+                Ok(Message::Text(text)) => match serde_json::from_str::<ClientMessage>(&text) {
+                    Ok(ClientMessage::Stdin { data_b64 }) => {
+                        let Ok(data) = BASE64.decode(&data_b64) else {
+                            continue;
+                        };
+                        if tokio::task::spawn_blocking(move || write_all_pty(master_fd, &data))
+                            .await
+                            .unwrap_or_else(|_| Err(std::io::Error::other("join error")))
+                            .is_err()
+                        {
+                            break;
                         }
-                        Ok(ClientMessage::Resize { cols, rows }) => {
-                            let size = PtySize {
-                                rows,
-                                cols,
-                                pixel_width: 0,
-                                pixel_height: 0,
-                            };
-                            let _ = master_clone.lock().await.resize(size);
-                        }
-                        Ok(ClientMessage::Signal { sig }) => {
-                            // Forward signal to child process if available (platform-specific)
-                            forward_signal(child_pid, &sig);
-                        }
-                        _ => {} // Ignore other message types
                     }
-                }
+                    Ok(ClientMessage::Resize { cols, rows }) => {
+                        let _ = pty_resize(master_fd, rows, cols);
+                    }
+                    Ok(ClientMessage::Signal { sig }) => forward_signal(child_pid, &sig),
+                    _ => {}
+                },
                 Ok(Message::Close(_)) => break,
-                _ => {} // Ignore other message types
+                _ => {}
             }
         }
     });
 
-    // Wait for child process to exit
-    let status = tokio::task::spawn_blocking(move || child.wait())
+    #[cfg(target_os = "linux")]
+    let trace_result = tokio::task::spawn_blocking(move || trace_rx.recv())
         .await
-        .unwrap_or_else(|_| Ok(portable_pty::ExitStatus::with_exit_code(1)));
+        .ok()
+        .and_then(Result::ok)
+        .and_then(Result::ok);
 
-    // Send exit message
-    let exit_code = status.map(|s| s.exit_code() as i32).unwrap_or(1);
+    #[cfg(target_os = "linux")]
+    let (exit_code, process_telemetry) = match trace_result {
+        Some(result) => (
+            exit_code_from_raw_wait_status(result.raw_exit_status),
+            result.process_telemetry,
+        ),
+        None => (
+            1,
+            world::exec::unavailable_process_telemetry("backend_disabled"),
+        ),
+    };
+
+    #[cfg(not(target_os = "linux"))]
+    let (exit_code, process_telemetry) = (
+        1,
+        substrate_common::ProcessTelemetry::not_supported_platform(),
+    );
+
+    #[cfg(target_os = "linux")]
+    input_task.abort();
+    #[cfg(target_os = "linux")]
+    drop(pty);
+    #[cfg(target_os = "linux")]
+    if tokio::time::timeout(std::time::Duration::from_millis(250), &mut reader_task)
+        .await
+        .is_err()
+    {
+        // The legacy stream contract expects buffered PTY stdout before `exit`.
+        // If the reader does not quiesce promptly after we close the parent PTY handles,
+        // abort it rather than hanging the websocket close path indefinitely.
+        reader_task.abort();
+    }
+
     info!(exit_code, "ws_pty: exit");
     #[cfg(target_os = "linux")]
     let (primary, final_strategy, reason) = match fs_strategy_meta.as_ref() {
@@ -2621,6 +2758,13 @@ async fn handle_legacy_start(
     let exit_payload = serde_json::json!({
         "type": "exit",
         "code": exit_code,
+        "process_events": process_telemetry.process_events,
+        "process_events_status": process_telemetry.process_events_status.as_str(),
+        "process_events_reason": process_telemetry.process_events_reason,
+        "process_events_dropped": process_telemetry.process_events_dropped,
+        "process_events_max": process_telemetry.process_events_max,
+        "process_events_backend": process_telemetry.process_events_backend,
+        "process_events_error": process_telemetry.process_events_error,
         "world_fs_strategy_primary": primary,
         "world_fs_strategy_final": final_strategy,
         "world_fs_strategy_fallback_reason": reason,
@@ -2636,16 +2780,40 @@ async fn handle_legacy_start(
         service.note_pty_pending_diff(world_id);
     }
 
-    // Clean up tasks
-    reader_task.abort();
-    input_task.abort();
     info!("ws_pty: session closed");
+}
+
+#[cfg(not(target_os = "linux"))]
+async fn handle_legacy_start(
+    _service: WorldAgentService,
+    tx: Arc<Mutex<WsSender>>,
+    mut rx: WsReceiver,
+    _first_text: String,
+) {
+    let _ = send_persistent_ws_message(
+        &tx,
+        &PersistentServerMessage::Error {
+            code: "internal_error".to_string(),
+            message: "Legacy PTY streaming is only supported on Linux world-agent".to_string(),
+            fatal: true,
+            seq: None,
+        },
+    )
+    .await;
+
+    while let Some(msg) = rx.next().await {
+        if matches!(msg, Ok(Message::Close(_))) {
+            break;
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base64::Engine;
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn ensure_xdg_dirs_creates_default_data_home_under_home() {
         let tmp = tempfile::tempdir().unwrap();
@@ -2657,6 +2825,7 @@ mod tests {
         assert!(tmp.path().join(".local/share").is_dir());
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn ensure_xdg_dirs_creates_explicit_xdg_data_home() {
         let tmp = tempfile::tempdir().unwrap();
@@ -2670,6 +2839,7 @@ mod tests {
         assert!(data_home.is_dir());
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn ensure_xdg_dirs_falls_back_when_data_home_uncreatable() {
         let tmp = tempfile::tempdir().unwrap();
@@ -2707,7 +2877,7 @@ mod tests {
     #[test]
     fn test_server_message_stdout_serialization() {
         let msg = ServerMessage::Stdout {
-            data_b64: BASE64.encode(b"hello"),
+            data_b64: base64::engine::general_purpose::STANDARD.encode(b"hello"),
         };
         let js = serde_json::to_string(&msg).unwrap();
         assert!(js.contains("\"stdout\""));

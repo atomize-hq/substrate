@@ -483,7 +483,7 @@ RECOMMENDATION: ACCEPT
 - Reviewed commit: `9b5532aae65f55b998247253db85b10a1f27f4d1`
 - Reviewer: Codex (third-party reviewer)
 - Date (UTC): 2026-02-15
-- Recommendation: `ACCEPT` (supersedes prior FLAG decision above)
+- Recommendation detail: supersedes prior FLAG decision above
 
 ## Evidence: Commands Run (verbatim; re-review)
 
