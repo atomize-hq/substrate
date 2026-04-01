@@ -441,25 +441,25 @@
       "id": "best_effort_distro_package_manager",
       "title": "Best-effort distro package manager",
       "branch": "feat/best-effort-distro-package-manager",
-      "directory": "docs/project_management/packs/draft/best-effort-distro-package-manager",
-      "plan": "docs/project_management/packs/draft/best-effort-distro-package-manager/plan.md",
+      "directory": "docs/project_management/packs/implemented/best-effort-distro-package-manager",
+      "plan": "docs/project_management/packs/implemented/best-effort-distro-package-manager/plan.md",
       "status": "completed",
       "sequence": [
         {
           "id": "BEDPM0",
-          "spec": "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md"
+          "spec": "docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md"
         },
         {
           "id": "BEDPM1",
-          "spec": "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM1/BEDPM1-spec.md"
+          "spec": "docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM1/BEDPM1-spec.md"
         },
         {
           "id": "BEDPM2",
-          "spec": "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md"
+          "spec": "docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md"
         },
         {
           "id": "BEDPM3",
-          "spec": "docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM3/BEDPM3-spec.md"
+          "spec": "docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM3/BEDPM3-spec.md"
         }
       ],
       "notes": [

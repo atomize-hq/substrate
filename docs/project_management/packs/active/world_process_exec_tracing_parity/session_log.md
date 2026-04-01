@@ -123,3 +123,33 @@
 - Artifacts:
   - `CODEX_TEST_LAST_MESSAGE_PATH=NOT_CREATED`
 - Blockers: `make triad-task-start-pair ... LAUNCH_CODEX=1` exited 2 because dependency `F0-exec-preflight` is still `pending`
+
+## START — 2026-04-01T16:45:16Z — ops — F0-exec-preflight
+- Goal: Validate Planning Pack mechanical invariants and smoke script syntax before starting WPEP0 execution triads.
+- Inputs read:
+  - `docs/project_management/packs/active/world_process_exec_tracing_parity/plan.md`
+  - `docs/project_management/packs/active/world_process_exec_tracing_parity/spec_manifest.md`
+  - `docs/project_management/packs/active/world_process_exec_tracing_parity/tasks.json`
+  - `docs/project_management/packs/sequencing.json`
+- Sequencing confirmation:
+  - `world_process_exec_tracing_parity` is present in `docs/project_management/packs/sequencing.json`
+  - Feature directory resolves to `docs/project_management/packs/active/world_process_exec_tracing_parity`
+
+## END — 2026-04-01T16:46:05Z — ops — F0-exec-preflight
+- Result:
+  - Required preflight commands now pass.
+  - Hard-ban scan and ambiguity scan completed under `make planning-lint` with no remaining violations.
+  - Mechanical blockers cleared before final pass:
+    - Fixed ADR executive summary hash drift in `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
+    - Fixed stale completed-sprint paths for `best_effort_distro_package_manager` in `docs/project_management/packs/sequencing.json`
+- Commands run (verbatim) + exit codes:
+  - `make planning-lint FEATURE_DIR="docs/project_management/packs/active/world_process_exec_tracing_parity"` → exit 2
+    - Key output: hard-ban scan passed; ambiguity scan passed; failed on `ADR-0028` executive summary hash drift
+  - `bash -n docs/project_management/packs/active/world_process_exec_tracing_parity/smoke/linux-smoke.sh` → exit 0
+  - `bash -n docs/project_management/packs/active/world_process_exec_tracing_parity/smoke/macos-smoke.sh` → exit 0
+  - `make adr-fix ADR=docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md` → exit 0
+  - `make planning-lint FEATURE_DIR="docs/project_management/packs/active/world_process_exec_tracing_parity"` → exit 2
+    - Key output: feature pack checks passed; failed on stale completed-sprint paths for `best_effort_distro_package_manager` in `docs/project_management/packs/sequencing.json`
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → exit 0
+  - `make planning-lint FEATURE_DIR="docs/project_management/packs/active/world_process_exec_tracing_parity"` → exit 0
+    - Key output: `OK: completed sprint paths resolve`; `OK: planning lint passed`
