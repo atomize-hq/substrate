@@ -1128,6 +1128,8 @@ fn build_stream_payload(exit: i32, stdout: &str, stderr: &str, scopes: &[String]
     )
 }
 
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 fn build_stream_payload_with_process_events(
     exit: i32,
     stdout: &str,
