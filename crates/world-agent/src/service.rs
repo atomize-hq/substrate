@@ -9,7 +9,7 @@ use agent_api_types::WorldFsEntryTypeV1;
 use agent_api_types::{
     Budget, ExecuteCancelRequestV1, ExecuteCancelResponseV1, ExecuteRequest, ExecuteResponse,
     PendingDiffClearRequestV1, PendingDiffClearResponseV1, PendingDiffReconcileRequestV1,
-    PendingDiffReconcileResponseV1, PendingDiffRecordV1, PendingDiffRequestV1,
+    PendingDiffReconcileResponseV1, PendingDiffRecordV1, PendingDiffRequestV1, ProcessTelemetry,
     WorldFsReadRequestV1, WorldFsReadResponseV1, WorldNetworkRoutingV1,
 };
 #[cfg(target_os = "linux")]
@@ -484,6 +484,7 @@ impl WorldAgentService {
                 stderr_b64: BASE64.encode(message.as_bytes()),
                 scopes_used: Vec::new(),
                 fs_diff: None,
+                process_telemetry: ProcessTelemetry::default(),
             });
         }
 
@@ -575,6 +576,7 @@ impl WorldAgentService {
             stderr_b64: BASE64.encode(result.stderr),
             scopes_used: result.scopes_used,
             fs_diff: result.fs_diff,
+            process_telemetry: result.process_telemetry,
         })
     }
 
@@ -1082,6 +1084,7 @@ impl WorldAgentService {
                     span_id,
                     scopes_used: Vec::new(),
                     fs_diff: None,
+                    process_telemetry: ProcessTelemetry::default(),
                 },
             ];
 
@@ -1209,6 +1212,7 @@ impl WorldAgentService {
                         span_id,
                         scopes_used: exec_result.scopes_used,
                         fs_diff: exec_result.fs_diff,
+                        process_telemetry: exec_result.process_telemetry,
                     };
                     let _ = tx.send(frame);
                 }
@@ -1920,6 +1924,33 @@ mod tests {
                 display_path: None,
                 summary: None,
             }),
+            process_telemetry: ProcessTelemetry {
+                process_events: vec![substrate_common::ProcessEvent {
+                    event_type: substrate_common::ProcessEventType::WorldProcessStart,
+                    ts: "2026-04-01T00:00:00Z".to_string(),
+                    ts_unix_ns: 1_743_465_600_000_000_000,
+                    session_id: "ses_test".to_string(),
+                    world_id: "wld_test".to_string(),
+                    pid: 42,
+                    ppid: 1,
+                    cwd: "/tmp".to_string(),
+                    parent_span: "spn_test".to_string(),
+                    parent_cmd_id: Some("cmd_test".to_string()),
+                    argv: None,
+                    argv_omitted: Some(true),
+                    exe: None,
+                    exit_code: None,
+                    signal: None,
+                    duration_ms: None,
+                    env: None,
+                }],
+                process_events_status: substrate_common::ProcessEventsStatus::Truncated,
+                process_events_reason: Some("capture_overflow".to_string()),
+                process_events_dropped: Some(2),
+                process_events_max: None,
+                process_events_backend: None,
+                process_events_error: None,
+            },
         };
 
         let json = serde_json::to_string(&resp).expect("serialize ExecuteResponse");
@@ -1929,6 +1960,16 @@ mod tests {
         assert_eq!(back.exit, 0);
         assert_eq!(back.span_id, "spn_test");
         assert_eq!(back.scopes_used, vec!["tcp:example.com:443".to_string()]);
+        assert_eq!(
+            back.process_telemetry.process_events_status,
+            substrate_common::ProcessEventsStatus::Truncated
+        );
+        assert_eq!(
+            back.process_telemetry.process_events_reason.as_deref(),
+            Some("capture_overflow")
+        );
+        assert_eq!(back.process_telemetry.process_events_dropped, Some(2));
+        assert_eq!(back.process_telemetry.process_events.len(), 1);
         let fd = back.fs_diff.expect("fs_diff present");
         assert_eq!(fd.writes.len(), 1);
         assert_eq!(fd.writes[0], std::path::PathBuf::from("/tmp/a.txt"));

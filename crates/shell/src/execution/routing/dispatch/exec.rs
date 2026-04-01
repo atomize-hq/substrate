@@ -18,7 +18,10 @@ use crate::execution::pty;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use crate::execution::pw;
 use crate::execution::routing::builtin::handle_builtin;
-use crate::execution::routing::telemetry::{log_command_event, SHELL_AGENT_ID};
+use crate::execution::routing::telemetry::{
+    add_process_telemetry_summary, append_process_events_to_trace, log_command_event,
+    SHELL_AGENT_ID,
+};
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use crate::execution::routing::world_transport_to_meta;
 #[cfg(target_os = "linux")]
@@ -482,6 +485,9 @@ pub(crate) fn execute_command(
         WorldFsStrategyFallbackReason,
     )> = None;
 
+    let redacted_command = redacted_for_logging.clone();
+    let start_time = std::time::Instant::now();
+
     if should_use_pty {
         // Attempt world-agent PTY WS route on Linux when world is enabled or agent socket exists
         #[cfg(target_os = "linux")]
@@ -526,9 +532,11 @@ pub(crate) fn execute_command(
                     .as_ref()
                     .map(|s| s.get_span_id().to_string())
                     .unwrap_or_else(|| cmd_id.to_string());
+                let completion_span_id = span.as_ref().map(|s| s.get_span_id().to_string());
                 match execute_world_pty_over_ws(trimmed, &span_id_for_ws) {
                     Ok(outcome) => {
                         let code = outcome.exit_code;
+                        append_process_events_to_trace(&outcome.process_telemetry)?;
                         if let Some(active_span) = span.take() {
                             let mut active_span = active_span;
                             active_span.set_execution_origin(ExecutionOrigin::World);
@@ -554,6 +562,39 @@ pub(crate) fn execute_command(
                                 collect_world_telemetry(active_span.get_span_id());
                             let _ = active_span.finish(code, scopes_used, fs_diff);
                         }
+                        let mut completion_extra = json!({
+                            log_schema::EXIT_CODE: code,
+                            log_schema::DURATION_MS: start_time.elapsed().as_millis()
+                        });
+                        if let Some(span_id) = completion_span_id.as_ref() {
+                            completion_extra["span_id"] = json!(span_id);
+                        }
+                        if let Some(meta) = outcome.fs_strategy {
+                            completion_extra["world_fs_strategy_primary"] =
+                                json!(meta.primary.as_str());
+                            completion_extra["world_fs_strategy_final"] =
+                                json!(meta.final_strategy.as_str());
+                            completion_extra["world_fs_strategy_fallback_reason"] =
+                                json!(meta.fallback_reason.as_str());
+                        } else {
+                            completion_extra["world_fs_strategy_primary"] =
+                                json!(WorldFsStrategy::Overlay.as_str());
+                            completion_extra["world_fs_strategy_final"] =
+                                json!(WorldFsStrategy::Host.as_str());
+                            completion_extra["world_fs_strategy_fallback_reason"] =
+                                json!(WorldFsStrategyFallbackReason::None.as_str());
+                        }
+                        add_process_telemetry_summary(
+                            &mut completion_extra,
+                            &outcome.process_telemetry,
+                        );
+                        log_command_event(
+                            config,
+                            "command_complete",
+                            &redacted_command,
+                            cmd_id,
+                            Some(completion_extra),
+                        )?;
                         #[cfg(unix)]
                         {
                             use std::os::unix::process::ExitStatusExt;
@@ -692,8 +733,11 @@ pub(crate) fn execute_command(
                     .as_ref()
                     .map(|s| s.get_span_id().to_string())
                     .unwrap_or_else(|| cmd_id.to_string());
+                let completion_span_id = span.as_ref().map(|s| s.get_span_id().to_string());
                 match execute_world_pty_over_ws_macos(trimmed, &span_id_for_ws) {
-                    Ok(code) => {
+                    Ok(outcome) => {
+                        let code = outcome.exit_code;
+                        append_process_events_to_trace(&outcome.process_telemetry)?;
                         if let Some(active_span) = span.take() {
                             let mut active_span = active_span;
                             if let Some(meta) = transport_meta {
@@ -714,6 +758,27 @@ pub(crate) fn execute_command(
                                 collect_world_telemetry(active_span.get_span_id());
                             let _ = active_span.finish(code, scopes_used, fs_diff);
                         }
+                        let mut completion_extra = json!({
+                            log_schema::EXIT_CODE: code,
+                            log_schema::DURATION_MS: start_time.elapsed().as_millis(),
+                            "world_fs_strategy_primary": WorldFsStrategy::Overlay.as_str(),
+                            "world_fs_strategy_final": WorldFsStrategy::Host.as_str(),
+                            "world_fs_strategy_fallback_reason": WorldFsStrategyFallbackReason::None.as_str(),
+                        });
+                        if let Some(span_id) = completion_span_id.as_ref() {
+                            completion_extra["span_id"] = json!(span_id);
+                        }
+                        add_process_telemetry_summary(
+                            &mut completion_extra,
+                            &outcome.process_telemetry,
+                        );
+                        log_command_event(
+                            config,
+                            "command_complete",
+                            &redacted_command,
+                            cmd_id,
+                            Some(completion_extra),
+                        )?;
                         #[cfg(unix)]
                         {
                             use std::os::unix::process::ExitStatusExt;
@@ -817,9 +882,6 @@ pub(crate) fn execute_command(
     // Compute resolved path from raw command before redaction
     let resolved = first_command_path(trimmed);
 
-    // Redact sensitive information before logging (token-aware)
-    let redacted_command = redacted_for_logging.clone();
-
     // Log command start with redacted command and resolved path
     let span_id_for_cmd_events = span.as_ref().map(|s| s.get_span_id().to_string());
     let start_extra = {
@@ -839,7 +901,6 @@ pub(crate) fn execute_command(
         cmd_id,
         start_extra,
     )?;
-    let start_time = std::time::Instant::now();
 
     // Attempt to route non-PTY commands through the world agent when available
     let mut agent_result: Option<AgentStreamOutcome> = None;
@@ -1216,6 +1277,7 @@ pub(crate) fn execute_command(
             }
         }
 
+        append_process_events_to_trace(&outcome.process_telemetry)?;
         if let Some(mut active_span) = span {
             if let Ok(resolved) =
                 crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_for_profile)
@@ -1257,6 +1319,7 @@ pub(crate) fn execute_command(
             completion_extra["world_fs_strategy_fallback_reason"] =
                 json!(WorldFsStrategyFallbackReason::None.as_str());
         }
+        add_process_telemetry_summary(&mut completion_extra, &outcome.process_telemetry);
         log_command_event(
             config,
             "command_complete",

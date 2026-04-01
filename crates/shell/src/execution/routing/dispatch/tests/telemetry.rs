@@ -1,6 +1,9 @@
 use super::*;
 use crate::execution::agent_events::{self, clear_agent_event_sender, init_event_channel};
-use agent_api_types::ExecuteStreamFrame;
+use crate::execution::routing::dispatch::world_ops::consume_agent_stream_buffer_with_meta;
+use agent_api_types::{
+    ExecuteStreamFrame, ProcessEvent, ProcessEventType, ProcessEventsStatus, ProcessTelemetry,
+};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use serde_json::Value as JsonValue;
@@ -28,6 +31,7 @@ fn consume_agent_stream_buffer_emits_agent_events() {
                 span_id: "spn_test".into(),
                 scopes_used: vec!["scope:a".into()],
                 fs_diff: None,
+                process_telemetry: ProcessTelemetry::default(),
             },
         ];
 
@@ -91,4 +95,74 @@ fn parse_fs_diff_from_agent_json() {
     assert!(diff.mods.is_empty());
     assert!(diff.deletes.is_empty());
     assert!(!diff.truncated);
+}
+
+#[test]
+fn consume_agent_stream_buffer_captures_process_event_summary() {
+    let frame = ExecuteStreamFrame::Exit {
+        exit: 0,
+        span_id: "spn_proc".into(),
+        scopes_used: vec![],
+        fs_diff: None,
+        process_telemetry: ProcessTelemetry {
+            process_events: vec![ProcessEvent {
+                event_type: ProcessEventType::WorldProcessExit,
+                ts: "2026-04-01T00:00:01Z".into(),
+                ts_unix_ns: 1_743_465_601_000_000_000,
+                session_id: "ses_proc".into(),
+                world_id: "wld_proc".into(),
+                pid: 99,
+                ppid: 10,
+                cwd: "/project".into(),
+                parent_span: "spn_parent".into(),
+                parent_cmd_id: Some("cmd_proc".into()),
+                argv: None,
+                argv_omitted: Some(true),
+                exe: None,
+                exit_code: Some(0),
+                signal: None,
+                duration_ms: Some(12),
+                env: None,
+            }],
+            process_events_status: ProcessEventsStatus::Truncated,
+            process_events_reason: Some("capture_overflow".into()),
+            process_events_dropped: Some(4),
+            process_events_max: None,
+            process_events_backend: None,
+            process_events_error: None,
+        },
+    };
+
+    let mut buffer = serde_json::to_vec(&frame).expect("serialize frame");
+    buffer.push(b'\n');
+
+    let mut exit_code = None;
+    let mut scopes_used = Vec::new();
+    let mut fs_diff = None;
+    let mut fs_strategy = None;
+    let mut process_telemetry = ProcessTelemetry::default();
+
+    consume_agent_stream_buffer_with_meta(
+        "tester",
+        &mut buffer,
+        &mut None,
+        &mut exit_code,
+        &mut scopes_used,
+        &mut fs_diff,
+        &mut fs_strategy,
+        &mut process_telemetry,
+    )
+    .expect("consume stream");
+
+    assert_eq!(exit_code, Some(0));
+    assert_eq!(
+        process_telemetry.process_events_status,
+        ProcessEventsStatus::Truncated
+    );
+    assert_eq!(
+        process_telemetry.process_events_reason.as_deref(),
+        Some("capture_overflow")
+    );
+    assert_eq!(process_telemetry.process_events_dropped, Some(4));
+    assert_eq!(process_telemetry.process_events.len(), 1);
 }

@@ -4,7 +4,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::IpAddr;
 use substrate_common::agent_events::AgentEvent;
-pub use substrate_common::{FsDiff, WorldFsMode};
+pub use substrate_common::{
+    FsDiff, ProcessEvent, ProcessEventType, ProcessEventsStatus, ProcessTelemetry, WorldFsMode,
+};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -652,6 +654,8 @@ pub struct ExecuteResponse {
     pub scopes_used: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fs_diff: Option<FsDiff>,
+    #[serde(flatten, default)]
+    pub process_telemetry: ProcessTelemetry,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -799,6 +803,7 @@ fn world_fs_read_response_v1_default_schema_version() -> u32 {
 
 /// Streaming frame describing incremental execution output.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::large_enum_variant)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ExecuteStreamFrame {
     /// Initial handshake announcing the span identifier for this execution.
@@ -816,6 +821,8 @@ pub enum ExecuteStreamFrame {
         scopes_used: Vec<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         fs_diff: Option<FsDiff>,
+        #[serde(flatten, default)]
+        process_telemetry: ProcessTelemetry,
     },
     /// Error reported while attempting to execute the command.
     Error { message: String },
@@ -922,6 +929,33 @@ mod tests {
             span_id: "spn_test".into(),
             scopes_used: vec!["tcp:example.com:443".into()],
             fs_diff: None,
+            process_telemetry: ProcessTelemetry {
+                process_events: vec![ProcessEvent {
+                    event_type: ProcessEventType::WorldProcessStart,
+                    ts: "2026-04-01T00:00:00Z".into(),
+                    ts_unix_ns: 1_743_465_600_000_000_000,
+                    session_id: "ses_test".into(),
+                    world_id: "wld_test".into(),
+                    pid: 42,
+                    ppid: 1,
+                    cwd: "/tmp".into(),
+                    parent_span: "spn_parent".into(),
+                    parent_cmd_id: Some("cmd_test".into()),
+                    argv: None,
+                    argv_omitted: Some(true),
+                    exe: None,
+                    exit_code: None,
+                    signal: None,
+                    duration_ms: None,
+                    env: None,
+                }],
+                process_events_status: ProcessEventsStatus::Truncated,
+                process_events_reason: Some("capture_overflow".into()),
+                process_events_dropped: Some(3),
+                process_events_max: None,
+                process_events_backend: None,
+                process_events_error: None,
+            },
         };
 
         let json = serde_json::to_string(&frame).expect("serialize");
@@ -933,11 +967,22 @@ mod tests {
                 span_id,
                 scopes_used,
                 fs_diff,
+                process_telemetry,
             } => {
                 assert_eq!(exit, 0);
                 assert_eq!(span_id, "spn_test");
                 assert_eq!(scopes_used, vec!["tcp:example.com:443".to_string()]);
                 assert!(fs_diff.is_none());
+                assert_eq!(process_telemetry.process_events.len(), 1);
+                assert_eq!(
+                    process_telemetry.process_events_status,
+                    ProcessEventsStatus::Truncated
+                );
+                assert_eq!(
+                    process_telemetry.process_events_reason.as_deref(),
+                    Some("capture_overflow")
+                );
+                assert_eq!(process_telemetry.process_events_dropped, Some(3));
             }
             other => panic!("unexpected frame: {:?}", other),
         }

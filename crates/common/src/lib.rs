@@ -1,6 +1,7 @@
 //! Shared utilities for substrate components
 
-use std::collections::HashSet;
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 
 pub mod agent_events;
 pub mod fs_diff;
@@ -20,6 +21,138 @@ pub use settings::{
     WorldFsStrategy, WorldFsStrategyFallbackReason, WorldFsStrategyProbe,
     WorldFsStrategyProbeResult,
 };
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ProcessEventType {
+    WorldProcessStart,
+    WorldProcessExit,
+}
+
+impl ProcessEventType {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::WorldProcessStart => "world_process_start",
+            Self::WorldProcessExit => "world_process_exit",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProcessEvent {
+    pub event_type: ProcessEventType,
+    pub ts: String,
+    pub ts_unix_ns: u64,
+    pub session_id: String,
+    pub world_id: String,
+    pub pid: u32,
+    pub ppid: u32,
+    pub cwd: String,
+    pub parent_span: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_cmd_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub argv: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub argv_omitted: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exe: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signal: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub env: Option<HashMap<String, String>>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ProcessEventsStatus {
+    Ok,
+    Unavailable,
+    Truncated,
+    Error,
+}
+
+impl ProcessEventsStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Ok => "ok",
+            Self::Unavailable => "unavailable",
+            Self::Truncated => "truncated",
+            Self::Error => "error",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "ok" => Some(Self::Ok),
+            "unavailable" => Some(Self::Unavailable),
+            "truncated" => Some(Self::Truncated),
+            "error" => Some(Self::Error),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProcessTelemetry {
+    #[serde(default)]
+    pub process_events: Vec<ProcessEvent>,
+    pub process_events_status: ProcessEventsStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub process_events_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub process_events_dropped: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub process_events_max: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub process_events_backend: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub process_events_error: Option<String>,
+}
+
+impl ProcessTelemetry {
+    pub fn ok(process_events: Vec<ProcessEvent>) -> Self {
+        Self {
+            process_events,
+            process_events_status: ProcessEventsStatus::Ok,
+            process_events_reason: None,
+            process_events_dropped: None,
+            process_events_max: None,
+            process_events_backend: None,
+            process_events_error: None,
+        }
+    }
+
+    pub fn unavailable(reason: impl Into<String>) -> Self {
+        Self {
+            process_events: Vec::new(),
+            process_events_status: ProcessEventsStatus::Unavailable,
+            process_events_reason: Some(reason.into()),
+            process_events_dropped: None,
+            process_events_max: None,
+            process_events_backend: None,
+            process_events_error: None,
+        }
+    }
+
+    pub fn backend_disabled() -> Self {
+        Self::unavailable("backend_disabled")
+    }
+
+    pub fn not_supported_platform() -> Self {
+        Self::unavailable("not_supported_platform")
+    }
+}
+
+impl Default for ProcessTelemetry {
+    fn default() -> Self {
+        Self::backend_disabled()
+    }
+}
 
 /// Convenience re-exports for consumers that need the common substrate types.
 ///
@@ -51,6 +184,7 @@ pub mod prelude {
         WorldFsStrategyProbeResult,
     };
     pub use crate::{dedupe_path, redact_sensitive};
+    pub use crate::{ProcessEvent, ProcessEventType, ProcessEventsStatus, ProcessTelemetry};
 }
 
 /// Deduplicate PATH-like strings while preserving order
@@ -80,6 +214,9 @@ pub mod log_schema {
     pub const COMPONENT: &str = "component";
     pub const EXIT_CODE: &str = "exit_code";
     pub const DURATION_MS: &str = "duration_ms";
+    pub const PROCESS_EVENTS_STATUS: &str = "process_events_status";
+    pub const PROCESS_EVENTS_REASON: &str = "process_events_reason";
+    pub const PROCESS_EVENTS_DROPPED: &str = "process_events_dropped";
 }
 
 /// Redact sensitive information from command arguments

@@ -19,7 +19,7 @@ use crate::execution::{policy_snapshot::bootstrap_world_spec, socket_activation}
 use agent_api_client::AgentClient;
 #[cfg(not(target_os = "windows"))]
 use agent_api_types::ExecuteCancelRequestV1;
-use agent_api_types::{ExecuteRequest, ExecuteStreamFrame, WorldFsMode};
+use agent_api_types::{ExecuteRequest, ExecuteStreamFrame, ProcessTelemetry, WorldFsMode};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use std::env;
@@ -167,10 +167,10 @@ pub(super) fn collect_world_telemetry(
     }
 }
 
-#[cfg(target_os = "linux")]
 pub(crate) struct PtyWorldOutcome {
     pub(crate) exit_code: i32,
     pub(crate) fs_strategy: Option<WorldFsStrategyTraceMeta>,
+    pub(crate) process_telemetry: ProcessTelemetry,
 }
 
 #[cfg(target_os = "linux")]
@@ -375,6 +375,7 @@ pub(super) fn execute_world_pty_over_ws(
 
         let mut exit_code: i32 = 0;
         let mut fs_strategy: Option<WorldFsStrategyTraceMeta> = None;
+        let mut process_telemetry = ProcessTelemetry::default();
         while let Some(msg) = stream.next().await {
             let msg = msg.map_err(|e| anyhow::anyhow!("ws recv: {}", e))?;
             if msg.is_text() {
@@ -391,6 +392,7 @@ pub(super) fn execute_world_pty_over_ws(
                         }
                         Some("exit") => {
                             exit_code = v.get("code").and_then(|c| c.as_i64()).unwrap_or(0) as i32;
+                            process_telemetry = extract_process_telemetry_from_ws_exit(&v);
                             if let (Some(primary), Some(final_strategy), Some(reason)) = (
                                 v.get("world_fs_strategy_primary")
                                     .and_then(serde_json::Value::as_str)
@@ -447,6 +449,7 @@ pub(super) fn execute_world_pty_over_ws(
         Ok::<PtyWorldOutcome, anyhow::Error>(PtyWorldOutcome {
             exit_code,
             fs_strategy,
+            process_telemetry,
         })
     })?;
     Ok(outcome)
@@ -623,7 +626,10 @@ where
 }
 
 #[cfg(target_os = "macos")]
-pub(super) fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyhow::Result<i32> {
+pub(super) fn execute_world_pty_over_ws_macos(
+    cmd: &str,
+    span_id: &str,
+) -> anyhow::Result<PtyWorldOutcome> {
     use base64::engine::general_purpose::STANDARD;
     use base64::Engine;
     use futures::StreamExt;
@@ -641,7 +647,7 @@ pub(super) fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyho
             ws: tungs::WebSocketStream<S>,
             cmd: &str,
             span_id: &str,
-        ) -> anyhow::Result<i32>
+        ) -> anyhow::Result<PtyWorldOutcome>
         where
             S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
         {
@@ -752,6 +758,7 @@ pub(super) fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyho
             });
 
             let mut exit_code: i32 = 0;
+            let mut process_telemetry = ProcessTelemetry::default();
             while let Some(msg) = stream.next().await {
                 let msg = msg.map_err(|e| anyhow::anyhow!("ws recv: {}", e))?;
                 if msg.is_text() {
@@ -769,6 +776,7 @@ pub(super) fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyho
                             Some("exit") => {
                                 exit_code =
                                     v.get("code").and_then(|c| c.as_i64()).unwrap_or(0) as i32;
+                                process_telemetry = extract_process_telemetry_from_ws_exit(&v);
                                 break;
                             }
                             Some("error") => {
@@ -787,7 +795,11 @@ pub(super) fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyho
 
             stdin_task.abort();
             resize_task.abort();
-            Ok::<i32, anyhow::Error>(exit_code)
+            Ok::<PtyWorldOutcome, anyhow::Error>(PtyWorldOutcome {
+                exit_code,
+                fs_strategy: None,
+                process_telemetry,
+            })
         }
 
         // Connect according to transport and delegate to generic handler
@@ -827,6 +839,7 @@ pub(crate) struct AgentStreamOutcome {
     pub(crate) scopes_used: Vec<String>,
     pub(crate) fs_diff: Option<substrate_common::FsDiff>,
     pub(crate) fs_strategy: Option<WorldFsStrategyTraceMeta>,
+    pub(crate) process_telemetry: ProcessTelemetry,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -863,6 +876,46 @@ fn parse_world_fs_strategy_unavailable_reason(
         }
     }
     None
+}
+
+fn extract_process_telemetry_from_ws_exit(value: &serde_json::Value) -> ProcessTelemetry {
+    let process_events = value
+        .get("process_events")
+        .cloned()
+        .and_then(|raw| serde_json::from_value(raw).ok())
+        .unwrap_or_default();
+    let process_events_status = value
+        .get("process_events_status")
+        .and_then(serde_json::Value::as_str)
+        .and_then(substrate_common::ProcessEventsStatus::parse)
+        .unwrap_or(substrate_common::ProcessEventsStatus::Unavailable);
+
+    ProcessTelemetry {
+        process_events,
+        process_events_status,
+        process_events_reason: value
+            .get("process_events_reason")
+            .and_then(serde_json::Value::as_str)
+            .map(ToOwned::to_owned)
+            .or_else(|| {
+                (process_events_status == substrate_common::ProcessEventsStatus::Unavailable)
+                    .then(|| "backend_disabled".to_string())
+            }),
+        process_events_dropped: value
+            .get("process_events_dropped")
+            .and_then(serde_json::Value::as_u64),
+        process_events_max: value
+            .get("process_events_max")
+            .and_then(serde_json::Value::as_u64),
+        process_events_backend: value
+            .get("process_events_backend")
+            .and_then(serde_json::Value::as_str)
+            .map(ToOwned::to_owned),
+        process_events_error: value
+            .get("process_events_error")
+            .and_then(serde_json::Value::as_str)
+            .map(ToOwned::to_owned),
+    }
 }
 
 pub(crate) fn build_agent_client_and_request(
@@ -1301,6 +1354,7 @@ pub(crate) fn stream_non_pty_via_agent(command: &str) -> anyhow::Result<AgentStr
             scopes_used: Vec::new(),
             fs_diff: None,
             fs_strategy: None,
+            process_telemetry: ProcessTelemetry::default(),
         });
     }
 
@@ -1348,6 +1402,7 @@ pub(crate) fn stream_non_pty_via_agent(command: &str) -> anyhow::Result<AgentStr
                 scopes_used: response.scopes_used,
                 fs_diff: response.fs_diff,
                 fs_strategy: None,
+                process_telemetry: ProcessTelemetry::not_supported_platform(),
             })
         }
 
@@ -1435,6 +1490,7 @@ where
     let mut scopes_used = Vec::new();
     let mut fs_diff = None;
     let mut fs_strategy = None;
+    let mut process_telemetry = ProcessTelemetry::default();
     let mut active_span_id: Option<String> = None;
 
     loop {
@@ -1471,6 +1527,7 @@ where
                 &mut scopes_used,
                 &mut fs_diff,
                 &mut fs_strategy,
+                &mut process_telemetry,
             )?;
             if exit_code.is_some() {
                 break;
@@ -1487,6 +1544,7 @@ where
             &mut scopes_used,
             &mut fs_diff,
             &mut fs_strategy,
+            &mut process_telemetry,
         )?;
     }
 
@@ -1498,6 +1556,7 @@ where
         scopes_used,
         fs_diff,
         fs_strategy,
+        process_telemetry,
     })
 }
 
@@ -1510,6 +1569,7 @@ pub(crate) fn consume_agent_stream_buffer(
     fs_diff: &mut Option<substrate_common::FsDiff>,
 ) -> anyhow::Result<()> {
     let mut ignored = None;
+    let mut process_telemetry = ProcessTelemetry::default();
     consume_agent_stream_buffer_with_meta(
         agent_label,
         buffer,
@@ -1518,10 +1578,12 @@ pub(crate) fn consume_agent_stream_buffer(
         scopes_used,
         fs_diff,
         &mut ignored,
+        &mut process_telemetry,
     )
 }
 
-fn consume_agent_stream_buffer_with_meta(
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn consume_agent_stream_buffer_with_meta(
     agent_label: &str,
     buffer: &mut Vec<u8>,
     active_span_id: &mut Option<String>,
@@ -1529,6 +1591,7 @@ fn consume_agent_stream_buffer_with_meta(
     scopes_used: &mut Vec<String>,
     fs_diff: &mut Option<substrate_common::FsDiff>,
     fs_strategy: &mut Option<WorldFsStrategyTraceMeta>,
+    process_telemetry: &mut ProcessTelemetry,
 ) -> anyhow::Result<()> {
     use anyhow::Context as _;
 
@@ -1595,11 +1658,13 @@ fn consume_agent_stream_buffer_with_meta(
                 exit,
                 scopes_used: scopes,
                 fs_diff: diff,
+                process_telemetry: exit_process_telemetry,
                 ..
             } => {
                 *exit_code = Some(exit);
                 *scopes_used = scopes;
                 *fs_diff = diff;
+                *process_telemetry = exit_process_telemetry;
             }
             ExecuteStreamFrame::Error { message } => {
                 if message.contains("WORLD_FS_STRATEGY_UNAVAILABLE") {
@@ -1794,6 +1859,7 @@ mod tests {
                     span_id: "spn_interrupt".to_string(),
                     scopes_used: Vec::new(),
                     fs_diff: None,
+                    process_telemetry: agent_api_types::ProcessTelemetry::default(),
                 }),
             ];
 

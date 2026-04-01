@@ -354,6 +354,7 @@ impl ReplWorldAgentStub {
                                 span_id: "agent-span".to_string(),
                                 scopes_used: Vec::new(),
                                 fs_diff: None,
+                                process_telemetry: agent_api_types::ProcessTelemetry::default(),
                             })
                             .expect("serialize exit"),
                         );
@@ -388,6 +389,9 @@ impl ReplWorldAgentStub {
                             "stderr_b64": BASE64.encode(&output.stderr),
                             "scopes_used": [],
                             "fs_diff": serde_json::Value::Null,
+                            "process_events": [],
+                            "process_events_status": "unavailable",
+                            "process_events_reason": "backend_disabled",
                         })
                         .to_string();
                         write_http_json(&mut stream, "200 OK", &resp).await;
