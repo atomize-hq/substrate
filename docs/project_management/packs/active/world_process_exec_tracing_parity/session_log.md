@@ -309,3 +309,23 @@
   - `CODEX_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/packs/active/world_process_exec_tracing_parity/logs/WPEP1/integ/events.jsonl`
   - `CODEX_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/packs/active/world_process_exec_tracing_parity/logs/WPEP1/integ/stderr.log`
 - Blockers: `Codex integration run stalled and was interrupted; make integ-checks failed in /home/spenser/__Active_code/substrate/wt/world-process-exec-tracing-parity-wpep1-integ on replay_world tests replay_flip_host_to_world_prefers_agent_and_reports_origin and replay_prefers_agent_when_socket_healthy, so the branch was not merged back to orchestration.`
+
+## END — 2026-04-01T18:22:03Z — integ — WPEP1-integ
+- Worktree: `/home/spenser/__Active_code/substrate/wt/world-process-exec-tracing-parity-wpep1-integ`
+- Branch: `world-process-exec-tracing-parity-wpep1-integ`
+- HEAD: `77ffb271436deb3fe758c5126ee8f7966e3235a3`
+- Codex: `CODEX_EXIT=1`
+- Finisher summary:
+  - `TASK_BRANCH=world-process-exec-tracing-parity-wpep1-integ`
+  - `WORKTREE=/home/spenser/__Active_code/substrate/wt/world-process-exec-tracing-parity-wpep1-integ`
+  - `HEAD=77ffb271436deb3fe758c5126ee8f7966e3235a3`
+  - `COMMITS=6`
+  - `CHECKS=make integ-checks; impact_map_touchset:skipped; impact_map_source:legacy`
+  - `SMOKE_RUN=`
+  - `MERGED_TO_ORCH=true`
+- Artifacts:
+  - `CODEX_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/docs/project_management/packs/active/world_process_exec_tracing_parity/logs/WPEP1/integ/last_message.md`
+  - `CODEX_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/packs/active/world_process_exec_tracing_parity/logs/WPEP1/integ/events.jsonl`
+  - `CODEX_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/packs/active/world_process_exec_tracing_parity/logs/WPEP1/integ/stderr.log`
+- Recovery: `Original Codex integration run stalled. Integration was completed manually in the task worktree, make integ-checks passed, and make triad-task-finish TASK_ID="WPEP1-integ" merged the branch back to orchestration.`
+- Blockers: `NONE`

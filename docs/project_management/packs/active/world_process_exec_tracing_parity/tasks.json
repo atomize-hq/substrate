@@ -378,7 +378,7 @@
       "name": "WPEP1 integration",
       "type": "integration",
       "phase": "WPEP1",
-      "status": "blocked",
+      "status": "completed",
       "description": "Merge WPEP1 code+test.",
       "references": [
         "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP1-spec.md",
