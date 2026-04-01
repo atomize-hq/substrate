@@ -315,7 +315,7 @@
       "name": "WPEP1 code",
       "type": "code",
       "phase": "WPEP1",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Implement world-agent API/types + shell persistence plumbing for process event diagnostics per WPEP1.",
       "references": [
         "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP1-spec.md",
@@ -349,7 +349,7 @@
       "name": "WPEP1 tests",
       "type": "test",
       "phase": "WPEP1",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Add/adjust tests for process telemetry diagnostics/persistence per WPEP1.",
       "references": [
         "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP1-spec.md"

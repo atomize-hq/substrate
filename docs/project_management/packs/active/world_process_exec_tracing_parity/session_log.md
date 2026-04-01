@@ -245,3 +245,41 @@
 - Orchestration branch: `feat/world-process-exec-tracing-parity`
 - Dispatch:
   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/packs/active/world_process_exec_tracing_parity" SLICE_ID="WPEP1" LAUNCH_CODEX=1`
+
+## END — 2026-04-01T17:46:10Z — code — WPEP1-code
+- Worktree: `/home/spenser/__Active_code/substrate/wt/world-process-exec-tracing-parity-wpep1-code`
+- Branch: `world-process-exec-tracing-parity-wpep1-code`
+- HEAD: `9a62c5c891d7c15c57291fb294ae4ec4b48e552f`
+- Codex: `CODEX_CODE_EXIT=0`
+- Finisher summary:
+  - `TASK_BRANCH=world-process-exec-tracing-parity-wpep1-code`
+  - `WORKTREE=/home/spenser/__Active_code/substrate/wt/world-process-exec-tracing-parity-wpep1-code`
+  - `HEAD=9a62c5c891d7c15c57291fb294ae4ec4b48e552f`
+  - `COMMITS=1`
+  - `CHECKS=verify-only; impact_map_touchset:skipped; impact_map_source:legacy`
+  - `SMOKE_RUN=skipped`
+  - `MERGED_TO_ORCH=`
+- Artifacts:
+  - `CODEX_CODE_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/docs/project_management/packs/active/world_process_exec_tracing_parity/logs/WPEP1/code/last_message.md`
+  - `CODEX_CODE_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/packs/active/world_process_exec_tracing_parity/logs/WPEP1/code/events.jsonl`
+  - `CODEX_CODE_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/packs/active/world_process_exec_tracing_parity/logs/WPEP1/code/stderr.log`
+- Blockers: `NONE`
+
+## END — 2026-04-01T17:46:10Z — test — WPEP1-test
+- Worktree: `/home/spenser/__Active_code/substrate/wt/world-process-exec-tracing-parity-wpep1-test`
+- Branch: `world-process-exec-tracing-parity-wpep1-test`
+- HEAD: `151b84646b616428641c85e853af3c8a913d9a29`
+- Codex: `CODEX_TEST_EXIT=0`
+- Finisher summary:
+  - `TASK_BRANCH=world-process-exec-tracing-parity-wpep1-test`
+  - `WORKTREE=/home/spenser/__Active_code/substrate/wt/world-process-exec-tracing-parity-wpep1-test`
+  - `HEAD=151b84646b616428641c85e853af3c8a913d9a29`
+  - `COMMITS=1`
+  - `CHECKS=verify-only; impact_map_touchset:skipped; impact_map_source:legacy`
+  - `SMOKE_RUN=skipped`
+  - `MERGED_TO_ORCH=`
+- Artifacts:
+  - `CODEX_TEST_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/docs/project_management/packs/active/world_process_exec_tracing_parity/logs/WPEP1/test/last_message.md`
+  - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/packs/active/world_process_exec_tracing_parity/logs/WPEP1/test/events.jsonl`
+  - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/packs/active/world_process_exec_tracing_parity/logs/WPEP1/test/stderr.log`
+- Blockers: `NONE`
