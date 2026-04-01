@@ -650,7 +650,7 @@ where
 pub(super) fn execute_world_pty_over_ws_macos(
     cmd: &str,
     span_id: &str,
-    parent_cmd_id: Option<&str>,
+    _parent_cmd_id: Option<&str>,
 ) -> anyhow::Result<PtyWorldOutcome> {
     use base64::engine::general_purpose::STANDARD;
     use base64::Engine;

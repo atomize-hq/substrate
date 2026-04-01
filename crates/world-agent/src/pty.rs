@@ -15,6 +15,7 @@ use crate::service::{
 use agent_api_types::PolicyResolutionModeV1;
 use agent_api_types::{PolicySnapshotV3, WorldNetworkRoutingV1};
 use axum::extract::ws::{Message, WebSocket};
+#[cfg(target_os = "linux")]
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use futures_util::stream::SplitSink;
 use futures_util::stream::SplitStream;
@@ -27,6 +28,7 @@ use rand::rngs::OsRng;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+#[cfg(target_os = "linux")]
 use std::io::Read;
 #[cfg(target_os = "linux")]
 use std::os::fd::{AsRawFd, FromRawFd};
@@ -56,6 +58,7 @@ fn record_doctor_request_context_for_pty(
     service.record_doctor_request_context(policy_resolution_mode, isolate_network);
 }
 
+#[cfg(target_os = "linux")]
 fn ensure_xdg_dirs(env: &mut HashMap<String, String>) {
     // Some minimal images don't ship with pre-created XDG dirs (e.g. /root/.local/share),
     // and TUIs like `nano` expect them to exist.
@@ -80,7 +83,7 @@ fn ensure_xdg_dirs(env: &mut HashMap<String, String>) {
     }
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn parse_signal(sig: &str) -> Option<i32> {
     match sig {
         "INT" | "SIGINT" => Some(libc::SIGINT),
@@ -91,7 +94,7 @@ fn parse_signal(sig: &str) -> Option<i32> {
     }
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn forward_signal(child_pid: Option<i32>, sig: &str) {
     if let (Some(pid), Some(signo)) = (child_pid, parse_signal(sig)) {
         // Safety: libc::kill is async-signal-safe and we are not accessing shared data
@@ -99,9 +102,6 @@ fn forward_signal(child_pid: Option<i32>, sig: &str) {
         info!("ws_pty: forwarded signal {} to pid {}", sig, pid);
     }
 }
-
-#[cfg(not(unix))]
-fn forward_signal(_child_pid: Option<i32>, _sig: &str) {}
 
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -141,6 +141,7 @@ pub enum ServerMessage {
 type WsSender = SplitSink<WebSocket, Message>;
 type WsReceiver = SplitStream<WebSocket>;
 
+#[cfg(target_os = "linux")]
 async fn send_ws_message(tx: &Arc<Mutex<WsSender>>, msg: &ServerMessage) -> Result<(), ()> {
     let text = serde_json::to_string(msg).map_err(|err| {
         error!(%err, "ws_pty: failed to serialize server message");
@@ -2240,8 +2241,9 @@ fn traced_wait_loop(
     });
 }
 
+#[cfg(target_os = "linux")]
 async fn handle_legacy_start(
-    #[cfg_attr(not(target_os = "linux"), allow(unused_variables))] service: WorldAgentService,
+    service: WorldAgentService,
     tx: Arc<Mutex<WsSender>>,
     mut rx: WsReceiver,
     first_text: String,
@@ -2719,6 +2721,12 @@ async fn handle_legacy_start(
         ),
     };
 
+    #[cfg(not(target_os = "linux"))]
+    let (exit_code, process_telemetry) = (
+        1,
+        substrate_common::ProcessTelemetry::not_supported_platform(),
+    );
+
     #[cfg(target_os = "linux")]
     input_task.abort();
     #[cfg(target_os = "linux")]
@@ -2775,10 +2783,37 @@ async fn handle_legacy_start(
     info!("ws_pty: session closed");
 }
 
+#[cfg(not(target_os = "linux"))]
+async fn handle_legacy_start(
+    _service: WorldAgentService,
+    tx: Arc<Mutex<WsSender>>,
+    mut rx: WsReceiver,
+    _first_text: String,
+) {
+    let _ = send_persistent_ws_message(
+        &tx,
+        &PersistentServerMessage::Error {
+            code: "internal_error".to_string(),
+            message: "Legacy PTY streaming is only supported on Linux world-agent".to_string(),
+            fatal: true,
+            seq: None,
+        },
+    )
+    .await;
+
+    while let Some(msg) = rx.next().await {
+        if matches!(msg, Ok(Message::Close(_))) {
+            break;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base64::Engine;
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn ensure_xdg_dirs_creates_default_data_home_under_home() {
         let tmp = tempfile::tempdir().unwrap();
@@ -2790,6 +2825,7 @@ mod tests {
         assert!(tmp.path().join(".local/share").is_dir());
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn ensure_xdg_dirs_creates_explicit_xdg_data_home() {
         let tmp = tempfile::tempdir().unwrap();
@@ -2803,6 +2839,7 @@ mod tests {
         assert!(data_home.is_dir());
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn ensure_xdg_dirs_falls_back_when_data_home_uncreatable() {
         let tmp = tempfile::tempdir().unwrap();
@@ -2840,7 +2877,7 @@ mod tests {
     #[test]
     fn test_server_message_stdout_serialization() {
         let msg = ServerMessage::Stdout {
-            data_b64: BASE64.encode(b"hello"),
+            data_b64: base64::engine::general_purpose::STANDARD.encode(b"hello"),
         };
         let js = serde_json::to_string(&msg).unwrap();
         assert!(js.contains("\"stdout\""));
