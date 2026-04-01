@@ -212,3 +212,22 @@
 - Orchestration branch: `feat/world-process-exec-tracing-parity`
 - Dispatch:
   - `make triad-task-start FEATURE_DIR="docs/project_management/packs/active/world_process_exec_tracing_parity" TASK_ID="WPEP0-integ-core" LAUNCH_CODEX=1`
+
+## END — 2026-04-01T17:09:28Z — integ — WPEP0-integ-core
+- Worktree: `/home/spenser/__Active_code/substrate/wt/world-process-exec-tracing-parity-wpep0-integ-core`
+- Branch: `world-process-exec-tracing-parity-wpep0-integ-core`
+- HEAD: `4b0fffd2a03b06b88dc84a36b3ef595647430b27`
+- Codex: `CODEX_EXIT=0`
+- Finisher summary:
+  - `TASK_BRANCH=world-process-exec-tracing-parity-wpep0-integ-core`
+  - `WORKTREE=/home/spenser/__Active_code/substrate/wt/world-process-exec-tracing-parity-wpep0-integ-core`
+  - `HEAD=4b0fffd2a03b06b88dc84a36b3ef595647430b27`
+  - `COMMITS=4`
+  - `CHECKS=verify-only; impact_map_touchset:skipped; impact_map_source:legacy`
+  - `SMOKE_RUN=skipped`
+  - `MERGED_TO_ORCH=false`
+- Artifacts:
+  - `CODEX_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/docs/project_management/packs/active/world_process_exec_tracing_parity/logs/WPEP0/integ-core/last_message.md`
+  - `CODEX_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/packs/active/world_process_exec_tracing_parity/logs/WPEP0/integ-core/events.jsonl`
+  - `CODEX_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/packs/active/world_process_exec_tracing_parity/logs/WPEP0/integ-core/stderr.log`
+- Blockers: `NONE`
