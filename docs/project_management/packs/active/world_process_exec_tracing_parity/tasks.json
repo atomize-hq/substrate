@@ -81,7 +81,7 @@
       "name": "WPEP0 tests",
       "type": "test",
       "phase": "WPEP0",
-      "status": "blocked",
+      "status": "in_progress",
       "description": "Add/adjust tests for span correctness + joinability foundation per WPEP0.",
       "references": [
         "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP0-spec.md"
