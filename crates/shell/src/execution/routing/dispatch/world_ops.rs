@@ -186,6 +186,7 @@ pub(super) fn collect_world_telemetry(
     }
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub(crate) struct PtyWorldOutcome {
     pub(crate) exit_code: i32,
     pub(crate) fs_strategy: Option<WorldFsStrategyTraceMeta>,
@@ -934,6 +935,7 @@ fn parse_world_fs_strategy_unavailable_reason(
     None
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn extract_process_telemetry_from_ws_exit(value: &serde_json::Value) -> ProcessTelemetry {
     let process_events = value
         .get("process_events")
