@@ -1962,6 +1962,23 @@ mod tests {
         assert_eq!(actual, expected);
     }
 
+    fn assert_disable_attribution(
+        attribution: &DoctorDisableAttribution,
+        expected_reason: &'static str,
+        expected_layer: &'static str,
+        expected_flag: Option<&'static str>,
+        expected_env: Option<&'static str>,
+        expected_path_display: Option<&'static str>,
+    ) {
+        assert_eq!(attribution.reason, expected_reason);
+        assert_eq!(attribution.source.key, "world.enabled");
+        assert_eq!(attribution.source.layer, expected_layer);
+        assert!(!attribution.source.value_display);
+        assert_eq!(attribution.source.flag, expected_flag);
+        assert_eq!(attribution.source.env, expected_env);
+        assert_eq!(attribution.source.path_display, expected_path_display);
+    }
+
     #[test]
     #[serial]
     fn test_phase_a_concat_dedupe_and_replace_provenance() {
@@ -2428,6 +2445,25 @@ world:
             ),
             Some("world isolation disabled by effective config (source unknown)")
         );
+        assert_eq!(
+            world_disable_attribution_message(
+                false,
+                Some(&ConfigExplainKey {
+                    merge_strategy: "replace".to_string(),
+                    sources: vec![
+                        ConfigExplainSource {
+                            layer: "global_patch".to_string(),
+                            path: Some("/tmp/secret/config.yaml".to_string()),
+                        },
+                        ConfigExplainSource {
+                            layer: "workspace_patch".to_string(),
+                            path: Some("/tmp/secret/workspace.yaml".to_string()),
+                        },
+                    ],
+                })
+            ),
+            Some("world isolation disabled by effective config (source unknown)")
+        );
     }
 
     #[test]
@@ -2442,10 +2478,12 @@ world:
                 }],
             }),
         );
+        let message = message.expect("expected attribution message");
         assert_eq!(
             message,
-            Some("world isolation disabled by global config $SUBSTRATE_HOME/config.yaml (world.enabled: false)")
+            "world isolation disabled by global config $SUBSTRATE_HOME/config.yaml (world.enabled: false)"
         );
+        assert!(!message.contains("/tmp/secret/substrate/config.yaml"));
     }
 
     #[test]
@@ -2460,6 +2498,18 @@ world:
                     layer: "cli_flag",
                     value_display: false,
                     flag: Some("--no-world"),
+                    env: None,
+                    path_display: None,
+                },
+            ),
+            (
+                "source_unknown",
+                Some("world isolation disabled by effective config (source unknown)"),
+                WorldDisableSource {
+                    key: "world.enabled",
+                    layer: "source_unknown",
+                    value_display: false,
+                    flag: None,
                     env: None,
                     path_display: None,
                 },
@@ -2512,18 +2562,6 @@ world:
                     path_display: None,
                 },
             ),
-            (
-                "source_unknown",
-                Some("world isolation disabled by effective config (source unknown)"),
-                WorldDisableSource {
-                    key: "world.enabled",
-                    layer: "source_unknown",
-                    value_display: false,
-                    flag: None,
-                    env: None,
-                    path_display: None,
-                },
-            ),
         ];
 
         for (layer, expected_reason, expected_source) in cases {
@@ -2538,8 +2576,14 @@ world:
                 }),
             )
             .expect("expected attribution");
-            assert_eq!(Some(attribution.reason), expected_reason);
-            assert_eq!(attribution.source, expected_source);
+            assert_disable_attribution(
+                &attribution,
+                expected_reason.expect("expected reason"),
+                expected_source.layer,
+                expected_source.flag,
+                expected_source.env,
+                expected_source.path_display,
+            );
         }
     }
 
@@ -2553,17 +2597,14 @@ world:
             }),
         )
         .expect("expected attribution");
-
-        assert_eq!(
-            attribution.reason,
-            "world isolation disabled by effective config (source unknown)"
+        assert_disable_attribution(
+            &attribution,
+            "world isolation disabled by effective config (source unknown)",
+            "source_unknown",
+            None,
+            None,
+            None,
         );
-        assert_eq!(attribution.source.key, "world.enabled");
-        assert_eq!(attribution.source.layer, "source_unknown");
-        assert!(!attribution.source.value_display);
-        assert_eq!(attribution.source.flag, None);
-        assert_eq!(attribution.source.env, None);
-        assert_eq!(attribution.source.path_display, None);
     }
 
     #[test]
@@ -2579,10 +2620,17 @@ world:
             }),
         )
         .expect("expected attribution");
-        assert_eq!(
-            workspace.source.path_display,
-            Some("<workspace>/.substrate/workspace.yaml")
+        assert_disable_attribution(
+            &workspace,
+            "world isolation disabled by workspace config <workspace>/.substrate/workspace.yaml (world.enabled: false)",
+            "workspace_patch",
+            None,
+            None,
+            Some("<workspace>/.substrate/workspace.yaml"),
         );
+        let workspace_json = serde_json::to_string(&workspace.source).unwrap();
+        assert!(workspace_json.contains("<workspace>/.substrate/workspace.yaml"));
+        assert!(!workspace_json.contains("/tmp/secret/workspace.yaml"));
 
         let global = world_disable_attribution(
             false,
@@ -2595,10 +2643,45 @@ world:
             }),
         )
         .expect("expected attribution");
-        assert_eq!(
-            global.source.path_display,
-            Some("$SUBSTRATE_HOME/config.yaml")
+        assert_disable_attribution(
+            &global,
+            "world isolation disabled by global config $SUBSTRATE_HOME/config.yaml (world.enabled: false)",
+            "global_patch",
+            None,
+            None,
+            Some("$SUBSTRATE_HOME/config.yaml"),
         );
+        let global_json = serde_json::to_string(&global.source).unwrap();
+        assert!(global_json.contains("$SUBSTRATE_HOME/config.yaml"));
+        assert!(!global_json.contains("/tmp/secret/config.yaml"));
+    }
+
+    #[test]
+    fn test_world_disable_attribution_builder_redacts_env_token_in_source() {
+        let attribution = world_disable_attribution(
+            false,
+            Some(&ConfigExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![ConfigExplainSource {
+                    layer: "override_env".to_string(),
+                    path: None,
+                }],
+            }),
+        )
+        .expect("expected attribution");
+
+        assert_disable_attribution(
+            &attribution,
+            "world isolation disabled by env override SUBSTRATE_OVERRIDE_WORLD=disabled",
+            "override_env",
+            None,
+            Some("SUBSTRATE_OVERRIDE_WORLD"),
+            None,
+        );
+
+        let source_json = serde_json::to_string(&attribution.source).unwrap();
+        assert!(source_json.contains("SUBSTRATE_OVERRIDE_WORLD"));
+        assert!(!source_json.contains("disabled"));
     }
 
     #[test]
