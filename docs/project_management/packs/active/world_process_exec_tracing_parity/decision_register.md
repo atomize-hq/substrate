@@ -199,7 +199,7 @@ Scope:
 
 **Problem / Context**
 
-- `ActiveSpan.finish()` currently reads `SHIM_PARENT_SPAN` at finish time. Since span start can mutate `SHIM_PARENT_SPAN`, this can yield self-parent spans and break trace tree reconstruction. Process events depend on stable parent linkage to attach correctly.
+- At planning time, `ActiveSpan.finish()` read `SHIM_PARENT_SPAN` at finish time. Since span start could mutate `SHIM_PARENT_SPAN`, this yielded self-parent spans and broke trace tree reconstruction. The landed fix now captures the parent at span start and restores `SHIM_PARENT_SPAN` through span-lifecycle guards, but this decision remains the rationale for that invariant.
 
 **Option A — Capture parent at span start; enforce env stack discipline**
 
@@ -210,7 +210,7 @@ Scope:
 - **Cons:**
   - Requires a small change to span lifecycle state and some additional tests.
 - **Cascading implications:**
-  - `ActiveSpan` must store the captured parent span id (and restore env on drop/finish).
+  - The span lifecycle must store the captured parent span id and restore `SHIM_PARENT_SPAN` on drop/finish, whether that logic lives in `ActiveSpan` directly or in the owning shell/shim call site.
   - Requires tests covering nested spans and multiple finish paths.
 - **Risks:**
   - Minimal; mostly implementation correctness.
@@ -267,8 +267,8 @@ Scope:
 - **Cons:**
   - Adds some duplication (IDs appear in multiple records).
 - **Cascading implications:**
-  - Shell `command_start`/`command_complete` events SHOULD include `span_id` when a span exists.
-  - Shim span records SHOULD include `parent_cmd_id` (from env `SHIM_PARENT_CMD_ID`) when present.
+  - Shell `command_start`/`command_complete` events MUST include `span_id` when a span exists.
+  - Shim span records MUST include `parent_cmd_id` (from env `SHIM_PARENT_CMD_ID`) when present.
 - **Risks:**
   - None material; additive fields only.
 - **Unlocks:**

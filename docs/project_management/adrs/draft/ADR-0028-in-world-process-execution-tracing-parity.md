@@ -6,7 +6,7 @@
 - Owner(s): Shell + World-Agent + World runtime
 
 ## Scope
-- Feature directory: `docs/project_management/_archived/next/world_process_exec_tracing_parity/`
+- Feature directory: `docs/project_management/packs/active/world_process_exec_tracing_parity/`
 - Intended branch name(s): `feat/world-process-exec-tracing-parity`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
@@ -15,18 +15,18 @@
   - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Related Docs
-- Plan: `docs/project_management/_archived/next/world_process_exec_tracing_parity/plan.md`
-- Tasks: `docs/project_management/_archived/next/world_process_exec_tracing_parity/tasks.json`
-- Spec manifest: `docs/project_management/_archived/next/world_process_exec_tracing_parity/spec_manifest.md`
+- Plan: `docs/project_management/packs/active/world_process_exec_tracing_parity/plan.md`
+- Tasks: `docs/project_management/packs/active/world_process_exec_tracing_parity/tasks.json`
+- Spec manifest: `docs/project_management/packs/active/world_process_exec_tracing_parity/spec_manifest.md`
 - Specs:
-  - `docs/project_management/_archived/next/world_process_exec_tracing_parity/WPEP0-spec.md`
-  - `docs/project_management/_archived/next/world_process_exec_tracing_parity/WPEP1-spec.md`
-  - `docs/project_management/_archived/next/world_process_exec_tracing_parity/WPEP2-spec.md`
-  - `docs/project_management/_archived/next/world_process_exec_tracing_parity/WPEP3-spec.md`
-- Contract (if present): `docs/project_management/_archived/next/world_process_exec_tracing_parity/contract.md`
-- Decision Register: `docs/project_management/_archived/next/world_process_exec_tracing_parity/decision_register.md`
-- Impact Map: `docs/project_management/_archived/next/world_process_exec_tracing_parity/impact_map.md`
-- Manual Playbook: `docs/project_management/_archived/next/world_process_exec_tracing_parity/manual_testing_playbook.md`
+  - `docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP0-spec.md`
+  - `docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP1-spec.md`
+  - `docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP2-spec.md`
+  - `docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP3-spec.md`
+- Contract (if present): `docs/project_management/packs/active/world_process_exec_tracing_parity/contract.md`
+- Decision Register: `docs/project_management/packs/active/world_process_exec_tracing_parity/decision_register.md`
+- Impact Map: `docs/project_management/packs/active/world_process_exec_tracing_parity/impact_map.md`
+- Manual Playbook: `docs/project_management/packs/active/world_process_exec_tracing_parity/manual_testing_playbook.md`
 
 ## Executive Summary (Operator)
 
@@ -54,11 +54,13 @@ ADR_BODY_SHA256: ef913d97dd8c4a9789080513f362ee40d84cdc55c4a509effe2dbf00ec9c205
 - `crates/world/src/session.rs` + `crates/world/src/exec.rs`:
   - execution occurs via `std::process::Command` (direct or via wrapper), with no per-process telemetry.
 - `crates/trace/src/span.rs`:
-  - bug: `ActiveSpan.finish()` reads `SHIM_PARENT_SPAN` from the environment at finish time, after it was mutated at span start; this can yield self-parent spans, breaking tree reconstruction.
+  - command completion now reuses the parent captured at span start rather than re-reading `SHIM_PARENT_SPAN` at finish time.
+- `crates/shell/src/execution/routing/dispatch/exec.rs` + `crates/shim/src/exec/policy.rs`:
+  - shell and shim span lifecycles now enforce `SHIM_PARENT_SPAN` stack discipline (push current span while active; restore/unset on finish/drop).
 - `crates/shell/src/execution/invocation/runtime.rs`:
-  - script-mode `command_complete` events do not consistently include the `world_fs_strategy_*` contract fields.
+  - script-mode `command_complete` events include the `world_fs_strategy_*` contract fields.
 - `crates/replay/src/replay/executor.rs`:
-  - `replay_strategy` uses `cmd_id` to store a span id (internally consistent with `log_schema::COMMAND_ID`, but easy to mis-join against shell `cmd_id` without an explicit `span_id` field).
+  - `replay_strategy` carries both `cmd_id` and an explicit `span_id` field, so replay joins do not depend on consumers knowing that `cmd_id` stores the span id.
 - Redaction:
   - shim argv redaction is robust (`crates/shim/src/logger.rs`), including “flag consumes next arg” semantics.
   - `substrate_common::redact_sensitive()` is not sufficient for safe argv/env capture at process granularity (it does not redact values following flags).
@@ -411,12 +413,12 @@ Any record intended to trigger routing or cross-component attribution MUST carry
   - execute a world command that spawns children and assert `trace.jsonl` contains `world_process_start`/`world_process_exit` with correct `parent_span` and no secrets.
 
 ### Manual validation
-- Manual playbook: `docs/project_management/_archived/next/world_process_exec_tracing_parity/manual_testing_playbook.md`
+- Manual playbook: `docs/project_management/packs/active/world_process_exec_tracing_parity/manual_testing_playbook.md`
 
 ### Smoke scripts
-- Linux: `docs/project_management/_archived/next/world_process_exec_tracing_parity/smoke/linux-smoke.sh`
-- macOS: `docs/project_management/_archived/next/world_process_exec_tracing_parity/smoke/macos-smoke.sh`
-- Windows: `docs/project_management/_archived/next/world_process_exec_tracing_parity/smoke/windows-smoke.ps1`
+- Linux: `docs/project_management/packs/active/world_process_exec_tracing_parity/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/packs/active/world_process_exec_tracing_parity/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/packs/active/world_process_exec_tracing_parity/smoke/windows-smoke.ps1`
 
 ## Rollout / Backwards Compatibility
 - Policy: greenfield breaking is allowed
@@ -425,7 +427,7 @@ Any record intended to trigger routing or cross-component attribution MUST carry
 
 ## Decision Summary
 - Decision Register entries:
-  - `docs/project_management/_archived/next/world_process_exec_tracing_parity/decision_register.md`:
+  - `docs/project_management/packs/active/world_process_exec_tracing_parity/decision_register.md`:
     - DR-0001 (In-world tracing mechanism: ptrace vs in-world shims)
     - DR-0002 (Env data minimization policy: allowlist-only vs full redacted map)
     - DR-0003 (Failure behavior: degrade (omit events) vs fail execution)

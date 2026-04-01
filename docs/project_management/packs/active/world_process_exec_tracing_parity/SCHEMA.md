@@ -1,6 +1,7 @@
 # world_process_exec_tracing_parity — schema
 
 This document defines the authoritative trace schema surfaces introduced or tightened by ADR-0028.
+It captures the landed command-span fixes and the planned `world_process_*` family in a single place so the pack stays aligned with the current implementation.
 
 ## 1) Span records (command_start / command_complete)
 
@@ -9,11 +10,12 @@ This document defines the authoritative trace schema surfaces introduced or tigh
 - Deny MUST be unambiguous on completion records:
   - `outcome: "denied"` MUST be present on deny completion spans.
 
-### Completion ergonomics (recommended / required by spec slices)
-- `duration_ms` SHOULD be present on completion spans.
-- `policy_decision` SHOULD be present on completion spans when known at start.
+### Completion ergonomics
+- `duration_ms` MUST be present on completion spans.
+- `policy_decision` MUST be present on completion spans whenever the command was policy-evaluated; commands running with policy disabled MAY omit it.
 
 ### Joinability fields
+- `span_id` MUST be present on shell `command_start` and `command_complete` events when a span exists.
 - `parent_cmd_id` (optional):
   - When present, it MUST equal `SHIM_PARENT_CMD_ID` for the execution.
 
@@ -32,7 +34,7 @@ For any world execution summary (`component: "shell"` and `event_type: "command_
   - `process_events_dropped`: integer
 
 ### Joinability
-- When a span exists for the command, shell `command_start` and `command_complete` events SHOULD include:
+- When a span exists for the command, shell `command_start` and `command_complete` events MUST include:
   - `span_id: "spn_..."` (string)
 
 ### world_fs_strategy contract fields
@@ -41,7 +43,9 @@ For any world execution summary (`component: "shell"` and `event_type: "command_
   - `world_fs_strategy_final`
   - `world_fs_strategy_fallback_reason`
 
-## 3) World process event family (new)
+## 3) World process event family (planned; reserved by ADR-0028 / WPEP1-WPEP3)
+
+This family is the target schema for the new world subprocess telemetry path. The current runtime does not emit these records yet; this section exists so downstream schema and docs can align before implementation lands.
 
 ### Event types
 - `world_process_start`
@@ -95,7 +99,7 @@ When `SUBSTRATE_PREEXEC_RAW_LOG` is set:
 
 ## 5) Router-derived event families (Phase 8 additive; owned by ADR-0029)
 
-ADR-0028’s Phase 8 additive correlation vocabulary extends beyond `world_process_*` to cover router-derived events emitted by the host workflow router daemon (ADR-0029). This planning pack does not implement the router, but the canonical trace schema must reserve and document the derived event families so downstream joins are deterministic and non-heuristic.
+ADR-0028’s Phase 8 additive correlation vocabulary extends beyond `world_process_*` to cover router-derived events emitted by the host workflow router daemon (ADR-0029). This planning pack does not implement the router, but the canonical trace schema reserves and documents the derived event families so downstream joins are deterministic and non-heuristic.
 
 Authoritative sources:
 - ADR-0028 Phase 8 additive correlation vocabulary + matrix: `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`

@@ -7,7 +7,7 @@
   - completion spans include `duration_ms` and `policy_decision` when known.
   - deny completion spans include `outcome: "denied"`.
 - Improve cross-component joinability:
-  - shell `command_start`/`command_complete` events include `span_id` when a shim span exists.
+  - shell `command_start`/`command_complete` events MUST include `span_id` when a shim span exists.
   - replay `replay_strategy` events include `span_id` explicitly.
 - Preexec privacy posture:
   - canonical trace `builtin_command` records omit command bodies and include `command_omitted: true`.
@@ -17,7 +17,7 @@
 - Span correctness:
   - shim completion spans never self-parent (`parent_span != span_id` when parent_span is present).
 - Joinability:
-  - shell `command_complete` includes `span_id` for shimmed executions.
+  - shell `command_complete` MUST include `span_id` for shimmed executions.
   - replay `replay_strategy` includes `span_id`.
 - Deny clarity:
   - deny completion spans include `outcome: "denied"`.
@@ -28,4 +28,3 @@
 ## Out of scope (explicit)
 - Any world-agent API additions for `process_events`.
 - Any Linux ptrace capture implementation.
-

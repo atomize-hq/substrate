@@ -1,12 +1,61 @@
 use anyhow::Result;
-use std::path::Path;
+use std::{env, ffi::OsString, path::Path};
 use substrate_broker::{policy_mode, quick_check, Decision, PolicyMode};
 use substrate_trace::{
     create_span_builder, init_trace, ActiveSpan, PolicyDecision as TracePolicyDecision,
 };
 
 pub(crate) struct PolicyContext {
-    pub(crate) span: Option<ActiveSpan>,
+    pub(crate) span: Option<PolicySpan>,
+}
+
+pub(crate) struct PolicySpan {
+    span: ActiveSpan,
+    _parent_span_guard: ParentSpanGuard,
+}
+
+struct ParentSpanGuard {
+    previous: Option<OsString>,
+}
+
+impl ParentSpanGuard {
+    fn set_current(span_id: &str) -> Self {
+        let previous = env::var_os("SHIM_PARENT_SPAN");
+        env::set_var("SHIM_PARENT_SPAN", span_id);
+        Self { previous }
+    }
+}
+
+impl Drop for ParentSpanGuard {
+    fn drop(&mut self) {
+        match self.previous.take() {
+            Some(value) => env::set_var("SHIM_PARENT_SPAN", value),
+            None => env::remove_var("SHIM_PARENT_SPAN"),
+        }
+    }
+}
+
+impl PolicySpan {
+    pub(crate) fn set_outcome(&mut self, outcome: &'static str) {
+        self.span.set_outcome(outcome);
+    }
+
+    pub(crate) fn finish(
+        self,
+        exit_code: i32,
+        scopes_used: Vec<String>,
+        fs_diff: Option<substrate_common::FsDiff>,
+    ) -> Result<()> {
+        let PolicySpan {
+            span,
+            _parent_span_guard,
+        } = self;
+        span.finish(exit_code, scopes_used, fs_diff)
+    }
+
+    pub(crate) fn get_span_id(&self) -> &str {
+        self.span.get_span_id()
+    }
 }
 
 pub(crate) enum PolicyResult {
@@ -88,7 +137,7 @@ fn start_span(
     command_str: &str,
     cwd: &Path,
     policy_decision: Option<TracePolicyDecision>,
-) -> Result<Option<ActiveSpan>> {
+) -> Result<Option<PolicySpan>> {
     let mut builder = match create_span_builder() {
         Ok(builder) => builder
             .with_command(command_str)
@@ -104,10 +153,10 @@ fn start_span(
     }
 
     let span = match builder.start() {
-        Ok(span) => {
-            std::env::set_var("SHIM_PARENT_SPAN", span.get_span_id());
-            Some(span)
-        }
+        Ok(span) => Some(PolicySpan {
+            _parent_span_guard: ParentSpanGuard::set_current(span.get_span_id()),
+            span,
+        }),
         Err(e) => {
             eprintln!("substrate: failed to create span: {}", e);
             None
@@ -121,7 +170,7 @@ fn start_span(
 mod tests {
     use super::*;
     use serial_test::serial;
-    use std::path::Path;
+    use std::{env, path::Path};
     use substrate_broker::{set_global_broker, set_observe_only, BrokerHandle};
 
     #[test]
@@ -152,5 +201,63 @@ mod tests {
         }
 
         set_observe_only(true);
+    }
+
+    #[test]
+    #[serial]
+    fn start_span_restores_previous_parent_span_on_finish() {
+        let previous = env::var_os("SHIM_PARENT_SPAN");
+        env::set_var("SHIM_PARENT_SPAN", "spn_previous");
+        let _ = substrate_trace::set_global_trace_context(substrate_trace::TraceContext::default());
+
+        let span = start_span("echo ok", Path::new("."), None)
+            .expect("span setup should succeed")
+            .expect("span should be created");
+        let current_span_id = span.get_span_id().to_string();
+        assert_eq!(
+            env::var("SHIM_PARENT_SPAN").ok(),
+            Some(current_span_id),
+            "expected active shim span to be published while command is running"
+        );
+
+        span.finish(0, vec![], None)
+            .expect("span finish should succeed");
+        assert_eq!(
+            env::var("SHIM_PARENT_SPAN").ok(),
+            Some("spn_previous".to_string()),
+            "expected previous parent span to be restored after finish"
+        );
+
+        match previous {
+            Some(value) => env::set_var("SHIM_PARENT_SPAN", value),
+            None => env::remove_var("SHIM_PARENT_SPAN"),
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn start_span_unsets_parent_span_when_none_existed() {
+        let previous = env::var_os("SHIM_PARENT_SPAN");
+        env::remove_var("SHIM_PARENT_SPAN");
+        let _ = substrate_trace::set_global_trace_context(substrate_trace::TraceContext::default());
+
+        let span = start_span("echo ok", Path::new("."), None)
+            .expect("span setup should succeed")
+            .expect("span should be created");
+        assert!(
+            env::var_os("SHIM_PARENT_SPAN").is_some(),
+            "expected shim span to set SHIM_PARENT_SPAN while active"
+        );
+
+        drop(span);
+        assert!(
+            env::var_os("SHIM_PARENT_SPAN").is_none(),
+            "expected SHIM_PARENT_SPAN to be unset when no previous parent existed"
+        );
+
+        match previous {
+            Some(value) => env::set_var("SHIM_PARENT_SPAN", value),
+            None => env::remove_var("SHIM_PARENT_SPAN"),
+        }
     }
 }

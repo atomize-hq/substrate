@@ -5,7 +5,7 @@
 The Substrate Trace module (`crates/trace`) provides comprehensive span-based tracing for command execution across the Substrate ecosystem. It captures detailed execution context, policy decisions, and system state to enable command replay, security auditing, and graph-based analysis of command relationships.
 
 Canonical trace schema/correlation vocabulary (Phase 8 cross-cutting spines for LLM/agents/router/workflows):
-- Source of truth: `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md` (Phase 8 additive correlation vocabulary + required/optional matrix)
+- Source of truth: `docs/project_management/packs/active/world_process_exec_tracing_parity/SCHEMA.md` for the pack-level schema and `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md` for the ADR decision record.
 - Phase 8 registry/progress: `docs/project_management/packs/PHASE_8_CROSS_CUTTING_DECISION_REGISTRY.md`
 
 ### Key Features
@@ -62,6 +62,17 @@ Operator note (non-negotiable):
 
 ### Command Span Schema (`command_start` / `command_complete`)
 
+The current runtime already lands these fields on completion spans:
+- `span_id`
+- `parent_span` captured at span start
+- `parent_cmd_id` when available
+- `duration_ms`
+- `policy_decision` when known at start
+- `world_fs_strategy_primary`
+- `world_fs_strategy_final`
+- `world_fs_strategy_fallback_reason`
+- `outcome` on deny completions
+
 ```json
 {
   "ts": "2024-01-01T00:00:00Z",
@@ -79,6 +90,11 @@ Operator note (non-negotiable):
   "cwd": "/projects/foo",
   "cmd": "npm install",
   "exit": 0,
+  "duration_ms": 123,
+  "parent_cmd_id": "cmd_yyy",
+  "world_fs_strategy_primary": "overlay",
+  "world_fs_strategy_final": "host",
+  "world_fs_strategy_fallback_reason": "none",
   "scopes_used": ["fs.write:/projects/foo/node_modules"],
   "fs_diff": {
     "writes": ["node_modules/..."],
@@ -102,6 +118,25 @@ Operator note (non-negotiable):
 }
 ```
 
+### Planned World Process Telemetry (`world_process_*`)
+
+`world_process_*` is the reserved/planned event family for subprocess exec/exit telemetry introduced by ADR-0028. The current runtime does not emit these records yet; the authoritative target schema lives in [SCHEMA.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/active/world_process_exec_tracing_parity/SCHEMA.md).
+
+Planned event names:
+- `world_process_start`
+- `world_process_exit`
+
+Planned required join keys:
+- `session_id`
+- `world_id`
+- `parent_span`
+- `parent_cmd_id` when available
+
+Planned record posture:
+- `argv` is redacted or explicitly omitted.
+- `env` is allowlist-only and redacted.
+- `process_events_status` and `process_events_reason` describe degrade/truncation behavior at the protocol layer.
+
 ### Phase 8 Additive Correlation (selected fields; operator-facing summary)
 
 These are canonical cross-feature correlation identifiers. Details and required/optional classification live in ADR-0028.
@@ -111,7 +146,7 @@ These are canonical cross-feature correlation identifiers. Details and required/
 - `run_id`: unit-of-work identifier inside an orchestration session; required on structured agent events and other run-scoped families.
 - `agent_id`: actor/principal identifier (`human` for direct operator actions; agent inventory id for agent-driven records).
 - `backend_id`: backend identifier in `<kind>:<name>` form (e.g., `cli:codex`, `api:openai`) when a specific backend is involved.
-- `world_id`: world boundary identity; required on in-world telemetry families (e.g., `world_process_*`) and any record that describes an in-world boundary/session.
+- `world_id`: world boundary identity; required on in-world telemetry families (e.g., planned `world_process_*`) and any record that describes an in-world boundary/session.
 
 ### Router-Derived Event Families (workflow router daemon; Phase 8)
 
