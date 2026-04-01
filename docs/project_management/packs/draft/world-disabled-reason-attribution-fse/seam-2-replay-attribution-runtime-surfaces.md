@@ -2,14 +2,15 @@
 seam_id: SEAM-2
 seam_slug: replay-attribution-runtime-surfaces
 type: capability
-status: proposed
-execution_horizon: next
+status: landed
+execution_horizon: future
 plan_version: v1
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+    - governance/seam-1-closeout.md
   required_threads:
     - THR-01
     - THR-02
@@ -19,16 +20,16 @@ basis:
     - telemetry field names, enum values, or omission rules change
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: reserved_final_slice
-  status: pending
+  status: passed
 open_remediations: []
 ---
 
@@ -104,13 +105,13 @@ open_remediations: []
   - Risk:
     - a narrow helper contract may still prove insufficient once wired into both stderr and trace output
   - De-risk plan:
-    - keep `SEAM-2` provisional until `SEAM-1` publishes evidence and revalidate before promotion
+    - bind `SEAM-2` directly to the published `SEAM-1` closeout and revalidate again before landing if the helper/result contract drifts
 - **Rollout / safety**:
   - Runtime behavior remains bounded to existing replay surfaces.
   - Safety comes from exact-string contracts, additive-only telemetry, and the promise not to change replay selection, backend, timeout, or exit-code behavior.
 - **Downstream decomposition context**:
   - Why this seam is `active`, `next`, or `future`
-    - `next` because it is second on the critical path and should follow a published `SEAM-1` contract rather than re-infer foundation semantics.
+    - `active` because `governance/seam-1-closeout.md` now publishes the upstream `C-01` / `C-02` handoff this seam consumes.
   - Which threads matter most
     - `THR-03`
     - `THR-04`
@@ -121,8 +122,8 @@ open_remediations: []
     - telemetry object gating
     - omission rules for replay-local opt-out cases
     - evidence that no additional replay lines or secret-bearing fields were introduced
-  - Provisional-deeper-planning note
-    - if seam-local work begins before `SEAM-1` publishes, deeper planning should stay provisional and spike-grade only.
+  - Active-planning note
+    - seam-local planning now binds directly to the published `SEAM-1` closeout and should treat later helper/result drift as a stale-trigger revalidation event, not as a missing-input blocker.
 - **Expected seam-exit concerns**:
   - Contracts likely to publish:
     - `C-03`

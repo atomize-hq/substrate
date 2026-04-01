@@ -47,6 +47,7 @@ use nix::sys::termios::{
     Termios,
 };
 pub(crate) use path_env::{canonicalize_or, enforce_caged_destination};
+pub use replay::replay_unknown_effective_disable_attribution_fixture;
 pub(crate) use replay::{handle_replay_command, handle_trace_command};
 #[cfg(target_os = "linux")]
 use std::os::unix::io::AsRawFd;

@@ -209,6 +209,17 @@ Command completion spans record snapshot metadata without logging raw policy con
 - `policy_snapshot_schema` (number, optional): snapshot schema version when `policy_resolution_mode == "snapshot_v1"`.
 - `policy_snapshot_hash` (string, optional): stable SHA-256 hex digest of the serialized snapshot when `policy_resolution_mode == "snapshot_v1"`.
 
+### Replay Strategy Telemetry
+
+`replay_strategy` entries emitted by `crates/replay/src/replay/executor.rs` mirror the replay summary and warning copy:
+
+- `origin_reason` stores the exact human-readable fragment shown in the replay summary or host warning.
+- `origin_reason_code` keeps replay-local values (`flag_world`, `flag_no_world`, `env_disabled`, `flip_world`, `recorded_origin`) and extends with the effective-disable values `world_disabled_override_env`, `world_disabled_workspace_patch`, `world_disabled_global_patch`, and `world_disabled_unknown`.
+- `world_disable_source` is optional and only appears for the effective-disable values above.
+- `world_disable_source` uses `key`, `layer`, and `value_display` always, with optional `env` or `path_display` only when the source is known.
+- The runtime normalizes `source_unknown` to `layer: unknown` and omits `env` and `path_display` in that case.
+- Replay-local opt-outs do not emit `world_disable_source`.
+
 Verbose replay outputs (`--replay-verbose` or JSON mode) print `[replay] scopes: [...]` adjacent
 to the world strategy line so the CLI summary mirrors the `scopes_used` array above. When the
 shell falls back to host execution it now prefixes warnings with `shell world-agent path (...)`

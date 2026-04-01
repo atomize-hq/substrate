@@ -4,8 +4,8 @@ pack_version: v1
 pack_status: extracted
 source_ref: world-disabled-reason-attribution.zip::world-disabled-reason-attribution/
 execution_horizon:
-  active_seam: SEAM-1
-  next_seam: SEAM-2
+  active_seam: null
+  next_seam: null
 ---
 
 # Scope Brief - world-disabled-reason-attribution
@@ -40,7 +40,7 @@ execution_horizon:
   - Effective-disable attribution reuses the winning-layer order already captured by the source pack: override env when no workspace exists, workspace patch, global patch, then unknown-source fallback.
   - Replay emits no additional replay lines outside the origin summary and the existing host warning.
   - Telemetry changes must be additive only and must preserve existing `replay_strategy` fields.
-  - This extracted pack must remain one level above seam decomposition.
+  - The extracted pack begins one level above seam decomposition; promoted seams may later add threaded seam artifacts while future seams remain seam briefs.
 - **External systems / dependencies**:
   - Replay routing in `crates/shell/src/execution/routing/replay.rs`
   - Config provenance and redaction behavior in `crates/shell/src/execution/config_model.rs` or an adjacent helper seam
