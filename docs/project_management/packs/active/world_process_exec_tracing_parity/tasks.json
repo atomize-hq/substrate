@@ -554,7 +554,7 @@
       "name": "WPEP3 tests",
       "type": "test",
       "phase": "WPEP3",
-      "status": "pending",
+      "status": "completed",
       "description": "Add/adjust tests for redaction + argv/env capture per WPEP3.",
       "references": [
         "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP3-spec.md"
