@@ -295,6 +295,7 @@ impl SessionWorld {
             world_fs_strategy_primary: fs_strategy_meta.as_ref().map(|m| m.primary),
             world_fs_strategy_final: fs_strategy_meta.as_ref().map(|m| m.final_strategy),
             world_fs_strategy_fallback_reason: fs_strategy_meta.as_ref().map(|m| m.fallback_reason),
+            process_telemetry: substrate_common::ProcessTelemetry::default(),
         })
     }
 

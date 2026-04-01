@@ -1,6 +1,6 @@
 use super::*;
 use crate::execution::agent_events::{self, clear_agent_event_sender, init_event_channel};
-use agent_api_types::ExecuteStreamFrame;
+use agent_api_types::{ExecuteStreamFrame, ProcessTelemetry};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use serde_json::Value as JsonValue;
@@ -28,6 +28,7 @@ fn consume_agent_stream_buffer_emits_agent_events() {
                 span_id: "spn_test".into(),
                 scopes_used: vec!["scope:a".into()],
                 fs_diff: None,
+                process_telemetry: ProcessTelemetry::default(),
             },
         ];
 

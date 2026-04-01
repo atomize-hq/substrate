@@ -5,7 +5,7 @@ use agent_api_client::{AgentClient, Transport};
 use agent_api_types::{
     ExecuteRequest, ExecuteResponse, PolicySnapshotV3, PolicySnapshotWorldFsDimensionV3,
     PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
-    WorldFsMode,
+    ProcessTelemetry, WorldFsMode,
 };
 use anyhow::{anyhow, Context, Result};
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
@@ -358,6 +358,7 @@ impl WindowsWslBackend {
             world_fs_strategy_primary: None,
             world_fs_strategy_final: None,
             world_fs_strategy_fallback_reason: None,
+            process_telemetry: ProcessTelemetry::not_supported_platform(),
         };
         if let Some(ref mut diff) = result.fs_diff {
             normalize_diff(diff);

@@ -121,6 +121,7 @@ async fn execute_stream_cancel_interrupts_live_non_pty_command() {
             ExecuteStreamFrame::Exit {
                 exit,
                 span_id: exit_span,
+                process_telemetry: _,
                 ..
             } => {
                 assert_eq!(exit_span, span_id);
