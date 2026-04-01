@@ -248,7 +248,7 @@
       "name": "WPEP0 integration (final merge)",
       "type": "integration",
       "phase": "WPEP0",
-      "status": "in_progress",
+      "status": "pending",
       "description": "Merge WPEP0 core + platform parity fixes.",
       "references": [
         "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP0-spec.md",
@@ -286,7 +286,7 @@
       "name": "CI checkpoint 1",
       "type": "ops",
       "phase": "CP1",
-      "status": "in_progress",
+      "status": "pending",
       "description": "Run cross-platform CI gates after WPEP0 boundary.",
       "references": [
         "docs/project_management/packs/active/world_process_exec_tracing_parity/ci_checkpoint_plan.md"
@@ -520,7 +520,7 @@
       "name": "WPEP3 code",
       "type": "code",
       "phase": "WPEP3",
-      "status": "pending",
+      "status": "completed",
       "description": "Implement redaction hardening + argv/env capture for process telemetry per WPEP3.",
       "references": [
         "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP3-spec.md",
