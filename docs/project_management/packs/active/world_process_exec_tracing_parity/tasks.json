@@ -182,7 +182,7 @@
       "name": "WPEP0 integration (macos parity)",
       "type": "integration",
       "phase": "WPEP0",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Resolve macOS-specific compile/test parity issues for WPEP0.",
       "references": [
         "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP0-spec.md"
