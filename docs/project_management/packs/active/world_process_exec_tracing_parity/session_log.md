@@ -89,3 +89,20 @@
 - Orchestration branch: `feat/world-process-exec-tracing-parity`
 - Dispatch:
   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/packs/active/world_process_exec_tracing_parity" SLICE_ID="WPEP0" LAUNCH_CODEX=1`
+
+## END — 2026-04-01T16:42:31Z — code — WPEP0-code
+- Worktree: `wt/world-process-exec-tracing-parity-wpep0-code` (not created)
+- Branch: `world-process-exec-tracing-parity-wpep0-code`
+- HEAD: `NOT_CREATED`
+- Codex: `CODEX_CODE_EXIT=missing (launcher exited 2 before Codex start)`
+- Finisher summary:
+  - `TASK_BRANCH=world-process-exec-tracing-parity-wpep0-code`
+  - `WORKTREE=wt/world-process-exec-tracing-parity-wpep0-code (not created)`
+  - `HEAD=NOT_CREATED`
+  - `COMMITS=NOT_RUN`
+  - `CHECKS=NOT_RUN`
+  - `SMOKE_RUN=NOT_RUN`
+  - `MERGED_TO_ORCH=NO`
+- Artifacts:
+  - `CODEX_CODE_LAST_MESSAGE_PATH=NOT_CREATED`
+- Blockers: `make triad-task-start-pair ... LAUNCH_CODEX=1` exited 2 because dependency `F0-exec-preflight` is still `pending`

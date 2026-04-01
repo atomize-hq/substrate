@@ -47,7 +47,7 @@
       "name": "WPEP0 code",
       "type": "code",
       "phase": "WPEP0",
-      "status": "in_progress",
+      "status": "blocked",
       "description": "Implement span correctness + joinability foundation per WPEP0.",
       "references": [
         "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP0-spec.md",
