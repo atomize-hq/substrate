@@ -459,3 +459,10 @@
   - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/packs/active/world_process_exec_tracing_parity/logs/WPEP3/test/events.jsonl`
   - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/packs/active/world_process_exec_tracing_parity/logs/WPEP3/test/stderr.log`
 - Blockers: `NONE`
+
+## START — 2026-04-01T20:00:48Z — integ — WPEP3-integ-core
+- Worktree: `wt/world-process-exec-tracing-parity-wpep3-integ-core`
+- Branch: `world-process-exec-tracing-parity-wpep3-integ-core`
+- Orchestration branch: `feat/world-process-exec-tracing-parity`
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="docs/project_management/packs/active/world_process_exec_tracing_parity" TASK_ID="WPEP3-integ-core" LAUNCH_CODEX=1 FORCE=1`
