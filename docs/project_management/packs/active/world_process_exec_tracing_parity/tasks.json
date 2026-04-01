@@ -17,7 +17,7 @@
       "name": "Execution preflight gate (feature start)",
       "type": "ops",
       "phase": "F0",
-      "status": "pending",
+      "status": "completed",
       "description": "Validate Planning Pack mechanical invariants and smoke script syntax before starting WPEP0.",
       "references": [
         "docs/project_management/packs/active/world_process_exec_tracing_parity/plan.md",
