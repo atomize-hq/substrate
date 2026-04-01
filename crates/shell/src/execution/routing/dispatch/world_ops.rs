@@ -1583,7 +1583,7 @@ pub(crate) fn consume_agent_stream_buffer(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn consume_agent_stream_buffer_with_meta(
+pub(crate) fn consume_agent_stream_buffer_with_meta(
     agent_label: &str,
     buffer: &mut Vec<u8>,
     active_span_id: &mut Option<String>,

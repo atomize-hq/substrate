@@ -389,6 +389,9 @@ impl ReplWorldAgentStub {
                             "stderr_b64": BASE64.encode(&output.stderr),
                             "scopes_used": [],
                             "fs_diff": serde_json::Value::Null,
+                            "process_events": [],
+                            "process_events_status": "unavailable",
+                            "process_events_reason": "backend_disabled",
                         })
                         .to_string();
                         write_http_json(&mut stream, "200 OK", &resp).await;

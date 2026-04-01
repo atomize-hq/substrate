@@ -929,7 +929,33 @@ mod tests {
             span_id: "spn_test".into(),
             scopes_used: vec!["tcp:example.com:443".into()],
             fs_diff: None,
-            process_telemetry: ProcessTelemetry::default(),
+            process_telemetry: ProcessTelemetry {
+                process_events: vec![ProcessEvent {
+                    event_type: ProcessEventType::WorldProcessStart,
+                    ts: "2026-04-01T00:00:00Z".into(),
+                    ts_unix_ns: 1_743_465_600_000_000_000,
+                    session_id: "ses_test".into(),
+                    world_id: "wld_test".into(),
+                    pid: 42,
+                    ppid: 1,
+                    cwd: "/tmp".into(),
+                    parent_span: "spn_parent".into(),
+                    parent_cmd_id: Some("cmd_test".into()),
+                    argv: None,
+                    argv_omitted: Some(true),
+                    exe: None,
+                    exit_code: None,
+                    signal: None,
+                    duration_ms: None,
+                    env: None,
+                }],
+                process_events_status: ProcessEventsStatus::Truncated,
+                process_events_reason: Some("capture_overflow".into()),
+                process_events_dropped: Some(3),
+                process_events_max: None,
+                process_events_backend: None,
+                process_events_error: None,
+            },
         };
 
         let json = serde_json::to_string(&frame).expect("serialize");
@@ -947,14 +973,16 @@ mod tests {
                 assert_eq!(span_id, "spn_test");
                 assert_eq!(scopes_used, vec!["tcp:example.com:443".to_string()]);
                 assert!(fs_diff.is_none());
+                assert_eq!(process_telemetry.process_events.len(), 1);
                 assert_eq!(
                     process_telemetry.process_events_status,
-                    ProcessEventsStatus::Unavailable
+                    ProcessEventsStatus::Truncated
                 );
                 assert_eq!(
                     process_telemetry.process_events_reason.as_deref(),
-                    Some("backend_disabled")
+                    Some("capture_overflow")
                 );
+                assert_eq!(process_telemetry.process_events_dropped, Some(3));
             }
             other => panic!("unexpected frame: {:?}", other),
         }
