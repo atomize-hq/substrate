@@ -81,6 +81,18 @@ These are the binding contract statements this seam must land and later publish 
   - Host warning remains: `[replay] warn: running on host (<reason>)`
   - Replay does not emit additional replay lines outside the existing origin summary and host warning.
 - **C-04 (replay_strategy telemetry contract)**:
+  - The replay runtime publishes only this narrowed effective-disable layer set:
+    - `override_env`
+    - `workspace_patch`
+    - `global_patch`
+    - `unknown`
+  - The corresponding runtime `origin_reason_code` values are:
+    - `world_disabled_override_env`
+    - `world_disabled_workspace_patch`
+    - `world_disabled_global_patch`
+    - `world_disabled_unknown`
+  - Helper `source_unknown` maps to the runtime `unknown` case and is the only safe fallback when provenance is unavailable.
+  - A reachable helper `default` layer is not a valid runtime publication under `C-03` / `C-04`; if the helper can still produce `default` for a replay path, that path remains a pre-land blocker until this contract is explicitly revised.
   - `origin_reason` equals the same exact fragment used in replay stderr.
   - `origin_reason_code` gains only these additive effective-disable values:
     - `world_disabled_override_env`
