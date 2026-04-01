@@ -80,9 +80,9 @@ Horizon policy for this extracted pack:
   - **Consumer seam(s)**: `SEAM-3`
   - **Carried contract IDs**: `C-03`
   - **Purpose**: publish the final replay copy contract for origin summaries and host warnings so docs/tests/smoke can lock it in.
-  - **State**: `defined`
+  - **State**: `published`
   - **Revalidation trigger**: reason fragments, recorded-host punctuation, host-warning cadence, or replay line count changes.
-  - **Satisfied by**: `SEAM-2` produces runtime output that matches the exact fragments and formatting already locked in the source contract.
+  - **Satisfied by**: `governance/seam-2-closeout.md` now publishes the landed replay stderr contract, backed by `crates/shell/src/execution/routing/replay.rs`, `crates/shell/tests/replay_world.rs`, and commit `4c28c166`.
   - **Notes**: this thread is the main user-visible contract handoff into the conformance seam.
 
 - **Thread ID**: `THR-04`
@@ -90,9 +90,9 @@ Horizon policy for this extracted pack:
   - **Consumer seam(s)**: `SEAM-3`
   - **Carried contract IDs**: `C-04`
   - **Purpose**: publish the final machine-readable replay provenance contract for conformance, docs, and parity validation.
-  - **State**: `defined`
+  - **State**: `published`
   - **Revalidation trigger**: telemetry field names, enum values, emission gates, omission rules, or redaction keys change.
-  - **Satisfied by**: `SEAM-2` emits additive `replay_strategy` provenance fields exactly as named by the source telemetry contract.
+  - **Satisfied by**: `governance/seam-2-closeout.md` now publishes the landed replay telemetry contract, backed by `crates/replay/src/replay/executor.rs`, `crates/replay/tests/planner_executor.rs`, `crates/shell/tests/replay_world.rs`, and commit `05ca9bd6`.
   - **Notes**: Linux/macOS/Windows parity depends on this thread publishing the same schema and values.
 
 ## Dependency graph
