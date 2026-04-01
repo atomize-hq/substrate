@@ -1293,6 +1293,44 @@ fn replay_recorded_host_origin_attributes_global_config() {
 }
 
 #[test]
+fn replay_unknown_source_fallback_uses_published_contract() {
+    let fixture =
+        substrate_shell::execution::replay_unknown_effective_disable_attribution_fixture();
+    assert_eq!(
+        fixture.get("summary").and_then(|value| value.as_str()),
+        Some(
+            "[replay] origin: host (recorded; world isolation disabled by effective config (source unknown))"
+        )
+    );
+    assert_eq!(
+        fixture.get("reason_code").and_then(|value| value.as_str()),
+        Some("world_disabled_unknown")
+    );
+    assert_eq!(
+        fixture.get("world_disable_source"),
+        Some(&json!({
+            "key": "world.enabled",
+            "layer": "unknown",
+            "value_display": false,
+        }))
+    );
+    assert!(
+        fixture
+            .get("world_disable_source")
+            .and_then(|value| value.get("env"))
+            .is_none(),
+        "unknown-source fallback must not invent an env token: {fixture:?}"
+    );
+    assert!(
+        fixture
+            .get("world_disable_source")
+            .and_then(|value| value.get("path_display"))
+            .is_none(),
+        "unknown-source fallback must not invent a path display: {fixture:?}"
+    );
+}
+
+#[test]
 fn replay_flip_world_to_host_reports_reason() {
     let fixture = ShellEnvFixture::new();
     let cwd = fixture.home().join("workspace-flip-world");

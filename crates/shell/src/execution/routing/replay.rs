@@ -294,6 +294,36 @@ impl ReplayWorldMode {
     }
 }
 
+#[doc(hidden)]
+pub fn replay_unknown_effective_disable_attribution_fixture() -> serde_json::Value {
+    let mode = ReplayWorldMode {
+        recorded: ExecutionOrigin::Host,
+        recorded_source: RecordedOriginSource::Span,
+        selected: ExecutionOrigin::Host,
+        source: ReplayWorldSource::Recorded,
+        flipped: false,
+        effective_disable_attribution: Some(WorldDisableAttribution {
+            reason: "world isolation disabled by effective config (source unknown)",
+            source: crate::execution::config_model::WorldDisableSource {
+                key: "world.enabled",
+                layer: "source_unknown",
+                value_display: false,
+                flag: None,
+                env: None,
+                path_display: None,
+            },
+        }),
+    };
+
+    json!({
+        "summary": mode.summary(),
+        "reason_code": mode.reason_code(),
+        "world_disable_source": mode
+            .effective_disable_source()
+            .expect("expected unknown-source effective-disable attribution"),
+    })
+}
+
 fn resolve_replay_effective_disable_attribution(cwd: &Path) -> Option<WorldDisableAttribution> {
     let cli = CliConfigOverrides {
         world_enabled: None,
