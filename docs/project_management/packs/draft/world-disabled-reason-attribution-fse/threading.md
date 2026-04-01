@@ -2,12 +2,12 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-1`
-  - Inferred from the source pack's `WDRA0` first position and from the fact that every later runtime and conformance surface consumes its classifier/redaction contract.
-- **Next seam**: `SEAM-2`
-  - Inferred from the source pack's `WDRA1` second position and from its dependence on `SEAM-1` for runtime copy and telemetry wiring.
-- **Future seam**: `SEAM-3`
-  - Kept at seam-brief depth because it is lock-in and parity work that should validate already-published runtime behavior.
+- **Active seam**: `SEAM-2`
+  - `SEAM-1` closeout now publishes `C-01` / `C-02` and marks `promotion_readiness: ready`, so the replay-runtime seam can move into active planning and execution readiness.
+- **Next seam**: `SEAM-3`
+  - `SEAM-3` is now the immediate downstream consumer because it still depends on `SEAM-2` publishing runtime copy and telemetry truth.
+- **Previous active seam**: `SEAM-1`
+  - Its closeout is now the authoritative upstream basis for `THR-01` and `THR-02`.
 
 Horizon policy for this extracted pack:
 
@@ -60,20 +60,20 @@ Horizon policy for this extracted pack:
   - **Consumer seam(s)**: `SEAM-2`
   - **Carried contract IDs**: `C-01`
   - **Purpose**: publish a replay-safe classifier contract that runtime copy and telemetry can consume without redefining precedence or redaction.
-  - **State**: `defined`
+  - **State**: `revalidated`
   - **Revalidation trigger**: helper result fields, layer vocabulary, or helper placement changes.
-  - **Satisfied by**: `SEAM-1` makes the classifier result concrete enough that `SEAM-2` can wire replay output and telemetry against one named contract.
-  - **Notes**: this is the first critical-path handoff and is the main blocker for `SEAM-2` deep planning.
+  - **Satisfied by**: `governance/seam-1-closeout.md` now publishes the landed `C-01` handoff, and `SEAM-2` has revalidated that its runtime adoption plan will consume that published helper contract directly.
+  - **Notes**: this remains the first critical-path handoff, but it is no longer a blocker for `SEAM-2` activation.
 
 - **Thread ID**: `THR-02`
   - **Producer seam**: `SEAM-1`
   - **Consumer seam(s)**: `SEAM-2`, `SEAM-3`
   - **Carried contract IDs**: `C-02`
   - **Purpose**: keep provenance precedence and redaction semantics single-source across runtime surfaces and conformance work.
-  - **State**: `defined`
+  - **State**: `revalidated`
   - **Revalidation trigger**: ADR-0037 winning-layer interpretation changes, workspace-versus-override rule changes, tokenized path-display changes, or unknown-source fallback changes.
-  - **Satisfied by**: one shared provenance contract names the winning layer, the tokenized display, the allowlisted env token, and the fallback behavior.
-  - **Notes**: the workspace-exists rule is load-bearing and must remain explicit.
+  - **Satisfied by**: `governance/seam-1-closeout.md` publishes the landed provenance/redaction contract, and `SEAM-2` now revalidates against that closeout-backed truth rather than against provisional seam intent.
+  - **Notes**: the workspace-exists rule remains load-bearing, and any later helper/result drift still forces downstream revalidation before `SEAM-2` lands.
 
 - **Thread ID**: `THR-03`
   - **Producer seam**: `SEAM-2`
@@ -109,13 +109,13 @@ flowchart LR
 ## Critical path
 
 1. `SEAM-1` first:
-   - the source pack's runtime and conformance work both rely on one shared classifier and one shared provenance/redaction contract
-   - without this seam, every later surface risks precedence and redaction drift
+   - this seam has now landed and published the shared classifier plus provenance/redaction contract
+   - its closeout is the authoritative upstream handoff for all later work
 2. `SEAM-2` second:
-   - this seam publishes the actual replay behavior that operators and trace consumers will see
-   - it cannot safely proceed beyond provisional planning until `THR-01` and `THR-02` are published
+   - this seam now owns the active window because it publishes the replay behavior that operators and trace consumers will actually see
+   - it can proceed against the revalidated `THR-01` / `THR-02` handoff from `SEAM-1`
 3. `SEAM-3` third:
-   - this seam should lock tests, docs, smoke wrappers, and platform parity against already-published runtime contracts rather than against inferred future behavior
+   - this seam remains queued behind `SEAM-2` because parity and lock-in should validate already-published runtime truth rather than speculative intermediate behavior
 
 ## Workstreams
 

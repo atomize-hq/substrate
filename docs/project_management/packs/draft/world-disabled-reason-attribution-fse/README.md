@@ -3,7 +3,7 @@
 Source: `world-disabled-reason-attribution.zip::world-disabled-reason-attribution/`
 
 This pack re-expresses the deep-researched ADR-0038 planning pack as a governance-ready seam pack for `feature-seam-extractor-v2-3`.
-It preserves the source pack's contract detail, telemetry shape, redaction rules, platform parity expectations, and execution ordering while intentionally stopping one level above seam-local decomposition.
+It preserves the source pack's contract detail, telemetry shape, redaction rules, platform parity expectations, and execution ordering; promoted seams may now carry seam-local decomposition while future seams remain seam briefs.
 
 Restated scope and assumptions:
 
@@ -23,14 +23,15 @@ Start here:
 
 Execution horizon:
 
-- Active seam: `SEAM-1`
-- Next seam: `SEAM-2`
+- Active seam: `SEAM-2`
+- Next seam: `SEAM-3`
+- Previous active seam: `SEAM-1` (its closeout now publishes `C-01` and `C-02`)
 
 Horizon inference:
 
-- `SEAM-1` is inferred as active because the source pack's `WDRA0` slice is the first critical-path dependency for every later surface.
-- `SEAM-2` is inferred as next because the source pack's `WDRA1` slice depends on the shared classifier and publishes the runtime behavior that downstream conformance work must consume.
-- `SEAM-3` stays future because the source pack's `WDRA2` work is lock-in, parity, and evidence work that should follow the runtime contracts.
+- `SEAM-2` is now active because `governance/seam-1-closeout.md` publishes the landed `C-01` / `C-02` handoff and clears the replay-runtime seam to consume it directly.
+- `SEAM-3` is now next because it still depends on `SEAM-2` publishing replay copy and telemetry truth before parity and lock-in work becomes current.
+- `SEAM-1` has left the forward planning window because its seam-exit gate passed and its closeout is now the authoritative upstream basis.
 
 Policy:
 

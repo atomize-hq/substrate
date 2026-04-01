@@ -3,7 +3,7 @@ seam_id: SEAM-3
 seam_slug: parity-and-contract-lock-in
 type: conformance
 status: proposed
-execution_horizon: future
+execution_horizon: next
 plan_version: v1
 basis:
   currentness: provisional
@@ -113,7 +113,7 @@ open_remediations: []
   - Its safety role is to close drift loops, preserve redaction guarantees, and make the feature reviewable across platforms.
 - **Downstream decomposition context**:
   - Why this seam is `active`, `next`, or `future`
-    - `future` because it should validate already-published runtime truth rather than speculative intermediate behavior.
+    - `next` because it now sits immediately behind the active replay-runtime seam and should wait on published `C-03` / `C-04` truth before becoming active.
   - Which threads matter most
     - `THR-03`
     - `THR-04`

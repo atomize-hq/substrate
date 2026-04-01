@@ -2,8 +2,8 @@
 seam_id: SEAM-1
 seam_slug: effective-disable-attribution-foundation
 type: integration
-status: exec-ready
-execution_horizon: active
+status: landed
+execution_horizon: future
 plan_version: v1
 basis:
   currentness: current
@@ -23,12 +23,12 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S3
-  status: pending
+  status: passed
 open_remediations: []
 ---
 
@@ -103,7 +103,7 @@ open_remediations: []
   - Safety comes from keeping the result shape narrow and from proving that redaction and precedence are deterministic before runtime wiring begins.
 - **Downstream decomposition context**:
   - Why this seam is `active`, `next`, or `future`
-    - `active` because the source pack's `WDRA0` work is the first critical-path dependency for every later runtime and conformance surface.
+    - `future` because the seam has already landed, published `C-01` / `C-02`, and left the forward planning window after closeout.
   - Which threads matter most
     - `THR-01` and `THR-02`
   - What the first seam-local review should focus on
@@ -113,18 +113,18 @@ open_remediations: []
     - exact negative coverage for raw-path and raw-env leaks
     - determinism of the temp-dir based tests
   - Later next-seam planning posture
-    - `SEAM-2` should stay provisional until this seam publishes its helper/result contract and provenance semantics.
+    - `SEAM-2` now consumes this seam's closeout-backed handoff directly and has moved into the active window.
 - **Expected seam-exit concerns**:
-  - Contracts likely to publish:
+  - Contracts published:
     - `C-01`
     - `C-02`
-  - Threads likely to advance:
+  - Threads advanced:
     - `THR-01` from `defined` to `published`
     - `THR-02` from `defined` to `published`
-  - Review-surface areas likely to shift after landing:
+  - Review-surface areas shifted at landing:
     - provenance resolution path
     - classifier-to-runtime wiring surface
-  - Downstream seams most likely to require revalidation:
+  - Downstream seams requiring revalidation:
     - `SEAM-2`
     - `SEAM-3`
   - Accepted or published owned-contract artifacts belong here and in closeout evidence, not in pre-exec verification for the producing seam.
