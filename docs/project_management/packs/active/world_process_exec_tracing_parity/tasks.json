@@ -149,7 +149,7 @@
       "name": "WPEP0 integration (linux parity)",
       "type": "integration",
       "phase": "WPEP0",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Resolve Linux-specific compile/test parity issues for WPEP0.",
       "references": [
         "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP0-spec.md"
