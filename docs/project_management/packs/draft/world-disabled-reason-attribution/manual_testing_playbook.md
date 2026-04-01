@@ -33,51 +33,71 @@ cargo test -p shell --test replay_world replay_env_override_reports_world_toggle
 Expected:
 - both tests pass
 - replay keeps the exact fragments `--no-world flag` and `SUBSTRATE_REPLAY_USE_WORLD=disabled`
+- replay-local opt-outs do not emit `world_disable_source`
 
 ## Case 2 — effective override-env attribution
 
 Run:
 ```bash
 cargo test -p shell --test replay_world replay_recorded_host_origin_attributes_override_env -- --exact --nocapture
-cargo test -p shell --test replay_world replay_trace_strategy_emits_world_disable_source_for_override_env -- --exact --nocapture
 ```
 
 Expected:
-- both tests pass
+- the test passes
 - replay stderr includes `world isolation disabled by env override SUBSTRATE_OVERRIDE_WORLD=disabled`
 - replay telemetry emits:
   - `origin_reason_code = world_disabled_override_env`
   - `world_disable_source.layer = override_env`
   - `world_disable_source.env = SUBSTRATE_OVERRIDE_WORLD`
+  - no absolute path or raw env value appears in telemetry
 
-## Case 3 — workspace and global config attribution
+## Case 3 — workspace config attribution
 
 Run:
 ```bash
 cargo test -p shell --test replay_world replay_recorded_host_origin_attributes_workspace_config -- --exact --nocapture
-cargo test -p shell --test replay_world replay_recorded_host_origin_attributes_global_config -- --exact --nocapture
-cargo test -p shell --test replay_world replay_trace_strategy_emits_world_disable_source_for_workspace_config -- --exact --nocapture
-cargo test -p shell --test replay_world replay_trace_strategy_emits_world_disable_source_for_global_config -- --exact --nocapture
 ```
 
 Expected:
-- all tests pass
-- workspace case uses `<workspace>/.substrate/workspace.yaml`
-- global case uses `$SUBSTRATE_HOME/config.yaml`
+- the test passes
+- replay stderr includes `world isolation disabled by workspace config <workspace>/.substrate/workspace.yaml (world.enabled: false)`
+- replay telemetry emits:
+  - `origin_reason_code = world_disabled_workspace_patch`
+  - `world_disable_source.layer = workspace_patch`
+  - `world_disable_source.path_display = <workspace>/.substrate/workspace.yaml`
 - no absolute host path appears in stderr or telemetry
 
-## Case 4 — redaction and omission rules
+## Case 4 — global config attribution
 
 Run:
 ```bash
-cargo test -p shell --test replay_world replay_recorded_host_origin_redacts_absolute_config_paths -- --exact --nocapture
-cargo test -p shell --test replay_world replay_trace_strategy_omits_world_disable_source_for_replay_opt_out -- --exact --nocapture
+cargo test -p shell --test replay_world replay_recorded_host_origin_attributes_global_config -- --exact --nocapture
 ```
 
 Expected:
-- all tests pass
-- redaction test proves tokenized path displays only
-- omission test proves replay-local opt-outs do not emit `world_disable_source`
+- the test passes
+- replay stderr includes `world isolation disabled by global config $SUBSTRATE_HOME/config.yaml (world.enabled: false)`
+- replay telemetry emits:
+  - `origin_reason_code = world_disabled_global_patch`
+  - `world_disable_source.layer = global_patch`
+  - `world_disable_source.path_display = $SUBSTRATE_HOME/config.yaml`
+- no absolute host path appears in stderr or telemetry
+
+## Case 5 — unknown-source fallback redaction
+
+Run:
+```bash
+cargo test -p shell --test replay_world replay_unknown_source_fallback_uses_published_contract -- --exact --nocapture
+```
+
+Expected:
+- the test passes
+- replay stderr includes `world isolation disabled by effective config (source unknown)`
+- replay telemetry emits:
+  - `origin_reason_code = world_disabled_unknown`
+  - `world_disable_source.layer = unknown`
+- replay telemetry does not invent `world_disable_source.env` or `world_disable_source.path_display`
+- replay stderr and telemetry do not leak absolute paths
 
 ## Cross-platform smoke wrapper check
 
@@ -88,4 +108,4 @@ Run one platform-local smoke script from the repo root after `cargo build --bin 
 
 Expected:
 - exit `0`
-- slice-scoped smoke runs the test filters for the selected `SUBSTRATE_SMOKE_SLICE_ID`
+- slice-scoped smoke aligns with the case groups above for the selected `SUBSTRATE_SMOKE_SLICE_ID`

@@ -16,17 +16,24 @@ substrate --replay <SPAN_ID>
 
 ## Linux Isolation
 
-Replay now defaults to the recorded origin: spans captured on the host replay on the host; spans
+Replay defaults to the recorded origin: spans captured on the host replay on the host; spans
 captured in the world replay in the world. Use `--flip-world` (alias `--flip`) to invert the
 recorded origin before applying `--world` / `--no-world` / `SUBSTRATE_REPLAY_USE_WORLD`
-overrides (precedence: `--world` > `--no-world` > env > recorded origin/flip).
+overrides (precedence: `--world` > `--no-world` > env > recorded origin/flip). Replay-local
+opt-outs keep their fixed fragments (`--no-world flag`, `SUBSTRATE_REPLAY_USE_WORLD=disabled`,
+`--flip-world`, `recorded origin (span)`, `recorded origin (replay_context)`, `default origin`).
+Effective-disable attribution uses the published contract fragments
+`world isolation disabled by env override SUBSTRATE_OVERRIDE_WORLD=disabled`,
+`world isolation disabled by workspace config <workspace>/.substrate/workspace.yaml (world.enabled: false)`,
+`world isolation disabled by global config $SUBSTRATE_HOME/config.yaml (world.enabled: false)`, and
+`world isolation disabled by effective config (source unknown)`.
 
 On Linux, world-mode replay is agent-first: when `/run/substrate.sock` responds, `--replay-verbose`
 prints `[replay] world strategy: agent (socket=..., project_dir=...)`. If the agent is unavailable,
 replay emits a single `[replay] warn: agent replay unavailable (<cause>); falling back to local backend. Run `substrate world doctor --json` or set SUBSTRATE_WORLD_SOCKET to point at a healthy agent socket`
 before switching to the local backend/copy-diff while still collecting `fs_diff`—even when the rest
 of the CLI is running with `SUBSTRATE_WORLD=disabled`. Host-only runs show
-`[replay] warn: running on host (...)` in verbose mode so the warning sits alongside any
+`[replay] warn: running on host (<reason>)` in verbose mode so the warning sits alongside any
 `scopes: []` line. Replays manage their own world state so tests/harnesses do not need to touch
 global config files to flip modes.
 
@@ -73,7 +80,7 @@ By default on Linux, replay will:
 - Carry world-root/caging env into the replay so cwd/path alignment matches the original span when isolation is active
 - Return `fs_diff` (writes/mods/deletes) and `scopes_used` from the isolated execution
 - Show isolation strategy in verbose mode (overlay/fuse/copy-diff)
-- Print the active world toggle in verbose mode (`[replay] world toggle: enabled (default)`), followed by `[replay] warn: running without world isolation (...)` whenever `--no-world` or `SUBSTRATE_REPLAY_USE_WORLD=disabled` opt-outs are in effect. This keeps the new `scopes: [...]` line aligned with the toggle that produced it.
+- Print the active world toggle in verbose mode (`[replay] world toggle: enabled (default)`), followed by `[replay] warn: running on host (...)` for replay-local host runs and by the tokenized effective-disable reason when host replay is caused by config attribution. This keeps the `scopes: [...]` line aligned with the toggle that produced it.
 
 ### Replay world toggles
 
@@ -88,6 +95,13 @@ Use these toggles to exercise different replay modes without mutating global con
 Both toggles work on Linux and macOS (Lima). On Windows/WSL, replay still respects the flag/env but the backend falls back to direct execution because world isolation is experimental there. Verbose output continues to show the origin summary even when the platform ultimately degrades to host execution.
 
 On macOS and Linux, replay uses the world backend (Lima agent on macOS, agent-first on Linux with a local backend fallback) to collect `fs_diff` and scopes. Other platforms fall back to direct execution without isolation or `fs_diff`.
+
+Replay strategy telemetry mirrors the same contract:
+- `origin_reason` stores the exact human-readable fragment shown in the replay summary or host warning.
+- `origin_reason_code` keeps replay-local values (`flag_world`, `flag_no_world`, `env_disabled`, `flip_world`, `recorded_origin`) and extends with the effective-disable values `world_disabled_override_env`, `world_disabled_workspace_patch`, `world_disabled_global_patch`, and `world_disabled_unknown`.
+- `world_disable_source` is optional and only appears for the effective-disable values above.
+- `world_disable_source` uses `key`, `layer`, and `value_display` always, with optional `env` or `path_display` only when the source is known. The runtime normalizes `source_unknown` to `layer: unknown` and omits `env` and `path_display` in that case.
+- Replay-local opt-outs do not emit `world_disable_source`.
 
 ### Isolation fallback & cleanup
 
