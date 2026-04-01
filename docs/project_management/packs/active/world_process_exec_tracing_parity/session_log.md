@@ -106,3 +106,20 @@
 - Artifacts:
   - `CODEX_CODE_LAST_MESSAGE_PATH=NOT_CREATED`
 - Blockers: `make triad-task-start-pair ... LAUNCH_CODEX=1` exited 2 because dependency `F0-exec-preflight` is still `pending`
+
+## END — 2026-04-01T16:42:56Z — test — WPEP0-test
+- Worktree: `wt/world-process-exec-tracing-parity-wpep0-test` (not created)
+- Branch: `world-process-exec-tracing-parity-wpep0-test`
+- HEAD: `NOT_CREATED`
+- Codex: `CODEX_TEST_EXIT=missing (launcher exited 2 before Codex start)`
+- Finisher summary:
+  - `TASK_BRANCH=world-process-exec-tracing-parity-wpep0-test`
+  - `WORKTREE=wt/world-process-exec-tracing-parity-wpep0-test (not created)`
+  - `HEAD=NOT_CREATED`
+  - `COMMITS=NOT_RUN`
+  - `CHECKS=NOT_RUN`
+  - `SMOKE_RUN=NOT_RUN`
+  - `MERGED_TO_ORCH=NO`
+- Artifacts:
+  - `CODEX_TEST_LAST_MESSAGE_PATH=NOT_CREATED`
+- Blockers: `make triad-task-start-pair ... LAUNCH_CODEX=1` exited 2 because dependency `F0-exec-preflight` is still `pending`
