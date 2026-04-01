@@ -1790,12 +1790,13 @@ pub(super) fn emit_stream_chunk(agent_label: &str, data: &[u8], is_stderr: bool)
 mod tests {
     use super::{
         current_world_request_profile, ensure_world_deps_bin_on_path,
-        preserve_world_project_dir_override, process_agent_stream_body,
-        WORLD_PROJECT_DIR_OVERRIDE_ENV,
+        extract_process_telemetry_from_ws_exit, preserve_world_project_dir_override,
+        process_agent_stream_body, WORLD_PROJECT_DIR_OVERRIDE_ENV,
     };
     use agent_api_types::ExecuteStreamFrame;
     use futures::stream;
     use http_body_util::StreamBody;
+    use serde_json::json;
     use std::convert::Infallible;
     use std::sync::{Arc, Mutex, OnceLock};
     use std::time::Duration;
@@ -1994,5 +1995,105 @@ mod tests {
                 &[("spn_interrupt".to_string(), "INT".to_string())]
             );
         });
+    }
+
+    #[test]
+    fn extract_process_telemetry_from_ws_exit_preserves_ptrace_not_permitted_reason() {
+        let exit = json!({
+            "type": "exit",
+            "exit": 0,
+            "span_id": "spn_ptrace_denied",
+            "scopes_used": [],
+            "process_events": [],
+            "process_events_status": "unavailable",
+            "process_events_reason": "ptrace_not_permitted"
+        });
+
+        let process_telemetry = extract_process_telemetry_from_ws_exit(&exit);
+
+        assert_eq!(
+            process_telemetry.process_events_status,
+            substrate_common::ProcessEventsStatus::Unavailable
+        );
+        assert_eq!(
+            process_telemetry.process_events_reason.as_deref(),
+            Some("ptrace_not_permitted")
+        );
+        assert!(process_telemetry.process_events.is_empty());
+        assert!(process_telemetry.process_events_dropped.is_none());
+    }
+
+    #[test]
+    fn extract_process_telemetry_from_ws_exit_preserves_linux_process_event_fields() {
+        let exit = json!({
+            "type": "exit",
+            "exit": 0,
+            "span_id": "spn_parent",
+            "scopes_used": [],
+            "process_events": [
+                {
+                    "ts": "2026-04-01T00:00:00Z",
+                    "ts_unix_ns": 1_743_465_600_000_000_000u64,
+                    "event_type": "world_process_start",
+                    "session_id": "ses_linux",
+                    "world_id": "wld_linux",
+                    "pid": 42,
+                    "ppid": 1,
+                    "cwd": "/project",
+                    "parent_span": "spn_parent",
+                    "parent_cmd_id": "cmd_parent",
+                    "argv_omitted": true
+                },
+                {
+                    "ts": "2026-04-01T00:00:01Z",
+                    "ts_unix_ns": 1_743_465_601_000_000_000u64,
+                    "event_type": "world_process_exit",
+                    "session_id": "ses_linux",
+                    "world_id": "wld_linux",
+                    "pid": 42,
+                    "ppid": 1,
+                    "cwd": "/project",
+                    "parent_span": "spn_parent",
+                    "parent_cmd_id": "cmd_parent",
+                    "argv_omitted": true,
+                    "exit_code": 0,
+                    "duration_ms": 11
+                }
+            ],
+            "process_events_status": "truncated",
+            "process_events_reason": "capture_overflow",
+            "process_events_dropped": 7,
+            "process_events_max": 10000,
+            "process_events_backend": "ptrace"
+        });
+
+        let process_telemetry = extract_process_telemetry_from_ws_exit(&exit);
+
+        assert_eq!(
+            process_telemetry.process_events_status,
+            substrate_common::ProcessEventsStatus::Truncated
+        );
+        assert_eq!(
+            process_telemetry.process_events_reason.as_deref(),
+            Some("capture_overflow")
+        );
+        assert_eq!(process_telemetry.process_events_dropped, Some(7));
+        assert_eq!(process_telemetry.process_events_max, Some(10_000));
+        assert_eq!(
+            process_telemetry.process_events_backend.as_deref(),
+            Some("ptrace")
+        );
+        assert_eq!(process_telemetry.process_events.len(), 2);
+        assert_eq!(process_telemetry.process_events[0].argv_omitted, Some(true));
+        assert_eq!(
+            process_telemetry.process_events[0].parent_span,
+            "spn_parent"
+        );
+        assert_eq!(
+            process_telemetry.process_events[0].parent_cmd_id.as_deref(),
+            Some("cmd_parent")
+        );
+        assert_eq!(process_telemetry.process_events[1].exit_code, Some(0));
+        assert_eq!(process_telemetry.process_events[1].duration_ms, Some(11));
     }
 }
