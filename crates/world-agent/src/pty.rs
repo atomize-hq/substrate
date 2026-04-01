@@ -2631,7 +2631,7 @@ async fn handle_legacy_start(
         return;
     }
     #[cfg(target_os = "linux")]
-    let reader_task = {
+    let mut reader_task = {
         let tx_clone = tx.clone();
         tokio::spawn(async move {
             let mut reader = unsafe { std::fs::File::from_raw_fd(reader_fd) };
@@ -2652,6 +2652,16 @@ async fn handle_legacy_start(
                         if send_ws_message(&tx_clone, &msg).await.is_err() {
                             break;
                         }
+                    }
+                    Ok((r, b, Err(err)))
+                        if matches!(
+                            err.kind(),
+                            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted
+                        ) =>
+                    {
+                        reader = r;
+                        buf = b;
+                        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
                     }
                     _ => break,
                 }
@@ -2709,6 +2719,21 @@ async fn handle_legacy_start(
         ),
     };
 
+    #[cfg(target_os = "linux")]
+    input_task.abort();
+    #[cfg(target_os = "linux")]
+    drop(pty);
+    #[cfg(target_os = "linux")]
+    if tokio::time::timeout(std::time::Duration::from_millis(250), &mut reader_task)
+        .await
+        .is_err()
+    {
+        // The legacy stream contract expects buffered PTY stdout before `exit`.
+        // If the reader does not quiesce promptly after we close the parent PTY handles,
+        // abort it rather than hanging the websocket close path indefinitely.
+        reader_task.abort();
+    }
+
     info!(exit_code, "ws_pty: exit");
     #[cfg(target_os = "linux")]
     let (primary, final_strategy, reason) = match fs_strategy_meta.as_ref() {
@@ -2747,9 +2772,6 @@ async fn handle_legacy_start(
         service.note_pty_pending_diff(world_id);
     }
 
-    // Clean up tasks
-    reader_task.abort();
-    input_task.abort();
     info!("ws_pty: session closed");
 }
 
