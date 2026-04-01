@@ -2,12 +2,12 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-3`
-  - `SEAM-2` closeout now publishes `C-03` / `C-04` and marks `promotion_readiness: ready`, so the parity seam can move into active planning and execution readiness.
+- **Active seam**: none
+  - `SEAM-3` has passed its seam-exit gate and left the forward planning window.
 - **Next seam**: `none`
-  - `SEAM-3` is the last seam in this extracted pack, so no additional forward-window seam remains after promotion.
-- **Previous active seam**: `SEAM-2`
-  - Its closeout is now the authoritative upstream basis for `THR-03` and `THR-04`.
+  - `SEAM-3` was the last seam in this extracted pack, so no additional forward-window seam remains after closeout.
+- **Previous active seam**: `SEAM-3`
+  - Its closeout is now the authoritative terminal evidence set for `THR-02`, `THR-03`, and `THR-04`.
 
 Horizon policy for this extracted pack:
 

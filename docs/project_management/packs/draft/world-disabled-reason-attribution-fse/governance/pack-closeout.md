@@ -1,20 +1,11 @@
 # Pack Closeout - world-disabled-reason-attribution
 
-This is a pack-level closeout scaffold created during extraction. Update it after execution and seam closeout.
-
-- **Remaining open seams**:
-  - `SEAM-1` is still `proposed` and is the active seam
-  - `SEAM-2` is still `proposed` and is the next seam
-  - `SEAM-3` is still `proposed` and remains future
-- **Open remediations still blocking pack closeout**:
-  - none opened at extraction time
-- **Threads still not closed**:
-  - `THR-01`
-  - `THR-02`
-  - `THR-03`
-  - `THR-04`
-- **Downstream stale triggers still requiring attention**:
-  - none recorded yet; populate from seam closeouts if landed behavior differs from the extracted contracts
+- **Pack status**: landed and complete
+- **Remaining open seams**: none
+- **Open remediations still blocking pack closeout**: none
+- **Threads still not closed**: none; `THR-01` through `THR-04` now have landed closeout evidence and terminal revalidation across `SEAM-1`, `SEAM-2`, and `SEAM-3`
+- **Downstream stale triggers still requiring attention**: none inside this pack; future replay drift against the locked fragments, telemetry fields, or parity assumptions should reopen follow-on work rather than leave this pack active
 - **Evidence summary**:
-  - the source pack supplied detailed contract, telemetry, parity, and slice-order research
-  - this extracted pack has not yet recorded landed evidence, published threads, or realized seam-exit records
+  - `SEAM-1` closeout records the landed effective-disable provenance and redaction contract in `governance/seam-1-closeout.md`
+  - `SEAM-2` closeout records the landed replay copy and telemetry contracts in `governance/seam-2-closeout.md`
+  - `SEAM-3` closeout records the terminal replay lock-in across regression tests, operator docs, manual validation, and platform smoke wrappers in `governance/seam-3-closeout.md`

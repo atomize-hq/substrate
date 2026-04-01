@@ -23,15 +23,15 @@ Start here:
 
 Execution horizon:
 
-- Active seam: `SEAM-3`
+- Active seam: `none`
 - Next seam: `none`
-- Previous active seam: `SEAM-2` (its closeout now publishes `C-03` and `C-04`)
+- Previous active seam: `SEAM-3` (its closeout now records the terminal lock-in evidence for `C-02`, `C-03`, and `C-04`)
 
 Horizon inference:
 
-- `SEAM-3` is now active because `governance/seam-2-closeout.md` publishes the landed `C-03` / `C-04` handoff and clears the parity seam to consume final runtime truth directly.
-- There is no remaining `next` seam inside this pack after `SEAM-3`; further work now belongs to execution and closeout rather than another horizon handoff.
-- `SEAM-2` has left the forward planning window because its seam-exit gate passed and its closeout is now the authoritative runtime handoff for parity work.
+- `SEAM-3` has now left the forward planning window because its seam-exit gate passed and `governance/seam-3-closeout.md` records the terminal parity lock-in evidence.
+- There is no remaining `next` seam inside this pack after `SEAM-3`; the pack is now in closeout posture rather than another promotion handoff.
+- `SEAM-1` and `SEAM-2` remain historical upstream seams whose closeouts provide the authoritative basis for the landed final seam.
 
 Policy:
 

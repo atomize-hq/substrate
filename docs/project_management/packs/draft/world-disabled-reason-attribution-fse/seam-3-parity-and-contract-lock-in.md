@@ -2,8 +2,8 @@
 seam_id: SEAM-3
 seam_slug: parity-and-contract-lock-in
 type: conformance
-status: exec-ready
-execution_horizon: active
+status: landed
+execution_horizon: future
 plan_version: v1
 basis:
   currentness: current
@@ -26,12 +26,12 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: reserved_final_slice
-  status: pending
+  status: passed
 open_remediations: []
 ---
 
