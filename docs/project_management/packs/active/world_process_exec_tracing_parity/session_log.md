@@ -153,3 +153,10 @@
   - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → exit 0
   - `make planning-lint FEATURE_DIR="docs/project_management/packs/active/world_process_exec_tracing_parity"` → exit 0
     - Key output: `OK: completed sprint paths resolve`; `OK: planning lint passed`
+
+## START — 2026-04-01T16:48:53Z — code — WPEP0-code
+- Worktree: `wt/world-process-exec-tracing-parity-wpep0-code`
+- Branch: `world-process-exec-tracing-parity-wpep0-code`
+- Orchestration branch: `feat/world-process-exec-tracing-parity`
+- Dispatch:
+  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/packs/active/world_process_exec_tracing_parity" SLICE_ID="WPEP0" LAUNCH_CODEX=1`
