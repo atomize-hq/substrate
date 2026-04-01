@@ -207,7 +207,6 @@ impl SessionWorld {
         span_id: Option<String>,
     ) -> Result<ExecResult> {
         let output;
-        #[cfg(target_os = "linux")]
         let process_capture =
             crate::exec::ProcessCaptureSpec::from_env(&self.id, &env, span_id.as_deref());
         let process_telemetry;

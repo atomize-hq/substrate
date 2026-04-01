@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::thread;
 use tracing::warn;
+use substrate_common::ProcessTelemetry;
 use world_api::WorldFsMode;
 
 #[cfg(target_os = "linux")]
@@ -18,7 +19,7 @@ use std::sync::{Mutex, OnceLock};
 #[cfg(target_os = "linux")]
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 #[cfg(target_os = "linux")]
-use substrate_common::{ProcessEvent, ProcessEventType, ProcessEventsStatus, ProcessTelemetry};
+use substrate_common::{ProcessEvent, ProcessEventType, ProcessEventsStatus};
 
 #[cfg(target_os = "linux")]
 fn active_exec_registry() -> &'static Mutex<HashMap<String, i32>> {
@@ -26,16 +27,13 @@ fn active_exec_registry() -> &'static Mutex<HashMap<String, i32>> {
     ACTIVE_EXEC_REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-#[cfg(target_os = "linux")]
 const PROCESS_EVENTS_DEFAULT_MAX: usize = 10_000;
 
 #[cfg(target_os = "linux")]
 const PROCESS_EVENTS_BACKEND: &str = "world-linux-ptrace";
 
-#[cfg(target_os = "linux")]
 const SUBSTRATE_PARENT_SPAN_ENV: &str = "SUBSTRATE_PARENT_SPAN_ID";
 
-#[cfg(target_os = "linux")]
 #[derive(Clone, Debug)]
 pub struct ProcessCaptureSpec {
     pub session_id: String,
@@ -45,7 +43,6 @@ pub struct ProcessCaptureSpec {
     pub max_events: usize,
 }
 
-#[cfg(target_os = "linux")]
 impl ProcessCaptureSpec {
     pub fn from_env(world_id: &str, env: &HashMap<String, String>, span_id: Option<&str>) -> Self {
         let session_id = env
@@ -68,20 +65,18 @@ impl ProcessCaptureSpec {
     }
 }
 
-#[cfg(target_os = "linux")]
 pub struct CapturedCommandOutput {
     pub output: Output,
     pub process_telemetry: ProcessTelemetry,
 }
 
-#[cfg(target_os = "linux")]
 #[derive(Clone, Copy)]
 pub(crate) struct CommandCapture<'a> {
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     span_id: Option<&'a str>,
     process_capture: Option<&'a ProcessCaptureSpec>,
 }
 
-#[cfg(target_os = "linux")]
 impl<'a> CommandCapture<'a> {
     pub(crate) const fn new(
         span_id: Option<&'a str>,
@@ -198,6 +193,9 @@ fn configure_child_process_group(command: &mut Command) {
         });
     }
 }
+
+#[cfg(not(unix))]
+fn configure_child_process_group(_command: &mut Command) {}
 
 #[cfg(target_os = "linux")]
 fn configure_traced_child_process(command: &mut Command) {
@@ -752,6 +750,67 @@ pub(crate) fn execute_shell_command_with_capture(
     })
 }
 
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn execute_shell_command_with_capture(
+    cmd: &str,
+    cwd: &Path,
+    env: &HashMap<String, String>,
+    login_shell: bool,
+    capture: CommandCapture<'_>,
+) -> Result<CapturedCommandOutput> {
+    let mut command = Command::new("sh");
+    if login_shell {
+        command.arg("-lc");
+    } else {
+        command.arg("-c");
+    }
+    command.arg(cmd);
+    command.current_dir(cwd);
+    command.env_clear();
+    command.envs(env);
+    command.stdout(Stdio::piped());
+    command.stderr(Stdio::piped());
+    configure_child_process_group(&mut command);
+
+    let mut child = command
+        .spawn()
+        .with_context(|| format!("Failed to spawn command: {cmd}"))?;
+
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| anyhow!("Failed to capture stdout pipe"))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| anyhow!("Failed to capture stderr pipe"))?;
+
+    let stdout_handle = spawn_reader(stdout, StreamKind::Stdout);
+    let stderr_handle = spawn_reader(stderr, StreamKind::Stderr);
+
+    let status = child
+        .wait()
+        .context("Failed to wait for child process completion")?;
+
+    let stdout_buf = join_reader(stdout_handle, "stdout");
+    let stderr_buf = join_reader(stderr_handle, "stderr");
+
+    let telemetry = if capture.process_capture.is_some() {
+        ProcessTelemetry::not_supported_platform()
+    } else {
+        ProcessTelemetry::default()
+    };
+
+    Ok(CapturedCommandOutput {
+        output: Output {
+            status,
+            stdout: stdout_buf,
+            stderr: stderr_buf,
+        },
+        process_telemetry: telemetry,
+    })
+}
+
 pub struct ProjectBindMount<'a> {
     pub merged_dir: &'a Path,
     pub project_dir: &'a Path,
@@ -1173,6 +1232,24 @@ pub(crate) fn execute_shell_command_with_project_bind_mount(
     .output)
 }
 
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn execute_shell_command_with_project_bind_mount_capture(
+    cmd: &str,
+    mount: ProjectBindMount<'_>,
+    env: &HashMap<String, String>,
+    login_shell: bool,
+    _attach_policy: CgroupAttachPolicy<'_>,
+    _capture: CommandCapture<'_>,
+) -> Result<CapturedCommandOutput> {
+    let _ = cmd;
+    let _ = mount;
+    let _ = env;
+    let _ = login_shell;
+    Err(anyhow!(
+        "project bind mount enforcement is only supported on Linux"
+    ))
+}
+
 #[cfg(target_os = "linux")]
 pub(crate) fn execute_shell_command_with_project_bind_mount_capture(
     cmd: &str,
@@ -1418,6 +1495,26 @@ pub(crate) fn execute_shell_command_with_world_deps_bind_mount(
         CommandCapture::new(_span_id, None),
     )?
     .output)
+}
+
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn execute_shell_command_with_world_deps_bind_mount_capture(
+    cmd: &str,
+    cwd: &Path,
+    env: &HashMap<String, String>,
+    login_shell: bool,
+    world_deps_root: &Path,
+    _attach_policy: CgroupAttachPolicy<'_>,
+    _capture: CommandCapture<'_>,
+) -> Result<CapturedCommandOutput> {
+    let _ = cmd;
+    let _ = cwd;
+    let _ = env;
+    let _ = login_shell;
+    let _ = world_deps_root;
+    Err(anyhow!(
+        "world-deps bind mount fallback is only supported on Linux"
+    ))
 }
 
 #[cfg(target_os = "linux")]
