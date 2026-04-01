@@ -414,3 +414,10 @@
 - Orchestration branch: `feat/world-process-exec-tracing-parity`
 - Dispatch:
   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/packs/active/world_process_exec_tracing_parity" SLICE_ID="WPEP3" LAUNCH_CODEX=1 FORCE=1`
+
+## START — 2026-04-01T19:43:30Z — test — WPEP3-test
+- Worktree: `wt/world-process-exec-tracing-parity-wpep3-test`
+- Branch: `world-process-exec-tracing-parity-wpep3-test`
+- Orchestration branch: `feat/world-process-exec-tracing-parity`
+- Dispatch:
+  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/packs/active/world_process_exec_tracing_parity" SLICE_ID="WPEP3" LAUNCH_CODEX=1 FORCE=1`
