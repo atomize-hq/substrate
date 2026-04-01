@@ -290,3 +290,22 @@
 - Orchestration branch: `feat/world-process-exec-tracing-parity`
 - Dispatch:
   - `make triad-task-start FEATURE_DIR="docs/project_management/packs/active/world_process_exec_tracing_parity" TASK_ID="WPEP1-integ" LAUNCH_CODEX=1`
+
+## END — 2026-04-01T18:00:45Z — integ — WPEP1-integ
+- Worktree: `/home/spenser/__Active_code/substrate/wt/world-process-exec-tracing-parity-wpep1-integ`
+- Branch: `world-process-exec-tracing-parity-wpep1-integ`
+- HEAD: `64c8bb5aa74a68c9fda438b9b95dd9af031e8d21`
+- Codex: `CODEX_EXIT=1`
+- Finisher summary:
+  - `TASK_BRANCH=world-process-exec-tracing-parity-wpep1-integ`
+  - `WORKTREE=/home/spenser/__Active_code/substrate/wt/world-process-exec-tracing-parity-wpep1-integ`
+  - `HEAD=64c8bb5aa74a68c9fda438b9b95dd9af031e8d21`
+  - `COMMITS=5`
+  - `CHECKS=verify-only; impact_map_touchset:skipped; impact_map_source:legacy`
+  - `SMOKE_RUN=skipped`
+  - `MERGED_TO_ORCH=true`
+- Artifacts:
+  - `CODEX_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/docs/project_management/packs/active/world_process_exec_tracing_parity/logs/WPEP1/integ/last_message.md`
+  - `CODEX_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/packs/active/world_process_exec_tracing_parity/logs/WPEP1/integ/events.jsonl`
+  - `CODEX_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/packs/active/world_process_exec_tracing_parity/logs/WPEP1/integ/stderr.log`
+- Blockers: `Codex integration run stalled and was interrupted; make integ-checks failed in /home/spenser/__Active_code/substrate/wt/world-process-exec-tracing-parity-wpep1-integ on replay_world tests replay_flip_host_to_world_prefers_agent_and_reports_origin and replay_prefers_agent_when_socket_healthy, so the branch was not merged back to orchestration.`
