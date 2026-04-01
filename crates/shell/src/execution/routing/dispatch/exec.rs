@@ -754,6 +754,13 @@ pub(crate) fn execute_command(
                                     resolved.snapshot_hash,
                                 );
                             }
+                            if let Some(meta) = outcome.fs_strategy {
+                                active_span.set_world_fs_strategy(
+                                    meta.primary,
+                                    meta.final_strategy,
+                                    meta.fallback_reason,
+                                );
+                            }
                             let (scopes_used, fs_diff) =
                                 collect_world_telemetry(active_span.get_span_id());
                             let _ = active_span.finish(code, scopes_used, fs_diff);
@@ -761,12 +768,24 @@ pub(crate) fn execute_command(
                         let mut completion_extra = json!({
                             log_schema::EXIT_CODE: code,
                             log_schema::DURATION_MS: start_time.elapsed().as_millis(),
-                            "world_fs_strategy_primary": WorldFsStrategy::Overlay.as_str(),
-                            "world_fs_strategy_final": WorldFsStrategy::Host.as_str(),
-                            "world_fs_strategy_fallback_reason": WorldFsStrategyFallbackReason::None.as_str(),
                         });
                         if let Some(span_id) = completion_span_id.as_ref() {
                             completion_extra["span_id"] = json!(span_id);
+                        }
+                        if let Some(meta) = outcome.fs_strategy {
+                            completion_extra["world_fs_strategy_primary"] =
+                                json!(meta.primary.as_str());
+                            completion_extra["world_fs_strategy_final"] =
+                                json!(meta.final_strategy.as_str());
+                            completion_extra["world_fs_strategy_fallback_reason"] =
+                                json!(meta.fallback_reason.as_str());
+                        } else {
+                            completion_extra["world_fs_strategy_primary"] =
+                                json!(WorldFsStrategy::Overlay.as_str());
+                            completion_extra["world_fs_strategy_final"] =
+                                json!(WorldFsStrategy::Host.as_str());
+                            completion_extra["world_fs_strategy_fallback_reason"] =
+                                json!(WorldFsStrategyFallbackReason::None.as_str());
                         }
                         add_process_telemetry_summary(
                             &mut completion_extra,

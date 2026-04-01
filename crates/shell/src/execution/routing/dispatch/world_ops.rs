@@ -758,6 +758,7 @@ pub(super) fn execute_world_pty_over_ws_macos(
             });
 
             let mut exit_code: i32 = 0;
+            let mut fs_strategy: Option<WorldFsStrategyTraceMeta> = None;
             let mut process_telemetry = ProcessTelemetry::default();
             while let Some(msg) = stream.next().await {
                 let msg = msg.map_err(|e| anyhow::anyhow!("ws recv: {}", e))?;
@@ -777,13 +778,46 @@ pub(super) fn execute_world_pty_over_ws_macos(
                                 exit_code =
                                     v.get("code").and_then(|c| c.as_i64()).unwrap_or(0) as i32;
                                 process_telemetry = extract_process_telemetry_from_ws_exit(&v);
+                                if let (Some(primary), Some(final_strategy), Some(reason)) = (
+                                    v.get("world_fs_strategy_primary")
+                                        .and_then(serde_json::Value::as_str)
+                                        .and_then(substrate_common::WorldFsStrategy::parse),
+                                    v.get("world_fs_strategy_final")
+                                        .and_then(serde_json::Value::as_str)
+                                        .and_then(substrate_common::WorldFsStrategy::parse),
+                                    v.get("world_fs_strategy_fallback_reason")
+                                        .and_then(serde_json::Value::as_str)
+                                        .and_then(
+                                            substrate_common::WorldFsStrategyFallbackReason::parse,
+                                        ),
+                                ) {
+                                    fs_strategy = Some(WorldFsStrategyTraceMeta {
+                                        primary,
+                                        final_strategy,
+                                        fallback_reason: reason,
+                                    });
+                                }
                                 break;
                             }
                             Some("error") => {
-                                if let Some(msg) = v.get("message").and_then(|m| m.as_str()) {
-                                    eprintln!("world-agent error: {}", msg);
+                                if let Some(message) = v.get("message").and_then(|m| m.as_str()) {
+                                    if message.contains("WORLD_FS_STRATEGY_UNAVAILABLE") {
+                                        return Err(anyhow::Error::new(
+                                            WorldFsStrategyUnavailableError {
+                                                raw_message: message.to_string(),
+                                                fallback_reason:
+                                                    parse_world_fs_strategy_unavailable_reason(
+                                                        message,
+                                                    ),
+                                            },
+                                        ));
+                                    }
+                                    return Err(anyhow::anyhow!(
+                                        "world-agent error: {}",
+                                        message
+                                    ));
                                 }
-                                break;
+                                return Err(anyhow::anyhow!("world-agent error"));
                             }
                             _ => {}
                         }
@@ -797,7 +831,7 @@ pub(super) fn execute_world_pty_over_ws_macos(
             resize_task.abort();
             Ok::<PtyWorldOutcome, anyhow::Error>(PtyWorldOutcome {
                 exit_code,
-                fs_strategy: None,
+                fs_strategy,
                 process_telemetry,
             })
         }
